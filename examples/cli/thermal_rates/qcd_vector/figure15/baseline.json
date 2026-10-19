@@ -1,0 +1,27 @@
+{
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "native_binary_sha256": "9f4f7bc9b5f5d1caffa8235cb88b93429b90677aabe9e05420dd155e03e8de24",
+  "measurement_host": "itphlies",
+  "measurement_dates_utc": [
+    "2026-10-18",
+    "2026-10-19"
+  ],
+  "newer_upstream_commit_not_measured": "75a0ced4e78fa420b56a9ad39d7ae6d0b3509a4a",
+  "attribution": "All native integrations, timings and profiles in these dated result directories were measured on 116767bd3. Rebasing the result commits does not change the measured source revision.",
+  "archive": "archive.json",
+  "full_scan": "full-scan-20261019/manifest.json",
+  "main_scan": {
+    "points": 35,
+    "polarization_rows": 70,
+    "native_process_evaluations": 25912000,
+    "worker_limit": 60,
+    "wall_time_limit_seconds": 43200,
+    "status": "budget_finished",
+    "rest_points_reaching_reference_normalized_precision": 7,
+    "near_light_cone_converged": false,
+    "suspect_reference_boundary": "E=3k"
+  },
+  "historical_measurements": true,
+  "numerical_results_recomputed_during_curation": false,
+  "csv_line_endings": "Committed CSV records use LF; original CRLF records are preserved in the archive. Every CSV cell is unchanged."
+}

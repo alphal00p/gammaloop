@@ -1,0 +1,23 @@
+{
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "binary": "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+  "binary_sha256": "9f4f7bc9b5f5d1caffa8235cb88b93429b90677aabe9e05420dd155e03e8de24",
+  "status": "native measurements complete; recovered recordings analyzed",
+  "original_controller_manifests_preserved": true,
+  "scratch": "/tmp/qcd-cut-profile-20261018T201221Z",
+  "workers": 6,
+  "cpus": [
+    242,
+    243,
+    244,
+    245,
+    246,
+    247
+  ],
+  "all_profile_workers_stopped": true,
+  "source_changes": false,
+  "main_scan_workers": 60,
+  "main_scan_deadline_utc": "2026-10-19T05:19:29.104704+00:00",
+  "raw_artifact_manifest": "comparison.json",
+  "thermal_vacuum_generation_audit": "../vacuum-timing-20261018/comparison.json"
+}

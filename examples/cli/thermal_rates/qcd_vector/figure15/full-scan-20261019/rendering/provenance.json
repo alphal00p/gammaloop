@@ -1,0 +1,48 @@
+{
+  "rendered_utc": "2026-10-19T09:27:23.884358+00:00",
+  "source": {
+    "url": "https://arxiv.org/pdf/1910.07552v2",
+    "title": "G. Jackson, Two-loop thermal spectral functions with general kinematics",
+    "figure": 15,
+    "page": 33,
+    "paper_sha256": "b92fd775f7b5ebb15ea382925acc6e89b6ff1f1f9eec1898432a319c259a7d65",
+    "svg_sha256": "8cf6b21f5ce1e108659bda049bb05c508b06444f66702e2696ed8962b81e848d",
+    "mutool": "/nix/store/175y8nr0rb67s2jygn6myn4fa1lv34cc-mupdf-1.27.2-bin/bin/mutool"
+  },
+  "scripts_sha256": {
+    "plot.py": "abb285c99740b75943d6a93e6fcf1ae38323eaa0cf4e67caab79a9487299a5cd",
+    "extract_published_curves.py": "6cf94a110ea101c3799010a4579a57a4a5b73d2418f79e180b1e60598d0145c1"
+  },
+  "input_run_root": "/tmp/qcd-fig15-scan-20261018T171925Z",
+  "transverse_ylim": [
+    -0.4,
+    1.5
+  ],
+  "longitudinal_ylim": [
+    -1.2,
+    0.7
+  ],
+  "curve_data": "../reference/published-curves.json",
+  "curves": 14,
+  "source_path_segments": 15,
+  "vertices": 4187,
+  "native_markers": 64,
+  "native_markers_and_errors_unchanged": true,
+  "numerical_results_unchanged": true,
+  "source_controller_snapshots_preserved": true,
+  "previous_overlays": "recomputed-reference-grid",
+  "command": [
+    "python3",
+    "/shared/kaapo/gammaloop/gammaloop-thermal-rates/examples/cli/thermal_rates/qcd_vector/figure15/campaign/plot.py",
+    "/tmp/qcd-fig15-scan-20261018T171925Z"
+  ],
+  "repro_command": "python3 rendering/plot.py . --published-curves reference/published-curves.json",
+  "extraction_command": [
+    "python3",
+    "/shared/kaapo/gammaloop/gammaloop-thermal-rates/examples/cli/thermal_rates/qcd_vector/figure15/reference/extract_published_curves.py",
+    "/tmp/qcd-fig15-reference-20261018/paper.pdf",
+    "/shared/kaapo/gammaloop/gammaloop-thermal-rates/examples/cli/thermal_rates/qcd_vector/figure15/reference/published-curves.json",
+    "--mutool",
+    "/nix/store/175y8nr0rb67s2jygn6myn4fa1lv34cc-mupdf-1.27.2-bin/bin/mutool"
+  ]
+}

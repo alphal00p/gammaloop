@@ -1,0 +1,41 @@
+{
+  "status": "passed",
+  "completed_utc": "2026-10-18T17:18:37.827443+00:00",
+  "checks": [
+    "all Python sources compile",
+    "35 unique finite points and quota transitions",
+    "reference-normalized precision independent of pull; unknown reference, invalid sample and insufficient training rejected",
+    "forced five-second deadline kills controller and child process group and finalizes stable JSON/CSV"
+  ],
+  "forced_hard_cutoff": {
+    "controller_pid": 1340243,
+    "child_pid": 1340248,
+    "controller_exit_code": -9,
+    "target_group": 1340243,
+    "watchdog_pid": 1340245,
+    "all_group_compute_dead": true,
+    "registered_deadline_utc": "2026-10-18T17:18:37.317128+00:00",
+    "observed_cutoff_utc": "2026-10-18T17:18:37.317556+00:00",
+    "deadline_delay_seconds": 0.00042748451232910156,
+    "final_manifest_status": "budget_finished",
+    "live_elapsed_frozen_after_cutoff": true
+  },
+  "benchmark_processes_launched": 0,
+  "source_hashes": {
+    "gate.py": "ad44608dee7038690e2afa84f29edee0f3843433513944e553521cf036640376",
+    "campaign.py": "f32241630e670616a0fd52b54a653553792234fab04f748b5ac858329ecd881c",
+    "watchdog.py": "5ef763f86dbcbd9c069f8ef6a7a0c8b6a681f926667c597e75da8146f3733d55",
+    "common.py": "60ab251cabb10ac75214d6caf974af595fc3e1795ea85f89f490160bd0116406",
+    "validation.py": "0a238b945af5900a707869122644817fe74e708c944e5b62a30cb9a7adf134e4"
+  },
+  "native_smoke_evidence": {
+    "source": "root-launched earlier controller draft; subsequent reporting and acceptance fixes covered by Python checks",
+    "samples": 1800,
+    "same_process_resumes": 4,
+    "zero_final_unstable_samples": true,
+    "budget_status": "budget_finished",
+    "exited_before_deadline": true,
+    "manifest": "native-150s-validation.json",
+    "fingerprint_control": "native-resume-validation.json"
+  }
+}

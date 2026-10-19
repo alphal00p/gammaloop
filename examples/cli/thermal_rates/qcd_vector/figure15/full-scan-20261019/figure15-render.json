@@ -1,0 +1,538 @@
+{
+  "curve_source": {
+    "url": "https://arxiv.org/pdf/1910.07552v2",
+    "title": "G. Jackson, Two-loop thermal spectral functions with general kinematics",
+    "figure": 15,
+    "page": 33,
+    "paper_sha256": "b92fd775f7b5ebb15ea382925acc6e89b6ff1f1f9eec1898432a319c259a7d65",
+    "svg_sha256": "8cf6b21f5ce1e108659bda049bb05c508b06444f66702e2696ed8962b81e848d",
+    "mutool": "/nix/store/175y8nr0rb67s2jygn6myn4fa1lv34cc-mupdf-1.27.2-bin/bin/mutool"
+  },
+  "curve_file_sha256": "74d6de004d46b9e38def51cc254003a334b9f3102e2b3df5b17ec310524a2a5a",
+  "curve_method": "Affine mapping of original vector vertices; no smoothing, interpolation, new quadrature, or reconnection of separate PDF paths",
+  "curve_limitation": "Published graphical precision and clipping; not an independent numerical integration target",
+  "native_markers": [
+    {
+      "name": "E0p25_k0p00",
+      "component": "T",
+      "E_over_T": 0.25,
+      "k_over_T": 0.0,
+      "value_g3": 0.10542377535389642,
+      "error_g3": 0.0005266281700103949
+    },
+    {
+      "name": "E0p25_k0p00",
+      "component": "L",
+      "E_over_T": 0.25,
+      "k_over_T": 0.0,
+      "value_g3": 0.10542377535389642,
+      "error_g3": 0.0005266281700103949
+    },
+    {
+      "name": "E0p25_k0p50",
+      "component": "T",
+      "E_over_T": 0.25,
+      "k_over_T": 0.5,
+      "value_g3": -0.22039232344824872,
+      "error_g3": 0.4757536300970675
+    },
+    {
+      "name": "E0p25_k0p50",
+      "component": "L",
+      "E_over_T": 0.25,
+      "k_over_T": 0.5,
+      "value_g3": 0.5892481182807853,
+      "error_g3": 1.437425626414737
+    },
+    {
+      "name": "E0p50_k0p00",
+      "component": "T",
+      "E_over_T": 0.5,
+      "k_over_T": 0.0,
+      "value_g3": 0.15099662953313434,
+      "error_g3": 0.0007379529619308115
+    },
+    {
+      "name": "E0p50_k0p00",
+      "component": "L",
+      "E_over_T": 0.5,
+      "k_over_T": 0.0,
+      "value_g3": 0.15099662953313434,
+      "error_g3": 0.0007379529619308115
+    },
+    {
+      "name": "E0p50_k1p00",
+      "component": "T",
+      "E_over_T": 0.5,
+      "k_over_T": 1.0,
+      "value_g3": 0.08612397428111107,
+      "error_g3": 0.04525564645047728
+    },
+    {
+      "name": "E0p50_k1p00",
+      "component": "L",
+      "E_over_T": 0.5,
+      "k_over_T": 1.0,
+      "value_g3": -0.4695401877316733,
+      "error_g3": 0.08776046834748016
+    },
+    {
+      "name": "E0p50_k1p50",
+      "component": "T",
+      "E_over_T": 0.5,
+      "k_over_T": 1.5,
+      "value_g3": 0.03881464820582786,
+      "error_g3": 0.0355490518990178
+    },
+    {
+      "name": "E0p50_k1p50",
+      "component": "L",
+      "E_over_T": 0.5,
+      "k_over_T": 1.5,
+      "value_g3": -0.3430216425767442,
+      "error_g3": 0.1898880119523319
+    },
+    {
+      "name": "E0p75_k0p00",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 0.0,
+      "value_g3": 0.17964580118178033,
+      "error_g3": 0.000849953882684744
+    },
+    {
+      "name": "E0p75_k0p00",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 0.0,
+      "value_g3": 0.17964580118178033,
+      "error_g3": 0.000849953882684744
+    },
+    {
+      "name": "E0p75_k0p50",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 0.5,
+      "value_g3": 0.22008741660896639,
+      "error_g3": 0.0018497713313359143
+    },
+    {
+      "name": "E0p75_k0p50",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 0.5,
+      "value_g3": 0.16616074020826702,
+      "error_g3": 0.0020542966947704718
+    },
+    {
+      "name": "E0p75_k1p00",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 1.0,
+      "value_g3": -0.029684274121984877,
+      "error_g3": 0.07985553015287015
+    },
+    {
+      "name": "E0p75_k1p00",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 1.0,
+      "value_g3": -0.3715617093522667,
+      "error_g3": 0.14409395356280652
+    },
+    {
+      "name": "E0p75_k1p50",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 1.5,
+      "value_g3": 0.08954119980706021,
+      "error_g3": 0.02711096163780359
+    },
+    {
+      "name": "E0p75_k1p50",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 1.5,
+      "value_g3": -0.4453096794202308,
+      "error_g3": 0.10408423240737436
+    },
+    {
+      "name": "E1p00_k0p00",
+      "component": "T",
+      "E_over_T": 1.0,
+      "k_over_T": 0.0,
+      "value_g3": 0.19990640115987418,
+      "error_g3": 0.0009029768790138406
+    },
+    {
+      "name": "E1p00_k0p00",
+      "component": "L",
+      "E_over_T": 1.0,
+      "k_over_T": 0.0,
+      "value_g3": 0.19990640115987418,
+      "error_g3": 0.0009029768790138406
+    },
+    {
+      "name": "E1p00_k0p50",
+      "component": "T",
+      "E_over_T": 1.0,
+      "k_over_T": 0.5,
+      "value_g3": 0.220264814293501,
+      "error_g3": 0.001493485751816718
+    },
+    {
+      "name": "E1p00_k0p50",
+      "component": "L",
+      "E_over_T": 1.0,
+      "k_over_T": 0.5,
+      "value_g3": 0.190806055696763,
+      "error_g3": 0.0016687043950645367
+    },
+    {
+      "name": "E1p00_k1p50",
+      "component": "T",
+      "E_over_T": 1.0,
+      "k_over_T": 1.5,
+      "value_g3": -0.017674663578886363,
+      "error_g3": 0.04285871626968158
+    },
+    {
+      "name": "E1p00_k1p50",
+      "component": "L",
+      "E_over_T": 1.0,
+      "k_over_T": 1.5,
+      "value_g3": -0.2966713541772676,
+      "error_g3": 0.08498726364016179
+    },
+    {
+      "name": "E1p25_k0p00",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 0.0,
+      "value_g3": 0.22139423565484873,
+      "error_g3": 0.0009181184972324663
+    },
+    {
+      "name": "E1p25_k0p00",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 0.0,
+      "value_g3": 0.22139423565484873,
+      "error_g3": 0.0009181184972324663
+    },
+    {
+      "name": "E1p25_k0p50",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 0.5,
+      "value_g3": 0.22749955656197676,
+      "error_g3": 0.0015292657147479643
+    },
+    {
+      "name": "E1p25_k0p50",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 0.5,
+      "value_g3": 0.21276274825870123,
+      "error_g3": 0.0016663273961654256
+    },
+    {
+      "name": "E1p25_k1p00",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 1.0,
+      "value_g3": 0.3046603769595508,
+      "error_g3": 0.003879565684114366
+    },
+    {
+      "name": "E1p25_k1p00",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 1.0,
+      "value_g3": 0.18643635743167172,
+      "error_g3": 0.003744849231564204
+    },
+    {
+      "name": "E1p25_k1p50",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 1.5,
+      "value_g3": 0.1473979208029573,
+      "error_g3": 0.06240761066868853
+    },
+    {
+      "name": "E1p25_k1p50",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 1.5,
+      "value_g3": -0.42083366238591075,
+      "error_g3": 0.10363906490773488
+    },
+    {
+      "name": "E1p50_k0p00",
+      "component": "T",
+      "E_over_T": 1.5,
+      "k_over_T": 0.0,
+      "value_g3": 0.24580399975062384,
+      "error_g3": 0.0009108370428063187
+    },
+    {
+      "name": "E1p50_k0p00",
+      "component": "L",
+      "E_over_T": 1.5,
+      "k_over_T": 0.0,
+      "value_g3": 0.24580399975062384,
+      "error_g3": 0.0009108370428063187
+    },
+    {
+      "name": "E1p50_k0p50",
+      "component": "T",
+      "E_over_T": 1.5,
+      "k_over_T": 0.5,
+      "value_g3": 0.2484551914962068,
+      "error_g3": 0.0014968101272209641
+    },
+    {
+      "name": "E1p50_k0p50",
+      "component": "L",
+      "E_over_T": 1.5,
+      "k_over_T": 0.5,
+      "value_g3": 0.24092419044916047,
+      "error_g3": 0.0016381710386917713
+    },
+    {
+      "name": "E1p50_k1p00",
+      "component": "T",
+      "E_over_T": 1.5,
+      "k_over_T": 1.0,
+      "value_g3": 0.27095206992823795,
+      "error_g3": 0.0027657849140257725
+    },
+    {
+      "name": "E1p50_k1p00",
+      "component": "L",
+      "E_over_T": 1.5,
+      "k_over_T": 1.0,
+      "value_g3": 0.2216267643238283,
+      "error_g3": 0.002809365087190006
+    },
+    {
+      "name": "E1p75_k0p00",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 0.0,
+      "value_g3": 0.280446353204664,
+      "error_g3": 0.00089630669015619
+    },
+    {
+      "name": "E1p75_k0p00",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 0.0,
+      "value_g3": 0.280446353204664,
+      "error_g3": 0.00089630669015619
+    },
+    {
+      "name": "E1p75_k0p50",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 0.5,
+      "value_g3": 0.2785612102366881,
+      "error_g3": 0.0016099936138777077
+    },
+    {
+      "name": "E1p75_k0p50",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 0.5,
+      "value_g3": 0.2762067244559058,
+      "error_g3": 0.0017750074593568606
+    },
+    {
+      "name": "E1p75_k1p00",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 1.0,
+      "value_g3": 0.27199030544101377,
+      "error_g3": 0.0024399561976030165
+    },
+    {
+      "name": "E1p75_k1p00",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 1.0,
+      "value_g3": 0.25076255914104806,
+      "error_g3": 0.002528136665262102
+    },
+    {
+      "name": "E1p75_k1p50",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 1.5,
+      "value_g3": 0.35871670573191455,
+      "error_g3": 0.0069671561593969925
+    },
+    {
+      "name": "E1p75_k1p50",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 1.5,
+      "value_g3": 0.18813665029794804,
+      "error_g3": 0.005671898260813003
+    },
+    {
+      "name": "E2p00_k0p50",
+      "component": "T",
+      "E_over_T": 2.0,
+      "k_over_T": 0.5,
+      "value_g3": 0.3189764381927539,
+      "error_g3": 0.0017580248947943594
+    },
+    {
+      "name": "E2p00_k0p50",
+      "component": "L",
+      "E_over_T": 2.0,
+      "k_over_T": 0.5,
+      "value_g3": 0.32025475738167497,
+      "error_g3": 0.001964344412405836
+    },
+    {
+      "name": "E2p00_k1p00",
+      "component": "T",
+      "E_over_T": 2.0,
+      "k_over_T": 1.0,
+      "value_g3": 0.2947839737706962,
+      "error_g3": 0.002477211796625883
+    },
+    {
+      "name": "E2p00_k1p00",
+      "component": "L",
+      "E_over_T": 2.0,
+      "k_over_T": 1.0,
+      "value_g3": 0.2883689766033339,
+      "error_g3": 0.0026185416083970812
+    },
+    {
+      "name": "E2p00_k1p50",
+      "component": "T",
+      "E_over_T": 2.0,
+      "k_over_T": 1.5,
+      "value_g3": 0.30971292716761406,
+      "error_g3": 0.0041195826707249
+    },
+    {
+      "name": "E2p00_k1p50",
+      "component": "L",
+      "E_over_T": 2.0,
+      "k_over_T": 1.5,
+      "value_g3": 0.2449576492085414,
+      "error_g3": 0.003978465768105852
+    },
+    {
+      "name": "E0p45_k0p50",
+      "component": "T",
+      "E_over_T": 0.45,
+      "k_over_T": 0.5,
+      "value_g3": -0.5720167928587886,
+      "error_g3": 0.5333040773313455
+    },
+    {
+      "name": "E0p45_k0p50",
+      "component": "L",
+      "E_over_T": 0.45,
+      "k_over_T": 0.5,
+      "value_g3": 0.3486002190536132,
+      "error_g3": 1.0256396139123845
+    },
+    {
+      "name": "E0p55_k0p50",
+      "component": "T",
+      "E_over_T": 0.55,
+      "k_over_T": 0.5,
+      "value_g3": 0.30477040791508236,
+      "error_g3": 0.004035785718638389
+    },
+    {
+      "name": "E0p55_k0p50",
+      "component": "L",
+      "E_over_T": 0.55,
+      "k_over_T": 0.5,
+      "value_g3": 0.10201320882263669,
+      "error_g3": 0.004737891269209614
+    },
+    {
+      "name": "E0p95_k1p00",
+      "component": "T",
+      "E_over_T": 0.95,
+      "k_over_T": 1.0,
+      "value_g3": 0.029616471958401967,
+      "error_g3": 0.3708507336461772
+    },
+    {
+      "name": "E0p95_k1p00",
+      "component": "L",
+      "E_over_T": 0.95,
+      "k_over_T": 1.0,
+      "value_g3": 1.105412609939731,
+      "error_g3": 0.9289277354022368
+    },
+    {
+      "name": "E1p05_k1p00",
+      "component": "T",
+      "E_over_T": 1.05,
+      "k_over_T": 1.0,
+      "value_g3": 0.37240820954019055,
+      "error_g3": 0.07918821121688377
+    },
+    {
+      "name": "E1p05_k1p00",
+      "component": "L",
+      "E_over_T": 1.05,
+      "k_over_T": 1.0,
+      "value_g3": 0.08751223387137753,
+      "error_g3": 0.017276330917405266
+    },
+    {
+      "name": "E1p45_k1p50",
+      "component": "T",
+      "E_over_T": 1.45,
+      "k_over_T": 1.5,
+      "value_g3": 0.3229790588782902,
+      "error_g3": 0.14005615015830566
+    },
+    {
+      "name": "E1p45_k1p50",
+      "component": "L",
+      "E_over_T": 1.45,
+      "k_over_T": 1.5,
+      "value_g3": -0.4221305145293528,
+      "error_g3": 0.23346063240633677
+    },
+    {
+      "name": "E1p55_k1p50",
+      "component": "T",
+      "E_over_T": 1.55,
+      "k_over_T": 1.5,
+      "value_g3": 0.5776122759130058,
+      "error_g3": 0.034747503694688965
+    },
+    {
+      "name": "E1p55_k1p50",
+      "component": "L",
+      "E_over_T": 1.55,
+      "k_over_T": 1.5,
+      "value_g3": 0.11372107499331055,
+      "error_g3": 0.015466598441230939
+    }
+  ],
+  "zoom_ylim": {
+    "T": [
+      -0.4,
+      1.5
+    ],
+    "L": [
+      -1.2,
+      0.7
+    ]
+  }
+}

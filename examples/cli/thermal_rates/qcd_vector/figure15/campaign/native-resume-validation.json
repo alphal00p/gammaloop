@@ -1,0 +1,29 @@
+{
+  "command": [
+    "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+    "-n",
+    "--read-only-state",
+    "-s",
+    "/tmp/qcd-fig15-projectors-20261018/direct-state",
+    "run",
+    "-c",
+    "set process -p vector_T_nlo -i NLO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 general.generate_events=false integrator.n_start=200 integrator.n_increase=0 integrator.n_max=1000000000 integrator.seed=1027261 integrator.target_relative_accuracy=0.000001; set process -p vector_L_nlo -i NLO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 general.generate_events=false integrator.n_start=200 integrator.n_increase=0 integrator.n_max=1000000000 integrator.seed=1027261 integrator.target_relative_accuracy=0.000001; integrate -p vector_T_nlo -i NLO -p vector_L_nlo -i NLO --n-cores 2 --batch-timing 0.2 --workspace-path /tmp/qcd-fig15-pilot-20261018T163918Z/persistent-nlo-control/workspace --renderer tabled --no-stream-iterations --no-stream-updates --write-results-for-each-iteration; ! /nix/store/xc221w8v56q6h5457rv9av51yjlh0kmv-python3-3.13.14-env/bin/python3 /tmp/qcd-fig15-pilot-20261018T163918Z/gate_control.py /tmp/qcd-fig15-pilot-20261018T163918Z/persistent-nlo-control; integrate -p vector_T_nlo -i NLO -p vector_L_nlo -i NLO --n-cores 2 --batch-timing 0.2 --workspace-path /tmp/qcd-fig15-pilot-20261018T163918Z/persistent-nlo-control/workspace --renderer tabled --no-stream-iterations --no-stream-updates --write-results-for-each-iteration"
+  ],
+  "started_utc": "2026-10-18T16:59:39.132159+00:00",
+  "workers": 2,
+  "metadata_fingerprints_modified": false,
+  "status": "passed",
+  "pid": 936312,
+  "first_checkpoint_samples": 200,
+  "fingerprints_before_resume": [
+    "83dedb036d141fc8",
+    "b77e84d66ec64d30"
+  ],
+  "second_checkpoint_samples": 400,
+  "exit_code": 0,
+  "ended_utc": "2026-10-18T17:00:08.003723+00:00",
+  "fingerprints_after_resume": [
+    "83dedb036d141fc8",
+    "b77e84d66ec64d30"
+  ]
+}

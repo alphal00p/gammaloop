@@ -1,0 +1,78 @@
+{
+  "status": "passed",
+  "runs": [
+    {
+      "label": "before",
+      "exit_code": 0,
+      "wall_seconds": 2.3699712679954246
+    },
+    {
+      "label": "after",
+      "exit_code": 0,
+      "wall_seconds": 2.2206795350066386
+    }
+  ],
+  "native_marker_count": 64,
+  "all_marker_values_and_errors_unchanged": true,
+  "plot_geometry_and_outputs_identical": true,
+  "dependencies_supplied_by_caller_PYTHONPATH": true,
+  "fixed_pdf_metadata_epoch": "1792343969",
+  "comparisons": [
+    {
+      "file": "figure15-comparison.csv",
+      "identical": true,
+      "sha256": "3006f570764ade0f16392801f88d83098cc49183a622b3af3ef16793e98ed347",
+      "bytes": 20472
+    },
+    {
+      "file": "comparison-report.json",
+      "identical": true,
+      "sha256": "6a8015b20c453cad922091ff1261fae8b85fe07f36692d2e202f11d2497e3267",
+      "bytes": 1084
+    },
+    {
+      "file": "figure15-render.json",
+      "identical": true,
+      "sha256": "02ce4dc4be94dcb6b2fe214421fe7b8a311ff79f7b3cd1cb2fc048d73a73c75f",
+      "bytes": 13117
+    },
+    {
+      "file": "figure15-overlay.png",
+      "identical": true,
+      "sha256": "2885c407bb511453ba63a46dc15193dd69b8c54fc62bd254749d9d861438d205",
+      "bytes": 197180
+    },
+    {
+      "file": "figure15-overlay.pdf",
+      "identical": true,
+      "sha256": "548cac1eddc7ee4ea21c9e10668cd2abb6e11c8f7adb8ce0bf0cb01fe63111ba",
+      "bytes": 36502
+    },
+    {
+      "file": "figure15-overlay-zoom.png",
+      "identical": true,
+      "sha256": "79a64357567dfef9fb5a4388ae07dbbf313ac4f810e341775f7383239823b60a",
+      "bytes": 244895
+    },
+    {
+      "file": "figure15-overlay-zoom.pdf",
+      "identical": true,
+      "sha256": "acb8e655853b36b2f33abba11943942db6e202077cc2f0164d0383143f31db80",
+      "bytes": 39038
+    },
+    {
+      "file": "nlo-residuals.png",
+      "identical": true,
+      "sha256": "06416fc732cea31e67268263925e7f8807560d4da64501a0fbd71d090681defa",
+      "bytes": 55537
+    }
+  ],
+  "benchmark_processes_launched": 0,
+  "formatted_rendering_AST_unchanged": true,
+  "ruff_format_passed": true,
+  "ruff_check_passed": true,
+  "kind": "postprocessing-only validation; no new benchmark measurement",
+  "curated_manifest_render_passed": true,
+  "curated_render_output": "/tmp/nix-shell.eP5J91/figure15-curated-render-tqux3fqr",
+  "committed_csv_line_endings": "After rendering verification, CRLF was normalized to LF for Git; all CSV cells are unchanged."
+}

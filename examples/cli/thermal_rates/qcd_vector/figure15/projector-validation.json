@@ -1,0 +1,152 @@
+{
+  "card": "/tmp/qcd-fig15-projectors-20261018/direct-projectors.toml",
+  "state": "/tmp/qcd-fig15-projectors-20261018/direct-state",
+  "direct_projector": "P_L=-n_mu n_nu-Q3_mu Q3_nu/Q3_squared",
+  "symbolic_identity": "2 P_T + P_L = -g",
+  "normalization": "rho_L=9*k0*native_L; rho_T=9*k0*native_T; no Ward replacement needed for trace closure",
+  "precision_and_stability": "unmodified generic Euler rotation and precision ladder",
+  "lo_checks": [
+    {
+      "tag": "anchor",
+      "k0": 4,
+      "k": 1,
+      "samples": 20000,
+      "rho_L": 0.9040435588671356,
+      "error": 0.011270010411177743,
+      "reference": 0.9043249832164968,
+      "pull": -0.024971081577889305,
+      "unresolved_percents": {
+        "vector_T@LO": 0.0,
+        "vector_L@LO": 0.0,
+        "vector_00@LO": 0.0,
+        "vector_V@LO": 0.0
+      },
+      "point": {
+        "T": 0.00021522000278838453,
+        "L": 0.00015413634151953263,
+        "00": 1.0275756101302173e-05,
+        "V": 0.0005845763470963015
+      },
+      "point_trace_residual": -1.6263032587282567e-19,
+      "point_density_residual": 2.710505431213761e-20,
+      "integrated_density_residual": 1.0408340855860843e-17
+    },
+    {
+      "tag": "timelike",
+      "k0": 1,
+      "k": 0.5,
+      "samples": 20000,
+      "rho_L": 0.014512813488622605,
+      "error": 0.0002609577376738145,
+      "reference": 0.014574740011827535,
+      "pull": -0.23730479792223969,
+      "unresolved_percents": {
+        "vector_T@LO": 0.0,
+        "vector_L@LO": 0.0,
+        "vector_00@LO": 0.0,
+        "vector_V@LO": 0.0
+      },
+      "point": {
+        "T": 6.855529108225316e-05,
+        "L": 8.226634929870376e-05,
+        "00": 2.7422116432901236e-05,
+        "V": 0.00021937693146321005
+      },
+      "point_trace_residual": -2.710505431213761e-20,
+      "point_density_residual": 5.421010862427522e-20,
+      "integrated_density_residual": 2.168404344971009e-19
+    },
+    {
+      "tag": "spacelike",
+      "k0": 0.5,
+      "k": 1,
+      "samples": 20000,
+      "rho_L": -0.5660343747538004,
+      "error": 0.016833372142317525,
+      "reference": -0.5553484877381948,
+      "pull": -0.634803705713976,
+      "unresolved_percents": {
+        "vector_T@LO": 0.0,
+        "vector_L@LO": 0.0,
+        "vector_00@LO": 0.0,
+        "vector_V@LO": 0.0
+      },
+      "point": {
+        "T": 0.0037278832488243114,
+        "L": -0.004473458663031651,
+        "00": 0.005964611550708868,
+        "V": 0.002982307834616972
+      },
+      "point_trace_residual": 0.0,
+      "point_density_residual": 0.0,
+      "integrated_density_residual": 5.551115123125783e-17
+    }
+  ],
+  "nlo_point": {
+    "k0": 4,
+    "k": 1,
+    "loop_momenta": [
+      0.17,
+      -0.31,
+      0.43,
+      -0.29,
+      0.53,
+      0.71
+    ],
+    "T": -4.586851851844162e-05,
+    "L": 1.2674022674154676e-05,
+    "00": -5.64121969527008e-06,
+    "V": -7.906301436272885e-05,
+    "trace_residual": -2.846030702774449e-19,
+    "density_residual": 9.729231810320588e-05
+  },
+  "provenance": {
+    "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+    "working_tree_at_validation": "clean baseline; no Rust changes",
+    "host": "itphlies",
+    "date_utc": "2026-10-18",
+    "binary": "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+    "binary_sha256": "9f4f7bc9b5f5d1caffa8235cb88b93429b90677aabe9e05420dd155e03e8de24",
+    "build_command": "nix develop /tmp/thermal-rates-development-shell --command cargo build --locked -p gammaloop-api --bin gammaloop --no-default-features --features cli --profile dev-optim",
+    "form": "5.0.0",
+    "scratch_card_sha256": "7efe8587c2f934a21a6495a45681bc8a03b009bd9d4890cd0e4e106fe7c43f56",
+    "durable_card": "direct-projectors.toml",
+    "durable_card_changes": "Parameterized output/state paths, arranged generation blocks, retained accepted LO checks, added finite-size pilot block; generated tensor projector expressions unchanged."
+  },
+  "sewn_current_half_edges": {
+    "LO": [
+      0,
+      5
+    ],
+    "NLO": [
+      0,
+      11
+    ],
+    "NLO_graphs": [
+      "GL0",
+      "GL2"
+    ]
+  },
+  "scratch_commands": {
+    "generation": "run model LO_T LO_00 LO_V LO_L NLO_T NLO_00 NLO_L NLO_V save direct_nlo_inspect",
+    "lo_validation": "run direct_validate_anchor direct_validate_timelike direct_validate_spacelike",
+    "worker_limit": 8,
+    "seed": 191007552,
+    "lo_batch_samples": 10000,
+    "lo_total_samples_per_slot_per_point": 20000
+  },
+  "reference": {
+    "article": "https://arxiv.org/pdf/1910.07552",
+    "figure": 15,
+    "units": "T=1",
+    "figure_strong_coupling": 3,
+    "native_strong_coupling": 1,
+    "figure_combination": "rho_LO + 9*rho_NLO_coefficient",
+    "author_implementation": "https://doi.org/10.5281/zenodo.3478144",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+    "lo_controls": "Independent massless one-dimensional phase-space Simpson quadrature; cross-checked against unchanged author LO formulas."
+  },
+  "excluded_diagnostic": {
+    "cartesian_projectors": "Fixed spatial basis vectors do not rotate with the default generic stability probes; those trial integrations were rejected and replaced by covariant projectors. No z-only stability overrides are retained in the durable card."
+  }
+}

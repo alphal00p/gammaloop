@@ -1,0 +1,3102 @@
+{
+  "created_utc": "2026-10-18T17:15:19.527743+00:00",
+  "inputs": [
+    "/tmp/qcd-fig15-pilot-20261018T163918Z/direct-component-summary.json",
+    "/tmp/qcd-fig15-pilot-20261018T163918Z/trace-summary.json"
+  ],
+  "reference_root": "/tmp/qcd-fig15-reference-20261018",
+  "reference_records": 19,
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "full_scan_started": false,
+  "nominal_relative_error": 0.005,
+  "nominal_absolute_floor": 0.0,
+  "production_absolute_floor_selected": false,
+  "worker_limit": 60,
+  "full_scan_hard_wall_hours": 12,
+  "caveats": [
+    "10k pilots are not trained precision runs and cannot establish persistent discrepancies.",
+    "N^-1/2 sample and cost projections are conditional; allow at least a factor-two workload contingency.",
+    "Measured efficiency is summed worker elapsed time divided by allocated worker walltime, not OS CPU utilization.",
+    "Reference tolerance changes are empirical controls, not rigorous quadrature uncertainty bounds.",
+    "No absolute floor is used unless explicitly selected; relative precision is distinct from target agreement.",
+    "Per-component costs do not capture shared-run imbalance; paired T/L must run to the larger sample requirement."
+  ],
+  "joint_workspace_costs": [
+    {
+      "name": "anchor",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_anchor/nlo/integration_result.json",
+      "components": [
+        "T",
+        "L"
+      ],
+      "route": "components",
+      "nominal_joint_target_samples": 6526541,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 216.40879051478944,
+      "allocated_worker_hours_at_measured_efficiency": 252.49689568951405,
+      "hours_on_60_workers_at_measured_efficiency": 4.208281594825234,
+      "twofold_workload_contingency_hours_on_60_workers": 8.416563189650468
+    },
+    {
+      "name": "timelike_k05",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k05/nlo/integration_result.json",
+      "components": [
+        "T",
+        "L"
+      ],
+      "route": "components",
+      "nominal_joint_target_samples": 1758540,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 58.217069488433324,
+      "allocated_worker_hours_at_measured_efficiency": 67.54519805026649,
+      "hours_on_60_workers_at_measured_efficiency": 1.125753300837775,
+      "twofold_workload_contingency_hours_on_60_workers": 2.25150660167555
+    },
+    {
+      "name": "spacelike",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_spacelike/nlo/integration_result.json",
+      "components": [
+        "T",
+        "L"
+      ],
+      "route": "components",
+      "nominal_joint_target_samples": 5024509506,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 216030.87417330913,
+      "allocated_worker_hours_at_measured_efficiency": 253130.62695772413,
+      "hours_on_60_workers_at_measured_efficiency": 4218.843782628735,
+      "twofold_workload_contingency_hours_on_60_workers": 8437.68756525747
+    },
+    {
+      "name": "timelike_k1",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k1/nlo/integration_result.json",
+      "components": [
+        "T",
+        "L"
+      ],
+      "route": "components",
+      "nominal_joint_target_samples": 15075034,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 573.1970630298467,
+      "allocated_worker_hours_at_measured_efficiency": 675.9666477190115,
+      "hours_on_60_workers_at_measured_efficiency": 11.266110795316857,
+      "twofold_workload_contingency_hours_on_60_workers": 22.532221590633714
+    },
+    {
+      "name": "near_lc_above",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_near_lc_above/nlo/integration_result.json",
+      "components": [
+        "T",
+        "L"
+      ],
+      "route": "components",
+      "nominal_joint_target_samples": 60034225,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 3638.9653097748196,
+      "allocated_worker_hours_at_measured_efficiency": 4226.448379025054,
+      "hours_on_60_workers_at_measured_efficiency": 70.44080631708424,
+      "twofold_workload_contingency_hours_on_60_workers": 140.88161263416848
+    },
+    {
+      "name": "near_lc_below",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_near_lc_below/nlo/integration_result.json",
+      "components": [
+        "T",
+        "L"
+      ],
+      "route": "components",
+      "nominal_joint_target_samples": 334862909412,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 27999105.64071788,
+      "allocated_worker_hours_at_measured_efficiency": 34939795.06965294,
+      "hours_on_60_workers_at_measured_efficiency": 582329.917827549,
+      "twofold_workload_contingency_hours_on_60_workers": 1164659.835655098
+    },
+    {
+      "name": "timelike_k15",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k15/nlo/integration_result.json",
+      "components": [
+        "T",
+        "L"
+      ],
+      "route": "components",
+      "nominal_joint_target_samples": 8041469,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 285.3212736716289,
+      "allocated_worker_hours_at_measured_efficiency": 331.3620678461564,
+      "hours_on_60_workers_at_measured_efficiency": 5.522701130769273,
+      "twofold_workload_contingency_hours_on_60_workers": 11.045402261538547
+    },
+    {
+      "name": "anchor",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_anchor/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 3975909,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 78.93124858248582,
+      "allocated_worker_hours_at_measured_efficiency": 90.5418205318133,
+      "hours_on_60_workers_at_measured_efficiency": 1.5090303421968883,
+      "twofold_workload_contingency_hours_on_60_workers": 3.0180606843937765
+    },
+    {
+      "name": "rest",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_rest/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 604421,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 6.720286284813056,
+      "allocated_worker_hours_at_measured_efficiency": 7.478759253051214,
+      "hours_on_60_workers_at_measured_efficiency": 0.12464598755085354,
+      "twofold_workload_contingency_hours_on_60_workers": 0.2492919751017071
+    },
+    {
+      "name": "timelike_k05",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k05/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 836089,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 16.810693652458056,
+      "allocated_worker_hours_at_measured_efficiency": 19.25602160018656,
+      "hours_on_60_workers_at_measured_efficiency": 0.32093369333644267,
+      "twofold_workload_contingency_hours_on_60_workers": 0.6418673866728853
+    },
+    {
+      "name": "spacelike",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_spacelike/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 26409742,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 724.7597033226956,
+      "allocated_worker_hours_at_measured_efficiency": 848.5984017763868,
+      "hours_on_60_workers_at_measured_efficiency": 14.143306696273115,
+      "twofold_workload_contingency_hours_on_60_workers": 28.28661339254623
+    },
+    {
+      "name": "timelike_k1",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k1/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 1971963,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 46.204108650944995,
+      "allocated_worker_hours_at_measured_efficiency": 54.56249433507233,
+      "hours_on_60_workers_at_measured_efficiency": 0.9093749055845387,
+      "twofold_workload_contingency_hours_on_60_workers": 1.8187498111690774
+    },
+    {
+      "name": "near_lc_above",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_near_lc_above/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 3041757,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 108.1192703085825,
+      "allocated_worker_hours_at_measured_efficiency": 125.4269457671389,
+      "hours_on_60_workers_at_measured_efficiency": 2.0904490961189817,
+      "twofold_workload_contingency_hours_on_60_workers": 4.180898192237963
+    },
+    {
+      "name": "near_lc_below",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_near_lc_below/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 1455142564,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 108422.02611781782,
+      "allocated_worker_hours_at_measured_efficiency": 147847.52673636092,
+      "hours_on_60_workers_at_measured_efficiency": 2464.1254456060155,
+      "twofold_workload_contingency_hours_on_60_workers": 4928.250891212031
+    },
+    {
+      "name": "timelike_k15",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k15/nlo/integration_result.json",
+      "components": [
+        "V"
+      ],
+      "route": "trace",
+      "nominal_joint_target_samples": 6611264,
+      "final_stability_clean": true,
+      "nominal_joint_core_hours": 148.52253609541336,
+      "allocated_worker_hours_at_measured_efficiency": 173.5776491588699,
+      "hours_on_60_workers_at_measured_efficiency": 2.892960819314498,
+      "twofold_workload_contingency_hours_on_60_workers": 5.785921638628996
+    }
+  ],
+  "rows": [
+    {
+      "name": "anchor",
+      "component": "T",
+      "order": "nlo",
+      "k0_over_T": 4.0,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.036009036455590865,
+      "error": 0.004174730130739746,
+      "reference": {
+        "value": 0.03508277862588191,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 2.4172531563712574e-05,
+        "source": "/tmp/qcd-fig15-reference-20261018/initial-driver-output-aggregate.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_anchor/nlo/integration_result.json",
+      "native_slot": "vector_T_nlo@NLO",
+      "relative_error_to_estimate": 0.11593562454492073,
+      "relative_error_to_reference": 0.11899656453265899,
+      "pull": 0.221872504497632,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.059684881,
+        "average_parameterization_time_seconds": 0.000292767,
+        "average_integrand_time_seconds": 0.05921123,
+        "average_evaluator_time_seconds": 0.00283242,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.649e-05,
+        "f64_percentage": 87.79,
+        "f128_percentage": 12.21,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.46106016498518726,
+      "max_weight_impact": 0.060514892313064325,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.01608576612551902,
+          "variance_coefficient": 0.5175037436897904
+        },
+        {
+          "samples": 4000,
+          "error": 0.008999068039166913,
+          "variance_coefficient": 0.3239329022942217
+        },
+        {
+          "samples": 6000,
+          "error": 0.006359630221707507,
+          "variance_coefficient": 0.24266937934113286
+        },
+        {
+          "samples": 8000,
+          "error": 0.005010262930094859,
+          "variance_coefficient": 0.20082187702946178
+        },
+        {
+          "samples": 10000,
+          "error": 0.004174730130739746,
+          "variance_coefficient": 0.17428371664506295
+        }
+      ],
+      "late_error_decay_exponent": 0.8242352152016198,
+      "variance_coefficient_for_projection": 0.20082187702946178,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00017541389312940956,
+      "floor_dominated": false,
+      "nominal_target_samples": 6526541,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.059684881,
+      "workers": 5,
+      "measured_wall_seconds": 278.55147910118103,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 596.8488100000001,
+      "workspace_worker_elapsed_seconds": 1193.6976200000001,
+      "measured_worker_time_efficiency_proxy": 0.8570750540271957,
+      "nominal_core_hours": 108.20439525739472,
+      "projected_hours_on_60_workers_at_measured_efficiency": 2.104140797412617,
+      "allocated_worker_hours_at_measured_efficiency": 126.24844784475702,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Reference tolerance drift exceeds one tenth of nominal Monte Carlo error goal.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "anchor",
+      "component": "L",
+      "order": "nlo",
+      "k0_over_T": 4.0,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.037933738164516936,
+      "error": 0.004154540308373523,
+      "reference": {
+        "value": 0.03631776699738202,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 4.838979405095978e-05,
+        "source": "/tmp/qcd-fig15-reference-20261018/initial-driver-output-aggregate.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_anchor/nlo/integration_result.json",
+      "native_slot": "vector_L_nlo@NLO",
+      "relative_error_to_estimate": 0.10952098341469713,
+      "relative_error_to_reference": 0.1143941561350125,
+      "pull": 0.3889650953386852,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.059684881,
+        "average_parameterization_time_seconds": 0.000292767,
+        "average_integrand_time_seconds": 0.05921123,
+        "average_evaluator_time_seconds": 0.00283242,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.649e-05,
+        "f64_percentage": 87.79,
+        "f128_percentage": 12.21,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.0287105352693249,
+      "max_weight_impact": 0.014081502782217009,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.012948563322534735,
+          "variance_coefficient": 0.33533058423538353
+        },
+        {
+          "samples": 4000,
+          "error": 0.008173503277249698,
+          "variance_coefficient": 0.2672246232928462
+        },
+        {
+          "samples": 6000,
+          "error": 0.0060224218063540435,
+          "variance_coefficient": 0.21761738648189222
+        },
+        {
+          "samples": 8000,
+          "error": 0.004847568479727959,
+          "variance_coefficient": 0.18799136132521627
+        },
+        {
+          "samples": 10000,
+          "error": 0.004154540308373523,
+          "variance_coefficient": 0.17260205173900367
+        }
+      ],
+      "late_error_decay_exponent": 0.7281363862256744,
+      "variance_coefficient_for_projection": 0.18799136132521627,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0001815888349869101,
+      "floor_dominated": false,
+      "nominal_target_samples": 5701113,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.059684881,
+      "workers": 5,
+      "measured_wall_seconds": 278.55147910118103,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 596.8488100000001,
+      "workspace_worker_elapsed_seconds": 1193.6976200000001,
+      "measured_worker_time_efficiency_proxy": 0.8570750540271957,
+      "nominal_core_hours": 94.51951415904252,
+      "projected_hours_on_60_workers_at_measured_efficiency": 1.8380248364270504,
+      "allocated_worker_hours_at_measured_efficiency": 110.28149018562303,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Reference tolerance drift exceeds one tenth of nominal Monte Carlo error goal.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "timelike_k05",
+      "component": "T",
+      "order": "nlo",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.5,
+      "samples": 10000,
+      "value": 0.022493614994285597,
+      "error": 0.001425648114617839,
+      "reference": {
+        "value": 0.022818831939137627,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 3.468452847849024e-09,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-half-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k05/nlo/integration_result.json",
+      "native_slot": "vector_T_nlo@NLO",
+      "relative_error_to_estimate": 0.0633801243143896,
+      "relative_error_to_reference": 0.06247682258322103,
+      "pull": -0.22811866513021534,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.059589617,
+        "average_parameterization_time_seconds": 0.000279888,
+        "average_integrand_time_seconds": 0.059146461,
+        "average_evaluator_time_seconds": 0.002677368,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.6236e-05,
+        "f64_percentage": 89.32,
+        "f128_percentage": 10.68,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.5140731602754414,
+      "max_weight_impact": 0.03582024054767893,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.002956812511969042,
+          "variance_coefficient": 0.017485480461873353
+        },
+        {
+          "samples": 4000,
+          "error": 0.002008399053552919,
+          "variance_coefficient": 0.016134667033249048
+        },
+        {
+          "samples": 6000,
+          "error": 0.0015533350066702025,
+          "variance_coefficient": 0.014477097857682707
+        },
+        {
+          "samples": 8000,
+          "error": 0.0013143628585183431,
+          "variance_coefficient": 0.013820397790820081
+        },
+        {
+          "samples": 10000,
+          "error": 0.001425648114617839,
+          "variance_coefficient": 0.02032472546713399
+        }
+      ],
+      "late_error_decay_exponent": 0.18739539892805082,
+      "variance_coefficient_for_projection": 0.02032472546713399,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00011409415969568813,
+      "floor_dominated": false,
+      "nominal_target_samples": 1561342,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.059589617,
+      "workers": 5,
+      "measured_wall_seconds": 276.5506761074066,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 595.89617,
+      "workspace_worker_elapsed_seconds": 1191.79234,
+      "measured_worker_time_efficiency_proxy": 0.8618979760057663,
+      "nominal_core_hours": 25.844381051670556,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.4997571594153824,
+      "allocated_worker_hours_at_measured_efficiency": 29.985429564922946,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "timelike_k05",
+      "component": "L",
+      "order": "nlo",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.5,
+      "samples": 10000,
+      "value": 0.01975114175771189,
+      "error": 0.0013124904890949058,
+      "reference": {
+        "value": 0.019794753841412636,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 5.032433605250963e-09,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-half-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k05/nlo/integration_result.json",
+      "native_slot": "vector_L_nlo@NLO",
+      "relative_error_to_estimate": 0.06645137304948157,
+      "relative_error_to_reference": 0.0663049664375741,
+      "pull": -0.03322849503528294,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.059589617,
+        "average_parameterization_time_seconds": 0.000279888,
+        "average_integrand_time_seconds": 0.059146461,
+        "average_evaluator_time_seconds": 0.002677368,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.6236e-05,
+        "f64_percentage": 89.32,
+        "f128_percentage": 10.68,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.9432235195801824,
+      "max_weight_impact": 0.011771117248598369,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.0032101067978642425,
+          "variance_coefficient": 0.02060957130738844
+        },
+        {
+          "samples": 4000,
+          "error": 0.0021512052582367074,
+          "variance_coefficient": 0.01851073625226104
+        },
+        {
+          "samples": 6000,
+          "error": 0.0016578890990573084,
+          "variance_coefficient": 0.016491577588638322
+        },
+        {
+          "samples": 8000,
+          "error": 0.0014456123693814876,
+          "variance_coefficient": 0.01671836098007007
+        },
+        {
+          "samples": 10000,
+          "error": 0.0013124904890949058,
+          "variance_coefficient": 0.01722631283964585
+        }
+      ],
+      "late_error_decay_exponent": 0.4582285466948076,
+      "variance_coefficient_for_projection": 0.01722631283964585,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 9.897376920706319e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 1758540,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.059589617,
+      "workers": 5,
+      "measured_wall_seconds": 276.5506761074066,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 595.89617,
+      "workspace_worker_elapsed_seconds": 1191.79234,
+      "measured_worker_time_efficiency_proxy": 0.8618979760057663,
+      "nominal_core_hours": 29.108534744216662,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.5628766504188875,
+      "allocated_worker_hours_at_measured_efficiency": 33.772599025133246,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "spacelike",
+      "component": "T",
+      "order": "nlo",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": -0.037435598672119395,
+      "error": 0.035331247342400986,
+      "reference": {
+        "value": -0.028282273810538147,
+        "tolerance": 0.0001,
+        "empirical_tolerance_drift": null,
+        "source": "/tmp/qcd-fig15-reference-20261018/spacelike-tol0.0001.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 1
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_spacelike/nlo/integration_result.json",
+      "native_slot": "vector_T_nlo@NLO",
+      "relative_error_to_estimate": 0.9437874268246804,
+      "relative_error_to_reference": 1.2492364503322342,
+      "pull": -0.25907165894469725,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.077391748,
+        "average_parameterization_time_seconds": 0.000280388,
+        "average_integrand_time_seconds": 0.07696137,
+        "average_evaluator_time_seconds": 0.002555665,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.3976e-05,
+        "f64_percentage": 92.62,
+        "f128_percentage": 7.37,
+        "arb_percentage": 0.01,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.7111295312067509,
+      "max_weight_impact": 0.20070953342394274,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.1037253208579272,
+          "variance_coefficient": 21.517884374159895
+        },
+        {
+          "samples": 4000,
+          "error": 0.07181167336611988,
+          "variance_coefficient": 20.627665726569163
+        },
+        {
+          "samples": 6000,
+          "error": 0.05161885869574101,
+          "variance_coefficient": 15.987039438305263
+        },
+        {
+          "samples": 8000,
+          "error": 0.04131721451438873,
+          "variance_coefficient": 13.656897721824118
+        },
+        {
+          "samples": 10000,
+          "error": 0.035331247342400986,
+          "variance_coefficient": 12.482970387699167
+        }
+      ],
+      "late_error_decay_exponent": 0.7436620761374305,
+      "variance_coefficient_for_projection": 13.656897721824118,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00014141136905269073,
+      "floor_dominated": false,
+      "nominal_target_samples": 682941342,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.077391748,
+      "workers": 5,
+      "measured_wall_seconds": 362.73003602027893,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 773.91748,
+      "workspace_worker_elapsed_seconds": 1547.83496,
+      "measured_worker_time_efficiency_proxy": 0.8534363335235167,
+      "nominal_core_hours": 14681.673399679392,
+      "projected_hours_on_60_workers_at_measured_efficiency": 286.7168259067102,
+      "allocated_worker_hours_at_measured_efficiency": 17203.00955440261,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Reference has no completed tolerance refinement yet.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "spacelike",
+      "component": "L",
+      "order": "nlo",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.03716170862287037,
+      "error": 0.06895595280602432,
+      "reference": {
+        "value": 0.02043287824303178,
+        "tolerance": 0.0001,
+        "empirical_tolerance_drift": null,
+        "source": "/tmp/qcd-fig15-reference-20261018/spacelike-tol0.0001.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 1
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_spacelike/nlo/integration_result.json",
+      "native_slot": "vector_L_nlo@NLO",
+      "relative_error_to_estimate": 1.8555646487036623,
+      "relative_error_to_reference": 3.3747547450658524,
+      "pull": 0.2426016855556679,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.077391748,
+        "average_parameterization_time_seconds": 0.000280388,
+        "average_integrand_time_seconds": 0.07696137,
+        "average_evaluator_time_seconds": 0.002555665,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.3976e-05,
+        "f64_percentage": 92.62,
+        "f128_percentage": 7.37,
+        "arb_percentage": 0.01,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.9771868462892221,
+      "max_weight_impact": 0.43678714225286003,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.20535493811501274,
+          "variance_coefficient": 84.34130121644142
+        },
+        {
+          "samples": 4000,
+          "error": 0.1426230321747453,
+          "variance_coefficient": 81.36531722687374
+        },
+        {
+          "samples": 6000,
+          "error": 0.10165466178028701,
+          "variance_coefficient": 62.002021569987264
+        },
+        {
+          "samples": 8000,
+          "error": 0.08096575948317833,
+          "variance_coefficient": 52.44363366950305
+        },
+        {
+          "samples": 10000,
+          "error": 0.06895595280602432,
+          "variance_coefficient": 47.54923427386653
+        }
+      ],
+      "late_error_decay_exponent": 0.7612497939629637,
+      "variance_coefficient_for_projection": 52.44363366950305,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00010216439121515891,
+      "floor_dominated": false,
+      "nominal_target_samples": 5024509506,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.077391748,
+      "workers": 5,
+      "measured_wall_seconds": 362.73003602027893,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 773.91748,
+      "workspace_worker_elapsed_seconds": 1547.83496,
+      "measured_worker_time_efficiency_proxy": 0.8534363335235167,
+      "nominal_core_hours": 108015.43708665457,
+      "projected_hours_on_60_workers_at_measured_efficiency": 2109.4218913143677,
+      "allocated_worker_hours_at_measured_efficiency": 126565.31347886207,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Reference has no completed tolerance refinement yet.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "timelike_k1",
+      "component": "T",
+      "order": "nlo",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.03150120220677578,
+      "error": 0.0030514560691857523,
+      "reference": {
+        "value": 0.03231315273198728,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 2.089973336755202e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-mid-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k1/nlo/integration_result.json",
+      "native_slot": "vector_T_nlo@NLO",
+      "relative_error_to_estimate": 0.09686792425113847,
+      "relative_error_to_reference": 0.09443387014864289,
+      "pull": -0.26608625744632075,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.068441286,
+        "average_parameterization_time_seconds": 0.000295876,
+        "average_integrand_time_seconds": 0.067955235,
+        "average_evaluator_time_seconds": 0.003117516,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.9966e-05,
+        "f64_percentage": 84.795,
+        "f128_percentage": 15.204999999999998,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.4226105519876526,
+      "max_weight_impact": 0.04752124420951891,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.005376852116364497,
+          "variance_coefficient": 0.05782107736250674
+        },
+        {
+          "samples": 4000,
+          "error": 0.005973364096654372,
+          "variance_coefficient": 0.142724314524798
+        },
+        {
+          "samples": 6000,
+          "error": 0.004430995257259945,
+          "variance_coefficient": 0.11780231381916077
+        },
+        {
+          "samples": 8000,
+          "error": 0.0035924995977327746,
+          "variance_coefficient": 0.10324842687768118
+        },
+        {
+          "samples": 10000,
+          "error": 0.0030514560691857523,
+          "variance_coefficient": 0.09311384142170562
+        }
+      ],
+      "late_error_decay_exponent": 0.73015341167392,
+      "variance_coefficient_for_projection": 0.10324842687768118,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0001615657636599364,
+      "floor_dominated": false,
+      "nominal_target_samples": 3955349,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.068441286,
+      "workers": 5,
+      "measured_wall_seconds": 322.849014043808,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 684.41286,
+      "workspace_worker_elapsed_seconds": 1368.82572,
+      "measured_worker_time_efficiency_proxy": 0.8479664861632574,
+      "nominal_core_hours": 75.19699226078167,
+      "projected_hours_on_60_workers_at_measured_efficiency": 1.4779867185754187,
+      "allocated_worker_hours_at_measured_efficiency": 88.67920311452512,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "timelike_k1",
+      "component": "L",
+      "order": "nlo",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.015243775464647547,
+      "error": 0.0034655888778376033,
+      "reference": {
+        "value": 0.018855611482488852,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 4.632361130102458e-09,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-mid-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k1/nlo/integration_result.json",
+      "native_slot": "vector_L_nlo@NLO",
+      "relative_error_to_estimate": 0.22734452405670694,
+      "relative_error_to_reference": 0.1837961543202184,
+      "pull": -1.0421997949436386,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.068441286,
+        "average_parameterization_time_seconds": 0.000295876,
+        "average_integrand_time_seconds": 0.067955235,
+        "average_evaluator_time_seconds": 0.003117516,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.9966e-05,
+        "f64_percentage": 84.795,
+        "f128_percentage": 15.204999999999998,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.26672209489719023,
+      "max_weight_impact": 0.1259929396084193,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.0052719690722621,
+          "variance_coefficient": 0.055587315797776225
+        },
+        {
+          "samples": 4000,
+          "error": 0.00727484434799981,
+          "variance_coefficient": 0.21169344115049912
+        },
+        {
+          "samples": 6000,
+          "error": 0.005221681931507783,
+          "variance_coefficient": 0.1635957731630091
+        },
+        {
+          "samples": 8000,
+          "error": 0.004092557373797949,
+          "variance_coefficient": 0.13399220686262375
+        },
+        {
+          "samples": 10000,
+          "error": 0.0034655888778376033,
+          "variance_coefficient": 0.12010306270191698
+        }
+      ],
+      "late_error_decay_exponent": 0.8045957779384199,
+      "variance_coefficient_for_projection": 0.13399220686262375,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 9.427805741244426e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 15075034,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.068441286,
+      "workers": 5,
+      "measured_wall_seconds": 322.849014043808,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 684.41286,
+      "workspace_worker_elapsed_seconds": 1368.82572,
+      "measured_worker_time_efficiency_proxy": 0.8479664861632574,
+      "nominal_core_hours": 286.59853151492337,
+      "projected_hours_on_60_workers_at_measured_efficiency": 5.6330553976584286,
+      "allocated_worker_hours_at_measured_efficiency": 337.98332385950573,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "near_lc_above",
+      "component": "T",
+      "order": "nlo",
+      "k0_over_T": 1.05,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.049272034824310876,
+      "error": 0.004523321163154966,
+      "reference": {
+        "value": 0.053204246603998716,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 7.919081683460671e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/refine-near-above-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_near_lc_above/nlo/integration_result.json",
+      "native_slot": "vector_T_nlo@NLO",
+      "relative_error_to_estimate": 0.09180301116614642,
+      "relative_error_to_reference": 0.08501804746568864,
+      "pull": -0.8693196078399098,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.109106723,
+        "average_parameterization_time_seconds": 0.000327242,
+        "average_integrand_time_seconds": 0.108374612,
+        "average_evaluator_time_seconds": 0.006775839,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 8.1117e-05,
+        "f64_percentage": 33.43,
+        "f128_percentage": 66.57,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.24280829194698478,
+      "max_weight_impact": 0.012183702233883367,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.011919762626639418,
+          "variance_coefficient": 0.2841614821508597
+        },
+        {
+          "samples": 4000,
+          "error": 0.008107166605469044,
+          "variance_coefficient": 0.2629046014753298
+        },
+        {
+          "samples": 6000,
+          "error": 0.00626352144923414,
+          "variance_coefficient": 0.2353902056700968
+        },
+        {
+          "samples": 8000,
+          "error": 0.005211235289642026,
+          "variance_coefficient": 0.2172557859520833
+        },
+        {
+          "samples": 10000,
+          "error": 0.004523321163154966,
+          "variance_coefficient": 0.20460434345045597
+        }
+      ],
+      "late_error_decay_exponent": 0.6372970306908403,
+      "variance_coefficient_for_projection": 0.2172557859520833,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00026602123301999357,
+      "floor_dominated": false,
+      "nominal_target_samples": 3070003,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.109106723,
+      "workers": 5,
+      "measured_wall_seconds": 506.8846700191498,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 1091.06723,
+      "workspace_worker_elapsed_seconds": 2182.13446,
+      "measured_worker_time_efficiency_proxy": 0.8609984042001352,
+      "nominal_core_hours": 93.04387970282473,
+      "projected_hours_on_60_workers_at_measured_efficiency": 1.801085020385185,
+      "allocated_worker_hours_at_measured_efficiency": 108.0651012231111,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "near_lc_above",
+      "component": "L",
+      "order": "nlo",
+      "k0_over_T": 1.05,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.023180892096466055,
+      "error": 0.0046669916475228675,
+      "reference": {
+        "value": 0.012119500871846592,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.9707994715345567e-09,
+        "source": "/tmp/qcd-fig15-reference-20261018/refine-near-above-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_near_lc_above/nlo/integration_result.json",
+      "native_slot": "vector_L_nlo@NLO",
+      "relative_error_to_estimate": 0.2013292511824579,
+      "relative_error_to_reference": 0.3850811759388718,
+      "pull": 2.370133066445619,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.109106723,
+        "average_parameterization_time_seconds": 0.000327242,
+        "average_integrand_time_seconds": 0.108374612,
+        "average_evaluator_time_seconds": 0.006775839,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 8.1117e-05,
+        "f64_percentage": 33.43,
+        "f128_percentage": 66.57,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.1025884501620709,
+      "max_weight_impact": 0.052379457297548226,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.012367048173896533,
+          "variance_coefficient": 0.30588776107095517
+        },
+        {
+          "samples": 4000,
+          "error": 0.008683730235130442,
+          "variance_coefficient": 0.3016286831860744
+        },
+        {
+          "samples": 6000,
+          "error": 0.006300783079612708,
+          "variance_coefficient": 0.2381992044980028
+        },
+        {
+          "samples": 8000,
+          "error": 0.0052493943116122274,
+          "variance_coefficient": 0.2204491251102945
+        },
+        {
+          "samples": 10000,
+          "error": 0.0046669916475228675,
+          "variance_coefficient": 0.2178081103804821
+        }
+      ],
+      "late_error_decay_exponent": 0.5898138032007948,
+      "variance_coefficient_for_projection": 0.2204491251102945,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 6.0597504359232956e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 60034225,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.109106723,
+      "workers": 5,
+      "measured_wall_seconds": 506.8846700191498,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 1091.06723,
+      "workspace_worker_elapsed_seconds": 2182.13446,
+      "measured_worker_time_efficiency_proxy": 0.8609984042001352,
+      "nominal_core_hours": 1819.4826548874098,
+      "projected_hours_on_60_workers_at_measured_efficiency": 35.22040315854212,
+      "allocated_worker_hours_at_measured_efficiency": 2113.224189512527,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "near_lc_below",
+      "component": "T",
+      "order": "nlo",
+      "k0_over_T": 0.95,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": -0.15066735612459473,
+      "error": 0.117196991643239,
+      "reference": {
+        "value": -0.004270396744788731,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 2.1279407317123522e-07,
+        "source": "/tmp/qcd-fig15-reference-20261018/near-below-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_near_lc_below/nlo/integration_result.json",
+      "native_slot": "vector_T_nlo@NLO",
+      "relative_error_to_estimate": 0.7778525797341441,
+      "relative_error_to_reference": 27.4440523087831,
+      "pull": -1.2491528777927594,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.150504546,
+        "average_parameterization_time_seconds": 0.000366938,
+        "average_integrand_time_seconds": 0.149521736,
+        "average_evaluator_time_seconds": 0.009548758,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 0.000142367,
+        "f64_percentage": 30.34,
+        "f128_percentage": 68.2,
+        "arb_percentage": 1.46,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.9822210239017615,
+      "max_weight_impact": 0.25839936183923645,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.32913903203637795,
+          "variance_coefficient": 216.66500481968768
+        },
+        {
+          "samples": 4000,
+          "error": 0.2187953514690495,
+          "variance_coefficient": 191.48562329785958
+        },
+        {
+          "samples": 6000,
+          "error": 0.1722986052780893,
+          "variance_coefficient": 178.1208562846489
+        },
+        {
+          "samples": 8000,
+          "error": 0.13814232443837407,
+          "variance_coefficient": 152.666414409896
+        },
+        {
+          "samples": 10000,
+          "error": 0.117196991643239,
+          "variance_coefficient": 137.35134850225433
+        }
+      ],
+      "late_error_decay_exponent": 0.7550536442451782,
+      "variance_coefficient_for_projection": 152.666414409896,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 2.1351983723943656e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 334862909412,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.150504546,
+      "workers": 5,
+      "measured_wall_seconds": 751.2522809505463,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 1505.0454599999998,
+      "workspace_worker_elapsed_seconds": 3010.0909199999996,
+      "measured_worker_time_efficiency_proxy": 0.8013528867270485,
+      "nominal_core_hours": 13999552.82035894,
+      "projected_hours_on_60_workers_at_measured_efficiency": 291164.9589137745,
+      "allocated_worker_hours_at_measured_efficiency": 17469897.53482647,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "near_lc_below",
+      "component": "L",
+      "order": "nlo",
+      "k0_over_T": 0.95,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.3139363145628048,
+      "error": 0.21987364046464802,
+      "reference": {
+        "value": -0.01059692687923706,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.7496877953437906e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/near-below-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_near_lc_below/nlo/integration_result.json",
+      "native_slot": "vector_L_nlo@NLO",
+      "relative_error_to_estimate": 0.700376574054038,
+      "relative_error_to_reference": 20.748811704594694,
+      "pull": 1.475998854415754,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.150504546,
+        "average_parameterization_time_seconds": 0.000366938,
+        "average_integrand_time_seconds": 0.149521736,
+        "average_evaluator_time_seconds": 0.009548758,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 0.000142367,
+        "f64_percentage": 30.34,
+        "f128_percentage": 68.2,
+        "arb_percentage": 1.46,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.714707859423539,
+      "max_weight_impact": 0.24660573037844857,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.6375319102284025,
+          "variance_coefficient": 812.8938731189517
+        },
+        {
+          "samples": 4000,
+          "error": 0.42077501985797305,
+          "variance_coefficient": 708.2064693459105
+        },
+        {
+          "samples": 6000,
+          "error": 0.32662442109496104,
+          "variance_coefficient": 640.1010747337106
+        },
+        {
+          "samples": 8000,
+          "error": 0.26213530951073855,
+          "variance_coefficient": 549.7193639383255
+        },
+        {
+          "samples": 10000,
+          "error": 0.21987364046464802,
+          "variance_coefficient": 483.4441777117731
+        }
+      ],
+      "late_error_decay_exponent": 0.7742613156885835,
+      "variance_coefficient_for_projection": 549.7193639383255,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 5.2984634396185296e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 195812833266,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.150504546,
+      "workers": 5,
+      "measured_wall_seconds": 751.2522809505463,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 1505.0454599999998,
+      "workspace_worker_elapsed_seconds": 3010.0909199999996,
+      "measured_worker_time_efficiency_proxy": 0.8013528867270485,
+      "nominal_core_hours": 8186311.547686951,
+      "projected_hours_on_60_workers_at_measured_efficiency": 170260.22873897164,
+      "allocated_worker_hours_at_measured_efficiency": 10215613.724338299,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "timelike_k15",
+      "component": "T",
+      "order": "nlo",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.5,
+      "samples": 10000,
+      "value": 0.029959461085745286,
+      "error": 0.002903723481006038,
+      "reference": {
+        "value": 0.027250572175468765,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.359571636175283e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-k15-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k15/nlo/integration_result.json",
+      "native_slot": "vector_T_nlo@NLO",
+      "relative_error_to_estimate": 0.09692175278772387,
+      "relative_error_to_reference": 0.10655642246000245,
+      "pull": 0.9329018165799954,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.063866228,
+        "average_parameterization_time_seconds": 0.000287935,
+        "average_integrand_time_seconds": 0.063410363,
+        "average_evaluator_time_seconds": 0.002721071,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.7507e-05,
+        "f64_percentage": 88.89,
+        "f128_percentage": 11.110000000000001,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.2394548225799782,
+      "max_weight_impact": 0.021230637229398542,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.007728314478456414,
+          "variance_coefficient": 0.11945368935583807
+        },
+        {
+          "samples": 4000,
+          "error": 0.00496188202681417,
+          "variance_coefficient": 0.09848109299208598
+        },
+        {
+          "samples": 6000,
+          "error": 0.00387161247139199,
+          "variance_coefficient": 0.08993629877182796
+        },
+        {
+          "samples": 8000,
+          "error": 0.003344782346883914,
+          "variance_coefficient": 0.08950055158421011
+        },
+        {
+          "samples": 10000,
+          "error": 0.002903723481006038,
+          "variance_coefficient": 0.08431610054145823
+        }
+      ],
+      "late_error_decay_exponent": 0.5605793896217502,
+      "variance_coefficient_for_projection": 0.08950055158421011,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00013625286087734384,
+      "floor_dominated": false,
+      "nominal_target_samples": 4820971,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.063866228,
+      "workers": 5,
+      "measured_wall_seconds": 296.68794202804565,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 638.66228,
+      "workspace_worker_elapsed_seconds": 1277.32456,
+      "measured_worker_time_efficiency_proxy": 0.8610559305300353,
+      "nominal_core_hours": 85.52700918538555,
+      "projected_hours_on_60_workers_at_measured_efficiency": 1.6554675515820476,
+      "allocated_worker_hours_at_measured_efficiency": 99.32805309492286,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "timelike_k15",
+      "component": "L",
+      "order": "nlo",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.5,
+      "samples": 10000,
+      "value": 0.021523319009900916,
+      "error": 0.002824537533175601,
+      "reference": {
+        "value": 0.019950037022636837,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.611649272717508e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-k15-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/direct_component_timelike_k15/nlo/integration_result.json",
+      "native_slot": "vector_L_nlo@NLO",
+      "relative_error_to_estimate": 0.1312315043918779,
+      "relative_error_to_reference": 0.1415805659894598,
+      "pull": 0.5570051623620143,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.063866228,
+        "average_parameterization_time_seconds": 0.000287935,
+        "average_integrand_time_seconds": 0.063410363,
+        "average_evaluator_time_seconds": 0.002721071,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 5.7507e-05,
+        "f64_percentage": 88.89,
+        "f128_percentage": 11.110000000000001,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.2404508456905031,
+      "max_weight_impact": 0.023208878304758818,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.0069027723818166,
+          "variance_coefficient": 0.09529653311034002
+        },
+        {
+          "samples": 4000,
+          "error": 0.004663702791536395,
+          "variance_coefficient": 0.08700049491113745
+        },
+        {
+          "samples": 6000,
+          "error": 0.0037688977119939393,
+          "variance_coefficient": 0.0852275397808389
+        },
+        {
+          "samples": 8000,
+          "error": 0.003162542642829062,
+          "variance_coefficient": 0.08001340774169784
+        },
+        {
+          "samples": 10000,
+          "error": 0.002824537533175601,
+          "variance_coefficient": 0.0797801227631771
+        }
+      ],
+      "late_error_decay_exponent": 0.5667771287437338,
+      "variance_coefficient_for_projection": 0.08001340774169784,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 9.975018511318419e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 8041469,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.063866228,
+      "workers": 5,
+      "measured_wall_seconds": 296.68794202804565,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 638.66228,
+      "workspace_worker_elapsed_seconds": 1277.32456,
+      "measured_worker_time_efficiency_proxy": 0.8610559305300353,
+      "nominal_core_hours": 142.66063683581444,
+      "projected_hours_on_60_workers_at_measured_efficiency": 2.7613505653846366,
+      "allocated_worker_hours_at_measured_efficiency": 165.6810339230782,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails."
+      ],
+      "pilot_route": "direct-component"
+    },
+    {
+      "name": "anchor",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 4.0,
+      "k_over_T": 1.0,
+      "samples": 20000,
+      "value": 2.677273586750814,
+      "error": 0.017435791339947354,
+      "reference": {
+        "value": 2.7034759765132232,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 0.0,
+        "source": "/tmp/qcd-fig15-reference-20261018/initial-driver-output-aggregate.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_anchor/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.006512517594852058,
+      "relative_error_to_reference": 0.0064493975501994155,
+      "pull": -1.5027932630953467,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.000928743,
+        "average_parameterization_time_seconds": 2.8506e-05,
+        "average_integrand_time_seconds": 0.000886651,
+        "average_evaluator_time_seconds": 2.932e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.572e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.8323553034684892,
+      "max_weight_impact": 0.00032225442246497913,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.062417515488865954,
+          "variance_coefficient": 19.479731199014108
+        },
+        {
+          "samples": 10000,
+          "error": 0.03351782125452626,
+          "variance_coefficient": 11.234443416503721
+        },
+        {
+          "samples": 15000,
+          "error": 0.022900636761777927,
+          "variance_coefficient": 7.8665874614234195
+        },
+        {
+          "samples": 20000,
+          "error": 0.017435791339947354,
+          "variance_coefficient": 6.080136393003663
+        }
+      ],
+      "late_error_decay_exponent": 0.9477116420011689,
+      "variance_coefficient_for_projection": 6.973361927213541,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.013517379882566117,
+      "floor_dominated": false,
+      "nominal_target_samples": 38165,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.000928743,
+      "workers": 5,
+      "measured_wall_seconds": 4.063999891281128,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 18.57486,
+      "workspace_worker_elapsed_seconds": 18.57486,
+      "measured_worker_time_efficiency_proxy": 0.9141171504384316,
+      "nominal_core_hours": 0.009845965720833334,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.0001795168470494725,
+      "allocated_worker_hours_at_measured_efficiency": 0.010771010822968349,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "anchor",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 4.0,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.09456000064121195,
+      "error": 0.010074618506055535,
+      "reference": {
+        "value": 0.10648332424914585,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 4.4730923534630485e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/initial-driver-output-aggregate.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_anchor/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 0.10654207315714345,
+      "relative_error_to_reference": 0.09461217122113229,
+      "pull": -1.183501251264965,
+      "statistics": {
+        "num_evals": 10000,
+        "average_total_time_seconds": 0.071468561,
+        "average_parameterization_time_seconds": 0.000368191,
+        "average_integrand_time_seconds": 0.070861897,
+        "average_evaluator_time_seconds": 0.002614692,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 8.2561e-05,
+        "f64_percentage": 88.35,
+        "f128_percentage": 11.65,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.1264571196170905,
+      "max_weight_impact": 0.018704529045413715,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.03273578825907397,
+          "variance_coefficient": 2.1432636658858506
+        },
+        {
+          "samples": 4000,
+          "error": 0.020238585205278697,
+          "variance_coefficient": 1.6384013244453028
+        },
+        {
+          "samples": 6000,
+          "error": 0.014808918194126119,
+          "variance_coefficient": 1.3158243484819176
+        },
+        {
+          "samples": 8000,
+          "error": 0.011869292049501974,
+          "variance_coefficient": 1.127040750050966
+        },
+        {
+          "samples": 10000,
+          "error": 0.010074618506055535,
+          "variance_coefficient": 1.0149793804255665
+        }
+      ],
+      "late_error_decay_exponent": 0.7548047363298258,
+      "variance_coefficient_for_projection": 1.127040750050966,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0005324166212457292,
+      "floor_dominated": false,
+      "nominal_target_samples": 3975909,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.071468561,
+      "workers": 5,
+      "measured_wall_seconds": 163.96278381347656,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 714.68561,
+      "workspace_worker_elapsed_seconds": 714.68561,
+      "measured_worker_time_efficiency_proxy": 0.8717656450783656,
+      "nominal_core_hours": 78.93124858248582,
+      "projected_hours_on_60_workers_at_measured_efficiency": 1.5090303421968883,
+      "allocated_worker_hours_at_measured_efficiency": 90.5418205318133,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "rest",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.0,
+      "samples": 20000,
+      "value": 0.058549475131402046,
+      "error": 0.00039738172013379,
+      "reference": {
+        "value": 0.05847002366550118,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 0.0,
+        "extrapolation_shift": 1.1435732916176278e-10,
+        "source": [
+          "/tmp/qcd-fig15-reference-20261018/rest-k00125-tol1e-05.csv",
+          "/tmp/qcd-fig15-reference-20261018/rest-k0025-tol1e-05.csv",
+          "/tmp/qcd-fig15-reference-20261018/rest-k005-tol1e-05.csv"
+        ],
+        "method": "k^2 extrapolation of rhoV; rotational rhoT=rhoL=rhoV/3",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_rest/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.006787109862931305,
+      "relative_error_to_reference": 0.00679633246613949,
+      "pull": 0.19993739489103346,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.000138796,
+        "average_parameterization_time_seconds": 3.2299e-05,
+        "average_integrand_time_seconds": 9.0446e-05,
+        "average_evaluator_time_seconds": 3.511e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.466e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.009857799814597001,
+      "max_weight_impact": 0.00028480216201910464,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.0014821474716550484,
+          "variance_coefficient": 0.010983805638667264
+        },
+        {
+          "samples": 10000,
+          "error": 0.0007794572540447852,
+          "variance_coefficient": 0.006075536108830369
+        },
+        {
+          "samples": 15000,
+          "error": 0.0005267218584650317,
+          "variance_coefficient": 0.004161538742772853
+        },
+        {
+          "samples": 20000,
+          "error": 0.00039738172013379,
+          "variance_coefficient": 0.003158244629929796
+        }
+      ],
+      "late_error_decay_exponent": 0.979467693665454,
+      "variance_coefficient_for_projection": 0.0036598916863513245,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0002923501183275059,
+      "floor_dominated": false,
+      "nominal_target_samples": 42822,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.000138796,
+      "workers": 5,
+      "measured_wall_seconds": 0.753000020980835,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 2.77592,
+      "workspace_worker_elapsed_seconds": 2.77592,
+      "measured_worker_time_efficiency_proxy": 0.7372961281951018,
+      "nominal_core_hours": 0.00165097842,
+      "projected_hours_on_60_workers_at_measured_efficiency": 3.7320563539862624e-05,
+      "allocated_worker_hours_at_measured_efficiency": 0.002239233812391758,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "rest",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.0,
+      "samples": 10000,
+      "value": 0.05417845238542631,
+      "error": 0.0022919144009475967,
+      "reference": {
+        "value": 0.060268179487703966,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.1680476239006587e-09,
+        "extrapolation_shift": 1.6429862192968159e-09,
+        "source": [
+          "/tmp/qcd-fig15-reference-20261018/rest-k00125-tol1e-05.csv",
+          "/tmp/qcd-fig15-reference-20261018/rest-k0025-tol1e-05.csv",
+          "/tmp/qcd-fig15-reference-20261018/rest-k005-tol1e-05.csv"
+        ],
+        "method": "k^2 extrapolation of rhoV; rotational rhoT=rhoL=rhoV/3",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_rest/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 0.04230306145777077,
+      "relative_error_to_reference": 0.038028598514663906,
+      "pull": -2.6570482299687304,
+      "statistics": {
+        "num_evals": 10000,
+        "average_total_time_seconds": 0.040026787,
+        "average_parameterization_time_seconds": 0.000309057,
+        "average_integrand_time_seconds": 0.039567529,
+        "average_evaluator_time_seconds": 0.001565859,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 6.5585e-05,
+        "f64_percentage": 96.54,
+        "f128_percentage": 3.46,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.9214053461778646,
+      "max_weight_impact": 0.0026112585814502313,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.006241891110454529,
+          "variance_coefficient": 0.07792240926954254
+        },
+        {
+          "samples": 4000,
+          "error": 0.004032368289144332,
+          "variance_coefficient": 0.06503997607718716
+        },
+        {
+          "samples": 6000,
+          "error": 0.003118437199334977,
+          "variance_coefficient": 0.05834790339717705
+        },
+        {
+          "samples": 8000,
+          "error": 0.002619284093796337,
+          "variance_coefficient": 0.054885193312115985
+        },
+        {
+          "samples": 10000,
+          "error": 0.0022919144009475967,
+          "variance_coefficient": 0.05252871621270981
+        }
+      ],
+      "late_error_decay_exponent": 0.6030018123259544,
+      "variance_coefficient_for_projection": 0.054885193312115985,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00030134089743851986,
+      "floor_dominated": false,
+      "nominal_target_samples": 604421,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.040026787,
+      "workers": 5,
+      "measured_wall_seconds": 89.08867597579956,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 400.26787,
+      "workspace_worker_elapsed_seconds": 400.26787,
+      "measured_worker_time_efficiency_proxy": 0.8985830479930593,
+      "nominal_core_hours": 6.720286284813056,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.12464598755085354,
+      "allocated_worker_hours_at_measured_efficiency": 7.478759253051214,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "timelike_k05",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.5,
+      "samples": 20000,
+      "value": 0.04361709675430204,
+      "error": 0.00029409875344733996,
+      "reference": {
+        "value": 0.043639034129543106,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 0.0,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-half-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k05/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.006742740240232345,
+      "relative_error_to_reference": 0.006739350659648047,
+      "pull": -0.07459186747282506,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.000994182,
+        "average_parameterization_time_seconds": 2.8537e-05,
+        "average_integrand_time_seconds": 0.00095264,
+        "average_evaluator_time_seconds": 2.78e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.318e-06,
+        "f64_percentage": 99.995,
+        "f128_percentage": 0.005,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.9540226550389548,
+      "max_weight_impact": 0.00029419898073234594,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.001004354169646303,
+          "variance_coefficient": 0.005043636490429573
+        },
+        {
+          "samples": 10000,
+          "error": 0.0005488734088158913,
+          "variance_coefficient": 0.003012620189051765
+        },
+        {
+          "samples": 15000,
+          "error": 0.00038133571316290715,
+          "variance_coefficient": 0.0021812538920019447
+        },
+        {
+          "samples": 20000,
+          "error": 0.00029409875344733996,
+          "variance_coefficient": 0.0017298815355855852
+        }
+      ],
+      "late_error_decay_exponent": 0.9029569164060743,
+      "variance_coefficient_for_projection": 0.001955567713793765,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00021819517064771554,
+      "floor_dominated": false,
+      "nominal_target_samples": 41076,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.000994182,
+      "workers": 5,
+      "measured_wall_seconds": 4.200000047683716,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 19.88364,
+      "workspace_worker_elapsed_seconds": 19.88364,
+      "measured_worker_time_efficiency_proxy": 0.946839989250274,
+      "nominal_core_hours": 0.011343616619999998,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.00019967500226696333,
+      "allocated_worker_hours_at_measured_efficiency": 0.011980500136017798,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "timelike_k05",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.5,
+      "samples": 10000,
+      "value": 0.06627722001744012,
+      "error": 0.00291036562222538,
+      "reference": {
+        "value": 0.06543241771968789,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.9044720939165316e-09,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-half-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k05/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 0.04391200508198065,
+      "relative_error_to_reference": 0.044478955900626664,
+      "pull": 0.29027359700128064,
+      "statistics": {
+        "num_evals": 10000,
+        "average_total_time_seconds": 0.072382841,
+        "average_parameterization_time_seconds": 0.000371044,
+        "average_integrand_time_seconds": 0.071774409,
+        "average_evaluator_time_seconds": 0.002552774,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 7.8997e-05,
+        "f64_percentage": 89.55,
+        "f128_percentage": 10.45,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.37784108696930063,
+      "max_weight_impact": 0.006696206554274004,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.007495948791044181,
+          "variance_coefficient": 0.11237849655591345
+        },
+        {
+          "samples": 4000,
+          "error": 0.004994187184977446,
+          "variance_coefficient": 0.09976762255437178
+        },
+        {
+          "samples": 6000,
+          "error": 0.003935214514645667,
+          "variance_coefficient": 0.09291547965766758
+        },
+        {
+          "samples": 8000,
+          "error": 0.003344599482272695,
+          "variance_coefficient": 0.08949076557455024
+        },
+        {
+          "samples": 10000,
+          "error": 0.00291036562222538,
+          "variance_coefficient": 0.08470228055031323
+        }
+      ],
+      "late_error_decay_exponent": 0.5893919705763652,
+      "variance_coefficient_for_projection": 0.08949076557455024,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00032716208859843944,
+      "floor_dominated": false,
+      "nominal_target_samples": 836089,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.072382841,
+      "workers": 5,
+      "measured_wall_seconds": 165.82368087768555,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 723.8284100000001,
+      "workspace_worker_elapsed_seconds": 723.8284100000001,
+      "measured_worker_time_efficiency_proxy": 0.8730097006276306,
+      "nominal_core_hours": 16.810693652458056,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.32093369333644267,
+      "allocated_worker_hours_at_measured_efficiency": 19.25602160018656,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "spacelike",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.0,
+      "samples": 20000,
+      "value": 0.06723794165008007,
+      "error": 0.0006539767460884982,
+      "reference": {
+        "value": 0.06770513842441958,
+        "tolerance": 0.0001,
+        "empirical_tolerance_drift": null,
+        "source": "/tmp/qcd-fig15-reference-20261018/spacelike-tol0.0001.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 1
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_spacelike/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.009726305268116717,
+      "relative_error_to_reference": 0.009659189262548273,
+      "pull": -0.714393557773826,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.002475317,
+        "average_parameterization_time_seconds": 3.2317e-05,
+        "average_integrand_time_seconds": 0.002427556,
+        "average_evaluator_time_seconds": 4.067e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.963e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.240042617709264,
+      "max_weight_impact": 0.0005399624617500726,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.0017310857391767225,
+          "variance_coefficient": 0.014983289181905099
+        },
+        {
+          "samples": 10000,
+          "error": 0.0010571502522100967,
+          "variance_coefficient": 0.011175666557478712
+        },
+        {
+          "samples": 15000,
+          "error": 0.0007940577337600349,
+          "variance_coefficient": 0.009457915268161836
+        },
+        {
+          "samples": 20000,
+          "error": 0.0006539767460884982,
+          "variance_coefficient": 0.008553711688490001
+        }
+      ],
+      "late_error_decay_exponent": 0.6746488410219404,
+      "variance_coefficient_for_projection": 0.009005813478325918,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0003385256921220979,
+      "floor_dominated": false,
+      "nominal_target_samples": 78586,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.002475317,
+      "workers": 5,
+      "measured_wall_seconds": 10.812000036239624,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 49.506339999999994,
+      "workspace_worker_elapsed_seconds": 49.506339999999994,
+      "measured_worker_time_efficiency_proxy": 0.9157665526094121,
+      "nominal_core_hours": 0.05403479493388889,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.000983416475518434,
+      "allocated_worker_hours_at_measured_efficiency": 0.059004988531106056,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Reference has no completed tolerance refinement yet.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "spacelike",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": -0.03600453862748239,
+      "error": 0.009284106377685002,
+      "reference": {
+        "value": -0.03613166937804451,
+        "tolerance": 0.0001,
+        "empirical_tolerance_drift": null,
+        "source": "/tmp/qcd-fig15-reference-20261018/spacelike-tol0.0001.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 1
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_spacelike/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 0.2578593347283837,
+      "relative_error_to_reference": 0.25695204615501405,
+      "pull": 0.013693375042286259,
+      "statistics": {
+        "num_evals": 10000,
+        "average_total_time_seconds": 0.098794412,
+        "average_parameterization_time_seconds": 0.000380882,
+        "average_integrand_time_seconds": 0.098188098,
+        "average_evaluator_time_seconds": 0.002647561,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 8.0087e-05,
+        "f64_percentage": 93.02,
+        "f128_percentage": 6.97,
+        "arb_percentage": 0.01,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.735126658258078,
+      "max_weight_impact": 0.16834008402780418,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.014243500494241886,
+          "variance_coefficient": 0.4057546126589377
+        },
+        {
+          "samples": 4000,
+          "error": 0.010308026777494199,
+          "variance_coefficient": 0.42502166418214976
+        },
+        {
+          "samples": 6000,
+          "error": 0.008600167158721805,
+          "variance_coefficient": 0.4437772509477425
+        },
+        {
+          "samples": 8000,
+          "error": 0.01101132238798824,
+          "variance_coefficient": 0.9699937658576882
+        },
+        {
+          "samples": 10000,
+          "error": 0.009284106377685002,
+          "variance_coefficient": 0.8619463123217133
+        }
+      ],
+      "late_error_decay_exponent": -0.18326759712745944,
+      "variance_coefficient_for_projection": 0.8619463123217133,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00018065834689022256,
+      "floor_dominated": false,
+      "nominal_target_samples": 26409742,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.098794412,
+      "workers": 5,
+      "measured_wall_seconds": 231.35055589675903,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 987.94412,
+      "workspace_worker_elapsed_seconds": 987.94412,
+      "measured_worker_time_efficiency_proxy": 0.8540667785910775,
+      "nominal_core_hours": 724.7597033226956,
+      "projected_hours_on_60_workers_at_measured_efficiency": 14.143306696273115,
+      "allocated_worker_hours_at_measured_efficiency": 848.5984017763868,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Reference has no completed tolerance refinement yet.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "timelike_k1",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.0,
+      "samples": 20000,
+      "value": 0.040150449558039585,
+      "error": 0.0003332525265895832,
+      "reference": {
+        "value": 0.03989695840020262,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 0.0,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-mid-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k1/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.008300094525911825,
+      "relative_error_to_reference": 0.008352830389894855,
+      "pull": 0.7606578723682236,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.001127865,
+        "average_parameterization_time_seconds": 2.9823e-05,
+        "average_integrand_time_seconds": 0.001085199,
+        "average_evaluator_time_seconds": 2.992e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.451e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.4722276012782558,
+      "max_weight_impact": 0.0005225423838335283,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.0010481907654562147,
+          "variance_coefficient": 0.0054935194039384275
+        },
+        {
+          "samples": 10000,
+          "error": 0.0005909031115355195,
+          "variance_coefficient": 0.0034916648722235857
+        },
+        {
+          "samples": 15000,
+          "error": 0.00042198655922517323,
+          "variance_coefficient": 0.0026710898425005097
+        },
+        {
+          "samples": 20000,
+          "error": 0.0003332525265895832,
+          "variance_coefficient": 0.002221144929566817
+        }
+      ],
+      "late_error_decay_exponent": 0.8206035247357856,
+      "variance_coefficient_for_projection": 0.0024461173860336636,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0001994847920010131,
+      "floor_dominated": false,
+      "nominal_target_samples": 61470,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.001127865,
+      "workers": 5,
+      "measured_wall_seconds": 4.918000221252441,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 22.5573,
+      "workspace_worker_elapsed_seconds": 22.5573,
+      "measured_worker_time_efficiency_proxy": 0.917336274306041,
+      "nominal_core_hours": 0.019258294875,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.0003498952240745227,
+      "allocated_worker_hours_at_measured_efficiency": 0.02099371344447136,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "timelike_k1",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.0934226900854728,
+      "error": 0.005853178555996812,
+      "reference": {
+        "value": 0.08348191694646341,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 3.7167105601532135e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-mid-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k1/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 0.06265264413432876,
+      "relative_error_to_reference": 0.0701131307244709,
+      "pull": 1.6983546706984831,
+      "statistics": {
+        "num_evals": 10000,
+        "average_total_time_seconds": 0.084349854,
+        "average_parameterization_time_seconds": 0.000394226,
+        "average_integrand_time_seconds": 0.083681146,
+        "average_evaluator_time_seconds": 0.003063776,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 8.6064e-05,
+        "f64_percentage": 84.69,
+        "f128_percentage": 15.310000000000002,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.3574543982926606,
+      "max_weight_impact": 0.01208421429097756,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.012934491060427636,
+          "variance_coefficient": 0.33460211798456485
+        },
+        {
+          "samples": 4000,
+          "error": 0.009057993318020388,
+          "variance_coefficient": 0.328188971797208
+        },
+        {
+          "samples": 6000,
+          "error": 0.007567215103347479,
+          "variance_coefficient": 0.3435764665219812
+        },
+        {
+          "samples": 8000,
+          "error": 0.0065541445693645985,
+          "variance_coefficient": 0.34365448828905165
+        },
+        {
+          "samples": 10000,
+          "error": 0.005853178555996812,
+          "variance_coefficient": 0.34259699208380917
+        }
+      ],
+      "late_error_decay_exponent": 0.5026439190313756,
+      "variance_coefficient_for_projection": 0.3435764665219812,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0004174095847323171,
+      "floor_dominated": false,
+      "nominal_target_samples": 1971963,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.084349854,
+      "workers": 5,
+      "measured_wall_seconds": 199.2177131175995,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 843.49854,
+      "workspace_worker_elapsed_seconds": 843.49854,
+      "measured_worker_time_efficiency_proxy": 0.846810784844295,
+      "nominal_core_hours": 46.204108650944995,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.9093749055845387,
+      "allocated_worker_hours_at_measured_efficiency": 54.56249433507233,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "near_lc_above",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 1.05,
+      "k_over_T": 1.0,
+      "samples": 20000,
+      "value": 0.006089489368584852,
+      "error": 9.636660747429449e-05,
+      "reference": {
+        "value": 0.006160294381865281,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 0.0,
+        "source": "/tmp/qcd-fig15-reference-20261018/refine-near-above-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_near_lc_above/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.015825071962756267,
+      "relative_error_to_reference": 0.015643182208626136,
+      "pull": -0.7347463518347478,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.001242288,
+        "average_parameterization_time_seconds": 3.0209e-05,
+        "average_integrand_time_seconds": 0.001198607,
+        "average_evaluator_time_seconds": 3.238e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.304e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.358849246422544,
+      "max_weight_impact": 0.0022940028201301767,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.0003250953572220421,
+          "variance_coefficient": 0.0005284349564366359
+        },
+        {
+          "samples": 10000,
+          "error": 0.00017691850902568584,
+          "variance_coefficient": 0.0003130015883587168
+        },
+        {
+          "samples": 15000,
+          "error": 0.00012373107828903977,
+          "variance_coefficient": 0.00022964069601852735
+        },
+        {
+          "samples": 20000,
+          "error": 9.636660747429449e-05,
+          "variance_coefficient": 0.00018573046072209502
+        }
+      ],
+      "late_error_decay_exponent": 0.8688436467385412,
+      "variance_coefficient_for_projection": 0.00020768557837031119,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 3.080147190932641e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 218909,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.001242288,
+      "workers": 5,
+      "measured_wall_seconds": 5.363999843597412,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 24.845760000000002,
+      "workspace_worker_elapsed_seconds": 24.845760000000002,
+      "measured_worker_time_efficiency_proxy": 0.9263892887564658,
+      "nominal_core_hours": 0.07554111772000001,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.0013590600020394281,
+      "allocated_worker_hours_at_measured_efficiency": 0.0815436001223657,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "near_lc_above",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 1.05,
+      "k_over_T": 1.0,
+      "samples": 10000,
+      "value": 0.12227683099250157,
+      "error": 0.010243629110350235,
+      "reference": {
+        "value": 0.11852799407984402,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.6035243315115633e-07,
+        "source": "/tmp/qcd-fig15-reference-20261018/refine-near-above-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_near_lc_above/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 0.08377408072489553,
+      "relative_error_to_reference": 0.08642371103867512,
+      "pull": 0.365967653872757,
+      "statistics": {
+        "num_evals": 10000,
+        "average_total_time_seconds": 0.127962021,
+        "average_parameterization_time_seconds": 0.000424908,
+        "average_integrand_time_seconds": 0.126974557,
+        "average_evaluator_time_seconds": 0.005320898,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 0.000107841,
+        "f64_percentage": 33.07,
+        "f128_percentage": 66.93,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.776436454047456,
+      "max_weight_impact": 0.018644885700667715,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.028765510958431634,
+          "variance_coefficient": 1.6549092413993007
+        },
+        {
+          "samples": 4000,
+          "error": 0.018387836791187887,
+          "variance_coefficient": 1.3524501674374514
+        },
+        {
+          "samples": 6000,
+          "error": 0.01397888654739951,
+          "variance_coefficient": 1.1724556146304022
+        },
+        {
+          "samples": 8000,
+          "error": 0.011556017296576458,
+          "variance_coefficient": 1.0683322860701943
+        },
+        {
+          "samples": 10000,
+          "error": 0.010243629110350235,
+          "variance_coefficient": 1.0493193735041473
+        }
+      ],
+      "late_error_decay_exponent": 0.6111093988311448,
+      "variance_coefficient_for_projection": 1.0683322860701943,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0005926399703992201,
+      "floor_dominated": false,
+      "nominal_target_samples": 3041757,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.127962021,
+      "workers": 5,
+      "measured_wall_seconds": 296.892226934433,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 1279.62021,
+      "workspace_worker_elapsed_seconds": 1279.62021,
+      "measured_worker_time_efficiency_proxy": 0.8620099106081327,
+      "nominal_core_hours": 108.1192703085825,
+      "projected_hours_on_60_workers_at_measured_efficiency": 2.0904490961189817,
+      "allocated_worker_hours_at_measured_efficiency": 125.4269457671389,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "near_lc_below",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 0.95,
+      "k_over_T": 1.0,
+      "samples": 20000,
+      "value": 0.017279205150211162,
+      "error": 0.0004523275463111521,
+      "reference": {
+        "value": 0.016790597091154748,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 0.0,
+        "source": "/tmp/qcd-fig15-reference-20261018/near-below-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "time_capped",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_near_lc_below/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.026177566756050954,
+      "relative_error_to_reference": 0.02693933657364915,
+      "pull": 1.0802084972298036,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.003422371,
+        "average_parameterization_time_seconds": 4.3164e-05,
+        "average_integrand_time_seconds": 0.003354389,
+        "average_evaluator_time_seconds": 7.904e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 4.805e-06,
+        "f64_percentage": 96.845,
+        "f128_percentage": 3.1550000000000002,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 1.8397300271012114,
+      "max_weight_impact": 0.008284049917258087,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.0015611757096270764,
+          "variance_coefficient": 0.012186347981648029
+        },
+        {
+          "samples": 10000,
+          "error": 0.0008483204211930228,
+          "variance_coefficient": 0.007196475370131077
+        },
+        {
+          "samples": 15000,
+          "error": 0.0005865519459381151,
+          "variance_coefficient": 0.005160647779256842
+        },
+        {
+          "samples": 20000,
+          "error": 0.0004523275463111521,
+          "variance_coefficient": 0.00409200418303735
+        }
+      ],
+      "late_error_decay_exponent": 0.9032702453716828,
+      "variance_coefficient_for_projection": 0.0046263259811470964,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 8.395298545577374e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 656394,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.003422371,
+      "workers": 5,
+      "measured_wall_seconds": 15.583999872207642,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 68.44742,
+      "workspace_worker_elapsed_seconds": 68.44742,
+      "measured_worker_time_efficiency_proxy": 0.87843198872285,
+      "nominal_core_hours": 0.6240066083816667,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.011839402791803082,
+      "allocated_worker_hours_at_measured_efficiency": 0.7103641675081849,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "near_lc_below",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 0.95,
+      "k_over_T": 1.0,
+      "samples": 8000,
+      "value": -0.02469723573508983,
+      "error": 0.03872419547379598,
+      "reference": {
+        "value": -0.01913772036881452,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 4.0809126838903254e-07,
+        "source": "/tmp/qcd-fig15-reference-20261018/near-below-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "time_capped",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_near_lc_below/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 1.5679566688824467,
+      "relative_error_to_reference": 2.023448703791189,
+      "pull": -0.1435669688744687,
+      "statistics": {
+        "num_evals": 8000,
+        "average_total_time_seconds": 0.268234401,
+        "average_parameterization_time_seconds": 0.00063706,
+        "average_integrand_time_seconds": 0.266515365,
+        "average_evaluator_time_seconds": 0.010105058,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 0.000208114,
+        "f64_percentage": 31.525,
+        "f128_percentage": 66.6375,
+        "arb_percentage": 1.8375,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.4416073590637326,
+      "max_weight_impact": 0.6444221058647657,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.06999737128394903,
+          "variance_coefficient": 9.799263973326026
+        },
+        {
+          "samples": 4000,
+          "error": 0.06219726357303588,
+          "variance_coefficient": 15.473998383894783
+        },
+        {
+          "samples": 6000,
+          "error": 0.049414845924278826,
+          "variance_coefficient": 14.650961986321294
+        },
+        {
+          "samples": 8000,
+          "error": 0.03872419547379598,
+          "variance_coefficient": 11.996506520742088
+        }
+      ],
+      "late_error_decay_exponent": 0.8474156593545857,
+      "variance_coefficient_for_projection": 13.32373425353169,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 9.568860184407261e-05,
+      "floor_dominated": false,
+      "nominal_target_samples": 1455142564,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.268234401,
+      "workers": 5,
+      "measured_wall_seconds": 585.2359590530396,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 2145.875208,
+      "workspace_worker_elapsed_seconds": 2145.875208,
+      "measured_worker_time_efficiency_proxy": 0.7333367592354388,
+      "nominal_core_hours": 108422.02611781782,
+      "projected_hours_on_60_workers_at_measured_efficiency": 2464.1254456060155,
+      "allocated_worker_hours_at_measured_efficiency": 147847.52673636092,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "timelike_k15",
+      "component": "V",
+      "order": "lo",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.5,
+      "samples": 20000,
+      "value": 0.18733885382996007,
+      "error": 0.001424104776819078,
+      "reference": {
+        "value": 0.18621073544026095,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 0.0,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-k15-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k15/lo/integration_result.json",
+      "native_slot": "vector_lo@LO",
+      "relative_error_to_estimate": 0.007601758779370352,
+      "relative_error_to_reference": 0.007647812428494227,
+      "pull": 0.7921596837972243,
+      "statistics": {
+        "num_evals": 20000,
+        "average_total_time_seconds": 0.001101402,
+        "average_parameterization_time_seconds": 2.9177e-05,
+        "average_integrand_time_seconds": 0.001058983,
+        "average_evaluator_time_seconds": 3.161e-06,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 3.635e-06,
+        "f64_percentage": 100.0,
+        "f128_percentage": 0.0,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.2765682153852822,
+      "max_weight_impact": 0.0004381486786095894,
+      "iteration_count": 4,
+      "history": [
+        {
+          "samples": 5000,
+          "error": 0.004498086744073465,
+          "variance_coefficient": 0.10116392178604715
+        },
+        {
+          "samples": 10000,
+          "error": 0.002542019825395614,
+          "variance_coefficient": 0.06461864792704347
+        },
+        {
+          "samples": 15000,
+          "error": 0.0018064341709701976,
+          "variance_coefficient": 0.04894806621073178
+        },
+        {
+          "samples": 20000,
+          "error": 0.001424104776819078,
+          "variance_coefficient": 0.040561488307178324
+        }
+      ],
+      "late_error_decay_exponent": 0.8266467191055878,
+      "variance_coefficient_for_projection": 0.04475477725895505,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.0009310536772013048,
+      "floor_dominated": false,
+      "nominal_target_samples": 51629,
+      "precision_reached": false,
+      "nominal_goal": "LO control",
+      "mean_core_seconds_per_sample": 0.001101402,
+      "workers": 5,
+      "measured_wall_seconds": 5.026000022888184,
+      "timing_source": "timestamped stage boundaries",
+      "worker_elapsed_seconds": 22.02804,
+      "workspace_worker_elapsed_seconds": 22.02804,
+      "measured_worker_time_efficiency_proxy": 0.876563465964396,
+      "nominal_core_hours": 0.015795634405,
+      "projected_hours_on_60_workers_at_measured_efficiency": 0.00030033258701584955,
+      "allocated_worker_hours_at_measured_efficiency": 0.018019955220950973,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    },
+    {
+      "name": "timelike_k15",
+      "component": "V",
+      "order": "nlo",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.5,
+      "samples": 10000,
+      "value": 0.08529786220683867,
+      "error": 0.009136800507045196,
+      "reference": {
+        "value": 0.07445118137357437,
+        "tolerance": 1e-05,
+        "empirical_tolerance_drift": 1.1074939992861133e-08,
+        "source": "/tmp/qcd-fig15-reference-20261018/timelike-k15-tol1e-05.csv",
+        "method": "exact kinematic point",
+        "limits_checked": 2
+      },
+      "status": "completed",
+      "result_path": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_timelike_k15/nlo/integration_result.json",
+      "native_slot": "vector_nlo@NLO",
+      "relative_error_to_estimate": 0.10711640679680084,
+      "relative_error_to_reference": 0.12272203527838449,
+      "pull": 1.1871421319640998,
+      "statistics": {
+        "num_evals": 10000,
+        "average_total_time_seconds": 0.080874267,
+        "average_parameterization_time_seconds": 0.000378745,
+        "average_integrand_time_seconds": 0.080266249,
+        "average_evaluator_time_seconds": 0.002558045,
+        "average_observable_time_seconds": 0.0,
+        "average_integrator_time_seconds": 7.3669e-05,
+        "f64_percentage": 88.49000000000001,
+        "f128_percentage": 11.51,
+        "arb_percentage": 0.0,
+        "nan_percentage": 0.0,
+        "nan_or_unstable_percentage": 0.0,
+        "generated_event_count": 0,
+        "accepted_event_count": 0,
+        "selection_efficiency_percentage": null
+      },
+      "final_nonfinite_count": 0,
+      "final_nonfinite_or_unstable_count": 0,
+      "chi_sq_per_dof": 0.3226590879969072,
+      "max_weight_impact": 0.04008717845919912,
+      "iteration_count": 5,
+      "history": [
+        {
+          "samples": 2000,
+          "error": 0.02857650334712474,
+          "variance_coefficient": 1.6332330870964626
+        },
+        {
+          "samples": 4000,
+          "error": 0.018057770842728398,
+          "variance_coefficient": 1.3043323512339675
+        },
+        {
+          "samples": 6000,
+          "error": 0.013198737163675053,
+          "variance_coefficient": 1.0452399762946618
+        },
+        {
+          "samples": 8000,
+          "error": 0.010701356659972374,
+          "variance_coefficient": 0.9161522749114807
+        },
+        {
+          "samples": 10000,
+          "error": 0.009136800507045196,
+          "variance_coefficient": 0.8348112350554135
+        }
+      ],
+      "late_error_decay_exponent": 0.720460295660722,
+      "variance_coefficient_for_projection": 0.9161522749114807,
+      "nominal_absolute_floor": 0.0,
+      "target_absolute_error": 0.00037225590686787186,
+      "floor_dominated": false,
+      "nominal_target_samples": 6611264,
+      "precision_reached": false,
+      "nominal_goal": "0.5% isolated NLO or explicitly reported scalar absolute floor",
+      "mean_core_seconds_per_sample": 0.080874267,
+      "workers": 5,
+      "measured_wall_seconds": 189.03481602668762,
+      "timing_source": "stage start to job completion; includes final reporting",
+      "worker_elapsed_seconds": 808.74267,
+      "workspace_worker_elapsed_seconds": 808.74267,
+      "measured_worker_time_efficiency_proxy": 0.8556547275247148,
+      "nominal_core_hours": 148.52253609541336,
+      "projected_hours_on_60_workers_at_measured_efficiency": 2.892960819314498,
+      "allocated_worker_hours_at_measured_efficiency": 173.5776491588699,
+      "warnings": [
+        "Pilot is not fully trained; extrapolation from at most a few iterations is provisional.",
+        "Large individual sample weight; pilot uncertainty may miss rare tails.",
+        "Trace does not separately validate Figure 15 transverse and longitudinal curves."
+      ],
+      "pilot_route": "trace"
+    }
+  ]
+}

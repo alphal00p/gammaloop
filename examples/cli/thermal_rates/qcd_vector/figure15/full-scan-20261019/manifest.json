@@ -1,0 +1,1250 @@
+{
+  "status": "budget_finished",
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "started_utc": "2026-10-18T17:19:29.104704+00:00",
+  "finished_utc": "2026-10-19T05:17:30.308653+00:00",
+  "hard_deadline_utc": "2026-10-19T05:19:29.104704+00:00",
+  "worker_limit": 60,
+  "relative_error": 0.005,
+  "absolute_floor": 0,
+  "minimum_samples": 100000,
+  "metadata_fingerprints_modified": false,
+  "remaining_compute_group_members": [],
+  "kind": "curated historical run metadata; original manifest is archived",
+  "binary_sha256": "9f4f7bc9b5f5d1caffa8235cb88b93429b90677aabe9e05420dd155e03e8de24",
+  "archive_record": "../archive.json",
+  "original_manifest_member": "shared/kaapo/gammaloop/gammaloop-thermal-rates/examples/cli/thermal_rates/qcd_vector/figure15/full-scan-20261019/manifest.json",
+  "original_manifest_sha256": "5f41671b1fca2ffd8ba3035c1113f0b71e760ac5873ede1e0ae01058ce9160c0",
+  "source_states": [
+    {
+      "original_directory": "/tmp/qcd-fig15-projectors-20261018/direct-state",
+      "sha256": "324294087cf66fb1ed322b57fa3528c7231ce3f8085bca8bf3188bc465761094"
+    },
+    {
+      "original_directory": "/tmp/qcd-fig15-pilot-20261018T163918Z/trace_rest/state",
+      "sha256": "c47f44c99c5cc0b6979095a44f56710f7c8f7f43b90f355145eee8a9d472ea5e"
+    }
+  ],
+  "controller_sources": [
+    {
+      "path": "/tmp/qcd-fig15-scan-20261018T171925Z/controller/campaign.py",
+      "sha256": "f32241630e670616a0fd52b54a653553792234fab04f748b5ac858329ecd881c"
+    },
+    {
+      "path": "/tmp/qcd-fig15-scan-20261018T171925Z/controller/common.py",
+      "sha256": "60ab251cabb10ac75214d6caf974af595fc3e1795ea85f89f490160bd0116406"
+    },
+    {
+      "path": "/tmp/qcd-fig15-scan-20261018T171925Z/controller/gate.py",
+      "sha256": "ad44608dee7038690e2afa84f29edee0f3843433513944e553521cf036640376"
+    },
+    {
+      "path": "/tmp/qcd-fig15-scan-20261018T171925Z/controller/validation.py",
+      "sha256": "0a238b945af5900a707869122644817fe74e708c944e5b62a30cb9a7adf134e4"
+    },
+    {
+      "path": "/tmp/qcd-fig15-scan-20261018T171925Z/controller/watchdog.py",
+      "sha256": "5ef763f86dbcbd9c069f8ef6a7a0c8b6a681f926667c597e75da8146f3733d55"
+    }
+  ],
+  "settings": {
+    "workers_per_job": 6,
+    "cpu_affinity": [
+      182,
+      183,
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191,
+      192,
+      193,
+      194,
+      195,
+      196,
+      197,
+      198,
+      199,
+      200,
+      201,
+      202,
+      203,
+      204,
+      205,
+      206,
+      207,
+      208,
+      209,
+      210,
+      211,
+      212,
+      213,
+      214,
+      215,
+      216,
+      217,
+      218,
+      219,
+      220,
+      221,
+      222,
+      223,
+      224,
+      225,
+      226,
+      227,
+      228,
+      229,
+      230,
+      231,
+      232,
+      233,
+      234,
+      235,
+      236,
+      237,
+      238,
+      239,
+      240,
+      241
+    ],
+    "wall_seconds": 43200,
+    "graceful_margin_seconds": 120,
+    "quantum_seconds": 600,
+    "iteration_samples": 2000,
+    "max_cycles": 128,
+    "stopping_criterion": "error <= max(relative_error * abs(reference if present else estimate), absolute_floor), minimum training samples, zero final discarded or unstable samples; reference residual never controls stopping",
+    "checkpoint_policy": "Completed-iteration native snapshots only; no metadata edits or on-disk state reloads"
+  },
+  "jobs": [
+    {
+      "name": "E0p25_k0p00",
+      "k0_over_T": 0.25,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191007552,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 0.75,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 200000,
+      "active_wall_seconds": 1324.6925905970274,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "acceptance_reference": {
+        "T": 0.011706455112971673,
+        "L": 0.011706455112971673
+      },
+      "stop_reason": "isolated_nlo_precision_goal",
+      "runtime_settings": {
+        "vector_nlo@NLO": "e662180f822fb6a3f68a91ebb616937b21ae4f724d7aee5d88048c6a9df4a9f5"
+      }
+    },
+    {
+      "name": "E0p25_k0p50",
+      "k0_over_T": 0.25,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191112281,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 394000,
+      "active_wall_seconds": 14173.243061088026,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "251dca781afd2ef6735908ccdc847de78708e1746784849fa6dac2aa2ed4e95a",
+        "vector_T_nlo@NLO": "251dca781afd2ef6735908ccdc847de78708e1746784849fa6dac2aa2ed4e95a"
+      }
+    },
+    {
+      "name": "E0p25_k1p00",
+      "k0_over_T": 0.25,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191217010,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 416000,
+      "active_wall_seconds": 14405.346196226194,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "f2a39b6c0bc72176f65af8c36a939fdf96cfd3bb24caac2eed96186645e5ff7a",
+        "vector_T_nlo@NLO": "f2a39b6c0bc72176f65af8c36a939fdf96cfd3bb24caac2eed96186645e5ff7a"
+      }
+    },
+    {
+      "name": "E0p25_k1p50",
+      "k0_over_T": 0.25,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191321739,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 390000,
+      "active_wall_seconds": 14289.506732574082,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "2f1b6e7c4a3f3e8b4f32a73783d6d8f39f8ef75b8a63d7d912f6b8d7d6a87a4a",
+        "vector_T_nlo@NLO": "2f1b6e7c4a3f3e8b4f32a73783d6d8f39f8ef75b8a63d7d912f6b8d7d6a87a4a"
+      }
+    },
+    {
+      "name": "E0p50_k0p00",
+      "k0_over_T": 0.5,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191426468,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 1.5,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 244000,
+      "active_wall_seconds": 1771.4717866220744,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "acceptance_reference": {
+        "T": 0.016437561994943777,
+        "L": 0.016437561994943777
+      },
+      "stop_reason": "isolated_nlo_precision_goal",
+      "runtime_settings": {
+        "vector_nlo@NLO": "c1d64891734aeef3dda9d15e9308d255abd75a4777602abd2bdcc57ad8862bc5"
+      }
+    },
+    {
+      "name": "E0p50_k1p00",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191531197,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 4.5,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 394000,
+      "active_wall_seconds": 14380.568325679982,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "4b1934da5acffc1b5dae1ad26b6446528e9da58201bdba63494251d6508c0212",
+        "vector_T_nlo@NLO": "4b1934da5acffc1b5dae1ad26b6446528e9da58201bdba63494251d6508c0212"
+      }
+    },
+    {
+      "name": "E0p50_k1p50",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191635926,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 4.5,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 394000,
+      "active_wall_seconds": 14531.806731020042,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "7adbbab1b2f21d4b7c0241bb67321dd2cefdd17113256e3e788ef76803862991",
+        "vector_T_nlo@NLO": "7adbbab1b2f21d4b7c0241bb67321dd2cefdd17113256e3e788ef76803862991"
+      }
+    },
+    {
+      "name": "E0p75_k0p00",
+      "k0_over_T": 0.75,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191740655,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 334000,
+      "active_wall_seconds": 2297.7376972529455,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "acceptance_reference": {
+        "T": 0.018928107254389908,
+        "L": 0.018928107254389908
+      },
+      "stop_reason": "isolated_nlo_precision_goal",
+      "runtime_settings": {
+        "vector_nlo@NLO": "c6bcf14550fc99623a6eeed0a97019a0cbe958f197fd63e26ee8016c00c3c0a3"
+      }
+    },
+    {
+      "name": "E0p75_k0p50",
+      "k0_over_T": 0.75,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191845384,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 6.75,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 454000,
+      "active_wall_seconds": 14708.218975685013,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "0fc090c755399dfe93f18f2a9e20319a8a4c6f42bcc647cf2032b6d5ad189af1",
+        "vector_T_nlo@NLO": "0fc090c755399dfe93f18f2a9e20319a8a4c6f42bcc647cf2032b6d5ad189af1"
+      }
+    },
+    {
+      "name": "E0p75_k1p00",
+      "k0_over_T": 0.75,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191950113,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 6.75,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 370000,
+      "active_wall_seconds": 14689.287511525908,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "893370630f6565bcf0661962d6a525f7bb894da29632ca209299a7b121e86c5e",
+        "vector_T_nlo@NLO": "893370630f6565bcf0661962d6a525f7bb894da29632ca209299a7b121e86c5e"
+      }
+    },
+    {
+      "name": "E0p75_k1p50",
+      "k0_over_T": 0.75,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192054842,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 6.75,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 384000,
+      "active_wall_seconds": 14698.863873621915,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "2653a31bcb81eef6263a3117bf7250fbf836bceb57c10e21b565f0f15882536f",
+        "vector_T_nlo@NLO": "2653a31bcb81eef6263a3117bf7250fbf836bceb57c10e21b565f0f15882536f"
+      }
+    },
+    {
+      "name": "E1p00_k0p00",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192159571,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 3.0,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 462000,
+      "active_wall_seconds": 3183.561073188903,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "acceptance_reference": {
+        "T": 0.020089392614905915,
+        "L": 0.020089392614905915
+      },
+      "stop_reason": "isolated_nlo_precision_goal",
+      "runtime_settings": {
+        "vector_nlo@NLO": "7d49adfc5b481768bcc4deceaaed5468c0572a1c4f5f7a9fd3bd60f6a1b52683"
+      }
+    },
+    {
+      "name": "E1p00_k0p50",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192264300,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 9.0,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 498000,
+      "active_wall_seconds": 14503.53051075479,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "730f17c2dad0ce9822951595a6f83d593b69e2d391eb26d7b7d236d76d143190",
+        "vector_T_nlo@NLO": "730f17c2dad0ce9822951595a6f83d593b69e2d391eb26d7b7d236d76d143190"
+      }
+    },
+    {
+      "name": "E1p00_k1p50",
+      "k0_over_T": 1.0,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192369029,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 9.0,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 336000,
+      "active_wall_seconds": 14192.587252167054,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "e7065de309592be724f32031493b6615f4b33bf63e526ac9eae741c15c2ea6c6",
+        "vector_T_nlo@NLO": "e7065de309592be724f32031493b6615f4b33bf63e526ac9eae741c15c2ea6c6"
+      }
+    },
+    {
+      "name": "E1p25_k0p00",
+      "k0_over_T": 1.25,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192473758,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 3.75,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 642000,
+      "active_wall_seconds": 4503.862139115983,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "acceptance_reference": {
+        "T": 0.020408760145117045,
+        "L": 0.020408760145117045
+      },
+      "stop_reason": "isolated_nlo_precision_goal",
+      "runtime_settings": {
+        "vector_nlo@NLO": "b1f59501d2b75fa357d0002c5b28cfe2d50da22321469e024505b65c3f947dbb"
+      }
+    },
+    {
+      "name": "E1p25_k0p50",
+      "k0_over_T": 1.25,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192578487,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 11.25,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 460000,
+      "active_wall_seconds": 14174.325785434048,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "8ccf3bbdf7629bf9cacffe005de2bf0be4c3cabd1804dc6e0f0c9bb926fc9a8b",
+        "vector_T_nlo@NLO": "8ccf3bbdf7629bf9cacffe005de2bf0be4c3cabd1804dc6e0f0c9bb926fc9a8b"
+      }
+    },
+    {
+      "name": "E1p25_k1p00",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192683216,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 11.25,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 408000,
+      "active_wall_seconds": 13895.409470365907,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "65db6828ed92ad8fe51c9328a71ff7a03e2be9377df0226f09c475236f32f979",
+        "vector_T_nlo@NLO": "65db6828ed92ad8fe51c9328a71ff7a03e2be9377df0226f09c475236f32f979"
+      }
+    },
+    {
+      "name": "E1p25_k1p50",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192787945,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 11.25,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 268000,
+      "active_wall_seconds": 14111.562287283945,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "8a461168f30fa96016e4a75492f19efbc6c1e684e4500a9ca44f2af109d80a7c",
+        "vector_T_nlo@NLO": "8a461168f30fa96016e4a75492f19efbc6c1e684e4500a9ca44f2af109d80a7c"
+      }
+    },
+    {
+      "name": "E1p50_k0p00",
+      "k0_over_T": 1.5,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192892674,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 4.5,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 882000,
+      "active_wall_seconds": 6843.4954023290775,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "acceptance_reference": {
+        "T": 0.0202530251598709,
+        "L": 0.0202530251598709
+      },
+      "stop_reason": "isolated_nlo_precision_goal",
+      "runtime_settings": {
+        "vector_nlo@NLO": "3cd1f0ac0eafd3eb32faaeb498d7f0da23fbf83f59974a560964866acf583609"
+      }
+    },
+    {
+      "name": "E1p50_k0p50",
+      "k0_over_T": 1.5,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 192997403,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 13.5,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 528000,
+      "active_wall_seconds": 14200.922980765055,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "cb3aeeeb410d3a5d0dfafbc51fc7111d5730bf0dea6b3fac31f3f88dd70e49a3",
+        "vector_T_nlo@NLO": "cb3aeeeb410d3a5d0dfafbc51fc7111d5730bf0dea6b3fac31f3f88dd70e49a3"
+      }
+    },
+    {
+      "name": "E1p50_k1p00",
+      "k0_over_T": 1.5,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193102132,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 13.5,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 434000,
+      "active_wall_seconds": 13974.709111449949,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "e5d02f214a766f769e89348e3071238bfbc159907a6df5069b60fc0a50edd3b4",
+        "vector_T_nlo@NLO": "e5d02f214a766f769e89348e3071238bfbc159907a6df5069b60fc0a50edd3b4"
+      }
+    },
+    {
+      "name": "E1p75_k0p00",
+      "k0_over_T": 1.75,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193206861,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 5.25,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 1172000,
+      "active_wall_seconds": 9468.39109530783,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "acceptance_reference": {
+        "T": 0.019934338508032296,
+        "L": 0.019934338508032296
+      },
+      "stop_reason": "isolated_nlo_precision_goal",
+      "runtime_settings": {
+        "vector_nlo@NLO": "26444928564c5e7d006e7f4d09123d5fb20af09924e0f49c4942d03b226db301"
+      }
+    },
+    {
+      "name": "E1p75_k0p50",
+      "k0_over_T": 1.75,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193311590,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 15.75,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 514000,
+      "active_wall_seconds": 13849.13604848116,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "ebfb66b395cc69dd5e366d5e018dfdd3a33828fa34e84e6ff62812d44a78d606",
+        "vector_T_nlo@NLO": "ebfb66b395cc69dd5e366d5e018dfdd3a33828fa34e84e6ff62812d44a78d606"
+      }
+    },
+    {
+      "name": "E1p75_k1p00",
+      "k0_over_T": 1.75,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193416319,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 15.75,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 486000,
+      "active_wall_seconds": 14155.49544377299,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "516168a61daa5cb12ae29b60c6b6ea62e0422b79dd6d4ca9a9ecbcb147c22d21",
+        "vector_T_nlo@NLO": "516168a61daa5cb12ae29b60c6b6ea62e0422b79dd6d4ca9a9ecbcb147c22d21"
+      }
+    },
+    {
+      "name": "E1p75_k1p50",
+      "k0_over_T": 1.75,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193521048,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 15.75,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 330000,
+      "active_wall_seconds": 14015.302306957135,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "a0dced6f5ad75e2372142892d5384b59133b9869d890924fde353efee446fd4c",
+        "vector_T_nlo@NLO": "a0dced6f5ad75e2372142892d5384b59133b9869d890924fde353efee446fd4c"
+      }
+    },
+    {
+      "name": "E2p00_k0p00",
+      "k0_over_T": 2.0,
+      "k_over_T": 0.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193625777,
+      "processes": [
+        "vector_nlo"
+      ],
+      "slot_keys": [
+        "vector_nlo@NLO"
+      ],
+      "output_scale": 6.0,
+      "rest_isotropy": true,
+      "status": "budget_stopped",
+      "samples": 1584000,
+      "active_wall_seconds": 13341.295695840032,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_nlo@NLO": "17d4caade4e98c58604ae63b18f93e942307333ab152bbc6d1033a6c864a8269"
+      }
+    },
+    {
+      "name": "E2p00_k0p50",
+      "k0_over_T": 2.0,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193730506,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 18.0,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 496000,
+      "active_wall_seconds": 13951.996735694935,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "266d65b758e1fa76fed24533538d918ba475379bff26d9510a7e86eb3780b572",
+        "vector_T_nlo@NLO": "266d65b758e1fa76fed24533538d918ba475379bff26d9510a7e86eb3780b572"
+      }
+    },
+    {
+      "name": "E2p00_k1p00",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193835235,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 18.0,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 460000,
+      "active_wall_seconds": 13819.515115844086,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "48107e25218e89e4ff664b61413b3373962d4f66e671b18a321a884b1d31d580",
+        "vector_T_nlo@NLO": "48107e25218e89e4ff664b61413b3373962d4f66e671b18a321a884b1d31d580"
+      }
+    },
+    {
+      "name": "E2p00_k1p50",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 193939964,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 18.0,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 436000,
+      "active_wall_seconds": 14044.98267167306,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "0603ba04395f028707a11c0ac39d66b5bec4004435827e75e07d61f579feaabb",
+        "vector_T_nlo@NLO": "0603ba04395f028707a11c0ac39d66b5bec4004435827e75e07d61f579feaabb"
+      }
+    },
+    {
+      "name": "E0p45_k0p50",
+      "k0_over_T": 0.45,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 194044693,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 4.05,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 212000,
+      "active_wall_seconds": 14227.543724240037,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "c9d040b6b8968d276b8c4be1e00f7f8c8e85ff35969cec22474722b5292bd852",
+        "vector_T_nlo@NLO": "c9d040b6b8968d276b8c4be1e00f7f8c8e85ff35969cec22474722b5292bd852"
+      }
+    },
+    {
+      "name": "E0p55_k0p50",
+      "k0_over_T": 0.55,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 194149422,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 4.95,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 308000,
+      "active_wall_seconds": 14350.61868638196,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "87a38dab92aa6ab406d3d70e8f4c08fa0070cbd3b77aafd76c27ebb17ec536f3",
+        "vector_T_nlo@NLO": "87a38dab92aa6ab406d3d70e8f4c08fa0070cbd3b77aafd76c27ebb17ec536f3"
+      }
+    },
+    {
+      "name": "E0p95_k1p00",
+      "k0_over_T": 0.95,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 194254151,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 8.549999999999999,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 170000,
+      "active_wall_seconds": 14379.240393024054,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "4fc2675cf915c82b44dfe7be601b16651358a04c97365e93fd182dbeadfcfa96",
+        "vector_T_nlo@NLO": "4fc2675cf915c82b44dfe7be601b16651358a04c97365e93fd182dbeadfcfa96"
+      }
+    },
+    {
+      "name": "E1p05_k1p00",
+      "k0_over_T": 1.05,
+      "k_over_T": 1.0,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 194358880,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 9.450000000000001,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 250000,
+      "active_wall_seconds": 14002.161814603896,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "1df3deaf1ac7d1210a0797b891886515cb021c95f7a3c73440d62d9ff2e046fb",
+        "vector_T_nlo@NLO": "1df3deaf1ac7d1210a0797b891886515cb021c95f7a3c73440d62d9ff2e046fb"
+      }
+    },
+    {
+      "name": "E1p45_k1p50",
+      "k0_over_T": 1.45,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 194463609,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 13.049999999999999,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 166000,
+      "active_wall_seconds": 14295.649938068062,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "bd7d84ba57415c6695d5aef7189250ad333145e382340123206975946b009868",
+        "vector_T_nlo@NLO": "bd7d84ba57415c6695d5aef7189250ad333145e382340123206975946b009868"
+      }
+    },
+    {
+      "name": "E1p55_k1p50",
+      "k0_over_T": 1.55,
+      "k_over_T": 1.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 194568338,
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 13.950000000000001,
+      "rest_isotropy": false,
+      "status": "budget_stopped",
+      "samples": 240000,
+      "active_wall_seconds": 14304.93034981977,
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "stop_reason": "original_wall_time_budget",
+      "runtime_settings": {
+        "vector_L_nlo@NLO": "9d8e32d31172e6251a0fff2ef6003a40d3fd930dcc387d992d38278f913a987a",
+        "vector_T_nlo@NLO": "9d8e32d31172e6251a0fff2ef6003a40d3fd930dcc387d992d38278f913a987a"
+      }
+    }
+  ],
+  "runtime_settings_by_sha256": {
+    "e662180f822fb6a3f68a91ebb616937b21ae4f724d7aee5d88048c6a9df4a9f5": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191007552\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "251dca781afd2ef6735908ccdc847de78708e1746784849fa6dac2aa2ed4e95a": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.4330127018922193\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191112281\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "f2a39b6c0bc72176f65af8c36a939fdf96cfd3bb24caac2eed96186645e5ff7a": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.9682458365518543\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191217010\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "2f1b6e7c4a3f3e8b4f32a73783d6d8f39f8ef75b8a63d7d912f6b8d7d6a87a4a": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.479019945774904\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191321739\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "c1d64891734aeef3dda9d15e9308d255abd75a4777602abd2bdcc57ad8862bc5": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.5\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.5,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191426468\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "4b1934da5acffc1b5dae1ad26b6446528e9da58201bdba63494251d6508c0212": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.8660254037844386\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.5,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191531197\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "7adbbab1b2f21d4b7c0241bb67321dd2cefdd17113256e3e788ef76803862991": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.4142135623730951\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.5,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191635926\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "c6bcf14550fc99623a6eeed0a97019a0cbe958f197fd63e26ee8016c00c3c0a3": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.75\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191740655\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "0fc090c755399dfe93f18f2a9e20319a8a4c6f42bcc647cf2032b6d5ad189af1": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.5590169943749475\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191845384\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "893370630f6565bcf0661962d6a525f7bb894da29632ca209299a7b121e86c5e": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.6614378277661477\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191950113\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "2653a31bcb81eef6263a3117bf7250fbf836bceb57c10e21b565f0f15882536f": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.299038105676658\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192054842\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "7d49adfc5b481768bcc4deceaaed5468c0572a1c4f5f7a9fd3bd60f6a1b52683": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.0,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192159571\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "730f17c2dad0ce9822951595a6f83d593b69e2d391eb26d7b7d236d76d143190": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.8660254037844386\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.0,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192264300\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "e7065de309592be724f32031493b6615f4b33bf63e526ac9eae741c15c2ea6c6": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.118033988749895\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.0,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192369029\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "b1f59501d2b75fa357d0002c5b28cfe2d50da22321469e024505b65c3f947dbb": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192473758\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "8ccf3bbdf7629bf9cacffe005de2bf0be4c3cabd1804dc6e0f0c9bb926fc9a8b": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.14564392373896\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192578487\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "65db6828ed92ad8fe51c9328a71ff7a03e2be9377df0226f09c475236f32f979": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.75\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192683216\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "8a461168f30fa96016e4a75492f19efbc6c1e684e4500a9ca44f2af109d80a7c": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.82915619758885\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192787945\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "3cd1f0ac0eafd3eb32faaeb498d7f0da23fbf83f59974a560964866acf583609": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.5\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.5,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192892674\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "cb3aeeeb410d3a5d0dfafbc51fc7111d5730bf0dea6b3fac31f3f88dd70e49a3": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.4142135623730951\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.5,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192997403\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "e5d02f214a766f769e89348e3071238bfbc159907a6df5069b60fc0a50edd3b4": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.118033988749895\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.5,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193102132\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "26444928564c5e7d006e7f4d09123d5fb20af09924e0f49c4942d03b226db301": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.75\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193206861\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "ebfb66b395cc69dd5e366d5e018dfdd3a33828fa34e84e6ff62812d44a78d606": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.6770509831248424\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193311590\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "516168a61daa5cb12ae29b60c6b6ea62e0422b79dd6d4ca9a9ecbcb147c22d21": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.4361406616345072\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193416319\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "a0dced6f5ad75e2372142892d5384b59133b9869d890924fde353efee446fd4c": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.9013878188659973\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193521048\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "17d4caade4e98c58604ae63b18f93e942307333ab152bbc6d1033a6c864a8269": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 2.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193625777\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "266d65b758e1fa76fed24533538d918ba475379bff26d9510a7e86eb3780b572": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.9364916731037085\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193730506\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "48107e25218e89e4ff664b61413b3373962d4f66e671b18a321a884b1d31d580": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.7320508075688772\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193835235\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "0603ba04395f028707a11c0ac39d66b5bec4004435827e75e07d61f579feaabb": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.3228756555322954\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193939964\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "c9d040b6b8968d276b8c4be1e00f7f8c8e85ff35969cec22474722b5292bd852": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.45,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194044693\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "87a38dab92aa6ab406d3d70e8f4c08fa0070cbd3b77aafd76c27ebb17ec536f3": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.55,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194149422\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "4fc2675cf915c82b44dfe7be601b16651358a04c97365e93fd182dbeadfcfa96": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.31224989991991997\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.95,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194254151\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "1df3deaf1ac7d1210a0797b891886515cb021c95f7a3c73440d62d9ff2e046fb": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.3201562118716425\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.05,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194358880\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "bd7d84ba57415c6695d5aef7189250ad333145e382340123206975946b009868": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.38405728739343037\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.45,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194463609\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "9d8e32d31172e6251a0fff2ef6003a40d3fd930dcc387d992d38278f913a987a": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/116767bd3ed30491a2b15559d228171d20082abe/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.3905124837953331\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.55,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194568338\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n"
+  }
+}

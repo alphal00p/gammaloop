@@ -1,0 +1,30 @@
+{
+  "status": "budget_finished",
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "started_utc": "2026-10-18T17:19:29.104704+00:00",
+  "hard_deadline_utc": "2026-10-19T05:19:29.104704+00:00",
+  "available_components": 70,
+  "components_with_reference": 64,
+  "precision_reached": 15,
+  "within_half_percent_of_target": 16,
+  "discrepancy_watch": [
+    {
+      "name": "E1p50_k0p50",
+      "component": "T",
+      "pull": -114.26559990270536,
+      "samples": 528000,
+      "chi_sq_per_dof": 1.0117517284061914,
+      "max_weight_impact": 0.00047298596166228256
+    },
+    {
+      "name": "E1p50_k0p50",
+      "component": "L",
+      "pull": 134.3018456613221,
+      "samples": 528000,
+      "chi_sq_per_dof": 1.0890717025008736,
+      "max_weight_impact": 0.0006069518039712116
+    }
+  ],
+  "numerical_failures": [],
+  "interpretation": "Native isolated NLO is compared independently. Figure overlay uses author analytic LO + 9*native NLO; the LO curve is not a new native integration. A three-sigma residual is a watch flag, not proof of a systematic discrepancy."
+}

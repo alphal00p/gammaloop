@@ -1,0 +1,3355 @@
+{
+  "results": {
+    "E0.25-k0.5.json": {
+      "status": "ok",
+      "E": 0.25,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.019601561398127788,
+      "rhoV_nlo": -0.04904328964476717,
+      "minus_ImPi00_lo": -0.7729587185494462,
+      "minus_ImPi00_nlo": 0.020220693029760605,
+      "rhoL_lo": -0.5797190389120846,
+      "rhoL_nlo": 0.015165519772320453,
+      "rhoT_lo": 0.2996603001551062,
+      "rhoT_nlo": -0.03210440470854381,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.4217880454047767,
+      "rhoT_g3": 0.010720657778211906,
+      "rhoL_g3": -0.4432293609612006,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.019601561398127788,
+          "nlo": -0.04904328964476717,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.5,1.0000000000000001e-05,0.019601561398127788,-0.049043289644767167,326.18367513499999\n",
+          "stderr": "",
+          "wall_seconds": 326.1903220899985,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.25,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.7729587185494462,
+          "nlo": 0.020220693029760605,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.5,1.0000000000000001e-05,-0.7729587185494462,0.020220693029760605,861.12186303500005\n",
+          "stderr": "",
+          "wall_seconds": 861.1294667769689,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1187.320926870976,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E0.25-k0.json": {
+      "status": "ok",
+      "E": 0.25,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.0009313361331063544,
+      "rhoV_nlo": 0.03511936533891502,
+      "method": "vector k^2 extrapolation then exact rest isotropy",
+      "rest_extrapolation_difference": 1.4233955070164228e-08,
+      "rest_quartic_extrapolation": 0.035119366287845365,
+      "rest_controls": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.999999999999ap-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 0.0125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.0009290047804537461,
+          "nlo": 0.03513801133911713,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.0125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.012500000000000001,1.0000000000000001e-05,0.0009290047804537461,0.035138011339117127,220.76211513199999\n",
+          "stderr": "",
+          "wall_seconds": 220.76867237698752,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.999999999999ap-8",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 0.00625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.0009307532935258802,
+          "nlo": 0.03512401616349924,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.00625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.0062500000000000003,1.0000000000000001e-05,0.00093075329352588023,0.035124016163499243,217.685462231\n",
+          "stderr": "",
+          "wall_seconds": 217.69187134498497,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.999999999999ap-9",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 0.003125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.0009311904231234834,
+          "nlo": 0.03512052804506108,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.003125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.0031250000000000002,1.0000000000000001e-05,0.00093119042312348344,0.035120528045061078,180.80545833400001\n",
+          "stderr": "",
+          "wall_seconds": 180.81203950900817,
+          "cache_hit": false
+        }
+      ],
+      "rhoT_lo": 0.00031044537770211813,
+      "rhoT_nlo": 0.011706455112971673,
+      "rhoL_lo": 0.00031044537770211813,
+      "rhoL_nlo": 0.011706455112971673,
+      "rhoV_g3": 0.31700562418334155,
+      "rhoT_g3": 0.10566854139444717,
+      "rhoL_g3": 0.10566854139444717,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.999999999999ap-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 0.0125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.0009290047804537461,
+          "nlo": 0.03513801133911713,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.0125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.012500000000000001,1.0000000000000001e-05,0.0009290047804537461,0.035138011339117127,220.76211513199999\n",
+          "stderr": "",
+          "wall_seconds": 220.76867237698752,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.999999999999ap-8",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 0.00625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.0009307532935258802,
+          "nlo": 0.03512401616349924,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.00625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.0062500000000000003,1.0000000000000001e-05,0.00093075329352588023,0.035124016163499243,217.685462231\n",
+          "stderr": "",
+          "wall_seconds": 217.69187134498497,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.999999999999ap-9",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 0.003125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.0009311904231234834,
+          "nlo": 0.03512052804506108,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "0.003125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,0.0031250000000000002,1.0000000000000001e-05,0.00093119042312348344,0.035120528045061078,180.80545833400001\n",
+          "stderr": "",
+          "wall_seconds": 180.81203950900817,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 619.2742137869936,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 236
+    },
+    "E0.25-k1.5.json": {
+      "status": "incomplete",
+      "E": 0.25,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "error": "Command '['/tmp/qcd-fig15-reference-20261018/portable-build/reference', '0.25', '1.5', '1e-05', 'density']' timed out after 1054.9412723989808 seconds",
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05588255134882565,
+          "nlo": -0.010227328296284583,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,1.5,1.0000000000000001e-05,0.055882551348825651,-0.010227328296284583,745.05160332100002\n",
+          "stderr": "",
+          "wall_seconds": 745.0580270069768,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1800.1019970120396
+    },
+    "E0.25-k1.json": {
+      "status": "incomplete",
+      "E": 0.25,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "error": "Command '['/tmp/qcd-fig15-reference-20261018/portable-build/reference', '0.25', '1.0', '1e-05', 'density']' timed out after 1164.2875041239895 seconds",
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-2",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.25,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.04226574734906211,
+          "nlo": -0.018471264451987535,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.25",
+            "1.0",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.25,1,1.0000000000000001e-05,0.042265747349062112,-0.018471264451987535,635.705532866\n",
+          "stderr": "",
+          "wall_seconds": 635.7118420529878,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1800.1013123299927
+    },
+    "E0.45-k0.5.json": {
+      "status": "ok",
+      "E": 0.45,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.008941932907404493,
+      "rhoV_nlo": -0.07180370319558446,
+      "minus_ImPi00_lo": -1.396332668441996,
+      "minus_ImPi00_nlo": -0.02624116626939149,
+      "rhoL_lo": -0.2653032070039792,
+      "rhoL_nlo": -0.004985821591184382,
+      "rhoT_lo": 0.13712256995569183,
+      "rhoT_nlo": -0.03340894080220004,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.6372913958528557,
+      "rhoT_g3": -0.16355789726410852,
+      "rhoL_g3": -0.3101756013246386,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.ccccccccccccdp-2",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.45,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.008941932907404493,
+          "nlo": -0.07180370319558446,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.45",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.45000000000000001,0.5,1.0000000000000001e-05,0.0089419329074044932,-0.071803703195584462,225.879235489\n",
+          "stderr": "",
+          "wall_seconds": 225.88590500399005,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.ccccccccccccdp-2",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.45,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -1.396332668441996,
+          "nlo": -0.02624116626939149,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.45",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.45000000000000001,0.5,1.0000000000000001e-05,-1.3963326684419961,-0.026241166269391492,1052.1968856670001\n",
+          "stderr": "",
+          "wall_seconds": 1052.2036651539966,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1278.0908474919852,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 240
+    },
+    "E0.5-k0.json": {
+      "status": "ok",
+      "E": 0.5,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.007421773095099282,
+      "rhoV_nlo": 0.04931268598483133,
+      "method": "vector k^2 extrapolation then exact rest isotropy",
+      "rest_extrapolation_difference": 1.9552952840173887e-08,
+      "rest_quartic_extrapolation": 0.049312687288361516,
+      "rest_controls": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.999999999999ap-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 0.025,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.007403123758370791,
+          "nlo": 0.04934294136551637,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "0.025",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,0.025000000000000001,1.0000000000000001e-05,0.0074031237583707908,0.049342941365516368,241.80180598699999\n",
+          "stderr": "",
+          "wall_seconds": 241.80890051403549,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.999999999999ap-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 0.0125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.007417110716046994,
+          "nlo": 0.04932023516528796,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "0.0125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,0.012500000000000001,1.0000000000000001e-05,0.0074171107160469936,0.049320235165287961,188.44936551200001\n",
+          "stderr": "",
+          "wall_seconds": 188.46917760698125,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.999999999999ap-8",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 0.00625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.007420607497532508,
+          "nlo": 0.04931457327994549,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "0.00625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,0.0062500000000000003,1.0000000000000001e-05,0.0074206074975325083,0.049314573279945491,154.239559445\n",
+          "stderr": "",
+          "wall_seconds": 154.2509092190303,
+          "cache_hit": false
+        }
+      ],
+      "rhoT_lo": 0.002473924365033094,
+      "rhoT_nlo": 0.016437561994943777,
+      "rhoL_lo": 0.002473924365033094,
+      "rhoL_nlo": 0.016437561994943777,
+      "rhoV_g3": 0.45123594695858127,
+      "rhoT_g3": 0.1504119823195271,
+      "rhoL_g3": 0.1504119823195271,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.999999999999ap-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 0.025,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.007403123758370791,
+          "nlo": 0.04934294136551637,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "0.025",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,0.025000000000000001,1.0000000000000001e-05,0.0074031237583707908,0.049342941365516368,241.80180598699999\n",
+          "stderr": "",
+          "wall_seconds": 241.80890051403549,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.999999999999ap-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 0.0125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.007417110716046994,
+          "nlo": 0.04932023516528796,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "0.0125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,0.012500000000000001,1.0000000000000001e-05,0.0074171107160469936,0.049320235165287961,188.44936551200001\n",
+          "stderr": "",
+          "wall_seconds": 188.46917760698125,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.999999999999ap-8",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 0.00625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.007420607497532508,
+          "nlo": 0.04931457327994549,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "0.00625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,0.0062500000000000003,1.0000000000000001e-05,0.0074206074975325083,0.049314573279945491,154.239559445\n",
+          "stderr": "",
+          "wall_seconds": 154.2509092190303,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 584.5312300570076,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E0.5-k1.5.json": {
+      "status": "ok",
+      "E": 0.5,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.10237819755411351,
+      "rhoV_nlo": -0.020259556584793264,
+      "minus_ImPi00_lo": -0.45906184417661045,
+      "minus_ImPi00_nlo": 0.024206577204431277,
+      "rhoL_lo": -0.4080549726014315,
+      "rhoL_nlo": 0.021516957515050023,
+      "rhoT_lo": 0.2552165850777725,
+      "rhoT_nlo": -0.020888257049921644,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.07995781170902586,
+      "rhoT_g3": 0.06722227162847771,
+      "rhoL_g3": -0.21440235496598126,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.10237819755411351,
+          "nlo": -0.020259556584793264,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,1.5,1.0000000000000001e-05,0.10237819755411351,-0.020259556584793264,185.89890828\n",
+          "stderr": "",
+          "wall_seconds": 185.90640820999397,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.5,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.45906184417661045,
+          "nlo": 0.024206577204431277,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "1.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,1.5,1.0000000000000001e-05,-0.45906184417661045,0.024206577204431277,544.96541872900002\n",
+          "stderr": "",
+          "wall_seconds": 544.9715169330011,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 730.8789776490303,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E0.5-k1.json": {
+      "status": "ok",
+      "E": 0.5,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.06770513842441958,
+      "rhoV_nlo": -0.03613166887407381,
+      "minus_ImPi00_lo": -0.7404646502649685,
+      "minus_ImPi00_nlo": 0.02724380717734014,
+      "rhoL_lo": -0.5553484876987265,
+      "rhoL_nlo": 0.020432855383005107,
+      "rhoT_lo": 0.31152681306157304,
+      "rhoT_nlo": -0.02828226212853946,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.25747988144224476,
+      "rhoT_g3": 0.056986453904717904,
+      "rhoL_g3": -0.3714527892516805,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.5,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.06770513842441958,
+          "nlo": -0.03613166887407381,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "1.0",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,1,1.0000000000000001e-05,0.067705138424419581,-0.036131668874073812,332.77647539700001\n",
+          "stderr": "",
+          "wall_seconds": 332.78322931501316,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p-1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.5,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.7404646502649685,
+          "nlo": 0.02724380717734014,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.5",
+            "1.0",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.5,1,1.0000000000000001e-05,-0.74046465026496855,0.027243807177340141,833.78871897399995\n",
+          "stderr": "",
+          "wall_seconds": 833.7949802029761,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1166.579295972013,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 241
+    },
+    "E0.55-k0.5.json": {
+      "status": "ok",
+      "E": 0.55,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.0017038701849553164,
+      "rhoV_nlo": 0.0781165557928138,
+      "minus_ImPi00_lo": -0.0027100637319201217,
+      "minus_ImPi00_nlo": -0.053312332518414975,
+      "rhoL_lo": 0.0005691133837032261,
+      "rhoL_nlo": 0.011195589828867154,
+      "rhoT_lo": 0.0005673784006260451,
+      "rhoT_nlo": 0.03346048298197332,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.7047528723202796,
+      "rhoT_g3": 0.30171172523838596,
+      "rhoL_g3": 0.10132942184350761,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.199999999999ap-1",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.55,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.0017038701849553164,
+          "nlo": 0.0781165557928138,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.55",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.55000000000000004,0.5,1.0000000000000001e-05,0.0017038701849553164,0.078116555792813805,97.343684491999994\n",
+          "stderr": "",
+          "wall_seconds": 97.35056395700667,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.199999999999ap-1",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.55,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.0027100637319201217,
+          "nlo": -0.053312332518414975,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.55",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.55000000000000004,0.5,1.0000000000000001e-05,-0.0027100637319201217,-0.053312332518414975,15.676498142\n",
+          "stderr": "",
+          "wall_seconds": 15.683165185968392,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 113.03489560796879,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 236
+    },
+    "E0.75-k0.5.json": {
+      "status": "ok",
+      "E": 0.75,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.013757445678071556,
+      "rhoV_nlo": 0.06644705133782802,
+      "minus_ImPi00_lo": -0.003675997421676294,
+      "minus_ImPi00_nlo": -0.014093935757989532,
+      "rhoL_lo": 0.004594996777095368,
+      "rhoL_nlo": 0.017617419697486914,
+      "rhoT_lo": 0.004581224450488094,
+      "rhoT_nlo": 0.024414815820170556,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.6117809077185238,
+      "rhoT_g3": 0.22431456683202308,
+      "rhoL_g3": 0.16315177405447762,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.013757445678071556,
+          "nlo": 0.06644705133782802,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.5,1.0000000000000001e-05,0.013757445678071556,0.066447051337828023,125.506255665\n",
+          "stderr": "",
+          "wall_seconds": 125.51251100801164,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.75,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.003675997421676294,
+          "nlo": -0.014093935757989532,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.5,1.0000000000000001e-05,-0.003675997421676294,-0.014093935757989532,18.300988528000001\n",
+          "stderr": "",
+          "wall_seconds": 18.307040912040975,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 143.82062236301135,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 241
+    },
+    "E0.75-k0.json": {
+      "status": "ok",
+      "E": 0.75,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.024887836308728366,
+      "rhoV_nlo": 0.05678432176316972,
+      "method": "vector k^2 extrapolation then exact rest isotropy",
+      "rest_extrapolation_difference": 2.1431471229627075e-08,
+      "rest_quartic_extrapolation": 0.05678432319193447,
+      "rest_controls": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.3333333333334p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 0.037500000000000006,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.024824914410417884,
+          "nlo": 0.05682225680757898,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.037500000000000006",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.037500000000000006,1.0000000000000001e-05,0.024824914410417884,0.056822256807578977,193.13394569100001\n",
+          "stderr": "",
+          "wall_seconds": 193.14729423099197,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.3333333333334p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 0.018750000000000003,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.02487210549971932,
+          "nlo": 0.05679378945066862,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.018750000000000003",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.018750000000000003,1.0000000000000001e-05,0.02487210549971932,0.056793789450668618,162.030804077\n",
+          "stderr": "",
+          "wall_seconds": 162.03746534197126,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.3333333333334p-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 0.009375000000000001,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.024883903585571625,
+          "nlo": 0.05678668868504445,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.009375000000000001",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.0093750000000000014,1.0000000000000001e-05,0.024883903585571625,0.056786688685044447,145.44566637400001\n",
+          "stderr": "",
+          "wall_seconds": 145.45173061598325,
+          "cache_hit": false
+        }
+      ],
+      "rhoT_lo": 0.00829594543624279,
+      "rhoT_nlo": 0.018928107254389908,
+      "rhoL_lo": 0.00829594543624279,
+      "rhoL_nlo": 0.018928107254389908,
+      "rhoV_g3": 0.5359467321772559,
+      "rhoT_g3": 0.17864891072575195,
+      "rhoL_g3": 0.17864891072575195,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.3333333333334p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 0.037500000000000006,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.024824914410417884,
+          "nlo": 0.05682225680757898,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.037500000000000006",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.037500000000000006,1.0000000000000001e-05,0.024824914410417884,0.056822256807578977,193.13394569100001\n",
+          "stderr": "",
+          "wall_seconds": 193.14729423099197,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.3333333333334p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 0.018750000000000003,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.02487210549971932,
+          "nlo": 0.05679378945066862,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.018750000000000003",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.018750000000000003,1.0000000000000001e-05,0.02487210549971932,0.056793789450668618,162.030804077\n",
+          "stderr": "",
+          "wall_seconds": 162.03746534197126,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.3333333333334p-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 0.009375000000000001,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.024883903585571625,
+          "nlo": 0.05678668868504445,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "0.009375000000000001",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,0.0093750000000000014,1.0000000000000001e-05,0.024883903585571625,0.056786688685044447,145.44566637400001\n",
+          "stderr": "",
+          "wall_seconds": 145.45173061598325,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 500.63825003703823,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 238
+    },
+    "E0.75-k1.5.json": {
+      "status": "ok",
+      "E": 0.75,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.12997536547278474,
+      "rhoV_nlo": -0.029347525813065836,
+      "minus_ImPi00_lo": -0.6946173003407111,
+      "minus_ImPi00_nlo": 0.030705729679806806,
+      "rhoL_lo": -0.5209629752555334,
+      "rhoL_nlo": 0.023029297259855103,
+      "rhoT_lo": 0.32546917036415907,
+      "rhoT_nlo": -0.026188411536460468,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.13415236684480777,
+      "rhoT_g3": 0.08977346653601487,
+      "rhoL_g3": -0.3136992999168374,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.12997536547278474,
+          "nlo": -0.029347525813065836,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,1.5,1.0000000000000001e-05,0.12997536547278474,-0.029347525813065836,323.140576404\n",
+          "stderr": "",
+          "wall_seconds": 323.14693360897945,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.75,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.6946173003407111,
+          "nlo": 0.030705729679806806,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "1.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,1.5,1.0000000000000001e-05,-0.69461730034071112,0.030705729679806806,759.43204684800003\n",
+          "stderr": "",
+          "wall_seconds": 759.438258817012,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1082.5862738580327,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 238
+    },
+    "E0.75-k1.json": {
+      "status": "ok",
+      "E": 0.75,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.05935726913202579,
+      "rhoV_nlo": -0.04737850236294828,
+      "minus_ImPi00_lo": -1.119931749479143,
+      "minus_ImPi00_nlo": 0.01428051483221687,
+      "rhoL_lo": -0.48997014039712505,
+      "rhoL_nlo": 0.00624772523909488,
+      "rhoT_lo": 0.2746637047645754,
+      "rhoT_nlo": -0.02681311380102158,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.36704925213450873,
+      "rhoT_g3": 0.0333456805553812,
+      "rhoL_g3": -0.43374061324527113,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 0.75,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05935726913202579,
+          "nlo": -0.04737850236294828,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "1.0",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,1,1.0000000000000001e-05,0.05935726913202579,-0.047378502362948278,244.09226477600001\n",
+          "stderr": "",
+          "wall_seconds": 244.09862153301947,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p-1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 0.75,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -1.119931749479143,
+          "nlo": 0.01428051483221687,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "0.75",
+            "1.0",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "0.75,1,1.0000000000000001e-05,-1.119931749479143,0.014280514832216869,858.87283699199997\n",
+          "stderr": "",
+          "wall_seconds": 858.8802592640277,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1102.979956252966,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 236
+    },
+    "E0.95-k1.json": {
+      "status": "ok",
+      "E": 0.95,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.016790597091154748,
+      "rhoV_nlo": -0.01913772036881452,
+      "minus_ImPi00_lo": -1.431308855294251,
+      "minus_ImPi00_nlo": -0.10868642953063647,
+      "rhoL_lo": -0.13955261339118952,
+      "rhoL_nlo": -0.01059692687923706,
+      "rhoT_lo": 0.07817160524117213,
+      "rhoT_nlo": -0.004270396744788731,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.15544888622817596,
+      "rhoT_g3": 0.03973803453807355,
+      "rhoL_g3": -0.23492495530432306,
+      "raw": [
+        {
+          "E": 0.95,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.016790597091154748,
+          "nlo": -0.01913772036881452,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/near-below-tol1e-05.csv",
+          "source_assembly_wall_seconds": 570.067910686,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.e666666666666p-1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 0.95,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -1.431308855294251,
+          "nlo": -0.10868642953063647,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/near-below-tol1e-05.csv",
+          "source_assembly_wall_seconds": 570.067910686,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.e666666666666p-1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "cache_hit": true
+        }
+      ],
+      "wall_seconds": 0.0007147129508666694,
+      "cache_hits": 2,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E1-k0.5.json": {
+      "status": "ok",
+      "E": 1.0,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.043639034129543106,
+      "rhoV_nlo": 0.06543241771968789,
+      "minus_ImPi00_lo": -0.0048582465654569695,
+      "minus_ImPi00_nlo": -0.006598251280470879,
+      "rhoL_lo": 0.014574739696370909,
+      "rhoL_nlo": 0.019794753841412636,
+      "rhoT_lo": 0.014532147216586098,
+      "rhoT_nlo": 0.022818831939137627,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.632530793606734,
+      "rhoT_g3": 0.21990163466882476,
+      "rhoL_g3": 0.19272752426908463,
+      "raw": [
+        {
+          "E": 1.0,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.043639034129543106,
+          "nlo": 0.06543241771968789,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/timelike-half-tol1e-05.csv",
+          "source_assembly_wall_seconds": 120.589707562,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 1.0,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.0048582465654569695,
+          "nlo": -0.006598251280470879,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/timelike-half-tol1e-05.csv",
+          "source_assembly_wall_seconds": 120.589707562,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "cache_hit": true
+        }
+      ],
+      "wall_seconds": 0.0004340520245023072,
+      "cache_hits": 2,
+      "cpu_workers": 1,
+      "cpu": 236
+    },
+    "E1-k0.json": {
+      "status": "ok",
+      "E": 1.0,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.05847002366550818,
+      "rhoV_nlo": 0.060268177844717746,
+      "method": "vector k^2 extrapolation then exact rest isotropy",
+      "rest_extrapolation_difference": 2.4644793296391132e-08,
+      "rest_quartic_extrapolation": 0.06026817948770397,
+      "rest_controls": [
+        {
+          "E": 1.0,
+          "k": 0.05,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05832099328521772,
+          "nlo": 0.06031100763265813,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/rest-k005-tol1e-05.csv",
+          "source_assembly_wall_seconds": 350.40514412,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.999999999999ap-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 1.0,
+          "k": 0.025,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05843276469814231,
+          "nlo": 0.060278866808107866,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/rest-k0025-tol1e-05.csv",
+          "source_assembly_wall_seconds": 399.778557361,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.999999999999ap-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 1.0,
+          "k": 0.0125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05846070883789347,
+          "nlo": 0.06027085008556528,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/rest-k00125-tol1e-05.csv",
+          "source_assembly_wall_seconds": 284.255728157,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.999999999999ap-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        }
+      ],
+      "rhoT_lo": 0.019490007888502726,
+      "rhoT_nlo": 0.020089392614905915,
+      "rhoL_lo": 0.019490007888502726,
+      "rhoL_nlo": 0.020089392614905915,
+      "rhoV_g3": 0.6008836242679678,
+      "rhoT_g3": 0.20029454142265596,
+      "rhoL_g3": 0.20029454142265596,
+      "raw": [
+        {
+          "E": 1.0,
+          "k": 0.05,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05832099328521772,
+          "nlo": 0.06031100763265813,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/rest-k005-tol1e-05.csv",
+          "source_assembly_wall_seconds": 350.40514412,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.999999999999ap-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 1.0,
+          "k": 0.025,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05843276469814231,
+          "nlo": 0.060278866808107866,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/rest-k0025-tol1e-05.csv",
+          "source_assembly_wall_seconds": 399.778557361,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.999999999999ap-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 1.0,
+          "k": 0.0125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.05846070883789347,
+          "nlo": 0.06027085008556528,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/rest-k00125-tol1e-05.csv",
+          "source_assembly_wall_seconds": 284.255728157,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.999999999999ap-7",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        }
+      ],
+      "wall_seconds": 0.0004090219736099243,
+      "cache_hits": 3,
+      "cpu_workers": 1,
+      "cpu": 239
+    },
+    "E1-k1.5.json": {
+      "status": "ok",
+      "E": 1.0,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.12891961747620065,
+      "rhoV_nlo": -0.035033422584838485,
+      "minus_ImPi00_lo": -0.937408033120489,
+      "minus_ImPi00_nlo": 0.026253760791835782,
+      "rhoL_lo": -0.5207822406224939,
+      "rhoL_nlo": 0.014585422662130991,
+      "rhoT_lo": 0.32485092904934726,
+      "rhoT_nlo": -0.024809422623484737,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.18638118578734572,
+      "rhoT_g3": 0.10156612543798463,
+      "rhoL_g3": -0.38951343666331495,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.0,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.12891961747620065,
+          "nlo": -0.035033422584838485,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.0",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1,1.5,1.0000000000000001e-05,0.12891961747620065,-0.035033422584838485,275.75623476599998\n",
+          "stderr": "",
+          "wall_seconds": 275.76271920203,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.0,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.937408033120489,
+          "nlo": 0.026253760791835782,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.0",
+            "1.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1,1.5,1.0000000000000001e-05,-0.93740803312048904,0.026253760791835782,747.31026373600002\n",
+          "stderr": "",
+          "wall_seconds": 747.318033303949,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 1023.0819957290078,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 236
+    },
+    "E1.05-k1.json": {
+      "status": "ok",
+      "E": 1.05,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.006160294381865281,
+      "rhoV_nlo": 0.11852799407984402,
+      "minus_ImPi00_lo": -0.02018746748880866,
+      "minus_ImPi00_nlo": -0.11823903289606427,
+      "rhoL_lo": 0.0020692154176028886,
+      "rhoL_nlo": 0.012119500871846592,
+      "rhoT_lo": 0.002045539482131196,
+      "rhoT_nlo": 0.053204246603998716,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 1.0729122411004615,
+      "rhoT_g3": 0.48088375891811963,
+      "rhoL_g3": 0.1111447232642222,
+      "raw": [
+        {
+          "E": 1.05,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.006160294381865281,
+          "nlo": 0.11852799407984402,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/refine-near-above-tol1e-05.csv",
+          "source_assembly_wall_seconds": 20.728769139,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0cccccccccccdp+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 1.05,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.02018746748880866,
+          "nlo": -0.11823903289606427,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/refine-near-above-tol1e-05.csv",
+          "source_assembly_wall_seconds": 20.728769139,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0cccccccccccdp+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "cache_hit": true
+        }
+      ],
+      "wall_seconds": 0.00040860200533643365,
+      "cache_hits": 2,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E1.25-k0.5.json": {
+      "status": "ok",
+      "E": 1.25,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.09440360920690878,
+      "rhoV_nlo": 0.06447107554038774,
+      "minus_ImPi00_lo": -0.006005190510122142,
+      "minus_ImPi00_nlo": -0.003890486264614449,
+      "rhoL_lo": 0.031527250178141245,
+      "rhoL_nlo": 0.02042505288922586,
+      "rhoT_lo": 0.03143817951438377,
+      "rhoT_nlo": 0.02202301132558094,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.6746432890703985,
+      "rhoT_g3": 0.22964528144461221,
+      "rhoL_g3": 0.21535272618117396,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.09440360920690878,
+          "nlo": 0.06447107554038774,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.5,1.0000000000000001e-05,0.094403609206908781,0.064471075540387737,68.871818746000002\n",
+          "stderr": "",
+          "wall_seconds": 68.87841798103182,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.25,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.006005190510122142,
+          "nlo": -0.003890486264614449,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.5,1.0000000000000001e-05,-0.0060051905101221421,-0.0038904862646144491,19.159255625\n",
+          "stderr": "",
+          "wall_seconds": 19.165422078978736,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 88.04495691403281,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 236
+    },
+    "E1.25-k0.json": {
+      "status": "ok",
+      "E": 1.25,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.11291660096534711,
+      "rhoV_nlo": 0.06122628043535114,
+      "method": "vector k^2 extrapolation then exact rest isotropy",
+      "rest_extrapolation_difference": 2.3325823723940875e-08,
+      "rest_quartic_extrapolation": 0.06122628199040605,
+      "rest_controls": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-4",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 0.0625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.11262598388904149,
+          "nlo": 0.061271140501913304,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.0625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.0625,1.0000000000000001e-05,0.11262598388904149,0.061271140501913304,217.54670435899999\n",
+          "stderr": "",
+          "wall_seconds": 217.55334924400086,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 0.03125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.11284394265213833,
+          "nlo": 0.06123747795762389,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.03125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.03125,1.0000000000000001e-05,0.11284394265213833,0.061237477957623888,212.01632826100001\n",
+          "stderr": "",
+          "wall_seconds": 212.0226680850028,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 0.015625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.11289843613426645,
+          "nlo": 0.061229079815919324,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.015625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.015625,1.0000000000000001e-05,0.11289843613426645,0.061229079815919324,157.88230385\n",
+          "stderr": "",
+          "wall_seconds": 157.8883200819837,
+          "cache_hit": false
+        }
+      ],
+      "rhoT_lo": 0.03763886698844904,
+      "rhoT_nlo": 0.020408760145117045,
+      "rhoL_lo": 0.03763886698844904,
+      "rhoL_nlo": 0.020408760145117045,
+      "rhoV_g3": 0.6639531248835073,
+      "rhoT_g3": 0.22131770829450245,
+      "rhoL_g3": 0.22131770829450245,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-4",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 0.0625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.11262598388904149,
+          "nlo": 0.061271140501913304,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.0625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.0625,1.0000000000000001e-05,0.11262598388904149,0.061271140501913304,217.54670435899999\n",
+          "stderr": "",
+          "wall_seconds": 217.55334924400086,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 0.03125,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.11284394265213833,
+          "nlo": 0.06123747795762389,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.03125",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.03125,1.0000000000000001e-05,0.11284394265213833,0.061237477957623888,212.01632826100001\n",
+          "stderr": "",
+          "wall_seconds": 212.0226680850028,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 0.015625,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.11289843613426645,
+          "nlo": 0.061229079815919324,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "0.015625",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,0.015625,1.0000000000000001e-05,0.11289843613426645,0.061229079815919324,157.88230385\n",
+          "stderr": "",
+          "wall_seconds": 157.8883200819837,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 587.4659669469693,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 240
+    },
+    "E1.25-k1.5.json": {
+      "status": "ok",
+      "E": 1.25,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.08910787287605286,
+      "rhoV_nlo": -0.028424655408351752,
+      "minus_ImPi00_lo": -1.189855186858848,
+      "minus_ImPi00_nlo": -0.010969447659483619,
+      "rhoL_lo": -0.3635668626513147,
+      "rhoL_nlo": -0.003351775673731106,
+      "rhoT_lo": 0.2263373677636838,
+      "rhoT_nlo": -0.012536439867310322,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": -0.16671402579911287,
+      "rhoT_g3": 0.1135094089578909,
+      "rhoL_g3": -0.3937328437148947,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.25,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.08910787287605286,
+          "nlo": -0.028424655408351752,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,1.5,1.0000000000000001e-05,0.08910787287605286,-0.028424655408351752,254.71945223500001\n",
+          "stderr": "",
+          "wall_seconds": 254.7271511059953,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.25,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -1.189855186858848,
+          "nlo": -0.010969447659483619,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.25",
+            "1.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.25,1.5,1.0000000000000001e-05,-1.1898551868588481,-0.010969447659483619,683.08369470499997\n",
+          "stderr": "",
+          "wall_seconds": 683.0920566779678,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 937.8204740500078,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 241
+    },
+    "E1.25-k1.json": {
+      "status": "ok",
+      "E": 1.25,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.03989695840020262,
+      "rhoV_nlo": 0.08348191694646341,
+      "minus_ImPi00_lo": -0.02381950948623149,
+      "minus_ImPi00_nlo": -0.03352108707998018,
+      "rhoL_lo": 0.013398474086005214,
+      "rhoL_nlo": 0.018855611482488852,
+      "rhoT_lo": 0.013249242157098702,
+      "rhoT_nlo": 0.03231315273198728,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.7912342109183733,
+      "rhoT_g3": 0.3040676167449842,
+      "rhoL_g3": 0.1830989774284049,
+      "raw": [
+        {
+          "E": 1.25,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.03989695840020262,
+          "nlo": 0.08348191694646341,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/refine-timelike-mid-tol1e-05.csv",
+          "source_assembly_wall_seconds": 120.208136619,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 1.25,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.02381950948623149,
+          "nlo": -0.03352108707998018,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/refine-timelike-mid-tol1e-05.csv",
+          "source_assembly_wall_seconds": 120.208136619,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.4000000000000p+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "cache_hit": true
+        }
+      ],
+      "wall_seconds": 0.0006664730026386678,
+      "cache_hits": 2,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E1.45-k1.5.json": {
+      "status": "ok",
+      "E": 1.45,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.022287713980120194,
+      "rhoV_nlo": 0.03003919112938564,
+      "minus_ImPi00_lo": -1.400397166676742,
+      "minus_ImPi00_nlo": -0.1997472800586413,
+      "rhoL_lo": -0.09180381425991972,
+      "rhoL_nlo": -0.01309454391495537,
+      "rhoT_lo": 0.05704576412001996,
+      "rhoT_nlo": 0.021566867522170505,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.29264043414459096,
+      "rhoT_g3": 0.2511475718195545,
+      "rhoL_g3": -0.20965470949451806,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.7333333333333p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.45,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.022287713980120194,
+          "nlo": 0.03003919112938564,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.45",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.45,1.5,1.0000000000000001e-05,0.022287713980120194,0.030039191129385641,8.7580699919999994\n",
+          "stderr": "",
+          "wall_seconds": 8.764445537002757,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.7333333333333p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.45,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -1.400397166676742,
+          "nlo": -0.1997472800586413,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.45",
+            "1.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.45,1.5,1.0000000000000001e-05,-1.4003971666767421,-0.19974728005864131,232.17892019199999\n",
+          "stderr": "",
+          "wall_seconds": 232.18537071801256,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 240.95092083798954,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 239
+    },
+    "E1.5-k0.5.json": {
+      "status": "ok",
+      "E": 1.5,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.1703302366133455,
+      "rhoV_nlo": 0.07661808411974388,
+      "minus_ImPi00_lo": -0.007109951088814501,
+      "minus_ImPi00_nlo": 0.000499511281480354,
+      "rhoL_lo": 0.056879608710516005,
+      "rhoL_nlo": -0.003996090251842832,
+      "rhoT_lo": 0.05672531395141475,
+      "rhoT_nlo": 0.04030708718579336,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.8598929936910404,
+      "rhoT_g3": 0.419489098623555,
+      "rhoL_g3": 0.020914796443930517,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.1703302366133455,
+          "nlo": 0.07661808411974388,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.5,1.0000000000000001e-05,0.17033023661334551,0.076618084119743884,8.8895939009999996\n",
+          "stderr": "",
+          "wall_seconds": 8.896449846972246,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.5,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.007109951088814501,
+          "nlo": 0.000499511281480354,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.5,1.0000000000000001e-05,-0.0071099510888145007,0.00049951128148035401,17.561315296\n",
+          "stderr": "",
+          "wall_seconds": 17.567977881990373,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 26.465666331991088,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 241
+    },
+    "E1.5-k0.json": {
+      "status": "ok",
+      "E": 1.5,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.19249093577614163,
+      "rhoV_nlo": 0.0607590754796127,
+      "method": "vector k^2 extrapolation then exact rest isotropy",
+      "rest_extrapolation_difference": 2.887270846019252e-08,
+      "rest_quartic_extrapolation": 0.06075907740445993,
+      "rest_controls": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.3333333333334p-4",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 0.07500000000000001,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.19199009912205184,
+          "nlo": 0.060802225766052126,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.07500000000000001",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.075000000000000011,1.0000000000000001e-05,0.19199009912205184,0.060802225766052126,244.97195522000001\n",
+          "stderr": "",
+          "wall_seconds": 244.98661401501158,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.3333333333334p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 0.037500000000000006,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.19236571697949695,
+          "nlo": 0.06076984139669121,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.037500000000000006",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.037500000000000006,1.0000000000000001e-05,0.19236571697949695,0.060769841396691213,217.52823787\n",
+          "stderr": "",
+          "wall_seconds": 217.53465238399804,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.3333333333334p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 0.018750000000000003,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.19245963047485254,
+          "nlo": 0.06076176695888232,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.018750000000000003",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.018750000000000003,1.0000000000000001e-05,0.19245963047485254,0.060761766958882323,186.16368397900001\n",
+          "stderr": "",
+          "wall_seconds": 186.17003133200342,
+          "cache_hit": false
+        }
+      ],
+      "rhoT_lo": 0.06416364525871388,
+      "rhoT_nlo": 0.0202530251598709,
+      "rhoL_lo": 0.06416364525871388,
+      "rhoL_nlo": 0.0202530251598709,
+      "rhoV_g3": 0.739322615092656,
+      "rhoT_g3": 0.24644087169755197,
+      "rhoL_g3": 0.24644087169755197,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.3333333333334p-4",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 0.07500000000000001,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.19199009912205184,
+          "nlo": 0.060802225766052126,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.07500000000000001",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.075000000000000011,1.0000000000000001e-05,0.19199009912205184,0.060802225766052126,244.97195522000001\n",
+          "stderr": "",
+          "wall_seconds": 244.98661401501158,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.3333333333334p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 0.037500000000000006,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.19236571697949695,
+          "nlo": 0.06076984139669121,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.037500000000000006",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.037500000000000006,1.0000000000000001e-05,0.19236571697949695,0.060769841396691213,217.52823787\n",
+          "stderr": "",
+          "wall_seconds": 217.53465238399804,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.3333333333334p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 0.018750000000000003,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.19245963047485254,
+          "nlo": 0.06076176695888232,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "0.018750000000000003",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,0.018750000000000003,1.0000000000000001e-05,0.19245963047485254,0.060761766958882323,186.16368397900001\n",
+          "stderr": "",
+          "wall_seconds": 186.17003133200342,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 648.692933237995,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 241
+    },
+    "E1.5-k1.json": {
+      "status": "ok",
+      "E": 1.5,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.10503609208300274,
+      "rhoV_nlo": 0.07275226335848134,
+      "minus_ImPi00_lo": -0.028210923842625142,
+      "minus_ImPi00_nlo": -0.016206899441879603,
+      "rhoL_lo": 0.035263654803281426,
+      "rhoL_nlo": 0.020258624302349502,
+      "rhoT_lo": 0.03488621863986066,
+      "rhoT_nlo": 0.02624681952806592,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.7598064623093348,
+      "rhoT_g3": 0.2711075943924539,
+      "rhoL_g3": 0.21759127352442695,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.5,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.10503609208300274,
+          "nlo": 0.07275226335848134,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "1.0",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,1,1.0000000000000001e-05,0.10503609208300274,0.072752263358481339,90.084198533000006\n",
+          "stderr": "",
+          "wall_seconds": 90.09071718197083,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8000000000000p+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.5,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.028210923842625142,
+          "nlo": -0.016206899441879603,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.5",
+            "1.0",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.5,1,1.0000000000000001e-05,-0.028210923842625142,-0.016206899441879603,18.845318395\n",
+          "stderr": "",
+          "wall_seconds": 18.8514331819606,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 108.94324909901479,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E1.55-k1.5.json": {
+      "status": "ok",
+      "E": 1.55,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.01292067223564287,
+      "rhoV_nlo": 0.1429322370979309,
+      "minus_ImPi00_lo": -0.0645495052689511,
+      "minus_ImPi00_nlo": -0.17788830267613795,
+      "rhoL_lo": 0.004375022023784472,
+      "rhoL_nlo": 0.012056873848049373,
+      "rhoT_lo": 0.004272825105929199,
+      "rhoT_nlo": 0.06543768162494076,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 1.299310806117021,
+      "rhoT_g3": 0.5932119597303961,
+      "rhoL_g3": 0.11288688665622883,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8cccccccccccdp+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.55,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.01292067223564287,
+          "nlo": 0.1429322370979309,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.55",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.55,1.5,1.0000000000000001e-05,0.012920672235642869,0.1429322370979309,46.504289579999998\n",
+          "stderr": "",
+          "wall_seconds": 46.5106424059486,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.8cccccccccccdp+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.55,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.0645495052689511,
+          "nlo": -0.17788830267613795,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.55",
+            "1.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.55,1.5,1.0000000000000001e-05,-0.064549505268951105,-0.17788830267613795,13.291652351\n",
+          "stderr": "",
+          "wall_seconds": 13.297783955989871,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 59.809496946050785,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E1.75-k0.5.json": {
+      "status": "ok",
+      "E": 1.75,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.27515257289938255,
+      "rhoV_nlo": 0.061109043935148655,
+      "minus_ImPi00_lo": -0.008166767560378433,
+      "minus_ImPi00_nlo": -0.0017828740880207964,
+      "rhoL_lo": 0.09187613505425737,
+      "rhoL_nlo": 0.02005733349023396,
+      "rhoT_lo": 0.09163821892256259,
+      "rhoT_nlo": 0.020525855222457347,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.8251339683157205,
+      "rhoT_g3": 0.2763709159246787,
+      "rhoL_g3": 0.27239213646636307,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.27515257289938255,
+          "nlo": 0.061109043935148655,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.5,1.0000000000000001e-05,0.27515257289938255,0.061109043935148655,222.38276383199999\n",
+          "stderr": "",
+          "wall_seconds": 222.39083851198666,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.75,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.008166767560378433,
+          "nlo": -0.0017828740880207964,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.5,1.0000000000000001e-05,-0.008166767560378433,-0.0017828740880207964,157.81886625999999\n",
+          "stderr": "",
+          "wall_seconds": 157.82720454101218,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 380.21931074897293,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 241
+    },
+    "E1.75-k0.json": {
+      "status": "ok",
+      "E": 1.75,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.3009062841250532,
+      "rhoV_nlo": 0.05980301552409689,
+      "method": "vector k^2 extrapolation then exact rest isotropy",
+      "rest_extrapolation_difference": 6.423348428846731e-08,
+      "rest_quartic_extrapolation": 0.059803019806329176,
+      "rest_controls": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.6666666666667p-4",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 0.08750000000000001,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.30011425769561395,
+          "nlo": 0.05983937705015768,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.08750000000000001",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.087500000000000008,1.0000000000000001e-05,0.30011425769561395,0.059839377050157683,306.23066460000001\n",
+          "stderr": "",
+          "wall_seconds": 306.2388860210194,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.6666666666667p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 0.043750000000000004,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.3007082577667689,
+          "nlo": 0.05981205773049887,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.043750000000000004",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.043750000000000004,1.0000000000000001e-05,0.3007082577667689,0.059812057730498872,239.41977486799999\n",
+          "stderr": "",
+          "wall_seconds": 239.4292923739995,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.6666666666667p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 0.021875000000000002,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.30085677630088514,
+          "nlo": 0.05980527607569738,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.021875000000000002",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.021875000000000002,1.0000000000000001e-05,0.30085677630088514,0.059805276075697383,301.72379729099998\n",
+          "stderr": "",
+          "wall_seconds": 301.7299673340167,
+          "cache_hit": false
+        }
+      ],
+      "rhoT_lo": 0.10030209470835107,
+      "rhoT_nlo": 0.019934338508032296,
+      "rhoL_lo": 0.10030209470835107,
+      "rhoL_nlo": 0.019934338508032296,
+      "rhoV_g3": 0.8391334238419252,
+      "rhoT_g3": 0.27971114128064173,
+      "rhoL_g3": 0.27971114128064173,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.6666666666667p-4",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 0.08750000000000001,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.30011425769561395,
+          "nlo": 0.05983937705015768,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.08750000000000001",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.087500000000000008,1.0000000000000001e-05,0.30011425769561395,0.059839377050157683,306.23066460000001\n",
+          "stderr": "",
+          "wall_seconds": 306.2388860210194,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.6666666666667p-5",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 0.043750000000000004,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.3007082577667689,
+          "nlo": 0.05981205773049887,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.043750000000000004",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.043750000000000004,1.0000000000000001e-05,0.3007082577667689,0.059812057730498872,239.41977486799999\n",
+          "stderr": "",
+          "wall_seconds": 239.4292923739995,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.6666666666667p-6",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 0.021875000000000002,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.30085677630088514,
+          "nlo": 0.05980527607569738,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "0.021875000000000002",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,0.021875000000000002,1.0000000000000001e-05,0.30085677630088514,0.059805276075697383,301.72379729099998\n",
+          "stderr": "",
+          "wall_seconds": 301.7299673340167,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 847.3998913939577,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 239
+    },
+    "E1.75-k1.5.json": {
+      "status": "ok",
+      "E": 1.75,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.07684981048697484,
+      "rhoV_nlo": 0.09112654272467853,
+      "minus_ImPi00_lo": -0.07202000048974261,
+      "minus_ImPi00_nlo": -0.052006299967287166,
+      "rhoL_lo": 0.02600722239907372,
+      "rhoL_nlo": 0.01878005276596481,
+      "rhoT_lo": 0.025421294043950562,
+      "rhoT_nlo": 0.03617324497935686,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.8969886950090816,
+      "rhoT_g3": 0.3509804988581623,
+      "rhoL_g3": 0.195027697292757,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.07684981048697484,
+          "nlo": 0.09112654272467853,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "1.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,1.5,1.0000000000000001e-05,0.07684981048697484,0.09112654272467853,100.884765664\n",
+          "stderr": "",
+          "wall_seconds": 100.8909704000107,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.75,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.07202000048974261,
+          "nlo": -0.052006299967287166,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "1.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,1.5,1.0000000000000001e-05,-0.072020000489742608,-0.052006299967287166,15.162224089\n",
+          "stderr": "",
+          "wall_seconds": 15.168398703972343,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 116.06042683700798,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 237
+    },
+    "E1.75-k1.json": {
+      "status": "ok",
+      "E": 1.75,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.1992087649380163,
+      "rhoV_nlo": 0.06687220521292953,
+      "minus_ImPi00_lo": -0.03241618022921399,
+      "minus_ImPi00_nlo": -0.009837418356561756,
+      "rhoL_lo": 0.06685837172275386,
+      "rhoL_nlo": 0.020289675360408623,
+      "rhoT_lo": 0.06617519660763121,
+      "rhoT_nlo": 0.02329126492626045,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.8010586118543821,
+      "rhoT_g3": 0.27579658094397524,
+      "rhoL_g3": 0.24946544996643147,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 1.75,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.1992087649380163,
+          "nlo": 0.06687220521292953,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "1.0",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,1,1.0000000000000001e-05,0.19920876493801629,0.066872205212929525,17.885146345999999\n",
+          "stderr": "",
+          "wall_seconds": 17.89156306401128,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.c000000000000p+0",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 1.75,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.03241618022921399,
+          "nlo": -0.009837418356561756,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "1.75",
+            "1.0",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "1.75,1,1.0000000000000001e-05,-0.032416180229213991,-0.0098374183565617564,19.314097884999999\n",
+          "stderr": "",
+          "wall_seconds": 19.32047054299619,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 37.213182290957775,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 240
+    },
+    "E2-k0.5.json": {
+      "status": "ok",
+      "E": 2.0,
+      "k": 0.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.41202138185030074,
+      "rhoV_nlo": 0.05982480642860791,
+      "minus_ImPi00_lo": -0.00917104273469285,
+      "minus_ImPi00_nlo": -0.0013201440062305461,
+      "rhoL_lo": 0.13756564102039276,
+      "rhoL_nlo": 0.019802160093458192,
+      "rhoT_lo": 0.137227870414954,
+      "rhoT_nlo": 0.020011323167574858,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.9504446397077719,
+      "rhoT_g3": 0.31732977892312775,
+      "rhoL_g3": 0.3157850818615165,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+1",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 2.0,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.41202138185030074,
+          "nlo": 0.05982480642860791,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "2.0",
+            "0.5",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "2,0.5,1.0000000000000001e-05,0.41202138185030074,0.059824806428607907,253.579425388\n",
+          "stderr": "",
+          "wall_seconds": 253.58713240700308,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+1",
+            "0x1.0000000000000p-1",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 2.0,
+          "k": 0.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.00917104273469285,
+          "nlo": -0.0013201440062305461,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "2.0",
+            "0.5",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "2,0.5,1.0000000000000001e-05,-0.0091710427346928507,-0.0013201440062305461,180.278305725\n",
+          "stderr": "",
+          "wall_seconds": 180.28435223799897,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 433.8725531089585,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 236
+    },
+    "E2-k0.json": {
+      "status": "incomplete",
+      "E": 2.0,
+      "k": 0.0,
+      "tolerance": 1e-05,
+      "error": "Command '['/tmp/qcd-fig15-reference-20261018/portable-build/reference', '2.0', '0.1', '1e-05', 'vector']' timed out after 1799.9998823900241 seconds",
+      "raw": [],
+      "wall_seconds": 1800.1008610929712
+    },
+    "E2-k1.5.json": {
+      "status": "ok",
+      "E": 2.0,
+      "k": 1.5,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.18621073544026095,
+      "rhoV_nlo": 0.07445118137357437,
+      "minus_ImPi00_lo": -0.08096040755518363,
+      "minus_ImPi00_nlo": -0.025650047600533077,
+      "rhoL_lo": 0.06296920587625394,
+      "rhoL_nlo": 0.019950037022636837,
+      "rhoT_lo": 0.061620764782003505,
+      "rhoT_nlo": 0.027250572175468765,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.8562713678024303,
+      "rhoT_g3": 0.3068759143612224,
+      "rhoL_g3": 0.24251953907998547,
+      "raw": [
+        {
+          "E": 2.0,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.18621073544026095,
+          "nlo": 0.07445118137357437,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/timelike-k15-tol1e-05.csv",
+          "source_assembly_wall_seconds": 75.014253459,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+1",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "cache_hit": true
+        },
+        {
+          "E": 2.0,
+          "k": 1.5,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.08096040755518363,
+          "nlo": -0.025650047600533077,
+          "source_raw_file": "/tmp/qcd-fig15-reference-20261018/timelike-k15-tol1e-05.csv",
+          "source_assembly_wall_seconds": 75.014253459,
+          "wall_seconds": null,
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+1",
+            "0x1.8000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "cache_hit": true
+        }
+      ],
+      "wall_seconds": 0.0007801739848218858,
+      "cache_hits": 2,
+      "cpu_workers": 1,
+      "cpu": 239
+    },
+    "E2-k1.json": {
+      "status": "ok",
+      "E": 2.0,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "basis": "both",
+      "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+      "units": "T=1, Nc=3, unit charge; NLO is g^2 coefficient",
+      "numerical_caveat": "upstream GSL statuses are not exposed; tolerance/extrapolation differences are empirical checks",
+      "rhoV_lo": 0.32563525412594235,
+      "rhoV_nlo": 0.06296155522029367,
+      "minus_ImPi00_lo": -0.03641694602602115,
+      "minus_ImPi00_nlo": -0.006675735309577694,
+      "rhoL_lo": 0.10925083807806345,
+      "rhoL_nlo": 0.020027205928733083,
+      "rhoT_lo": 0.10819220802393945,
+      "rhoT_nlo": 0.021467174645780296,
+      "method": "unchanged upstream assembly and paper Eq2.5 polarization conversion",
+      "rhoV_g3": 0.8922892511085854,
+      "rhoT_g3": 0.30139677983596214,
+      "rhoL_g3": 0.2894956914366612,
+      "raw": [
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "vector"
+          ],
+          "E": 2.0,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "vector",
+          "lo": 0.32563525412594235,
+          "nlo": 0.06296155522029367,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "2.0",
+            "1.0",
+            "1e-05",
+            "vector"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "2,1,1.0000000000000001e-05,0.32563525412594235,0.062961555220293675,127.49389083299999\n",
+          "stderr": "",
+          "wall_seconds": 127.50024945003679,
+          "cache_hit": false
+        },
+        {
+          "parameters": [
+            "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+            "0x1.0000000000000p+1",
+            "0x1.0000000000000p+0",
+            "0x1.4f8b588e368f1p-17",
+            "density"
+          ],
+          "E": 2.0,
+          "k": 1.0,
+          "tolerance": 1e-05,
+          "component": "density",
+          "lo": -0.03641694602602115,
+          "nlo": -0.006675735309577694,
+          "command": [
+            "/tmp/qcd-fig15-reference-20261018/portable-build/reference",
+            "2.0",
+            "1.0",
+            "1e-05",
+            "density"
+          ],
+          "driver_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+          "stdout": "2,1,1.0000000000000001e-05,-0.036416946026021149,-0.0066757353095776937,19.366612522\n",
+          "stderr": "",
+          "wall_seconds": 19.372732558986172,
+          "cache_hit": false
+        }
+      ],
+      "wall_seconds": 146.87407783302478,
+      "cache_hits": 0,
+      "cpu_workers": 1,
+      "cpu": 237
+    }
+  },
+  "native_baseline_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "reference_source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+}

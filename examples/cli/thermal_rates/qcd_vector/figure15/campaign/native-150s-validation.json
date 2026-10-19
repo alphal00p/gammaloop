@@ -1,0 +1,154 @@
+{
+  "stage": "full_scan",
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "started_utc": "2026-10-18T17:11:34.273333+00:00",
+  "hard_deadline_utc": "2026-10-18T17:14:04.273333+00:00",
+  "compute_process_group": 1198459,
+  "watchdog_pid": 1199384,
+  "watchdog_verified": true,
+  "worker_limit": 2,
+  "relative_error": 0.005,
+  "absolute_floor": 0,
+  "minimum_samples": 100000,
+  "jobs": [
+    {
+      "name": "E1p00_k0p50",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.5,
+      "T": 1,
+      "e": 1,
+      "g": 1,
+      "Nc": 3,
+      "Qd": -0.3333333333333333,
+      "seed": 191007552,
+      "source_state": "/tmp/qcd-fig15-projectors-20261018/direct-state",
+      "directory": "/tmp/qcd-fig15-pilot-20261018T163918Z/fullscan/test-150s/jobs/E1p00_k0p50",
+      "processes": [
+        "vector_T_nlo",
+        "vector_L_nlo"
+      ],
+      "slot_keys": [
+        "vector_T_nlo@NLO",
+        "vector_L_nlo@NLO"
+      ],
+      "output_scale": 9.0,
+      "rest_isotropy": false,
+      "workers": 2,
+      "status": "budget_stopped",
+      "samples": 1800,
+      "active_wall_seconds": 144.27962278795894,
+      "epochs": [
+        {
+          "epoch": 0,
+          "cpu_affinity": [
+            182,
+            183
+          ],
+          "workers": 2,
+          "quota": 100000,
+          "started_utc": "2026-10-18T17:11:34.378601+00:00",
+          "started_monotonic": 377196.505053548,
+          "initial_samples": 0,
+          "interrupt_sent": true,
+          "interrupted_monotonic": 377226.600180659,
+          "interrupt_reason": "wall_quantum",
+          "ended_utc": "2026-10-18T17:12:05.732385+00:00",
+          "wall_seconds": 30.346248781948816
+        },
+        {
+          "epoch": 1,
+          "cpu_affinity": [
+            182,
+            183
+          ],
+          "workers": 2,
+          "quota": 100000,
+          "started_utc": "2026-10-18T17:12:05.732723+00:00",
+          "started_monotonic": 377226.85130233,
+          "initial_samples": 400,
+          "interrupt_sent": true,
+          "interrupted_monotonic": 377256.950938868,
+          "interrupt_reason": "wall_quantum",
+          "ended_utc": "2026-10-18T17:12:36.082872+00:00",
+          "wall_seconds": 30.350672229018528
+        },
+        {
+          "epoch": 2,
+          "cpu_affinity": [
+            182,
+            183
+          ],
+          "workers": 2,
+          "quota": 100000,
+          "started_utc": "2026-10-18T17:12:36.083153+00:00",
+          "started_monotonic": 377257.201974559,
+          "initial_samples": 800,
+          "interrupt_sent": true,
+          "interrupted_monotonic": 377287.323223537,
+          "interrupt_reason": "wall_quantum",
+          "ended_utc": "2026-10-18T17:13:06.455272+00:00",
+          "wall_seconds": 30.372382369008847
+        },
+        {
+          "epoch": 3,
+          "cpu_affinity": [
+            182,
+            183
+          ],
+          "workers": 2,
+          "quota": 100000,
+          "started_utc": "2026-10-18T17:13:06.455661+00:00",
+          "started_monotonic": 377287.574356928,
+          "initial_samples": 1200,
+          "interrupt_sent": true,
+          "interrupted_monotonic": 377317.702813095,
+          "interrupt_reason": "wall_quantum",
+          "ended_utc": "2026-10-18T17:13:36.835084+00:00",
+          "wall_seconds": 30.379727529012598
+        },
+        {
+          "epoch": 4,
+          "cpu_affinity": [
+            182,
+            183
+          ],
+          "workers": 2,
+          "quota": 100000,
+          "started_utc": "2026-10-18T17:13:36.835473+00:00",
+          "started_monotonic": 377317.954084457,
+          "initial_samples": 1600,
+          "interrupt_sent": true,
+          "interrupted_monotonic": 377340.534135447,
+          "interrupt_reason": "original_wall_time_budget",
+          "ended_utc": "2026-10-18T17:13:59.665225+00:00",
+          "wall_seconds": 22.830591878970154
+        }
+      ],
+      "identity": {
+        "pid": 1199394,
+        "state": "R",
+        "parent_pid": 1198459,
+        "process_group": 1198459,
+        "session": 1198459,
+        "start_ticks": 37719549
+      },
+      "pid": 1199394,
+      "started_utc": "2026-10-18T17:11:34.381577+00:00",
+      "precision_reached": false,
+      "final_stability_clean": true,
+      "next_epoch": 4,
+      "stop_reason": "original_wall_time_budget",
+      "exit_code": -15,
+      "ended_utc": "2026-10-18T17:13:59.665616+00:00"
+    }
+  ],
+  "full_scan_started": true,
+  "metadata_fingerprints_modified": false,
+  "completion_notification": "Local JSON/CSV artifacts only; no automatic chat notification configured",
+  "reserved_workers": 0,
+  "active_workers": 0,
+  "updated_utc": "2026-10-18T17:13:59.666098+00:00",
+  "summary_rows": 2,
+  "finished_utc": "2026-10-18T17:13:59.665864+00:00",
+  "status": "budget_finished"
+}

@@ -1,0 +1,107 @@
+{
+  "paper": "https://arxiv.org/pdf/1910.07552v2",
+  "upstream_archive_url": "https://zenodo.org/api/records/3478144/files/gw3g/spectral-v0.9-spf.zip/content",
+  "upstream_source_commit": "dca510d2d2c8bee2288345e972ee3a54b37cdbd5",
+  "upstream_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+  "GSL": "2.8",
+  "portable_binary_sha256": "47f2b74e8b1c809d8845a88ca818d8dcef45bd9ddd289d2b6351f7b9af6f4e37",
+  "source_sha256": {
+    "driver.cpp": "7c2159e2be95bbf416419a3243f190e73a22ab3627aa8c64c1ae43554b33781f",
+    "build.sh": "fe0012f6f1bdafb2d83401d4f8b6dc2bf4d7a1ce2707d451652f07ef731f8ac2",
+    "reference_cli.py": "509045c4b5489e05f90e65245a36c34392d3754f17db31700dd06b1e082be2af",
+    "reference_grid.py": "d7e62907cf808160cf9fd2fbc091331aa0e927873b8752380dba4c265afff1dc"
+  },
+  "fresh_portable_validation": {
+    "E": 1.05,
+    "k": 1.0,
+    "tolerance": 0.0001,
+    "rhoV_lo": 0.006160294381865281,
+    "rhoV_nlo": 0.11852815443227717,
+    "minus_ImPi00_lo": -0.02018746748880866,
+    "minus_ImPi00_nlo": -0.11823905212337618,
+    "rhoT_lo": 0.002045539482131196,
+    "rhoT_nlo": 0.05320432579481555,
+    "rhoL_lo": 0.0020692154176028886,
+    "rhoL_nlo": 0.012119502842646063,
+    "wall_seconds": 4.616266394034028,
+    "cpu": 123
+  },
+  "fresh_portable_vs_original_cached_raw_fields": "bit-identical atE1.05,k1,tolerance1e-4 for both vector and density assemblies",
+  "cache_identity": [
+    "verified_upstream_archive_sha256",
+    "E.hex",
+    "k.hex",
+    "tolerance.hex",
+    "raw_component"
+  ],
+  "hard_control": {
+    "E": 4.0,
+    "k": 1.0,
+    "trace_tolerance": 1e-05,
+    "rhoV_nlo": 0.10648332424914585,
+    "rhoT_nlo_at_density_tolerance1e-5": 0.03508277862588191,
+    "rhoL_nlo_at_density_tolerance1e-5": 0.03631776699738202,
+    "density_tolerance": 1e-06,
+    "minus_ImPi00_nlo": -0.002421184766596678,
+    "rhoL_nlo_refined": 0.03631777149895017,
+    "rhoT_nlo_with_trace_tolerance1e-5": 0.03508277637509784,
+    "rhoL_shift1e-5_to1e-6": 4.501568152959212e-09,
+    "density_seconds": 239.316657541,
+    "trace1e-6_status": "stopped before full-controller launch; no completed result"
+  },
+  "original_tolerance_runs": {
+    "completed": 19,
+    "total": 20,
+    "timed_out_point": {
+      "E": 0.5,
+      "k": 1.0,
+      "tolerance": 1e-05,
+      "seconds": 900.0
+    }
+  },
+  "rest_vector_extrapolations": [
+    {
+      "tolerance": 0.0001,
+      "rhoV_nlo_large_pair": 0.06026817699729414,
+      "rhoV_nlo": 0.060268180427098,
+      "extrapolation_difference": 3.4298038575908407e-09,
+      "rhoT_nlo": 0.020089393475699335,
+      "rhoL_nlo": 0.020089393475699335
+    },
+    {
+      "tolerance": 1e-05,
+      "rhoV_nlo_large_pair": 0.06026815319992445,
+      "rhoV_nlo": 0.060268177844717746,
+      "extrapolation_difference": 2.4644793296391132e-08,
+      "rhoT_nlo": 0.020089392614905915,
+      "rhoL_nlo": 0.020089392614905915
+    }
+  ],
+  "scheduler_dry_run": {
+    "points": 35,
+    "initial_target_rows": 14,
+    "workers": 6,
+    "cpus": [
+      236,
+      237,
+      238,
+      239,
+      240,
+      241
+    ],
+    "source_integrations_launched": 0
+  },
+  "cli_signal_cleanup": {
+    "returncode": 3,
+    "children_surviving": [],
+    "result": {
+      "status": "incomplete",
+      "E": 4.0,
+      "k": 1.0,
+      "tolerance": 1e-06,
+      "error": "author reference interrupted by signal15",
+      "raw": [],
+      "wall_seconds": 0.1376426659990102
+    }
+  }
+}

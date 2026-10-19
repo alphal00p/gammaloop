@@ -1,0 +1,3930 @@
+{
+  "created_utc": "2026-10-18T19:15:43.246987+00:00",
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "test_design": "Matched fresh 1000 samples per component plus three fixed x-space benchmarks, full default stability; only generation medium differs",
+  "random_sample_results": [
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "component": "T",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.063781946,
+      "average_parameterization_time_seconds": 0.000286907,
+      "average_integrand_time_seconds": 0.063312661,
+      "average_evaluator_time_seconds": 0.002918844,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 6.7213e-05,
+      "f64_percentage": 87.4,
+      "f128_percentage": 12.6,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.06039381700000001
+    },
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "component": "L",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.063781946,
+      "average_parameterization_time_seconds": 0.000286907,
+      "average_integrand_time_seconds": 0.063312661,
+      "average_evaluator_time_seconds": 0.002918844,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 6.7213e-05,
+      "f64_percentage": 87.4,
+      "f128_percentage": 12.6,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.06039381700000001
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "component": "T",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.118975917,
+      "average_parameterization_time_seconds": 0.000334221,
+      "average_integrand_time_seconds": 0.118157652,
+      "average_evaluator_time_seconds": 0.007422293,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 9.1852e-05,
+      "f64_percentage": 25.8,
+      "f128_percentage": 74.2,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.110735359
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "component": "L",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.118975917,
+      "average_parameterization_time_seconds": 0.000334221,
+      "average_integrand_time_seconds": 0.118157652,
+      "average_evaluator_time_seconds": 0.007422293,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 9.1852e-05,
+      "f64_percentage": 25.8,
+      "f128_percentage": 74.2,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.110735359
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "component": "T",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.002122528,
+      "average_parameterization_time_seconds": 0.000263856,
+      "average_integrand_time_seconds": 0.00179241,
+      "average_evaluator_time_seconds": 0.000424605,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 3.1372e-05,
+      "f64_percentage": 99.9,
+      "f128_percentage": 0.1,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.001367805
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "component": "L",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.002122528,
+      "average_parameterization_time_seconds": 0.000263856,
+      "average_integrand_time_seconds": 0.00179241,
+      "average_evaluator_time_seconds": 0.000424605,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 3.1372e-05,
+      "f64_percentage": 99.9,
+      "f128_percentage": 0.1,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.001367805
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "component": "T",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.002108049,
+      "average_parameterization_time_seconds": 0.000271816,
+      "average_integrand_time_seconds": 0.001768481,
+      "average_evaluator_time_seconds": 0.000419447,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 3.6355e-05,
+      "f64_percentage": 99.85000000000001,
+      "f128_percentage": 0.15,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.0013490339999999998
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "component": "L",
+      "samples": 1000,
+      "num_evals": 2000,
+      "average_total_time_seconds": 0.002108049,
+      "average_parameterization_time_seconds": 0.000271816,
+      "average_integrand_time_seconds": 0.001768481,
+      "average_evaluator_time_seconds": 0.000419447,
+      "average_observable_time_seconds": 0.0,
+      "average_integrator_time_seconds": 3.6355e-05,
+      "f64_percentage": 99.85000000000001,
+      "f128_percentage": 0.15,
+      "arb_percentage": 0.0,
+      "nan_percentage": 0.0,
+      "nan_or_unstable_percentage": 0.0,
+      "generated_event_count": 0,
+      "accepted_event_count": 0,
+      "selection_efficiency_percentage": null,
+      "core_seconds": 0.0013490339999999998
+    }
+  ],
+  "fixed_point_results": [
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-L-0.json",
+      "component": "L",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 55,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.543612797619047e-05,
+          "standard_error_seconds_per_sample": 2.6320482099831837e-07,
+          "percentage_of_total": 0.02817951019521728
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002811969672619048,
+          "standard_error_seconds_per_sample": 3.713272287452243e-06,
+          "percentage_of_total": 0.5133407042260486
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.05223091532440476,
+          "standard_error_seconds_per_sample": 0.00016220104931846205,
+          "percentage_of_total": 95.35044106655786
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0020572171279761905,
+          "standard_error_seconds_per_sample": 6.108127158306332e-05,
+          "percentage_of_total": 3.7555642918352903
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.05477784343749999,
+          "standard_error_seconds_per_sample": 0.00021640546979475475,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.5637142857142876e-05,
+          "canonical_sampling": 0.0002828581428571428,
+          "integrand": 0.05206199771428571,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021106824285714284,
+          "other": 0.00019861171428570829,
+          "total": 0.05466978714285714
+        },
+        {
+          "parameterization": 1.6114285714285742e-05,
+          "canonical_sampling": 0.0002915408571428571,
+          "integrand": 0.052699267142857144,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002191172857142857,
+          "other": 0.00020042300000000512,
+          "total": 0.055398518142857144
+        },
+        {
+          "parameterization": 1.5418714285714242e-05,
+          "canonical_sampling": 0.00028066657142857145,
+          "integrand": 0.05234028085714285,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002139964428571428,
+          "other": 0.00019860900000000237,
+          "total": 0.05497493957142857
+        },
+        {
+          "parameterization": 1.458999999999998e-05,
+          "canonical_sampling": 0.00026704071428571425,
+          "integrand": 0.05155656542857142,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0018199387142857142,
+          "other": 0.0001659667142857174,
+          "total": 0.05382410157142856
+        },
+        {
+          "parameterization": 1.4075571428571456e-05,
+          "canonical_sampling": 0.0002635862857142857,
+          "integrand": 0.05186016628571428,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017483269999999998,
+          "other": 0.00016512857142857856,
+          "total": 0.05405128371428571
+        },
+        {
+          "parameterization": 1.5637285714285767e-05,
+          "canonical_sampling": 0.00028567528571428566,
+          "integrand": 0.052993520571428566,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002111160142857143,
+          "other": 0.00020137557142857476,
+          "total": 0.055607368857142854
+        },
+        {
+          "parameterization": 1.5765857142857067e-05,
+          "canonical_sampling": 0.0002873037142857143,
+          "integrand": 0.05204182442857143,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021365982857142855,
+          "other": 0.0002068507142857015,
+          "total": 0.05468834299999999
+        },
+        {
+          "parameterization": 1.625016666666662e-05,
+          "canonical_sampling": 0.00029090416666666667,
+          "integrand": 0.05229370016666666,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021998931666666667,
+          "other": 0.00020765783333333981,
+          "total": 0.055008405499999996
+        }
+      ],
+      "displayed_result": {
+        "re": -0.02220754136491262,
+        "im": 6.795587014491633e-20
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-L-1.json",
+      "component": "L",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 61,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.4511566964285725e-05,
+          "standard_error_seconds_per_sample": 3.2394938282462095e-07,
+          "percentage_of_total": 0.029244760045883125
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.000269329515625,
+          "standard_error_seconds_per_sample": 3.651432975077548e-06,
+          "percentage_of_total": 0.542772333071389
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.04722873209375,
+          "standard_error_seconds_per_sample": 0.00010575736583030917,
+          "percentage_of_total": 95.17875917550866
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.001931093154017857,
+          "standard_error_seconds_per_sample": 6.440918580239985e-05,
+          "percentage_of_total": 3.89167869014341
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.04962108405580357,
+          "standard_error_seconds_per_sample": 0.00016814314470139544,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.3504874999999985e-05,
+          "canonical_sampling": 0.000259390875,
+          "integrand": 0.04674421174999999,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.001682297875,
+          "other": 0.0001488928750000007,
+          "total": 0.04884829825
+        },
+        {
+          "parameterization": 1.5011500000000004e-05,
+          "canonical_sampling": 0.00027661200000000003,
+          "integrand": 0.047341368625,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020394698750000003,
+          "other": 0.00019670337500000967,
+          "total": 0.049869165375
+        },
+        {
+          "parameterization": 1.548537500000005e-05,
+          "canonical_sampling": 0.000282387125,
+          "integrand": 0.04782156675,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021168608750000003,
+          "other": 0.00019986824999999875,
+          "total": 0.050436168375
+        },
+        {
+          "parameterization": 1.561025000000008e-05,
+          "canonical_sampling": 0.00027691449999999997,
+          "integrand": 0.0472049925,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020894372500000003,
+          "other": 0.00019527437499999856,
+          "total": 0.049782228875
+        },
+        {
+          "parameterization": 1.3590249999999987e-05,
+          "canonical_sampling": 0.000261090625,
+          "integrand": 0.04722436812499999,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017858845000000001,
+          "other": 0.00015563550000000093,
+          "total": 0.049440569
+        },
+        {
+          "parameterization": 1.3365714285714335e-05,
+          "canonical_sampling": 0.0002532108571428571,
+          "integrand": 0.04708953871428571,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0016862064285714286,
+          "other": 0.0001465408571428642,
+          "total": 0.04918886257142857
+        },
+        {
+          "parameterization": 1.4470285714285607e-05,
+          "canonical_sampling": 0.0002694478571428572,
+          "integrand": 0.04725686914285714,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002006081857142857,
+          "other": 0.00018457385714285707,
+          "total": 0.049731443
+        },
+        {
+          "parameterization": 1.5054285714285749e-05,
+          "canonical_sampling": 0.0002755822857142857,
+          "integrand": 0.04714694114285714,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002042506571428571,
+          "other": 0.00019185271428572015,
+          "total": 0.049671937
+        }
+      ],
+      "displayed_result": {
+        "re": 0.02086044746126705,
+        "im": -9.027985689990515e-20
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-L-2.json",
+      "component": "L",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 56,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.4994303571428573e-05,
+          "standard_error_seconds_per_sample": 4.260384538598346e-07,
+          "percentage_of_total": 0.02739595274207174
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00028007410714285714,
+          "standard_error_seconds_per_sample": 4.178471986584912e-06,
+          "percentage_of_total": 0.5117207989695663
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.05233575517857142,
+          "standard_error_seconds_per_sample": 0.00010927159553970585,
+          "percentage_of_total": 95.6221720310399
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0019227802678571427,
+          "standard_error_seconds_per_sample": 6.667828010750077e-05,
+          "percentage_of_total": 3.5130939626950353
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.05473182010714285,
+          "standard_error_seconds_per_sample": 0.00017706953379852778,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.4598571428571505e-05,
+          "canonical_sampling": 0.00028987928571428567,
+          "integrand": 0.052034802,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0019821272857142858,
+          "other": 0.00018114242857143054,
+          "total": 0.05450254957142857
+        },
+        {
+          "parameterization": 1.6274285714285713e-05,
+          "canonical_sampling": 0.00026918514285714286,
+          "integrand": 0.052039781571428564,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.001736711285714286,
+          "other": 0.00015575771428571333,
+          "total": 0.054217709999999995
+        },
+        {
+          "parameterization": 1.4960142857142842e-05,
+          "canonical_sampling": 0.0002800424285714286,
+          "integrand": 0.0526070777142857,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0019438254285714283,
+          "other": 0.00017636685714286088,
+          "total": 0.05502227257142857
+        },
+        {
+          "parameterization": 1.6301142857142923e-05,
+          "canonical_sampling": 0.0002927894285714285,
+          "integrand": 0.05253675314285714,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021383879999999997,
+          "other": 0.0002060915714285766,
+          "total": 0.055190323285714285
+        },
+        {
+          "parameterization": 1.6161428571428505e-05,
+          "canonical_sampling": 0.0002956267142857143,
+          "integrand": 0.05288071214285715,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002181750571428571,
+          "other": 0.0002203821428571201,
+          "total": 0.05559463299999999
+        },
+        {
+          "parameterization": 1.4912857142857189e-05,
+          "canonical_sampling": 0.00027940371428571424,
+          "integrand": 0.052286848714285704,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0019849837142857144,
+          "other": 0.00018060128571428802,
+          "total": 0.05474675028571428
+        },
+        {
+          "parameterization": 1.3504285714285684e-05,
+          "canonical_sampling": 0.000264788,
+          "integrand": 0.05208634971428571,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017026577142857143,
+          "other": 0.0001537732857142815,
+          "total": 0.054221072999999995
+        },
+        {
+          "parameterization": 1.3241714285714226e-05,
+          "canonical_sampling": 0.0002688781428571429,
+          "integrand": 0.05221371642857142,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017117981428571426,
+          "other": 0.00015161471428572215,
+          "total": 0.05435924914285714
+        }
+      ],
+      "displayed_result": {
+        "re": 0.018220227224734573,
+        "im": -2.892422473149341e-19
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-T-0.json",
+      "component": "T",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 55,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.4948026785714285e-05,
+          "standard_error_seconds_per_sample": 3.5225994036545755e-07,
+          "percentage_of_total": 0.027468976600928795
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002779847380952381,
+          "standard_error_seconds_per_sample": 4.744137608873441e-06,
+          "percentage_of_total": 0.5108337291348073
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.051990010467261906,
+          "standard_error_seconds_per_sample": 0.00019784816525222202,
+          "percentage_of_total": 95.53852167110756
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0019509314464285711,
+          "standard_error_seconds_per_sample": 6.460585294293043e-05,
+          "percentage_of_total": 3.585094609489075
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.054417851101190476,
+          "standard_error_seconds_per_sample": 0.00025677454736793443,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.3728428571428632e-05,
+          "canonical_sampling": 0.0002696195714285714,
+          "integrand": 0.051594484,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017184361428571426,
+          "other": 0.00015413742857142698,
+          "total": 0.05375040557142857
+        },
+        {
+          "parameterization": 1.3837285714285723e-05,
+          "canonical_sampling": 0.0002630364285714286,
+          "integrand": 0.05166208528571429,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0018421704285714283,
+          "other": 0.00017814685714285378,
+          "total": 0.053959276285714286
+        },
+        {
+          "parameterization": 1.570985714285716e-05,
+          "canonical_sampling": 0.00028820514285714287,
+          "integrand": 0.051660074,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020986634285714285,
+          "other": 0.0001983407142857052,
+          "total": 0.054260993142857136
+        },
+        {
+          "parameterization": 1.5177142857142843e-05,
+          "canonical_sampling": 0.000284221,
+          "integrand": 0.05225044714285715,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021194554285714285,
+          "other": 0.00020136128571427575,
+          "total": 0.054870661999999994
+        },
+        {
+          "parameterization": 1.576014285714286e-05,
+          "canonical_sampling": 0.0002882651428571428,
+          "integrand": 0.05208767514285714,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002045306428571428,
+          "other": 0.00019097885714285806,
+          "total": 0.05462798571428571
+        },
+        {
+          "parameterization": 1.413714285714284e-05,
+          "canonical_sampling": 0.00026163242857142854,
+          "integrand": 0.05119525099999999,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0016834531428571427,
+          "other": 0.00015294628571429353,
+          "total": 0.05330742
+        },
+        {
+          "parameterization": 1.478571428571425e-05,
+          "canonical_sampling": 0.00027090385714285714,
+          "integrand": 0.05272807399999999,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0019562885714285716,
+          "other": 0.00018541228571428842,
+          "total": 0.05515546442857142
+        },
+        {
+          "parameterization": 1.644849999999997e-05,
+          "canonical_sampling": 0.0002979943333333333,
+          "integrand": 0.05274199316666667,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021436779999999996,
+          "other": 0.0002104876666666755,
+          "total": 0.05541060166666667
+        }
+      ],
+      "displayed_result": {
+        "re": -0.008114304481084352,
+        "im": 1.1919785647359703e-19
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-T-1.json",
+      "component": "T",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 59,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.496298214285713e-05,
+          "standard_error_seconds_per_sample": 3.2367154100470174e-07,
+          "percentage_of_total": 0.03000573171042909
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00027849679241071423,
+          "standard_error_seconds_per_sample": 5.001886759472531e-06,
+          "percentage_of_total": 0.5584782468834325
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.04750866006473214,
+          "standard_error_seconds_per_sample": 8.864331516718387e-05,
+          "percentage_of_total": 95.27058805619404
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0018860928683035712,
+          "standard_error_seconds_per_sample": 5.738608865753168e-05,
+          "percentage_of_total": 3.782240468307093
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.049867079687499996,
+          "standard_error_seconds_per_sample": 0.00014079001210060368,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.5755e-05,
+          "canonical_sampling": 0.00028207475000000004,
+          "integrand": 0.04726047800000001,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.001944110125,
+          "other": 0.00018795924999998742,
+          "total": 0.049690377125
+        },
+        {
+          "parameterization": 1.3897625000000016e-05,
+          "canonical_sampling": 0.000266412,
+          "integrand": 0.04760516100000001,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017136509999999998,
+          "other": 0.0001534483749999968,
+          "total": 0.04975257
+        },
+        {
+          "parameterization": 1.4952375000000008e-05,
+          "canonical_sampling": 0.000268875875,
+          "integrand": 0.04750876137500001,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00174886125,
+          "other": 0.00017282149999999635,
+          "total": 0.049714272375
+        },
+        {
+          "parameterization": 1.5783000000000008e-05,
+          "canonical_sampling": 0.0002891395714285714,
+          "integrand": 0.04756937471428572,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020220861428571425,
+          "other": 0.00019873057142856532,
+          "total": 0.050095113999999996
+        },
+        {
+          "parameterization": 1.6124285714285683e-05,
+          "canonical_sampling": 0.00030674528571428576,
+          "integrand": 0.04797483142857143,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002106882857142857,
+          "other": 0.00020272471428570832,
+          "total": 0.05060730857142857
+        },
+        {
+          "parameterization": 1.5218714285714237e-05,
+          "canonical_sampling": 0.0002769022857142857,
+          "integrand": 0.047631704857142854,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020534874285714285,
+          "other": 0.00019481671428571434,
+          "total": 0.050172129999999995
+        },
+        {
+          "parameterization": 1.422157142857137e-05,
+          "canonical_sampling": 0.000274018,
+          "integrand": 0.04719314442857143,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017563544285714285,
+          "other": 0.00016236057142856447,
+          "total": 0.049400098999999996
+        },
+        {
+          "parameterization": 1.3751285714285724e-05,
+          "canonical_sampling": 0.0002638065714285714,
+          "integrand": 0.047325824714285716,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017433097142857143,
+          "other": 0.00015807414285713695,
+          "total": 0.04950476642857142
+        }
+      ],
+      "displayed_result": {
+        "re": 0.010624719331122367,
+        "im": -4.955462585705071e-19
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-T-2.json",
+      "component": "T",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 56,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.4953089285714304e-05,
+          "standard_error_seconds_per_sample": 3.078622021667571e-07,
+          "percentage_of_total": 0.027239806644421105
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002804521607142857,
+          "standard_error_seconds_per_sample": 3.998345329354104e-06,
+          "percentage_of_total": 0.5108952728695166
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.05247733716071429,
+          "standard_error_seconds_per_sample": 0.00010418966199218445,
+          "percentage_of_total": 95.5971364952407
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0019369309285714284,
+          "standard_error_seconds_per_sample": 5.90555443730397e-05,
+          "percentage_of_total": 3.5284764886872897
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.05489425633928571,
+          "standard_error_seconds_per_sample": 0.00014721140688410476,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.5031285714285712e-05,
+          "canonical_sampling": 0.0002801767142857143,
+          "integrand": 0.05243700614285714,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020490639999999997,
+          "other": 0.00019288585714286738,
+          "total": 0.054974164
+        },
+        {
+          "parameterization": 1.5354571428571483e-05,
+          "canonical_sampling": 0.00028360957142857144,
+          "integrand": 0.052590532428571424,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002114309,
+          "other": 0.00020162614285714614,
+          "total": 0.05520543171428571
+        },
+        {
+          "parameterization": 1.4305857142857172e-05,
+          "canonical_sampling": 0.0002710538571428571,
+          "integrand": 0.05216469342857142,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017755872857142855,
+          "other": 0.00015890157142857408,
+          "total": 0.054384541999999994
+        },
+        {
+          "parameterization": 1.3881428571428547e-05,
+          "canonical_sampling": 0.0002694067142857143,
+          "integrand": 0.05289686728571428,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017573267142857144,
+          "other": 0.0001621735714285727,
+          "total": 0.05509965571428571
+        },
+        {
+          "parameterization": 1.3730142857142828e-05,
+          "canonical_sampling": 0.0002642494285714286,
+          "integrand": 0.052062138571428565,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.001699948,
+          "other": 0.00015807528571428614,
+          "total": 0.05419814142857142
+        },
+        {
+          "parameterization": 1.5581571428571425e-05,
+          "canonical_sampling": 0.0002888465714285714,
+          "integrand": 0.052830636,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002078311714285714,
+          "other": 0.0002068581428571331,
+          "total": 0.05542023399999999
+        },
+        {
+          "parameterization": 1.5894285714285747e-05,
+          "canonical_sampling": 0.0002899695714285714,
+          "integrand": 0.052506620142857154,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002065301571428571,
+          "other": 0.0002059228571428401,
+          "total": 0.05508370842857142
+        },
+        {
+          "parameterization": 1.5845571428571516e-05,
+          "canonical_sampling": 0.00029630485714285707,
+          "integrand": 0.05233020328571428,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.001955599142857143,
+          "other": 0.00019022057142857596,
+          "total": 0.054788173428571424
+        }
+      ],
+      "displayed_result": {
+        "re": 0.03842433502529773,
+        "im": -2.022747395614977e-19
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-L-0.json",
+      "component": "L",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 21,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 5.894070833333333e-05,
+          "standard_error_seconds_per_sample": 1.3059010742867936e-06,
+          "percentage_of_total": 0.04050433588663859
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00029224733333333336,
+          "standard_error_seconds_per_sample": 4.662484095040747e-06,
+          "percentage_of_total": 0.20083376135154635
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.13441194297916664,
+          "standard_error_seconds_per_sample": 0.00022530631752307737,
+          "percentage_of_total": 92.36852829820725
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 0.0007615214375000061,
+          "standard_error_seconds_per_sample": 2.4607824468739906e-05,
+          "percentage_of_total": 0.5233211639557455
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0099923818125,
+          "standard_error_seconds_per_sample": 6.652342688811164e-05,
+          "percentage_of_total": 6.866812440598798
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.14551703427083335,
+          "standard_error_seconds_per_sample": 0.00029814737779990054,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 5.8114000000000006e-05,
+          "canonical_sampling": 0.000304611,
+          "integrand": 0.13481482833333333,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.010159650999999999,
+          "other": 0.0007130219999999798,
+          "total": 0.1460502263333333
+        },
+        {
+          "parameterization": 5.3909666666666683e-05,
+          "canonical_sampling": 0.00029343733333333334,
+          "integrand": 0.1343760953333333,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009767558999999999,
+          "other": 0.0006920590000000226,
+          "total": 0.14518306033333334
+        },
+        {
+          "parameterization": 5.620666666666669e-05,
+          "canonical_sampling": 0.000280854,
+          "integrand": 0.13321069533333332,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009651943,
+          "other": 0.0006781040000000127,
+          "total": 0.143877803
+        },
+        {
+          "parameterization": 5.845699999999993e-05,
+          "canonical_sampling": 0.0002958706666666667,
+          "integrand": 0.13374790733333333,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.010055929666666666,
+          "other": 0.0007490980000000036,
+          "total": 0.14490726266666665
+        },
+        {
+          "parameterization": 6.10873333333333e-05,
+          "canonical_sampling": 0.00030623766666666664,
+          "integrand": 0.134832402,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.010126861333333332,
+          "other": 0.0008450550000000112,
+          "total": 0.14617164333333332
+        },
+        {
+          "parameterization": 6.0939999999999996e-05,
+          "canonical_sampling": 0.000278251,
+          "integrand": 0.13516101349999998,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.010158628,
+          "other": 0.0008683550000000151,
+          "total": 0.1465271875
+        },
+        {
+          "parameterization": 6.593549999999999e-05,
+          "canonical_sampling": 0.000273361,
+          "integrand": 0.13453590299999998,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.010048409500000001,
+          "other": 0.000795086500000014,
+          "total": 0.1457186955
+        },
+        {
+          "parameterization": 5.687550000000002e-05,
+          "canonical_sampling": 0.000305356,
+          "integrand": 0.134616699,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009970073,
+          "other": 0.0007513919999999896,
+          "total": 0.1457003955
+        }
+      ],
+      "displayed_result": {
+        "re": 0.00010919421186236492,
+        "im": -1.0412334058034715e-35
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-L-1.json",
+      "component": "L",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 52,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.396480357142858e-05,
+          "standard_error_seconds_per_sample": 4.1235437045984903e-07,
+          "percentage_of_total": 0.0242119860028589
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00026040797916666663,
+          "standard_error_seconds_per_sample": 3.7120722853540083e-06,
+          "percentage_of_total": 0.4514918032585769
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.05531134839880952,
+          "standard_error_seconds_per_sample": 8.359600526937148e-05,
+          "percentage_of_total": 95.89806160762417
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0019243209047619045,
+          "standard_error_seconds_per_sample": 7.582957183742365e-05,
+          "percentage_of_total": 3.336361343916687
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.05767723296130952,
+          "standard_error_seconds_per_sample": 0.00012831553586955266,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.6308571428571433e-05,
+          "canonical_sampling": 0.00027032499999999997,
+          "integrand": 0.05551504557142857,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002175,
+          "other": 0.00019061228571427835,
+          "total": 0.058167291428571424
+        },
+        {
+          "parameterization": 1.4992857142857093e-05,
+          "canonical_sampling": 0.000267158,
+          "integrand": 0.055290191428571424,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0022284108571428572,
+          "other": 0.00018918071428571798,
+          "total": 0.05798993385714286
+        },
+        {
+          "parameterization": 1.430714285714286e-05,
+          "canonical_sampling": 0.00027940642857142856,
+          "integrand": 0.055184623428571423,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002132354857142857,
+          "other": 0.00018482842857142634,
+          "total": 0.05779552028571428
+        },
+        {
+          "parameterization": 1.3022857142857137e-05,
+          "canonical_sampling": 0.00025118657142857143,
+          "integrand": 0.05522378442857143,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.001755521857142857,
+          "other": 0.00014728757142856014,
+          "total": 0.05739080328571428
+        },
+        {
+          "parameterization": 1.3248333333333367e-05,
+          "canonical_sampling": 0.00025377916666666667,
+          "integrand": 0.055517102500000005,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017638991666666663,
+          "other": 0.00014867333333332816,
+          "total": 0.0576967025
+        },
+        {
+          "parameterization": 1.3391833333333404e-05,
+          "canonical_sampling": 0.0002517438333333333,
+          "integrand": 0.05494907283333334,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017684096666666666,
+          "other": 0.0001711961666666581,
+          "total": 0.05715381433333333
+        },
+        {
+          "parameterization": 1.3108333333333331e-05,
+          "canonical_sampling": 0.00025537233333333334,
+          "integrand": 0.05514627666666666,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017292228333333332,
+          "other": 0.00014762449999999872,
+          "total": 0.05729160466666666
+        },
+        {
+          "parameterization": 1.3338500000000008e-05,
+          "canonical_sampling": 0.0002542925,
+          "integrand": 0.055664690333333336,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0018417479999999998,
+          "other": 0.00015812400000000254,
+          "total": 0.05793219333333333
+        }
+      ],
+      "displayed_result": {
+        "re": -0.0007492462479105587,
+        "im": -1.7725171873637736e-19
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-L-2.json",
+      "component": "L",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 23,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 6.295900000000002e-05,
+          "standard_error_seconds_per_sample": 2.6035985940403545e-06,
+          "percentage_of_total": 0.04733472239703911
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00028819729166666664,
+          "standard_error_seconds_per_sample": 3.7153216226421942e-06,
+          "percentage_of_total": 0.21667654817611737
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.12241167529166665,
+          "standard_error_seconds_per_sample": 0.0002294842767148147,
+          "percentage_of_total": 92.03327035193587
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 0.0006915064166666714,
+          "standard_error_seconds_per_sample": 2.5627266264773648e-05,
+          "percentage_of_total": 0.5198980966770141
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.009553730520833331,
+          "standard_error_seconds_per_sample": 9.9246940385447e-05,
+          "percentage_of_total": 7.182820280813949
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.13300806852083333,
+          "standard_error_seconds_per_sample": 0.00035218005242279804,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 5.996733333333334e-05,
+          "canonical_sampling": 0.0002900476666666666,
+          "integrand": 0.121995088,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009302914333333332,
+          "other": 0.0006395986666666575,
+          "total": 0.132287616
+        },
+        {
+          "parameterization": 7.995066666666671e-05,
+          "canonical_sampling": 0.00028925399999999997,
+          "integrand": 0.12360990799999998,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009996716333333332,
+          "other": 0.000768551000000034,
+          "total": 0.13474438
+        },
+        {
+          "parameterization": 6.0776333333333336e-05,
+          "canonical_sampling": 0.00027179066666666664,
+          "integrand": 0.12220162733333333,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0094297,
+          "other": 0.0006484393333333338,
+          "total": 0.13261233366666667
+        },
+        {
+          "parameterization": 6.493066666666669e-05,
+          "canonical_sampling": 0.0002930976666666666,
+          "integrand": 0.12312670699999997,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009977332666666667,
+          "other": 0.0008258243333333637,
+          "total": 0.13428789233333333
+        },
+        {
+          "parameterization": 6.171000000000009e-05,
+          "canonical_sampling": 0.00029955399999999994,
+          "integrand": 0.12213511366666666,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009359236,
+          "other": 0.0006209960000000125,
+          "total": 0.13247660966666666
+        },
+        {
+          "parameterization": 6.232999999999998e-05,
+          "canonical_sampling": 0.00029573766666666666,
+          "integrand": 0.12255922366666665,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009595807999999999,
+          "other": 0.000716169666666655,
+          "total": 0.13322926899999998
+        },
+        {
+          "parameterization": 5.6556999999999994e-05,
+          "canonical_sampling": 0.0002939206666666667,
+          "integrand": 0.12192269666666666,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009399248333333332,
+          "other": 0.0006466433333333077,
+          "total": 0.13231906599999999
+        },
+        {
+          "parameterization": 5.7450000000000014e-05,
+          "canonical_sampling": 0.00027217599999999995,
+          "integrand": 0.121743038,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009368888499999999,
+          "other": 0.0006658290000000067,
+          "total": 0.1321073815
+        }
+      ],
+      "displayed_result": {
+        "re": 0.001154127817412817,
+        "im": -8.397163161048522e-37
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-T-0.json",
+      "component": "T",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 21,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 6.138812499999999e-05,
+          "standard_error_seconds_per_sample": 1.1123060276545988e-06,
+          "percentage_of_total": 0.0424525972125195
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002882037083333333,
+          "standard_error_seconds_per_sample": 5.196282124214822e-06,
+          "percentage_of_total": 0.1993055814138231
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.13408258304166668,
+          "standard_error_seconds_per_sample": 0.00015556557828486976,
+          "percentage_of_total": 92.72402261971796
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 0.0007582275416666631,
+          "standard_error_seconds_per_sample": 1.6788603331494356e-05,
+          "percentage_of_total": 0.5243478021492544
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.009413530041666666,
+          "standard_error_seconds_per_sample": 6.270124892118605e-05,
+          "percentage_of_total": 6.5098713995064506
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.14460393245833333,
+          "standard_error_seconds_per_sample": 0.00017050415600292548,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 5.987666666666669e-05,
+          "canonical_sampling": 0.0003044246666666666,
+          "integrand": 0.13391792466666666,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009308395333333334,
+          "other": 0.0007414893333333172,
+          "total": 0.14433211066666665
+        },
+        {
+          "parameterization": 6.272333333333326e-05,
+          "canonical_sampling": 0.0003089876666666667,
+          "integrand": 0.13393655266666665,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009582054666666666,
+          "other": 0.0008346203333333413,
+          "total": 0.14472493866666666
+        },
+        {
+          "parameterization": 6.107033333333336e-05,
+          "canonical_sampling": 0.0002969573333333333,
+          "integrand": 0.13348116033333335,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009474243,
+          "other": 0.0007585786666666483,
+          "total": 0.14407200966666667
+        },
+        {
+          "parameterization": 5.7439999999999965e-05,
+          "canonical_sampling": 0.00026430766666666667,
+          "integrand": 0.13474204066666667,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009117107,
+          "other": 0.0007034406666666659,
+          "total": 0.144884336
+        },
+        {
+          "parameterization": 6.076366666666667e-05,
+          "canonical_sampling": 0.0002824943333333333,
+          "integrand": 0.133548612,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009210017333333334,
+          "other": 0.0006871783333333159,
+          "total": 0.14378906566666666
+        },
+        {
+          "parameterization": 6.169549999999997e-05,
+          "canonical_sampling": 0.00028822600000000004,
+          "integrand": 0.134241632,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009521075,
+          "other": 0.0007893395000000136,
+          "total": 0.144901968
+        },
+        {
+          "parameterization": 6.811050000000003e-05,
+          "canonical_sampling": 0.000281836,
+          "integrand": 0.13435856850000003,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0095381365,
+          "other": 0.0007804664999999933,
+          "total": 0.145027118
+        },
+        {
+          "parameterization": 5.9424999999999994e-05,
+          "canonical_sampling": 0.000278396,
+          "integrand": 0.1344341735,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0095572115,
+          "other": 0.0007707070000000094,
+          "total": 0.145099913
+        }
+      ],
+      "displayed_result": {
+        "re": 0.003272494540653329,
+        "im": 5.741705500145052e-35
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-T-1.json",
+      "component": "T",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 53,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.4183238095238081e-05,
+          "standard_error_seconds_per_sample": 3.15032378394911e-07,
+          "percentage_of_total": 0.024540894280406882
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00026423358928571425,
+          "standard_error_seconds_per_sample": 2.4485356060640058e-06,
+          "percentage_of_total": 0.4571966243851113
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.05534557591369048,
+          "standard_error_seconds_per_sample": 0.00014832076611084026,
+          "percentage_of_total": 95.76303508873107
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0019874835505952378,
+          "standard_error_seconds_per_sample": 6.80974868054176e-05,
+          "percentage_of_total": 3.438891977395568
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.05779430013095238,
+          "standard_error_seconds_per_sample": 0.00021740487014021458,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.3135714285714291e-05,
+          "canonical_sampling": 0.0002539352857142857,
+          "integrand": 0.054882431999999995,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017054371428571428,
+          "other": 0.00014930757142857937,
+          "total": 0.057004247714285715
+        },
+        {
+          "parameterization": 1.4075714285714238e-05,
+          "canonical_sampling": 0.00026814671428571427,
+          "integrand": 0.05585104899999999,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002133651714285714,
+          "other": 0.00019740928571429506,
+          "total": 0.05846433242857143
+        },
+        {
+          "parameterization": 1.4314571428571425e-05,
+          "canonical_sampling": 0.0002714205714285714,
+          "integrand": 0.05579418442857142,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0021516814285714283,
+          "other": 0.00021457700000000052,
+          "total": 0.058446177999999994
+        },
+        {
+          "parameterization": 1.4305714285714228e-05,
+          "canonical_sampling": 0.0002715452857142857,
+          "integrand": 0.055848954,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.002168344285714285,
+          "other": 0.00019424042857142665,
+          "total": 0.05849738971428571
+        },
+        {
+          "parameterization": 1.3428857142857187e-05,
+          "canonical_sampling": 0.0002565748571428571,
+          "integrand": 0.054893824714285715,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0017416089999999999,
+          "other": 0.00014957042857143,
+          "total": 0.057055007857142855
+        },
+        {
+          "parameterization": 1.6133499999999997e-05,
+          "canonical_sampling": 0.000258321,
+          "integrand": 0.055209671999999994,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0018405851666666666,
+          "other": 0.0001749535000000052,
+          "total": 0.057499665166666665
+        },
+        {
+          "parameterization": 1.4018499999999981e-05,
+          "canonical_sampling": 0.00026757416666666666,
+          "integrand": 0.055174392833333336,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020689456666666663,
+          "other": 0.00018959483333332722,
+          "total": 0.057714525999999995
+        },
+        {
+          "parameterization": 1.4053333333333303e-05,
+          "canonical_sampling": 0.0002663508333333333,
+          "integrand": 0.055110098333333336,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0020896139999999996,
+          "other": 0.0001929376666666635,
+          "total": 0.05767305416666666
+        }
+      ],
+      "displayed_result": {
+        "re": 0.010273257179350395,
+        "im": -1.797134148022547e-18
+      }
+    },
+    {
+      "mode": "thermal",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-T-2.json",
+      "component": "T",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 23,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 6.139316666666666e-05,
+          "standard_error_seconds_per_sample": 1.2911235156016973e-06,
+          "percentage_of_total": 0.045938240700860423
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002930978333333333,
+          "standard_error_seconds_per_sample": 4.232966675160095e-06,
+          "percentage_of_total": 0.2193142909482435
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.12315252749999997,
+          "standard_error_seconds_per_sample": 0.0006804147141317719,
+          "percentage_of_total": 92.15049098104292
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 0.0007561374791666652,
+          "standard_error_seconds_per_sample": 2.2105979630049287e-05,
+          "percentage_of_total": 0.5657897679312861
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.009379677812499999,
+          "standard_error_seconds_per_sample": 8.880951842326849e-05,
+          "percentage_of_total": 7.018466719376668
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.13364283379166667,
+          "standard_error_seconds_per_sample": 0.0007747368850376611,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 6.476000000000008e-05,
+          "canonical_sampling": 0.00029076433333333326,
+          "integrand": 0.12216402266666665,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009222427333333333,
+          "other": 0.000715722000000002,
+          "total": 0.13245769633333332
+        },
+        {
+          "parameterization": 6.153366666666665e-05,
+          "canonical_sampling": 0.0003060843333333333,
+          "integrand": 0.12225245000000001,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009392451999999999,
+          "other": 0.0007773506666666208,
+          "total": 0.13278987066666664
+        },
+        {
+          "parameterization": 6.396366666666669e-05,
+          "canonical_sampling": 0.0002789676666666666,
+          "integrand": 0.12173543466666664,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009442269666666666,
+          "other": 0.0007910100000000087,
+          "total": 0.13231164566666664
+        },
+        {
+          "parameterization": 5.695333333333337e-05,
+          "canonical_sampling": 0.0002912343333333333,
+          "integrand": 0.12190475933333333,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009158736666666667,
+          "other": 0.0006882480000000024,
+          "total": 0.13209993166666667
+        },
+        {
+          "parameterization": 5.505666666666664e-05,
+          "canonical_sampling": 0.0002796573333333333,
+          "integrand": 0.12099708033333331,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.008966373,
+          "other": 0.0006514810000000093,
+          "total": 0.13094964833333333
+        },
+        {
+          "parameterization": 6.0862999999999976e-05,
+          "canonical_sampling": 0.0002873643333333333,
+          "integrand": 0.125393683,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009505781333333333,
+          "other": 0.0008065059999999846,
+          "total": 0.13605419766666665
+        },
+        {
+          "parameterization": 6.312e-05,
+          "canonical_sampling": 0.0003128443333333333,
+          "integrand": 0.12470647699999998,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009715107,
+          "other": 0.0008215446666666737,
+          "total": 0.135619093
+        },
+        {
+          "parameterization": 6.489499999999993e-05,
+          "canonical_sampling": 0.00029786600000000004,
+          "integrand": 0.12606631299999999,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.009634275500000001,
+          "other": 0.0007972375000000198,
+          "total": 0.136860587
+        }
+      ],
+      "displayed_result": {
+        "re": 0.00117939743684583,
+        "im": 1.783347286458309e-37
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-L-0.json",
+      "component": "L",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 1532,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.2132504039185235e-05,
+          "standard_error_seconds_per_sample": 2.4367359457024373e-07,
+          "percentage_of_total": 0.634283540511537
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00023286268844758943,
+          "standard_error_seconds_per_sample": 3.387450347229785e-06,
+          "percentage_of_total": 12.173988980719182
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0012005641574702774,
+          "standard_error_seconds_per_sample": 1.6030773491098105e-06,
+          "percentage_of_total": 62.765121029593885
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 6.474780788135313e-05,
+          "standard_error_seconds_per_sample": 2.624875769249256e-06,
+          "percentage_of_total": 3.3849952730865476
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00040248156586087476,
+          "standard_error_seconds_per_sample": 2.0938490043614735e-06,
+          "percentage_of_total": 21.041611176088836
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.00191278872369928,
+          "standard_error_seconds_per_sample": 9.427316262126293e-06,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.1777526041666721e-05,
+          "canonical_sampling": 0.00023130158854166668,
+          "integrand": 0.0011959765052083338,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00039785616145833334,
+          "other": 6.39349583333327e-05,
+          "total": 0.0019008467395833333
+        },
+        {
+          "parameterization": 1.2800015624999978e-05,
+          "canonical_sampling": 0.0002354815312499999,
+          "integrand": 0.001201414338541668,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004037900625,
+          "other": 6.700413541666536e-05,
+          "total": 0.0019204900833333332
+        },
+        {
+          "parameterization": 1.243849479166671e-05,
+          "canonical_sampling": 0.0002392987552083334,
+          "integrand": 0.0012046047447916665,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004087520520833336,
+          "other": 6.938707291666659e-05,
+          "total": 0.0019344811197916667
+        },
+        {
+          "parameterization": 1.122079166666662e-05,
+          "canonical_sampling": 0.0002190371770833332,
+          "integrand": 0.0011961487968750002,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003948990885416667,
+          "other": 5.390539062499972e-05,
+          "total": 0.0018752112447916664
+        },
+        {
+          "parameterization": 1.1140931937172701e-05,
+          "canonical_sampling": 0.00021926071727748693,
+          "integrand": 0.001199239827225132,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00039578328795811517,
+          "other": 5.363803664921356e-05,
+          "total": 0.0018790628010471205
+        },
+        {
+          "parameterization": 1.2178518324607225e-05,
+          "canonical_sampling": 0.000233254821989529,
+          "integrand": 0.0012006819267015708,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040151600523560224,
+          "other": 6.595629842931906e-05,
+          "total": 0.0019135875706806284
+        },
+        {
+          "parameterization": 1.2946931937172894e-05,
+          "canonical_sampling": 0.0002461422722513088,
+          "integrand": 0.001209156869109947,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004100841256544504,
+          "other": 7.415754973822027e-05,
+          "total": 0.0019524877486910995
+        },
+        {
+          "parameterization": 1.2556821989529035e-05,
+          "canonical_sampling": 0.0002391246439790574,
+          "integrand": 0.0011972902513089014,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004071717434554975,
+          "other": 6.99990209424078e-05,
+          "total": 0.001926142481675393
+        }
+      ],
+      "displayed_result": {
+        "re": -0.008550355480964944,
+        "im": 3.1256702171697507e-20
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-L-1.json",
+      "component": "L",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 1548,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.2226406425271047e-05,
+          "standard_error_seconds_per_sample": 3.558167484739695e-07,
+          "percentage_of_total": 0.633593666752865
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002356987672166284,
+          "standard_error_seconds_per_sample": 4.9296548144649866e-06,
+          "percentage_of_total": 12.214320461427233
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0012084474835545639,
+          "standard_error_seconds_per_sample": 4.429033953507483e-06,
+          "percentage_of_total": 62.62385246747878
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 6.712902732893572e-05,
+          "standard_error_seconds_per_sample": 3.54068870568618e-06,
+          "percentage_of_total": 3.4787430657451552
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00040619033527188736,
+          "standard_error_seconds_per_sample": 2.920938643485152e-06,
+          "percentage_of_total": 21.049490338595977
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0019296920197972862,
+          "standard_error_seconds_per_sample": 1.5183678077742132e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.1643881443298759e-05,
+          "canonical_sampling": 0.00023126712371134041,
+          "integrand": 0.0012257454123711334,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040344031443299,
+          "other": 6.75598195876289e-05,
+          "total": 0.0019396565515463916
+        },
+        {
+          "parameterization": 1.1467206185566969e-05,
+          "canonical_sampling": 0.00022558944329896915,
+          "integrand": 0.0011944198814432983,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040026009278350537,
+          "other": 5.908389690721682e-05,
+          "total": 0.0018908205206185566
+        },
+        {
+          "parameterization": 1.3127164948453535e-05,
+          "canonical_sampling": 0.0002469602164948453,
+          "integrand": 0.0012102352371134014,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004098339999999999,
+          "other": 7.335400000000073e-05,
+          "total": 0.001953510618556701
+        },
+        {
+          "parameterization": 1.3600226804123773e-05,
+          "canonical_sampling": 0.00025678663402061856,
+          "integrand": 0.0012260148608247419,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004194219329896907,
+          "other": 8.079508762886623e-05,
+          "total": 0.0019966187422680412
+        },
+        {
+          "parameterization": 1.3500611398963795e-05,
+          "canonical_sampling": 0.00025122546113989634,
+          "integrand": 0.001212828994818651,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00041579827979274636,
+          "other": 7.989548704663346e-05,
+          "total": 0.001973248834196891
+        },
+        {
+          "parameterization": 1.1568264248704646e-05,
+          "canonical_sampling": 0.00022794289637305713,
+          "integrand": 0.0012031313160621756,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040535827461139914,
+          "other": 6.12152383419693e-05,
+          "total": 0.0019092159896373058
+        },
+        {
+          "parameterization": 1.1120948186528468e-05,
+          "canonical_sampling": 0.00021848488601036262,
+          "integrand": 0.0011956008756476687,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00039550339378238356,
+          "other": 5.3646450777201666e-05,
+          "total": 0.0018743565544041452
+        },
+        {
+          "parameterization": 1.1782948186528429e-05,
+          "canonical_sampling": 0.0002273334766839378,
+          "integrand": 0.0011996032901554405,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00039990639378238355,
+          "other": 6.148223834196863e-05,
+          "total": 0.001900108347150259
+        }
+      ],
+      "displayed_result": {
+        "re": 1.9867928670061042e-07,
+        "im": -2.2178388297184577e-24
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-L-2.json",
+      "component": "L",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 1543,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.2098300602466501e-05,
+          "standard_error_seconds_per_sample": 1.4371945343142394e-07,
+          "percentage_of_total": 0.6319013895594814
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00023281987129614636,
+          "standard_error_seconds_per_sample": 2.3602140084715617e-06,
+          "percentage_of_total": 12.160319455039915
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0012016272709615176,
+          "standard_error_seconds_per_sample": 3.745606572238939e-06,
+          "percentage_of_total": 62.761702424417244
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 6.51542747395838e-05,
+          "standard_error_seconds_per_sample": 1.838142080284374e-06,
+          "percentage_of_total": 3.40304627042327
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00040288708381571136,
+          "standard_error_seconds_per_sample": 1.8031288596178035e-06,
+          "percentage_of_total": 21.043030460560104
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0019145868014154254,
+          "standard_error_seconds_per_sample": 9.134445904962521e-06,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.2100056994818691e-05,
+          "canonical_sampling": 0.0002311898497409325,
+          "integrand": 0.0011929427668393785,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00039910174611398956,
+          "other": 6.524822279792741e-05,
+          "total": 0.0019005826424870467
+        },
+        {
+          "parameterization": 1.2019818652849362e-05,
+          "canonical_sampling": 0.00023302891191709853,
+          "integrand": 0.0011987140414507769,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040327907253886005,
+          "other": 6.64408445595864e-05,
+          "total": 0.0019134826891191712
+        },
+        {
+          "parameterization": 1.2276891191709787e-05,
+          "canonical_sampling": 0.00023555188601036278,
+          "integrand": 0.001219529523316062,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.000409575487046632,
+          "other": 6.652884455958605e-05,
+          "total": 0.0019434626321243524
+        },
+        {
+          "parameterization": 1.1678072538860138e-05,
+          "canonical_sampling": 0.00022833593264248703,
+          "integrand": 0.001195124585492226,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003987206891191712,
+          "other": 6.173273056995013e-05,
+          "total": 0.0018955920103626944
+        },
+        {
+          "parameterization": 1.1375331606217819e-05,
+          "canonical_sampling": 0.00021975066839378233,
+          "integrand": 0.0011893063419689126,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003968001968911915,
+          "other": 5.460006735751228e-05,
+          "total": 0.0018718326062176166
+        },
+        {
+          "parameterization": 1.2252015544041617e-05,
+          "canonical_sampling": 0.0002371542487046632,
+          "integrand": 0.001197534233160622,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040168470466321246,
+          "other": 6.876371502590644e-05,
+          "total": 0.0019173889170984457
+        },
+        {
+          "parameterization": 1.2512088082901492e-05,
+          "canonical_sampling": 0.0002420291917098446,
+          "integrand": 0.001213960310880828,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00041107236269430044,
+          "other": 7.216657512953495e-05,
+          "total": 0.0019517405284974094
+        },
+        {
+          "parameterization": 1.2572130208333103e-05,
+          "canonical_sampling": 0.00023551828124999998,
+          "integrand": 0.0012059063645833337,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004028624114583333,
+          "other": 6.575319791666677e-05,
+          "total": 0.0019226123854166667
+        }
+      ],
+      "displayed_result": {
+        "re": 0.00675792372802062,
+        "im": -3.4653733844788075e-21
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-T-0.json",
+      "component": "T",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 1560,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.1918239743589683e-05,
+          "standard_error_seconds_per_sample": 2.4925177949391013e-07,
+          "percentage_of_total": 0.6363267045414474
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.000229988683974359,
+          "standard_error_seconds_per_sample": 3.380958837884241e-06,
+          "percentage_of_total": 12.279325177524024
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0012064485153846151,
+          "standard_error_seconds_per_sample": 6.748438102170714e-06,
+          "percentage_of_total": 64.41348928280493
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 6.093511794871823e-05,
+          "standard_error_seconds_per_sample": 2.4238445409340514e-06,
+          "percentage_of_total": 3.253386710567516
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0003636843878205128,
+          "standard_error_seconds_per_sample": 1.8832755320301667e-06,
+          "percentage_of_total": 19.41747212456208
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0018729749448717949,
+          "standard_error_seconds_per_sample": 1.2962867665224263e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.1363979487179264e-05,
+          "canonical_sampling": 0.00022032708717948727,
+          "integrand": 0.001195660179487179,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003649796512820513,
+          "other": 5.5734179487179885e-05,
+          "total": 0.001848065076923077
+        },
+        {
+          "parameterization": 1.1031425641025487e-05,
+          "canonical_sampling": 0.0002193536307692309,
+          "integrand": 0.0011895701794871784,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00035521537948717945,
+          "other": 5.264352307692423e-05,
+          "total": 0.0018278141384615385
+        },
+        {
+          "parameterization": 1.2931887179487144e-05,
+          "canonical_sampling": 0.00024320807179487188,
+          "integrand": 0.0012032882205128203,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003657467128205128,
+          "other": 7.100403076923108e-05,
+          "total": 0.0018961789230769232
+        },
+        {
+          "parameterization": 1.2305302564102514e-05,
+          "canonical_sampling": 0.0002342457282051282,
+          "integrand": 0.0011972154666666664,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036179349743589755,
+          "other": 6.496171794871815e-05,
+          "total": 0.001870521712820513
+        },
+        {
+          "parameterization": 1.2314164102564251e-05,
+          "canonical_sampling": 0.00023268075897435887,
+          "integrand": 0.0012068489128205123,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036539526666666663,
+          "other": 6.394689743589779e-05,
+          "total": 0.001881186
+        },
+        {
+          "parameterization": 1.1580620512820482e-05,
+          "canonical_sampling": 0.00022538017948717945,
+          "integrand": 0.001199153046153846,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036144249230769224,
+          "other": 5.754127692307728e-05,
+          "total": 0.0018550976153846154
+        },
+        {
+          "parameterization": 1.1224712820512685e-05,
+          "canonical_sampling": 0.0002223295333333334,
+          "integrand": 0.001208735943589743,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003610848307692307,
+          "other": 5.393295897435958e-05,
+          "total": 0.0018573079794871794
+        },
+        {
+          "parameterization": 1.2593825641025634e-05,
+          "canonical_sampling": 0.00024238448205128214,
+          "integrand": 0.0012511161743589754,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00037381727179487185,
+          "other": 6.771635897435783e-05,
+          "total": 0.0019476281128205128
+        }
+      ],
+      "displayed_result": {
+        "re": -0.0017282078004450807,
+        "im": 8.004318974138524e-19
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-T-1.json",
+      "component": "T",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 1497,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.1737338779298e-05,
+          "standard_error_seconds_per_sample": 1.3544039905824439e-07,
+          "percentage_of_total": 0.6311389422381217
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00022772964367746612,
+          "standard_error_seconds_per_sample": 2.1688611106466502e-06,
+          "percentage_of_total": 12.245454368273473
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0012016458629288034,
+          "standard_error_seconds_per_sample": 5.581638624280083e-06,
+          "percentage_of_total": 64.6147745357197
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 5.996463339828147e-05,
+          "standard_error_seconds_per_sample": 1.7185632768079815e-06,
+          "percentage_of_total": 3.224411939224238
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00035863010599542037,
+          "standard_error_seconds_per_sample": 1.192923147867877e-06,
+          "percentage_of_total": 19.284220214544458
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0018597075847792692,
+          "standard_error_seconds_per_sample": 1.0328211837382993e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.2127186170212914e-05,
+          "canonical_sampling": 0.00023382305851063818,
+          "integrand": 0.0012301250585106394,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036194443085106365,
+          "other": 6.604543617021175e-05,
+          "total": 0.001904065170212766
+        },
+        {
+          "parameterization": 1.225627272727288e-05,
+          "canonical_sampling": 0.0002364450481283422,
+          "integrand": 0.001218530128342247,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003630583636363635,
+          "other": 6.605099465240515e-05,
+          "total": 0.0018963408074866308
+        },
+        {
+          "parameterization": 1.1599197860962662e-05,
+          "canonical_sampling": 0.00022224194117647053,
+          "integrand": 0.0011867833582887705,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003552111016042782,
+          "other": 5.626564705882276e-05,
+          "total": 0.0018321012459893047
+        },
+        {
+          "parameterization": 1.114264171122998e-05,
+          "canonical_sampling": 0.0002191325614973261,
+          "integrand": 0.0011910303850267377,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003554537754010696,
+          "other": 5.253503208556146e-05,
+          "total": 0.001829294395721925
+        },
+        {
+          "parameterization": 1.1378122994652371e-05,
+          "canonical_sampling": 0.00022242488770053478,
+          "integrand": 0.0011943070374331548,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003546332620320857,
+          "other": 5.6144534759358265e-05,
+          "total": 0.001838887844919786
+        },
+        {
+          "parameterization": 1.1779074866310156e-05,
+          "canonical_sampling": 0.00022829281283422452,
+          "integrand": 0.0011946824438502678,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00035921898395721916,
+          "other": 6.0670994652405877e-05,
+          "total": 0.0018546443101604276
+        },
+        {
+          "parameterization": 1.1593101604278114e-05,
+          "canonical_sampling": 0.0002275269679144386,
+          "integrand": 0.0011889294438502671,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003577059786096256,
+          "other": 5.938248128342259e-05,
+          "total": 0.0018451379732620321
+        },
+        {
+          "parameterization": 1.2023112299464924e-05,
+          "canonical_sampling": 0.00023194987165775415,
+          "integrand": 0.0012087790481283423,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036181495187165785,
+          "other": 6.262194652406389e-05,
+          "total": 0.0018771889304812833
+        }
+      ],
+      "displayed_result": {
+        "re": 1.934789889510095e-07,
+        "im": 2.120490374253548e-24
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "timelike",
+      "E": 1.0,
+      "k": 0.5,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-T-2.json",
+      "component": "T",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 1616,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.1564629331683161e-05,
+          "standard_error_seconds_per_sample": 9.417796256262724e-08,
+          "percentage_of_total": 0.6264127216793329
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00022441623143564356,
+          "standard_error_seconds_per_sample": 1.4434264851510517e-06,
+          "percentage_of_total": 12.15578798859439
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.00119501088490099,
+          "standard_error_seconds_per_sample": 3.6659434174757765e-06,
+          "percentage_of_total": 64.72927055227177
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 5.739732054455484e-05,
+          "standard_error_seconds_per_sample": 1.0402409785964427e-06,
+          "percentage_of_total": 3.108998200306585
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00035777863304455433,
+          "standard_error_seconds_per_sample": 1.0881860985389599e-06,
+          "percentage_of_total": 19.37953053714794
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0018461676992574255,
+          "standard_error_seconds_per_sample": 6.311177648517663e-06,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.1077069306930762e-05,
+          "canonical_sampling": 0.00021929020297029698,
+          "integrand": 0.0011844297524752482,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003544686089108911,
+          "other": 5.4762811881187796e-05,
+          "total": 0.0018240284455445547
+        },
+        {
+          "parameterization": 1.1498410891088925e-05,
+          "canonical_sampling": 0.00022724572277227738,
+          "integrand": 0.0012178489504950487,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003602322178217818,
+          "other": 5.737899504950619e-05,
+          "total": 0.0018742042970297029
+        },
+        {
+          "parameterization": 1.160071782178206e-05,
+          "canonical_sampling": 0.00022609893564356432,
+          "integrand": 0.0011916281336633665,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00035938858415841574,
+          "other": 5.819997029702989e-05,
+          "total": 0.0018469163415841586
+        },
+        {
+          "parameterization": 1.1914079207920924e-05,
+          "canonical_sampling": 0.0002294018019801979,
+          "integrand": 0.0011997223465346533,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003617026435643564,
+          "other": 6.116769801980232e-05,
+          "total": 0.0018639085693069309
+        },
+        {
+          "parameterization": 1.1623148514851425e-05,
+          "canonical_sampling": 0.0002279428960396041,
+          "integrand": 0.0011912393613861378,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00035820128217821764,
+          "other": 6.099416336633758e-05,
+          "total": 0.0018500008514851485
+        },
+        {
+          "parameterization": 1.1843376237623672e-05,
+          "canonical_sampling": 0.0002251159900990099,
+          "integrand": 0.0011967268168316834,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003599510099009897,
+          "other": 5.841491089108946e-05,
+          "total": 0.001852052103960396
+        },
+        {
+          "parameterization": 1.1346391089109146e-05,
+          "canonical_sampling": 0.0002185656881188118,
+          "integrand": 0.00119018754950495,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00035418341584158387,
+          "other": 5.281219306930789e-05,
+          "total": 0.0018270952376237626
+        },
+        {
+          "parameterization": 1.1613841584158372e-05,
+          "canonical_sampling": 0.0002216686138613861,
+          "integrand": 0.001188304168316832,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003541013019801981,
+          "other": 5.54478217821776e-05,
+          "total": 0.0018311357475247524
+        }
+      ],
+      "displayed_result": {
+        "re": 0.0040041815408199885,
+        "im": 1.308591927283493e-20
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-L-0.json",
+      "component": "L",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 1466,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.2246625586540708e-05,
+          "standard_error_seconds_per_sample": 3.8570882037416165e-07,
+          "percentage_of_total": 0.629964431863572
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00023531630095851157,
+          "standard_error_seconds_per_sample": 4.317163291909094e-06,
+          "percentage_of_total": 12.104632316389736
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0012156622857047398,
+          "standard_error_seconds_per_sample": 4.620319248942028e-06,
+          "percentage_of_total": 62.533470607088205
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 6.576776744773134e-05,
+          "standard_error_seconds_per_sample": 3.7144203785592946e-06,
+          "percentage_of_total": 3.383083279746831
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00041502559771843065,
+          "standard_error_seconds_per_sample": 2.5611067139733726e-06,
+          "percentage_of_total": 21.348849364911665
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0019440185774159539,
+          "standard_error_seconds_per_sample": 1.243190536016869e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.1286793478260853e-05,
+          "canonical_sampling": 0.00022630167391304344,
+          "integrand": 0.001241922521739131,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004190165923913043,
+          "other": 5.6061157608695454e-05,
+          "total": 0.001954588739130435
+        },
+        {
+          "parameterization": 1.1431347826086733e-05,
+          "canonical_sampling": 0.00022656072282608704,
+          "integrand": 0.0012071572065217387,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004115463478260868,
+          "other": 5.9469298913043984e-05,
+          "total": 0.0019161649239130432
+        },
+        {
+          "parameterization": 1.2840005464480884e-05,
+          "canonical_sampling": 0.0002444835409836066,
+          "integrand": 0.001212741535519126,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00041917946448087417,
+          "other": 7.475773770491815e-05,
+          "total": 0.0019640022841530057
+        },
+        {
+          "parameterization": 1.3607825136612039e-05,
+          "canonical_sampling": 0.0002507832677595628,
+          "integrand": 0.0012252387650273215,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004177770983606557,
+          "other": 7.763621311475486e-05,
+          "total": 0.001985043169398907
+        },
+        {
+          "parameterization": 1.2777617486338892e-05,
+          "canonical_sampling": 0.00024114774863387984,
+          "integrand": 0.0012118440874316935,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004137029617486337,
+          "other": 7.132791256830666e-05,
+          "total": 0.0019508003278688524
+        },
+        {
+          "parameterization": 1.1212060109289427e-05,
+          "canonical_sampling": 0.000223879655737705,
+          "integrand": 0.00121352350273224,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004090595573770492,
+          "other": 5.5339092896175513e-05,
+          "total": 0.0019130138688524592
+        },
+        {
+          "parameterization": 1.1156584699453527e-05,
+          "canonical_sampling": 0.00022059898907103839,
+          "integrand": 0.0011979544972677597,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004031904590163935,
+          "other": 5.399855737704879e-05,
+          "total": 0.001886899087431694
+        },
+        {
+          "parameterization": 1.3660770491803309e-05,
+          "canonical_sampling": 0.00024877480874316944,
+          "integrand": 0.001214916169398907,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004267323005464478,
+          "other": 7.755216939890727e-05,
+          "total": 0.0019816362185792347
+        }
+      ],
+      "displayed_result": {
+        "re": -1.1504982202276226e-05,
+        "im": -7.524696891747263e-21
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-L-1.json",
+      "component": "L",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 1495,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.3547850490196065e-05,
+          "standard_error_seconds_per_sample": 4.157906561457113e-07,
+          "percentage_of_total": 0.686918154554767
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002457576228616813,
+          "standard_error_seconds_per_sample": 4.675420460892798e-06,
+          "percentage_of_total": 12.460675801380908
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.001217432995313668,
+          "standard_error_seconds_per_sample": 4.796463159049742e-06,
+          "percentage_of_total": 61.72763915870794
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 7.495234922876769e-05,
+          "standard_error_seconds_per_sample": 3.994988537949023e-06,
+          "percentage_of_total": 3.800317212610781
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00042057478614657,
+          "standard_error_seconds_per_sample": 1.5780396381998167e-06,
+          "percentage_of_total": 21.32444967274559
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0019722656040408832,
+          "standard_error_seconds_per_sample": 1.3286363372942314e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.426781818181824e-05,
+          "canonical_sampling": 0.0002564412085561497,
+          "integrand": 0.001243737229946524,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004274361497326203,
+          "other": 8.934579144384992e-05,
+          "total": 0.0020312281978609624
+        },
+        {
+          "parameterization": 1.480205347593593e-05,
+          "canonical_sampling": 0.00025987182887700534,
+          "integrand": 0.0012259689625668453,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00042216088235294113,
+          "other": 8.453150802138982e-05,
+          "total": 0.0020073352352941174
+        },
+        {
+          "parameterization": 1.3735106951871421e-05,
+          "canonical_sampling": 0.0002412882513368985,
+          "integrand": 0.00120380290909091,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00041435760962566827,
+          "other": 7.189372192513313e-05,
+          "total": 0.0019450775989304813
+        },
+        {
+          "parameterization": 1.1698422459893194e-05,
+          "canonical_sampling": 0.000230156614973262,
+          "integrand": 0.0012242001283422452,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00042169680748663094,
+          "other": 6.083697326203269e-05,
+          "total": 0.001948588946524064
+        },
+        {
+          "parameterization": 1.1810299465240485e-05,
+          "canonical_sampling": 0.00022316900000000003,
+          "integrand": 0.0012036419732620336,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00041614664705882356,
+          "other": 5.662866844919636e-05,
+          "total": 0.0019113965882352941
+        },
+        {
+          "parameterization": 1.3910812834224632e-05,
+          "canonical_sampling": 0.0002518813850267379,
+          "integrand": 0.001215728128342246,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004197937807486629,
+          "other": 7.889424598930502e-05,
+          "total": 0.0019802083529411765
+        },
+        {
+          "parameterization": 1.4536957219251343e-05,
+          "canonical_sampling": 0.0002555498930481283,
+          "integrand": 0.0012144326417112287,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004177613368983955,
+          "other": 8.050143850267511e-05,
+          "total": 0.001982782267379679
+        },
+        {
+          "parameterization": 1.3621333333333277e-05,
+          "canonical_sampling": 0.00024770280107526876,
+          "integrand": 0.0012079519892473117,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00042524507526881737,
+          "other": 7.698644623655945e-05,
+          "total": 0.0019715076451612907
+        }
+      ],
+      "displayed_result": {
+        "re": 2.011061640041098e-09,
+        "im": -1.4131781993781373e-24
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-L-2.json",
+      "component": "L",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 1488,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.1352862231182837e-05,
+          "standard_error_seconds_per_sample": 6.440137772324455e-08,
+          "percentage_of_total": 0.592043196711418
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002236698514784946,
+          "standard_error_seconds_per_sample": 1.4294863871928032e-06,
+          "percentage_of_total": 11.664213938364613
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.001216112054435484,
+          "standard_error_seconds_per_sample": 7.523301341429999e-06,
+          "percentage_of_total": 63.41932577052503
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 5.596402284946224e-05,
+          "standard_error_seconds_per_sample": 9.063799379906439e-07,
+          "percentage_of_total": 2.918481552398296
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00041047450336021503,
+          "standard_error_seconds_per_sample": 2.5755120784606476e-06,
+          "percentage_of_total": 21.40593554200064
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0019175732943548388,
+          "standard_error_seconds_per_sample": 1.1928171605762484e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.1429295698924848e-05,
+          "canonical_sampling": 0.00022644344623655904,
+          "integrand": 0.001200604532258065,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040594115591397845,
+          "other": 5.853737634408567e-05,
+          "total": 0.001902955806451613
+        },
+        {
+          "parameterization": 1.1420274193548233e-05,
+          "canonical_sampling": 0.00022299092473118283,
+          "integrand": 0.0012166107526881723,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004128203548387095,
+          "other": 5.491543548387097e-05,
+          "total": 0.0019187577419354839
+        },
+        {
+          "parameterization": 1.1137822580645321e-05,
+          "canonical_sampling": 0.00022002941397849455,
+          "integrand": 0.0012026533118279573,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004014378064516131,
+          "other": 5.3213322580644576e-05,
+          "total": 0.0018884716774193548
+        },
+        {
+          "parameterization": 1.1323672043010908e-05,
+          "canonical_sampling": 0.00022069759677419338,
+          "integrand": 0.0012010085322580644,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004067848548387094,
+          "other": 5.4755430107527366e-05,
+          "total": 0.0018945700860215056
+        },
+        {
+          "parameterization": 1.138023118279577e-05,
+          "canonical_sampling": 0.00022296248387096779,
+          "integrand": 0.0012124298817204296,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004115120268817204,
+          "other": 5.4351860215054145e-05,
+          "total": 0.0019126364838709677
+        },
+        {
+          "parameterization": 1.1150010752688182e-05,
+          "canonical_sampling": 0.00022115430645161286,
+          "integrand": 0.0012101557204301082,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00041120250537634407,
+          "other": 5.5987102150537125e-05,
+          "total": 0.0019096496451612905
+        },
+        {
+          "parameterization": 1.1273043010752768e-05,
+          "canonical_sampling": 0.00022267195698924734,
+          "integrand": 0.0012197500215053753,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00040804623118279585,
+          "other": 5.4929327956990126e-05,
+          "total": 0.0019166705806451614
+        },
+        {
+          "parameterization": 1.1708548387096669e-05,
+          "canonical_sampling": 0.00023240868279569892,
+          "integrand": 0.0012656836827956998,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0004260510913978497,
+          "other": 6.102232795698794e-05,
+          "total": 0.001996874333333333
+        }
+      ],
+      "displayed_result": {
+        "re": 0.0001288242761615799,
+        "im": -6.1277886355789696e-21
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-T-0.json",
+      "component": "T",
+      "x_index": 0,
+      "xs": [
+        0.17,
+        0.31,
+        0.43,
+        0.29,
+        0.53,
+        0.71
+      ],
+      "samples": 1496,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.2714901069518747e-05,
+          "standard_error_seconds_per_sample": 3.2272143644604987e-07,
+          "percentage_of_total": 0.665484994467199
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.0002429636838235294,
+          "standard_error_seconds_per_sample": 4.525591743251926e-06,
+          "percentage_of_total": 12.716472184958306
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0012092166604278072,
+          "standard_error_seconds_per_sample": 4.28736461082271e-06,
+          "percentage_of_total": 63.28917057039298
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 7.18154592245991e-05,
+          "standard_error_seconds_per_sample": 3.734071836415616e-06,
+          "percentage_of_total": 3.7587481195046846
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0003739110487967915,
+          "standard_error_seconds_per_sample": 3.963238270683186e-06,
+          "percentage_of_total": 19.57012413067682
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0019106217533422462,
+          "standard_error_seconds_per_sample": 1.5640787467874558e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.3330117647058961e-05,
+          "canonical_sampling": 0.0002502411122994652,
+          "integrand": 0.001211181283422458,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003822949625668448,
+          "other": 8.11652352941197e-05,
+          "total": 0.0019382127112299466
+        },
+        {
+          "parameterization": 1.3723395721925e-05,
+          "canonical_sampling": 0.00025237195187165776,
+          "integrand": 0.0012027834973262035,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036655141711229946,
+          "other": 7.897451336898371e-05,
+          "total": 0.0019144047754010695
+        },
+        {
+          "parameterization": 1.1693711229946558e-05,
+          "canonical_sampling": 0.0002307393262032086,
+          "integrand": 0.0011945457219251345,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003608232834224599,
+          "other": 6.221913368983857e-05,
+          "total": 0.001860021176470588
+        },
+        {
+          "parameterization": 1.1156417112299466e-05,
+          "canonical_sampling": 0.0002194213796791444,
+          "integrand": 0.0011950049465240637,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003574183957219253,
+          "other": 5.2452791443850484e-05,
+          "total": 0.0018354539304812833
+        },
+        {
+          "parameterization": 1.2238780748663285e-05,
+          "canonical_sampling": 0.00023725519251336903,
+          "integrand": 0.0012076451871657757,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003738589893048129,
+          "other": 6.61230962566838e-05,
+          "total": 0.0018971212459893048
+        },
+        {
+          "parameterization": 1.3001614973261937e-05,
+          "canonical_sampling": 0.0002455482941176471,
+          "integrand": 0.0012253292994652402,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00037969401069518755,
+          "other": 7.416007486630996e-05,
+          "total": 0.001937733294117647
+        },
+        {
+          "parameterization": 1.329913368983978e-05,
+          "canonical_sampling": 0.00025689354010695185,
+          "integrand": 0.0012266189839572179,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003883164919786096,
+          "other": 8.221085561497458e-05,
+          "total": 0.0019673390053475937
+        },
+        {
+          "parameterization": 1.3276037433154991e-05,
+          "canonical_sampling": 0.0002512386737967913,
+          "integrand": 0.001210624363636364,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00038233083957219265,
+          "other": 7.721797326203203e-05,
+          "total": 0.0019346878877005349
+        }
+      ],
+      "displayed_result": {
+        "re": -2.7444751009479774e-05,
+        "im": -1.2229214425310324e-20
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-T-1.json",
+      "component": "T",
+      "x_index": 1,
+      "xs": [
+        0.61,
+        0.23,
+        0.47,
+        0.79,
+        0.37,
+        0.83
+      ],
+      "samples": 1616,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.1845666460396001e-05,
+          "standard_error_seconds_per_sample": 2.454464036433428e-07,
+          "percentage_of_total": 0.6366056161676429
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00022857095358910892,
+          "standard_error_seconds_per_sample": 3.1933269431958094e-06,
+          "percentage_of_total": 12.283779324203255
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.0011939443886138613,
+          "standard_error_seconds_per_sample": 1.781259939725081e-06,
+          "percentage_of_total": 64.16453694054269
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 6.203112685643566e-05,
+          "standard_error_seconds_per_sample": 2.6474862816889353e-06,
+          "percentage_of_total": 3.3336548742141696
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.0003643621775990099,
+          "standard_error_seconds_per_sample": 2.4578409324076586e-06,
+          "percentage_of_total": 19.581423244872244
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0018607543131188117,
+          "standard_error_seconds_per_sample": 1.0041204702718351e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.1017782178217642e-05,
+          "canonical_sampling": 0.00021689469306930692,
+          "integrand": 0.0011869058564356434,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00035759236138613857,
+          "other": 5.26224108910896e-05,
+          "total": 0.001825033103960396
+        },
+        {
+          "parameterization": 1.1918792079207999e-05,
+          "canonical_sampling": 0.00022879185148514847,
+          "integrand": 0.00119733298019802,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036539816336633653,
+          "other": 6.335308415841585e-05,
+          "total": 0.0018667948712871288
+        },
+        {
+          "parameterization": 1.2345183168317188e-05,
+          "canonical_sampling": 0.00023578815346534646,
+          "integrand": 0.0011969242128712868,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003653090841584157,
+          "other": 6.839278217821783e-05,
+          "total": 0.001878759415841584
+        },
+        {
+          "parameterization": 1.2394079207920676e-05,
+          "canonical_sampling": 0.00023510170792079215,
+          "integrand": 0.0011933031782178209,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036558851980198045,
+          "other": 6.752077227722823e-05,
+          "total": 0.0018739082574257425
+        },
+        {
+          "parameterization": 1.239536138613836e-05,
+          "canonical_sampling": 0.0002359206089108912,
+          "integrand": 0.001199370485148515,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003708363663366335,
+          "other": 6.807934158415828e-05,
+          "total": 0.0018866021633663365
+        },
+        {
+          "parameterization": 1.1093198019801942e-05,
+          "canonical_sampling": 0.00021973192079207928,
+          "integrand": 0.0011906387871287133,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00035801634653465374,
+          "other": 5.431931683168257e-05,
+          "total": 0.0018337995693069307
+        },
+        {
+          "parameterization": 1.1006683168316632e-05,
+          "canonical_sampling": 0.00021798455940594074,
+          "integrand": 0.0011877661237623765,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003560554158415841,
+          "other": 5.28143811881186e-05,
+          "total": 0.0018256271633663365
+        },
+        {
+          "parameterization": 1.2594252475247572e-05,
+          "canonical_sampling": 0.00023835413366336632,
+          "integrand": 0.0011993134851485147,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00037610116336633646,
+          "other": 6.914692574257436e-05,
+          "total": 0.0018955099603960395
+        }
+      ],
+      "displayed_result": {
+        "re": 4.242407717333056e-09,
+        "im": 3.3980339416269554e-26
+      }
+    },
+    {
+      "mode": "vacuum",
+      "point": "near_lc",
+      "E": 1.05,
+      "k": 1.0,
+      "file": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-T-2.json",
+      "component": "T",
+      "x_index": 2,
+      "xs": [
+        0.42,
+        0.67,
+        0.21,
+        0.56,
+        0.73,
+        0.35
+      ],
+      "samples": 1513,
+      "minimal_integrand": false,
+      "summary": {
+        "sampling other": {
+          "category": "sampling other",
+          "mean_seconds_per_sample": 1.2980906610275667e-05,
+          "standard_error_seconds_per_sample": 4.169560989029935e-07,
+          "percentage_of_total": 0.6733491683915499
+        },
+        "canonical sampling": {
+          "category": "canonical sampling",
+          "mean_seconds_per_sample": 0.00024586194978070173,
+          "standard_error_seconds_per_sample": 5.430643873308624e-06,
+          "percentage_of_total": 12.753418878532768
+        },
+        "physical other": {
+          "category": "physical other",
+          "mean_seconds_per_sample": 0.001219104770352965,
+          "standard_error_seconds_per_sample": 9.451126428057723e-06,
+          "percentage_of_total": 63.23773893030942
+        },
+        "canonical physical": {
+          "category": "canonical physical",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "event processing": {
+          "category": "event processing",
+          "mean_seconds_per_sample": 0.0,
+          "standard_error_seconds_per_sample": 0.0,
+          "percentage_of_total": 0.0
+        },
+        "other/overhead": {
+          "category": "other/overhead",
+          "mean_seconds_per_sample": 7.196346016081915e-05,
+          "standard_error_seconds_per_sample": 3.919071586347191e-06,
+          "percentage_of_total": 3.7329084561403345
+        },
+        "evaluators": {
+          "category": "evaluators",
+          "mean_seconds_per_sample": 0.00037790099330966306,
+          "standard_error_seconds_per_sample": 4.690589955411687e-06,
+          "percentage_of_total": 19.60258456662593
+        },
+        "Total": {
+          "category": "Total",
+          "mean_seconds_per_sample": 0.0019278120802144246,
+          "standard_error_seconds_per_sample": 2.2102550611404313e-05,
+          "percentage_of_total": 100.0
+        }
+      },
+      "batches": [
+        {
+          "parameterization": 1.3912205263157747e-05,
+          "canonical_sampling": 0.0002536829315789474,
+          "integrand": 0.0012062752263157887,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00038582511578947356,
+          "other": 8.015423684210629e-05,
+          "total": 0.0019398497157894737
+        },
+        {
+          "parameterization": 1.3883999999999923e-05,
+          "canonical_sampling": 0.0002545865767195768,
+          "integrand": 0.0012035677671957679,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003776473121693123,
+          "other": 8.026722222222128e-05,
+          "total": 0.0019299528783068782
+        },
+        {
+          "parameterization": 1.1857444444444482e-05,
+          "canonical_sampling": 0.00022946532804232802,
+          "integrand": 0.0011954404973544962,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00036268830158730174,
+          "other": 6.103537566137665e-05,
+          "total": 0.001860486947089947
+        },
+        {
+          "parameterization": 1.0967507936507842e-05,
+          "canonical_sampling": 0.00022105776190476192,
+          "integrand": 0.0011965378518518518,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003593923439153439,
+          "other": 5.306560317460329e-05,
+          "total": 0.0018410210687830688
+        },
+        {
+          "parameterization": 1.226746560846576e-05,
+          "canonical_sampling": 0.0002336104708994708,
+          "integrand": 0.0011985399523809532,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003671418359788359,
+          "other": 6.406082010581931e-05,
+          "total": 0.001875620544973545
+        },
+        {
+          "parameterization": 1.399453968253968e-05,
+          "canonical_sampling": 0.000258104417989418,
+          "integrand": 0.0012451999947089938,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.0003925014497354495,
+          "other": 7.926129629629713e-05,
+          "total": 0.001989061698412698
+        },
+        {
+          "parameterization": 1.4072878306878246e-05,
+          "canonical_sampling": 0.0002618012539682539,
+          "integrand": 0.0012492880158730146,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00039214214285714295,
+          "other": 8.30968042328053e-05,
+          "total": 0.002000401095238095
+        },
+        {
+          "parameterization": 1.2891211640211659e-05,
+          "canonical_sampling": 0.0002545868571428572,
+          "integrand": 0.0012579888571428556,
+          "canonical_physical": 0.0,
+          "event_processing": 0.0,
+          "evaluator": 0.00038586944444444436,
+          "other": 7.476632275132391e-05,
+          "total": 0.001986102693121693
+        }
+      ],
+      "displayed_result": {
+        "re": 7.057430457004072e-05,
+        "im": 8.231260483445382e-23
+      }
+    }
+  ],
+  "worker_limit_for_test": 6,
+  "original_scan_limit": 60,
+  "original_scan_deadline": "2026-10-19T05:19:29.104704+00:00",
+  "interpretation": "Mean worker-time per integrand evaluation. Each random-sample job evaluates T and L at1000 common coordinates; shared timing statistics are not independent per component. Default stability, UV and evaluator settings retained. Includes different thermal/vacuum cut catalogues and natural precision escalation; not a same-cut, same-precision isolation of distribution functions.",
+  "summary": [
+    {
+      "E": 1.0,
+      "k": 0.5,
+      "samples_per_component": 1000,
+      "thermal_total_ms": 63.781946000000005,
+      "vacuum_total_ms": 2.122528,
+      "total_ratio": 30.049990388819374,
+      "thermal_core_ms": 60.39381700000001,
+      "vacuum_core_ms": 1.367805,
+      "core_ratio": 44.15382090283338,
+      "thermal_quad_percent": 12.6,
+      "vacuum_quad_percent": 0.1
+    },
+    {
+      "E": 1.05,
+      "k": 1.0,
+      "samples_per_component": 1000,
+      "thermal_total_ms": 118.975917,
+      "vacuum_total_ms": 2.108049,
+      "total_ratio": 56.43887642080426,
+      "thermal_core_ms": 110.735359,
+      "vacuum_core_ms": 1.3490339999999998,
+      "core_ratio": 82.08492817823718,
+      "thermal_quad_percent": 74.2,
+      "vacuum_quad_percent": 0.15
+    }
+  ],
+  "configuration_audit": {
+    "models_byte_identical": true,
+    "runtime_settings_identical_after_overrides": true,
+    "generation_difference": "medium.mode thermodynamic_equilibrium vs vacuum; paths differ",
+    "ordinary_cuts_per_graph": {
+      "GL0": 3,
+      "GL2": 4
+    },
+    "thermal_orientations": {
+      "GL0": 32,
+      "GL2": 32
+    },
+    "vacuum_orientations": {
+      "GL0": 14,
+      "GL2": 18
+    },
+    "thermal_generated_evaluators": {
+      "GL0": 15,
+      "GL2": 21
+    },
+    "vacuum_generated_evaluators": {
+      "GL0": 5,
+      "GL2": 5
+    }
+  }
+}

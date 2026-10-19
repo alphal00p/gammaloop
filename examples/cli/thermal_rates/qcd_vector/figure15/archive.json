@@ -1,0 +1,19 @@
+{
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "host": "itphlies",
+  "archive": "/shared/kaapo/gammaloop/artifacts/figure15-baseline-116767bd3-20261019T094021Z/artifacts.tar.zst",
+  "sha256": "f650f2e21cbae270dbebb4a9c3e4a62469dce9ea080b38178af2a31985a1d24a",
+  "bytes": 467831116,
+  "content_manifest": "/shared/kaapo/gammaloop/artifacts/figure15-baseline-116767bd3-20261019T094021Z/contents.json",
+  "content_manifest_sha256": "c66e89bba896c159269355eb3c2268fee5f56f77b8d6c3fc017d600b681d384e",
+  "entry_count": 54020,
+  "logical_bytes": 5270599702,
+  "verified": {
+    "zstd_integrity": true,
+    "tar_compare_matches_originals": true
+  },
+  "paths_in_archive": "Original absolute paths with the leading slash removed. Extract into a separate directory.",
+  "checkout_artifacts_member": "shared/kaapo/gammaloop/gammaloop-thermal-rates/examples/cli/thermal_rates/qcd_vector/figure15",
+  "baseline_executable_member": "tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+  "preserved_unpacked_checkout": "/shared/kaapo/gammaloop/artifacts/figure15-baseline-116767bd3-20261019T094021Z/checkout-artifacts"
+}

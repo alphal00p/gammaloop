@@ -1,0 +1,33 @@
+{
+  "status": "passed",
+  "completed_utc": "2026-10-19T09:47:38.839971+00:00",
+  "checks": [
+    "all Python sources compile",
+    "35 unique finite points and quota transitions",
+    "reference-normalized precision independent of pull; unknown reference, invalid sample and insufficient training rejected",
+    "forced five-second deadline kills controller and child process group and finalizes stable JSON/CSV"
+  ],
+  "forced_hard_cutoff": {
+    "controller_pid": 3364736,
+    "child_pid": 3364738,
+    "controller_exit_code": -9,
+    "target_group": 3364736,
+    "watchdog_pid": 3364737,
+    "all_group_compute_dead": true,
+    "registered_deadline_utc": "2026-10-19T09:47:38.366951+00:00",
+    "observed_cutoff_utc": "2026-10-19T09:47:38.367374+00:00",
+    "deadline_delay_seconds": 0.0004227161407470703,
+    "final_manifest_status": "budget_finished",
+    "live_elapsed_frozen_after_cutoff": true
+  },
+  "benchmark_processes_launched": 0,
+  "source_hashes": {
+    "gate.py": "ad44608dee7038690e2afa84f29edee0f3843433513944e553521cf036640376",
+    "campaign.py": "f32241630e670616a0fd52b54a653553792234fab04f748b5ac858329ecd881c",
+    "plot.py": "03c6d0f47706d63e602ee4c736ef49c22460d2e103bccd6876ba171df2a1ded2",
+    "render_on_exit.py": "4238db705e5c8cf02242fc5200049740f71ff8cd6633faa60d34ceb8349745a9",
+    "watchdog.py": "5ef763f86dbcbd9c069f8ef6a7a0c8b6a681f926667c597e75da8146f3733d55",
+    "common.py": "60ab251cabb10ac75214d6caf974af595fc3e1795ea85f89f490160bd0116406",
+    "validation.py": "0a238b945af5900a707869122644817fe74e708c944e5b62a30cb9a7adf134e4"
+  }
+}

@@ -1,0 +1,201 @@
+{
+  "source_commit": "116767bd3ed30491a2b15559d228171d20082abe",
+  "started_utc": "2026-10-18T19:10:55.661795+00:00",
+  "binary": "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+  "binary_sha256": "9f4f7bc9b5f5d1caffa8235cb88b93429b90677aabe9e05420dd155e03e8de24",
+  "generation_command": [
+    "taskset",
+    "-c",
+    "242-247",
+    "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+    "-n",
+    "-s",
+    "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-state",
+    "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum.toml",
+    "run",
+    "model",
+    "NLO_T",
+    "NLO_L",
+    "save"
+  ],
+  "generation_pid": 3275297,
+  "comparison_workers": 6,
+  "comparison_cpu_affinity": [
+    242,
+    243,
+    244,
+    245,
+    246,
+    247
+  ],
+  "user_authorized_above_60": true,
+  "full_scan_deadline_unchanged": "2026-10-19T05:19:29.104704+00:00",
+  "thermal_source_state": "/tmp/qcd-fig15-projectors-20261018/direct-state",
+  "vacuum_source_state": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-state",
+  "root": "/tmp/qcd-vacuum-timing-20261018T191055Z",
+  "test_design": "Matched fresh 1000 samples per component plus three fixed x-space benchmarks, full default stability; only generation medium differs",
+  "common_random_seed": 2026101819,
+  "fixed_points": [
+    [
+      0.17,
+      0.31,
+      0.43,
+      0.29,
+      0.53,
+      0.71
+    ],
+    [
+      0.61,
+      0.23,
+      0.47,
+      0.79,
+      0.37,
+      0.83
+    ],
+    [
+      0.42,
+      0.67,
+      0.21,
+      0.56,
+      0.73,
+      0.35
+    ]
+  ],
+  "jobs": [
+    {
+      "label": "thermal-timelike",
+      "mode": "thermal",
+      "E": 1.0,
+      "k": 0.5,
+      "pid": 3324575,
+      "command": [
+        "taskset",
+        "-c",
+        "242,243,244",
+        "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+        "-n",
+        "--read-only-state",
+        "-s",
+        "/tmp/qcd-fig15-projectors-20261018/direct-state",
+        "run",
+        "-c",
+        "set process -p vector_T_nlo -i NLO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; set process -p vector_L_nlo -i NLO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; integrate -p vector_T_nlo -i NLO -p vector_L_nlo -i NLO --n-cores 3 --workspace-path /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/integration --batch-timing 0.5 --renderer tabled --no-stream-iterations --no-stream-updates --write-results-for-each-iteration; bench -p vector_T_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-T-0.json; bench -p vector_T_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-T-1.json; bench -p vector_T_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-T-2.json; bench -p vector_L_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-L-0.json; bench -p vector_L_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-L-1.json; bench -p vector_L_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike/bench-L-2.json; display integrand -p vector_T_nlo -i NLO --category cuts orientation"
+      ],
+      "cpus": [
+        242,
+        243,
+        244
+      ],
+      "workers": 3,
+      "started_utc": "2026-10-18T19:13:06.501823+00:00",
+      "started_epoch": 1792350786.5018516,
+      "status": "completed",
+      "directory": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-timelike",
+      "exit_code": 0,
+      "wall_seconds": 72.62464666366577,
+      "ended_utc": "2026-10-18T19:14:19.126733+00:00"
+    },
+    {
+      "label": "thermal-near_lc",
+      "mode": "thermal",
+      "E": 1.05,
+      "k": 1.0,
+      "pid": 3324577,
+      "command": [
+        "taskset",
+        "-c",
+        "245,246,247",
+        "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+        "-n",
+        "--read-only-state",
+        "-s",
+        "/tmp/qcd-fig15-projectors-20261018/direct-state",
+        "run",
+        "-c",
+        "set process -p vector_T_nlo -i NLO kv kinematics.externals.data.momenta=[[1.05,0.0,0.0,1.0]] kinematics.e_cm=0.3201562118716425 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; set process -p vector_L_nlo -i NLO kv kinematics.externals.data.momenta=[[1.05,0.0,0.0,1.0]] kinematics.e_cm=0.3201562118716425 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; integrate -p vector_T_nlo -i NLO -p vector_L_nlo -i NLO --n-cores 3 --workspace-path /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/integration --batch-timing 0.5 --renderer tabled --no-stream-iterations --no-stream-updates --write-results-for-each-iteration; bench -p vector_T_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-T-0.json; bench -p vector_T_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-T-1.json; bench -p vector_T_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-T-2.json; bench -p vector_L_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-L-0.json; bench -p vector_L_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-L-1.json; bench -p vector_L_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc/bench-L-2.json; display integrand -p vector_T_nlo -i NLO --category cuts orientation"
+      ],
+      "cpus": [
+        245,
+        246,
+        247
+      ],
+      "workers": 3,
+      "started_utc": "2026-10-18T19:13:06.504495+00:00",
+      "started_epoch": 1792350786.5045092,
+      "status": "completed",
+      "directory": "/tmp/qcd-vacuum-timing-20261018T191055Z/thermal-near_lc",
+      "exit_code": 0,
+      "wall_seconds": 118.21414995193481,
+      "ended_utc": "2026-10-18T19:15:04.718916+00:00"
+    },
+    {
+      "label": "vacuum-timelike",
+      "mode": "vacuum",
+      "E": 1.0,
+      "k": 0.5,
+      "pid": 3358381,
+      "command": [
+        "taskset",
+        "-c",
+        "242,243,244",
+        "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+        "-n",
+        "--read-only-state",
+        "-s",
+        "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-state",
+        "run",
+        "-c",
+        "set process -p vector_T_nlo -i NLO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; set process -p vector_L_nlo -i NLO kv kinematics.externals.data.momenta=[[1.0,0.0,0.0,0.5]] kinematics.e_cm=0.8660254037844386 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; integrate -p vector_T_nlo -i NLO -p vector_L_nlo -i NLO --n-cores 3 --workspace-path /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/integration --batch-timing 0.5 --renderer tabled --no-stream-iterations --no-stream-updates --write-results-for-each-iteration; bench -p vector_T_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-T-0.json; bench -p vector_T_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-T-1.json; bench -p vector_T_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-T-2.json; bench -p vector_L_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-L-0.json; bench -p vector_L_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-L-1.json; bench -p vector_L_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike/bench-L-2.json; display integrand -p vector_T_nlo -i NLO --category cuts orientation"
+      ],
+      "cpus": [
+        242,
+        243,
+        244
+      ],
+      "workers": 3,
+      "started_utc": "2026-10-18T19:14:19.630286+00:00",
+      "started_epoch": 1792350859.6303267,
+      "status": "completed",
+      "directory": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-timelike",
+      "exit_code": 0,
+      "wall_seconds": 20.53675150871277,
+      "ended_utc": "2026-10-18T19:14:40.167270+00:00"
+    },
+    {
+      "label": "vacuum-near_lc",
+      "mode": "vacuum",
+      "E": 1.05,
+      "k": 1.0,
+      "pid": 3377345,
+      "command": [
+        "taskset",
+        "-c",
+        "242,243,244",
+        "/tmp/thermal-convergence-20261018T125832Z/bin/gammaloop",
+        "-n",
+        "--read-only-state",
+        "-s",
+        "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-state",
+        "run",
+        "-c",
+        "set process -p vector_T_nlo -i NLO kv kinematics.externals.data.momenta=[[1.05,0.0,0.0,1.0]] kinematics.e_cm=0.3201562118716425 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; set process -p vector_L_nlo -i NLO kv kinematics.externals.data.momenta=[[1.05,0.0,0.0,1.0]] kinematics.e_cm=0.3201562118716425 general.generate_events=false integrator.n_start=1000 integrator.n_increase=0 integrator.n_max=1000 integrator.seed=2026101819 integrator.target_relative_accuracy=0.0; integrate -p vector_T_nlo -i NLO -p vector_L_nlo -i NLO --n-cores 3 --workspace-path /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/integration --batch-timing 0.5 --renderer tabled --no-stream-iterations --no-stream-updates --write-results-for-each-iteration; bench -p vector_T_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-T-0.json; bench -p vector_T_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-T-1.json; bench -p vector_T_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-T-2.json; bench -p vector_L_nlo -i NLO -x 0.17 0.31 0.43 0.29 0.53 0.71 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-L-0.json; bench -p vector_L_nlo -i NLO -x 0.61 0.23 0.47 0.79 0.37 0.83 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-L-1.json; bench -p vector_L_nlo -i NLO -x 0.42 0.67 0.21 0.56 0.73 0.35 --duration 3s --n-batches 8 --json-output /tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc/bench-L-2.json; display integrand -p vector_T_nlo -i NLO --category cuts orientation"
+      ],
+      "cpus": [
+        242,
+        243,
+        244
+      ],
+      "workers": 3,
+      "started_utc": "2026-10-18T19:14:40.670659+00:00",
+      "started_epoch": 1792350880.670679,
+      "status": "completed",
+      "directory": "/tmp/qcd-vacuum-timing-20261018T191055Z/vacuum-near_lc",
+      "exit_code": 0,
+      "wall_seconds": 20.538864135742188,
+      "ended_utc": "2026-10-18T19:15:01.209736+00:00"
+    }
+  ],
+  "status": "completed",
+  "updated_utc": "2026-10-18T19:15:04.719012+00:00",
+  "finished_utc": "2026-10-18T19:15:04.719594+00:00"
+}
