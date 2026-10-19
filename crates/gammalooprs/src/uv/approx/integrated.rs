@@ -2696,6 +2696,172 @@ mod tests {
     }
 
     #[test]
+    fn physical_four_components_keep_joint_dimensional_angular_moments() -> Result<()> {
+        use crate::numerator::symbolica_ext::NumeratorAtomExt;
+
+        test_initialise()?;
+        let vakint = crate::utils::vakint()?;
+        let settings = VakintSettings::default().true_settings();
+        assert_eq!(
+            settings.tensor_reduction_method,
+            vakint::TensorReductionMethod::FeynKit
+        );
+        let integrated = Integrated::new(vakint, &settings);
+        let epsilon_symbol = vakint_symbol!(&settings.epsilon_symbol);
+        let epsilon = Atom::var(epsilon_symbol);
+        assert_eq!(epsilon_symbol, GS.dim_epsilon);
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let spectator = parse!("(angular_lift_spectator_a+angular_lift_spectator_b)^11");
+        let component = |loop_id, axis| function!(GS.loop_mom, loop_id, GS.cind(axis));
+        let physical_pair = |left, right| {
+            Atom::add_many((0..4).map(|axis| {
+                let sign = if (Minkowski {}).is_neg(axis) { -1 } else { 1 };
+                Atom::num(sign) * component(left, axis) * component(right, axis)
+            }))
+        };
+        let k_four = physical_pair(1, 1);
+        let l_four = physical_pair(2, 2);
+        let mixed_four = physical_pair(1, 2);
+        let k = function!(vakint::symbols::S.k, 1);
+        let l = function!(vakint::symbols::S.k, 2);
+        let kk = vakint::symbols::S.dot(&k, &k);
+        let ll = vakint::symbols::S.dot(&l, &l);
+        let kl = vakint::symbols::S.dot(&k, &l);
+        let invariant_a = &kk * &ll;
+        let invariant_b = kl.pow(2);
+        let keys = [kk.clone(), ll.clone(), kl.clone()];
+        let assert_coefficients_zero = |label: &str, expression: &Atom| -> Result<()> {
+            let rows = expression
+                .coefficient_list_exact(&keys)
+                .ok_or_else(|| eyre!("{label}: bounded invariant collection refused"))?;
+            for (_, coefficient) in rows {
+                assert!(coefficient.together().is_zero(), "{label}: {coefficient}");
+            }
+            Ok(())
+        };
+
+        // Joint O(D) isotropy gives T_mnrs=a*g_mn*g_rs
+        // + b*(g_mr*g_ns+g_ms*g_nr). The two full-D contractions
+        // determine a,b from kk*ll and (k.l)^2, independently of a projector.
+        let denominator = &dimension * (&dimension - Atom::one()) * (&dimension + Atom::num(2));
+        let a = ((&dimension + Atom::one()) * &invariant_a - Atom::num(2) * &invariant_b)
+            / &denominator;
+        let b = (&dimension * &invariant_b - &invariant_a) / &denominator;
+        assert_coefficients_zero(
+            "isotropy full trace",
+            &(dimension.pow(2) * &a + Atom::num(2) * &dimension * &b - &invariant_a),
+        )?;
+        assert_coefficients_zero(
+            "isotropy crossed trace",
+            &(&dimension * &a + &dimension * (&dimension + Atom::one()) * &b - &invariant_b),
+        )?;
+        let rank = Atom::num(4);
+        let expected_kl = rank.pow(2) * &a + Atom::num(2) * &rank * &b;
+        let expected_mixed_square = &rank * &a + &rank * (&rank + Atom::one()) * &b;
+        assert_coefficients_zero(
+            "physical-four double trace",
+            &(&expected_kl
+                - (Atom::num(8) * (Atom::num(2) * &dimension + Atom::one()) * &invariant_a
+                    + Atom::num(8) * (&dimension - Atom::num(4)) * &invariant_b)
+                    / &denominator),
+        )?;
+        assert_coefficients_zero(
+            "physical-four crossed trace",
+            &(&expected_mixed_square
+                - (Atom::num(4) * (&dimension - Atom::num(4)) * &invariant_a
+                    + Atom::num(4) * (Atom::num(5) * &dimension - Atom::num(2)) * &invariant_b)
+                    / &denominator),
+        )?;
+
+        for (label, physical, expected) in [
+            ("K", k_four.clone(), Atom::num(4) * &kk / &dimension),
+            ("L", l_four.clone(), Atom::num(4) * &ll / &dimension),
+            ("K L", &k_four * &l_four, expected_kl.clone()),
+            (
+                "M squared",
+                mixed_four.pow(2),
+                expected_mixed_square.clone(),
+            ),
+        ] {
+            let source = &spectator * physical;
+            let retained_source = source.clone();
+            let mut term = vakint::VakintTerm {
+                // This connected vacuum topology requires one JOINT angular
+                // average; its mixed fourth moments do not factor into (4/D)^2.
+                integral: vakint::vakint_parse!("topo(I2L(angular_lift_mass_squared,1,1,1))")
+                    .unwrap(),
+                numerator: to_vakint_numerator(&source)?,
+                vectors: vec![("k".into(), 1), ("k".into(), 2)],
+            };
+            term.tensor_reduce(vakint, &settings)?;
+            let resolved = integrated.simplify_projected_numerator(&term.numerator, 0)?;
+            assert!(
+                resolved
+                    .pattern_match(&spectator.to_pattern(), None, None)
+                    .next()
+                    .is_some(),
+                "{label}: powered scalar spectator must remain a literal factor"
+            );
+            // Strip only the unchanged spectator. Collect complete radial
+            // invariants; together receives their rational coefficients only.
+            let actual = resolved.replace(spectator.to_pattern()).with(1);
+            assert_coefficients_zero(label, &(actual - expected))?;
+            assert_eq!(source, retained_source, "{label}: source mutation");
+        }
+
+        // Freezing the angular dimension at four before Laurent expansion
+        // loses these independently nonzero finite rank-four coefficients.
+        for (label, expected, wrong, finite_control, double_pole_control) in [
+            (
+                "K L",
+                expected_kl,
+                invariant_a.clone(),
+                Atom::num((19, 18)) * &invariant_a - Atom::num((2, 9)) * &invariant_b,
+                Atom::num((31, 36)) * &invariant_a - Atom::num((1, 3)) * &invariant_b,
+            ),
+            (
+                "M squared",
+                expected_mixed_square,
+                invariant_b.clone(),
+                -Atom::num((1, 9)) * &invariant_a + Atom::num((17, 18)) * &invariant_b,
+                -Atom::num((1, 6)) * &invariant_a + Atom::num((25, 36)) * &invariant_b,
+            ),
+        ] {
+            assert_coefficients_zero(
+                "early-four angular value",
+                &(expected.replace(epsilon_symbol).with(0) - &wrong),
+            )?;
+            let difference = expected - wrong;
+            let lost = truncate(&series(&(&difference / &epsilon), 0)?, true);
+            assert_coefficients_zero(label, &(lost - &finite_control))?;
+            // A double enclosing pole consumes the independently retained
+            // epsilon-squared angular coefficient as a finite contribution.
+            let double_pole = series(&(&difference / epsilon.pow(2)), 0)?;
+            assert_coefficients_zero(
+                "double-pole angular Laurent series",
+                &(double_pole.to_atom() - &finite_control / &epsilon - &double_pole_control),
+            )?;
+            assert_coefficients_zero(
+                "double-pole finite angular loss",
+                &(truncate(&double_pole, true) - &double_pole_control),
+            )?;
+            for control in [&finite_control, &double_pole_control] {
+                let rows = control
+                    .coefficient_list_exact(&keys)
+                    .ok_or_else(|| eyre!("{label}: finite negative-control collection refused"))?;
+                assert_eq!(rows.len(), 2);
+                assert!(
+                    rows.iter()
+                        .all(|(_, coefficient)| !coefficient.together().is_zero())
+                );
+            }
+        }
+        // This admits an angular-lift boundary. It is not an actual D09 R2
+        // numerator, UV/IR separation or finite renormalization-condition proof.
+        Ok(())
+    }
+
+    #[test]
     fn projected_loop_dummies_do_not_capture_retained_numeric_ports() {
         test_initialise().unwrap();
         let vakint = crate::utils::vakint().unwrap();
