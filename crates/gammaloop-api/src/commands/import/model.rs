@@ -114,17 +114,18 @@ fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
     Ok(())
 }
 
-/// Releases before 1.0.0 silently discard particle chemical potentials.
+/// Releases before 1.0.0 silently discard particle chemical potentials; the
+/// isolated source-module import used for cut-state declarations was added in 1.0.1.
 #[cfg(feature = "ufo-import")]
 fn require_chemical_potential_loader(version: &str, python: &str) -> eyre::Result<()> {
-    if version
+    let release = version
         .split('.')
-        .next()
-        .and_then(|major| major.parse::<u64>().ok())
-        .is_none_or(|major| major < 1)
-    {
+        .take(3)
+        .map(str::parse::<u64>)
+        .collect::<std::result::Result<Vec<_>, _>>();
+    if !release.is_ok_and(|parts| parts.as_slice() >= [1, 0, 1].as_slice()) {
         return Err(eyre!(
-            "UFO import requires ufo-model-loader>=1.0.0; found {version}. Upgrade the loader in Python environment {python}."
+            "UFO import requires ufo-model-loader>=1.0.1; found {version}. Upgrade the loader in Python environment {python}."
         ));
     }
     Ok(())
@@ -150,7 +151,7 @@ pub(crate) fn load_ufo_model(
             Ok(version) => version.extract()?,
             Err(e) if e.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
                 return Err(eyre!(
-                    "UFO import requires ufo-model-loader>=1.0.0, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
+                    "UFO import requires ufo-model-loader>=1.0.1, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
                 ));
             }
             Err(e) => {
@@ -197,16 +198,28 @@ pub(crate) fn load_ufo_model(
         // The loader imports this module but does not serialize GammaLoop's
         // explicit BRST cut-state declaration. Preserve it at the UFO boundary,
         // rather than reconstructing physical partners from mass degeneracies.
-        let module_name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| eyre::eyre!("Invalid UFO module path: {}", path.display()))?;
-        let module = sys.getattr("modules")?.get_item(module_name)?;
-        if module.hasattr("covariant_cut_multiplets")? {
-            let declaration: String = py
-                .import("json")?
+        // The loader isolates same-name UFO imports and restores sys.modules,
+        // so read the declaration from the source module it imports.
+        let source = py
+            .import("pathlib")?
+            .getattr("Path")?
+            .call1((path.to_string_lossy().as_ref(),))?;
+        let imported = py
+            .import("ufo_model_loader.raw")?
+            .getattr("imported_ufo_module")?
+            .call1((source,))?;
+        let module = imported.call_method0("__enter__")?;
+        let declaration = (|| -> PyResult<Option<String>> {
+            if !module.hasattr("covariant_cut_multiplets")? {
+                return Ok(None);
+            }
+            py.import("json")?
                 .call_method1("dumps", (module.getattr("covariant_cut_multiplets")?,))?
-                .extract()?;
+                .extract()
+                .map(Some)
+        })();
+        imported.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+        if let Some(declaration) = declaration? {
             let mut serialized: serde_json::Value = serde_json::from_str(&model_json)?;
             serialized["covariant_cut_multiplets"] = serde_json::from_str(&declaration)?;
             model_json = serde_json::to_string(&serialized)?;
@@ -963,14 +976,14 @@ mod tests {
     #[cfg(feature = "ufo-import")]
     #[test]
     fn ufo_import_rejects_loader_without_chemical_potential_support() {
-        for version in ["0.1.8", "dev"] {
+        for version in ["0.1.8", "1.0.0", "dev"] {
             let error = require_chemical_potential_loader(version, "python")
                 .unwrap_err()
                 .to_string();
-            assert!(error.contains("ufo-model-loader>=1.0.0"), "{error}");
+            assert!(error.contains("ufo-model-loader>=1.0.1"), "{error}");
             assert!(error.contains(version), "{error}");
         }
-        for version in ["1.0.0", "12.3"] {
+        for version in ["1.0.1", "1.1.0", "2.0.0", "12.3"] {
             require_chemical_potential_loader(version, "python").unwrap();
         }
     }
