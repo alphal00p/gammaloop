@@ -217,6 +217,23 @@ fn ltd_cross_section_rejects_runtime_coincident_poles_after_reload() -> eyre::Re
                 cross_section.integrand.as_mut().unwrap(),
                 loaded.integrand.as_mut().unwrap(),
             ] {
+                // The stored generated medium mode is authoritative, including
+                // after reload and when numerical temperature parameters vanish.
+                for mode in [
+                    three_dimensional_reps::MediumMode::ThermodynamicEquilibrium,
+                    three_dimensional_reps::MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    let mut incompatible = integrand.clone();
+                    let ProcessIntegrand::CrossSection(payload) = &mut incompatible else {
+                        unreachable!()
+                    };
+                    payload.settings.general.inverse_temperature = 0.0;
+                    for term in &mut payload.data.graph_terms {
+                        term.graph.param_builder.medium_mode = mode;
+                    }
+                    let error = incompatible.warm_up(&model).unwrap_err();
+                    assert!(error.to_string().contains("LTD supports only vacuum"));
+                }
                 for mass in [1.0, -1.0] {
                     model.get_parameter_mut("mass_scalar_2")?.value =
                         Some(Complex::new_re(F(mass)));

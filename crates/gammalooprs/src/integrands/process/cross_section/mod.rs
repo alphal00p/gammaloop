@@ -2560,6 +2560,11 @@ impl GraphTerm for CrossSectionGraphTerm {
     }
 
     fn warm_up(&mut self, settings: &RuntimeSettings, model: &Model) -> Result<()> {
+        eyre::ensure!(
+            self.graph.param_builder.medium_mode == three_dimensional_reps::MediumMode::Vacuum
+                || !self.integrand.contains_key(&RepresentationMode::Ltd),
+            "LTD supports only vacuum calculations; regenerate this medium integrand with CFF"
+        );
         self.multi_channeling_setup.master_edge_masses.invalidate();
         self.multi_channeling_setup.invalidate_sampling();
         self.graph.validate_real_masses(model)?;
