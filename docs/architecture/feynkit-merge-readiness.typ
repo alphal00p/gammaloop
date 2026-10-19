@@ -286,6 +286,13 @@ linked scripts nor the shim, preserves validation, and leaves compiler-artifact
 ownership separate. Successful Rust compilation is not treated as a successful
 wheel or publication check.
 
+At `bf6f6eaa`, source-only Nix evaluation verifies the repaired filtered tree.
+All 18 notebook-host payload files, both external shim targets and all 251
+audited repository-link paths match the frozen Git contents; source guards
+remain unchanged. This verifies staging only. The actual wheel build, installed
+imports and full latest/snapshot publication checks still require their
+canonical Nix run.
+
 These repairs change no source-level numerical algorithm, indexed API or
 state format 21. They establish no performance improvement or executable
 equality, and do not resolve any historical inconclusive gate. The successful
