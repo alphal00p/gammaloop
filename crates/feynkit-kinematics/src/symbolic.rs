@@ -27,6 +27,10 @@ pub enum SymbolicKinematicsError {
     NonlinearMomentum(Atom),
     #[error("phase-space densities require four-dimensional kinematics")]
     PhaseSpaceDimension,
+    #[error("Weyl-matrix pivot {0:?} is outside the two-by-two matrix")]
+    InvalidWeylPivot([usize; 2]),
+    #[error("Weyl-matrix pivot {0:?} is identically zero")]
+    ZeroWeylPivot([usize; 2]),
 }
 
 /// Symbolic Lorentz kinematics in Spenso's scalar-product notation.

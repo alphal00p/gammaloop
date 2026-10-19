@@ -7,6 +7,107 @@ use insta::assert_snapshot;
 use spenso::{antisym, g, mink, shadowing::IntoAtom, structure::representation::RepName};
 use symbolica::{function, symbol};
 
+#[test]
+fn closed_quartic_invariants_with_two_structure_constants() {
+    test_initialize();
+    let source = parse_lit!(
+        d(
+            cof(Nc),
+            coad(Nc ^ 2 - 1, a),
+            coad(Nc ^ 2 - 1, b),
+            coad(Nc ^ 2 - 1, c),
+            coad(Nc ^ 2 - 1, d)
+        ) * d(
+            coad(Nc ^ 2 - 1),
+            coad(Nc ^ 2 - 1, e),
+            coad(Nc ^ 2 - 1, f),
+            coad(Nc ^ 2 - 1, c),
+            coad(Nc ^ 2 - 1, d)
+        ) * f(
+            coad(Nc ^ 2 - 1, x),
+            coad(Nc ^ 2 - 1, a),
+            coad(Nc ^ 2 - 1, e)
+        ) * f(
+            coad(Nc ^ 2 - 1, x),
+            coad(Nc ^ 2 - 1, b),
+            coad(Nc ^ 2 - 1, f)
+        ),
+        default_namespace = "spenso"
+    );
+    // Invariance on either symmetric rank-four tensor gives CA/3 times
+    // their Gram contraction. Its independent exact SU(3) matrix value is 15/2.
+    let n = Atom::var(CS.nc);
+    let expected =
+        n.clone().pow(2) * (n.clone().pow(2) - Atom::num(1)) * (n.clone().pow(2) + Atom::num(6))
+            / Atom::num(144);
+    let settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
+    let result = simplify_formal_color(&source, settings);
+    assert_eq!(result.expand(), expected.expand());
+    assert_eq!(simplify_formal_color(&result, settings), result);
+    assert_eq!(
+        result
+            .replace(n.to_pattern())
+            .with(Atom::num(3).to_pattern()),
+        Atom::num(15) / Atom::num(2)
+    );
+}
+
+#[test]
+fn seven_generator_trace_with_three_structure_constants() {
+    test_initialize();
+    let n = Atom::var(CS.nc);
+    let adjoint_dimension = n.clone().pow(2) - Atom::num(1);
+    let [a, b, c, d, e, f, g, h] = ["a", "b", "c", "d", "e", "f", "g", "h"].map(|label| {
+        ColorAdjoint {}.to_symbolic([
+            adjoint_dimension.clone(),
+            Atom::var(symbol!(&format!("quartic_capture::{label}"))),
+        ])
+    });
+    let fundamental = ColorFundamental {}.to_symbolic([n.clone()]);
+    let trace = trace!(&fundamental; [&a, &b, &d, &g, &a, &e, &f].map(|a| color_t!(a)));
+    let source =
+        Atom::i() * trace * color_f!(&b, &e, &h) * color_f!(&f, &c, &d) * color_f!(&h, &c, &g);
+    // Expand compact projector words before signed canonicalization. This
+    // removes the zero odd-invariant remainder using the existing tensor
+    // canonicalizer, without a separate color identity for that remainder.
+    let cooking = crate::CookSettings::reversible().with_representation_payloads(true, true);
+    let settings = crate::tensor::AlgebraSettings {
+        color: Some(
+            ColorSimplifySettings::default()
+                .without_one_shot_traces()
+                .with_cof_dimension_invariants(),
+        ),
+        ..Default::default()
+    };
+    let result = SymbolicTensor::infer(cooking.try_cook(source.as_view()).unwrap())
+        .unwrap()
+        .simplify_algebra(&settings)
+        .unwrap()
+        .contract(Default::default())
+        .unwrap()
+        .expand_projectors()
+        .unwrap()
+        .undo_trace()
+        .unwrap()
+        .undo_chain()
+        .unwrap()
+        .expanded(None, false)
+        .unwrap()
+        .canonize()
+        .unwrap()
+        .simplify_algebra(&settings)
+        .unwrap()
+        .into_expression();
+    let result = cooking.uncook(result.as_view());
+    let expected =
+        -(n.clone().pow(2) - Atom::num(1)) * (n.clone().pow(2) - Atom::num(2)) / Atom::num(32);
+    assert_eq!(result.expand(), expected.expand());
+    let fixed = result
+        .replace(n.to_pattern())
+        .with(Atom::num(3).to_pattern());
+    assert_eq!(fixed, -Atom::num(7) / Atom::num(4), "{result}");
+}
+
 macro_rules! fco {
     ($r:ident, $a:tt, $b:tt, $c:tt) => {
         color_f!(

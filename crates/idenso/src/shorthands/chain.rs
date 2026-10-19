@@ -608,7 +608,8 @@ fn chainify_rule(representation: LibraryRep) -> Replacement {
         chainify_endpoints(representation)
             & W_.a_.filter_match(move |a| {
                 matches!(a, Match::FunctionName(a)
-                if *a != T.chain && *a != T.trace && *a != ETS.metric)
+                if *a != T.chain && *a != T.trace && *a != ETS.metric
+                    && !T.is_scalar_metadata(*a))
             })
             & W_.a___.filter_match(no_ports)
             & W_.b___.filter_match(no_ports)
@@ -629,6 +630,11 @@ fn chainified_slot_function(
     let AtomView::Fun(function) = atom else {
         return None;
     };
+    // Scalar metadata can contain representation arguments without owning
+    // matrix endpoints. Its genuine tensor children are still visited below.
+    if T.is_scalar_metadata(function.get_symbol()) {
+        return Some(None);
+    }
     if !representation.is_self_dual()
         || [T.chain, T.trace, ETS.metric].contains(&function.get_symbol())
     {
@@ -1041,6 +1047,33 @@ mod tests {
             // Parsing restores both tensor interfaces and the untouched scalar
             // factor, without distributing any numerator products or powers.
             assert_eq!(net.simple_execute::<()>().unwrap(), input);
+        }
+    }
+
+    #[test]
+    fn chainify_keeps_scalar_representation_metadata_out_of_matrix_words() {
+        use crate::{color::CS, representations::ColorAdjoint};
+
+        let reps = test_initialize();
+        let adjoint = reps.coad_da.to_symbolic([]);
+        let invariant = CS.gram(Atom::num(4), &adjoint, &adjoint);
+        let scalar = symbol!("chainify_scalar_representation_metadata"; Scalar);
+        let indexed_metadata = function!(
+            scalar,
+            reps.coad_da.to_symbolic([Atom::num(99501)]),
+            reps.coad_da.to_symbolic([Atom::num(99502)])
+        );
+        for metadata in [invariant, indexed_metadata] {
+            assert_eq!(metadata.chainify(ColorAdjoint {}.into()), metadata);
+            let tensor = crate::color_f!(
+                slot!(reps.coad_da, 99503),
+                slot!(reps.coad_da, 99504),
+                slot!(reps.coad_da, 99505)
+            );
+            assert_eq!(
+                (&metadata * &tensor).chainify(ColorAdjoint {}.into()),
+                &metadata * tensor.chainify(ColorAdjoint {}.into()),
+            );
         }
     }
 
