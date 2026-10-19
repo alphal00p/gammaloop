@@ -2773,6 +2773,36 @@ mod tests {
                     / &denominator),
         )?;
 
+        // For z=n.P.n, these are <z^2> and <z^3> for a rank-r
+        // projector. Conditional isotropy, Tr(P)=r and P^2=P give
+        // B=(r E2-E3)/(D-1), C=(E2-E3)/(D-1). Keep the same joint
+        // angular dimension for both loop vectors at rank six.
+        let e2 = &rank * (&rank + Atom::num(2)) / (&dimension * (&dimension + Atom::num(2)));
+        let e3 = &e2 * (&rank + Atom::num(4)) / (&dimension + Atom::num(4));
+        let b6 = (&rank * &e2 - &e3) / (&dimension - Atom::one());
+        let c6 = (&e2 - &e3) / (&dimension - Atom::one());
+        let invariant_six_a = &kk * ll.pow(2);
+        let invariant_six_b = &ll * kl.pow(2);
+        let expected_kl_squared = &b6 * &invariant_six_a + (&e3 - &b6) * &invariant_six_b;
+        let expected_mixed_square_l = &c6 * &invariant_six_a + (&e3 - &c6) * &invariant_six_b;
+        let denominator_six = &denominator * (&dimension + Atom::num(4));
+        assert_coefficients_zero(
+            "physical-four rank-six K L squared",
+            &(&expected_kl_squared
+                - (Atom::num(96) * (&dimension + Atom::num(2)) * &invariant_six_a
+                    + Atom::num(96) * (&dimension - Atom::num(4)) * &invariant_six_b)
+                    / &denominator_six),
+        )?;
+        assert_coefficients_zero(
+            "physical-four rank-six M squared L",
+            &(&expected_mixed_square_l
+                - (Atom::num(24) * (&dimension - Atom::num(4)) * &invariant_six_a
+                    + Atom::num(24)
+                        * (Atom::num(7) * &dimension - Atom::num(4))
+                        * &invariant_six_b)
+                    / &denominator_six),
+        )?;
+
         for (label, physical, expected) in [
             ("K", k_four.clone(), Atom::num(4) * &kk / &dimension),
             ("L", l_four.clone(), Atom::num(4) * &ll / &dimension),
@@ -2782,12 +2812,22 @@ mod tests {
                 mixed_four.pow(2),
                 expected_mixed_square.clone(),
             ),
+            (
+                "K L squared",
+                &k_four * l_four.pow(2),
+                expected_kl_squared.clone(),
+            ),
+            (
+                "M squared L",
+                mixed_four.pow(2) * &l_four,
+                expected_mixed_square_l.clone(),
+            ),
         ] {
             let source = &spectator * physical;
             let retained_source = source.clone();
             let mut term = vakint::VakintTerm {
                 // This connected vacuum topology requires one JOINT angular
-                // average; its mixed fourth moments do not factor into (4/D)^2.
+                // average; its mixed moments do not factor into powers of 4/D.
                 integral: vakint::vakint_parse!("topo(I2L(angular_lift_mass_squared,1,1,1))")
                     .unwrap(),
                 numerator: to_vakint_numerator(&source)?,
@@ -2810,7 +2850,7 @@ mod tests {
         }
 
         // Freezing the angular dimension at four before Laurent expansion
-        // loses these independently nonzero finite rank-four coefficients.
+        // loses these independently nonzero finite rank-four and rank-six coefficients.
         for (label, expected, wrong, finite_control, double_pole_control) in [
             (
                 "K L",
@@ -2825,6 +2865,20 @@ mod tests {
                 invariant_b.clone(),
                 -Atom::num((1, 9)) * &invariant_a + Atom::num((17, 18)) * &invariant_b,
                 -Atom::num((1, 6)) * &invariant_a + Atom::num((25, 36)) * &invariant_b,
+            ),
+            (
+                "K L squared",
+                expected_kl_squared,
+                invariant_six_a.clone(),
+                Atom::num((17, 12)) * &invariant_six_a - Atom::num((1, 3)) * &invariant_six_b,
+                Atom::num((199, 144)) * &invariant_six_a - Atom::num((7, 12)) * &invariant_six_b,
+            ),
+            (
+                "M squared L",
+                expected_mixed_square_l,
+                invariant_six_b.clone(),
+                -Atom::num((1, 12)) * &invariant_six_a + Atom::num((7, 6)) * &invariant_six_b,
+                -Atom::num((7, 48)) * &invariant_six_a + Atom::num((17, 18)) * &invariant_six_b,
             ),
         ] {
             assert_coefficients_zero(
@@ -2856,8 +2910,9 @@ mod tests {
                 );
             }
         }
-        // This admits an angular-lift boundary. It is not an actual D09 R2
-        // numerator, UV/IR separation or finite renormalization-condition proof.
+        // These admit angular mechanisms, without asserting that an actual W
+        // input needs rank six. They are not an actual D09 R2 numerator, UV/IR
+        // separation or finite renormalization-condition proof.
         Ok(())
     }
 
