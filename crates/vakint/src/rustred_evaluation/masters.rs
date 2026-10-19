@@ -125,7 +125,7 @@ impl MasterCatalog {
                     .ok_or_else(|| failure("missing family graph"))?;
                 catalog.family_graphs.insert(
                     Self::family_symbol(fingerprint),
-                    Self::graph_location(data, graph, version)?,
+                    Self::graph_location(data, graph)?,
                 );
             }
             for value in &data.manifest.masters {
@@ -198,7 +198,7 @@ impl MasterCatalog {
                     identity: metadata.master_id,
                     loop_count: count,
                     coefficients,
-                    graph: Self::graph_location(data, &metadata.parent_graph, version)?,
+                    graph: Self::graph_location(data, &metadata.parent_graph)?,
                 };
                 if catalog.masters.insert(symbol, master).is_some() {
                     return Err(failure("duplicate family-qualified master identity"));
@@ -294,19 +294,15 @@ impl MasterCatalog {
         Ok(result)
     }
 
-    fn graph_location(
-        data: &LoopData,
-        path: &str,
-        version: &str,
-    ) -> Result<String, RustRedEvaluationError> {
+    fn graph_location(data: &LoopData, path: &str) -> Result<String, RustRedEvaluationError> {
         data.read(path)?;
         Ok(data
             .path(path)?
             .map(|path| path.display().to_string())
             .unwrap_or_else(|| {
                 format!(
-                    "https://github.com/alphal00p/vakint-external-data/blob/{version}/{}L/{path}",
-                    data.manifest.loop_count
+                    "https://github.com/alphal00p/vakint-external-data/blob/{}/{}L/{path}",
+                    data.manifest.version, data.manifest.loop_count
                 )
             }))
     }
@@ -1206,6 +1202,36 @@ mod tests {
             )
             .unwrap();
         assert!(result.is_zero());
+    }
+
+    #[test]
+    fn vendored_fallback_graphs_keep_their_package_version() {
+        let vendored = super::super::data::RustRedData::vendored().unwrap();
+        let package = Arc::clone(&vendored.loops[&3]);
+        let catalog = MasterCatalog::load(
+            &BTreeMap::from([(3, Arc::clone(&package))]),
+            "local-mixed-release",
+        )
+        .unwrap();
+        assert_ne!(catalog.version, package.manifest.version);
+        let expected = format!(
+            "https://github.com/alphal00p/vakint-external-data/blob/{}/3L/",
+            package.manifest.version
+        );
+        assert!(!catalog.family_graphs.is_empty());
+        assert!(!catalog.masters.is_empty());
+        assert!(
+            catalog
+                .family_graphs
+                .values()
+                .all(|graph| graph.starts_with(&expected))
+        );
+        assert!(
+            catalog
+                .masters
+                .values()
+                .all(|master| master.graph.starts_with(&expected))
+        );
     }
 
     #[test]

@@ -1760,10 +1760,6 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
-            if source == Path::new("crates/vakint/artifacts/masters_summary.md") {
-                self.check_generated_master_summary(&source)?;
-                continue;
-            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
@@ -1776,53 +1772,6 @@ impl SiteBuilder {
             "Markdown/HTML sources differ from the shrinking legacy inventory; new: {:?}; migrated or removed: {:?}",
             actual.difference(&declared).collect::<Vec<_>>(),
             declared.difference(&actual).collect::<Vec<_>>()
-        );
-        Ok(())
-    }
-
-    // This requested generated data table is an artifact, never an authored prose source.
-    fn check_generated_master_summary(&self, source: &Path) -> Result<()> {
-        let summary = fs::read_to_string(self.root.join(source))?;
-        let lines = summary
-            .lines()
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .collect::<Vec<_>>();
-        ensure!(
-            lines.len() >= 3
-                && lines
-                    .iter()
-                    .all(|line| line.len() > 1 && line.starts_with('|') && line.ends_with('|')),
-            "{} must contain only a generated Markdown table",
-            source.display()
-        );
-        let rows = lines
-            .iter()
-            .map(|line| {
-                line[1..line.len() - 1]
-                    .split('|')
-                    .map(str::trim)
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        let columns = rows[0].len();
-        ensure!(
-            columns >= 2
-                && rows
-                    .iter()
-                    .all(|row| row.len() == columns && row.iter().all(|cell| !cell.is_empty())),
-            "{} has inconsistent or empty table cells",
-            source.display()
-        );
-        ensure!(
-            rows[0][0] == "Loop"
-                && rows[1].iter().all(|cell| {
-                    let dashes = cell.strip_prefix(':').unwrap_or(cell);
-                    let dashes = dashes.strip_suffix(':').unwrap_or(dashes);
-                    dashes.len() >= 3 && dashes.bytes().all(|byte| byte == b'-')
-                }),
-            "{} requires its master-summary header and Markdown separator",
-            source.display()
         );
         Ok(())
     }
@@ -10430,7 +10379,7 @@ mod tests {
     }
 
     #[test]
-    fn prose_source_gate_allows_only_the_generated_master_table() {
+    fn prose_source_gate_rejects_obsolete_master_summary_exception() {
         let temporary = tempfile::tempdir().unwrap();
         let directory = temporary.path().join("crates/vakint/artifacts");
         fs::create_dir_all(&directory).unwrap();
@@ -10442,22 +10391,15 @@ mod tests {
             schema: LEGACY_PROSE_SCHEMA_VERSION,
             source: Vec::new(),
         };
-        fs::write(&summary, table).unwrap();
         builder.check_prose_sources().unwrap();
-        for invalid in [
-            format!("{table}An authored note.\n"),
-            format!("{table}|\n"),
-            format!("{table}```text\nprose\n```\n"),
-            table.replace("|---|---:|---:|", "|heading|---:|---:|"),
-            table.replace("| 1L | 1 | 6 / 6 |", "| 1L | 1 |"),
-            table.replace("| Loop |", "| Note |"),
-        ] {
-            fs::write(&summary, invalid).unwrap();
-            assert!(builder.check_prose_sources().is_err());
-        }
+        // Even the formerly permitted generated table now belongs in the
+        // external-data repository and must not bypass the prose inventory.
         fs::write(&summary, table).unwrap();
-        fs::write(directory.join("other_summary.md"), table).unwrap();
-        assert!(builder.check_prose_sources().is_err());
+        let error = builder.check_prose_sources().unwrap_err().to_string();
+        assert!(error.contains("Markdown/HTML sources differ from the shrinking legacy inventory"));
+        assert!(error.contains("masters_summary.md"));
+        fs::remove_file(summary).unwrap();
+        builder.check_prose_sources().unwrap();
     }
 
     #[test]
