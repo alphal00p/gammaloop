@@ -2108,6 +2108,19 @@ impl FeynmanDiagram {
             && !parsed
                 .iter_edges()
                 .any(|(_, _, edge)| edge.data.statements.contains_key("particle_id"))
+            // Vertex bindings also identify partial annotated exports.
+            && !parsed.iter_nodes().any(|(_, _, node)| {
+                [
+                    "interaction_id",
+                    "feynkit_name",
+                    "numerator",
+                    "external_state",
+                    "external_index",
+                    "external_connection",
+                ]
+                .iter()
+                .any(|key| node.statements.contains_key(*key))
+            })
         {
             return Self::from_compact_dot(model, parsed).map(|(diagram, _)| diagram);
         }
@@ -3106,6 +3119,60 @@ mod tests {
                 "{dot}"
             );
         }
+    }
+
+    #[test]
+    fn native_vertex_metadata_does_not_become_compact() {
+        let model = scalar_model();
+        let input = r#"digraph sunset {
+            a [ATTRIBUTES];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+            a -> b [particle="phi"];
+        }"#;
+        let compact = input.replace("ATTRIBUTES", "label=\"a\"");
+        assert_eq!(
+            FeynmanDiagram::from_dot(model.clone(), &compact)
+                .unwrap()
+                .loop_count(),
+            2
+        );
+        let compact = input.replace("ATTRIBUTES", "num=\"2\", label=\"a\"");
+        assert_eq!(
+            FeynmanDiagram::from_dot(model.clone(), &compact)
+                .unwrap()
+                .numerator()
+                .expression(),
+            &Atom::num(2)
+        );
+        let mut accepted = Vec::new();
+        for metadata in [
+            "interaction_id=9999",
+            "feynkit_name=\"native-vertex\"",
+            "numerator=\"2\"",
+            "external_state=\"incoming\"",
+            "external_index=0",
+            "external_connection=3",
+        ] {
+            let annotated = input.replace("ATTRIBUTES", metadata);
+            for result in [
+                FeynmanDiagram::from_dot(model.clone(), &annotated).map(|_| ()),
+                FeynmanDiagram::from_dot_set(model.clone(), &annotated).map(|_| ()),
+            ] {
+                match result {
+                    Err(DiagramError::MissingDotAttribute {
+                        attribute: "model_fingerprint",
+                        ..
+                    }) => {}
+                    Ok(_) => accepted.push(metadata),
+                    Err(error) => panic!("unexpected error for {metadata}: {error}"),
+                }
+            }
+        }
+        assert!(
+            accepted.is_empty(),
+            "native vertex metadata was silently accepted as compact: {accepted:?}"
+        );
     }
 
     #[test]
