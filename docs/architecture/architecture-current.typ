@@ -293,6 +293,11 @@ The Python graph APIs share `linnet-render-py`, which renders native SVG through
 Linnest and loads verified font resources supplied by the host. The application
 retains its separate Typst drawing workflow.
 
+FeynKit's DOT importer treats native vertex bindings, serialized numerators,
+and external-state metadata as annotated input even when the graph fingerprint
+is missing. That input must pass native model-fingerprint validation; ordinary
+compact labels and `num` expressions retain the compact-input boundary.
+
 GammaLoop's DOT importer selects one explicit source boundary: a canonical
 FeynKit diagram, a finalized GammaLoop runtime artifact, or compact model DOT.
 It validates that dialect without retrying malformed artifacts through another

@@ -247,7 +247,10 @@ anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-10-17: Live graph fragments, aggregate numerator, prefactor and projector retain tensors; the shared source codec records logical ports and ranked zeros in optional metadata.
 # Reviewed 2026-10-17: Artifact validation uses the native coefficient visitor and exact-only scalar zero certification while preserving tensor factorization; typed source fixtures retain owner and UV-degree assertions.
 # Reviewed 2026-10-19: the architecture note records the finalized retained-tensor prefactor replacement and its existing index frame; ranked-zero, precision, native JSON/DOT and reduction-proof controls preserve the current carrier boundary.
-digest = "9630c92642289af4374c29c375abfb90d8c1ef14"
+# Reviewed 2026-10-20: the architecture records native vertex metadata requiring
+# model-fingerprint validation. Single and collection import regressions preserve
+# ordinary compact labels and num expressions without discarding native bindings.
+digest = "f1cff6ba0ac5a406d174c6bc71bd0cd4ffe0dc54"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
