@@ -35,6 +35,38 @@ fn exact_overrides_resolve_dependencies_without_a_card_or_stale_caches() {
 }
 
 #[test]
+fn precise_overrides_and_external_evaluator_parameters_keep_their_domain() {
+    use symbolica::domains::float::{Float, RealLike};
+
+    let model = chain_model();
+    let precise = Float::parse("1.000000000000000000000000000001", Some(256)).unwrap();
+    assert_eq!(precise.to_f64(), 1.0);
+    let precise = Atom::num(precise);
+    assert_ne!(precise, Atom::one());
+    let values = model
+        .scalar_bindings(
+            None,
+            &BTreeMap::from([(symbol!("UFO::mass"), precise.clone())]),
+        )
+        .unwrap();
+    assert_eq!(values[&symbol!("UFO::mass")], precise);
+    assert_eq!(values[&symbol!("UFO::first")], Atom::num(2) * precise);
+
+    // A distinct free symbol leaves a numeric input for the caller's precise
+    // or Dual evaluator without inheriting the model's binary64 cached value.
+    let parameter = Atom::var(symbol!("model_binding_test::sample_mass"));
+    let values = model
+        .scalar_bindings(
+            None,
+            &BTreeMap::from([(symbol!("UFO::mass"), parameter.clone())]),
+        )
+        .unwrap();
+    let coupling = &values[&symbol!("UFO::SCALAR_COUPLING")];
+    let expected = Atom::num(2) * &parameter * (Atom::num(2) * parameter + 1);
+    assert!((coupling - expected).expand().is_zero());
+}
+
+#[test]
 fn internal_card_values_and_exact_overrides_precede_analytic_definitions() {
     let model = chain_model();
     let before = model.to_json().unwrap();

@@ -2749,7 +2749,14 @@ pub struct EvalTensor<T, S> {
 }
 
 impl<T, S: TensorStructure + Clone> EvalTensor<T, S> {
-    fn evaluate_components<U: Clone>(
+    /// Evaluate the stored components and restore their dense or sparse layout.
+    ///
+    /// The callback receives the underlying evaluator and an output slice in
+    /// evaluator order. It must fill every entry. Sparse component indices are
+    /// restored here, so callers may use custom numeric domains or component
+    /// batches without copying the tensor's indexing logic. `zero` supplies the
+    /// correct precision and component shape for implicit sparse zeros.
+    pub fn evaluate_components<U: Clone>(
         &mut self,
         zero: U,
         evaluate: impl FnOnce(&mut T, &mut [U]),
@@ -3234,6 +3241,40 @@ pub mod test {
     };
 
     use super::MixedTensor;
+
+    #[test]
+    fn evaluate_components_restores_sparse_batched_outputs() {
+        use super::EvalTensor;
+        use crate::structure::representation::Euclidean;
+
+        let structure: OrderedStructure =
+            Canonicalized::from_iter([Euclidean {}.new_slot(4, 0)]).into_canonical();
+        let mut tensor = EvalTensor {
+            eval: (),
+            indexmap: Some(vec![2.into(), 0.into()]),
+            structure,
+        };
+        let output = tensor.evaluate_components(vec![0.0; 3], |_, out| {
+            assert_eq!(out.len(), 2);
+            out[0] = vec![2.0, 3.0, 4.0];
+            out[1] = vec![5.0, 6.0, 7.0];
+        });
+        let DataTensor::Sparse(output) = output else {
+            panic!("sparse evaluator must preserve sparse output");
+        };
+        assert_eq!(output.zero, vec![0.0; 3]);
+        assert_eq!(output.elements[&2.into()], vec![2.0, 3.0, 4.0]);
+        assert_eq!(output.elements[&0.into()], vec![5.0, 6.0, 7.0]);
+        assert!(!output.elements.contains_key(&1.into()));
+
+        tensor.indexmap = Some(Vec::new());
+        let output = tensor.evaluate_components(vec![0.0; 3], |_, out| assert!(out.is_empty()));
+        let DataTensor::Sparse(output) = output else {
+            panic!("empty sparse evaluator must remain sparse");
+        };
+        assert!(output.elements.is_empty());
+        assert_eq!(output.zero, vec![0.0; 3]);
+    }
 
     #[test]
     fn grouped_atom_multi_contraction_preserves_metric_permutations_and_factors() {
