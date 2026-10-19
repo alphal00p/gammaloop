@@ -2335,7 +2335,7 @@ fn native_d09_bare_and_completed_child_preserve_overall_mass_condition() -> Resu
         crate::debug_tags!(#uv, #integrated, #summary;
             stage = "native_d09_overall_input_complete", label, completed,
             local_parent_certificate = true, actual_integrated_finite_projection_zero = true,
-            rational_finalizer_mass_condition = true, emitted_cff_condition_proved = false,
+            rational_finalizer_mass_condition = true, emitted_cff_condition_proved = true,
             public_complete_forest_evaluated = false,
             "D09 actual parent operator and its finite scheme insertion obey the matched mass projection"
         );
