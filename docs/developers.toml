@@ -1564,7 +1564,8 @@ anchor = "fn preprocess_numerator_families<A: AtomCore>("
 # Reviewed 2026-10-17: Scalar-argument finite dots lower after family shadows, before component parsing, with admission and scalar-component timers recorded separately.
 # Reviewed 2026-10-17: The scalar invariant rewrite with algebra disabled preserves the declared tensor interface via the checked finisher; reversed-axis nonzero and ranked-zero controls are retained.
 # Reviewed 2026-10-18: The readiness record separates the indexed continuation from prior qualification and records strict runtime interfaces, preserved component layouts, API limitations and pending performance measurements.
-digest = "3b507cbf49922826dc7426ae7fcfa75e95c43aed"
+# Reviewed 2026-10-20: Exact raw scalar component values reuse the existing compact-factor collector within one family callback. Typed tensors, support, logical layout, formal-position analysis, renaming and function registration order remain unchanged; profile request/hit/unique counts describe actual work, with no unmeasured performance claim.
+digest = "fd01cdbe6f2f274b4bcef83d8995d22953d1eee4"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"

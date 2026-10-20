@@ -1399,8 +1399,14 @@ its explicit runtime interface. The full path/symbol evidence is in
   Symbolica `ExpressionEvaluator` programs; `ParamBuilder<T: FloatLike>` supplies
   numeric values. The precision lanes and eager, SymJIT and external backends
   remain the same. Component factor collection and the guarded common-pair
-  elimination policy are earlier performance repairs. Equivalent expression
-  organization can still change compiler work and executed instruction counts.
+  elimination policy are earlier performance repairs. Completed component
+  collection memoizes exact raw scalar values within one family callback; the
+  cached value is the existing collector's scalar result. Typed bodies, support,
+  logical axes, formal-position analysis and registration order retain their
+  existing owners. Profile counts distinguish requests, cache hits and unique
+  inputs. This reuse alone makes no measured performance claim. Equivalent
+  expression organization can still change compiler work and executed instruction
+  counts.
 + #strong[Sampling and events.] `ProcessIntegrand` evaluates
   `MomentumSample<T>` / `BareMomentumSample<T>` with their momenta, Jacobian,
   orientation and parameterization branch. `SamplingMapContext` and proposal/
