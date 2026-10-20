@@ -865,6 +865,7 @@ fn cross_section_standalone_export_writes_archive_and_loader() -> Result<()> {
         .ok_or_else(|| eyre!("standalone cross-section archive has no graph terms"))?;
     let cut_group_integrands = graph_term
         .get("cut_group_integrands")
+        .and_then(|representations| representations.get("cff"))
         .and_then(serde_json::Value::as_array)
         .ok_or_else(|| eyre!("standalone graph term has no cut-group integrands"))?;
     assert!(!cut_group_integrands.is_empty());
