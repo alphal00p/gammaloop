@@ -174,7 +174,10 @@
           nickel
           nls
           docsTypst
-          linnetPython
+          # One environment rather than separate Python packages: their setup
+          # hook would put this Python's `_sysconfigdata` on PYTHONPATH, where
+          # any other interpreter, e.g. a uv-managed Python, would read it.
+          (linnetPython.withPackages (ps: [ps.virtualenv]))
           docsPkgs.roboto
           cargo-nextest
           pkg-config
@@ -196,7 +199,6 @@
           poppler-utils
           rust-analyzer
           maturin
-          virtualenv
         ]
         ++ lib.optionals (!pkgs.stdenv.hostPlatform.isDarwin) [
           valgrind
