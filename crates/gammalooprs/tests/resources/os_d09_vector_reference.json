@@ -1,0 +1,217 @@
+{
+  "format": 1,
+  "reference_kind": "retained_pinned_backend_numerical_reference",
+  "native_unregulated_source": {
+    "projection": "pslash/(4*Nc*p_squared)",
+    "source_kernel_weight": "1",
+    "external_ordering": "-1",
+    "numerator_prefactor": "1",
+    "propagator_prescription": "Feynman+i0",
+    "source": {
+      "color_rows": [
+        {
+          "channel": "CF2",
+          "coefficient": "((-1*d+2)*(-1*sp2*sp3+2*sp1*sp4+sp2)+2*d*sp4)*(-1*d+2)"
+        }
+      ],
+      "external_momenta": [
+        "p"
+      ],
+      "integral_zero_certified": false,
+      "light_flavor": null,
+      "loop_momenta": [
+        "k0",
+        "k1"
+      ],
+      "loops": 2,
+      "name": "D09",
+      "propagators": [
+        {
+          "edge": 2,
+          "mass_squared": "1",
+          "momentum": "k0",
+          "polynomial": "-1+sp0",
+          "power": 1
+        },
+        {
+          "edge": 3,
+          "mass_squared": "0",
+          "momentum": "-1*k0+k1",
+          "polynomial": "-2*sp1+sp0+sp3",
+          "power": 1
+        },
+        {
+          "edge": 4,
+          "mass_squared": "1",
+          "momentum": "k1",
+          "polynomial": "-1+sp3",
+          "power": 1
+        },
+        {
+          "edge": 5,
+          "mass_squared": "1",
+          "momentum": "k1",
+          "polynomial": "-1+sp3",
+          "power": 1
+        },
+        {
+          "edge": 6,
+          "mass_squared": "0",
+          "momentum": "-1*p+k1",
+          "polynomial": "-2*sp4+1+sp3",
+          "power": 1
+        }
+      ],
+      "scalar_products": [
+        {
+          "left": "k0",
+          "right": "k0",
+          "variable": "sp0"
+        },
+        {
+          "left": "k0",
+          "right": "k1",
+          "variable": "sp1"
+        },
+        {
+          "left": "k0",
+          "right": "p",
+          "variable": "sp2"
+        },
+        {
+          "left": "k1",
+          "right": "k1",
+          "variable": "sp3"
+        },
+        {
+          "left": "k1",
+          "right": "p",
+          "variable": "sp4"
+        }
+      ]
+    }
+  },
+  "native_regulated_source": {
+    "external_ordering": "-1",
+    "numerator_prefactor": "1",
+    "projection": "pslash/(4*Nc*p_squared)",
+    "propagator_prescription": "Feynman+i0",
+    "source": {
+      "color_rows": [
+        {
+          "channel": "CF2",
+          "coefficient": "((-1*d+2)*(-1*sp2*sp3+2*sp1*sp4+sp2)+2*d*sp4)*(-1*d+2)"
+        }
+      ],
+      "external_momenta": [
+        "p"
+      ],
+      "integral_zero_certified": false,
+      "light_flavor": null,
+      "loop_momenta": [
+        "k0",
+        "k1"
+      ],
+      "loops": 2,
+      "name": "D09",
+      "propagators": [
+        {
+          "edge": 2,
+          "mass_squared": "1",
+          "momentum": "k0",
+          "polynomial": "-1+sp0",
+          "power": 1
+        },
+        {
+          "edge": 3,
+          "mass_squared": "1",
+          "momentum": "-1*k0+k1",
+          "polynomial": "(-2*sp1+sp0+sp3)-1",
+          "power": 1
+        },
+        {
+          "edge": 4,
+          "mass_squared": "1",
+          "momentum": "k1",
+          "polynomial": "-1+sp3",
+          "power": 1
+        },
+        {
+          "edge": 5,
+          "mass_squared": "1",
+          "momentum": "k1",
+          "polynomial": "-1+sp3",
+          "power": 1
+        },
+        {
+          "edge": 6,
+          "mass_squared": "1",
+          "momentum": "-1*p+k1",
+          "polynomial": "(-2*sp4+1+sp3)-1",
+          "power": 1
+        }
+      ],
+      "scalar_products": [
+        {
+          "left": "k0",
+          "right": "k0",
+          "variable": "sp0"
+        },
+        {
+          "left": "k0",
+          "right": "k1",
+          "variable": "sp1"
+        },
+        {
+          "left": "k0",
+          "right": "p",
+          "variable": "sp2"
+        },
+        {
+          "left": "k1",
+          "right": "k1",
+          "variable": "sp3"
+        },
+        {
+          "left": "k1",
+          "right": "p",
+          "variable": "sp4"
+        }
+      ]
+    },
+    "source_kernel_weight": "1"
+  },
+  "massless": {
+    "numerical_reference": {
+      "finite_prepared": "-19.0743405536087186",
+      "reported_absolute_error": "6.386262723980348e-7",
+      "source_revision": "c9532785fbde412355d762bb81020624bb8799f3",
+      "closed_receipt_sha256": "615bbd0efbd6e9fe0c9f9531ca885ac7ead2e857c57636cf05697909ecc99ecb",
+      "normalization": "a^2*CF^2, amputated Sigma, p^2=m^2=mu_bar^2=1"
+    },
+    "backend_input_canonical_sha256": "01ecb7d5c3f696f7c7d70344f846d7233a5c92075d5e5165e82b992a812d6b20",
+    "backend_input_file_sha256": "1c3552b96fe27d6d9a696a2c99e80cbd43ce77750270b6de1b6fa51056d89440",
+    "native_export_sha256": "9d9dd1ee1fcd5b9d1db342af1040ffc923630acb2c14b65bb1cc76d75265c2f7"
+  },
+  "positive_gluon_mass": {
+    "numerical_reference": {
+      "finite_prepared": "-2.511189682186968",
+      "reported_absolute_error": "4.060967323799331e-07",
+      "source_revision": "20d6abb309bd2552bc036e5547e5ca088f37b0c4",
+      "closed_receipt_sha256": "cab62e82df5cb68a8fecbc6563dd2f7bb844e7d1fb1baa6646c2fc2c20aa7133",
+      "normalization": "a^2*CF^2, amputated Sigma, p^2=m^2=mu_bar^2=lambda^2=1"
+    },
+    "backend_input_canonical_sha256": "10a92a5dd860e21b92c5326d0a4352898be831d6b04072b64434ebda69e10290",
+    "backend_input_file_sha256": "b4c7a3d5fe32cf63a5a664ce6667a281647ae33660c5b6b09862eb50c0c4536f",
+    "native_input_sha256": "ee684e9c6a317538b796cfef1a285c789bc1f994fce423868517eeacdf16d100",
+    "reference_summary_sha256": "98765b6502fa0ce5a5e837fe90eaee6f87412728208411bd82314269fa883553",
+    "prior_reference": {
+      "finite_prepared": "-2.511189682186969",
+      "reported_absolute_error": "4.0609673237649595e-07",
+      "source_revision": "e98bd54848181c738b1a428ee0f040fe765c6564",
+      "closed_receipt_sha256": "a8c7bd4ae3c9139650d00bb650a73d1530b3ca3378b8993d22ab0741a745a82d",
+      "reference_summary_sha256": "229c1ed75efaf569f5edb6a3d47cfe8114f5ab561c9bccb8291b09e39330466b",
+      "backend_input_file_sha256": "b4c7a3d5fe32cf63a5a664ce6667a281647ae33660c5b6b09862eb50c0c4536f"
+    }
+  }
+}

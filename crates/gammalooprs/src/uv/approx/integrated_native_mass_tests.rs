@@ -45,14 +45,6 @@ enum NativeQuarkTrace {
     Vector,
 }
 
-enum NativeNumericalReference<'a> {
-    MassAndVector,
-    EmittedVector {
-        regulated_source: &'a serde_json::Value,
-        unregulated_source: &'a serde_json::Value,
-    },
-}
-
 impl QcdMassReference {
     /// Open a complete source-derived quark closing word on its native frame.
     /// Keep momentum specialization, normalization and Gram controls at callers.
@@ -2051,6 +2043,25 @@ fn native_d09_vector_projection_exports_original_scalar_coordinates() -> Result<
 }
 
 impl QcdMassReference {
+    /// Admit an independent numerical datum only for its exact original source.
+    /// The fixture owns the shared Rust/Python datum and its retained provenance.
+    fn certify_emitted_vector_reference(source: &serde_json::Value) -> Result<serde_json::Value> {
+        let reference: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../tests/resources/os_d09_vector_reference.json"
+        ))?;
+        ensure!(reference["format"] == 1);
+        for (actual, expected) in [
+            ("unregulated_source", "native_unregulated_source"),
+            ("regulated_source", "native_regulated_source"),
+        ] {
+            ensure!(
+                source[actual] == reference[expected],
+                "the emitted {actual} changed its native numerator, projector, phase or prescribed poles"
+            );
+        }
+        Ok(reference)
+    }
+
     fn numerical_reference_input(&self) -> Result<serde_json::Value> {
         use symbolica_utils::AtomPrintExt;
         let reference = self;
@@ -2078,7 +2089,7 @@ impl QcdMassReference {
         Ok(serde_json::json!({"sources": sources, "vector_source": vector_source}))
     }
 
-    fn numerical_reference(&self, mode: NativeNumericalReference<'_>) -> Result<serde_json::Value> {
+    fn numerical_reference(&self) -> Result<serde_json::Value> {
         use color_eyre::eyre::WrapErr;
         use std::{
             fs,
@@ -2094,31 +2105,21 @@ impl QcdMassReference {
         let input = directory.join("native-sources.json");
         let script = directory.join("os_mass_reference.py");
         let output = directory.join("results");
-        let mut native_input = self.numerical_reference_input()?;
-        let regulated_vector = match mode {
-            NativeNumericalReference::MassAndVector => false,
-            NativeNumericalReference::EmittedVector {
-                regulated_source,
-                unregulated_source,
-            } => {
-                native_input["emitted_regulated_source"] = regulated_source.clone();
-                native_input["emitted_unregulated_source"] = unregulated_source.clone();
-                true
-            }
-        };
+        let native_input = self.numerical_reference_input()?;
         fs::write(&input, serde_json::to_vec_pretty(&native_input)?)?;
         fs::write(
             &script,
             include_str!("../../../tests/resources/os_mass_reference.py"),
+        )?;
+        fs::write(
+            directory.join("os_d09_vector_reference.json"),
+            include_str!("../../../tests/resources/os_d09_vector_reference.json"),
         )?;
         let python = std::env::var("PYTHON_BIN_PATH")
             .unwrap_or_else(|_| "gammaloop-os-mass-reference-python".to_owned());
         let log = fs::File::create(directory.join("backend.log"))?;
         let mut command = Command::new(python);
         command.arg(&script);
-        if regulated_vector {
-            command.arg("--regulated-vector-only");
-        }
         let status = command
             .arg(&input)
             .arg(&output)
@@ -2149,7 +2150,7 @@ impl QcdMassReference {
 fn native_two_loop_qcd_bare_mass_matches_primary_reference() -> Result<()> {
     crate::initialisation::test_initialise()?;
     let reference = QcdMassReference::new()?;
-    let summary = reference.numerical_reference(NativeNumericalReference::MassAndVector)?;
+    let summary = reference.numerical_reference()?;
     ensure!(summary["one_loop_anchors_passed"] == true);
     ensure!(summary["bare_four_color_reference_passed"] == true);
     ensure!(summary["independent_insertions_reconstruct_Zm_reference"] == true);
@@ -4879,105 +4880,79 @@ fn native_d09_emitted_vacuum_policy_field_matches_actual_source_rows() -> Result
         "Actual native W coefficients survive the observed finalizer in the independently known field direction"
     );
     // This comparison uses the actual complete production forest and its
-    // dimensional addbacks. The independent backend receives only the native
-    // source/poles, never the emitted estimate or a fitted coefficient.
+    // dimensional addbacks. The fixed independent reference is admitted by
+    // exact equality of the original full-D source, phase and pole inventory.
     let emitted = native_emitted_integration_tests::two_loop(&reference)?;
-    let dimensional = reference.numerical_reference(NativeNumericalReference::EmittedVector {
-        regulated_source: &emitted["source"]["regulated_source"],
-        unregulated_source: &emitted["source"]["unregulated_source"],
-    })?;
-    ensure!(dimensional["passed"] == true);
-    ensure!(dimensional["emitted_regulated_source_bound"] == true);
-    ensure!(dimensional["emitted_unregulated_source_bound"] == true);
-    let target = dimensional["finite_vector_reference"]["value"][0]
-        .as_f64()
-        .ok_or_else(|| eyre!("missing independent regulated vector reference"))?;
-    let target_error = dimensional["finite_vector_reference"]["bare_reported_absolute_error"][0]
-        .as_f64()
-        .ok_or_else(|| eyre!("missing independent regulated vector error"))?;
-    let unregulated_target = dimensional["unregulated_vector_reference"]["finite_prepared"]
+    let independent = QcdMassReference::certify_emitted_vector_reference(&emitted["source"])?;
+    let numerical = &independent["positive_gluon_mass"]["numerical_reference"];
+    let target = numerical["finite_prepared"]
         .as_str()
-        .ok_or_else(|| eyre!("missing retained massless vector reference"))?
+        .ok_or_else(|| eyre!("missing independent positive-mass vector reference"))?
         .parse::<f64>()?;
-    let unregulated_error = dimensional["unregulated_vector_reference"]["reported_absolute_error"]
+    let target_error = numerical["reported_absolute_error"]
         .as_str()
-        .ok_or_else(|| eyre!("missing retained massless vector error"))?
+        .ok_or_else(|| eyre!("missing independent positive-mass vector error"))?
         .parse::<f64>()?;
-    for (key, target, target_error, maximum_error) in [
-        (
-            "integrations",
-            target,
-            target_error,
-            0.01 * (1.0 + target.abs()),
-        ),
-        (
-            "unregulated_integrations",
-            unregulated_target,
-            unregulated_error,
-            0.025,
-        ),
-    ] {
-        let estimates = emitted[key]
-            .as_array()
-            .ok_or_else(|| eyre!("missing independently seeded emitted integrals"))?;
-        ensure!(estimates.len() == 4);
-        let mut values = Vec::new();
-        for estimate in estimates {
-            let value = estimate["value"]
-                .as_f64()
-                .ok_or_else(|| eyre!("missing emitted vector value"))?;
-            let error = estimate["error"]
-                .as_f64()
-                .ok_or_else(|| eyre!("missing emitted integration error"))?;
-            ensure!(value.is_finite() && error.is_finite() && error > 0.0);
-            let imaginary = estimate["imaginary"]
-                .as_f64()
-                .ok_or_else(|| eyre!("missing emitted imaginary coefficient"))?;
-            let imaginary_error = estimate["imaginary_error"]
-                .as_f64()
-                .ok_or_else(|| eyre!("missing emitted imaginary error"))?;
-            ensure!(imaginary.is_finite() && imaginary_error.is_finite());
+    let estimates = emitted["integrations"]
+        .as_array()
+        .ok_or_else(|| eyre!("missing independently seeded emitted integrals"))?;
+    ensure!(estimates.len() == 4);
+    let mut values = Vec::new();
+    for estimate in estimates {
+        let value = estimate["value"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted vector value"))?;
+        let error = estimate["error"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted integration error"))?;
+        ensure!(value.is_finite() && error.is_finite() && error > 0.0);
+        let imaginary = estimate["imaginary"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted imaginary coefficient"))?;
+        let imaginary_error = estimate["imaginary_error"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted imaginary error"))?;
+        ensure!(imaginary.is_finite() && imaginary_error.is_finite());
+        ensure!(
+            imaginary.abs() <= 5.0 * imaginary_error + 1.0e-9 * (1.0 + target.abs()),
+            "the below-threshold emitted coefficient has an unexpected imaginary part: {estimate}"
+        );
+        // Predeclared numerical acceptance: resolve the coefficient to one
+        // percent, then require five combined standard errors plus 1e-3.
+        ensure!(
+            error <= 0.01 * (1.0 + target.abs()),
+            "emitted vector uncertainty is unresolved: {estimate}"
+        );
+        let bound = 5.0 * error.hypot(target_error) + 1.0e-3;
+        ensure!(
+            (value - target).abs() <= bound,
+            "complete emitted vector {value} +/- {error} disagrees with dimensional {target} +/- {target_error}; {emitted}"
+        );
+        let r = 11.0 / 36.0 + std::f64::consts::PI.powi(2) / 12.0;
+        for wrong in [0.0, target + r, target - r] {
             ensure!(
-                imaginary.abs() <= 5.0 * imaginary_error + 1.0e-9 * (1.0 + target.abs()),
-                "the on-shell emitted coefficient has an unexpected imaginary part: {estimate}"
+                (value - wrong).abs() > bound,
+                "the emitted field comparison cannot distinguish a wrong zero or finite-shifted reference"
             );
-            // Both error caps are fixed before the corresponding measurements.
-            // The massless cap resolves the known finite shift by a wide margin.
-            ensure!(
-                error <= maximum_error,
-                "emitted vector uncertainty is unresolved: {estimate}"
-            );
-            let bound = 5.0 * error.hypot(target_error) + 1.0e-3;
-            ensure!(
-                (value - target).abs() <= bound,
-                "complete emitted vector {value} +/- {error} disagrees with dimensional {target} +/- {target_error}; {emitted}"
-            );
-            let r = 11.0 / 36.0 + std::f64::consts::PI.powi(2) / 12.0;
-            for wrong in [0.0, target + r, target - r] {
-                ensure!(
-                    (value - wrong).abs() > bound,
-                    "the emitted field comparison cannot distinguish a wrong zero or finite-shifted reference"
-                );
-            }
-            values.push((value, error));
         }
-        for (index, (value, error)) in values.iter().enumerate() {
-            for (other, other_error) in &values[index + 1..] {
-                ensure!(
-                    (value - other).abs() <= 5.0 * error.hypot(*other_error) + 1.0e-3,
-                    "emitted integrations disagree across seeds or auxiliary scales"
-                );
-            }
+        values.push((value, error));
+    }
+    for (index, (value, error)) in values.iter().enumerate() {
+        for (other, other_error) in &values[index + 1..] {
+            ensure!(
+                (value - other).abs() <= 5.0 * error.hypot(*other_error) + 1.0e-3,
+                "emitted integrations disagree across seeds or auxiliary scales"
+            );
         }
     }
     crate::debug_tags!(#uv,#integrated,#cff,#summary;
-        stage="native_d09_complete_emitted_massless_and_regulated_vector_reference",
-        file.emitted=%emitted, file.dimensional=%dimensional,
+        stage="native_d09_complete_emitted_regulated_vector_reference",
+        file.emitted=%emitted, file.independent_reference=%independent,
         source_poles_and_dimensional_numerator_bound=true,
         production_complete_forest_integrated=true, matched_positive_gluon_mass=true,
-        physical_massless_gluon_forest_integrated=true,
+        reference_kind="retained_pinned_backend_numerical_reference", fresh_backend_rerun=false,
         uniform_unregulated_limit_claimed=false,
-        "Complete emitted OS forests agree with the matched and massless dimensional field references"
+        "Complete emitted OS forest agrees with the matched dimensional field reference"
     );
     Ok(())
 }

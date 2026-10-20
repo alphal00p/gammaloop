@@ -48,19 +48,18 @@ POLICY = {
 # Retained run of this same pinned backend/policy after exact native D09 vector
 # admission, independent of production counterterm construction. This measured
 # finite datum is not an analytic constant or a four-dimensional IR proof.
-D09_VECTOR_NUMERICAL_REFERENCE = {
-    "finite_prepared": "-19.0743405536087186",
-    "reported_absolute_error": "6.386262723980348e-7",
-    "source_revision": "c9532785fbde412355d762bb81020624bb8799f3",
-    "closed_receipt_sha256": "615bbd0efbd6e9fe0c9f9531ca885ac7ead2e857c57636cf05697909ecc99ecb",
-    "normalization": "a^2*CF^2, amputated Sigma, p^2=m^2=mu_bar^2=1",
-}
+_D09_VECTOR_REFERENCE = json.loads(
+    Path(__file__).with_name("os_d09_vector_reference.json").read_text()
+)
+D09_VECTOR_NUMERICAL_REFERENCE = _D09_VECTOR_REFERENCE["massless"][
+    "numerical_reference"
+]
 # Canonical JSON (sorted keys, separators=(',', ':')) of the qualified c953
 # backend input dictionary, not its outer policy/requested-order envelope.
-# The retained input file SHA is 1c3552b96fe27d6d9a696a2c99e80cbd43ce77750270b6de1b6fa51056d89440.
-D09_VECTOR_BACKEND_INPUT_SHA256 = (
-    "01ecb7d5c3f696f7c7d70344f846d7233a5c92075d5e5165e82b992a812d6b20"
-)
+# Its retained file digest and numerical provenance share the JSON data owner.
+D09_VECTOR_BACKEND_INPUT_SHA256 = _D09_VECTOR_REFERENCE["massless"][
+    "backend_input_canonical_sha256"
+]
 
 
 def polynomial(text, symbols):
