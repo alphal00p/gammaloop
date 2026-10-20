@@ -320,13 +320,23 @@ impl LorentzTensor {
                 indices,
             });
         }
+        let shared = self.shared_indices(&other);
         if [&self.expression, &other.expression]
             .iter()
             .any(|expression| {
+                let native_attachment = |factor| {
+                    // Earlier attachments turn a native leaf into a product.
+                    // Only its remaining shared ports make this contraction opaque.
+                    matches!(factor, AtomView::Fun(leaf)
+                        if leaf.get_symbol().has_tag(&SPENSO_TAG.tensor)
+                            && ![S.k, S.p].contains(&leaf.get_symbol())
+                            && leaf.iter().any(|argument| shared.iter().any(|index| index.as_view() == argument)))
+                };
                 expression.get_all_symbols(true).contains(&S.tensor)
-                    || matches!(expression.as_view(), AtomView::Fun(leaf)
-                    if leaf.get_symbol().has_tag(&SPENSO_TAG.tensor)
-                        && ![S.k, S.p].contains(&leaf.get_symbol()))
+                    || match expression.as_view() {
+                        AtomView::Mul(product) => product.iter().any(native_attachment),
+                        factor => native_attachment(factor),
+                    }
             })
         {
             // A declared tensor's algebra belongs to its caller. Only metrics
@@ -336,7 +346,6 @@ impl LorentzTensor {
                 if let AtomView::Fun(metric) = metric.expression.as_view()
                     && metric.get_symbol() == S.g
                 {
-                    let shared = self.shared_indices(&other);
                     let replacement = metric
                         .iter()
                         .find(|index| *index != shared[0].as_view())
@@ -382,7 +391,6 @@ impl LorentzTensor {
                 _ => {}
             }
         }
-        let shared = self.shared_indices(&other);
         let (AtomView::Fun(left), AtomView::Fun(right)) =
             (self.expression.as_view(), other.expression.as_view())
         else {
@@ -569,6 +577,38 @@ mod tests {
         ] {
             let parsed = LorentzTensor::parse(unresolved_loop.as_view(), &dimension).unwrap();
             assert!(crate::projection::ScalarTerms::parse(parsed.expression.as_view()).is_err());
+        }
+    }
+
+    #[test]
+    fn native_tensor_multiple_attachments_keep_their_lorentz_interface() {
+        use spenso::structure::representation::RepName;
+        use symbolica::{function, symbol};
+
+        let _ = &*S;
+        let mink = Minkowski {}.new_rep(symbol!("native_attachment_dimension"));
+        let slots = [
+            "native_attachment_mu",
+            "native_attachment_nu",
+            "native_attachment_rho",
+        ]
+        .map(|name| mink.to_symbolic([Atom::var(symbol!(name))]));
+        let tensor = spenso::tensor_symbol!("native_attachment_tensor");
+        for count in [2, 3] {
+            let input = FunctionBuilder::new(tensor)
+                .add_args(slots.iter().take(count))
+                .finish()
+                * slots
+                    .iter()
+                    .take(count)
+                    .enumerate()
+                    .fold(Atom::one(), |product, (i, slot)| {
+                        product * function!(S.k, i + 1, slot)
+                    });
+            assert!(!input.get_all_symbols(true).contains(&S.tensor));
+            let parsed = LorentzTensor::parse(input.as_view(), &Atom::num(4)).unwrap();
+            assert!(parsed.is_scalar());
+            assert_eq!(parsed.expression, input);
         }
     }
 

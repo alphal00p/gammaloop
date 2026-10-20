@@ -1133,7 +1133,9 @@ end_anchor = "#[cfg(test)]"
 # retain actual native incidence. Hidden compound interfaces and loop-dependent native
 # leaves are rejected; ordinary raw loop/external pairs still contract.
 # Reviewed 2026-10-16: Admit a validated fixed-coordinate basis only as an operand of a closed external dot; reject standalone, invalid-component, open-port and active-loop cases.
-digest = "a8094d8c0a5c1567c4bebcb720b932c4ca813f87"
+# Reviewed 2026-10-20: Successive native attachments retain remaining shared ports
+# inside products without obstructing contractions through closed native coefficients.
+digest = "a368502f5f518da70b03bb4120334b222e9f08e0"
 
 [[section.note.scope]]
 path = "crates/vakint/src/projection.rs"
