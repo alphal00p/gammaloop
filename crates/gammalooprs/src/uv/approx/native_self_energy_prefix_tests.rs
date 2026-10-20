@@ -30,6 +30,193 @@ fn native_os_quark_proper_prefix_matches_mass_and_field_insertions() -> Result<(
     Ok(())
 }
 
+// This source-only gate does not interchange an OS limit with CFF residues.
+// The actual D09 prefix owner below supplies its native graph and child ports.
+#[test]
+fn native_d09_complete_child_has_pointwise_matched_shell_endpoints() -> Result<()> {
+    use crate::{graph::parse::NumeratorInterface, uv::overlap_numerators::NumeratorJetCache};
+    use idenso::shorthands::UndoShorthands;
+
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let mut records = reference.certify_os_quark_proper_prefix()?;
+    ensure!(records.len() == 1);
+    let record = records
+        .remove(&("D09".to_owned(), vec![2, 3]))
+        .ok_or_else(|| eyre!("the actual D09 OS child is missing"))?;
+    let graph = &record.graph;
+    let child = &record.given;
+    let empty = graph.empty_subgraph();
+    let root = OwnedForestNode {
+        spinney: Spinney::empty(graph),
+        topo_order: 0,
+    };
+    ensure!(graph.paired_edges(child.subgraph()) == [EdgeIndex(2), EdgeIndex(3)]);
+    ensure!(child.lmb().loop_edges.iter().copied().eq([EdgeIndex(2)]));
+    let crown = graph.dummy_less_full_crown(child.subgraph());
+    ensure!(
+        crown
+            .included_iter()
+            .map(|hedge| graph[&hedge])
+            .collect::<BTreeSet<_>>()
+            == BTreeSet::from([EdgeIndex(4), EdgeIndex(5)])
+    );
+    // This is the same source factor and prescribed denominator product as the
+    // prefix owner; the external amplitude and its ordering factor never enter.
+    let source = graph
+        .numerator(child.subgraph(), &empty)?
+        .to_d_dim(GS.dim)?
+        .color_simplify()?
+        .state
+        .expr;
+    let bare = source.with_checked_expression(
+        source.expression() * graph.denominator(child.subgraph(), &graph.model, |_| -1),
+    )?;
+    let frozen_kernel = function!(symbol!("native_os_prefix::pointwise_frozen_kernel"));
+    let mut endpoint_count = 0;
+    let mut nonzero_control_ran = false;
+    for components in [["1", "0", "0", "0"], ["5/4", "1/4", "1/2", "1/2"]] {
+        let mut settings = record.settings.clone();
+        settings.on_shell_subtraction_velocity = components.map(str::to_owned);
+        let velocity = settings.on_shell_velocity()?;
+        let ctx = UVCtx::new(graph, &graph.model, &settings);
+        let completed = if components == ["1", "0", "0", "0"] {
+            record.completed.clone()
+        } else {
+            // Rebuild the actual boosted operator and its own analytic policy;
+            // the rest-frame child coefficient is never substituted for it.
+            let local = uv_limit(
+                &Full4dCts::from_factorized_local(&Local4dCts::root()),
+                &ctx,
+                child,
+                &root,
+                child,
+                &root,
+            )?;
+            let backend = vakint::VakintSettings {
+                number_of_terms_in_epsilon_expansion: 3,
+                evaluation_order: vakint::EvaluationOrder(vec![
+                    vakint::EvaluationMethod::AlphaLoop(vakint::AlphaLoopOptions {
+                        susbstitute_masters: false,
+                    }),
+                ]),
+                ..settings.vakint.true_settings()
+            };
+            let integrated = super::super::Integrated::new(crate::utils::vakint()?, &backend)
+                .run(&local, &ctx, child, &root, child, &root)?;
+            Full4dCts::recursion_input(
+                &local,
+                &integrated,
+                ApproximationType::OS,
+                false,
+                child.lmb(),
+            )?
+        };
+        let mut local_remainder = bare.clone();
+        let mut frozen_remainder = bare.with_checked_expression(Atom::Zero)?;
+        let mut active_count = 0;
+        let mut operation_lmb = None;
+        let mut frozen_count = 0;
+        for sector in completed.sectors() {
+            if sector.frozen_lmbs().is_empty() {
+                active_count += 1;
+                ensure!(sector.active_components.len() == 1);
+                ensure!(&sector.active_components[0].0 == child.subgraph());
+                ensure!(&sector.active_components[0].1 == child.subgraph());
+                ensure!(sector.active_components[0].2.loop_edges == child.lmb().loop_edges);
+                operation_lmb = Some(&sector.active_components[0].2);
+                local_remainder = local_remainder.try_add(&sector.atom)?;
+            } else {
+                frozen_count += 1;
+                ensure!(sector.active_components.is_empty());
+                ensure!(sector.frozen_lmbs() == std::slice::from_ref(child.lmb()));
+                // Keep the localization kernel independent and frozen. The
+                // consumed-measure marker is not a physical loop coordinate.
+                frozen_remainder = frozen_remainder.try_add(
+                    &sector
+                        .atom
+                        .with_checked_expression(&frozen_kernel * sector.atom.expression())?,
+                )?;
+            }
+        }
+        ensure!((active_count, frozen_count) == (1, 1));
+        let operation_lmb =
+            operation_lmb.ok_or_else(|| eyre!("missing actual child operation LMB"))?;
+        let complete = local_remainder.try_add(&frozen_remainder)?;
+        for (label, payload) in [
+            (
+                "actual native bare plus signed local child",
+                &local_remainder,
+            ),
+            ("actual native frozen analytic child", &frozen_remainder),
+            ("actual complete native child", &complete),
+        ] {
+            // This component operation changes only the child's own boundary
+            // via its retained sub-LMB. The surrounding graph is untouched.
+            let endpoints = graph.on_shell_branches(
+                &graph.model,
+                payload,
+                child.subgraph(),
+                operation_lmb,
+                &velocity,
+            )?;
+            for endpoint in endpoints {
+                crate::uv::approx::local_4d::on_shell_tests::assert_rational_zero(
+                    label,
+                    graph,
+                    child,
+                    &NumeratorInterface::export(&endpoint).0,
+                    crate::uv::approx::local_4d::on_shell_tests::SpinReduction::FiniteComponents,
+                )?;
+                endpoint_count += 1;
+            }
+        }
+        // The same exact denominator-class oracle must distinguish the raw O
+        // source. This control neither clears a forest denominator nor relies
+        // on a numerical nonzero witness.
+        if !nonzero_control_ran {
+            let raw_endpoint = graph
+                .on_shell_branches(
+                    &graph.model,
+                    &bare,
+                    child.subgraph(),
+                    operation_lmb,
+                    &velocity,
+                )?
+                .into_iter()
+                .next()
+                .ok_or_else(|| eyre!("missing raw O branch"))?;
+            let coefficients = crate::uv::approx::local_4d::on_shell_tests::rational_coefficients(
+                graph,
+                child,
+                &NumeratorInterface::export(&raw_endpoint).0,
+            )?;
+            let mut cache = NumeratorJetCache::default();
+            let mut found_nonzero = false;
+            for numerator in coefficients.into_values() {
+                let exact = cache.canonicalize(&numerator.undo_dots::<Aind>()?)?;
+                found_nonzero |= !exact.is_zero;
+            }
+            ensure!(
+                found_nonzero,
+                "the actual raw child must fail the zero-endpoint certificate"
+            );
+            nonzero_control_ran = true;
+        }
+    }
+    ensure!(endpoint_count == 12 && nonzero_control_ran);
+    crate::debug_tags!(#uv, #local, #on_shell, #summary;
+        stage = "native_d09_pointwise_child_endpoints",
+        endpoint_count, nonzero_control_ran,
+        physical_source_owners = ?[EdgeIndex(2), EdgeIndex(3)],
+        boundary_owners = ?[EdgeIndex(4), EdgeIndex(5)],
+        frozen_kernel_retained = true,
+        cff_limit_exchange_proved = false,
+        "Actual native D09 child has matched rest and boosted pointwise shell endpoints"
+    );
+    Ok(())
+}
+
 impl QcdMassReference {
     pub(super) fn certify_os_quark_proper_prefix(&self) -> Result<CertifiedMassPrefixes> {
         let reference = self;

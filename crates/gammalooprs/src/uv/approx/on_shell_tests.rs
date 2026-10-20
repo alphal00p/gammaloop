@@ -141,7 +141,7 @@ fn physical_expression(graph: &Graph, current: &OwnedForestNode, atom: &Atom) ->
 
 /// Collect only identical denominator products. No common denominator or
 /// polynomial expansion of a graph numerator is used, even in this diagnostic.
-fn rational_coefficients(
+pub(in crate::uv) fn rational_coefficients(
     graph: &Graph,
     current: &OwnedForestNode,
     atom: &Atom,
