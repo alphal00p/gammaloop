@@ -22,6 +22,21 @@ revision-specific Rustdoc for their accepted forms, return types, feature gates,
 locations. APIs behind `bincode` and `reference-cases` are available only when the matching Cargo
 feature is enabled. Python bindings belong to `spynso3`.
 
+== Selected-slot tensor symmetry
+
+Idenso accepts flat tensor heads declared through Spenso's
+`TensorSlotSymmetry`. Reindexing, explicit contractions, matrix composition, and
+Dirac adjunction retain the registered subgroup semantics. Derivative and
+internal slots outside a group remain ordered spectators, including spectators
+with the same Lorentz representation as the antisymmetric pair.
+
+`canonize()` exposes each declared group to Symbolica through a temporary compact
+encoding and restores the physical head after dummy relabeling. The existing
+Graphica incidence graph and Linnet permutation parity detect signed zeros within
+the selected groups. Neither operation expands a product of field strengths
+into its permutation sum. Native archive admission requires the declaration's
+normalization callback to be restored before importing its expressions.
+
 == Python community module
 
 #boundary("Part of Symbolica community", [

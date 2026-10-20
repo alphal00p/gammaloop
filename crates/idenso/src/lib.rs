@@ -706,7 +706,18 @@ impl IndexTooling for AtomView<'_> {
             .graph
             .to_expression_at(&tree, root, &mut |_, node| match node {
                 NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                    Ok(Some(net.store.tensors[*index].expression.clone()))
+                    let expression = &net.store.tensors[*index].expression;
+                    let encoded = if let AtomView::Fun(function) = expression.as_view() {
+                        spenso::network::tensor_symmetry::TensorSlotSymmetry::canonical_view(
+                            function,
+                        )
+                        .map_err(|error| {
+                            spenso::network::TensorNetworkError::Other(eyre::eyre!(error))
+                        })?
+                    } else {
+                        expression.clone()
+                    };
+                    Ok(Some(encoded))
                 }
                 NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
                     Ok(Some(net.store.get_scalar_ref(*index).clone()))
@@ -734,6 +745,16 @@ impl IndexTooling for AtomView<'_> {
             if i64::try_from(exponent).is_ok_and(|n| n > 0) {
                 return;
             }
+            let base =
+                match spenso::network::tensor_symmetry::TensorSlotSymmetry::restore_canonical_view(
+                    &base.to_owned(),
+                ) {
+                    Ok(base) => base,
+                    Err(reason) => {
+                        failure = Some(CanonicalizationError::Prepare { reason });
+                        return;
+                    }
+                };
             let canonical =
                 match base.canonize::<Aind>(&mut new_dummy as &mut dyn FnMut(usize) -> Aind) {
                     Ok(canonical) => canonical.pow(exponent),
@@ -806,9 +827,12 @@ impl IndexTooling for AtomView<'_> {
             ));
         }
 
-        Ok(scalar_definitions
-            .map_root(|_| canonical.canonical_form.replace_multiple(&reps))
-            .into_inner())
+        let canonical =
+            spenso::network::tensor_symmetry::TensorSlotSymmetry::restore_canonical_view(
+                &canonical.canonical_form.replace_multiple(&reps),
+            )
+            .map_err(|reason| CanonicalizationError::Prepare { reason })?;
+        Ok(scalar_definitions.map_root(|_| canonical).into_inner())
     }
     fn spenso_conj(&self) -> Atom {
         let conjugate = self
