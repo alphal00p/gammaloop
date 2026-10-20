@@ -9,7 +9,10 @@ use crate::{
         parsing::{StrictTensorFilter, structure_inference::TensorialSyntax},
         tags::SPENSO_TAG,
     },
-    structure::{representation::LibraryRep, slot::SlotMatcher},
+    structure::{
+        representation::LibraryRep,
+        slot::{SlotMatch, SlotMatcher},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol, representation::FunView},
@@ -410,10 +413,15 @@ impl<const N: usize> TensorCollectFilter<N> {
 
         // Match rep(a__) against the whole argument, as matches() does through
         // partial(false). Only the recognized shorthand branches below recurse.
+        let mut slots = SlotMatcher::default();
         if fun.iter().any(|arg| {
-            matches!(arg, AtomView::Fun(inner)
-                if inner.get_nargs() > 0
-                    && reps.iter().any(|rep| inner.get_symbol() == rep.symbol()))
+            let representation = match slots.classify(arg) {
+                SlotMatch::Explicit(slot) => Some(slot.representation()),
+                _ => slots.compact_representation(arg),
+            };
+            representation.is_some_and(|representation| {
+                reps.iter().any(|rep| representation.head() == rep.symbol())
+            })
         }) {
             return true;
         }
@@ -750,5 +758,45 @@ mod scalar_domain_tests {
             }
         }
         assert!(!filter.matches((Atom::one() + dot).pow(2).as_view()));
+    }
+
+    #[test]
+    fn representation_filter_matches_dual_ports_without_entering_foreign_scopes() {
+        use crate::structure::{abstract_index::AIND_SYMBOLS, representation::RepName};
+        crate::structure::representation::initialize();
+        let rep = LibraryRep::new_dual("collect_dual_port_regression").unwrap();
+        let other = LibraryRep::from(Minkowski {});
+        let filter = TensorCollectFilter::Reps([rep]);
+        let index = Atom::var(symbol!("collect_dual_port_index"));
+        let coordinate = FunctionBuilder::new(AIND_SYMBOLS.cind).add_arg(0).finish();
+        let foreign = symbol!("collect_dual_port_foreign");
+        for representation in [rep, rep.dual()] {
+            for port in [
+                representation.to_symbolic([Atom::num(3)]),
+                representation.to_symbolic([Atom::num(3), index.clone()]),
+            ] {
+                let selector = FunctionBuilder::new(ETS.delta)
+                    .add_arg(&coordinate)
+                    .add_arg(&port)
+                    .finish();
+                assert!(filter.matches(selector.as_view()));
+                assert!(TensorCollectFilter::Reps([rep.dual()]).matches(selector.as_view()));
+                assert!(!TensorCollectFilter::Reps([other]).matches(selector.as_view()));
+                let wrapped = FunctionBuilder::new(foreign).add_arg(&selector).finish();
+                assert!(!filter.matches(wrapped.as_view()));
+                for owner in [SPENSO_TAG.pure_scalar, SPENSO_TAG.bracket] {
+                    let wrapped = FunctionBuilder::new(owner).add_arg(&selector).finish();
+                    assert!(!filter.matches(wrapped.as_view()));
+                }
+            }
+        }
+        let malformed = FunctionBuilder::new(AIND_SYMBOLS.dind)
+            .add_arg(rep.to_symbolic([Atom::num(3), index.clone(), index]))
+            .finish();
+        let malformed = FunctionBuilder::new(ETS.delta)
+            .add_arg(coordinate)
+            .add_arg(malformed)
+            .finish();
+        assert!(!filter.matches(malformed.as_view()));
     }
 }
