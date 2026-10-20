@@ -2,8 +2,8 @@
 
 This records completed migration checks as of 20 October 2026. The focused
 suites overlap; their counts are not a combined whole-repository test result.
-Completed scientific checks and the remaining validation/delivery gates are
-recorded separately below.
+Completed scientific checks and repository validation/delivery records appear
+separately below.
 
 #let evidence(path, body) = link(
   "https://github.com/alphal00p/vakint-external-data/blob/fced6061d2037272bc76c15bd0396b9ac7287bf7/" + path,
@@ -11,6 +11,10 @@ recorded separately below.
 )
 #let producer_evidence(path, body) = link(
   "https://github.com/alphal00p/vakint-external-data/blob/9fbcd9a6bcc63ac39c342b623b394c118ac318b1/validation/" + path,
+  body,
+)
+#let cache_evidence(path, body) = link(
+  "https://github.com/alphal00p/vakint-external-data/blob/15270b5bfddf535afc740de87a6d89d597930b00/validation/" + path,
   body,
 )
 
@@ -111,10 +115,104 @@ Cache preparation reports for
 #evidence("1L/cache.json", [1L]), #evidence("2L/cache.json", [2L]),
 #evidence("3L/cache.json", [3L]) and #evidence("4L/cache.json", [4L])
 all report their selected finite workloads complete. Guarded intermediate capture
-stored 735 additional 3L and 195,449 additional 4L records. One 4L root reached
+published 735 3L and 195,449 4L records; 703 and 73,274 of those later served
+selected roots. The complete packs therefore contain 2,352 and 286,527 distinct
+records, including 32 and 122,175 outside their selected primers. One 4L root reached
 the optional capture-metadata budget. This limits intermediate capture, not root
 completion; neither these workloads nor their caches certify arbitrary-index
 IBP coverage. Cached/uncached 1L–4L parity passed with the final native bindings.
+
+== Published cache workload and size
+
+The offline producer was run separately for 1L, 2L, 3L and 4L. The public
+reproduction driver is #link("examples/prepare_bundled_caches.rs")[`prepare_bundled_caches`]:
+it calls `prepare_cache` with the loop count and default `Primer` options.
+The input is the complete finite primer, spanning all physical parent pinches,
+at most two total extra positive powers above the surviving unit lines, and
+numerator rank at most one. At 4L the parents are H, FG, BMW and X. This covers
+common unit, dotted, pinched and rank-one requests while harvesting complete
+guarded intermediate reductions along their paths. It is independent of the
+later illustrative requests in `native_cache.rs` and of certification coverage.
+
+Each container is `nL/cache/`, containing `bundle.rrindex`, one
+`bindings/<binding-id>/cache.rrindex` per program, and hash-named
+`chunks/*.rrchunk.gz`. These store exact unit-mass, unnormalized reductions and
+nonzero guards; numerical master values are separate data. Writer locks and
+optional preparation checkpoints are excluded from distribution.
+
+#table(columns: 6,
+  [Loops], [Selected roots], [Distinct records], [Native file bytes], [Metadata bytes], [Preparation seconds],
+  [1], [5], [5], [1,235], [5,964], [0.00473],
+  [2], [77], [77], [3,854], [6,445], [0.00747],
+  [3], [2,320], [2,352], [160,651], [22,749], [1.76790],
+  [4], [164,352], [286,527], [90,887,721], [4,564,269], [653.07154],
+)
+
+Sizes are logical file-content lengths: 9,863 native files total 91,053,461
+bytes, plus 4,599,427 bytes of `cache.json` generation metadata. Native chunk
+payloads are already gzip-compressed; filesystem allocation is a separate
+quantity. The 4L cache comprises 9,812 chunks and five indexes. Its native
+preparation took 10 min 53 s, or 11 min 9 s including the producer's startup
+and publication work. These generation times come from the published producer
+receipts at Vakint `e98b51c489ab9a35d01f30aa865ad79c48372624` and RustRed
+`74a83e94f9f841ae113f3d151cd80567dbc9805d`; final-runtime compatibility was
+validated separately through codecs, bindings and exact cached/uncached parity.
+
+The complete compressed loop assets are 48,045, 107,633, 370,372 and
+111,922,455 bytes respectively. They include IBPs, master coefficients and graphs
+alongside these caches. No five-loop prepared cache is published.
+
+The #cache_evidence("prepared-cache-inventory.json.gz", [independent inventory]),
+#cache_evidence("prepared-cache-native-file-inventory.json.gz", [complete file list])
+and #cache_evidence("prepared-cache-metadata-authentication.json.gz", [manifest authentication])
+verify all 9,863 native file hashes and sizes. This evidence-only follow-up
+does not change the immutable runtime release.
+
+=== Measured reduction benefit
+
+The #cache_evidence("prepared-cache-reduction-timings.json.gz", [complete timing receipt])
+and #cache_evidence("prepared-cache-reduction-protocol.json.gz", [protocol/profile])
+record one fresh cached/uncached process pair per request on two fixed cores,
+using the unoptimized Cargo test profile with debug information. Public exact
+RustRed Retain calls use unit mass and FMFT/MATAD normalization. Engine/data/program
+initialization, cache attachment, three RAM repeats and exact-reference checks
+are outside the first-call timings; numerical master and HPL evaluation are
+excluded. All 22 processes exited zero, and all eleven cached expressions
+agreed exactly with uncached references. These are shared-host samples, with
+no OS page-cache flush or statistical release-build speedup claim.
+
+#table(columns: 5,
+  [Family], [First power], [Uncached seconds], [Prepared seconds], [Uncached / prepared],
+  [1L], [3], [0.010444], [0.010304], [1.01],
+  [2L], [2], [0.012492], [0.012369], [1.01],
+  [3L], [2], [0.254533], [0.094634], [2.69],
+  [4L/H], [2], [34.154138], [0.123183], [277.26],
+  [4L/FG], [2], [2.537141], [0.135310], [18.75],
+  [4L/BMW], [2], [0.056794], [0.064122], [0.89],
+  [4L/X], [2], [157.714177], [0.318779], [494.74],
+  [4L/H], [4], [47.442782], [24.538869], [1.93],
+  [4L/FG], [4], [4.582351], [0.919546], [4.98],
+  [4L/BMW], [4], [26.793927], [6.579722], [4.07],
+  [4L/X], [4], [249.320210], [81.082004], [3.07],
+)
+
+Every other physical denominator has power one and auxiliary powers are zero.
+The seven primer requests have backing entry hits and zero cached native rule
+applications. The four power-four requests have no exact entry hit: H, FG, BMW
+and X instead use 2,983, 52, 888 and 8,460 descendant hits respectively. Thus
+intermediate records help inputs outside the selected primer.
+
+The BMW primer already needs zero ordinary native rules; its small slowdown
+shows no cache benefit for that request. The sampled 1L and 2L calls are also
+effectively unchanged. Common first-use four-loop data/program setup took
+74.91–98.93 seconds per fresh test process; attaching its cache took
+0.140–0.168 seconds. Those separate costs matter for a one-shot calculation
+and are amortized when the loaded engine handles multiple requests.
+
+The #cache_evidence("prepared-cache-reduction-independent-review.json.gz", [independent review])
+verifies the raw logs, profile, source identity, expression assertions and all
+ratios. Its scope is separate from the earlier exact native guard checks.
+Benchmark sources and raw process logs accompany the archived receipt.
 
 == Completed runtime checks
 
@@ -181,8 +279,8 @@ IBP coverage. Cached/uncached 1L–4L parity passed with the final native bindin
   out of strict completed caches.
 
 The recorded local all-targets Clippy pass completed with `-D warnings` on the
-Float, alias and loader-bound changes. The repository Nix/upload gate remains
-pending below.
+Float, alias and loader-bound changes. The complete repository Nix/upload result
+is recorded below.
 The initial offline locked-resolution proof matched all 709 Git dependency/
 feature nodes against the Nix vendor output. The later payload-adapter migration
 removed the obsolete separate payload package and reused the already-pinned
@@ -272,7 +370,7 @@ here. Source, library, binary and input hashes bind the original preparation to
 `93ce035278ab1feb93e0e6215ad85eb79dbc5e75` and the candidate/comparison to the
 `c398e309de1767fcecbe841f6555080e10700fb6` runtime source cohort.
 
-A call-path audit against `00ed8877f629f8bb42578813c8a286104cb5e3fa` confirms
+A call-path audit against `d5383061f075c3762bfb2ecdc7affb03f50e6e3b` confirms
 fourteen called or related method bodies and twenty-one transitive source/pin
 scopes are unchanged at that revision. The sealed preparation and strict
 canonicalization do not enter the indexed-scope path; the later UV-restoration
@@ -323,14 +421,24 @@ marked non-draft and labeled `final-review`. Its
 #link("https://nix-ci.com/gh:alphal00p:gammaloop/reject-native-dot-metadata-fallback/d39d9bf206d8f858efedc9281f034cddb50c51fa")[hosted NixCI check also passed]. Already-fixed dependency issues were
 incorporated without duplicate upstream submissions.
 
-Two further focused submissions against the current FeynKit branch are prepared:
-native multiattachment tensor-port preservation at
-`070556bcab0eff348188f27b0dfc44c173ffee46`, and FORM saved-index epsilon
-restoration at `2e231c0e2ee6967c2ab61b070ecbbe654c5391bf`. Their focused tests,
-Clippy, formatting and architecture-scope checks pass. Their exact final-source
-checks/upload recipes are still pending completion; no push, PR URL or hosted-CI
-success is claimed yet. The latest dependency already contains the registered
-symbol-data parser fix, so the second submission does not duplicate that repair.
+Native multiattachment tensor-port preservation was submitted against the current
+FeynKit branch in #link("https://github.com/alphal00p/gammaloop/pull/157")[PR 157],
+head `070556bcab0eff348188f27b0dfc44c173ffee46`. All 50 focused unit tests,
+Clippy, formatting and 74 architecture-scope checks passed. Its exact
+final-source static/producer checks and upload exited zero with
+`CI upload completed`; the PR is non-draft and labeled `final-review`.
+
+FORM saved-index epsilon restoration was submitted in
+#link("https://github.com/alphal00p/gammaloop/pull/158")[PR 158], head
+`2e231c0e2ee6967c2ab61b070ecbbe654c5391bf`. All 48 focused unit tests, Clippy,
+formatting and 74 architecture checks passed. Its exact final-source
+static/producer checks and upload exited zero with `CI upload completed`;
+the PR is non-draft and labeled `final-review`. Its tested base is `8cb80dfd`;
+the target subsequently included the independent PR 156 graph fix at `d39d9bf2`,
+with a clean merge verified separately. No merged-base rerun is claimed.
+The latest dependency already contains the registered symbol-data parser fix;
+this submission does not duplicate that repair. No hosted-CI result is claimed
+for PRs 157 or 158.
 
 Python build producers now use the complete manifest normal-dependency closure,
 including optional UFO and FeynKit Python sources. This follows the existing
@@ -461,9 +569,23 @@ snapshot issues addressed above. The aggregate run exited one before upload;
 319 valid producer outputs were retained. Successful groups and partial
 documentation test output do not make the failed aggregate or its upload complete.
 
-The corrected source has the focused validation recorded here. Its exact full
-repository checks and successful upload still remain required, followed by the
-same checks on the final report/source commit. Delivery is a normal push to
-`origin/vakint_rustred`, without a main-repository PR. The separate upstream
-submissions retain their own checks/upload, PR and review-label requirements.
-This report does not claim final CI, upload or delivery completion.
+The corrected runtime source at
+`d5383061f075c3762bfb2ecdc7affb03f50e6e3b` passed the exact
+`just ci-checks-and-upload` command with exit zero and `CI upload completed`.
+Clippy, formatting, workspace graph checks and doctests passed. All nine runtime
+groups have valid successful results: 2,723 selected tests passed, comprising
+344 Vakint, 108 integration, 799 core, 256 documentation, five Python and 1,211
+other native package tests. Existing skips were preserved. Checks took 2,784
+seconds, publication preparation 363 seconds and upload 475 seconds.
+
+The complete source-bound receipt is
+`coherent-main-ci-native-metadata-cwd-upload.receipt.json`, SHA256
+`0a4ce20114955def3dd8e910bba7c321f5189f270fa630d7b2ae8107f13d68fc`.
+Its nine runtime logs and valid producer outputs are retained locally. The
+separate four-loop scientific checks and published-download/offline-reuse checks
+above remain part of acceptance; they are not replaced by this CI selection.
+
+The final report-only commit uses the same exact checks/upload gate before a
+normal push to `origin/vakint_rustred`, without a main-repository PR. Separate
+upstream submissions retain their own checks/upload, PR and review-label
+requirements. Upstream merge timing is not a delivery requirement.
