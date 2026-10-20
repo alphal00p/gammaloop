@@ -37,7 +37,7 @@ helicities = [1, 1]
 evaluator_method = "SingleParametric"
 
 [cli_settings.global]
-logfile_directive = "off"
+logfile_directive = "[{#generation,#profile}]=debug"
 display_directive = "info"
 
 [cli_settings.global.generation]
