@@ -84,15 +84,17 @@ extension. Explicit rendering needs no Python compiler package.
 
 === Notebook expression display
 
-Interactive tensor output uses Symbolica's shared `MathMLViewer`, with paged
-output, hover previews, subexpression inspection, and keyboard zoom. Spenso
-still renders the mathematics: tensor notation, logical index order, and
-custom printers are retained without expanding or changing the expression.
+Interactive tensor output uses Symbolica's shared responsive MathML renderer
+and `MathMLViewer`. Arithmetic uses the same eight width-fitting layouts,
+nested omissions, inline expansion, hover previews, inspection, and keyboard
+zoom as `expression.to_expression()`. Spenso supplies only tensor notation
+leaves, retaining logical index order and custom printers without expanding
+or changing the expression.
 
 Use `expression.paged(page_size=25)` to request the viewer explicitly. Page
 sizes range from 1 to 500; rendering budgets may shorten a page. Notebook
 display requires the Community assembly's `notebook-display` extra, which
-provides the widget and the isolated Typst page compiler. Explicit `to_html()`
+provides the widget and the isolated Typst notation compiler. Explicit `to_html()`
 and `to_svg()` exports remain complete and use the embedded renderer.
 
 === Pyodide builds

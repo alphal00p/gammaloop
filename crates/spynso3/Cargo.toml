@@ -20,6 +20,7 @@ pyo3 = { workspace = true, features = ["eyre", "multiple-pymethods"] }
 
 itertools = "0.14.0"
 serde_json = { workspace = true }
+self_cell = { workspace = true }
 roxmltree = "0.21.1"
 ciborium = "0.2"
 linnet = { workspace = true }
