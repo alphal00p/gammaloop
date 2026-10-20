@@ -354,6 +354,79 @@ pub enum AdjointError {
 }
 
 impl tensor::SymbolicTensor<PartialStructure> {
+    /// Expose independent positive-power copies through the existing collection
+    /// owner. Scalar sums remain factored; the caller's native index type is
+    /// restored before its ordinary canonicalization parser runs.
+    fn prepare_canonical_powers<Aind: DummyAind + ParseableAind + AbsInd>(
+        source: AtomView<'_>,
+    ) -> Result<Atom, CanonicalizationError> {
+        use spenso::structure::{representation::LibraryRep, slot::SlotMatcher};
+        use std::collections::{HashMap, HashSet};
+
+        let state = ParseState::<Aind>::default();
+        state.reserve_indices(source);
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let mut failure = None;
+        let expression = source.replace_map_bottom_up(|value, _, output| {
+            if failure.is_some() {
+                return;
+            }
+            let AtomView::Pow(power) = value else {
+                return;
+            };
+            if !i64::try_from(power.get_exp()).is_ok_and(|power| power > 1) {
+                return;
+            }
+            let result = (|| {
+                let cooked = cooking.try_cook(value).map_err(|error| error.to_string())?;
+                let mut slots = SlotMatcher::default();
+                let mut written = HashSet::new();
+                cooked.visitor(&mut |part| {
+                    if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(part) {
+                        written.insert(slot.aind);
+                        return false;
+                    }
+                    true
+                });
+                if written.is_empty() {
+                    return Ok(None);
+                }
+                let tensor = Self::infer(cooked.clone()).map_err(|error| error.to_string())?;
+                let prepared = tensor
+                    .collect_with_map(
+                        tensor::CollectionMode::Factored,
+                        None,
+                        |_| true,
+                        |value, _, _| Ok(value),
+                    )
+                    .map_err(|error| error.to_string())?;
+                if prepared.expression() == &cooked {
+                    return Ok(None);
+                }
+                let mut fresh = HashMap::new();
+                let expression = prepared.expression().replace_map(|part, _, out| {
+                    if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(part)
+                        && !written.contains(&slot.aind)
+                    {
+                        let index = *fresh
+                            .entry(slot.aind)
+                            .or_insert_with(|| state.fresh_index());
+                        **out = slot.rep().slot::<Aind, Aind>(index).to_atom();
+                    }
+                });
+                Ok::<_, String>(Some(cooking.uncook(expression.as_view())))
+            })();
+            match result {
+                Ok(Some(expression)) => **output = expression,
+                Ok(None) => {}
+                Err(reason) => failure = Some(reason),
+            }
+        });
+        failure.map_or(Ok(expression), |reason| {
+            Err(CanonicalizationError::Prepare { reason })
+        })
+    }
+
     /// Dirac adjunction with the source's ordered logical axes. The external
     /// representations are dualized; zero retains those axes without parsing.
     /// As for axis permutation, unresolved axes acquire independent graph labels
@@ -569,6 +642,14 @@ impl IndexTooling for AtomView<'_> {
                 reason: error.to_string(),
             })?;
 
+        let prepared = tensor::SymbolicTensor::prepare_canonical_powers::<Aind>(*self)?;
+        if prepared.as_view() != *self {
+            net = prepared
+                .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+                .map_err(|error| NetworkToolingError::Parse {
+                    reason: error.to_string(),
+                })?;
+        }
         net.remove_antisymmetric_zero_terms();
 
         // Keep duality wrappers in the expression graph. The canonicalizer
@@ -585,6 +666,36 @@ impl IndexTooling for AtomView<'_> {
                 dummies.insert(slot.to_atom(), slot.rep());
             }
         }
+        // A variadic tensor word exposes only its free ports to the outer
+        // network. Give Symbolica its internal slot inventory as well; its
+        // canonicalizer owns deciding which of these slots are contracted.
+        let mut slots = spenso::structure::slot::SlotMatcher::default();
+        prepared.visitor(&mut |value| {
+            let AtomView::Fun(function) = value else {
+                return true;
+            };
+            if function
+                .get_symbol()
+                .has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word)
+            {
+                value.visitor(&mut |part| {
+                    if let Ok(slot) =
+                        slots.parse::<spenso::structure::representation::LibraryRep, Aind>(part)
+                    {
+                        let slot = if slot.rep_name().is_dual() {
+                            slot.dual()
+                        } else {
+                            slot
+                        };
+                        dummies.insert(slot.to_atom(), slot.rep());
+                        return false;
+                    }
+                    !matches!(part, AtomView::Fun(function) if function.get_symbol().is_scalar())
+                });
+                return false;
+            }
+            !function.get_symbol().is_scalar()
+        });
 
         let external = net.graph.dangling_indices();
         // Reconstruct the admitted operation graph, without running tensor algebra
@@ -801,6 +912,145 @@ pub mod test {
         AdjointError, CanonicalizationError, Cookable, IndexTooling, NetworkToolingError, gamma,
         test_support::test_initialize, u,
     };
+
+    #[test]
+    fn canonicalization_of_closed_scalar_power_matches_fresh_contracted_copies() {
+        test_initialize();
+        let a = SPENSO_TAG.tensor_symbol("canonical_power::a");
+        let b = SPENSO_TAG.tensor_symbol("canonical_power::b");
+        let index = spenso::mink!(4, 701);
+        let norm =
+            crate::tensor::SymbolicTensor::infer(function!(a, &index) * function!(b, &index))
+                .unwrap();
+        for power in [2, 3] {
+            let powered = norm
+                .pow(&crate::tensor::SymbolicTensor::infer(Atom::num(power)).unwrap())
+                .unwrap();
+            let mut explicit = crate::tensor::SymbolicTensor::infer(Atom::one()).unwrap();
+            for copy in 0..power {
+                explicit = explicit
+                    .multiply(
+                        &norm
+                            .wrap_indices(symbol!(&format!("canonical_power::copy_{copy}")), true)
+                            .unwrap(),
+                    )
+                    .unwrap();
+            }
+            let expected = explicit.canonize().unwrap();
+            let actual = powered.canonize().unwrap();
+            assert_eq!(actual.expression(), expected.expression());
+            assert_eq!(actual.canonize().unwrap().expression(), actual.expression());
+            assert_ne!(actual.expression(), norm.canonize().unwrap().expression());
+            assert_eq!(
+                powered.expression().canonize(AbstractIndex::Dummy).unwrap(),
+                *expected.expression()
+            );
+        }
+    }
+
+    #[test]
+    fn canonicalization_of_word_internal_dummies_keeps_external_names_and_signs() {
+        use crate::tensor::SymbolicTensor;
+        test_initialize();
+        let head = symbol!("canonical_word::exterior"; Flat, Linear, Antisymmetric;
+            tag = &SPENSO_TAG.tensor_word);
+        let a = SPENSO_TAG.tensor_symbol("canonical_word::a");
+        let b = SPENSO_TAG.tensor_symbol("canonical_word::b");
+        let index = symbol!("canonical_word::owned_index", tag = &SPENSO_TAG.index);
+        let density = |scope: usize, external: usize, reverse: bool| {
+            let internal = function!(index, scope, 0);
+            let left =
+                SymbolicTensor::infer(function!(a, crate::bis!(4, 71), crate::cof!(3, &internal)))
+                    .unwrap();
+            let right =
+                SymbolicTensor::infer(function!(b, crate::bis!(4, 72), crate::coaf!(3, &internal)))
+                    .unwrap();
+            let operands = if reverse {
+                [right, left]
+            } else {
+                [left, right]
+            };
+            let word = SymbolicTensor::word(head, &operands).unwrap();
+            word.multiply(
+                &SymbolicTensor::infer(gamma!(
+                    crate::bis!(4, 71),
+                    crate::bis!(4, 72),
+                    spenso::mink!(4, external as u64)
+                ))
+                .unwrap(),
+            )
+            .unwrap()
+        };
+        let canonical = density(1, 73, false).canonize().unwrap();
+        let renamed = density(2, 73, false).canonize().unwrap();
+        assert_eq!(canonical.expression(), renamed.expression());
+        assert_eq!(canonical.rank(), 1);
+        assert_eq!(
+            canonical.expression(),
+            &-density(2, 73, true).canonize().unwrap().expression()
+        );
+        assert_ne!(
+            canonical.expression(),
+            density(2, 74, false).canonize().unwrap().expression()
+        );
+        assert_eq!(
+            canonical.canonize().unwrap().expression(),
+            canonical.expression()
+        );
+        assert!(
+            !canonical
+                .expression()
+                .get_all_symbols(true)
+                .contains(&index)
+        );
+    }
+
+    #[test]
+    fn canonicalization_of_powered_sums_keeps_factorization_and_outer_ports() {
+        use crate::tensor::SymbolicTensor;
+        test_initialize();
+        let index = spenso::mink!(4, 801);
+        let pair = |left, right| {
+            SymbolicTensor::infer(
+                function!(SPENSO_TAG.tensor_symbol(left), &index)
+                    * function!(SPENSO_TAG.tensor_symbol(right), &index),
+            )
+            .unwrap()
+        };
+        let sum = pair("canonical_sum_power::a", "canonical_sum_power::b")
+            .try_add(&pair("canonical_sum_power::c", "canonical_sum_power::d"))
+            .unwrap();
+        let squared = sum
+            .pow(&SymbolicTensor::infer(Atom::num(2)).unwrap())
+            .unwrap();
+        let explicit = sum
+            .wrap_indices(symbol!("canonical_sum_power::left"), true)
+            .unwrap()
+            .multiply(
+                &sum.wrap_indices(symbol!("canonical_sum_power::right"), true)
+                    .unwrap(),
+            )
+            .unwrap();
+        let free = spenso::mink!(4, AbstractIndex::Dummy(0).to_atom());
+        let spectator = (Atom::var(symbol!("canonical_sum_power::x"; Scalar))
+            + Atom::var(symbol!("canonical_sum_power::y"; Scalar)))
+        .pow(7);
+        let outer = SymbolicTensor::infer(
+            function!(
+                SPENSO_TAG.tensor_symbol("canonical_sum_power::outer"),
+                &free
+            ) * &spectator,
+        )
+        .unwrap();
+        let actual = squared.multiply(&outer).unwrap().canonize().unwrap();
+        let expected = explicit.multiply(&outer).unwrap().canonize().unwrap();
+        assert_eq!(actual.expression(), expected.expression());
+        assert_eq!(actual.rank(), 1);
+        assert!(actual.expression().contains(&free));
+        assert!(actual.expression().contains(&spectator));
+        assert_ne!(actual.expression(), &actual.expression().expand());
+        assert_eq!(actual.canonize().unwrap().expression(), actual.expression());
+    }
 
     #[test]
     fn typed_adjoint_keeps_native_logical_axes_and_ranked_zero() {
