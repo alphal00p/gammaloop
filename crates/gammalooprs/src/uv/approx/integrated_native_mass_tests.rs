@@ -39,6 +39,12 @@ pub(in crate::uv) struct QcdMassReference {
     model: Model,
 }
 
+#[derive(Clone, Copy)]
+enum NativeQuarkTrace {
+    Mass,
+    Vector,
+}
+
 impl QcdMassReference {
     /// Open a complete source-derived quark closing word on its native frame.
     /// Keep momentum specialization, normalization and Gram controls at callers.
@@ -953,6 +959,14 @@ impl QcdMassReference {
     }
 
     fn project(&self, diagram: &FeynmanDiagram) -> Result<MassProjection> {
+        self.project_quark_trace(diagram, NativeQuarkTrace::Mass)
+    }
+
+    fn project_quark_trace(
+        &self,
+        diagram: &FeynmanDiagram,
+        projection: NativeQuarkTrace,
+    ) -> Result<MassProjection> {
         let model = &self.model;
         let loops = diagram.loop_momentum_basis().loop_edges.len();
         let name = diagram.name();
@@ -1012,7 +1026,91 @@ impl QcdMassReference {
             "d must reach numerator indices before contraction"
         );
 
-        let admitted = dimensional.multiply(&mass_projector)?;
+        let projector = match projection {
+            NativeQuarkTrace::Mass => mass_projector,
+            NativeQuarkTrace::Vector => {
+                let AtomView::Fun(native_external) = p_native.as_view() else {
+                    return Err(eyre!("native external momentum is not a carrier"));
+                };
+                // Extract the p-linear MATRIX before tracing. Specialization is
+                // confined to this closing word; the source is never set to p=0.
+                let mut removed = 0;
+                let identity = mass_projector.with_checked_expression(
+                    mass_projector.expression().replace_map(|view, _, output| {
+                        if let AtomView::Fun(momentum) = view
+                            && momentum.get_symbol() == native_external.get_symbol()
+                            && momentum.get_nargs() > 0
+                            && momentum.get(0) == native_external.get(0)
+                        {
+                            removed += 1;
+                            **output = Atom::Zero;
+                        }
+                    }),
+                )?;
+                ensure!(removed == 1);
+                let kinetic = mass_projector.try_sub(&identity)?;
+                let gram_kinematics = Kinematics::in_dimension(&d)?;
+                let p_squared = gram_kinematics.scalar_product(&p_native, &p_native)?;
+                // This denominator belongs to the vector projector, before the
+                // external on-shell relation is applied by the common pipeline.
+                let vector = kinetic.with_checked_expression(kinetic.expression() / &p_squared)?;
+                let source = dimensional.clone().try_into_indexed()?;
+                let identity = identity
+                    .with_checked_expression(Atom::num(4) * &nc * identity.expression())?
+                    .try_into_indexed()?;
+                let kinetic = kinetic
+                    .with_checked_expression(Atom::num(4) * &nc * kinetic.expression())?
+                    .try_into_indexed()?;
+                let open_identity = Self::open_native_quark_dual(&identity, &source)?;
+                let open_kinetic = Self::open_native_quark_dual(&kinetic, &source)?;
+                let vector = vector.try_into_indexed()?;
+                let gram_kinematics = gram_kinematics.with_mass_squared(&p_native, Atom::one())?;
+                let trace = |matrix: &SymbolicTensor<IndexedStructure>| -> Result<Atom> {
+                    let admitted = vector.clone().multiply(matrix.clone())?;
+                    let reduced = admitted.simplify_algebra(&AlgebraSettings {
+                        gamma: Some(GammaSimplifySettings::canonical()),
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?;
+                    let reduced = reduced.contract(ContractSettings::default())?;
+                    ensure!(reduced.contraction_complete());
+                    let dots = reduced.to_dots()?;
+                    ensure!(dots.is_scalar());
+                    Ok(gram_kinematics
+                        .apply(&cooking.uncook(dots.expression().as_view()))
+                        .collect_compact_factors())
+                };
+                ensure!(trace(&open_identity)?.together().is_zero());
+                ensure!((trace(&open_kinetic)? - Atom::one()).together().is_zero());
+                // A source perturbation by the actual open kinetic matrix must
+                // be visible. Whole source addends cancel without expanding N.
+                // Addition retains the source's logical port order, whereas the
+                // open dual retains its closing word's order. Admit that same
+                // word in the actual source frame and certify the inverse.
+                let source_kinetic =
+                    source.with_checked_expression(open_kinetic.expression().clone())?;
+                ensure!(
+                    source_kinetic.structure().logical_slots()
+                        == source.structure().logical_slots()
+                );
+                ensure!(
+                    source_kinetic.structure().canonical().external_structure()
+                        == source.structure().canonical().external_structure()
+                );
+                ensure!(
+                    open_kinetic
+                        .with_checked_expression(source_kinetic.expression().clone())?
+                        .same_value(&open_kinetic)
+                );
+                ensure!((trace(&source_kinetic)? - Atom::one()).together().is_zero());
+                let shifted = source.try_add(&source_kinetic)?;
+                let difference = shifted.try_sub(&source)?;
+                ensure!(difference.same_value(&source_kinetic));
+                ensure!((trace(&difference)? - Atom::one()).together().is_zero());
+                vector.into()
+            }
+        };
+        let admitted = dimensional.multiply(&projector)?;
         let projected_source = cooking.uncook(admitted.expression().as_view());
         ensure!(
             cooking.uncook(cooking.try_cook(projected_source.as_view())?.as_view())
@@ -1021,7 +1119,7 @@ impl QcdMassReference {
         );
         ensure!(
             admitted.structure().canonical().is_scalar(),
-            "mass trace must close the native spin/color interface"
+            "quark trace must close the native spin/color interface"
         );
         let identities = admitted.simplify_algebra(&AlgebraSettings {
             gamma: Some(GammaSimplifySettings::canonical()),
@@ -1031,7 +1129,7 @@ impl QcdMassReference {
         let contracted = identities.contract(ContractSettings::default())?;
         ensure!(
             contracted.contraction_complete(),
-            "native mass projection must finish without re-admission"
+            "native quark projection must finish without re-admission"
         );
 
         let traced = contracted.to_dots()?;
@@ -1143,7 +1241,7 @@ impl QcdMassReference {
         // measures relative to the PySecDec normalization, not graph signs.
         ensure!(
             diagram.numerator_prefactor().is_scalar(),
-            "the independent mass reference requires a scalar global numerator prefactor"
+            "the independent quark reference requires a scalar global numerator prefactor"
         );
         let numerator_prefactor = diagram.numerator_prefactor().expression();
         let scalar = (Atom::i().pow((loops + 1) as i64)
@@ -1170,7 +1268,7 @@ impl QcdMassReference {
         ] {
             ensure!(
                 !scalar.contains_symbol(head),
-                "unresolved tensor/momentum head in mass projection {name}: {head}"
+                "unresolved tensor/momentum head in quark projection {name}: {head}"
             );
         }
         ensure!(
@@ -1585,6 +1683,15 @@ fn native_qcd_mass_projections_certify_all_one_and_two_loop_sources() -> Result<
     let normalized = cooked.to_cof_dimension_invariants();
     ensure!(normalized.together().is_zero());
     ensure!(normalized.to_cof_dimension_invariants() == normalized);
+    let mass_payload = serde_json::to_vec_pretty(&serde_json::json!({
+        "sources":sources.iter().map(|(diagram, projected)| projected.numeric_input(diagram, &reference.model))
+            .collect::<Result<Vec<_>>>()?
+    }))?;
+    crate::debug_tags!(#uv, #integrated, #inspect;
+        stage="native_mass_projection_scalar_export", payload_bytes=mass_payload.len(),
+        file.numeric_payload=%String::from_utf8(mass_payload)?,
+        "Unchanged mass projection branch retains the existing complete scalar serializer"
+    );
     Ok(())
 }
 
@@ -1699,6 +1806,232 @@ impl MassProjection {
             "propagators": propagators,
         }))
     }
+}
+
+#[test]
+fn native_d09_vector_projection_exports_original_scalar_coordinates() -> Result<()> {
+    use serde_json::json;
+    use symbolica_utils::AtomPrintExt;
+
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let diagrams = reference.sources(2)?;
+    let diagram = diagrams
+        .iter()
+        .find(|diagram| diagram.name() == "D09")
+        .ok_or_else(|| eyre!("native rainbow D09 is missing"))?;
+    let vector = reference.project_quark_trace(diagram, NativeQuarkTrace::Vector)?;
+    let family = &vector.family;
+    ensure!(family.loop_momenta().len() == 2 && family.external_momenta().len() == 1);
+    let l = &family.loop_momenta()[0];
+    let k = &family.loop_momenta()[1];
+    let p = &family.external_momenta()[0];
+    let kin = family.kinematics();
+    let ll = kin.scalar_product(l, l)?;
+    let kk = kin.scalar_product(k, k)?;
+    let kl = kin.scalar_product(k, l)?;
+    let pk = kin.scalar_product(p, k)?;
+    let pl = kin.scalar_product(p, l)?;
+    ensure!(kin.scalar_product(p, p)?.is_one());
+    let d = Atom::var(symbol!("native_mass_reference::d"));
+    let cf = Atom::var(symbol!("native_mass_reference::CF"));
+    let mass = Atom::var(symbol!("UFO::MT"));
+    let coupling = Atom::var(symbol!("UFO::G"));
+
+    // Independent ordered trace Tr(pslash N)/(4 Nc p^2), with Tr_spin(1)=4
+    // and internal Lorentz dimension d. This is not inferred from A+B or B.
+    // N=gamma_mu(kslash+m)gamma_nu(lslash+m)gamma^nu(kslash+m)gamma^mu.
+    let expected = (Atom::num(2) - &d).pow(2)
+        * (Atom::num(2) * &kl * &pk + (mass.pow(2) - &kk) * &pl)
+        + Atom::num(2) * &d * (Atom::num(2) - &d) * mass.pow(2) * &pk;
+    ensure!(
+        (&vector.raw_phi - Atom::i() * coupling.pow(4) * cf.pow(2) * &expected)
+            .together()
+            .is_zero(),
+        "actual native vector trace must equal the independent D-dimensional ordered word"
+    );
+    ensure!(!vector.raw_phi.is_zero());
+    ensure!(
+        !(&expected
+            - expected
+                .replace(symbol!("native_mass_reference::d"))
+                .with(4))
+        .together()
+        .is_zero(),
+        "an early four-dimensional trace must be detected"
+    );
+    ensure!(vector.kernel_weight.is_one() && vector.numerator_prefactor.is_one());
+    ensure!(vector.external_ordering == Atom::num(-1));
+    ensure!(!vector.scaleless && vector.coupling_definitions.len() == 1);
+    ensure!(vector.colors.len() == 1 && vector.colors[0].0 == cf.pow(2));
+    // Four ig vertices, three i quark and two -i gluon propagators give +i.
+    // The common bridge i^(L+1) implements Gamma_2=-i Sigma and the loop measure.
+    ensure!((Atom::i().pow(3) * Atom::i()).is_one());
+    ensure!(!(Atom::i().pow(2) * Atom::i() - Atom::one()).is_zero());
+
+    let sp = (0..5)
+        .map(|index| Atom::var(symbol!(&format!("native_mass_reference::sp{index}"))))
+        .collect::<Vec<_>>();
+    let expected_scalar = (Atom::num(2) - &d).pow(2)
+        * (Atom::num(2) * &sp[1] * &sp[4] + (Atom::one() - &sp[3]) * &sp[2])
+        + Atom::num(2) * &d * (Atom::num(2) - &d) * &sp[4];
+    ensure!(
+        (&vector.scalar - cf.pow(2) * &expected_scalar)
+            .together()
+            .is_zero()
+    );
+    // A separate mass projection is only a secondary control after the direct
+    // vector identity above. It must not silently stand in for A.
+    let mass_projection = reference.project(diagram)?;
+    mass_projection.certify_rainbow()?;
+    let identity_scalar =
+        &d * (Atom::num(2) * (Atom::num(2) - &d) * &sp[1] + &d * (&sp[3] + Atom::one()));
+    ensure!(
+        (&mass_projection.scalar - &vector.scalar - cf.pow(2) * &identity_scalar)
+            .together()
+            .is_zero()
+    );
+    ensure!(
+        !(&mass_projection.scalar - &vector.scalar)
+            .together()
+            .is_zero()
+    );
+
+    let basis = diagram.loop_momentum_basis();
+    for (edge, expected_momentum) in [
+        (0, p.clone()),
+        (2, l.clone()),
+        (3, k - l),
+        (4, k.clone()),
+        (5, k.clone()),
+        (6, k - p),
+    ] {
+        ensure!(
+            basis.route_expression(&symbols::momentum().call(edge)) == expected_momentum,
+            "D09 source edge {edge} has a different signed native chart"
+        );
+    }
+    let expected_poles = vec![
+        (2, l.clone(), Atom::one(), &ll - Atom::one()),
+        (3, k - l, Atom::Zero, &ll - Atom::num(2) * &kl + &kk),
+        (4, k.clone(), Atom::one(), &kk - Atom::one()),
+        (5, k.clone(), Atom::one(), &kk - Atom::one()),
+        (6, k - p, Atom::Zero, &kk - Atom::num(2) * &pk + Atom::one()),
+    ];
+    ensure!(vector.poles == expected_poles);
+
+    let numeric = vector.numeric_input(diagram, &reference.model)?;
+    ensure!(numeric["name"] == "D09" && numeric["loops"] == 2);
+    ensure!(numeric["light_flavor"].is_null() && numeric["integral_zero_certified"] == false);
+    ensure!(numeric["loop_momenta"] == json!(["k0", "k1"]));
+    ensure!(numeric["external_momenta"] == json!(["p"]));
+    ensure!(
+        numeric["scalar_products"]
+            == json!([
+                {"variable":"sp0", "left":"k0", "right":"k0"},
+                {"variable":"sp1", "left":"k0", "right":"k1"},
+                {"variable":"sp2", "left":"k0", "right":"p"},
+                {"variable":"sp3", "left":"k1", "right":"k1"},
+                {"variable":"sp4", "left":"k1", "right":"p"},
+            ])
+    );
+    ensure!(
+        numeric["color_rows"]
+            == json!([{"channel":"CF2", "coefficient":vector.colors[0].1.to_bare_ordered_string()}])
+    );
+    let current = [
+        Atom::var(symbol!("native_mass_reference::k0")),
+        Atom::var(symbol!("native_mass_reference::k1")),
+        Atom::var(symbol!("native_mass_reference::p")),
+    ];
+    let archive = [
+        Atom::var(symbol!("native_mass_reference::k1")),
+        Atom::var(symbol!("native_mass_reference::k2")),
+        current[2].clone(),
+    ];
+    let native = [l.clone(), k.clone(), p.clone()];
+    let rename = |input: &Atom, from: &[Atom], to: &[Atom]| {
+        input.replace_map(|view, _, output| {
+            if let Some(position) = from
+                .iter()
+                .position(|candidate| candidate.as_view() == view)
+            {
+                **output = to[position].clone();
+            }
+        })
+    };
+    ensure!(current.iter().collect::<BTreeSet<_>>().len() == 3);
+    ensure!(archive.iter().collect::<BTreeSet<_>>().len() == 3);
+    for (source, named) in native.iter().zip(&current) {
+        ensure!(rename(source, &native, &current) == *named);
+        ensure!(rename(named, &current, &native) == *source);
+    }
+    for (named, archived) in current.iter().zip(&archive) {
+        ensure!(rename(named, &current, &archive) == *archived);
+        ensure!(rename(archived, &archive, &current) == *named);
+    }
+    let named_polynomials = [
+        &sp[0] - Atom::one(),
+        &sp[0] - Atom::num(2) * &sp[1] + &sp[3],
+        &sp[3] - Atom::one(),
+        &sp[3] - Atom::one(),
+        &sp[3] - Atom::num(2) * &sp[4] + Atom::one(),
+    ];
+    let serialized_poles = numeric["propagators"]
+        .as_array()
+        .ok_or_else(|| eyre!("native propagator export is not a list"))?;
+    ensure!(serialized_poles.len() == 5);
+    for (((edge, momentum, mass_squared, _), row), polynomial) in vector
+        .poles
+        .iter()
+        .zip(serialized_poles)
+        .zip(named_polynomials)
+    {
+        let named = rename(momentum, &native, &current);
+        let archived = rename(&named, &current, &archive);
+        ensure!(rename(&archived, &archive, &current) == named);
+        ensure!(rename(&named, &current, &native) == *momentum);
+        ensure!(row["edge"] == *edge && row["power"] == 1);
+        ensure!(row["momentum"] == named.to_bare_ordered_string());
+        ensure!(row["mass_squared"] == mass_squared.to_bare_ordered_string());
+        ensure!(row["polynomial"] == polynomial.to_bare_ordered_string());
+    }
+    // The same simultaneous inverse applies to every coordinate's physical
+    // momentum pair, independently of the invariant sp-variable numbering.
+    for ((left, right), product) in [(0, 0), (0, 1), (0, 2), (1, 1), (1, 2)]
+        .into_iter()
+        .zip(family.scalar_products())
+    {
+        ensure!(kin.scalar_product(&native[left], &native[right])? == *product);
+        for position in [left, right] {
+            let renamed = rename(&current[position], &current, &archive);
+            ensure!(rename(&renamed, &archive, &current) == current[position]);
+        }
+    }
+    let payload = json!({
+        "projection":"pslash/(4*Nc*p_squared)",
+        "origin":"current-native-exact-vector-export",
+        "native_vector_transport_verified":true,
+        "source_kernel_weight":vector.kernel_weight.to_bare_ordered_string(),
+        "external_ordering":vector.external_ordering.to_bare_ordered_string(),
+        "numerator_prefactor":vector.numerator_prefactor.to_bare_ordered_string(),
+        "coupling_definitions":vector.coupling_definitions.iter()
+            .map(|(name, expression)| json!({"name":name,"expression":expression.to_bare_ordered_string()}))
+            .collect::<Vec<_>>(),
+        "phase":{"native_numerator":"+i*G^4*CF^2*n_A", "scalar_bridge":"i^(L+1)*kernel*numerator_prefactor/G^(2*L)","Gamma_2":"-i*Sigma"},
+        "propagator_prescription":"Feynman+i0",
+        "prescription_origin":"explicit common physical/backend convention; scalar family does not encode i0; source zero widths and absent custom denominators are certified separately",
+        "certificates":{"dimensional_ordered_trace":true,"vector_identity_gram":0,"vector_kinetic_gram":1,
+            "algebraic_source_kinetic_gram":1,"early_D4_control":true,"wrong_mass_projector_control":true,
+            "original_poles":5,"archive_chart_inverse":true,"coordinate_metadata_inverse":true},
+        "source":numeric,
+        "integration_performed":false,
+    });
+    crate::debug_tags!(#uv, #integrated, #inspect;
+        stage="native_d09_vector_source_export", file.native_export=%serde_json::to_string_pretty(&payload)?,
+        "Actual D09 vector trace and original poles are certified before independent backend admission"
+    );
+    Ok(())
 }
 
 #[test]
