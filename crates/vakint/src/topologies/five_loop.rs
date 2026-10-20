@@ -588,7 +588,7 @@ mod tests {
                         format!("v{source} -> v{target} [particle=\"phi\"];")
                     })
                     .collect::<String>();
-                FeynmanDiagram::from_topology_dot(
+                FeynmanDiagram::from_dot(
                     Model::from_json(include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/tests/fixtures/phi_3_4.json"
