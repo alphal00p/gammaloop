@@ -94,6 +94,48 @@ fn native_parent_scalar_certificate_preserves_factored_cancellation() -> Result<
 }
 
 #[test]
+fn native_parent_external_frame_preserves_spin_color_component_selectors() -> Result<()> {
+    test_initialise()?;
+    let row = Atom::var(symbol!("native_frame_selector_regression::row"));
+    let column = Atom::var(symbol!("native_frame_selector_regression::column"));
+    let selectors = [
+        (2, idenso::bis!(4, row.clone())),
+        (1, idenso::bis!(4, column.clone())),
+        (0, idenso::cof!(3, row.clone())),
+        (
+            2,
+            function!(AIND_SYMBOLS.dind, idenso::cof!(3, column.clone())),
+        ),
+    ];
+    let a = Atom::var(symbol!("native_frame_selector_regression::a"; Scalar));
+    let b = Atom::var(symbol!("native_frame_selector_regression::b"; Scalar));
+    let spectator = (&a + &b).pow(11);
+    let source = &spectator
+        * Atom::mul_many(selectors.iter().map(|(component, port)| {
+            function!(ETS.delta, function!(AIND_SYMBOLS.cind, *component), port)
+        }));
+    let input = AppliedFeynmanRule::new(source)?.expr;
+    assert_eq!(input.rank(), 4);
+    let original = input.clone();
+    let reduced = QcdMassReference::reduce_parent_external_frame(
+        "native external bis4/cof3 selectors are outside the Lorentz frame",
+        &input,
+    )?;
+    assert_eq!(
+        reduced.structure().logical_slots(),
+        input.structure().logical_slots()
+    );
+    assert!(reduced.expression().contains(spectator.as_view()));
+    QcdMassReference::certify_parent_tensor_zero(
+        "native external spin/color selector matrix survives the Lorentz frame exactly",
+        &reduced.try_sub(&input)?,
+    )?;
+    assert!(input.same_value(&original));
+    assert!(!reduced.is_zero());
+    Ok(())
+}
+
+#[test]
 fn native_parent_scalar_certificate_accepts_ranked_zero() -> Result<()> {
     test_initialise()?;
     let adjoint = idenso::representations::ColorAdjoint {}.new_rep(8);
@@ -372,6 +414,7 @@ impl QcdMassReference {
         };
         assert!(!difference.contains_symbol(frame));
         let momenta = momentum_leaves(difference);
+        let mut frame_slots = SlotMatcher::default();
         let embedded = difference.replace_map(|view, _, output| {
             if let AtomView::Fun(value) = view {
                 if value.get_symbol() == AGS.gamma0 {
@@ -379,6 +422,16 @@ impl QcdMassReference {
                     **output = function!(AGS.gamma, value.get(0), value.get(1), &vectors[0]);
                 } else if value.get_symbol() == ETS.delta {
                     assert_eq!(value.get_nargs(), 2);
+                    // Finite external spin/color components are native tensor
+                    // selectors too. Only a Lorentz selector belongs to this
+                    // reversible external-frame embedding.
+                    let Some((representation, _)) = frame_slots.port_representation(value.get(1))
+                    else {
+                        return;
+                    };
+                    if representation != LibraryRep::from(Minkowski {}) {
+                        return;
+                    }
                     let AtomView::Fun(coordinate) = value.get(0) else {
                         panic!("the external frame requires a native fixed coordinate")
                     };
