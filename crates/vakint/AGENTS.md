@@ -12,7 +12,8 @@ The reproducible Rust collector is `examples/benchmark_reduction.rs`. From the
 repository workspace root, refresh with:
 
 ```sh
-cargo run --locked --release -p vakint --example benchmark_reduction -- \
+taskset -c CPU cargo run --locked --release -p vakint --example benchmark_reduction \
+  --features feynkit-ingress,experimental-rustred,weighted-lowering-diagnostics,symbolica_community_module -- \
   --form /path/to/form \
   --work-dir /path/to/workspace/vakint-benchmark \
   --output crates/vakint/docs/benchmark/data/results.json
@@ -20,8 +21,8 @@ typst compile crates/vakint/docs/benchmark/benchmark.typ \
   crates/vakint/docs/benchmark/benchmark.pdf
 ```
 
-Use a single CPU affinity for comparable timings (for example, prefix the Cargo
-command with `taskset -c CPU` on Linux); children inherit it. Keep build outputs
+Replace `CPU` with one permitted CPU on Linux, or use the equivalent affinity
+tool on another platform; children inherit it. Keep build outputs
 and temporary files under the development workspace. `--artifacts PATH`
 optionally selects an existing external-data checkout or installation directory;
 the default official `latest` loader downloads missing packs and reuses validated

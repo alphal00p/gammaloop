@@ -24,7 +24,7 @@ use vakint::{
     VakintSettings, vakint_parse, vakint_symbol,
 };
 
-const CASES: &str = include_str!("../docs/benchmark/cases.json");
+const CASES: &str = include_str!("../tests/fixtures/benchmark_reduction.json");
 const SCOPE: &str = "First public evaluate_integral call in a fresh process; retained masters, \
     common symbolic mUVsq and FMFTandMATAD normalization. Excludes engine/data loading, cache \
     attachment, input parsing and validation. FMFT includes version check, process launch, \
