@@ -8,7 +8,7 @@ use crate::{
     uv::{
         approx::{
             integrated,
-            integrated::native_mass_tests::{D09VacuumSource, QcdMassReference},
+            integrated::native_mass_tests::{D09VacuumFrame, D09VacuumSource, QcdMassReference},
         },
         hedge_poset::OwnedForestNode,
         orchestrator::validate_local_counterterm_schemes,
@@ -1247,24 +1247,7 @@ impl QcdMassReference {
         // A single explicit coordinate witness proves that these reconstructed
         // scalar kernels are not identically zero. No D-dimensional integral
         // or actual Projected4dSector transport is inferred from this check.
-        let kernel_at_origin = |kernel: &Atom, loops: usize| -> Result<()> {
-            eyre::ensure!(!kernel.is_zero());
-            let origin = kernel
-                .replace(function!(GS.localizing_integrand, W_.a_))
-                .with(W_.a_)
-                .replace(function!(GS.emr_mom, W_.a_, W_.b_))
-                .with(0)
-                .replace(GS.renormalization_localization_scale)
-                .with(1);
-            let inverse_origin =
-                Atom::var(symbolica::atom::Symbol::PI).pow(i64::try_from(2 * loops)?);
-            eyre::ensure!(
-                (&origin * &inverse_origin)
-                    .collect_compact_factors()
-                    .is_one()
-            );
-            Ok(())
-        };
+        let kernel_at_origin = Self::certify_d09_localizer_kernel_at_origin;
         let co_graph = grow_factor(ctx, parent, given)?;
         let mut domains = std::collections::HashSet::new();
         let mut matched = BTreeSet::new();
@@ -4354,7 +4337,7 @@ impl QcdMassReference {
         prefix: &Full4dCts,
         actual: &(OwnedForestNode, Local4dCts, IntegratedCts),
         source: D09VacuumSource,
-    ) -> Result<Vec<SymbolicTensor<IndexedStructure>>> {
+    ) -> Result<(Vec<SymbolicTensor<IndexedStructure>>, D09VacuumFrame)> {
         use crate::uv::Spinney;
         let (parent, local, _) = actual;
         let graph = ctx.graph;
@@ -4691,6 +4674,22 @@ impl QcdMassReference {
                 .eq([EdgeIndex(2), EdgeIndex(4)])
         );
 
+        let frame = D09VacuumFrame {
+            closing_duals,
+            open_basis,
+            external_points: signs
+                .iter()
+                .map(|(edge, sign)| {
+                    (
+                        *edge,
+                        GS.on_shell_momentum(incoming, &(Atom::num(*sign) * &mass), &velocity),
+                    )
+                })
+                .collect(),
+            mass: mass.clone(),
+            lmb: lmb.clone(),
+        };
+
         // All point/representation changes happen on a numerator AFTER the
         // actual operators. Negative denominator polynomials stay dimensional.
         let prepare_numerator = |numerator: &SymbolicTensor<IndexedStructure>,
@@ -4724,43 +4723,7 @@ impl QcdMassReference {
                 "D09 numerator retained a negative or malformed denominator shell"
             );
             let dotted = numerator.with_checked_expression(expression)?.to_dots()?;
-            let expression = GS
-                .erase_uv_momentum_provenance(dotted.expression())
-                .replace_multiple(graph.uv_wrapped_replacement(
-                    parent.subgraph(),
-                    &lmb,
-                    &[W_.x___],
-                ));
-            let mut unexpected = false;
-            let expression = expression.replace_map(|view, _, output| {
-                if let AtomView::Fun(momentum) = view
-                    && momentum.get_symbol() == GS.emr_mom
-                {
-                    let Ok(edge) = usize::try_from(momentum.get(0)) else {
-                        unexpected = true;
-                        return;
-                    };
-                    let edge = EdgeIndex(edge);
-                    if let Some(sign) = signs.get(&edge) {
-                        let point =
-                            GS.on_shell_momentum(incoming, &(Atom::num(*sign) * &mass), &velocity);
-                        let indices = momentum
-                            .iter()
-                            .skip(1)
-                            .map(|index| index.to_owned())
-                            .collect::<Vec<_>>();
-                        **output = GS.indexed_momentum(&point, &indices);
-                    } else if ![EdgeIndex(2), EdgeIndex(4)].contains(&edge) {
-                        unexpected = true;
-                    }
-                }
-            });
-            eyre::ensure!(!unexpected, "D09 UV numerator has an unowned momentum");
-            let expression = GS
-                .resolve_os_momenta(&expression)
-                .replace(mass.to_pattern())
-                .with(1);
-            let routed = dotted.with_checked_expression(expression)?;
+            let routed = frame.at_point(&dotted, graph, parent)?;
             if !physical_four {
                 return Ok(routed);
             }
@@ -5023,7 +4986,8 @@ impl QcdMassReference {
                 source.structure().canonical().external_structure()
                     == actual_open.structure().canonical().external_structure()
             );
-            let source_trace = integrated::simplify(&closing_duals[0].clone().multiply(source)?)?;
+            let source_trace =
+                integrated::simplify(&frame.closing_duals[0].clone().multiply(source)?)?;
             let source_trace = source_trace
                 .with_checked_expression(graph.model.expand_couplings(source_trace.expression()))?;
             let expected_phase =
@@ -5323,7 +5287,7 @@ impl QcdMassReference {
             eyre::ensure!(!classes.is_empty());
             for (integral, coefficient) in classes {
                 let mut reconstruction = coefficient.with_checked_expression(Atom::Zero)?;
-                for (dual, basis) in closing_duals.iter().zip(&open_basis) {
+                for (dual, basis) in frame.closing_duals.iter().zip(&frame.open_basis) {
                     let trace = integrated::simplify(&dual.clone().multiply(coefficient.clone())?)?;
                     eyre::ensure!(trace.is_scalar());
                     reconstruction =
@@ -5357,7 +5321,7 @@ impl QcdMassReference {
                     "Actual integration's pre-master native coefficient reconstructs in the complete external matrix basis"
                 );
             }
-            for (dual_index, dual) in closing_duals.iter().enumerate() {
+            for (dual_index, dual) in frame.closing_duals.iter().enumerate() {
                 let mut sum = SymbolicTensor::infer_indexed(Atom::Zero)?;
                 for term in &terms {
                     let numerator = if emitted_child {
@@ -5449,8 +5413,428 @@ impl QcdMassReference {
         eyre::ensure!(
             local == &retained_local && sector.integration_atom().same_value(&retained_w)
         );
-        eyre::ensure!(open_basis.iter().all(|value| value.rank() == 4));
+        eyre::ensure!(frame.open_basis.iter().all(|value| value.rank() == 4));
         eyre::ensure!(traces.len() == cases.len() * 2);
-        Ok(traces)
+        Ok((traces, frame))
+    }
+}
+
+impl QcdMassReference {
+    fn certify_d09_localizer_kernel_at_origin(kernel: &Atom, loops: usize) -> Result<()> {
+        eyre::ensure!(!kernel.is_zero());
+        let origin = kernel
+            .replace(function!(GS.localizing_integrand, W_.a_))
+            .with(W_.a_)
+            .replace(function!(GS.emr_mom, W_.a_, W_.b_))
+            .with(0)
+            .replace(GS.renormalization_localization_scale)
+            .with(1);
+        let inverse_origin = Atom::var(symbolica::atom::Symbol::PI).pow(i64::try_from(2 * loops)?);
+        eyre::ensure!(
+            (&origin * &inverse_origin)
+                .collect_compact_factors()
+                .is_one()
+        );
+        Ok(())
+    }
+
+    /// Observe the actual paired finalizer at the complementary native closure.
+    /// Both finite inputs were independently reconstructed/bound by the caller;
+    /// no reference coefficient enters this transport certificate.
+    pub(in crate::uv) fn certify_d09_vacuum_policy_field_emission(
+        &self,
+        diagram: &feynkit_graph::FeynmanDiagram,
+        ctx: &UVCtx<'_>,
+        actual: &(OwnedForestNode, Local4dCts, IntegratedCts),
+        frame: &D09VacuumFrame,
+        physical_four: &IntegratedCts,
+        source_factors: (&Atom, &Atom),
+    ) -> Result<[Atom; 2]> {
+        use crate::{
+            graph::feynman_graph::FeynmanGraph,
+            settings::global::OrientationPattern,
+            uv::{
+                Integrands,
+                approx::{
+                    CutStructure, OrientationProjection,
+                    final_integrand::{
+                        FinalIntegrandBuilder,
+                        projected_assembly_certificate::{
+                            ProjectedAssemblyCertificate, ProjectedAssemblySource,
+                        },
+                    },
+                    local_3d::Localizer,
+                    projected_4d::{Local4dProjectionContext, Projected4dApproximation},
+                },
+                settings::FinalIntegrandDimension,
+            },
+        };
+        use std::{
+            collections::BTreeSet,
+            sync::{Arc, Mutex},
+        };
+        use symbolica::id::Replacement;
+
+        let (parent, local, dimensional) = actual;
+        let retained_local = local.clone();
+        let retained_dimensional = dimensional.clone();
+        let retained_shadow = physical_four.clone();
+        let graph = ctx.graph;
+        eyre::ensure!(diagram.name() == "D09" && graph.name == "D09");
+        let (source_weight, external_ordering) = source_factors;
+        eyre::ensure!(
+            source_weight.is_one(),
+            "the amputated D09 source has unit scalar weight"
+        );
+        let overall_source_weight = source_weight * external_ordering;
+        eyre::ensure!(!overall_source_weight.is_zero());
+        eyre::ensure!(ctx.settings.generate_integrated && !ctx.settings.add_marker);
+        eyre::ensure!(
+            ctx.settings.on_shell_velocity()? == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]
+        );
+        let mut projection_graph = graph.clone();
+        let original_projector = projection_graph.global_prefactor.projector.clone();
+        let mut unowned = false;
+        original_projector.expression().visitor(&mut |view| {
+            if let AtomView::Fun(factor) = view
+                && [GS.u, GS.ubar, GS.emr_mom].contains(&factor.get_symbol())
+            {
+                unowned |= factor.get_nargs() == 0
+                    || usize::try_from(factor.get(0))
+                        .ok()
+                        .is_none_or(|edge| !frame.external_points.contains_key(&EdgeIndex(edge)));
+            }
+            true
+        });
+        eyre::ensure!(!unowned && !original_projector.expression().contains_symbol(GS.loop_mom));
+        // Same open external view as the existing complete emitted-mass owner.
+        // Original scalar source weight, graph incidence and LMB are unchanged.
+        projection_graph.global_prefactor.projector = SymbolicTensor::infer_indexed(Atom::one())?;
+        eyre::ensure!(projection_graph.global_prefactor.num == graph.global_prefactor.num);
+        eyre::ensure!(projection_graph.overall_factor == graph.overall_factor);
+        let reduced = graph
+            .full_filter()
+            .subtract(parent.subgraph())
+            .subtract(&graph.initial_state_cut);
+        let reduced_numerator = projection_graph
+            .numerator(&reduced, parent.subgraph())?
+            .state
+            .expr;
+        let full_global_factor = projection_graph.global_numerator()?;
+        let cograph = reduced_numerator
+            .clone()
+            .multiply(full_global_factor.clone())?;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        crate::debug_tags!(#uv, #local, #four_d, #cff, #integrated, #inspect;
+            stage = "native_d09_finite_cograph_source_weights",
+            rank = cograph.rank(), scalar = cograph.is_scalar(),
+            file.ports = ?cograph.structure().logical_slots(),
+            file.cograph = %cooking.uncook(cograph.expression().as_view()).to_canonical_string(),
+            file.reduced_numerator = %cooking.uncook(reduced_numerator.expression().as_view()).to_canonical_string(),
+            file.full_global_factor = %cooking.uncook(full_global_factor.expression().as_view()).to_canonical_string(),
+            file.original_overall_factor = %graph.overall_factor.to_canonical_string(),
+            file.original_scalar_prefactor = %cooking.uncook(graph.global_prefactor.num.expression().as_view()).to_canonical_string(),
+            file.kernel_source_weight = %source_weight.to_canonical_string(),
+            file.external_ordering = %external_ordering.to_canonical_string(),
+            file.amplitude_source_weight = %overall_source_weight.to_canonical_string(),
+            ordering_derived_before_integrals = true, graph_overall_factor_unchanged = true,
+            "Observe the actual finite cograph before comparing amplitude and amputated-kernel conventions"
+        );
+        eyre::ensure!(
+            cograph.is_scalar()
+                && matches!(cograph.expression().as_view(), AtomView::Num(_))
+                && cograph.expression() == &overall_source_weight,
+            "D09 finite emission must retain its independently known amplitude cograph/source weight"
+        );
+        let mut settings = ctx.settings.clone();
+        settings.local_uv_cts_from_expanded_4d_integrands = true;
+        settings.final_integrand = FinalIntegrandDimension::ThreeD;
+        let pattern = OrientationPattern::default();
+        let numerator = projection_graph
+            .numerator(&graph.full_filter(), &graph.empty_subgraph())?
+            .state
+            .expr;
+        let options = projection_graph.denominator_only_cff_3d_expression_options();
+        let surfaces = projection_graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let contracted = graph.paired_edges(&graph.tree_edges.subtract(&graph.initial_state_cut));
+        let production = projection_graph.generate_3d_expression_for_integrand(
+            &contracted,
+            &surfaces,
+            &options,
+            Some(numerator.expression()),
+        )?;
+        let orientation =
+            OrientationProjection::exact_expression(&production, &options, &pattern, true);
+        let cuts = CutStructure::empty(&projection_graph);
+        let localizer = Localizer::new(&cuts.cuts[0], orientation);
+        let allowed = cuts.cuts[0].residue_selector.generate_allowed_keys();
+        eyre::ensure!(
+            allowed.len() == 1,
+            "this proof retains the uncut D09 full-parent domain"
+        );
+        let mut projection_context = Local4dProjectionContext {
+            certify_denominator_reconstruction: true,
+            ..Default::default()
+        };
+        let projected = Projected4dApproximation::new(localizer, &mut projection_graph, &settings)
+            .project_local_4d(local, &mut projection_context)?;
+        eyre::ensure!(projection_context.denominator_reconstruction_certificates > 0);
+        eyre::ensure!(
+            projection_context.denominator_reconstruction_certificates
+                == projection_context.source_preparation_builds
+        );
+
+        let mut observed = Vec::new();
+        for finite in [dimensional, physical_four] {
+            let certificate = Mutex::new(ProjectedAssemblyCertificate::default());
+            let finalized = FinalIntegrandBuilder::new(localizer, &settings)
+                .with_projected_assembly_certificate(&certificate)
+                .build_projected(&mut projection_graph, parent, &projected, finite)?
+                .into_integrands();
+            let certificate = certificate
+                .into_inner()
+                .map_err(|_| eyre!("paired D09 assembly certificate was poisoned"))?;
+            certificate.certify(
+                &projection_graph,
+                parent,
+                &projected,
+                localizer,
+                &settings,
+                &finalized,
+            )?;
+            observed.push(certificate);
+        }
+        let [dimensional_emission, physical_emission] = observed.as_slice() else {
+            unreachable!()
+        };
+        let left = dimensional_emission
+            .emissions
+            .iter()
+            .filter(|emission| matches!(&emission.source, ProjectedAssemblySource::Local(_)))
+            .collect::<Vec<_>>();
+        let right = physical_emission
+            .emissions
+            .iter()
+            .filter(|emission| matches!(&emission.source, ProjectedAssemblySource::Local(_)))
+            .collect::<Vec<_>>();
+        let local_count = left.len();
+        eyre::ensure!(!left.is_empty() && left.len() == right.len());
+        let mut changed_mapped_carrier_rejected = false;
+        for (left, right) in left.iter().zip(&right) {
+            let (ProjectedAssemblySource::Local(a), ProjectedAssemblySource::Local(b)) =
+                (&left.source, &right.source)
+            else {
+                unreachable!()
+            };
+            eyre::ensure!(Arc::ptr_eq(&a.child, &b.child) && a.sector == b.sector);
+            crate::debug_tags!(#uv, #local, #four_d, #cff, #integrated, #inspect;
+                stage = "native_d09_paired_local_emission_provenance",
+                sector = a.sector,
+                outer_arguments_equal = a.outer_arguments == b.outer_arguments,
+                routed_carrier_equal = a.routed_carrier == b.routed_carrier,
+                frozen_factor_equal = a.frozen_factor == b.frozen_factor,
+                full_key_equal = left.key == right.key,
+                mapped_payload_equal = left.mapped == right.mapped,
+                file.left_key = ?left.key, file.right_key = ?right.key,
+                file.left_outer_arguments = ?a.outer_arguments.iter().map(|atom| atom.to_canonical_string()).collect::<Vec<_>>(),
+                file.right_outer_arguments = ?b.outer_arguments.iter().map(|atom| atom.to_canonical_string()).collect::<Vec<_>>(),
+                file.left_routed_carrier = %cooking.uncook(a.routed_carrier.as_view()).to_canonical_string(),
+                file.right_routed_carrier = %cooking.uncook(b.routed_carrier.as_view()).to_canonical_string(),
+                file.left_frozen_factor = %a.frozen_factor.to_canonical_string(),
+                file.right_frozen_factor = %b.frozen_factor.to_canonical_string(),
+                file.original_child = %a.child.lhs.to_canonical_string(),
+                file.left_prepared = %a.prepared.lhs.to_canonical_string(),
+                file.right_prepared = %b.prepared.lhs.to_canonical_string(),
+                file.left_parameters = ?a.prepared.args,
+                file.right_parameters = ?b.prepared.args,
+                file.left_call_weights = ?a.call_weights,
+                file.right_call_weights = ?b.call_weights,
+                file.left_prepared_calls = ?a.prepared_calls,
+                file.right_prepared_calls = ?b.prepared_calls,
+                file.left_routed_numerator = %cooking.uncook(a.routed_numerator.expression().as_view()).to_canonical_string(),
+                file.right_routed_numerator = %cooking.uncook(b.routed_numerator.expression().as_view()).to_canonical_string(),
+                original_shared_child_owner = true, registered_binding_certificate_required = true,
+                "Observe the first paired local provenance boundary before comparing full payloads"
+            );
+            left.certify_same_local_source(right)?;
+            if !changed_mapped_carrier_rejected
+                && right.mapped.iter().any(|(_, atom)| !atom.is_zero())
+            {
+                let mut wrong = (**right).clone();
+                wrong.mapped = wrong.mapped.map(|atom| Atom::num(2) * atom);
+                let rejected = left.certify_same_local_source(&wrong).is_err();
+                eyre::ensure!(
+                    rejected,
+                    "registered-name rebinding accepted a doubled actual mapped local carrier"
+                );
+                changed_mapped_carrier_rejected = true;
+            }
+        }
+        eyre::ensure!(
+            changed_mapped_carrier_rejected,
+            "the nonzero mapped local-carrier control must run"
+        );
+        let left = dimensional_emission
+            .emissions
+            .iter()
+            .filter(|emission| {
+                matches!(&emission.source, ProjectedAssemblySource::Integrated { .. })
+            })
+            .collect::<Vec<_>>();
+        let right = physical_emission
+            .emissions
+            .iter()
+            .filter(|emission| {
+                matches!(&emission.source, ProjectedAssemblySource::Integrated { .. })
+            })
+            .collect::<Vec<_>>();
+        eyre::ensure!(!left.is_empty() && left.len() == right.len());
+        eyre::ensure!(
+            dimensional_emission.integrated_key_domain == physical_emission.integrated_key_domain
+        );
+        let normalize_scalar =
+            FinalIntegrandBuilder::scalar_normalizer(&projection_graph, &reduced);
+        let scalar_tail = |atom: &Atom| {
+            normalize_scalar(atom)
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum)
+                .replace(GS.dim_epsilon)
+                .with(0)
+        };
+        let kernel = scalar_tail(&GS.localizing_integrand(parent.lmb()));
+        Self::certify_d09_localizer_kernel_at_origin(&kernel, parent.lmb().loop_edges.len())?;
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        // One mapped finite family per full key. Its scalar carrier stays
+        // factorized; argument substitution is restricted to the typed RHS.
+        let decompose =
+            |integrands: &Integrands| -> Result<(Atom, SymbolicTensor<IndexedStructure>)> {
+                eyre::ensure!(integrands.scalar_definitions().is_empty());
+                eyre::ensure!(integrands.numerators().len() == 1 && integrands.iter().count() == 1);
+                let entry = &integrands.numerators()[0];
+                let (key, root) = integrands.iter().next().unwrap();
+                eyre::ensure!(allowed.contains(key));
+                let mut calls = BTreeSet::new();
+                root.visitor(&mut |view| {
+                    if view.get_symbol() == Some(family) {
+                        calls.insert(view.to_owned());
+                    }
+                    true
+                });
+                eyre::ensure!(calls.len() == 1);
+                let call = calls.iter().next().unwrap();
+                let AtomView::Fun(arguments) = call.as_view() else {
+                    unreachable!()
+                };
+                eyre::ensure!(arguments.get_nargs() == entry.tags.len() + entry.args.len());
+                eyre::ensure!(
+                    entry
+                        .tags
+                        .iter()
+                        .enumerate()
+                        .all(|(index, tag)| arguments.get(index) == tag.as_view())
+                );
+                let carrier = root.replace(call.to_pattern()).with(1);
+                eyre::ensure!(!carrier.contains_symbol(family));
+                eyre::ensure!(
+                    (root - call * &carrier).collect_compact_factors().is_zero(),
+                    "finite branch is not linear in its one retained call"
+                );
+                let replacements = entry.args.iter().enumerate().map(|(index, formal)| {
+                    Replacement::new(
+                        Atom::from(formal.clone()).to_pattern(),
+                        arguments.get(entry.tags.len() + index).to_owned(),
+                    )
+                });
+                let specialized = entry.rhs.with_checked_expression(
+                    entry.rhs.expression().replace_multiple(replacements),
+                )?;
+                let finite = frame.unit_finite(&specialized, &projection_graph, parent)?;
+                Ok((scalar_tail(&carrier), finite))
+            };
+        let mut carriers = Atom::Zero;
+        let mut rows = Vec::new();
+        let mut tree = None;
+        for (left, right) in left.iter().zip(&right) {
+            eyre::ensure!(left.key == right.key && left.tree_factor == right.tree_factor);
+            let (
+                ProjectedAssemblySource::Integrated {
+                    frozen_integrands: a,
+                },
+                ProjectedAssemblySource::Integrated {
+                    frozen_integrands: b,
+                },
+            ) = (&left.source, &right.source)
+            else {
+                unreachable!()
+            };
+            eyre::ensure!(a == b && a.iter().all(|(_, atom)| scalar_tail(atom) == kernel));
+            let (left_carrier, left_matrix) = decompose(&left.mapped)?;
+            let (right_carrier, right_matrix) = decompose(&right.mapped)?;
+            eyre::ensure!(left_carrier == right_carrier);
+            carriers += left_carrier;
+            let current_tree = scalar_tail(&left.tree_factor);
+            if let Some(previous) = &tree {
+                eyre::ensure!(previous == &current_tree);
+            } else {
+                tree = Some(current_tree);
+            }
+            let delta = left_matrix.try_sub(&right_matrix)?;
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let mut dual_rows = [Atom::Zero, Atom::Zero];
+            for (index, dual) in frame.closing_duals.iter().enumerate() {
+                let trace = dual.clone().multiply(delta.clone())?;
+                eyre::ensure!(trace.is_scalar());
+                dual_rows[index] = on_shell_tests::scalar_component(
+                    &cooking.uncook(trace.expression().as_view()),
+                )?;
+            }
+            rows.push(dual_rows);
+        }
+        let first = rows
+            .first()
+            .ok_or_else(|| eyre!("paired D09 emitted no finite coefficient"))?;
+        for row in &rows {
+            for dual in 0..2 {
+                Self::certify_finite_tagged_rows_zero(
+                    "all complete D09 finite keys carry the same fixed-point coefficient",
+                    SymbolicTensor::infer_indexed(&row[dual] - &first[dual])?,
+                )?;
+            }
+        }
+        let tree = tree.ok_or_else(|| eyre!("paired D09 finite lane lost its tree factor"))?;
+        Self::certify_finite_tagged_rows_zero(
+            "orientation-summed finite carrier retains the original parent kernel once",
+            SymbolicTensor::infer_indexed(&carriers - &kernel * &tree * &overall_source_weight)?,
+        )?;
+        eyre::ensure!(
+            local == &retained_local
+                && dimensional == &retained_dimensional
+                && physical_four == &retained_shadow
+        );
+        // multiply_key_mapped stores a numeric scalar cograph in the roots,
+        // not in the retained finite RHS. The exact carrier sum above binds
+        // this once-only factor before reporting the emitted coefficient.
+        let observed = [0usize, 1].map(|dual| &first[dual] * &overall_source_weight);
+        crate::debug_tags!(#uv, #local, #four_d, #cff, #integrated, #summary;
+            stage = "native_d09_observed_vacuum_policy_finite_emission",
+            local_emissions = local_count,
+            integrated_emissions = rows.len(),
+            denominator_certificates = projection_context.denominator_reconstruction_certificates,
+            file.identity = %observed[0].to_canonical_string(),
+            file.temporal = %observed[1].to_canonical_string(),
+            file.body_identity = %first[0].to_canonical_string(),
+            file.body_temporal = %first[1].to_canonical_string(),
+            file.overall_source_weight = %overall_source_weight.to_canonical_string(),
+            file.kernel = %kernel.to_canonical_string(), file.tree = %tree.to_canonical_string(),
+            original_dimensional_input_unchanged = true, same_projected_local_payload = true,
+            exact_full_key_coverage = true, frozen_kernel_once = true,
+            independent_reference_used_to_define_carrier = false, full_unregulated_R2 = false,
+            "Actual paired finalizer retains source-owned complementary finite coefficients"
+        );
+        Ok(observed)
     }
 }
