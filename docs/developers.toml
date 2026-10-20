@@ -1984,7 +1984,9 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # linnet-render-py's iframe.js to production assets and Spynso's evaluator_horner.py
 # plus FeynKit's installed_squared_amplitude_display.py to compile-time test inputs.
 # The documented source ownership and producer/runtime boundaries are unchanged.
-digest = "5efb7f8ae06edd47459e3f4e32cc623472a7942b"
+# No-impact review 2026-11-08: remove unused ec-layout plugin/build inputs and
+# retain NetworkX notice in current production, compile-test and WASM owners.
+digest = "04351800442c85ac1b062cdbebdbb5e2f87f5319"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
