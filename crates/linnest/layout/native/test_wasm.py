@@ -1,6 +1,5 @@
-"""Run the shared EC seed inside Typst's actual WebAssembly sandbox."""
+"""Run Linnest's layout inside Typst's actual WebAssembly sandbox."""
 
-import json
 import os
 import shutil
 import subprocess
@@ -10,64 +9,6 @@ from pathlib import Path
 
 
 class TypstSeedTests(unittest.TestCase):
-    def test_accepted_gallery_matches_reference_in_typst(self):
-        typst = os.environ.get("TYPST") or shutil.which("typst")
-        if not typst:
-            self.skipTest("Typst is required for the WASM runtime test")
-        root = Path(__file__).resolve().parents[4]
-        wasm = Path(
-            os.environ.get(
-                "EC_LAYOUT_WASM", root / "crates/linnest/typst/ec-layout.wasm"
-            )
-        )
-        fixtures = json.loads(
-            (Path(__file__).parent / "fixtures/seeds.json").read_text()
-        )
-        with tempfile.TemporaryDirectory() as temporary:
-            directory = Path(temporary)
-            shutil.copy2(wasm, directory / "ec-layout.wasm")
-            (directory / "fixtures.json").write_text(json.dumps(fixtures))
-            source = directory / "seeds.typ"
-            source.write_text(
-                '#let ec = plugin("ec-layout.wasm")\n'
-                '#for fixture in json("fixtures.json") {\n'
-                "  let result = ec.initialize(bytes(json.encode((diagram: fixture.diagram))))\n"
-                "  [#metadata(json(result)) <seed>]\n"
-                "}\n"
-            )
-            result = subprocess.run(
-                [typst, "query", str(source), "<seed>", "--field", "value"],
-                text=True,
-                capture_output=True,
-                check=True,
-                timeout=90,
-            )
-        outputs = json.loads(result.stdout)
-        self.assertEqual(len(outputs), len(fixtures))
-        for fixture, got in zip(fixtures, outputs, strict=True):
-            with self.subTest(diagram=fixture["name"]):
-                expected = fixture["expected"]
-                for key in ("routes", "node_ids", "external_ids", "edge_endpoints"):
-                    self.assertEqual(got[key], expected[key], key)
-                self.assertEqual(set(got["positions"]), set(expected["positions"]))
-                for key, point in expected["positions"].items():
-                    for actual, reference in zip(
-                        got["positions"][key], point, strict=True
-                    ):
-                        self.assertAlmostEqual(actual, reference, delta=1e-12)
-                self.assertEqual(
-                    [
-                        (c["id"], c["edges"], c["route_points"])
-                        for c in got["crossings"]
-                    ],
-                    [
-                        (c["id"], c["edges"], c["route_points"])
-                        for c in expected["crossings"]
-                    ],
-                )
-                for key in ("contacts", "overlaps", "degenerate"):
-                    self.assertEqual(got["report"]["geometry"][key], [])
-
     def test_direct_layout_preserves_pins_and_supplies_physical_carriers(self):
         typst = os.environ.get("TYPST") or shutil.which("typst")
         if not typst:

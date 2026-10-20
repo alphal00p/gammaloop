@@ -890,7 +890,8 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
-        for name in ["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"] {
+        // linnest.wasm compiles Clarabel and NetworkX-derived code.
+        for name in ["LICENSE.clarabel", "LICENSE.networkx"] {
             assert!(
                 !LINNEST_PACKAGE_ASSETS
                     .get_file(name)
@@ -910,9 +911,8 @@ mod tests {
                             "typst.toml"
                                 | "linnest.wasm"
                                 | "kurvst.wasm"
-                                | "ec-layout.wasm"
-                                | "LICENSE.ec-layout"
                                 | "LICENSE.clarabel"
+                                | "LICENSE.networkx"
                         )
                     )
             }));
@@ -1313,25 +1313,6 @@ mod tests {
                 base.join("preparation-assertions.pdf"),
                 &[&repository],
             )
-            .unwrap();
-
-        // Drawing supplied geometry must not load the unused EC seed plugin.
-        fs::remove_file(templates.join(LINNEST_PACKAGE_DIR).join("ec-layout.wasm")).unwrap();
-        let precomputed = templates.join("precomputed-without-ec.typ");
-        fs::write(
-            &precomputed,
-            r#"#import "crates/linnest/typst/src/graph.typ" as graph
-#import "crates/linnest/typst/src/render/layout.typ": layout-graph
-#let g = graph.build({
-  graph.node(<v>, pos: graph.pos(x: 0, y: 0))
-  graph.edge(graph.source(<v>), pos: graph.pos(x: 2, y: 0))
-})
-#context layout-graph((layouts: none, draw: (title: none)), g)
-"#,
-        )
-        .unwrap();
-        renderer
-            .compile_template(&precomputed, base.join("precomputed-without-ec.pdf"), &[])
             .unwrap();
 
         fs::remove_dir_all(base).unwrap();

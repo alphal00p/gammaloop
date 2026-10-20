@@ -1750,7 +1750,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-19: the UFO adapter retains requested-source metadata under the
 # loader public import scope; its renamed embedded Python helper stays owned by
 # feynkit-ufo in both explicit source lists. Producer and runtime boundaries stay fixed.
-digest = "9ed8dd0ee840c3876b4c7a341bbd6a433d55ad0d"
+# No-impact attestation 2026-10-20: the Clinnet and API lists drop the removed
+# ec-layout.wasm plugin and LICENSE.ec-layout; Clinnet's list adds the LICENSE.networkx
+# its build script now embeds. Producer and runtime boundaries are unchanged.
+digest = "914010bdba76cd78db98c4055c13f3b66bd451df"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
