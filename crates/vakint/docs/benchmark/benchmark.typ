@@ -124,6 +124,7 @@ Median seconds over #data.protocol.repetitions fresh processes per backend and c
 #set text(8.5pt, fill: luma(100))
 Measured source: #raw(data.protocol.source_commit.slice(0, 12)).
 #if data.protocol.source_dirty [Modified source tree.]
+Binary: #raw(data.protocol.binary_sha256.slice(0, 12)).
 Data: #raw(data.protocol.data_version).
 Samples and provenance: #raw("data/results.json").
 Refresh instructions: #raw("../../AGENTS.md").

@@ -206,7 +206,7 @@ pub fn fixtures(_initialized_vakint: &Vakint) -> Result<Vec<CancellationFixture>
     let mass = model
         .particle_by_id(model.particle_id("phi")?)?
         .symbolic_mass_parameter(&model)?;
-    let diagram = FeynmanDiagram::from_topology_dot(model.clone(), &full_parent_dot())?;
+    let diagram = FeynmanDiagram::from_dot(model.clone(), &full_parent_dot())?;
     let physical = diagram.propagator_family(&Kinematics::new())?;
     let (edge_ids, physical_slots, edge_signs) = ordered_physical_slots(&diagram)?;
     let completed = physical.complete(&[])?;

@@ -314,7 +314,7 @@ fn check_independent_tadpoles(
 type MassiveBridgeFixture = (String, Atom, Atom, Atom);
 
 fn massive_bridge_fixtures() -> Result<Vec<MassiveBridgeFixture>, Box<dyn std::error::Error>> {
-    let diagram = FeynmanDiagram::from_topology_dot(
+    let diagram = FeynmanDiagram::from_dot(
         Model::from_json(include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/tests/fixtures/phi_3_4.json"

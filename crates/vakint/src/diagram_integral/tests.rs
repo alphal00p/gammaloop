@@ -16,7 +16,7 @@ fn scalar_model() -> Model {
 }
 
 fn sunset() -> (FeynmanDiagram, IntegralFamily) {
-    let diagram = FeynmanDiagram::from_topology_dot(
+    let diagram = FeynmanDiagram::from_dot(
         scalar_model(),
         "digraph sunset { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; }",
     ).unwrap();
@@ -25,8 +25,36 @@ fn sunset() -> (FeynmanDiagram, IntegralFamily) {
 }
 
 #[test]
+fn graph_ingress_rejects_open_external_half_edges() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi3(),
+        r#"digraph bubble {
+            ext [style=invis];
+            ext -> a [particle="phi"];
+            a -> b [particle="phi", lmb_id=0];
+            a -> b [particle="phi"];
+            b -> ext [particle="phi"];
+        }"#,
+    )
+    .unwrap();
+    assert!(
+        diagram
+            .edges()
+            .any(|(_, ends, _)| ends.source.is_none() || ends.target.is_none())
+    );
+    let family = diagram.propagator_family(&Kinematics::new()).unwrap();
+    let result = VakintExpression::from_diagram(
+        &diagram,
+        &family,
+        &Atom::one(),
+        &DiagramIntegralOptions::default(),
+    );
+    assert!(matches!(result, Err(VakintError::InvalidIntegralFormat(_))));
+}
+
+#[test]
 fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
-    let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
+    let diagram = FeynmanDiagram::from_dot(scalar_model(),
         "digraph repeated { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> a [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();
     let family = diagram.propagator_family(&Kinematics::new()).unwrap();
     assert_eq!(diagram.loop_count(), 3);
@@ -65,7 +93,7 @@ fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
 
 #[test]
 fn massive_zero_flow_bridge_is_a_scalar_factor_without_losing_loops() {
-    let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
+    let diagram = FeynmanDiagram::from_dot(scalar_model(),
         "digraph two_tadpoles { a -> a [particle=\"phi\"]; a -> b [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();
     let original = diagram.propagator_family(&Kinematics::new()).unwrap();
     assert_eq!(diagram.loop_count(), 2);
@@ -147,7 +175,7 @@ fn massive_zero_flow_bridge_is_a_scalar_factor_without_losing_loops() {
 
 #[test]
 fn five_loop_self_edge_pinch_never_downgrades_the_integration_dimension() {
-    let diagram = FeynmanDiagram::from_topology_dot(
+    let diagram = FeynmanDiagram::from_dot(
         scalar_model(),
         "digraph five_tadpoles {\
         a -> a [particle=\"phi\"]; a -> b [particle=\"phi\"];\

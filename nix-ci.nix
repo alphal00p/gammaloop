@@ -448,7 +448,7 @@
     ];
   };
   dependency-discovery = {
-    enable = true;
+    enable = false;
     synchronous = true;
   };
   deploy = {
@@ -458,7 +458,7 @@
       system = "x86_64-linux";
     };
   };
-  enable = true;
+  enable = false;
   fail-fast = false;
   fail-on-dangling-dependencies = true;
   onlyBuild = [

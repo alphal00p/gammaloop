@@ -78,7 +78,7 @@ pub(crate) fn integral_from_diagram(
     };
     Ok(VakintExpressionWrapper {
         value: VakintExpression::from_diagram(
-            diagram.as_diagram(),
+            diagram.as_diagram()?,
             family.as_family(),
             &numerator.expr,
             &options,

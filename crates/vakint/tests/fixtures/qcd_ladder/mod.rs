@@ -207,7 +207,7 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
         )))
         .expect("valid qcd fixture"),
     );
-    let target = FeynmanDiagram::from_topology_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
+    let target = FeynmanDiagram::from_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
     if target.loop_count() != 5
         || target.edges().count() != 16
         || target

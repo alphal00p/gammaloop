@@ -20,7 +20,7 @@ use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
-use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
+use feynkit_tensor::TensorReducer;
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};
@@ -2940,12 +2940,7 @@ impl VakintTerm {
             **out = alias;
         });
         let indexed_numerator = Vakint::convert_from_dot_notation(tensor_numerator.as_view());
-        // Preserve Vakint's historical spelling of paired scalar powers.
-        let reducer = TensorReducer::new(dimension)
-            .with_integrated_head(S.k)
-            .with_repeated_index_compatibility(
-                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
-            );
+        let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
         let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
         let lorentz = TensorCollectFilter::Reps([Minkowski {}.into()]);
         // The frontend still carries Vakint's raw-index k/p/g leaves here.
@@ -2973,6 +2968,7 @@ impl VakintTerm {
         });
         let mut failure = None;
         let mut reduced = selected
+            .into_inner()
             .map_collects(|collected, _, out| {
                 if failure.is_some() {
                     return;
@@ -3019,14 +3015,25 @@ impl VakintTerm {
         let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
         let numerator =
             Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
-        let reduced = reducer.reduce(numerator.as_view())?;
+        // This is Vakint's raw-index boundary. Preserve compound dimensions and
+        // index provenance while the shared typed reducer owns the tensor.
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = reducer.admit(
+            cooking
+                .try_cook(numerator.as_view())
+                .map_err(|error| VakintError::SymbolicaError(error.to_string()))?,
+        )?;
+        let reduced = reducer.reduce(&numerator)?;
         if scalar_only && reduced.max_rank() != 0 {
             return Err(VakintError::InvalidNumerator(format!(
                 "RustRed scalar input still requires tensor projection of rank {}; run the tensor prepass first",
                 reduced.max_rank(),
             )));
         }
-        let reduced = reduced.into_expression();
+        let reduced = reduced.into_expression()?;
+        let reduced = cooking.uncook(reduced.expression().as_view());
         let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);
         let reduced =
             Self::spenso_to_vakint_numerator(reduced.as_view(), dimension, &opaque_compact_vectors);
