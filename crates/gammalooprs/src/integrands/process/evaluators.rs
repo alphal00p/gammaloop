@@ -103,6 +103,15 @@ use super::{
 const NETWORK_SCALAR_ALIAS_MIN_BYTES: usize = 4096;
 static NETWORK_SCALAR_ALIAS_SCOPE: AtomicUsize = AtomicUsize::new(0);
 
+// The reference switch and counters exist only in native unit-test binaries.
+// Both modes execute this same lowering pipeline; the reference mode recomputes
+// the existing pure scalar collection for every component.
+#[cfg(test)]
+thread_local! {
+    static COMPONENT_COLLECTION_TEST_STATE: std::cell::RefCell<Option<(bool, [usize; 3])>> =
+        const { std::cell::RefCell::new(None) };
+}
+
 #[derive(Clone, Copy)]
 pub enum SingleOrAllOrientations<'a, OID> {
     Single {
@@ -1739,6 +1748,14 @@ impl EvaluatorStack {
         let mut components = HashMap::<Vec<Atom>, FamilyComponents>::new();
         let mut shadows = HashMap::new();
         let mut generated = Vec::new();
+        let mut component_collection_requests = 0usize;
+        let mut component_collection_cache_hits = 0usize;
+        let mut component_collection_unique_inputs = 0usize;
+        #[cfg(test)]
+        let collection_cache_enabled = COMPONENT_COLLECTION_TEST_STATE
+            .with(|state| state.borrow().as_ref().is_none_or(|(enabled, _)| *enabled));
+        #[cfg(not(test))]
+        let collection_cache_enabled = true;
         for (family_index, definition) in definitions.iter().enumerate() {
             if !referenced.contains(&family_index) {
                 continue;
@@ -1926,6 +1943,10 @@ impl EvaluatorStack {
                         });
                     }
                     let mut populated = HashMap::new();
+                    // Borrow exact raw scalar keys only while this contracted
+                    // family tensor is alive. No tensor, support, component index,
+                    // formal signature or proof is cached or rewritten here.
+                    let mut collected_components = HashMap::<AtomView<'_>, Atom>::new();
                     for (index, body) in tensor.iter_flat() {
                         if body.is_zero() {
                             continue;
@@ -1941,12 +1962,28 @@ impl EvaluatorStack {
                         // Powers and lazy guards keep their existing boundaries.
                         let collection_started = std::time::Instant::now();
                         let input_bytes = body.get_byte_size();
-                        let body = body.collect_compact_factors();
+                        let raw = body;
+                        let cached = collection_cache_enabled
+                            .then(|| collected_components.get(&raw))
+                            .flatten();
+                        let cache_hit = cached.is_some();
+                        let body = match cached {
+                            Some(collected) => collected.clone(),
+                            None => {
+                                let collected = body.collect_compact_factors();
+                                collected_components.insert(raw, collected.clone());
+                                collected
+                            }
+                        };
+                        component_collection_requests += 1;
+                        component_collection_cache_hits += usize::from(cache_hit);
                         crate::debug_tags!(#generation, #profile, #compile, #summary;
                             stage = "evaluator_component_factor_collection",
                             family_index,
                             input_bytes,
                             output_bytes = body.as_view().get_byte_size(),
+                            cache_hit,
+                            unique_inputs = collected_components.len(),
                             elapsed_ms = collection_started.elapsed().as_secs_f64() * 1000.0,
                             "Collected completed numerator component factors"
                         );
@@ -1968,6 +2005,7 @@ impl EvaluatorStack {
                                 .collect(),
                         });
                     }
+                    component_collection_unique_inputs += collected_components.len();
                     if dimensions.is_empty() {
                         if populated.is_empty() {
                             return Ok(Atom::Zero.into());
@@ -1998,10 +2036,23 @@ impl EvaluatorStack {
                 (shadow.into_inner(), formal_positions, max_formal_bytes),
             );
         }
+        #[cfg(test)]
+        COMPONENT_COLLECTION_TEST_STATE.with(|state| {
+            if let Some((_, counts)) = state.borrow_mut().as_mut() {
+                *counts = [
+                    component_collection_requests,
+                    component_collection_cache_hits,
+                    component_collection_unique_inputs,
+                ];
+            }
+        });
         crate::debug_tags!(#generation, #profile, #summary;
             stage = "evaluator_stack_numerator_families_prepared",
             elapsed_ms = family_preparation_started.elapsed().as_secs_f64() * 1000.0,
             referenced_families = referenced.len(), generated_definitions = generated.len(),
+            component_collection_requests,
+            component_collection_cache_hits,
+            component_collection_unique_inputs,
             "Prepared shared numerator scalar components"
         );
         let down_symbol = Atom::from(DualConciousIndex::Down(0))
@@ -3714,6 +3765,272 @@ mod tests {
             .sum();
         assert!((actual.values[0].re.0 - expected).abs() < 1e-12);
         assert!((actual.values[1].re.0 - derivative).abs() < 1e-12);
+    }
+
+    #[test]
+    fn shared_numerator_component_memoization_matches_eager_factored_reference() {
+        use spenso::network::library::symbolic::ETS;
+
+        test_initialise().unwrap();
+        let family = symbol!("evaluator_test::memoized_component_family");
+        let scalar = symbol!("evaluator_test::memoized_component_scalar");
+        let q = Atom::var(symbol!("evaluator_test::memoized_component_q"));
+        let x = Atom::var(symbol!("evaluator_test::memoized_component_x"));
+        let alias = function!(symbol!("evaluator_test::memoized_component_weight"), 0);
+        // This is an original scalar parameter, even though its head resembles
+        // a generated numerator component. It must never enter that catalog.
+        let foreign_head = symbol!("gammalooprs::numerator_component_0");
+        let foreign = function!(foreign_head, 99);
+        let weight = (&x + 2) * (&x + 3) * (&x + 5);
+        let alias_body = &q * &x * &weight * &foreign;
+        let mut builder = ParamBuilder::new_empty();
+        builder.pairs.additional_params = [x.clone(), foreign.clone()].into_iter().collect();
+        builder.pairs.update_ranges();
+        builder
+            .fn_map
+            .add_aliases([(alias.clone(), alias_body.clone())])
+            .unwrap();
+        builder.reps.push(FnMapEntry {
+            inlining: InliningPolicy::Always,
+            is_alias: false,
+            lhs: alias.clone(),
+            rhs: alias_body.clone(),
+            tags: vec![Atom::num(0)],
+            args: vec![],
+        });
+        let indices = [
+            parse_lit!(spenso::mink(4, 101)),
+            parse_lit!(spenso::mink(4, 102)),
+            parse_lit!(spenso::mink(4, 103)),
+            parse_lit!(spenso::mink(4, 104)),
+            parse_lit!(spenso::mink(4, 105)),
+            parse_lit!(spenso::mink(4, 106)),
+        ];
+        let metric_product = Atom::mul_many(
+            indices
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| function!(ETS.metric, &pair[0], &pair[1])),
+        );
+        let definition = Arc::new(
+            NumeratorDefinition::try_from(FnMapEntry {
+                inlining: InliningPolicy::Always,
+                is_alias: false,
+                lhs: function!(family, 0, q.clone()),
+                rhs: &alias * metric_product,
+                tags: vec![Atom::num(0)],
+                args: vec![Indeterminate::try_from(q.clone()).unwrap()],
+            })
+            .unwrap(),
+        );
+        let declared_slots = definition.rhs.structure().logical_slots();
+        assert_eq!(declared_slots.len(), 6);
+        let selector = |components: [i64; 6]| {
+            Atom::mul_many(indices.iter().zip(components).map(|(index, component)| {
+                function!(ETS.delta, function!(AIND_SYMBOLS.cind, component), index)
+            }))
+        };
+        let roots = [
+            function!(family, 0, 3) * selector([0, 0, 0, 0, 0, 0]),
+            function!(family, 0, 5) * selector([1, 1, 0, 0, 0, 0]),
+        ];
+        let settings = EvaluatorSettings {
+            store_atom: true,
+            ..Default::default()
+        };
+        let prepare = |enabled| {
+            struct Restore(Option<(bool, [usize; 3])>);
+            impl Drop for Restore {
+                fn drop(&mut self) {
+                    COMPONENT_COLLECTION_TEST_STATE.with(|state| {
+                        *state.borrow_mut() = self.0.take();
+                    });
+                }
+            }
+            let restore = Restore(
+                COMPONENT_COLLECTION_TEST_STATE
+                    .with(|state| state.replace(Some((enabled, [0; 3])))),
+            );
+            let result = EvaluatorStack::preprocess_numerator_families(
+                &roots,
+                &builder,
+                std::slice::from_ref(&definition),
+                &settings,
+                scalar,
+                InliningPolicy::Always,
+            )
+            .unwrap();
+            let counts =
+                COMPONENT_COLLECTION_TEST_STATE.with(|state| state.borrow().as_ref().unwrap().1);
+            drop(restore);
+            (result, counts)
+        };
+        let ((eager_atoms, eager_builder), eager_counts) = prepare(false);
+        let ((cached_atoms, cached_builder), cached_counts) = prepare(true);
+        // Three independent Minkowski metrics have 4^3 populated components,
+        // with exactly two literal scalar values, +alias and -alias. Captured q
+        // prevents closing the family before this finite component boundary.
+        assert_eq!(eager_counts, [64, 0, 2]);
+        assert_eq!(cached_counts, [64, 62, 2]);
+        assert_eq!(definition.rhs.structure().logical_slots(), declared_slots);
+        assert_eq!(
+            &eager_builder.reps[..builder.reps.len()],
+            builder.reps.as_slice()
+        );
+        assert_eq!(
+            &cached_builder.reps[..builder.reps.len()],
+            builder.reps.as_slice()
+        );
+        assert_eq!(cached_builder.reps[0].rhs, alias_body);
+        assert_eq!(cached_builder.reps.len(), eager_builder.reps.len());
+        // Independent sparse contractions enumerate their HashMap components
+        // differently. Match the entire catalog by exact physical call arguments,
+        // including component indices and formals, without sorting tensor axes.
+        let signature = |entry: &FnMapEntry| {
+            (
+                entry.is_alias,
+                entry.tags.clone(),
+                entry
+                    .args
+                    .iter()
+                    .cloned()
+                    .map(Atom::from)
+                    .collect::<Vec<_>>(),
+                entry
+                    .lhs
+                    .as_fun_view()
+                    .unwrap()
+                    .iter()
+                    .map(|arg| arg.to_owned())
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let eager_generated = &eager_builder.reps[builder.reps.len()..];
+        let cached_generated = &cached_builder.reps[builder.reps.len()..];
+        let mut cached_by_signature = HashMap::new();
+        for (index, entry) in cached_generated.iter().enumerate() {
+            assert!(
+                cached_by_signature
+                    .insert(signature(entry), (index, entry))
+                    .is_none()
+            );
+        }
+        let mut paired = Vec::new();
+        let mut eager_signatures = HashSet::new();
+        let mut matched_cached = HashSet::new();
+        let mut permutation = Vec::new();
+        let mut heads = HashMap::new();
+        for eager in eager_generated {
+            let key = signature(eager);
+            assert!(eager_signatures.insert(key.clone()));
+            let &(index, cached) = cached_by_signature.get(&key).unwrap();
+            assert!(matched_cached.insert(index));
+            permutation.push(index);
+            paired.push((eager, cached));
+            let old = eager.lhs.as_fun_view().unwrap().get_symbol();
+            let new = cached.lhs.as_fun_view().unwrap().get_symbol();
+            if let Some(previous) = heads.insert(new, old) {
+                assert_eq!(previous, old);
+            }
+        }
+        assert_eq!(paired.len(), cached_generated.len());
+        assert_eq!(matched_cached.len(), cached_by_signature.len());
+        let mut inverse_permutation = vec![usize::MAX; permutation.len()];
+        for (old, new) in permutation.iter().copied().enumerate() {
+            assert_eq!(inverse_permutation[new], usize::MAX);
+            inverse_permutation[new] = old;
+        }
+        for (old, new) in permutation.iter().copied().enumerate() {
+            assert_eq!(inverse_permutation[new], old);
+            assert_eq!(permutation[inverse_permutation[new]], new);
+        }
+        assert!(!heads.contains_key(&foreign_head));
+        assert_eq!(
+            heads.values().copied().collect::<HashSet<_>>().len(),
+            heads.len()
+        );
+        let inverse = heads
+            .iter()
+            .map(|(new, old)| (*old, *new))
+            .collect::<HashMap<_, _>>();
+        assert_eq!(inverse.len(), heads.len());
+        // Only the freshly scoped generated function heads differ between the
+        // two complete runs; normalize those exact paired heads, never a prefix.
+        let rename_heads = |atom: &Atom, names: &HashMap<Symbol, Symbol>| {
+            atom.replace_map(|part, _, out| {
+                if let AtomView::Fun(call) = part
+                    && let Some(head) = names.get(&call.get_symbol())
+                {
+                    **out = FunctionBuilder::new(*head).add_args(call.iter()).finish();
+                }
+            })
+        };
+        let normalize = |atom: &Atom| rename_heads(atom, &heads);
+        let restore = |atom: &Atom| rename_heads(atom, &inverse);
+        assert_eq!(normalize(&foreign), foreign);
+        assert_eq!(restore(&foreign), foreign);
+        for (eager, cached) in paired {
+            assert_eq!(eager.lhs, normalize(&cached.lhs));
+            assert_eq!(eager.rhs, normalize(&cached.rhs));
+            assert_eq!(restore(&normalize(&cached.lhs)), cached.lhs);
+            assert_eq!(restore(&normalize(&cached.rhs)), cached.rhs);
+            assert_eq!(normalize(&restore(&eager.lhs)), eager.lhs);
+            assert_eq!(normalize(&restore(&eager.rhs)), eager.rhs);
+            assert_eq!(eager.args, cached.args);
+            assert_eq!(eager.tags, cached.tags);
+            assert_eq!(eager.inlining, cached.inlining);
+            assert_eq!(eager.is_alias, cached.is_alias);
+        }
+        assert_eq!(eager_atoms.len(), cached_atoms.len());
+        for (eager, cached) in eager_atoms.iter().zip(&cached_atoms) {
+            assert_eq!(eager.get_root(), &normalize(cached.get_root()));
+            assert_eq!(&restore(&normalize(cached.get_root())), cached.get_root());
+            assert_eq!(&normalize(&restore(eager.get_root())), eager.get_root());
+            assert_eq!(eager.get_aliases().len(), cached.get_aliases().len());
+            for (handle, body) in cached.get_aliases() {
+                assert_eq!(restore(&normalize(handle)), *handle);
+                assert_eq!(restore(&normalize(body)), *body);
+            }
+            for (handle, body) in eager.get_aliases() {
+                assert_eq!(normalize(&restore(handle)), *handle);
+                assert_eq!(normalize(&restore(body)), *body);
+            }
+            let normalized_aliases = cached
+                .get_aliases()
+                .iter()
+                .map(|(handle, body)| (normalize(handle), normalize(body)))
+                .collect::<HashMap<_, _>>();
+            assert_eq!(normalized_aliases.len(), cached.get_aliases().len());
+            assert!(
+                eager
+                    .get_aliases()
+                    .iter()
+                    .all(|(handle, body)| normalized_aliases.get(handle) == Some(body))
+            );
+        }
+        for (atoms, prepared) in [(eager_atoms, eager_builder), (cached_atoms, cached_builder)] {
+            let mut evaluator = GenericEvaluator::new_from_builder(
+                atoms,
+                &prepared,
+                Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1)),
+                settings.optimization_settings(),
+                &settings,
+            )
+            .unwrap();
+            let values = [1.0, 1.0, 7.0, 0.0].map(|v| Complex::new_re(F(v)));
+            let actual = <f64 as GenericEvaluatorFloat>::get_evaluator(&mut evaluator)(&values);
+            assert_eq!(actual.len(), 2);
+            for (result, expected) in actual.iter().zip([[1512.0, 2646.0], [-2520.0, -4410.0]]) {
+                let DualOrNot::Dual(result) = result else {
+                    panic!("expected dual result");
+                };
+                assert_eq!(
+                    result.values,
+                    expected.map(|v| Complex::new_re(F(v))).to_vec()
+                );
+            }
+        }
     }
 
     #[test]
