@@ -25,6 +25,9 @@ pub(super) fn scalar(mut expression: Atom) -> Result<Atom> {
             .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
             .to_dots()
             .expand()
+            // Expansion can expose vector coefficients outside gamma products.
+            // Contract them before collection closes those products into traces.
+            .to_dots()
             .simplify_gamma()
             .expand()
             .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
@@ -226,5 +229,30 @@ fn scalar_contracts_metric_prerequisites_before_twenty_gamma_trace() -> Result<(
     // identity. Ten pairs therefore leave tr(1)*d^10, with tr(1)=4.
     let expected = Atom::num(4) * d.pow(10);
     assert!((scalar(trace)? - expected).expand().together().is_zero());
+    Ok(())
+}
+
+#[cfg(test)]
+#[test]
+fn scalar_preserves_factored_vector_coefficients_before_trace_collection() -> Result<()> {
+    let d = Atom::var(symbol!("qcd_ladder_factored_control::D"));
+    let p = spenso::vector_symbol!("qcd_ladder_factored_control::p");
+    let q = spenso::vector_symbol!("qcd_ladder_factored_control::q");
+    let expression = Atom::parse(
+        "(p(spenso::mink(D,mu))*q(spenso::mink(D,nu))+p(spenso::mink(D,nu))*q(spenso::mink(D,mu)))*spenso::gamma(spenso::bis(4,s0),spenso::bis(4,s1),spenso::mink(D,mu))*spenso::gamma(spenso::bis(4,s1),spenso::bis(4,s2),spenso::mink(D,a))*spenso::gamma(spenso::bis(4,s2),spenso::bis(4,s3),spenso::mink(D,nu))*spenso::gamma(spenso::bis(4,s3),spenso::bis(4,s0),spenso::mink(D,a))",
+        "qcd_ladder_factored_control",
+        Default::default(),
+    )?;
+    let kinematics = Kinematics::in_dimension(&d)?.with_momenta([Atom::var(p), Atom::var(q)])?;
+    // Tr(gamma_mu gamma_a gamma_nu gamma_a) = 4(2-D)g_mu_nu.
+    let expected = Atom::num(8)
+        * (Atom::num(2) - d)
+        * kinematics.scalar_product(&Atom::var(p), &Atom::var(q))?;
+    assert!(
+        (scalar(expression)? - expected)
+            .expand()
+            .together()
+            .is_zero()
+    );
     Ok(())
 }

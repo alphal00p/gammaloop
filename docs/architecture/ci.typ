@@ -49,6 +49,11 @@ compile-time test source closure. This includes integration tests that embed a
 model from another workspace package; Rust source filtering alone does not
 carry their DOT and JSON inputs into the sandbox.
 
+Python producers use the manifest's complete normal-dependency closure, including
+optional workspace dependencies. Their ABI features activate UFO and Python
+support beyond the native CI graph, so both dependency artifacts and the final
+extension must receive those real sources through the same closure.
+
 Vakint's production source closure contains cache-free 1L–3L runtime data.
 Prepared caches and 4L/5L RustRed packs are external data. Native reduction tests
 receive an explicitly pinned external-data snapshot at the terminal test boundary;

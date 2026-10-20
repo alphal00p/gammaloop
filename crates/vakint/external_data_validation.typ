@@ -213,11 +213,13 @@ Actual offline Nix-vendor resolution agrees with Cargo for all 695 selected-CI
 nodes and 822 all-feature nodes, including dependency edges and enabled features.
 Hakari and generated CI graph checks pass. The obsolete Git-Spenso vendor
 augmentation was removed after that proof. All required new fixture and stub
-inputs were checked in the Nix source. The pre-trace-backport Python extension downloaded and activated all five published
-packs. A clean `unshare --user --map-root-user --net` process reused that same
-installation and produced identical 80-digit one-loop numerical output, with no
-network interface. Development recorder path-serialization failures were retained
-and corrected; the final isolated run passed every assertion and exited zero.
+inputs were checked in the Nix source. The rebuilt Python extension downloaded, validated and activated all five
+published packs in a fresh installation. A separate
+`unshare --user --map-root-user --net` process reused that same installation and
+produced exactly the same 80-digit one-loop output as a new baseline made with
+the same extension. Download, baseline and isolated reuse all passed every
+assertion and exited zero without recorder failures. The module SHA256 was
+`ac081c32cfdbc4cda27b8e262ca86d874cd311fde8eff2e1a13cc02cb7654abb` throughout.
 
 The consolidated numerical rerun passed the complete fifteen-case four-loop
 inventory, all sixteen numerator/pinch pairs and the independent FORM-free
@@ -245,8 +247,16 @@ original dependency result after explicitly mapping only its old scalar DOT head
 declaration to the local DOT declaration. Both preserve the same symmetric,
 linear dot product and every argument; production registration checks are
 unchanged. The local probe completes in about 0.26 seconds; this is a contraction
-measurement, not an end-to-end QCD timing claim. Full QCD input parity is still
-pending its complete rerun.
+measurement, not an end-to-end QCD timing claim. The full QCD scalar comparison remains pending after successful complete
+preparations.
+
+The QCD fixture contracts vector coefficients exposed by expansion before gamma
+collection. The independent four-gamma control and all five fixture controls
+pass. Complete original and candidate preparations each produced 8,306 scalar
+terms, 21 contributions and five recorded guards. Their exact irreducible
+nonzero predicates agree: `D`, `D-1` and `D+2`. The complete canonical scalar
+comparison remains pending; equal counts and guard sets alone do not establish
+it.
 
 The complete native registry/cache/capability matrix passed all 64 selected tests,
 including actual five-loop witness admission/reuse. The fresh 38-root four-loop
@@ -254,8 +264,8 @@ campaign completed with 30 newly stored roots and eight strictly reused captured
 descendants. Every selected root has a validated durable record, all four cold
 term/ordered-guard controls agree, and fresh-process value/mass/hit/limit checks
 passed. Its two optional metadata capture exhaustions are recorded separately
-from successful root completion. Full five-loop QCD scalar input parity is still
-pending its complete run.
+from successful root completion. The full five-loop canonical scalar comparison is still running; completed
+preparations alone do not establish input parity.
 
 A separate authentic five-loop catalog test passed after validating all 905
 terminal records against the immutable v0.1.0 manifest. Retain preserves a real
@@ -270,8 +280,10 @@ successful numerical five-loop evaluation. It is an additional check beyond the
 Fifteen inherited Idenso snapshots were refreshed after exact validation of
 seventeen old/new expression pairs and a bijection preserving all six external
 DOT slots. Three fresh processes reproduced the same new port order. All 232
-Idenso tests and the complete 575-test Nix Spenso group passed, with the existing
-skips unchanged; that snapshot refresh changed no production algebra or CI selection.
+Idenso tests before the trace backport passed. The completed candidate passes
+all 235 selected Idenso package tests and the 578-test Nix Spenso group, with
+existing skips unchanged. The snapshot refresh changed no production algebra or
+CI selection.
 
 Generated Python signatures now follow the tested
 `symbolica.community.hepkit.vakint` module and include cumulative loaders, master
@@ -285,9 +297,20 @@ the same existing graph classes and supported short forms.
 A further native/compact DOT discriminator defect was reproduced and submitted
 against the current FeynKit branch in
 #link("https://github.com/alphal00p/gammaloop/pull/156")[PR 156]. Its 123 graph
-tests and all-target Clippy pass; the PR's separate Nix upload/readiness gate is
-in progress. Already-fixed dependency issues were incorporated without duplicate
+tests and all-target Clippy pass. Its exact final-source checks/upload command
+completed successfully at `d39d9bf206d8f858efedc9281f034cddb50c51fa`; the PR was pushed,
+marked non-draft and labeled `final-review`. Hosted checks remain independent
+of that completed local gate. Already-fixed dependency issues were incorporated without duplicate
 upstream submissions.
+
+Python build producers now use the complete manifest normal-dependency closure,
+including optional UFO and FeynKit Python sources. This follows the existing
+upstream source-closure fix: the earlier native-only closure supplied a dummy UFO
+crate even though Python ABI features activated its unconditional `UfoLoader`
+export. The evaluated corrected source contains all twenty dependency packages
+with matching source hashes. The corrected dependency producer compiled the
+real UFO loader and GammaLoop API successfully. No Rust API or Cargo manifest
+was changed.
 
 == Final repository-CI result — pending completion
 

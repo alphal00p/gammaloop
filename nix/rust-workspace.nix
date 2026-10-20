@@ -1126,10 +1126,17 @@
   cranePythonExtraFeatureSets = {
     "gammaloop-api" = ["python_abi" "pyo3-extension-module"];
   };
+  # Python enables optional workspace packages absent from native closures.
+  cranePythonSourcePackageNames =
+    workspaceDependencyClosureFor workspaceDependencyNamesFor "gammaloop-api";
+  cranePythonSrc = workspacePackageSrcForSourcePackages {
+    sourcePackages = cranePythonSourcePackageNames;
+    packageSourcePackages = ["gammaloop-api"];
+  };
   cranePythonFeaturesFor = package:
     sortedUnique (craneCiFeaturesFor package ++ (cranePythonExtraFeatureSets.${package} or []));
   cranePythonCargoArgs = let
-    featurePackages = workspaceNormalSourcePackageNamesFor "gammaloop-api";
+    featurePackages = cranePythonSourcePackageNames;
     selectedFeaturePackages =
       lib.filter (
         featurePackage:
@@ -1300,7 +1307,7 @@
       cargoArtifacts = cranePythonBuildArtifacts;
       CARGO_BUILD_INCREMENTAL = "true";
       pname = "gammaloop-api-python";
-      src = workspacePackageSrcFor "gammaloop-api";
+      src = cranePythonSrc;
       cargoExtraArgs = cranePythonCargoArgs;
       doCheck = false;
       postPatch = workspaceMissingCargoTargetsScript;
@@ -2314,7 +2321,7 @@
     // {
       cargoArtifacts = cranePythonDependencyArtifacts;
       pname = "gammaloop-api-python-build";
-      dummySrc = workspacePackageSrcFor "gammaloop-api";
+      dummySrc = cranePythonSrc;
       buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
       keepIncrementalState = true;
       previousArtifacts =
