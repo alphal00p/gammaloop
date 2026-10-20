@@ -1637,6 +1637,7 @@ mod tests {
                 p(1, n),
             )
         };
+        let coloured = format!("g(coad(8,a1),coad(8,b1))*({vertex})*({partner})");
         for source in [
             format!("({vertex})*(p(1,mink(D,m1))*p(2,mink(D,m4))+y*g(mink(D,m1),mink(D,m4)))"),
             format!("x*({vertex})*({partner})"),
@@ -1645,17 +1646,22 @@ mod tests {
                 triple(["a1", "a2", "e"], ["m1", "m2", "m3"]),
                 triple(["e", "a3", "a4"], ["m1", "m2", "m4"])
             ),
+            coloured.clone(),
         ] {
             let source = input(&source);
-            assert_eq!(
-                planned_contraction(&source)
-                    .expect("unbound spectators remain in the component planner")
-                    .status,
-                ReductionStatus::Complete,
-                "{source}"
-            );
+            if source != input(&coloured) {
+                assert_eq!(
+                    planned_contraction(&source)
+                        .expect("unbound spectators remain in the component planner")
+                        .status,
+                    ReductionStatus::Complete,
+                    "{source}"
+                );
+            }
+            // The literal rewrite copies a sum only into a bound antisymmetric
+            // tensor, so expand its input.
             let literal =
-                SlotContraction::new().contract_ordered::<0>(source.as_view(), true, None);
+                SlotContraction::new().contract_ordered::<0>(source.expand().as_view(), true, None);
             assert_eq!(
                 typed_contraction(&source).expand(),
                 literal.expand(),
@@ -1666,11 +1672,29 @@ mod tests {
         // whether a vector or a colour metric binds that slot.
         for source in [
             "(x*p(1,mink(4,a))+y*p(2,mink(4,a)))*(z*t(mink(4,a),mink(4,b),mink(4,c),mink(4,d))+spenso::epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d)))".to_owned(),
-            format!("g(coad(8,a1),coad(8,b1))*({vertex})*({partner})"),
+            coloured.clone(),
         ] {
             let source = input(&source);
             assert!(planned_contraction(&source).is_none(), "{source}");
         }
+        // The literal fallback relabels one vertex with the colour metric but
+        // keeps both vertex sums factorized, since their shared Lorentz slots
+        // sit on metrics. The planner then contracts that product around its
+        // spectators, as compared above.
+        let relabelled = vertex.replace("coad(8,a1)", "coad(8,b1)");
+        assert_eq!(
+            SlotContraction::new().contract_ordered::<0>(input(&coloured).as_view(), true, None),
+            input(&format!("({relabelled})*({partner})"))
+        );
+        // Colour trace notation in a sum connected by Lorentz slots declines
+        // the planner too. The sums, which share those slots on vectors and
+        // metrics, stay factorized.
+        let trace = "spenso::trace(coad(8),spenso::sym(spenso::f(coad(8,a1),spenso::in,spenso::out),spenso::f(coad(8,a2),spenso::in,spenso::out)))";
+        let source = input(&format!(
+            "(g(mink(D,m3),mink(D,m4))*{trace}+x*g(mink(D,m3),mink(D,m4))*spenso::f(coad(8,a1),coad(8,c),coad(8,d))*spenso::f(coad(8,a2),coad(8,c),coad(8,d)))*(p(1,mink(D,m1))*g(mink(D,m2),mink(D,m3))-p(2,mink(D,m2))*g(mink(D,m1),mink(D,m3)))*(p(3,mink(D,m1))*g(mink(D,m2),mink(D,m4))+p(3,mink(D,m2))*g(mink(D,m1),mink(D,m4)))"
+        ));
+        assert!(planned_contraction(&source).is_none(), "{source}");
+        assert_eq!(typed_contraction(&source), source);
     }
 
     pub(super) fn setup() -> SlotContraction {
