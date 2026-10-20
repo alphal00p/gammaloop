@@ -23,7 +23,7 @@ const INCOMING: &str = "incoming";
 const OUTGOING: &str = "outgoing";
 const RADIAL: &str = "radial";
 
-/// Request of the EC seed plugin protocol.
+/// Request of the `graph_impred_seed` protocol.
 #[derive(Clone, Debug, Deserialize)]
 pub struct SeedRequest {
     pub diagram: Diagram,

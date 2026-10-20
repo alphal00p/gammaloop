@@ -1874,7 +1874,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-25: browser CI declares native fixture and browser-script source
 # ownership, with pinned Chromium/Playwright/AnyWidget/Marimo runtime tools. The
 # separate nextest group reuses per-crate producers; ci.typ records this added coverage.
-digest = "5bb33f0636444ee9a41e219d9b0c9d7a0afccdbb"
+# No-impact attestation 2026-10-28: the Clinnet and API lists drop the removed
+# ec-layout.wasm plugin and LICENSE.ec-layout; Clinnet's list adds LICENSE.networkx.
+# Current browser, fixture, font, MathML and runtime source owners are preserved.
+digest = "58213ea8d1afa7d0f0318315d17f6c1630bcb7c7"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
