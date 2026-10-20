@@ -121,10 +121,10 @@ impl AutoIndex {
 /// return ordinary expressions; the tensor-aware overrides retain the interface.
 /// Use ``to_expression()`` to explicitly drop the tensor interface.
 ///
-/// Pass ``intern="indices"`` to reversibly encode compound index labels, or
-/// ``intern="flattened"`` to create readable names. Both modes operate only on
-/// index payloads. An explicit ``structure`` retains the declared axis order
-/// and can describe the interface of a symbolic zero.
+/// Pass ``intern="indices"`` to reversibly encode unknown function-valued index
+/// labels, or ``intern="flattened"`` to create readable names. Both modes operate
+/// only on index payloads and preserve native index forms. An explicit ``structure``
+/// retains the declared axis order and can describe the interface of a symbolic zero.
 ///
 /// Examples
 /// --------
@@ -730,10 +730,11 @@ impl TensorExpression {
     ///     not reorder arguments or component axes. For zero, it supplies the rank
     ///     and axes that cannot be inferred from the scalar expression alone.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -2994,10 +2995,11 @@ impl TensorExpression {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -3044,10 +3046,11 @@ impl TensorExpression {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -3091,10 +3094,11 @@ impl TensorExpression {
     ///     Keys must identify existing external axes. Each axis may be renamed
     ///     once; renaming must preserve the external interface.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -3180,10 +3184,11 @@ impl TensorExpression {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -6994,12 +6999,7 @@ mod tests {
             let expected = slots
                 .into_iter()
                 .rev()
-                .map(|slot| {
-                    settings
-                        .rust()
-                        .try_cook_indices(composition::port_atom(slot).as_view())
-                        .unwrap()
-                })
+                .map(composition::port_atom)
                 .collect::<Vec<_>>();
             let kwargs = PyDict::new(py);
             kwargs.set_item("intern", "flattened")?;
@@ -7007,7 +7007,7 @@ mod tests {
                 .get_type::<TensorExpression>()
                 .call((&original,), Some(&kwargs))?;
             let result = result.extract::<PyRef<'_, TensorExpression>>()?;
-            assert_ne!(*result.atom(), atom);
+            assert_eq!(*result.atom(), atom);
             assert_eq!(
                 result
                     .interface()
@@ -7017,8 +7017,8 @@ mod tests {
                     .collect::<Vec<_>>(),
                 expected
             );
-            // A typed zero has no index syntax to rewrite, but its interface
-            // still needs the same cooking operation, including mixed open ports.
+            // A typed zero retains its native labels and mixed open ports even
+            // though its expression has no index syntax.
             let mut zero_slots = slots.into_iter().rev().collect::<Vec<_>>();
             zero_slots.push(rep.slot(PartialIndex::open(2)));
             let zero = TensorExpression::from_atom_interface(
@@ -7041,22 +7041,26 @@ mod tests {
                     .collect::<Vec<_>>(),
                 expected
             );
-            // Flattening may identify a previously named index with an existing
-            // scalar label. Derive that contraction from the mapped slots.
-            let original_slot = rep.slot::<AbstractIndex, _>(i).to_atom();
+            // An unknown function label can flatten to an existing symbol index.
+            // The two distinct raw labels must then contract.
+            let unknown = FunctionBuilder::new(symbol!("retained_cooking_unknown_index"))
+                .add_arg(71)
+                .finish();
+            let original_slot = rep.to_symbolic([unknown]);
             let cooked_slot = settings
                 .rust()
                 .try_cook_indices(original_slot.as_view())
                 .unwrap();
+            assert_ne!(original_slot, cooked_slot);
             let metric = FunctionBuilder::new(ETS.metric)
                 .add_arg(original_slot)
                 .add_arg(cooked_slot)
                 .finish();
-            let metric = TensorExpression::from_atom_interface(py, metric, None)?;
-            assert_eq!(metric.borrow(py).interface().canonical().order(), 2);
+            let metric = PythonExpression { expr: metric }.into_pyobject(py)?;
+            assert!(TensorExpression::new(py, metric.as_any(), None, None).is_err());
             let cooked = Py::new(
                 py,
-                TensorExpression::new(py, metric.bind(py).as_any(), None, Some(settings))?,
+                TensorExpression::new(py, metric.as_any(), None, Some(settings))?,
             )?;
             assert!(cooked.borrow(py).interface().canonical().is_scalar());
             let contraction = PyDict::new(py);
