@@ -4106,6 +4106,54 @@ impl QcdMassReference {
 }
 
 impl QcdMassReference {
+    /// Complete finite external matrices while keeping scalar radial D words opaque.
+    pub(in crate::uv) fn materialize_finite_external_matrix_coefficients(
+        input: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        ensure!(input.rank() == 4);
+        ensure!(!input.expression().contains_symbol(crate::utils::GS.den));
+        let filter = spenso::shadowing::TensorCollectFilter::Reps([
+            spenso::structure::representation::LibraryRep::from(Minkowski {}),
+        ]);
+        let partial: SymbolicTensor<PartialStructure> = input.clone().into();
+        let rows = partial.coefficient_list(filter)?;
+        let recomposed = input.with_checked_expression(Atom::add_many(
+            rows.iter()
+                .map(|(radial, matrix)| radial.expression() * matrix.expression()),
+        ))?;
+        ensure!(
+            input.coefficients_equal(&recomposed, filter)? == symbolica::id::ConditionResult::True
+        );
+        let mut normalized = input.with_checked_expression(Atom::Zero)?;
+        for (radial, matrix) in rows {
+            if radial.expression().is_zero() || matrix.expression().is_zero() {
+                continue;
+            }
+            ensure!(
+                radial.is_scalar(),
+                "a radial spectator retained a free Lorentz port"
+            );
+            for head in [
+                crate::utils::GS.emr_mom,
+                crate::utils::GS.loop_mom,
+                crate::utils::GS.den,
+            ] {
+                ensure!(
+                    !matrix.expression().contains_symbol(head),
+                    "a finite external matrix retained an active radial carrier"
+                );
+            }
+            let matrix = input.with_checked_expression(matrix.expression().clone())?;
+            ensure!(matrix.rank() == 4);
+            let matrix = Self::materialize_native_four_component_numerator(&matrix)?;
+            normalized = normalized.try_add(
+                &matrix.with_checked_expression(matrix.expression() * radial.expression())?,
+            )?;
+        }
+        ensure!(normalized.structure().logical_slots() == input.structure().logical_slots());
+        Ok(normalized)
+    }
+
     /// Materialize only the admitted finite numerator, never a causal shell.
     pub(in crate::uv) fn materialize_native_four_component_numerator(
         input: &SymbolicTensor<IndexedStructure>,
@@ -4254,6 +4302,91 @@ impl QcdMassReference {
         ensure!(materialized.structure().logical_slots() == input.structure().logical_slots());
         Ok(materialized)
     }
+}
+
+#[test]
+fn native_d09_finite_matrix_completeness_keeps_dimensional_radial_spectators() -> Result<()> {
+    use crate::utils::GS;
+    use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    crate::initialisation::test_initialise()?;
+    let row = Atom::var(symbol!("native_radial_matrix_regression::row"));
+    let column = Atom::var(symbol!("native_radial_matrix_regression::column"));
+    let spin_row = idenso::bis!(4, row.clone());
+    let spin_column = idenso::bis!(4, column.clone());
+    let color_row = ColorFundamental {}.new_rep(3).to_symbolic([row]);
+    let color_column = function!(
+        AIND_SYMBOLS.dind,
+        ColorFundamental {}.new_rep(3).to_symbolic([column])
+    );
+    let identity = function!(ETS.metric, &spin_row, &spin_column)
+        * function!(ETS.metric, &color_row, &color_column);
+    let component =
+        |index: i32, port: &Atom| function!(ETS.delta, function!(AIND_SYMBOLS.cind, index), port);
+    let units = (0..4)
+        .flat_map(|spin| (0..3).map(move |color| (spin, color)))
+        .map(|(spin, color)| {
+            component(spin, &spin_row)
+                * component(spin, &spin_column)
+                * component(color, &color_row)
+                * component(color, &color_column)
+        })
+        .collect::<Vec<_>>();
+    let complete = Atom::add_many(units.iter());
+    let rep = (Minkowski {}).to_symbolic([GS.dim]);
+    let radial_factors = [
+        function!(
+            SPENSO_TAG.dot,
+            function!(GS.loop_mom, 1, &rep),
+            function!(GS.loop_mom, 2, &rep)
+        ),
+        function!(
+            SPENSO_TAG.dot,
+            function!(GS.loop_mom, 2, &rep),
+            function!(GS.loop_mom, 2, &rep)
+        ),
+    ];
+    let radial = Atom::mul_many(&radial_factors);
+    let a = Atom::var(symbol!("native_radial_matrix_regression::a"; Scalar));
+    let b = Atom::var(symbol!("native_radial_matrix_regression::b"; Scalar));
+    let spectator = (&a + &b).pow(11);
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let input = SymbolicTensor::infer_indexed(
+        cooking.try_cook(((&identity - &complete) * &radial * &spectator).as_view())?,
+    )?;
+    let before = input.clone();
+    let unmaterialized = QcdMassReference::certify_finite_tagged_rows_zero(
+        "unmaterialized finite matrix basis is not an independent word basis",
+        input.clone(),
+    );
+    ensure!(unmaterialized.is_err());
+    let normalized = QcdMassReference::materialize_finite_external_matrix_coefficients(&input)?;
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "exact finite I completeness with independent D radial moments",
+        normalized,
+    )?;
+    let one = SymbolicTensor::infer_indexed(
+        cooking.try_cook((&identity * &radial * &spectator).as_view())?,
+    )?;
+    let preserved = QcdMassReference::materialize_finite_external_matrix_coefficients(&one)?;
+    for factor in &radial_factors {
+        ensure!(preserved.expression().contains(factor.as_view()));
+    }
+    ensure!(preserved.expression().contains(spectator.as_view()));
+    ensure!(preserved.structure().logical_slots() == one.structure().logical_slots());
+    let wrong = SymbolicTensor::infer_indexed(
+        cooking.try_cook(((&identity - &complete + &units[0]) * &radial * &spectator).as_view())?,
+    )?;
+    let wrong = QcdMassReference::materialize_finite_external_matrix_coefficients(&wrong)?;
+    let perturbed = QcdMassReference::certify_finite_tagged_rows_zero(
+        "one perturbed native matrix coordinate must remain nonzero",
+        wrong,
+    );
+    ensure!(perturbed.is_err());
+    ensure!(input.same_value(&before));
+    Ok(())
 }
 
 /// A common positive scalar gluon mass is an analytic IR rearrangement only.
