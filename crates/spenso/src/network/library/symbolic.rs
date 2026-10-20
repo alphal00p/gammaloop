@@ -472,6 +472,10 @@ pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
     // sharp: symbol!("♯";Symmetric),
     metric: tensor_symbol!("g";Symmetric,Real,Linear;print = |a, opt, state| {
 
+        if opt.mode.is_mathml() {
+            return crate::network::tags::mathml::tensor(a, opt, state);
+        }
+
         if opt.mode.is_typst()
             && let Some(output) = tensor_print(a, opt, state)
         {

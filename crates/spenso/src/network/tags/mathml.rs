@@ -111,7 +111,7 @@ fn labelled_head(
     )
 }
 
-pub(super) fn tensor(
+pub(crate) fn tensor(
     atom: AtomView<'_>,
     options: &PrintOptions,
     state: &PrintState,
@@ -127,6 +127,16 @@ pub(super) fn tensor(
         return None;
     };
     let values = function.iter().collect::<Vec<_>>();
+    if symbol == crate::network::library::symbolic::ETS.metric {
+        let [first, second] = values.as_slice() else {
+            return None;
+        };
+        let first = tensor_slot(*first)?;
+        let second = tensor_slot(*second)?;
+        if first.representation != second.representation || first.dimension != second.dimension {
+            return None;
+        }
+    }
     if symbol.has_tag(&SPENSO_TAG.index) {
         let label = symbol
             .get_tags()
@@ -229,6 +239,58 @@ pub(super) fn tensor(
     (body.len() <= MAX_BYTES).then_some(body)
 }
 
+/// Standalone spaces and slots retain their family and dimension. Inside a
+/// tensor those qualifiers belong to the tensor's type, so only its index is
+/// shown by `tensor` instead.
+pub(crate) fn representation(
+    atom: AtomView<'_>,
+    options: &PrintOptions,
+    state: &PrintState,
+) -> Option<String> {
+    if !fits(atom, &mut 64, 0) {
+        return None;
+    }
+    let (symbol, dimension, index, class, row) = if let Some(slot) = tensor_slot(atom) {
+        (
+            slot.representation,
+            slot.dimension,
+            Some(slot.index),
+            RepresentationMetadata::from_symbol(slot.representation)?.class,
+            slot.row,
+        )
+    } else {
+        let value = representation_value(atom)?;
+        (value.symbol, value.dimension, None, value.class, value.row)
+    };
+    // A bare symbol defers to Symbolica, retaining its namespace/style options
+    // without calling this representation printer recursively on the function.
+    let mut body = format!(
+        "<msub>{}<mrow>{}</mrow></msub>",
+        source(Atom::var(symbol).as_view(), options)?,
+        source(dimension, options)?,
+    );
+    let dual = matches!(unwrap_tensor_display(atom), AtomView::Fun(wrapper)
+        if wrapper.get_symbol() == AIND_SYMBOLS.dind);
+    if dual && class == RepresentationClass::Dualizable {
+        body = format!("<msup>{body}<mo>*</mo></msup>");
+    }
+    if let Some(index) = index {
+        let index = source(index, options)?;
+        let pair = match row {
+            IndexRow::Top => format!("<none/><mrow>{index}</mrow>"),
+            IndexRow::Bottom => format!("<mrow>{index}</mrow><none/>"),
+        };
+        body = format!("<mmultiscripts>{body}{pair}</mmultiscripts>");
+    }
+    if state.in_exp_base
+        && ((dual && class == RepresentationClass::Dualizable)
+            || (index.is_some() && row == IndexRow::Top))
+    {
+        body = group(body);
+    }
+    (body.len() <= MAX_BYTES).then_some(body)
+}
+
 fn vector<'a>(
     atom: AtomView<'a>,
     options: &PrintOptions,
@@ -296,7 +358,10 @@ pub(super) fn dot(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{dind, lor, mink};
+    use crate::{
+        dind, lor, mink,
+        structure::representation::{LibraryRep, Minkowski},
+    };
     use symbolica::{function, printer::PrintMode};
 
     fn options() -> PrintOptions {
@@ -415,5 +480,142 @@ mod tests {
         assert!(dot(value.as_view(), &options, &PrintState::new()).is_none());
         let html = value.printer(options).to_string();
         assert!(html.contains("<mi>custom-vector</mi>"), "{html}");
+    }
+
+    #[test]
+    fn native_metrics_keep_original_indices_variance_and_source_bytes() {
+        use crate::network::library::symbolic::ETS;
+
+        let rep = LibraryRep::new_dual("native_mathml_print::metric_space").unwrap();
+        let mu = symbol!("native_mathml_print::metric_mu");
+        let nu = symbol!("native_mathml_print::metric_nu");
+        let first = function!(rep.symbol(), 3, mu);
+        let second = function!(rep.symbol(), 3, nu);
+        let options = options();
+        for (left, right, first_lower, second_lower) in [
+            (first.clone(), second.clone(), false, false),
+            (dind!(first.clone()), second.clone(), true, false),
+            (dind!(first.clone()), dind!(second.clone()), true, true),
+        ] {
+            let value = ETS.metric(left, right);
+            let bytes = value.as_view().get_data().to_vec();
+            let html = value.printer(options.clone()).to_string();
+            assert!(html.contains("<mi>g</mi>"), "{html}");
+            assert!(html.contains("<mi>metric_mu</mi>"), "{html}");
+            assert!(html.contains("<mi>metric_nu</mi>"), "{html}");
+            let [first, second] =
+                [("metric_mu", first_lower), ("metric_nu", second_lower)].map(|(label, lower)| {
+                    let index = format!("<mrow><mi>{label}</mi></mrow>");
+                    if lower {
+                        format!("{index}<none/>")
+                    } else {
+                        format!("<none/>{index}")
+                    }
+                });
+            // The metric is symmetric: either slot order is canonical.
+            assert!(
+                html.contains(&format!("<mi>g</mi>{first}{second}</mmultiscripts>"))
+                    || html.contains(&format!("<mi>g</mi>{second}{first}</mmultiscripts>")),
+                "{html}"
+            );
+            assert!(!html.contains("metric_space"), "{html}");
+            assert!(!html.contains("data-symbolica-path"), "{html}");
+            assert_eq!(value.as_view().get_data(), bytes);
+        }
+
+        let value = ETS.metric(mink!(4, Atom::var(mu)), mink!(4, Atom::var(nu)));
+        let mut state = PrintState::new();
+        let html = tensor(value.as_view(), &options, &state).unwrap();
+        state.in_exp_base = true;
+        assert_eq!(tensor(value.as_view(), &options, &state), Some(group(html)));
+    }
+
+    #[test]
+    fn native_metric_dispatch_defers_unsupported_calls() {
+        use crate::network::library::symbolic::ETS;
+
+        let p = crate::vector_symbol!("native_mathml_print::metric_p");
+        let q = crate::vector_symbol!("native_mathml_print::metric_q");
+        let options = options();
+
+        let mu = symbol!("native_mathml_print::unsupported_mu");
+        let nu = symbol!("native_mathml_print::unsupported_nu");
+        for value in [
+            function!(ETS.metric, mink!(4, Atom::var(mu))),
+            ETS.metric(mink!(4, Atom::var(mu)), mink!(5, Atom::var(nu))),
+            ETS.metric(mink!(4, Atom::var(mu)), lor!(4, Atom::var(nu))),
+            ETS.metric(function!(p, 2, mink!(4)), function!(q, 3, mink!(4))),
+            ETS.metric(function!(p, 2, mink!(4)), function!(q, 3, mink!(5))),
+        ] {
+            assert!(tensor(value.as_view(), &options, &PrintState::new()).is_none());
+            let html = value.printer(options.clone()).to_string();
+            assert!(html.contains("<mi>g</mi>"), "{html}");
+        }
+        let ordinary_g = symbol!("native_mathml_print::g");
+        let value = function!(ordinary_g, mink!(4, Atom::var(mu)), mink!(4, Atom::var(nu)));
+        assert!(tensor(value.as_view(), &options, &PrintState::new()).is_none());
+    }
+
+    #[test]
+    fn standalone_representations_keep_family_dimension_and_duality() {
+        let rep = LibraryRep::new_dual("native_mathml_print::standalone_space").unwrap();
+        let options = options();
+        let dimension = symbol!("native_mathml_print::D");
+        let index = symbol!("native_mathml_print::standalone_i");
+        for value in [
+            function!(rep.symbol(), dimension),
+            function!(rep.symbol(), 3, index),
+            dind!(function!(rep.symbol(), 3, index)),
+        ] {
+            let bytes = value.as_view().get_data().to_vec();
+            let html = value.printer(options.clone()).to_string();
+            assert!(html.contains("<mi>standalone_space</mi>"), "{html}");
+            assert!(html.contains("<msub>"), "{html}");
+            assert!(!html.contains("data-symbolica-path"), "{html}");
+            if value == function!(rep.symbol(), dimension) {
+                assert!(html.contains("<mi>D</mi>"), "{html}");
+                assert!(!html.contains("<mmultiscripts>"), "{html}");
+            } else {
+                assert!(html.contains("<mn>3</mn>"), "{html}");
+                assert!(html.contains("<mi>standalone_i</mi>"), "{html}");
+            }
+            assert_eq!(value.as_view().get_data(), bytes);
+        }
+        let dual = dind!(function!(rep.symbol(), 3, index));
+        let html = representation(dual.as_view(), &options, &PrintState::new()).unwrap();
+        assert!(html.contains("<mo>*</mo>"), "{html}");
+        assert!(html.contains("</mrow><none/>"), "{html}");
+        let mut power = PrintState::new();
+        power.in_exp_base = true;
+        assert_eq!(
+            representation(dual.as_view(), &options, &power),
+            Some(group(html))
+        );
+
+        let coad = LibraryRep::new_self_dual("coad").unwrap();
+        for (value, family, dim) in [
+            (
+                function!(LibraryRep::from(Minkowski {}).symbol(), dimension),
+                "mink",
+                "<mi>D</mi>",
+            ),
+            (function!(coad.symbol(), 8), "coad", "<mn>8</mn>"),
+        ] {
+            let html = value.printer(options.clone()).to_string();
+            assert!(html.contains(&format!("<mi>{family}</mi>")), "{html}");
+            assert!(html.contains(dim), "{html}");
+            assert!(!html.contains('*'), "{html}");
+        }
+
+        let value = function!(rep.symbol(), 3);
+        assert!(representation(value.as_view(), &options, &PrintState::new()).is_some());
+        for value in [
+            Atom::var(rep.symbol()),
+            function!(rep.symbol()),
+            function!(rep.symbol(), 3, index, index),
+            function!(AIND_SYMBOLS.dind, symbol!("native_mathml_print::opaque")),
+        ] {
+            assert!(representation(value.as_view(), &options, &PrintState::new()).is_none());
+        }
     }
 }
