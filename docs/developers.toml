@@ -250,7 +250,10 @@ anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-10-20: the architecture records native vertex metadata requiring
 # model-fingerprint validation. Single and collection import regressions preserve
 # ordinary compact labels and num expressions without discarding native bindings.
-digest = "f1cff6ba0ac5a406d174c6bc71bd0cd4ffe0dc54"
+# Reviewed 2026-10-20: the architecture records that the aggregate fragment product
+# keeps the canonical explicit-port order of admission, so exports need no metadata,
+# and that validation matches declared aggregate ports by label.
+digest = "8f5f129203a24a35bfda38b06dce0da19cdc9bf2"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
