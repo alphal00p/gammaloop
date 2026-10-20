@@ -1587,7 +1587,10 @@ impl LibraryRep {
         SymbolBuilder::new(namespaced)
             .with_tags(tags)
             .with_user_data(metadata.to_user_data())
-            .with_print_function(move |a, opt, _state| {
+            .with_print_function(move |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return crate::network::tags::mathml::representation(a, opt, state);
+                }
                 if matches!(
                     opt.custom_print_mode.get("typst"),
                     Some(PrintUserData::Integer(1))

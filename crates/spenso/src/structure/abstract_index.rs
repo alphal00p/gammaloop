@@ -489,7 +489,10 @@ let args = arg.pos().map(to-eq).join("")
                 }
             },
             tag = SPENSO_TAG.lower,
-            print = |a, opt, _state| {
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return crate::network::tags::mathml::representation(a, opt, state);
+                }
                 if matches!(
                     opt.custom_print_mode.get("typst"),
                     Some(PrintUserData::Integer(1))
