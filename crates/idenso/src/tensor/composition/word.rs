@@ -4,11 +4,14 @@ use crate::tensor::composition::{ExplicitIndexOccurrences, ProductPlan, TensorCo
 use crate::tensor::inference::{InterfaceInference, TensorInferenceError, TensorInterface};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
-use spenso::structure::slot::ParseableAind;
+use spenso::structure::slot::{DualSlotTo, ParseableAind};
 use std::mem;
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use symbolica::symbol;
+
+#[cfg(test)]
+mod adjoint_tests;
 
 #[derive(Clone, Copy)]
 pub(super) enum ProductAlgebra {
@@ -121,6 +124,106 @@ impl ProductPlan {
 }
 
 impl SymbolicTensor<PartialStructure> {
+    /// Dirac adjoint in a tensor-word algebra with an explicit odd-generator map.
+    ///
+    /// Each term has the same grammar as [`Self::multiply_word`]: at most one
+    /// selected word and a commuting, word-free tensor coefficient. The native
+    /// Dirac adjoint conjugates that coefficient with fixed physical indices;
+    /// this operation reverses the generator order and delegates each generator
+    /// to `adjoint_generator`. Symbolica owns distribution and exterior signs.
+    ///
+    /// The callback supplies the field convention, for example a declared
+    /// fermion/barred-fermion pairing. It must return an admissible, word-free
+    /// operand with the source generator's dual representations, unchanged
+    /// index labels, and unchanged logical axis order. Callback failures are
+    /// propagated; no Majorana, ghost, or unknown-field policy is implicit.
+    ///
+    /// The source's logical interface is retained with dual representations.
+    /// Unresolved ports are materialized before the operation, as with
+    /// [`Self::dirac_adjoint`]. Ranked zero retains its interface and requires
+    /// no generator callbacks. Ordinary `dirac_adjoint` continues to reject
+    /// nonzero tensor words without an explicit policy.
+    pub fn dirac_adjoint_word(
+        &self,
+        head: Symbol,
+        mut adjoint_generator: impl FnMut(&Self) -> Result<Self, crate::AdjointError>,
+    ) -> Result<Self, crate::AdjointError> {
+        let identity = Self::word(head, &[])?;
+        // Reuse the product boundary's head and complete operand-grammar checks.
+        ProductPlan::Scalar.apply_word(head, &identity, self)?;
+        let source = self.materialized()?;
+        let interface = PartialStructure::from_logical_slots(
+            source
+                .structure
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.dual()),
+        );
+        if source.is_zero() {
+            return Ok(Self::from_declared_parts(Atom::Zero, interface)?);
+        }
+        let mut terms = Vec::new();
+        for term in source.expression.expand_in(Atom::var(head)).terms() {
+            let mut coefficient = Vec::new();
+            let mut generators = Vec::new();
+            Self::split_word_coefficient(
+                head,
+                term,
+                &mut coefficient,
+                &mut generators,
+                &mut false,
+            )?;
+            let coefficient = coefficient
+                .into_iter()
+                .reduce(|left, right| Self::bracket_product(left.as_view(), right.as_view()))
+                .unwrap_or_else(Atom::one);
+            let coefficient = Self::infer(coefficient)?.dirac_adjoint(true)?;
+            let generators = generators
+                .into_iter()
+                .rev()
+                .map(|generator| {
+                    let generator = Self::infer(generator)?;
+                    let adjoint = adjoint_generator(&generator)?;
+                    adjoint.explicit_index_occurrences()?;
+                    let expected = generator
+                        .structure
+                        .logical_slots()
+                        .into_iter()
+                        .map(|slot| slot.dual())
+                        .collect::<Vec<_>>();
+                    if adjoint.structure.logical_slots() != expected {
+                        return Err(TensorInferenceError::invalid(
+                            "word-adjoint generator policy must preserve dual logical slots and index labels",
+                        )
+                        .into());
+                    }
+                    let mut word_free = true;
+                    adjoint.expression.visitor(&mut |node| {
+                        if matches!(node, AtomView::Fun(function)
+                            if function.get_symbol().has_tag(&SPENSO_TAG.tensor_word))
+                        {
+                            word_free = false;
+                        }
+                        word_free
+                    });
+                    if !word_free {
+                        return Err(TensorInferenceError::invalid(
+                            "word-adjoint generator policy must return a word-free operand",
+                        )
+                        .into());
+                    }
+                    Ok(adjoint)
+                })
+                .collect::<Result<Vec<_>, crate::AdjointError>>()?;
+            let word = Self::word(head, &generators)?;
+            terms.push(coefficient.multiply_word(head, &word)?.expression);
+        }
+        Ok(Self::from_declared_parts(
+            terms.into_iter().sum(),
+            interface,
+        )?)
+    }
+
     /// Multiply marked tensor words using the ordinary automatic port plan.
     ///
     /// For a chosen endpoint contraction and an example, see [`ProductPlan::apply_word`].
