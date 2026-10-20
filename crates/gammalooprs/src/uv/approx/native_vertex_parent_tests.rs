@@ -267,6 +267,51 @@ fn native_d09_laurent_grid_preserves_factors_and_rejects_unsupported_domains() -
 }
 
 impl QcdMassReference {
+    /// Same-sector finite component identity, preserving every original pole descriptor.
+    pub(in crate::uv) fn certify_fixed_component_rational_identity(
+        label: &str,
+        left: &SymbolicTensor<IndexedStructure>,
+        right: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<()> {
+        eyre::ensure!(left.structure().logical_slots() == right.structure().logical_slots());
+        // Same signed-numerator bucket core as the parent chart certificates,
+        // with stricter original descriptors for an unchanged sector. Repeated
+        // tuple entries preserve powers; full_expr includes its prescription.
+        let mut classes = BTreeMap::<_, SymbolicTensor<IndexedStructure>>::new();
+        for (sign, input) in [(1, left), (-1, right)] {
+            // Recomposition precedes physical normalization: retain consumed-child
+            // loop-scale powers instead of applying physical_terms' S -> 1.
+            for term in FourDTerm::from_tensor(input)? {
+                let mut key = term
+                    .denominators
+                    .iter()
+                    .map(|pole| {
+                        (
+                            pole.source_edge.0,
+                            pole.momentum.clone(),
+                            pole.mass_squared.clone(),
+                            pole.full_expr.clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                key.sort();
+                eyre::ensure!(!term.numerator.expression().contains_symbol(GS.den));
+                let numerator = term
+                    .numerator
+                    .with_checked_expression(Atom::num(sign) * term.numerator.expression())?;
+                if let Some(sum) = classes.get_mut(&key) {
+                    *sum = sum.try_add(&numerator)?;
+                } else {
+                    classes.insert(key, numerator);
+                }
+            }
+        }
+        for numerator in classes.into_values() {
+            Self::certify_finite_tagged_rows_zero(label, numerator)?;
+        }
+        Ok(())
+    }
+
     fn certify_parent_tensor_zero(
         label: &str,
         difference: &SymbolicTensor<IndexedStructure>,
@@ -5178,10 +5223,11 @@ impl QcdMassReference {
                     .with_checked_expression(Atom::add_many(rows.iter().map(
                         |(word, coefficient)| word.expression() * coefficient.expression(),
                     )))?;
-                eyre::ensure!(
-                    open_sum.coefficients_equal(&recomposed, filter)?
-                        == symbolica::id::ConditionResult::True
-                );
+                Self::certify_fixed_component_rational_identity(
+                    "physical-four matrix-domain decomposition retains every original pole class",
+                    &open_sum,
+                    &recomposed,
+                )?;
                 let mut scalar_inputs = BTreeMap::<
                     Atom,
                     (

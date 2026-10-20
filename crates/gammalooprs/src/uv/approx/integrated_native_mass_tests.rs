@@ -129,6 +129,224 @@ struct MassProjection {
 }
 
 #[test]
+fn native_fixed_component_rational_identity_preserves_pole_owners_and_weights() -> Result<()> {
+    use crate::utils::GS;
+    use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    crate::initialisation::test_initialise()?;
+    let row = Atom::var(symbol!("native_fixed_pole_regression::row"));
+    let column = Atom::var(symbol!("native_fixed_pole_regression::column"));
+    let spin_row = idenso::bis!(4, row.clone());
+    let spin_column = idenso::bis!(4, column.clone());
+    let color_row = ColorFundamental {}.new_rep(3).to_symbolic([row]);
+    let color_column = function!(
+        AIND_SYMBOLS.dind,
+        ColorFundamental {}.new_rep(3).to_symbolic([column])
+    );
+    let identity = function!(ETS.metric, &spin_row, &spin_column)
+        * function!(ETS.metric, &color_row, &color_column);
+    let selector =
+        |n: i32, port: &Atom| function!(ETS.delta, function!(AIND_SYMBOLS.cind, n), port);
+    let independent = selector(2, &spin_row)
+        * selector(1, &spin_column)
+        * selector(0, &color_row)
+        * selector(1, &color_column);
+    let [a, b, u, v, s, t] = ["a", "b", "u", "v", "s", "t"]
+        .map(|name| Atom::var(symbol!(&format!("native_fixed_pole_regression::{name}"); Scalar)));
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let logarithm = function!(
+        symbolica::atom::Symbol::LOG,
+        Atom::var(symbol!("native_fixed_pole_regression::scale"; Scalar))
+    );
+    let jet = (Atom::one() + &epsilon * &logarithm)
+        / ((Atom::num(2) - &epsilon) * (Atom::num(3) - &epsilon));
+    let integrated_loop_scale = Atom::var(GS.integrated_loop_scale);
+    let factors = [
+        (&u + &v).pow(11),
+        (&s + &t).pow(-2),
+        integrated_loop_scale.pow(4),
+    ];
+    let weight = &jet * Atom::mul_many(factors.iter());
+    let q0 = function!(GS.emr_mom, 2, function!(AIND_SYMBOLS.cind, 0));
+    let q1 = function!(GS.emr_mom, 4, function!(AIND_SYMBOLS.cind, 1));
+    let rep = (Minkowski {}).to_symbolic([GS.dim]);
+    let momentum = |edge: i32| function!(GS.emr_mom, edge);
+    let square = |edge: i32| {
+        function!(
+            SPENSO_TAG.dot,
+            function!(GS.emr_mom, edge, &rep),
+            function!(GS.emr_mom, edge, &rep)
+        )
+    };
+    let mass = Atom::var(GS.m_uv_expansion).pow(2);
+    let d2 = square(2) - &mass;
+    let d4 = square(4) - &mass;
+    let pole = |edge: i32, momentum: &Atom, mass: &Atom, polynomial: &Atom| {
+        function!(GS.den, edge, momentum, mass, polynomial)
+    };
+    let p2 = pole(2, &momentum(2), &mass, &d2);
+    let p4 = pole(4, &momentum(4), &mass, &d4);
+    let numerator = &identity * q0.pow(2) + &independent * &q1;
+    let lhs = &weight * (&a * &numerator / (p2.pow(2) * &p4) + &b * &numerator / (&p2 * p4.pow(2)));
+    let rhs = &weight
+        * ((&a * &identity * q0.pow(2) + &a * &independent * &q1) / (p2.pow(2) * &p4)
+            + (&b * &identity * q0.pow(2) + &b * &independent * &q1) / (&p2 * p4.pow(2)));
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let left = SymbolicTensor::infer_indexed(cooking.try_cook(lhs.as_view())?)?;
+    let right = left.with_checked_expression(cooking.try_cook(rhs.as_view())?)?;
+    let before = left.clone();
+    QcdMassReference::certify_fixed_component_rational_identity(
+        "independent fixed-component pole-class distribution",
+        &left,
+        &right,
+    )?;
+    for factor in &factors {
+        ensure!(right.expression().contains(factor.as_view()));
+    }
+    let wrong_weight = right.with_checked_expression(
+        right.expression()
+            + cooking.try_cook((&weight * &independent / (&p2 * p4.pow(2))).as_view())?,
+    )?;
+    ensure!(
+        QcdMassReference::certify_fixed_component_rational_identity(
+            "unit native matrix-weight perturbation",
+            &left,
+            &wrong_weight
+        )
+        .is_err()
+    );
+    let wrong_scale = rhs
+        .replace(integrated_loop_scale.to_pattern())
+        .with(integrated_loop_scale.pow(2));
+    let wrong_scale = right.with_checked_expression(cooking.try_cook(wrong_scale.as_view())?)?;
+    ensure!(
+        QcdMassReference::certify_fixed_component_rational_identity(
+            "changed consumed-child loop-scale power",
+            &left,
+            &wrong_scale
+        )
+        .is_err()
+    );
+    let changed = [
+        pole(3, &momentum(2), &mass, &d2),
+        pole(2, &momentum(4), &mass, &d2),
+        pole(2, &momentum(2), &(&mass + Atom::one()), &d2),
+        pole(
+            2,
+            &momentum(2),
+            &mass,
+            &(&d2
+                + Atom::i()
+                    * Atom::var(symbol!("native_fixed_pole_regression::prescription"; Scalar))),
+        ),
+        p2.pow(2),
+    ];
+    for altered in changed {
+        let altered = rhs.replace(p2.to_pattern()).with(altered);
+        let altered = right.with_checked_expression(cooking.try_cook(altered.as_view())?)?;
+        ensure!(
+            QcdMassReference::certify_fixed_component_rational_identity(
+                "changed original causal pole descriptor or power",
+                &left,
+                &altered
+            )
+            .is_err()
+        );
+    }
+    ensure!(left.same_value(&before));
+    Ok(())
+}
+
+#[test]
+fn native_complete_tensor_recomposition_preserves_factored_matrix_radial_distribution() -> Result<()>
+{
+    use crate::utils::GS;
+    use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    crate::initialisation::test_initialise()?;
+    let row = Atom::var(symbol!("native_recomposition_distribution::row"));
+    let column = Atom::var(symbol!("native_recomposition_distribution::column"));
+    let spin_row = idenso::bis!(4, row.clone());
+    let spin_column = idenso::bis!(4, column.clone());
+    let color_row = ColorFundamental {}.new_rep(3).to_symbolic([row]);
+    let color_column = function!(
+        AIND_SYMBOLS.dind,
+        ColorFundamental {}.new_rep(3).to_symbolic([column])
+    );
+    let identity = function!(ETS.metric, &spin_row, &spin_column)
+        * function!(ETS.metric, &color_row, &color_column);
+    let coordinate =
+        |index: i32, port: &Atom| function!(ETS.delta, function!(AIND_SYMBOLS.cind, index), port);
+    let independent = coordinate(2, &spin_row)
+        * coordinate(1, &spin_column)
+        * coordinate(0, &color_row)
+        * coordinate(1, &color_column);
+    let rep = (Minkowski {}).to_symbolic([GS.dim]);
+    let radial = function!(
+        SPENSO_TAG.dot,
+        function!(GS.loop_mom, 1, &rep),
+        function!(GS.loop_mom, 2, &rep)
+    );
+    let [a, b, u, v, s, t] = ["a", "b", "u", "v", "s", "t"].map(|name| {
+        Atom::var(symbol!(&format!("native_recomposition_distribution::{name}"); Scalar))
+    });
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let logarithm = function!(
+        symbolica::atom::Symbol::LOG,
+        Atom::var(symbol!("native_recomposition_distribution::scale"; Scalar))
+    );
+    let jet = (Atom::one() + &epsilon * &logarithm)
+        / ((Atom::num(2) - &epsilon) * (Atom::num(3) - &epsilon));
+    let spectator_factors = [(&u + &v).pow(11), (&s + &t).pow(-2)];
+    let spectator = Atom::mul_many(spectator_factors.iter());
+    let matrix_distribution = &a * (&identity * &radial + &independent * &radial)
+        + &b * (&identity * &radial - &independent * &radial);
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let input = SymbolicTensor::infer_indexed(
+        cooking.try_cook((&spectator * &jet * matrix_distribution).as_view())?,
+    )?;
+    let original = input.clone();
+    let selection = spenso::shadowing::TensorCollectFilter::Reps([
+        spenso::structure::representation::LibraryRep::from(Minkowski {}),
+    ]);
+    let partial: SymbolicTensor<PartialStructure> = input.clone().into();
+    let rows = partial.coefficient_list(selection)?;
+    ensure!(
+        rows.iter()
+            .all(|(radial, matrix)| radial.is_scalar() && matrix.rank() == 4)
+    );
+    let recomposed = input.with_checked_expression(Atom::add_many(
+        rows.iter()
+            .map(|(radial, matrix)| radial.expression() * matrix.expression()),
+    ))?;
+    ensure!(
+        input.coefficients_equal(
+            &recomposed,
+            spenso::shadowing::TensorCollectFilter::<0>::Tensors
+        )? == symbolica::id::ConditionResult::True
+    );
+    for factor in &spectator_factors {
+        ensure!(recomposed.expression().contains(factor.as_view()));
+    }
+    ensure!(recomposed.expression().contains(radial.as_view()));
+    ensure!(recomposed.structure().logical_slots() == input.structure().logical_slots());
+    let wrong = recomposed.with_checked_expression(
+        recomposed.expression()
+            + cooking.try_cook((&spectator * &jet * &radial * &independent).as_view())?,
+    )?;
+    ensure!(
+        input.coefficients_equal(&wrong, spenso::shadowing::TensorCollectFilter::<0>::Tensors)?
+            != symbolica::id::ConditionResult::True
+    );
+    ensure!(input.same_value(&original));
+    Ok(())
+}
+
+#[test]
 fn native_finite_scalar_certificate_preserves_captured_d09_laurent_recomposition() -> Result<()> {
     use crate::numerator::AppliedFeynmanRule;
     use spenso::network::library::symbolic::ETS;
@@ -4121,9 +4339,10 @@ impl QcdMassReference {
             rows.iter()
                 .map(|(radial, matrix)| radial.expression() * matrix.expression()),
         ))?;
-        ensure!(
-            input.coefficients_equal(&recomposed, filter)? == symbolica::id::ConditionResult::True
-        );
+        Self::certify_finite_tagged_rows_zero(
+            "radial decomposition retains its complete finite external matrix coefficients",
+            input.try_sub(&recomposed)?,
+        )?;
         let mut normalized = input.with_checked_expression(Atom::Zero)?;
         for (radial, matrix) in rows {
             if radial.expression().is_zero() || matrix.expression().is_zero() {
@@ -4201,9 +4420,10 @@ impl QcdMassReference {
             rows.iter()
                 .map(|(word, coefficient)| word.expression() * coefficient.expression()),
         ))?;
-        ensure!(
-            input.coefficients_equal(&recomposed, filter)? == symbolica::id::ConditionResult::True
-        );
+        Self::certify_finite_tagged_rows_zero(
+            "finite component-word decomposition retains the original numerator",
+            input.try_sub(&recomposed)?,
+        )?;
         let mut materialized = input.with_checked_expression(Atom::Zero)?;
         let mut cache = crate::uv::overlap_numerators::NumeratorJetCache::default();
         for (word, coefficient) in rows {
