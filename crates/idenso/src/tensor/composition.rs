@@ -42,6 +42,7 @@ use thiserror::Error;
 mod chain;
 mod product;
 mod word;
+use word::ProductAlgebra;
 
 #[cfg(test)]
 thread_local! {
@@ -2287,6 +2288,15 @@ impl ProductPlan {
         left: &SymbolicTensor<PartialStructure>,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        self.apply_algebra(left, right, ProductAlgebra::Commuting)
+    }
+
+    fn apply_algebra(
+        &self,
+        left: &SymbolicTensor<PartialStructure>,
+        right: &SymbolicTensor<PartialStructure>,
+        algebra: ProductAlgebra,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         match self {
             Self::Scalar => {
                 if !left.is_scalar() && !right.is_scalar() {
@@ -2302,7 +2312,13 @@ impl ProductPlan {
                     occurrences.branch_max(&ExplicitIndexOccurrences::from_interface(&interface));
                     occurrences.validate()?;
                 }
-                let atom = left.expression.as_ref() * right.expression.as_ref();
+                let atom = match algebra {
+                    ProductAlgebra::Commuting => left.expression.as_ref() * right.expression.as_ref(),
+                    ProductAlgebra::Word(_) => {
+                        let atom = algebra.expression(left.expression.as_view(), right.expression.as_view())?;
+                        return algebra.finish(atom, interface, Arc::new(occurrences), &[left, right], "multiply_word");
+                    }
+                };
                 let value =
                     SymbolicTensor::from_validated_parts(atom, interface, Arc::new(occurrences));
                 let value = if left.borrowed_parts().product_is_normalized()
@@ -2314,9 +2330,14 @@ impl ProductPlan {
                 };
                 value.validate_rewrite("multiply", &[left, right])
             }
-            Self::Outer => left.outer(right),
-            Self::Contract(pairs) => left.contract_ports(right, pairs),
+            Self::Outer => left.outer_algebra(right, algebra),
+            Self::Contract(pairs) => left.contract_ports_algebra(right, pairs, algebra),
             Self::Compose(left_channel, right_channel) => {
+                if matches!(algebra, ProductAlgebra::Word(_)) {
+                    return Err(TensorCompositionError::InvalidResultInterface(
+                        "tensor words require an explicit Contract plan; compact matrix-chain composition does not define a word policy".into(),
+                    ));
+                }
                 left.compose(right, *left_channel, *right_channel)
             }
         }
@@ -2959,6 +2980,10 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<Self, TensorCompositionError> {
+        self.outer_algebra(right, ProductAlgebra::Commuting)
+    }
+
+    fn outer_algebra(&self, right: &Self, algebra: ProductAlgebra) -> Result<Self, TensorCompositionError> {
         let collisions = compatible_pairs(&self.structure, &right.structure)
             .into_iter()
             .filter(|pair| {
@@ -2988,15 +3013,16 @@ impl SymbolicTensor<PartialStructure> {
         let atom = if self.expression.as_view().is_zero() || right.expression.as_view().is_zero() {
             Atom::Zero
         } else {
-            SymbolicTensor::bracket_product(self.expression.as_view(), right.expression.as_view())
+            algebra.expression(self.expression.as_view(), right.expression.as_view())?
         };
         let occurrences = ExplicitIndexOccurrences::product(&[self, right])?;
-        SymbolicTensor::from_validated_parts(
+        algebra.finish(
             atom,
             ProductPlan::free_interface(&self.structure, &right.structure, &[]),
             Arc::new(occurrences),
+            &[self, right],
+            "outer",
         )
-        .validate_rewrite("outer", &[self, right])
     }
 
     /// Contract pairs selected in the operands' public logical axis order.
@@ -3017,8 +3043,17 @@ impl SymbolicTensor<PartialStructure> {
         right: &SymbolicTensor<PartialStructure>,
         positions: &[PortPair],
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        self.contract_ports_algebra(right, positions, ProductAlgebra::Commuting)
+    }
+
+    fn contract_ports_algebra(
+        &self,
+        right: &Self,
+        positions: &[PortPair],
+        algebra: ProductAlgebra,
+    ) -> Result<Self, TensorCompositionError> {
         if positions.is_empty() {
-            return self.outer(right);
+            return self.outer_algebra(right, algebra);
         }
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
@@ -3090,7 +3125,8 @@ impl SymbolicTensor<PartialStructure> {
         };
         let atom = if self.is_zero() || right.is_zero() {
             Atom::Zero
-        } else if self.rank() == 1
+        } else if matches!(algebra, ProductAlgebra::Commuting)
+            && self.rank() == 1
             && right.rank() == 1
             && [self, right].into_iter().all(|operand| {
                 matches!(operand.expression.as_view(), AtomView::Fun(vector)
@@ -3102,15 +3138,14 @@ impl SymbolicTensor<PartialStructure> {
             // the structural contractor can pack them into Schoonschip notation.
             self.compact_dot_expression(right)?
         } else {
-            SymbolicTensor::bracket_product(
+            algebra.expression(
                 materialized_left.expression.as_view(),
                 materialized_right.expression.as_view(),
-            )
+            )?
         };
         let occurrences =
             ExplicitIndexOccurrences::product(&[materialized_left, materialized_right])?;
-        SymbolicTensor::from_validated_parts(atom, interface, Arc::new(occurrences))
-            .validate_rewrite("contract_ports", &[materialized_left, materialized_right])
+        algebra.finish(atom, interface, Arc::new(occurrences), &[materialized_left, materialized_right], "contract_ports")
     }
 
     fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
