@@ -271,8 +271,10 @@ universal projector also count as direct ports until native restoration. A
 closed external contraction such as a gamma leaf times its matching external
 vector is scalar with respect to loop integration while retaining its spinor
 interface. Metrics relabel complete slots on the actual leaf, and ordinary raw
-loop/external momentum pairs still become scalar products. Scalar spectators
-stay factorized. Hidden compound Lorentz slots or projector markers require
+loop/external momentum pairs still become scalar products. Successive attachments
+retain a native leaf's remaining ports after the first contraction forms a product;
+closed native coefficients do not obstruct independent raw momentum contractions.
+Scalar spectators stay factorized. Hidden compound Lorentz slots or projector markers require
 materialization by their tensor owner; loop-dependent native leaves require
 tensor reduction before this scalar boundary. Vakint does not infer spin or
 color identities from those interfaces.
