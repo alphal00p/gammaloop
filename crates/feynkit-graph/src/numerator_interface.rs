@@ -75,9 +75,7 @@ impl NumeratorInterface {
         expression: Atom,
         interface: Option<Self>,
     ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
+        let cooking = Self::source_cooking();
         let cook = |value: &Atom| {
             cooking
                 .try_cook(value.as_view())
@@ -119,6 +117,46 @@ impl NumeratorInterface {
         )?)
     }
 
+    /// Replace a retained payload from source notation without losing its ports
+    /// or index history. The new payload uses the same cooking policy as admission.
+    ///
+    /// # Errors
+    /// Returns the cooking or interface-validation error for invalid source notation.
+    ///
+    /// # Example
+    /// ```
+    /// use feynkit_graph::NumeratorInterface;
+    /// use spenso::tensor_symbol;
+    /// use symbolica::atom::Atom;
+    /// use symbolica::function;
+    ///
+    /// let ports = NumeratorInterface::parse(r#"["spenso::mink(4,1)"]"#)?;
+    /// let source = function!(tensor_symbol!("feynkit_graph::docs_source_vector"), &ports.0[0]);
+    /// let tensor = NumeratorInterface::admit(source, None)?;
+    /// let zero = NumeratorInterface::with_source_expression(&tensor, Atom::Zero)?;
+    /// assert!(zero.is_zero());
+    /// assert_eq!(zero.rank(), 1);
+    /// # Ok::<(), feynkit_graph::DiagramError>(())
+    /// ```
+    pub fn with_source_expression(
+        tensor: &SymbolicTensor<PartialStructure>,
+        expression: Atom,
+    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        let expression = Self::source_cooking()
+            .try_cook(expression.as_view())
+            .map_err(|source| DiagramError::TensorCooking {
+                operation: "replacing tensor source notation",
+                source: Box::new(source),
+            })?;
+        Ok(tensor.with_checked_expression(expression)?)
+    }
+
+    fn source_cooking() -> CookSettings {
+        CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true)
+    }
+
     /// Export source notation, retaining metadata whenever syntax loses ports.
     /// See the round trip in [`NumeratorInterface`].
     pub fn export<A>(
@@ -135,9 +173,7 @@ impl NumeratorInterface {
             .into_iter()
             .map(|slot| slot.rep().slot(slot.aind.into()))
             .collect::<Vec<_>>();
-        let cooking = CookSettings::indices()
-            .with_mode(CookMode::ReversibleEncoding)
-            .with_representation_payloads(true, true);
+        let cooking = Self::source_cooking();
         let expression = cooking.uncook(tensor.expression().as_view());
         if Self::admit(expression.clone(), None)
             .is_ok_and(|restored| restored.structure().logical_slots() == logical)

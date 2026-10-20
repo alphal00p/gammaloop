@@ -204,7 +204,9 @@ anchor = "pub fn generate("
 # NumeratorInterface, preserving hidden zero history through the same owner as
 # graph translation. Generic callback errors retain their original Rust types.
 # Generation/cache admission and axis-order ownership remain as documented; new regressions compare direct and template transport.
-digest = "c6353d34dcf95aa6006928573b87db2f24f53ba9"
+# Reviewed 2026-10-28: Rule construction reduces Lorentz momentum combinations through
+# the model owner, preserving literal UFO data and admitted-template transport.
+digest = "e41569d5e6c157253990c433abf31b5c6c2bc649"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -230,7 +232,9 @@ anchor = "pub struct Model {"
 # models without ZERO retain the exact proof on their internal parameters.
 # Reviewed 2026-10-16: The architecture distinguishes structural mass classification from a known zero pole in a massive covariant multiplet.
 # Reviewed 2026-10-16: Canonical expression export makes fingerprints independent of registration order; model ownership and strict import validation remain unchanged.
-digest = "0fdae8e4e1028c7e0cf0aa8e27f2443b53076d10"
+# Reviewed 2026-10-19: LorentzStructure owns the momentum-conservation reduction used for rule
+# instantiation; stored structures, export and validation keep the literal UFO form.
+digest = "658a731051f8480e86b31b37b2b583a01481270c"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"

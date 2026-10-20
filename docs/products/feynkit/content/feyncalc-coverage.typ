@@ -1105,14 +1105,16 @@ a ratio. The two diagrams contribute, in units of $a_4$ relative to the tree,
 $ frac(C_A xi,8epsilon) quad "and" quad frac(3C_A xi,8epsilon). $
 Their sum is $C_A xi/(2epsilon)$ and vanishes in Landau gauge.
 
-The shared SM model uses the antighost-derivative `UUV1` rule `P(3,2)` for
-the ordered fields `[ghost, antighost, vector]`, as derived in the
+The shared SM model supplies the canonical UFO `UUV1` rule
+`P(3,2) + P(3,3)`, equal to $-p_1$ when all vertex momenta are incoming.
+The ghost-Goldstone rules fix slot 1 as the antighost field, as derived in the
 #link("../../../architecture/sm-conventions-audit.typ")[SM conventions audit].
 With physical momenta $P_0=P_1+P_2$, the open tree tensor is
-$-g_s f(a,b,c)(P_0-P_1)_mu$ for an incoming ghost and
-$-g_s f(a,b,c)(P_0)_mu$ for an incoming antighost. Both FeynKit and GammaLoop
-consume this rule; the notebook only specializes the gluon propagator's
-gauge parameter. Shared graph finalization remaps
+$g_s f(a,b,c)(P_0)_mu$ for an incoming slot-1 ghost-labelled particle and
+$-g_s f(a,b,c)(P_0-P_1)_mu$ for an incoming slot-2 antiparticle.
+Both FeynKit and GammaLoop consume this rule, which FeynKit instantiates as the
+shorter $-p_1$ by momentum conservation; the notebook only specializes the
+gluon propagator's gauge parameter. Shared graph finalization remaps
 indices inside momentum arguments before transporting their momentum carriers.
 Each signed carrier is transported once, including when a sign change causes
 a product to collapse. This preserves linearity of sums for incoming neutral

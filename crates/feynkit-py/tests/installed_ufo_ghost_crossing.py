@@ -1,10 +1,10 @@
 """Check canonical SM ghost vertices in all three crossings.
 
-Particle order and couplings follow the bundled UFO in assets/models/ufo/sm.
-Its antighost-derivative convention defines UUV1 = P(3,2): the all-incoming
-antighost momentum for fields ordered [ghost, antighost, vector]. The expected
-crossings below follow that derivative independently of the stored Lorentz
-expression. No external MadGraph installation is required.
+Particle order and couplings follow the FeynRules SM UFO. Its ghost-Goldstone
+vertices fix the antighost field in slot 1, so UUV1 = P(3,2) + P(3,3) equals
+the antighost derivative -p1 with all momenta incoming. The expected crossings
+below use -p1 independently of the stored expression. No external MadGraph
+installation is required.
 """
 
 import copy
@@ -50,7 +50,7 @@ p3 = "UFO::P(UFO::idx(1,3),UFO::idx(1,3))"
 uuv = next(
     item for item in specification["lorentz_structures"] if item["name"] == "UUV1"
 )
-assert E(uuv["structure"], default_namespace="UFO") == E(p2)
+assert E(uuv["structure"], default_namespace="UFO") == E(p2 + "+" + p3)
 P, mink, hedge, wave, index, mu = S(
     "gammalooprs::P",
     "spenso::mink",
@@ -71,28 +71,28 @@ for name, (particles, coupling_name) in vertices.items():
         model.expand_couplings(S("UFO::" + coupling_name)) - coupling
     ).together() == zero
     ghost, antighost, vector = [model.particle(particle) for particle in particles]
-    # P0 = P1 + P2 for the physical process. The derivative supplies p2,
-    # the all-incoming antighost momentum: -P2 = -P0 + P1 when crossed
-    # to external slot 2, and P0 when the antighost is incoming.
+    # P0 = P1 + P2 for the physical process. The derivative supplies -p1
+    # of the first UFO leg, whose particle name is ghost-labelled even though
+    # the ghost-Goldstone rules identify its field as the antighost.
     # slots records the external indices of (ghost, antighost, vector).
     for incoming, outgoing, slots, momentum in (
         (
             [ghost],
             [model.particle(vector.antiname), model.particle(antighost.antiname)],
             (0, 2, 1),
-            -P(0, mink(4, mu)) + P(1, mink(4, mu)),
+            -P(0, mink(4, mu)),
         ),
         (
             [vector],
             [model.particle(ghost.antiname), model.particle(antighost.antiname)],
             (1, 2, 0),
-            -P(0, mink(4, mu)) + P(1, mink(4, mu)),
+            P(1, mink(4, mu)),
         ),
         (
             [antighost],
             [model.particle(vector.antiname), model.particle(ghost.antiname)],
             (2, 0, 1),
-            P(0, mink(4, mu)),
+            P(0, mink(4, mu)) - P(1, mink(4, mu)),
         ),
     ):
         diagrams = (
@@ -150,9 +150,10 @@ for name, (particles, coupling_name) in vertices.items():
         )
         assert residual == zero, (name, slots, residual)
 
-# Generation must also be linear before applying momentum conservation. Signed
-# remapping of Q inside a sum once collapsed -(-Q) and visited the new Q again;
-# a coefficient of two prevented that collapse and exposed the inconsistency.
+# Generation must also be linear. Signed remapping of Q inside a sum once
+# collapsed -(-Q) and visited the new Q again; a coefficient of two prevented
+# that collapse and exposed the inconsistency. FeynKit instantiates P2+P3 as the
+# equivalent -P1, so the probes compare numerators routed in the momentum basis.
 linearity = {}
 for label, tensor in (
     ("P2", p2),
@@ -183,7 +184,9 @@ for label, tensor in (
             .diagrams
         )
         assert len(diagrams) == 1, (name, label)
-        linearity[name, label] = diagrams[0].numerator_expression().to_expression()
+        linearity[name, label] = (
+            diagrams[0].numerator_expression(in_lmb=True).to_expression()
+        )
 for name in ("V_18", "V_19", "V_35"):
     for label, coefficient in (("P2+P3", 1), ("P2-P3", -1), ("P2+2P3", 2)):
         residual = (

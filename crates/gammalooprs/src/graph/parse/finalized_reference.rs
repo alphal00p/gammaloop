@@ -5,6 +5,9 @@
 //! ghost-loop conventions. Every coordinate and symbolic fragment is compared
 //! exactly, without reimporting or rewriting the stored reference.
 
+use crate::initialisation;
+use crate::model::{InputParamCard, ModelGammaLoopExt};
+use crate::utils;
 use crate::{graph::Graph, uv::UltravioletGraph};
 use feynkit_generator::{GenerationOptions, GenerationType, Process};
 use linnet::half_edge::{
@@ -127,5 +130,55 @@ fn finalized_graph_matches_gammaloop_reference() {
                 assert_eq!(&actual[field], expected, "{name} diagram {index}: {field}");
             }
         }
+    }
+}
+
+#[test]
+fn frozen_sm_graphs_match_the_run_card_model() {
+    initialisation::test_initialise().unwrap();
+    let mut model = utils::load_generic_model("sm")
+        .with_restriction(Some("default".to_owned()))
+        .unwrap();
+    let mut card = InputParamCard::from_str(
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../assets/models/json/sm/restrict_default.json"
+        ))
+        .to_owned(),
+        "json",
+    )
+    .unwrap();
+    model.simplify(&mut card).unwrap();
+    for (fixture, source) in [
+        (
+            "addbar",
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/addbar.dot"
+            )),
+        ),
+        (
+            "epemttbar",
+            include_str!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../tests/resources/graphs/epemttbar.dot"
+            )),
+        ),
+    ] {
+        let bindings = source
+            .lines()
+            .filter_map(|line| {
+                let (_, tail) = line.split_once("interaction=\"")?;
+                let name = tail.split('"').next()?;
+                Some((name, model.vertex_rule_id(name).unwrap().index()))
+            })
+            .collect::<Vec<_>>();
+        let imported = Graph::import_dot(source, &model).unwrap_or_else(|error| {
+            panic!(
+                "{fixture}: model {}, bindings {bindings:?}: {error}",
+                model.fingerprint()
+            )
+        });
+        assert!(!imported.is_empty());
     }
 }
