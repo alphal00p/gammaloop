@@ -1,0 +1,37 @@
+{
+  "normalization": {
+    "T": 1,
+    "Nc": 3,
+    "flavors": 1,
+    "electric_charge_squared_factored_out": true,
+    "flavor_charge_squared_factored_out": true,
+    "rhoV_relation": "rhoV=2*rhoT+rhoL",
+    "order": "LO; no g^2 multiplier"
+  },
+  "source": {
+    "paper": "https://arxiv.org/abs/1910.07552v2",
+    "source_archive_url": "https://zenodo.org/api/records/3478144/files/gw3g/spectral-v0.9-spf.zip/content",
+    "source_doi": "https://doi.org/10.5281/zenodo.3478144",
+    "source_tag": "v0.9-spf",
+    "source_commit": "dca510d2d2c8bee2288345e972ee3a54b37cdbd5",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb",
+    "archive_hash_verified_against_local_bytes": true,
+    "author_lo_expression_locations": [
+      "examples/dileptons.cpp:76",
+      "examples/dileptons.cpp:164",
+      "src/therm.cpp:61-132"
+    ],
+    "source_file_sha256": {
+      "examples/dileptons.cpp": "cd42062d369ab7361df795f3009692c982d2a16fdaeaa1bf5c9fa5e81e60a5be",
+      "src/therm.cpp": "cf83f336304afe0e77c84e1217a6bd9fd6ca8aef5ffd2abd5809df9dcd6e2890"
+    }
+  },
+  "method": "Direct smooth one-dimensional massless Fermi phase-space moments; Gauss-Legendre 64 vs96 nodes; exact analytic rest and zero/lightcone limits",
+  "rest_formula": "rhoT=rhoL=Nc*E^2*tanh(E/4)/(12*pi)",
+  "spacelike_convention": "rhoT>0,rhoL<0; ImPi00=-author_Rho00.lo; rhoL=-(E^2-k^2)/k^2*author_Rho00.lo",
+  "precision": "binary64; refinement difference, 16 ulps, and an explicit exponential tail bound give per-target numerical estimates, not rigorous total roundoff bounds",
+  "upstream_difference": "Author Li3 approximation is truncated; tiny differences from previous author LO values are expected and retained in validation.json",
+  "old_targets_path": "/tmp/qcd-fig15-scan-20261018T171925Z/reference/targets.json",
+  "old_targets_sha256": "4d451031607a32d63a30fb66a45672bb5f526bbf60f0d9c9e5739de5a00cf92d",
+  "generator_sha256": "67fea767af38bb6e83047c69b679d9c9614a324edcdfe3cde5bf881f68d4f6d0"
+}

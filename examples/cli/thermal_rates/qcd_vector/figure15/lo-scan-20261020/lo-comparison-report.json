@@ -1,0 +1,19 @@
+{
+  "order": "lo",
+  "status": "completed",
+  "synthetic_validation": false,
+  "source_commit": "31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a",
+  "started_utc": "2026-10-20T12:25:16.266038+00:00",
+  "hard_deadline_utc": "2026-10-20T15:25:16.266038+00:00",
+  "available_components": 70,
+  "native_marker_count": 70,
+  "expected_native_marker_count": 70,
+  "unique_native_points": 35,
+  "independent_native_slots": 62,
+  "components_with_reference": 70,
+  "precision_reached": 70,
+  "within_half_percent_of_target": 57,
+  "discrepancy_watch": [],
+  "numerical_failures": [],
+  "interpretation": "Native physical LO is compared numerically with analytic LO targets. Overlay lines use only the published vector-extracted LO paths. The plotted native ordinate is the stored native value, with its stored Monte Carlo error; no additive term or coupling rescaling is applied. Rest polarizations share one trace estimate and are fully correlated. A three-sigma residual is a watch flag, not proof of a systematic discrepancy."
+}

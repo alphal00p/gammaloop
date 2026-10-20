@@ -1,0 +1,30 @@
+{
+  "kind": "synthetic static rendering validation only; not benchmark results",
+  "renderer_sha256": "c5751529a5d99562c469607f9552c49b8961f97afddd0b5868b2f24b8cc551e2",
+  "source_commit": "31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a",
+  "lo_curves": 6,
+  "lo_segments": 6,
+  "lo_vertices": 1794,
+  "nlo_curves": 0,
+  "markers": 70,
+  "points": 35,
+  "independent_native_slots": 62,
+  "native_identity_transformation_verified": true,
+  "reference_nlo_sentinel_ignored": true,
+  "transverse_minimum": -0.4,
+  "full_and_zoom_verified": true,
+  "published_source_sha256": "74d6de004d46b9e38def51cc254003a334b9f3102e2b3df5b17ec310524a2a5a",
+  "previous_overlay_marker_count": 64,
+  "new_expected_complete_marker_count": 70,
+  "no_rest_reference_line": true,
+  "completion_helper": {
+    "test": "two short-lived Python processes, no native integrations",
+    "wait_method": "verified controller/watchdog pidfds; no polling",
+    "status": "complete",
+    "helper_script": "/tmp/qcd-fig15-lo-20261020/render_on_exit.py",
+    "python": "/nix/store/xc221w8v56q6h5457rv9av51yjlh0kmv-python3-3.13.14-env/bin/python3",
+    "matplotlib_store": "/nix/store/0zgivda187d2k15kjxq4i05ndmig7wiv-python3.13-matplotlib-3.10.8",
+    "test_status_file": "/tmp/qcd-fig15-lo-20261020/completion-renderer-static-test/completion-renderer.json",
+    "real_campaign_armed": false
+  }
+}

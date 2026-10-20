@@ -1,0 +1,1344 @@
+{
+  "status": "completed",
+  "source_commit": "31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a",
+  "perturbative_order": "LO",
+  "started_utc": "2026-10-20T12:25:16.266038+00:00",
+  "finished_utc": "2026-10-20T12:25:52.231684+00:00",
+  "hard_deadline_utc": "2026-10-20T15:25:16.266038+00:00",
+  "worker_limit": 60,
+  "relative_error": 0.005,
+  "absolute_floor": 0.0,
+  "minimum_samples": 100000,
+  "metadata_fingerprints_modified": false,
+  "remaining_compute_group_members": [],
+  "kind": "curated LO measurement metadata; complete original raw run retained separately",
+  "binary_sha256": "fa17c6c38bcc590e456860726a1f0fbbb818d03494bc313497902bcb7da761c9",
+  "measurement_host": "itphlies",
+  "historical_baseline_record": "../baseline.json",
+  "raw_run_record": "raw-run.json",
+  "original_run_root": "/tmp/qcd-fig15-lo-20261020",
+  "original_plan": {
+    "path": "/tmp/qcd-fig15-lo-20261020/plan.json",
+    "sha256": "b4ce0aba2e86d8292fa6c47167a595c07c9eeb43f95860954183a2bc3a29b508"
+  },
+  "original_manifest": {
+    "path": "/tmp/qcd-fig15-lo-20261020/manifest.json",
+    "sha256": "cd0e99c3c38e8446a6311b6bb636bcdbe3bdc61d8e55854b12a5177eded9330d"
+  },
+  "setup": {
+    "path": "/tmp/qcd-fig15-lo-20261020/setup.json",
+    "sha256": "a5f3bee487b163a57fb60c1edeca22b08cfc40609f3788329685b2f419372f6b"
+  },
+  "source_states": [
+    {
+      "original_directory": "/tmp/qcd-fig15-lo-20261020/state",
+      "sha256": "e23ea7e86786e28eb5dfd65afa6f88ff3af9d037dff916e3db175fd022817d75"
+    }
+  ],
+  "controller_sources": [
+    {
+      "path": "/tmp/qcd-fig15-lo-20261020/controller/campaign.py",
+      "sha256": "31364b1e320b600fdf8845fcd1cab64fc5f4d77e47d11148f14e9fceaefb80fc"
+    },
+    {
+      "path": "/tmp/qcd-fig15-lo-20261020/controller/common.py",
+      "sha256": "60ab251cabb10ac75214d6caf974af595fc3e1795ea85f89f490160bd0116406"
+    },
+    {
+      "path": "/tmp/qcd-fig15-lo-20261020/controller/gate.py",
+      "sha256": "ad44608dee7038690e2afa84f29edee0f3843433513944e553521cf036640376"
+    },
+    {
+      "path": "/tmp/qcd-fig15-lo-20261020/controller/validation.py",
+      "sha256": "2c83e483f2f4282273b4a66a80e632fc3ebf85cf3ddcbec63ae7df79b72267ef"
+    },
+    {
+      "path": "/tmp/qcd-fig15-lo-20261020/controller/watchdog.py",
+      "sha256": "5ef763f86dbcbd9c069f8ef6a7a0c8b6a681f926667c597e75da8146f3733d55"
+    }
+  ],
+  "settings": {
+    "workers_per_job": 6,
+    "cpu_affinity": [
+      182,
+      183,
+      184,
+      185,
+      186,
+      187,
+      188,
+      189,
+      190,
+      191,
+      192,
+      193,
+      194,
+      195,
+      196,
+      197,
+      198,
+      199,
+      200,
+      201,
+      202,
+      203,
+      204,
+      205,
+      206,
+      207,
+      208,
+      209,
+      210,
+      211,
+      212,
+      213,
+      214,
+      215,
+      216,
+      217,
+      218,
+      219,
+      220,
+      221,
+      222,
+      223,
+      224,
+      225,
+      226,
+      227,
+      228,
+      229,
+      230,
+      231,
+      232,
+      233,
+      234,
+      235,
+      236,
+      237,
+      238,
+      239,
+      240,
+      241
+    ],
+    "wall_seconds": 10800.0,
+    "graceful_margin_seconds": 120,
+    "quantum_seconds": 600,
+    "iteration_samples": 2000,
+    "max_cycles": 128,
+    "stopping_criterion": "error <= max(relative_error * abs(reference if present else estimate), absolute_floor), minimum training samples, zero final discarded or unstable samples; reference residual never controls stopping",
+    "checkpoint_policy": "Completed-iteration native snapshots only; no metadata edits or on-disk state reloads"
+  },
+  "reference": {
+    "value_key": "rho_lo",
+    "method": "independent analytic LO Fermi phase-space moments; no NLO masters",
+    "targets": {
+      "path": "/tmp/qcd-fig15-lo-20261020/reference/targets.json",
+      "sha256": "1cb02c8ba625f53b031aca0dc9bc708c388051b4177c0385dae9d5807235d4f4"
+    },
+    "provenance": {
+      "path": "/tmp/qcd-fig15-lo-20261020/reference/provenance.json",
+      "sha256": "bd5c0a8388079535a3e29c20cfa3659d8aa5c516b60c1516151844e6d5916bfd"
+    },
+    "validation": {
+      "path": "/tmp/qcd-fig15-lo-20261020/reference/validation.json",
+      "sha256": "921cb0fc3065300a151d1d152ca98a7d47fa0dd7535ca1f9840f62352ec295b7"
+    }
+  },
+  "normalization": {
+    "T": 1,
+    "Nc": 3,
+    "massless_flavors": 1,
+    "native_Qd": -0.3333333333333333,
+    "charge_squared_factored_out": true,
+    "direct_multiplier": "9E",
+    "rest_each_component_multiplier": "3E",
+    "strong_coupling_power": 0,
+    "rest_components_fully_correlated": true
+  },
+  "counts": {
+    "points": 35,
+    "physical_rows": 70,
+    "distinct_native_slots": 62,
+    "workspace_samples": 4226000,
+    "native_process_evaluations": 7568000,
+    "precision_passed": 70,
+    "central_values_within_half_percent": 57
+  },
+  "cost": {
+    "campaign_wall_seconds": 35.965646,
+    "reserved_worker_seconds": 1539.6972347788978,
+    "native_allocation_wall_sum_seconds": 256.616205796483,
+    "actual_os_cpu_seconds": null,
+    "note": "Worker allocation cost includes reserved-session overhead; not measured OS CPU time. Build and later rendering are outside campaign duration."
+  },
+  "final_native_input_files": {
+    "E0p25_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p25_k0p00/workspace/integration_result.json",
+      "sha256": "1be3c8b2adfab9125a3e6aa1aa8d8e57a0ca36b91ef5597dec50ec71c1c8031e"
+    },
+    "E0p25_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p25_k0p50/workspace/integration_result.json",
+      "sha256": "ae8693c97637cdaaf60584cbf41e8217c954b9729ff5e382a85fb0d0c446443e"
+    },
+    "E0p25_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p25_k1p00/workspace/integration_result.json",
+      "sha256": "60e80d32802d9aa5b7537bd2b55d7138b87f3dc936c173828a44bcb6fce26798"
+    },
+    "E0p25_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p25_k1p50/workspace/integration_result.json",
+      "sha256": "25275dc151839fc6f112a1b201eba523a151d1d7957934d7d131122e69b77c65"
+    },
+    "E0p50_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p50_k0p00/workspace/integration_result.json",
+      "sha256": "7f331a1f6c4031f42dd50122bcc6c83910cbc7c68ec58df60a69dffc5046eb85"
+    },
+    "E0p50_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p50_k1p00/workspace/integration_result.json",
+      "sha256": "78055c86dcd5c56b0db12f8b6e300004bf6b3b87b0049130bb44fb0d92e6fc17"
+    },
+    "E0p50_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p50_k1p50/workspace/integration_result.json",
+      "sha256": "0dcaa40b1e40b90e367416ba9e7945781af62509cd726738be61a21103685e8d"
+    },
+    "E0p75_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p75_k0p00/workspace/integration_result.json",
+      "sha256": "94d6ffe2833f642bda6d1487bb4b13f946fa32fb5caa9758bef9566f05dcb432"
+    },
+    "E0p75_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p75_k0p50/workspace/integration_result.json",
+      "sha256": "e4059f24e16140a08eba00f641146e6dc3f3b9f4707b334deedfcade32c182d9"
+    },
+    "E0p75_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p75_k1p00/workspace/integration_result.json",
+      "sha256": "1d1208c2742718feeb348a4df5daa873a0c980ea6a7e46d25db515a6f4e0852f"
+    },
+    "E0p75_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p75_k1p50/workspace/integration_result.json",
+      "sha256": "16abdfd50861c57627e3102dd2be0a53a30a027b89750c720da6020075343810"
+    },
+    "E1p00_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p00_k0p00/workspace/integration_result.json",
+      "sha256": "9953e5e565062d3b2c024d16e967d24c950e4947e5b0b9bd4e26abbc128077fa"
+    },
+    "E1p00_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p00_k0p50/workspace/integration_result.json",
+      "sha256": "95eae29094ac3c929f47a1267140af1a4e2e76f36c432b31907cc27d72f2a441"
+    },
+    "E1p00_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p00_k1p50/workspace/integration_result.json",
+      "sha256": "aaed880722edc1c1c85edb0c5d2f0bd7e90d464718f5978ab4789cf6aef12356"
+    },
+    "E1p25_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p25_k0p00/workspace/integration_result.json",
+      "sha256": "eaf04e2abe0d8dd2eb7465ecadb71090f61f81faed796f779f2d33993507492c"
+    },
+    "E1p25_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p25_k0p50/workspace/integration_result.json",
+      "sha256": "59681fd8f85f3a97b92d75d0bbc63c8e7ef4b5a20bc6ced0aba344cbf5074ebd"
+    },
+    "E1p25_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p25_k1p00/workspace/integration_result.json",
+      "sha256": "f6975cff16967aebcfd205af6bb2ae5b40b759b721c9f344cb35fa4f465cf7eb"
+    },
+    "E1p25_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p25_k1p50/workspace/integration_result.json",
+      "sha256": "9b81806bffc78129594e70e41e2d8dd8ce3b7cd3a02d1019443333f473248ad9"
+    },
+    "E1p50_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p50_k0p00/workspace/integration_result.json",
+      "sha256": "7c14fd13b8266507c1dbe9b388003949b090f4257833cbc75ee2761762f91971"
+    },
+    "E1p50_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p50_k0p50/workspace/integration_result.json",
+      "sha256": "0fd9611ebfcaa1bce3bec37e714ff4ae0d45d77831955b0f8823f53a0cfa157b"
+    },
+    "E1p50_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p50_k1p00/workspace/integration_result.json",
+      "sha256": "144e33063397df84e828d07627c5d0ebb1710127d06a580fc01b95ad3f877455"
+    },
+    "E1p75_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p75_k0p00/workspace/integration_result.json",
+      "sha256": "3af303fb399f6acd71d8a887567a54bd01ee2ffc535106b62684fbe196fd5a63"
+    },
+    "E1p75_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p75_k0p50/workspace/integration_result.json",
+      "sha256": "fc132ba3663b1efba0c873b70f80fa5b8fb110331fce0c75ea53b3bb18227938"
+    },
+    "E1p75_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p75_k1p00/workspace/integration_result.json",
+      "sha256": "3c3562c96975bc527c21924e8e3f6f1fb81f6e7f92b00703787c7c800b4e6e9a"
+    },
+    "E1p75_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p75_k1p50/workspace/integration_result.json",
+      "sha256": "c76e9ab3f67217faf3d1749460fc26354c4899ce1a5d1d74dc12c567a265c156"
+    },
+    "E2p00_k0p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E2p00_k0p00/workspace/integration_result.json",
+      "sha256": "dd6e9398439665db526b83245d2cdbba7dab061e8281fdde46cccdff99abc607"
+    },
+    "E2p00_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E2p00_k0p50/workspace/integration_result.json",
+      "sha256": "58e5b5f30742f65840d578d04be7882fa07aedd1b7c120c4afc46e5abee26d9d"
+    },
+    "E2p00_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E2p00_k1p00/workspace/integration_result.json",
+      "sha256": "1a34d0b0de7039401e82ba1b24c662ed752b7a93e950c0e35e093b2aca3189c3"
+    },
+    "E2p00_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E2p00_k1p50/workspace/integration_result.json",
+      "sha256": "d8ae8a3c3c088ac08feba749f1e278342e1fa5720098747c6dba19ceee2e8b0b"
+    },
+    "E0p45_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p45_k0p50/workspace/integration_result.json",
+      "sha256": "a7572e36830b56d1712b0392e00fe929b7975445a8917b1648ac17bc4572066d"
+    },
+    "E0p55_k0p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p55_k0p50/workspace/integration_result.json",
+      "sha256": "60a45da6a005c49aefbfba255a1abefa44a420ba30715af2884e0be4473b71db"
+    },
+    "E0p95_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E0p95_k1p00/workspace/integration_result.json",
+      "sha256": "5725f51edac0d18252e4879db6dd1f5e38530054b5f8ca233da048d4a32bbb0c"
+    },
+    "E1p05_k1p00": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p05_k1p00/workspace/integration_result.json",
+      "sha256": "f56d5cfcad6b670583b40e200112a7ed4ccd2854517918029772cd43927972b9"
+    },
+    "E1p45_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p45_k1p50/workspace/integration_result.json",
+      "sha256": "de1a714bd694e934a2e038c724754ea786be9eee48de98151e5da8cf516e7294"
+    },
+    "E1p55_k1p50": {
+      "path": "/tmp/qcd-fig15-lo-20261020/jobs/E1p55_k1p50/workspace/integration_result.json",
+      "sha256": "d2295716cd5f1bc3f9d6e81252a46a29ff00e6fa5fa045114d7175600599db4e"
+    }
+  },
+  "jobs": [
+    {
+      "name": "E0p25_k0p00",
+      "k0_over_T": 0.25,
+      "k_over_T": 0.0,
+      "seed": 191007552,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 0.75,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 106000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 6.565350490040146,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "a79e41feef58ab3a17eead64bda4f12b67a52d0c9b3f84de1da6d1f2de726d75"
+      },
+      "acceptance_reference": {
+        "T": 0.0003104453777021182,
+        "L": 0.0003104453777021182
+      }
+    },
+    {
+      "name": "E0p25_k0p50",
+      "k0_over_T": 0.25,
+      "k_over_T": 0.5,
+      "seed": 191112281,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 150000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 12.922721752896905,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "3d556b368ae3d990afc77c9b4cdba149b1520045737bb161b8b4406744d3ac37",
+        "vector_L@LO": "3d556b368ae3d990afc77c9b4cdba149b1520045737bb161b8b4406744d3ac37"
+      },
+      "acceptance_reference": {
+        "T": 0.29966030017799217,
+        "L": -0.5797190389578566
+      }
+    },
+    {
+      "name": "E0p25_k1p00",
+      "k0_over_T": 0.25,
+      "k_over_T": 1.0,
+      "seed": 191217010,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 102000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 9.860469139995985,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "27f8c6129cafea97475f36edd0f0732c5b9374d0407fb0aefc70dccdb1859a24",
+        "vector_L@LO": "27f8c6129cafea97475f36edd0f0732c5b9374d0407fb0aefc70dccdb1859a24"
+      },
+      "acceptance_reference": {
+        "T": 0.19381361650073997,
+        "L": -0.3453614856524179
+      }
+    },
+    {
+      "name": "E0p25_k1p50",
+      "k0_over_T": 0.25,
+      "k_over_T": 1.5,
+      "seed": 191321739,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 102000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 10.631900687003508,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "87ce4b006bd7cd3d96a55b4bbe07a88603fd826da3455c6d2b6d658305a3f1b7",
+        "vector_L@LO": "87ce4b006bd7cd3d96a55b4bbe07a88603fd826da3455c6d2b6d658305a3f1b7"
+      },
+      "acceptance_reference": {
+        "T": 0.13893329497581564,
+        "L": -0.22198403860280563
+      }
+    },
+    {
+      "name": "E0p50_k0p00",
+      "k0_over_T": 0.5,
+      "k_over_T": 0.0,
+      "seed": 191426468,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 1.5,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 116000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 7.074472752050497,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "b0a6f74c13a5e7ad036583f78aaa81ae7226228de45503e8f3157badf9695459"
+      },
+      "acceptance_reference": {
+        "T": 0.0024739243650330946,
+        "L": 0.0024739243650330946
+      }
+    },
+    {
+      "name": "E0p50_k1p00",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.0,
+      "seed": 191531197,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 4.5,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 106000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 10.114791585016064,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "c59ea10b6f131f3e845995a94c96c3c57075559eaf66e5c7437a5dff0e9b64a3",
+        "vector_L@LO": "c59ea10b6f131f3e845995a94c96c3c57075559eaf66e5c7437a5dff0e9b64a3"
+      },
+      "acceptance_reference": {
+        "T": 0.31152681308128904,
+        "L": -0.5553484877381585
+      }
+    },
+    {
+      "name": "E0p50_k1p50",
+      "k0_over_T": 0.5,
+      "k_over_T": 1.5,
+      "seed": 191635926,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 4.5,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 104000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 9.860469139995985,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "88bde84d87a949411462dea1bb5d8d1aeeed71b1bea6bcefd3123e532f3a1497",
+        "vector_L@LO": "88bde84d87a949411462dea1bb5d8d1aeeed71b1bea6bcefd3123e532f3a1497"
+      },
+      "acceptance_reference": {
+        "T": 0.25521658427754784,
+        "L": -0.40805497100098215
+      }
+    },
+    {
+      "name": "E0p75_k0p00",
+      "k0_over_T": 0.75,
+      "k_over_T": 0.0,
+      "seed": 191740655,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 2.25,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 110000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 6.820147407008335,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "3ac9cf65ab095f3087fd44b84d8d1806253f2698f6f93eee9b8a153cf1f0f352"
+      },
+      "acceptance_reference": {
+        "T": 0.008295945436242791,
+        "L": 0.008295945436242791
+      }
+    },
+    {
+      "name": "E0p75_k0p50",
+      "k0_over_T": 0.75,
+      "k_over_T": 0.5,
+      "seed": 191845384,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 6.75,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 104000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 8.59270069107879,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "0bde56cc0c45bbe0ba82b8cfdba0977a869e80187b80ade504acb0e467690b50",
+        "vector_L@LO": "0bde56cc0c45bbe0ba82b8cfdba0977a869e80187b80ade504acb0e467690b50"
+      },
+      "acceptance_reference": {
+        "T": 0.004581218227144805,
+        "L": 0.004595009223781933
+      }
+    },
+    {
+      "name": "E0p75_k1p00",
+      "k0_over_T": 0.75,
+      "k_over_T": 1.0,
+      "seed": 191950113,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 6.75,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 144000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 11.899865380953997,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "eabdffcd307eec973da3ba3131cca08a33f7b6213b880cda4377559d9ce2be3b",
+        "vector_L@LO": "eabdffcd307eec973da3ba3131cca08a33f7b6213b880cda4377559d9ce2be3b"
+      },
+      "acceptance_reference": {
+        "T": 0.27466370464270995,
+        "L": -0.4899701401533941
+      }
+    },
+    {
+      "name": "E0p75_k1p50",
+      "k0_over_T": 0.75,
+      "k_over_T": 1.5,
+      "seed": 192054842,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 6.75,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 104000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 5.332571279024705,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "25684abc4419e7f99dc0eb1e0debe3afdbab81ed21233bcfeaac2b88c6ee73d1",
+        "vector_L@LO": "25684abc4419e7f99dc0eb1e0debe3afdbab81ed21233bcfeaac2b88c6ee73d1"
+      },
+      "acceptance_reference": {
+        "T": 0.32546916860670266,
+        "L": -0.5209629717406207
+      }
+    },
+    {
+      "name": "E1p00_k0p00",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.0,
+      "seed": 192159571,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 3.0,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 110000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 3.297370648011565,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "312f9ed76564dadaedfec9f8def917bacd22ff00888f653e8e546427157ba858"
+      },
+      "acceptance_reference": {
+        "T": 0.019490007888502726,
+        "L": 0.019490007888502726
+      }
+    },
+    {
+      "name": "E1p00_k0p50",
+      "k0_over_T": 1.0,
+      "k_over_T": 0.5,
+      "seed": 192264300,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 9.0,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 106000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 5.583890022011474,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "38d6f5f034e909ee342abe4d878c0c7caa0e9ee6306a58fdc2db58d92a3b44f5",
+        "vector_L@LO": "38d6f5f034e909ee342abe4d878c0c7caa0e9ee6306a58fdc2db58d92a3b44f5"
+      },
+      "acceptance_reference": {
+        "T": 0.014532147058857737,
+        "L": 0.014574740011827614
+      }
+    },
+    {
+      "name": "E1p00_k1p50",
+      "k0_over_T": 1.0,
+      "k_over_T": 1.5,
+      "seed": 192369029,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 9.0,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 108000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 7.12065591593273,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "0eb13629ed28591b3baf39ffaae7ea75f3e1417fde49fbdb4c2bb6fb44bb687e",
+        "vector_L@LO": "0eb13629ed28591b3baf39ffaae7ea75f3e1417fde49fbdb4c2bb6fb44bb687e"
+      },
+      "acceptance_reference": {
+        "T": 0.3248509253466478,
+        "L": -0.5207822332170949
+      }
+    },
+    {
+      "name": "E1p25_k0p00",
+      "k0_over_T": 1.25,
+      "k_over_T": 0.0,
+      "seed": 192473758,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 3.75,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 102000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 3.5616272420156747,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "aef7a5cf2c676db4403f6c4dfce3d55f182721a4a1677a1ae599a8c0efded8c6"
+      },
+      "acceptance_reference": {
+        "T": 0.03763886698844904,
+        "L": 0.03763886698844904
+      }
+    },
+    {
+      "name": "E1p25_k0p50",
+      "k0_over_T": 1.25,
+      "k_over_T": 0.5,
+      "seed": 192578487,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 11.25,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 100000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 6.100025351042859,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "6807bf8867be5b3014e3ecbc67535c75fe5fca112ebd3c9142c6e10e84a5e520",
+        "vector_L@LO": "6807bf8867be5b3014e3ecbc67535c75fe5fca112ebd3c9142c6e10e84a5e520"
+      },
+      "acceptance_reference": {
+        "T": 0.031438182599355796,
+        "L": 0.03152724400819726
+      }
+    },
+    {
+      "name": "E1p25_k1p00",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.0,
+      "seed": 192683216,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 11.25,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 104000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 6.608823691029102,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "c4f776578a77f34041a53d1e8703788e6b07bfccb2292c61dbcdbdf523cee67e",
+        "vector_L@LO": "c4f776578a77f34041a53d1e8703788e6b07bfccb2292c61dbcdbdf523cee67e"
+      },
+      "acceptance_reference": {
+        "T": 0.01324924412565481,
+        "L": 0.013398470148893003
+      }
+    },
+    {
+      "name": "E1p25_k1p50",
+      "k0_over_T": 1.25,
+      "k_over_T": 1.5,
+      "seed": 192787945,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 11.25,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 150000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 10.669414908043109,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "1e90f027c2c9f610eba702baff2550ffd2aa10f22ffaabfca249da9b28836387",
+        "vector_L@LO": "1e90f027c2c9f610eba702baff2550ffd2aa10f22ffaabfca249da9b28836387"
+      },
+      "acceptance_reference": {
+        "T": 0.2263373625048552,
+        "L": -0.36356685213365764
+      }
+    },
+    {
+      "name": "E1p50_k0p00",
+      "k0_over_T": 1.5,
+      "k_over_T": 0.0,
+      "seed": 192892674,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 4.5,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 108000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 5.334205516031943,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "e9fb4a0c62ee53a5a47c6900766965ef719ec8804a73a67059710b09ad4c91c3"
+      },
+      "acceptance_reference": {
+        "T": 0.06416364525871388,
+        "L": 0.06416364525871388
+      }
+    },
+    {
+      "name": "E1p50_k0p50",
+      "k0_over_T": 1.5,
+      "k_over_T": 0.5,
+      "seed": 192997403,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 13.5,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 102000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 6.855423186090775,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "585797c9c4ee9054466926df70d607db0b603a84ead1177df932e024db780f07",
+        "vector_L@LO": "585797c9c4ee9054466926df70d607db0b603a84ead1177df932e024db780f07"
+      },
+      "acceptance_reference": {
+        "T": 0.056725335557478634,
+        "L": 0.05687956549838802
+      }
+    },
+    {
+      "name": "E1p50_k1p00",
+      "k0_over_T": 1.5,
+      "k_over_T": 1.0,
+      "seed": 193102132,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 13.5,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 100000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 6.346442745067179,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "9ff47eadadf3d038054555f95ebd6055f17530144e90951aa23700796df75948",
+        "vector_L@LO": "9ff47eadadf3d038054555f95ebd6055f17530144e90951aa23700796df75948"
+      },
+      "acceptance_reference": {
+        "T": 0.03488623113647157,
+        "L": 0.03526362981005961
+      }
+    },
+    {
+      "name": "E1p75_k0p00",
+      "k0_over_T": 1.75,
+      "k_over_T": 0.0,
+      "seed": 193206861,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 5.25,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 116000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 3.2985246130265296,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "dd70f6552f6f4e792db820068164f48139f148b360608b6fc93f12f4308054c4"
+      },
+      "acceptance_reference": {
+        "T": 0.10030209470835108,
+        "L": 0.10030209470835108
+      }
+    },
+    {
+      "name": "E1p75_k0p50",
+      "k0_over_T": 1.75,
+      "k_over_T": 0.5,
+      "seed": 193311590,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 15.75,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 106000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 4.828961099032313,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "fc3fdc4aaafb53acaebc51416c71b29ac037dd2470111baf510ea401f398bf95",
+        "vector_L@LO": "fc3fdc4aaafb53acaebc51416c71b29ac037dd2470111baf510ea401f398bf95"
+      },
+      "acceptance_reference": {
+        "T": 0.09163835367490225,
+        "L": 0.09187586554957788
+      }
+    },
+    {
+      "name": "E1p75_k1p00",
+      "k0_over_T": 1.75,
+      "k_over_T": 1.0,
+      "seed": 193416319,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 15.75,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 102000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 4.830615465994924,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "34ceef7ef1fdc7f52a31a27f4611843884b80b644fc62a8397eea01a70f5f24c",
+        "vector_L@LO": "34ceef7ef1fdc7f52a31a27f4611843884b80b644fc62a8397eea01a70f5f24c"
+      },
+      "acceptance_reference": {
+        "T": 0.06617524988473814,
+        "L": 0.06685826516854002
+      }
+    },
+    {
+      "name": "E1p75_k1p50",
+      "k0_over_T": 1.75,
+      "k_over_T": 1.5,
+      "seed": 193521048,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 15.75,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 104000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 4.841366217005998,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "02ee43b8ab617fefd2cc416ddd47a5cf28273a4fc160ac0095a5d852687974d3",
+        "vector_L@LO": "02ee43b8ab617fefd2cc416ddd47a5cf28273a4fc160ac0095a5d852687974d3"
+      },
+      "acceptance_reference": {
+        "T": 0.025421294067614904,
+        "L": 0.026007222351745036
+      }
+    },
+    {
+      "name": "E2p00_k0p00",
+      "k0_over_T": 2.0,
+      "k_over_T": 0.0,
+      "seed": 193625777,
+      "slot_keys": [
+        "vector_V@LO"
+      ],
+      "output_scale": 6.0,
+      "rest_isotropy": true,
+      "status": "precision_reached",
+      "samples": 116000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 3.056059554917738,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_V@LO": "4ced2c7ced0e71fa89706667d93d1e547fd59abe0f149e618314a3a73e5f0133"
+      },
+      "acceptance_reference": {
+        "T": 0.1470964597310106,
+        "L": 0.1470964597310106
+      }
+    },
+    {
+      "name": "E2p00_k0p50",
+      "k0_over_T": 2.0,
+      "k_over_T": 0.5,
+      "seed": 193730506,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 18.0,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 106000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 4.585442187031731,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "bdbea39418259b6c5f58a8fc581b6968719d28e6f052af17ad41a9ad75f5e5b3",
+        "vector_L@LO": "bdbea39418259b6c5f58a8fc581b6968719d28e6f052af17ad41a9ad75f5e5b3"
+      },
+      "acceptance_reference": {
+        "T": 0.13722817112225358,
+        "L": 0.13756503960579375
+      }
+    },
+    {
+      "name": "E2p00_k1p00",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.0,
+      "seed": 193835235,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 18.0,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 106000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 4.331430603051558,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "e90d4715c18d95a0ce3473b2ad4a7034350a435371731c9b6dd865622ca07579",
+        "vector_L@LO": "e90d4715c18d95a0ce3473b2ad4a7034350a435371731c9b6dd865622ca07579"
+      },
+      "acceptance_reference": {
+        "T": 0.1081922098858401,
+        "L": 0.10925083435426201
+      }
+    },
+    {
+      "name": "E2p00_k1p50",
+      "k0_over_T": 2.0,
+      "k_over_T": 1.5,
+      "seed": 193939964,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 18.0,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 100000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 5.607269168016501,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "4685071fe80425bc196bc93109a5bf4d3e55efab29858efb4ddcf127e74ac803",
+        "vector_L@LO": "4685071fe80425bc196bc93109a5bf4d3e55efab29858efb4ddcf127e74ac803"
+      },
+      "acceptance_reference": {
+        "T": 0.06162076479644962,
+        "L": 0.06296920584736168
+      }
+    },
+    {
+      "name": "E0p45_k0p50",
+      "k0_over_T": 0.45,
+      "k_over_T": 0.5,
+      "seed": 194044693,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 4.05,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 256000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 16.202180670923553,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "23a5bc6c9309d18a0e0dd917ba69a8ca815c79ef7e15f7317207cd6f8b396c2e",
+        "vector_L@LO": "23a5bc6c9309d18a0e0dd917ba69a8ca815c79ef7e15f7317207cd6f8b396c2e"
+      },
+      "acceptance_reference": {
+        "T": 0.13712257001705133,
+        "L": -0.2653032071266982
+      }
+    },
+    {
+      "name": "E0p55_k0p50",
+      "k0_over_T": 0.55,
+      "k_over_T": 0.5,
+      "seed": 194149422,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 4.95,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 102000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 5.6008389639901,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "218275a0c2d95a8f2e25c881a850242f7d46511329397b275a3f2feaeea91739",
+        "vector_L@LO": "218275a0c2d95a8f2e25c881a850242f7d46511329397b275a3f2feaeea91739"
+      },
+      "acceptance_reference": {
+        "T": 0.0005673782166228901,
+        "L": 0.0005691137517095363
+      }
+    },
+    {
+      "name": "E0p95_k1p00",
+      "k0_over_T": 0.95,
+      "k_over_T": 1.0,
+      "seed": 194254151,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 8.549999999999999,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 252000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 15.190071541932411,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "60ebb923cd14972f662b4845823a1243a6c66d08a820229b6365ca18628b7bb8",
+        "vector_L@LO": "60ebb923cd14972f662b4845823a1243a6c66d08a820229b6365ca18628b7bb8"
+      },
+      "acceptance_reference": {
+        "T": 0.07817160515933765,
+        "L": -0.13955261322752058
+      }
+    },
+    {
+      "name": "E1p05_k1p00",
+      "k0_over_T": 1.05,
+      "k_over_T": 1.0,
+      "seed": 194358880,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 9.450000000000001,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 102000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 5.090739448089153,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "a8d115b79b8bd92094d12acf0a4e2a132b60313f59d2e05bcd9352c94dc0f1a2",
+        "vector_L@LO": "a8d115b79b8bd92094d12acf0a4e2a132b60313f59d2e05bcd9352c94dc0f1a2"
+      },
+      "acceptance_reference": {
+        "T": 0.002045539623914753,
+        "L": 0.0020692151340357683
+      }
+    },
+    {
+      "name": "E1p45_k1p50",
+      "k0_over_T": 1.45,
+      "k_over_T": 1.5,
+      "seed": 194463609,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 13.049999999999999,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 204000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 11.644700290053152,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "1e6e951a5d7ecb5358b87475f1fb63bd4e5f482d6d68cf448bac8f52bfc734f8",
+        "vector_L@LO": "1e6e951a5d7ecb5358b87475f1fb63bd4e5f482d6d68cf448bac8f52bfc734f8"
+      },
+      "acceptance_reference": {
+        "T": 0.05704576410020387,
+        "L": -0.09180381422028752
+      }
+    },
+    {
+      "name": "E1p55_k1p50",
+      "k0_over_T": 1.55,
+      "k_over_T": 1.5,
+      "seed": 194568338,
+      "slot_keys": [
+        "vector_T@LO",
+        "vector_L@LO"
+      ],
+      "output_scale": 13.950000000000001,
+      "rest_isotropy": false,
+      "status": "precision_reached",
+      "samples": 116000,
+      "precision_reached": true,
+      "final_stability_clean": true,
+      "active_wall_seconds": 6.354666443075985,
+      "workers": 6,
+      "stop_reason": "isolated_lo_precision_goal",
+      "exit_code": -15,
+      "runtime_settings_sha256": {
+        "vector_T@LO": "f746c61c3a5665235adc651c922c4f37a583be8a9ab1f14cab51cb4421455cfc",
+        "vector_L@LO": "f746c61c3a5665235adc651c922c4f37a583be8a9ab1f14cab51cb4421455cfc"
+      },
+      "acceptance_reference": {
+        "T": 0.004272825118229723,
+        "L": 0.004375021999183401
+      }
+    }
+  ],
+  "runtime_settings_by_sha256": {
+    "a79e41feef58ab3a17eead64bda4f12b67a52d0c9b3f84de1da6d1f2de726d75": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191007552\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "3d556b368ae3d990afc77c9b4cdba149b1520045737bb161b8b4406744d3ac37": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.4330127018922193\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191112281\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "27f8c6129cafea97475f36edd0f0732c5b9374d0407fb0aefc70dccdb1859a24": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.9682458365518543\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191217010\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "87ce4b006bd7cd3d96a55b4bbe07a88603fd826da3455c6d2b6d658305a3f1b7": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.479019945774904\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.25,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191321739\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "b0a6f74c13a5e7ad036583f78aaa81ae7226228de45503e8f3157badf9695459": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.5\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.5,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191426468\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "c59ea10b6f131f3e845995a94c96c3c57075559eaf66e5c7437a5dff0e9b64a3": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.8660254037844386\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.5,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191531197\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "88bde84d87a949411462dea1bb5d8d1aeeed71b1bea6bcefd3123e532f3a1497": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.4142135623730951\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.5,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191635926\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "3ac9cf65ab095f3087fd44b84d8d1806253f2698f6f93eee9b8a153cf1f0f352": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.75\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191740655\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "0bde56cc0c45bbe0ba82b8cfdba0977a869e80187b80ade504acb0e467690b50": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.5590169943749475\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191845384\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "eabdffcd307eec973da3ba3131cca08a33f7b6213b880cda4377559d9ce2be3b": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.6614378277661477\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 191950113\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "25684abc4419e7f99dc0eb1e0debe3afdbab81ed21233bcfeaac2b88c6ee73d1": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.299038105676658\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.75,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192054842\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "312f9ed76564dadaedfec9f8def917bacd22ff00888f653e8e546427157ba858": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.0,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192159571\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "38d6f5f034e909ee342abe4d878c0c7caa0e9ee6306a58fdc2db58d92a3b44f5": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.8660254037844386\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.0,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192264300\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "0eb13629ed28591b3baf39ffaae7ea75f3e1417fde49fbdb4c2bb6fb44bb687e": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.118033988749895\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.0,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192369029\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "aef7a5cf2c676db4403f6c4dfce3d55f182721a4a1677a1ae599a8c0efded8c6": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192473758\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "6807bf8867be5b3014e3ecbc67535c75fe5fca112ebd3c9142c6e10e84a5e520": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.14564392373896\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192578487\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "c4f776578a77f34041a53d1e8703788e6b07bfccb2292c61dbcdbdf523cee67e": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.75\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192683216\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "1e90f027c2c9f610eba702baff2550ffd2aa10f22ffaabfca249da9b28836387": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.82915619758885\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.25,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192787945\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "e9fb4a0c62ee53a5a47c6900766965ef719ec8804a73a67059710b09ad4c91c3": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.5\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.5,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192892674\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "585797c9c4ee9054466926df70d607db0b603a84ead1177df932e024db780f07": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.4142135623730951\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.5,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 192997403\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "9ff47eadadf3d038054555f95ebd6055f17530144e90951aa23700796df75948": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.118033988749895\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.5,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193102132\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "dd70f6552f6f4e792db820068164f48139f148b360608b6fc93f12f4308054c4": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.75\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193206861\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "fc3fdc4aaafb53acaebc51416c71b29ac037dd2470111baf510ea401f398bf95": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.6770509831248424\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193311590\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "34ceef7ef1fdc7f52a31a27f4611843884b80b644fc62a8397eea01a70f5f24c": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.4361406616345072\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193416319\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "02ee43b8ab617fefd2cc416ddd47a5cf28273a4fc160ac0095a5d852687974d3": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.9013878188659973\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.75,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193521048\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "4ced2c7ced0e71fa89706667d93d1e547fd59abe0f149e618314a3a73e5f0133": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 2.0\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    0.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193625777\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "bdbea39418259b6c5f58a8fc581b6968719d28e6f052af17ad41a9ad75f5e5b3": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.9364916731037085\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193730506\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "e90d4715c18d95a0ce3473b2ad4a7034350a435371731c9b6dd865622ca07579": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.7320508075688772\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193835235\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "4685071fe80425bc196bc93109a5bf4d3e55efab29858efb4ddcf127e74ac803": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 1.3228756555322954\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    2.0,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 193939964\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "23a5bc6c9309d18a0e0dd917ba69a8ca815c79ef7e15f7317207cd6f8b396c2e": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.45,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194044693\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "218275a0c2d95a8f2e25c881a850242f7d46511329397b275a3f2feaeea91739": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.25\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.55,\n    0.0,\n    0.0,\n    0.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194149422\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "60ebb923cd14972f662b4845823a1243a6c66d08a820229b6365ca18628b7bb8": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.31224989991991997\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    0.95,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194254151\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "a8d115b79b8bd92094d12acf0a4e2a132b60313f59d2e05bcd9352c94dc0f1a2": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.3201562118716425\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.05,\n    0.0,\n    0.0,\n    1.0,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194358880\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "1e6e951a5d7ecb5358b87475f1fb63bd4e5f482d6d68cf448bac8f52bfc734f8": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.38405728739343037\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.45,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194463609\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n",
+    "f746c61c3a5665235adc651c922c4f37a583be8a9ab1f14cab51cb4421455cfc": "#:schema https://raw.githubusercontent.com/alphal00p/gammaloop/31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a/assets/schemas/runtime.json\n[general]\nevaluator_method = \"SummedFunctionMap\"\nm_uv = 4.0\nrenormalization_localization_scale = 4.0\nmu_r = 4.0\nintegral_unit = \"none\"\n\n[kinematics]\ne_cm = 0.3905124837953331\n\n[kinematics.externals]\ntype = \"constant\"\n\n[kinematics.externals.data]\nmomenta = [[\n    1.55,\n    0.0,\n    0.0,\n    1.5,\n]]\nhelicities = [\"summed\"]\n\n[integrator]\nn_start = 2000\nn_increase = 0\nn_max = 1000000000\ntarget_relative_accuracy = 0.000000000001\nseed = 194568338\n\n[sampling]\nsampling_multichanneling = true\nsampling_channel_weight = \"ose\"\ndefault_channel_selection = [\"auto:optimized_lmb\"]\n\n[subtraction]\ndisable_threshold_subtraction = true\n"
+  },
+  "operational_audit": {
+    "path": "/tmp/qcd-fig15-lo-20261020/controller/final-operational-audit.json",
+    "sha256": "275639e58365d1a27d83a9748cb690931a58c691d351ccb5c6ef5656f5f70c8b"
+  },
+  "production_validation": {
+    "path": "/tmp/qcd-fig15-lo-20261020/controller/production-validation.json",
+    "sha256": "f007f376ed939e53ac4440eb0ab8d24a4652829a1fa374f4fcd616af355e5fff"
+  },
+  "raw_preservation": {
+    "kind": "complete local file snapshot, not compressed archive",
+    "path": "/shared/kaapo/gammaloop/gammaloop-thermal-rates/.local/benchmarks/qcd-fig15-lo-20261020",
+    "durable_record": "raw-run.json"
+  },
+  "plotting": {
+    "orders": [
+      "lo"
+    ],
+    "published_curve_count": 6,
+    "published_vertex_count": 1794,
+    "nlo_curve_count": 0,
+    "rest_reference_line": null,
+    "markers": 70,
+    "render_record": "figure15-lo-render.json"
+  }
+}

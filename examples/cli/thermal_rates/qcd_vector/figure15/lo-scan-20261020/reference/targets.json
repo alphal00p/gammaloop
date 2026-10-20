@@ -1,0 +1,702 @@
+[
+  {
+    "E": 0.25,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.0003104453777021182,
+    "value": 0.0003104453777021182,
+    "reference_abs_error_estimate": 8.673617379884035e-19,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.25,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.0003104453777021182,
+    "value": 0.0003104453777021182,
+    "reference_abs_error_estimate": 8.673617379884035e-19,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.5,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.0024739243650330946,
+    "value": 0.0024739243650330946,
+    "reference_abs_error_estimate": 6.938893903907228e-18,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.5,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.0024739243650330946,
+    "value": 0.0024739243650330946,
+    "reference_abs_error_estimate": 6.938893903907228e-18,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.008295945436242791,
+    "value": 0.008295945436242791,
+    "reference_abs_error_estimate": 2.7755575615628914e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.008295945436242791,
+    "value": 0.008295945436242791,
+    "reference_abs_error_estimate": 2.7755575615628914e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.0,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.019490007888502726,
+    "value": 0.019490007888502726,
+    "reference_abs_error_estimate": 5.551115123125783e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.0,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.019490007888502726,
+    "value": 0.019490007888502726,
+    "reference_abs_error_estimate": 5.551115123125783e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.03763886698844904,
+    "value": 0.03763886698844904,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.03763886698844904,
+    "value": 0.03763886698844904,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.5,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.06416364525871388,
+    "value": 0.06416364525871388,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.5,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.06416364525871388,
+    "value": 0.06416364525871388,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.10030209470835108,
+    "value": 0.10030209470835108,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.10030209470835108,
+    "value": 0.10030209470835108,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 0.0,
+    "component": "T",
+    "rho_lo": 0.1470964597310106,
+    "value": 0.1470964597310106,
+    "reference_abs_error_estimate": 4.440892098500626e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 0.0,
+    "component": "L",
+    "rho_lo": 0.1470964597310106,
+    "value": 0.1470964597310106,
+    "reference_abs_error_estimate": 4.440892098500626e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.25,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.29966030017799217,
+    "value": 0.29966030017799217,
+    "reference_abs_error_estimate": 8.881784198911025e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.25,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": -0.5797190389578566,
+    "value": -0.5797190389578566,
+    "reference_abs_error_estimate": 1.7763568395912278e-15,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.45,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.13712257001705133,
+    "value": 0.13712257001705133,
+    "reference_abs_error_estimate": 4.440892099376566e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.45,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": -0.2653032071266982,
+    "value": -0.2653032071266982,
+    "reference_abs_error_estimate": 8.881784197877194e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.55,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.0005673782166228901,
+    "value": 0.0005673782166228901,
+    "reference_abs_error_estimate": 1.734723475976807e-18,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.55,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": 0.0005691137517095363,
+    "value": 0.0005691137517095363,
+    "reference_abs_error_estimate": 1.734723475976807e-18,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.004581218227144805,
+    "value": 0.004581218227144805,
+    "reference_abs_error_estimate": 1.3877787807814457e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": 0.004595009223781933,
+    "value": 0.004595009223781933,
+    "reference_abs_error_estimate": 1.3877787807814457e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.0,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.014532147058857737,
+    "value": 0.014532147058857737,
+    "reference_abs_error_estimate": 2.7755575615628914e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.0,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": 0.014574740011827614,
+    "value": 0.014574740011827614,
+    "reference_abs_error_estimate": 2.7755575615628914e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.031438182599355796,
+    "value": 0.031438182599355796,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": 0.03152724400819726,
+    "value": 0.03152724400819726,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.5,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.056725335557478634,
+    "value": 0.056725335557478634,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.5,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": 0.05687956549838802,
+    "value": 0.05687956549838802,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.09163835367490225,
+    "value": 0.09163835367490225,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": 0.09187586554957788,
+    "value": 0.09187586554957788,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 0.5,
+    "component": "T",
+    "rho_lo": 0.13722817112225358,
+    "value": 0.13722817112225358,
+    "reference_abs_error_estimate": 4.440892098500626e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 0.5,
+    "component": "L",
+    "rho_lo": 0.13756503960579375,
+    "value": 0.13756503960579375,
+    "reference_abs_error_estimate": 4.440892098500626e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.25,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.19381361650073997,
+    "value": 0.19381361650073997,
+    "reference_abs_error_estimate": 4.440892099437386e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.25,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": -0.3453614856524179,
+    "value": -0.3453614856524179,
+    "reference_abs_error_estimate": 8.88178419793801e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.5,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.31152681308128904,
+    "value": 0.31152681308128904,
+    "reference_abs_error_estimate": 8.881784198511793e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.5,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": -0.5553484877381585,
+    "value": -0.5553484877381585,
+    "reference_abs_error_estimate": 1.7763568395513043e-15,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.27466370464270995,
+    "value": 0.27466370464270995,
+    "reference_abs_error_estimate": 8.88178419834018e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": -0.4899701401533941,
+    "value": -0.4899701401533941,
+    "reference_abs_error_estimate": 8.88178419834018e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.95,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.07817160515933765,
+    "value": 0.07817160515933765,
+    "reference_abs_error_estimate": 2.220446049633601e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.95,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": -0.13955261322752058,
+    "value": -0.13955261322752058,
+    "reference_abs_error_estimate": 4.440892098883914e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.05,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.002045539623914753,
+    "value": 0.002045539623914753,
+    "reference_abs_error_estimate": 6.938893903907228e-18,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.05,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": 0.0020692151340357683,
+    "value": 0.0020692151340357683,
+    "reference_abs_error_estimate": 6.938893903907228e-18,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.01324924412565481,
+    "value": 0.01324924412565481,
+    "reference_abs_error_estimate": 2.7755575615628914e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": 0.013398470148893003,
+    "value": 0.013398470148893003,
+    "reference_abs_error_estimate": 2.7755575615628914e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.5,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.03488623113647157,
+    "value": 0.03488623113647157,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.5,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": 0.03526362981005961,
+    "value": 0.03526362981005961,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.06617524988473814,
+    "value": 0.06617524988473814,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": 0.06685826516854002,
+    "value": 0.06685826516854002,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 1.0,
+    "component": "T",
+    "rho_lo": 0.1081922098858401,
+    "value": 0.1081922098858401,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 1.0,
+    "component": "L",
+    "rho_lo": 0.10925083435426201,
+    "value": 0.10925083435426201,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.25,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.13893329497581564,
+    "value": 0.13893329497581564,
+    "reference_abs_error_estimate": 4.440892099008899e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.25,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": -0.22198403860280563,
+    "value": -0.22198403860280563,
+    "reference_abs_error_estimate": 4.440892099008899e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.5,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.25521658427754784,
+    "value": 0.25521658427754784,
+    "reference_abs_error_estimate": 8.881784197937936e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.5,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": -0.40805497100098215,
+    "value": -0.40805497100098215,
+    "reference_abs_error_estimate": 8.881784197937936e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.32546916860670266,
+    "value": 0.32546916860670266,
+    "reference_abs_error_estimate": 8.881784198202175e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 0.75,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": -0.5209629717406207,
+    "value": -0.5209629717406207,
+    "reference_abs_error_estimate": 1.7763568395203427e-15,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.0,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.3248509253466478,
+    "value": 0.3248509253466478,
+    "reference_abs_error_estimate": 8.881784198208886e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.0,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": -0.5207822332170949,
+    "value": -0.5207822332170949,
+    "reference_abs_error_estimate": 1.776356839521014e-15,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.2263373625048552,
+    "value": 0.2263373625048552,
+    "reference_abs_error_estimate": 4.440892099350151e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.25,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": -0.36356685213365764,
+    "value": -0.36356685213365764,
+    "reference_abs_error_estimate": 8.881784197850777e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.45,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.05704576410020387,
+    "value": 0.05704576410020387,
+    "reference_abs_error_estimate": 1.1102230248412487e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.45,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": -0.09180381422028752,
+    "value": -0.09180381422028752,
+    "reference_abs_error_estimate": 2.2204460494664053e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.55,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.004272825118229723,
+    "value": 0.004272825118229723,
+    "reference_abs_error_estimate": 1.3877787807814457e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.55,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": 0.004375021999183401,
+    "value": 0.004375021999183401,
+    "reference_abs_error_estimate": 1.3877787807814457e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.025421294067614904,
+    "value": 0.025421294067614904,
+    "reference_abs_error_estimate": 5.551115123125783e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 1.75,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": 0.026007222351745036,
+    "value": 0.026007222351745036,
+    "reference_abs_error_estimate": 5.551115123125783e-17,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 1.5,
+    "component": "T",
+    "rho_lo": 0.06162076479644962,
+    "value": 0.06162076479644962,
+    "reference_abs_error_estimate": 1.1102230246251565e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  },
+  {
+    "E": 2.0,
+    "k": 1.5,
+    "component": "L",
+    "rho_lo": 0.06296920584736168,
+    "value": 0.06296920584736168,
+    "reference_abs_error_estimate": 2.220446049250313e-16,
+    "source": "independent analytic LO Fermi phase-space moments",
+    "source_archive_sha256": "207a2cb3d39933a57a5c1a8592d664c7dc9d5750eb8cd10801e98ac9560446fb"
+  }
+]

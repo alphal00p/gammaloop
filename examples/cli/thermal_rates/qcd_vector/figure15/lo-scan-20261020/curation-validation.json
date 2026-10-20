@@ -1,0 +1,13 @@
+{
+  "status": "passed",
+  "source_commit": "31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a",
+  "native_objects_unchanged": 35,
+  "physical_rows_recomputed_exactly": 70,
+  "independent_targets_match": 70,
+  "precision_and_stability_pass": 70,
+  "original_lo_curves": 6,
+  "original_lo_vertices": 1794,
+  "nlo_curves": 0,
+  "clipped_error_bars": 0,
+  "historical_checksums_unchanged": 66
+}

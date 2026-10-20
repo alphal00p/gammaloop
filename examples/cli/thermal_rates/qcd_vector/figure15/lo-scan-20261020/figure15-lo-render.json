@@ -1,0 +1,724 @@
+{
+  "order": "lo",
+  "curve_file": "/shared/kaapo/gammaloop/gammaloop-thermal-rates/examples/cli/thermal_rates/qcd_vector/figure15/reference/published-curves.json",
+  "synthetic_validation": false,
+  "curve_file_sha256": "74d6de004d46b9e38def51cc254003a334b9f3102e2b3df5b17ec310524a2a5a",
+  "curve_source": {
+    "url": "https://arxiv.org/pdf/1910.07552v2",
+    "title": "G. Jackson, Two-loop thermal spectral functions with general kinematics",
+    "figure": 15,
+    "page": 33,
+    "paper_sha256": "b92fd775f7b5ebb15ea382925acc6e89b6ff1f1f9eec1898432a319c259a7d65",
+    "svg_sha256": "8cf6b21f5ce1e108659bda049bb05c508b06444f66702e2696ed8962b81e848d",
+    "mutool": "/nix/store/175y8nr0rb67s2jygn6myn4fa1lv34cc-mupdf-1.27.2-bin/bin/mutool"
+  },
+  "curve_method": "Affine mapping of original vector vertices; no smoothing, interpolation, new quadrature, or reconnection of separate PDF paths",
+  "curve_limitation": "Published graphical precision and clipping; not an independent numerical integration target",
+  "lo_curve_count": 6,
+  "lo_segment_count": 6,
+  "lo_vertex_count": 1794,
+  "source_nlo_curves_excluded": 8,
+  "nlo_curve_count": 0,
+  "source_calibration": {
+    "E_over_T": {
+      "ticks": [
+        [
+          0,
+          71.8672
+        ],
+        [
+          0.5,
+          128.559
+        ],
+        [
+          1,
+          185.254
+        ],
+        [
+          1.5,
+          241.945
+        ],
+        [
+          2,
+          298.637
+        ]
+      ],
+      "origin": 71.86732,
+      "units_per_value": 113.38512,
+      "maximum_tick_residual": 0.0015599999999835745
+    },
+    "T": {
+      "ticks": [
+        [
+          0,
+          265.566
+        ],
+        [
+          0.5,
+          312.813
+        ],
+        [
+          1,
+          360.059
+        ]
+      ],
+      "origin": 265.5661666666666,
+      "units_per_value": 94.49300000000005,
+      "maximum_tick_residual": 0.00033333333334439885
+    },
+    "L": {
+      "ticks": [
+        [
+          -1,
+          71.8672
+        ],
+        [
+          -0.5,
+          119.109
+        ],
+        [
+          0,
+          166.355
+        ],
+        [
+          0.5,
+          213.598
+        ]
+      ],
+      "origin": 166.35422,
+      "units_per_value": 94.48768000000001,
+      "maximum_tick_residual": 0.0013799999999974943
+    }
+  },
+  "source_coordinate_definition": "E/T and rho_{T,L}/(eT)^2; full published LO+NLO uses g=3",
+  "geometry_transformation": "identity: published segment vertices are plotted directly, without interpolation or added curves",
+  "rest_reference_line": "none: no k=0 LO path is present in the published vector extraction",
+  "reference_momenta": [
+    0.5,
+    1.0,
+    1.5
+  ],
+  "line_styles": {
+    "0.5": "-",
+    "1.0": "-",
+    "1.5": "-"
+  },
+  "colors": {
+    "0.0": "#c57915",
+    "0.5": "#c12636",
+    "1.0": "#8246a5",
+    "1.5": "#3155ac"
+  },
+  "native_marker_count": 70,
+  "expected_native_marker_count": 70,
+  "marker_transformation": "identity: value and error are already physical LO",
+  "rest_polarizations": "same trace estimate; fully correlated",
+  "native_markers": [
+    {
+      "name": "E0p25_k0p00",
+      "component": "T",
+      "E_over_T": 0.25,
+      "k_over_T": 0.0,
+      "value_lo": 0.0003101051167556225,
+      "error_lo": 3.168614862568489e-07
+    },
+    {
+      "name": "E0p25_k0p00",
+      "component": "L",
+      "E_over_T": 0.25,
+      "k_over_T": 0.0,
+      "value_lo": 0.0003101051167556225,
+      "error_lo": 3.168614862568489e-07
+    },
+    {
+      "name": "E0p25_k0p50",
+      "component": "T",
+      "E_over_T": 0.25,
+      "k_over_T": 0.5,
+      "value_lo": 0.30043090124472616,
+      "error_lo": 0.0014600192474716178
+    },
+    {
+      "name": "E0p25_k0p50",
+      "component": "L",
+      "E_over_T": 0.25,
+      "k_over_T": 0.5,
+      "value_lo": -0.5811649786518648,
+      "error_lo": 0.0028295232361897475
+    },
+    {
+      "name": "E0p25_k1p00",
+      "component": "T",
+      "E_over_T": 0.25,
+      "k_over_T": 1.0,
+      "value_lo": 0.19572370405087536,
+      "error_lo": 0.000789149942866562
+    },
+    {
+      "name": "E0p25_k1p00",
+      "component": "L",
+      "E_over_T": 0.25,
+      "k_over_T": 1.0,
+      "value_lo": -0.34842721621428135,
+      "error_lo": 0.0014374958512831726
+    },
+    {
+      "name": "E0p25_k1p50",
+      "component": "T",
+      "E_over_T": 0.25,
+      "k_over_T": 1.5,
+      "value_lo": 0.13860871336967978,
+      "error_lo": 0.00047658360347430345
+    },
+    {
+      "name": "E0p25_k1p50",
+      "component": "L",
+      "E_over_T": 0.25,
+      "k_over_T": 1.5,
+      "value_lo": -0.2215035458296762,
+      "error_lo": 0.0007910150063511539
+    },
+    {
+      "name": "E0p50_k0p00",
+      "component": "T",
+      "E_over_T": 0.5,
+      "k_over_T": 0.0,
+      "value_lo": 0.002472392340012363,
+      "error_lo": 2.36923941071492e-06
+    },
+    {
+      "name": "E0p50_k0p00",
+      "component": "L",
+      "E_over_T": 0.5,
+      "k_over_T": 0.0,
+      "value_lo": 0.002472392340012363,
+      "error_lo": 2.36923941071492e-06
+    },
+    {
+      "name": "E0p50_k1p00",
+      "component": "T",
+      "E_over_T": 0.5,
+      "k_over_T": 1.0,
+      "value_lo": 0.3122943983347061,
+      "error_lo": 0.0014728629269299945
+    },
+    {
+      "name": "E0p50_k1p00",
+      "component": "L",
+      "E_over_T": 0.5,
+      "k_over_T": 1.0,
+      "value_lo": -0.5568979736512776,
+      "error_lo": 0.0027212754755737
+    },
+    {
+      "name": "E0p50_k1p50",
+      "component": "T",
+      "E_over_T": 0.5,
+      "k_over_T": 1.5,
+      "value_lo": 0.25550276817523265,
+      "error_lo": 0.0009049415809218047
+    },
+    {
+      "name": "E0p50_k1p50",
+      "component": "L",
+      "E_over_T": 0.5,
+      "k_over_T": 1.5,
+      "value_lo": -0.40825651272538355,
+      "error_lo": 0.001567975046591544
+    },
+    {
+      "name": "E0p75_k0p00",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 0.0,
+      "value_lo": 0.008284892003294228,
+      "error_lo": 8.141571933291172e-06
+    },
+    {
+      "name": "E0p75_k0p00",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 0.0,
+      "value_lo": 0.008284892003294228,
+      "error_lo": 8.141571933291172e-06
+    },
+    {
+      "name": "E0p75_k0p50",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 0.5,
+      "value_lo": 0.004588279986240885,
+      "error_lo": 8.990950676425759e-06
+    },
+    {
+      "name": "E0p75_k0p50",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 0.5,
+      "value_lo": 0.004584257490213194,
+      "error_lo": 1.2308226216278343e-05
+    },
+    {
+      "name": "E0p75_k1p00",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 1.0,
+      "value_lo": 0.2755401864476168,
+      "error_lo": 0.001325347592146626
+    },
+    {
+      "name": "E0p75_k1p00",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 1.0,
+      "value_lo": -0.49195292840875127,
+      "error_lo": 0.0024319044418671587
+    },
+    {
+      "name": "E0p75_k1p50",
+      "component": "T",
+      "E_over_T": 0.75,
+      "k_over_T": 1.5,
+      "value_lo": 0.327235420063193,
+      "error_lo": 0.0013092010920844805
+    },
+    {
+      "name": "E0p75_k1p50",
+      "component": "L",
+      "E_over_T": 0.75,
+      "k_over_T": 1.5,
+      "value_lo": -0.5238744032807758,
+      "error_lo": 0.0022907539652138997
+    },
+    {
+      "name": "E1p00_k0p00",
+      "component": "T",
+      "E_over_T": 1.0,
+      "k_over_T": 0.0,
+      "value_lo": 0.019502082492619047,
+      "error_lo": 1.9542494950749497e-05
+    },
+    {
+      "name": "E1p00_k0p00",
+      "component": "L",
+      "E_over_T": 1.0,
+      "k_over_T": 0.0,
+      "value_lo": 0.019502082492619047,
+      "error_lo": 1.9542494950749497e-05
+    },
+    {
+      "name": "E1p00_k0p50",
+      "component": "T",
+      "E_over_T": 1.0,
+      "k_over_T": 0.5,
+      "value_lo": 0.014535016385298232,
+      "error_lo": 2.332172748175677e-05
+    },
+    {
+      "name": "E1p00_k0p50",
+      "component": "L",
+      "E_over_T": 1.0,
+      "k_over_T": 0.5,
+      "value_lo": 0.014579525925999244,
+      "error_lo": 3.215191570786892e-05
+    },
+    {
+      "name": "E1p00_k1p50",
+      "component": "T",
+      "E_over_T": 1.0,
+      "k_over_T": 1.5,
+      "value_lo": 0.3265558800207245,
+      "error_lo": 0.0014905432122499275
+    },
+    {
+      "name": "E1p00_k1p50",
+      "component": "L",
+      "E_over_T": 1.0,
+      "k_over_T": 1.5,
+      "value_lo": -0.5236856454196681,
+      "error_lo": 0.0025957652306124396
+    },
+    {
+      "name": "E1p25_k0p00",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 0.0,
+      "value_lo": 0.03762706066023976,
+      "error_lo": 3.9720429520499286e-05
+    },
+    {
+      "name": "E1p25_k0p00",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 0.0,
+      "value_lo": 0.03762706066023976,
+      "error_lo": 3.9720429520499286e-05
+    },
+    {
+      "name": "E1p25_k0p50",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 0.5,
+      "value_lo": 0.0314675563111361,
+      "error_lo": 4.6520460155797454e-05
+    },
+    {
+      "name": "E1p25_k0p50",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 0.5,
+      "value_lo": 0.031589907986209545,
+      "error_lo": 6.921959118114981e-05
+    },
+    {
+      "name": "E1p25_k1p00",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 1.0,
+      "value_lo": 0.013251335123287238,
+      "error_lo": 3.1733214176326464e-05
+    },
+    {
+      "name": "E1p25_k1p00",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 1.0,
+      "value_lo": 0.013428490768361171,
+      "error_lo": 4.4507325851186744e-05
+    },
+    {
+      "name": "E1p25_k1p50",
+      "component": "T",
+      "E_over_T": 1.25,
+      "k_over_T": 1.5,
+      "value_lo": 0.22799079040127063,
+      "error_lo": 0.0010309791867092876
+    },
+    {
+      "name": "E1p25_k1p50",
+      "component": "L",
+      "E_over_T": 1.25,
+      "k_over_T": 1.5,
+      "value_lo": -0.36645856718614767,
+      "error_lo": 0.0017749403625959938
+    },
+    {
+      "name": "E1p50_k0p00",
+      "component": "T",
+      "E_over_T": 1.5,
+      "k_over_T": 0.0,
+      "value_lo": 0.06415631181446091,
+      "error_lo": 6.376651100488264e-05
+    },
+    {
+      "name": "E1p50_k0p00",
+      "component": "L",
+      "E_over_T": 1.5,
+      "k_over_T": 0.0,
+      "value_lo": 0.06415631181446091,
+      "error_lo": 6.376651100488264e-05
+    },
+    {
+      "name": "E1p50_k0p50",
+      "component": "T",
+      "E_over_T": 1.5,
+      "k_over_T": 0.5,
+      "value_lo": 0.05674272752794257,
+      "error_lo": 7.482204004418552e-05
+    },
+    {
+      "name": "E1p50_k0p50",
+      "component": "L",
+      "E_over_T": 1.5,
+      "k_over_T": 0.5,
+      "value_lo": 0.05694729837783178,
+      "error_lo": 0.00012170735475273869
+    },
+    {
+      "name": "E1p50_k1p00",
+      "component": "T",
+      "E_over_T": 1.5,
+      "k_over_T": 1.0,
+      "value_lo": 0.03491708187880934,
+      "error_lo": 6.89176035066389e-05
+    },
+    {
+      "name": "E1p50_k1p00",
+      "component": "L",
+      "E_over_T": 1.5,
+      "k_over_T": 1.0,
+      "value_lo": 0.03532757459504552,
+      "error_lo": 9.56134977495469e-05
+    },
+    {
+      "name": "E1p75_k0p00",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 0.0,
+      "value_lo": 0.10041072357983949,
+      "error_lo": 9.770705335929038e-05
+    },
+    {
+      "name": "E1p75_k0p00",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 0.0,
+      "value_lo": 0.10041072357983949,
+      "error_lo": 9.770705335929038e-05
+    },
+    {
+      "name": "E1p75_k0p50",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 0.5,
+      "value_lo": 0.09178795010387358,
+      "error_lo": 0.00011258360223705657
+    },
+    {
+      "name": "E1p75_k0p50",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 0.5,
+      "value_lo": 0.09185221733841618,
+      "error_lo": 0.00019378627607836703
+    },
+    {
+      "name": "E1p75_k1p00",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 1.0,
+      "value_lo": 0.06618039515787709,
+      "error_lo": 0.00011815959835685384
+    },
+    {
+      "name": "E1p75_k1p00",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 1.0,
+      "value_lo": 0.06667862104865767,
+      "error_lo": 0.00016113658662320285
+    },
+    {
+      "name": "E1p75_k1p50",
+      "component": "T",
+      "E_over_T": 1.75,
+      "k_over_T": 1.5,
+      "value_lo": 0.025484547199350414,
+      "error_lo": 7.130635462425982e-05
+    },
+    {
+      "name": "E1p75_k1p50",
+      "component": "L",
+      "E_over_T": 1.75,
+      "k_over_T": 1.5,
+      "value_lo": 0.026145072890256412,
+      "error_lo": 9.707771191702198e-05
+    },
+    {
+      "name": "E2p00_k0p00",
+      "component": "T",
+      "E_over_T": 2.0,
+      "k_over_T": 0.0,
+      "value_lo": 0.14703234179095132,
+      "error_lo": 0.00014053791724271726
+    },
+    {
+      "name": "E2p00_k0p00",
+      "component": "L",
+      "E_over_T": 2.0,
+      "k_over_T": 0.0,
+      "value_lo": 0.14703234179095132,
+      "error_lo": 0.00014053791724271726
+    },
+    {
+      "name": "E2p00_k0p50",
+      "component": "T",
+      "E_over_T": 2.0,
+      "k_over_T": 0.5,
+      "value_lo": 0.13718909456201087,
+      "error_lo": 0.00016051613467583942
+    },
+    {
+      "name": "E2p00_k0p50",
+      "component": "L",
+      "E_over_T": 2.0,
+      "k_over_T": 0.5,
+      "value_lo": 0.13759537374274988,
+      "error_lo": 0.0002915581044021181
+    },
+    {
+      "name": "E2p00_k1p00",
+      "component": "T",
+      "E_over_T": 2.0,
+      "k_over_T": 1.0,
+      "value_lo": 0.10850851094871533,
+      "error_lo": 0.0001773966162230227
+    },
+    {
+      "name": "E2p00_k1p00",
+      "component": "L",
+      "E_over_T": 2.0,
+      "k_over_T": 1.0,
+      "value_lo": 0.10924264317087146,
+      "error_lo": 0.00024364296558662015
+    },
+    {
+      "name": "E2p00_k1p50",
+      "component": "T",
+      "E_over_T": 2.0,
+      "k_over_T": 1.5,
+      "value_lo": 0.061585687071966266,
+      "error_lo": 0.00013648198013121787
+    },
+    {
+      "name": "E2p00_k1p50",
+      "component": "L",
+      "E_over_T": 2.0,
+      "k_over_T": 1.5,
+      "value_lo": 0.062601867550112,
+      "error_lo": 0.00019410669666179763
+    },
+    {
+      "name": "E0p45_k0p50",
+      "component": "T",
+      "E_over_T": 0.45,
+      "k_over_T": 0.5,
+      "value_lo": 0.1369207865774386,
+      "error_lo": 0.0006794583694140936
+    },
+    {
+      "name": "E0p45_k0p50",
+      "component": "L",
+      "E_over_T": 0.45,
+      "k_over_T": 0.5,
+      "value_lo": -0.26492713968660353,
+      "error_lo": 0.001283233534672321
+    },
+    {
+      "name": "E0p55_k0p50",
+      "component": "T",
+      "E_over_T": 0.55,
+      "k_over_T": 0.5,
+      "value_lo": 0.0005676317259800629,
+      "error_lo": 1.9017672776860005e-06
+    },
+    {
+      "name": "E0p55_k0p50",
+      "component": "L",
+      "E_over_T": 0.55,
+      "k_over_T": 0.5,
+      "value_lo": 0.0005698275905685954,
+      "error_lo": 2.483943763745234e-06
+    },
+    {
+      "name": "E0p95_k1p00",
+      "component": "T",
+      "E_over_T": 0.95,
+      "k_over_T": 1.0,
+      "value_lo": 0.07810069105148748,
+      "error_lo": 0.00037474458565270167
+    },
+    {
+      "name": "E0p95_k1p00",
+      "component": "L",
+      "E_over_T": 0.95,
+      "k_over_T": 1.0,
+      "value_lo": -0.1394369368714411,
+      "error_lo": 0.0006906427719119895
+    },
+    {
+      "name": "E1p05_k1p00",
+      "component": "T",
+      "E_over_T": 1.05,
+      "k_over_T": 1.0,
+      "value_lo": 0.0020400385735589934,
+      "error_lo": 8.088871813957012e-06
+    },
+    {
+      "name": "E1p05_k1p00",
+      "component": "L",
+      "E_over_T": 1.05,
+      "k_over_T": 1.0,
+      "value_lo": 0.0020570835615383028,
+      "error_lo": 1.022919562815073e-05
+    },
+    {
+      "name": "E1p45_k1p50",
+      "component": "T",
+      "E_over_T": 1.45,
+      "k_over_T": 1.5,
+      "value_lo": 0.05703144047847288,
+      "error_lo": 0.00026828976997924584
+    },
+    {
+      "name": "E1p45_k1p50",
+      "component": "L",
+      "E_over_T": 1.45,
+      "k_over_T": 1.5,
+      "value_lo": -0.09180018269442236,
+      "error_lo": 0.00045862621335494933
+    },
+    {
+      "name": "E1p55_k1p50",
+      "component": "T",
+      "E_over_T": 1.55,
+      "k_over_T": 1.5,
+      "value_lo": 0.0042978765228523985,
+      "error_lo": 1.7003696417254434e-05
+    },
+    {
+      "name": "E1p55_k1p50",
+      "component": "L",
+      "E_over_T": 1.55,
+      "k_over_T": 1.5,
+      "value_lo": 0.0044048674902636255,
+      "error_lo": 2.157726247531549e-05
+    }
+  ],
+  "views": [
+    {
+      "view": "full",
+      "stem": "figure15-lo-overlay",
+      "native_marker_count": 70,
+      "lo_curve_segments": 6,
+      "nlo_curve_count": 0,
+      "xlim": [
+        0.0,
+        2.03
+      ],
+      "ylim": {
+        "T": [
+          -0.4,
+          0.3524555610821266
+        ],
+        "L": [
+          -0.6324648059739355,
+          0.18429848378829544
+        ]
+      },
+      "clipped_error_bars": []
+    },
+    {
+      "view": "zoom",
+      "stem": "figure15-lo-overlay-zoom",
+      "native_marker_count": 70,
+      "lo_curve_segments": 6,
+      "nlo_curve_count": 0,
+      "xlim": [
+        0.0,
+        2.03
+      ],
+      "ylim": {
+        "T": [
+          -0.4,
+          1.5
+        ],
+        "L": [
+          -1.2,
+          0.7
+        ]
+      },
+      "clipped_error_bars": []
+    }
+  ]
+}

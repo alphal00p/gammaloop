@@ -1,0 +1,75 @@
+{
+  "status": "completed",
+  "source_commit": "31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a",
+  "binary_sha256": "fa17c6c38bcc590e456860726a1f0fbbb818d03494bc313497902bcb7da761c9",
+  "started_utc": "2026-10-20T12:25:16.266038+00:00",
+  "finished_utc": "2026-10-20T12:25:52.231684+00:00",
+  "wall_seconds_including_hashing_setup": 35.965646,
+  "hard_budget_seconds": 10800.0,
+  "job_count": 35,
+  "job_statuses": {
+    "precision_reached": 35
+  },
+  "job_cli_exit_codes": {
+    "-15": 35
+  },
+  "component_count": 70,
+  "unique_native_slot_count": 62,
+  "precision_passed": 70,
+  "precision_by_component": {
+    "T": 35,
+    "L": 35
+  },
+  "relative_error_percent_range": [
+    0.09554133219773836,
+    0.49957206816533173
+  ],
+  "pull_range": [
+    -2.1326882850665805,
+    2.4204367844177423
+  ],
+  "pull_over_3sigma_rows": [],
+  "samples_per_point_range": [
+    100000,
+    256000
+  ],
+  "sample_points_total": 4226000,
+  "native_slot_evaluations_total": 7568000,
+  "zero_final_invalid_all_rows": true,
+  "nan_or_unstable_max_percent": 0.0,
+  "arb_max_percent": 0.005147058823529412,
+  "f128_percent_range": [
+    0.0,
+    7.482421875
+  ],
+  "max_reserved_numerical_workers": 60,
+  "allocation_records": 45,
+  "reserved_worker_wall_seconds": 1539.6972347788978,
+  "native_allocation_wall_sum_seconds": 256.616205796483,
+  "slot_cost_sum_seconds_reported": 688.761122,
+  "remaining_compute_group_members": [],
+  "metadata_fingerprints_modified": false,
+  "weighted_slot_mean_eval_us": 91.00966199788583,
+  "binary_hash_matches_run_plan": true,
+  "source_state_checks": [
+    {
+      "directory": "/tmp/qcd-fig15-lo-20261020/state",
+      "planned_sha256": "e23ea7e86786e28eb5dfd65afa6f88ff3af9d037dff916e3db175fd022817d75",
+      "actual_sha256": "e23ea7e86786e28eb5dfd65afa6f88ff3af9d037dff916e3db175fd022817d75",
+      "match": true
+    },
+    {
+      "directory": "/tmp/qcd-fig15-lo-20261020/state",
+      "planned_sha256": "e23ea7e86786e28eb5dfd65afa6f88ff3af9d037dff916e3db175fd022817d75",
+      "actual_sha256": "e23ea7e86786e28eb5dfd65afa6f88ff3af9d037dff916e3db175fd022817d75",
+      "match": true
+    }
+  ],
+  "controller_same_identity_live": false,
+  "watchdog_same_identity_live": false,
+  "renderer_same_identity_live": false,
+  "watchdog_final_status": "disarmed_after_all_compute_exited",
+  "renderer_final_status": "complete",
+  "thread_accounting": "Maximum60 numeric integration workers. Each active native had six numerical pool threads plus sleeping main and ctrl-c signal-handler threads, all within its assigned six CPUs. Gates are short-lived single-thread control callbacks; controller/watchdog/completion renderer are additional bookkeeping processes, not numerical workers. Renderer runs only after controller and watchdog exit.",
+  "stop_semantics": "Each precision-complete CLI is deliberately SIGTERM terminated by its idle gate, giving exit-15. Normal wall-budget soft stop would begin120 seconds early; independent monotonic SIGKILL group cutoff remains10800 seconds after controller startup, including source hashing/setup."
+}

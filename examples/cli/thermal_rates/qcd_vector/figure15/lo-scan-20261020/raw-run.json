@@ -1,0 +1,13 @@
+{
+  "kind": "verified local raw-run snapshot; not a compressed archive",
+  "source_commit": "31e8c8dcc92284cc52d3a36e4a713783ee3dcb4a",
+  "snapshot_root": "/shared/kaapo/gammaloop/gammaloop-thermal-rates/.local/benchmarks/qcd-fig15-lo-20261020",
+  "file_manifest": "/shared/kaapo/gammaloop/gammaloop-thermal-rates/.local/benchmarks/qcd-fig15-lo-20261020-files.json",
+  "file_manifest_sha256": "eb3fb6c5fe50ef313bc498229356bbecb722dbe799b86213577b222674935a47",
+  "file_count": 14685,
+  "bytes": 2559844178,
+  "scope": "Executable, source states, executed scripts, runtime configurations, checkpoints, logs, final production artifacts and validations; scratch reporting drafts excluded from hashing.",
+  "binary_sha256": "fa17c6c38bcc590e456860726a1f0fbbb818d03494bc313497902bcb7da761c9",
+  "historical_baseline_checksums_verified": 66,
+  "created_utc": "2026-10-20T12:29:52.196232+00:00"
+}
