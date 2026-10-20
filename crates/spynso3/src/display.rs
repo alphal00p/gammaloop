@@ -2764,6 +2764,7 @@ fn formatted(
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("_compile_typst", wrap_pyfunction!(compile_typst, m)?)?;
     m.add_class::<DisplaySettings>()?;
     m.add_function(wrap_pyfunction!(load_math_font, m)?)?;
     m.add_function(wrap_pyfunction!(format_tensor, m)?)?;
