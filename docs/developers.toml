@@ -1803,7 +1803,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-20: rebase retains the latest UFO metadata helper and
 # STIX runtime inputs together with OS reference compile-time fixtures; package
 # source ownership and producer/runtime partitioning remain unchanged.
-digest = "50f53c022a21d3bd26953f8d0034444315b9dcaa"
+# Reviewed 2026-10-20: the emitted D09 field checks share an embedded JSON
+# reference with the Python owner. It is a compile-time test input; the existing
+# dedicated Python runtime and production/cache ownership are unchanged.
+digest = "1800a2efb4d52ec611d2b4e8c51ff4874f87463c"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

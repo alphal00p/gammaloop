@@ -556,6 +556,7 @@
       "crates/gammalooprs/tests/resources/uv_parametric_numerator"
       "crates/gammalooprs/tests/resources/uv_fixed_basis"
       "crates/gammalooprs/tests/resources/os_mass_reference.py"
+      "crates/gammalooprs/tests/resources/os_d09_vector_reference.json"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL256.dot"
       "examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL262.dot"
     ];
