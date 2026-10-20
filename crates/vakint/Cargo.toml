@@ -19,21 +19,22 @@ ahash = "0.8.12"
 arrayvec = "0.7.4"
 colored = { workspace = true }
 eyre = { workspace = true }
-feynkit-graph = { workspace = true }
-feynkit-kinematics = { workspace = true }
-feynkit-py = { workspace = true, optional = true }
-feynkit-tensor = { workspace = true }
+feynkit-graph = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+feynkit-py = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false, optional = true }
+feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 flate2 = "1.1.9"
+idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 log = "0.4.29"
 regex = "1.12.2"
 rug = "1.28.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
-rustred.workspace = true
-rustred-app.workspace = true
+rustred = { git = "https://github.com/alphal00p/rustred", branch = "main", default-features = false }
+rustred-app = { git = "https://github.com/alphal00p/rustred", branch = "main", default-features = false }
 sha2 = "0.10.9"
-spenso = { workspace = true, default-features = false }
-spenso-macros = { workspace = true, default-features = false }
+spenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+spenso-macros = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 string-template-plus = "0.4.3"
 thiserror = { workspace = true }
 version-compare = "0.2.1"
@@ -54,9 +55,8 @@ default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
-idenso = { workspace = true, default-features = false }
-feynkit-generator = { workspace = true }
-feynkit-model = { workspace = true }
+feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
+feynkit-model = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 test-log = "0.2.19"
 
 [features]

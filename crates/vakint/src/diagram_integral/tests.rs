@@ -25,6 +25,34 @@ fn sunset() -> (FeynmanDiagram, IntegralFamily) {
 }
 
 #[test]
+fn graph_ingress_rejects_open_external_half_edges() {
+    let diagram = FeynmanDiagram::from_dot(
+        Model::phi3(),
+        r#"digraph bubble {
+            ext [style=invis];
+            ext -> a [particle="phi"];
+            a -> b [particle="phi", lmb_id=0];
+            a -> b [particle="phi"];
+            b -> ext [particle="phi"];
+        }"#,
+    )
+    .unwrap();
+    assert!(
+        diagram
+            .edges()
+            .any(|(_, ends, _)| ends.source.is_none() || ends.target.is_none())
+    );
+    let family = diagram.propagator_family(&Kinematics::new()).unwrap();
+    let result = VakintExpression::from_diagram(
+        &diagram,
+        &family,
+        &Atom::one(),
+        &DiagramIntegralOptions::default(),
+    );
+    assert!(matches!(result, Err(VakintError::InvalidIntegralFormat(_))));
+}
+
+#[test]
 fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
     let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
         "digraph repeated { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> a [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();
