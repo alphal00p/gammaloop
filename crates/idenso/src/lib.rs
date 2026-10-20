@@ -939,6 +939,15 @@ pub mod test {
             let expected = explicit.canonize().unwrap();
             let actual = powered.canonize().unwrap();
             assert_eq!(actual.expression(), expected.expression());
+            assert_eq!(
+                powered
+                    .expanded(None, false)
+                    .unwrap()
+                    .canonize()
+                    .unwrap()
+                    .expression(),
+                expected.expression()
+            );
             assert_eq!(actual.canonize().unwrap().expression(), actual.expression());
             assert_ne!(actual.expression(), norm.canonize().unwrap().expression());
             assert_eq!(
@@ -946,6 +955,76 @@ pub mod test {
                 *expected.expression()
             );
         }
+    }
+
+    #[test]
+    fn canonicalization_of_complex_norm_power_in_scalar_density() {
+        use crate::tensor::SymbolicTensor;
+        use spenso::structure::{
+            representation::{LibraryRep, RepName},
+            slot::IsAbstractSlot,
+        };
+        test_initialize();
+        let h = SPENSO_TAG.tensor_symbol("canonical_complex_power::h");
+        let rep = LibraryRep::new_dual("canonical_complex_power::weak")
+            .unwrap()
+            .new_rep(2);
+        let scope = symbol!("canonical_complex_power::scope");
+        let index = AbstractIndex::Normal(901).scoped(scope);
+        let norm = SymbolicTensor::infer(
+            spenso::network::library::function_lib::INBUILTS.conj(function!(
+                h,
+                rep.dual().slot::<AbstractIndex, _>(index).to_atom()
+            )) * function!(h, rep.slot::<AbstractIndex, _>(index).to_atom()),
+        )
+        .unwrap();
+        let square = norm
+            .pow(&SymbolicTensor::infer(Atom::num(2)).unwrap())
+            .unwrap();
+        let explicit = norm
+            .wrap_indices(symbol!("canonical_complex_power::left"), true)
+            .unwrap()
+            .multiply(
+                &norm
+                    .wrap_indices(symbol!("canonical_complex_power::right"), true)
+                    .unwrap(),
+            )
+            .unwrap();
+        let coefficient = SymbolicTensor::infer(
+            Atom::num((-1, 2)) * Atom::var(symbol!("canonical_complex_power::lambda"; Scalar)),
+        )
+        .unwrap();
+        let density = square
+            .multiply(&coefficient)
+            .unwrap()
+            .try_add(&norm)
+            .unwrap();
+        let expected = explicit
+            .multiply(&coefficient)
+            .unwrap()
+            .try_add(&norm)
+            .unwrap();
+        let callback = symbol!("canonical_complex_power::callback", norm = |_, _| {});
+        let wrapped_callback = spenso::network::library::function_lib::INBUILTS
+            .conj(function!(callback, &index.to_atom()));
+        assert!(
+            !crate::tensor::inference::InterfaceInference::normalization_is_intrinsic(
+                wrapped_callback.as_view()
+            )
+        );
+        assert_eq!(
+            density.canonize().unwrap().expression(),
+            expected.canonize().unwrap().expression()
+        );
+        assert_eq!(
+            density
+                .expanded(None, false)
+                .unwrap()
+                .canonize()
+                .unwrap()
+                .expression(),
+            expected.canonize().unwrap().expression()
+        );
     }
 
     #[test]

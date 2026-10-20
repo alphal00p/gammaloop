@@ -8,7 +8,10 @@ use std::collections::{HashMap, HashSet};
 use ahash::{AHashMap, AHashSet};
 use spenso::{
     network::{
-        library::symbolic::{ETS, ExplicitKey},
+        library::{
+            function_lib::INBUILTS,
+            symbolic::{ETS, ExplicitKey},
+        },
         parsing::{AtomStructureExt, ParseState, StrictTensorFilter},
         tags::SPENSO_TAG,
     },
@@ -1214,12 +1217,14 @@ impl SymbolicTensor<PartialStructure> {
 impl InterfaceInference {
     // These structural builtins cannot invoke user code themselves. Delta only
     // compares fixed components; cyclic only unwraps a sole sym projector.
-    // Their descendants remain checked for user callbacks.
+    // Native conjugation only unwraps a double conjugation. Their descendants
+    // remain checked for user callbacks.
     pub(crate) fn intrinsic_normalization_head(symbol: Symbol) -> bool {
         symbol.get_evaluation_info().is_none()
             && (symbol == ETS.metric
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
+                || symbol == INBUILTS.conj
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)
@@ -1238,6 +1243,7 @@ impl InterfaceInference {
             && (symbol == *metric.get_or_insert_with(|| ETS.metric)
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
+                || symbol == INBUILTS.conj
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)
