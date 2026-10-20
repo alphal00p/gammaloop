@@ -1,5 +1,3 @@
-/* Full math font: do not replace with a Latin-only webfont subset. */
-@font-face{font-family:"STIX Two Math";src:local("STIX Two Math"),url("https://cdn.jsdelivr.net/gh/stipub/stixfonts@2.13b171/fonts/static_otf_woff2/STIXTwoMath-Regular.woff2") format("woff2");font-display:swap}
 :root {
   --spenso-math-font: "Spenso Offline Math", "STIX Two Math", math;
 }
