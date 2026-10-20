@@ -322,7 +322,8 @@ where
     }
 
     fn inv(&self) -> Self {
-        self.inv()
+        let inverse = SymComplex::new(self.re.clone(), self.im.clone()).inv();
+        Self::new(inverse.re, inverse.im)
     }
 
     fn from_usize(&self, a: usize) -> Self {
@@ -418,20 +419,17 @@ where
 
     #[inline]
     fn norm(&self) -> Self {
-        Complex::new(self.norm_squared().sqrt(), self.im.zero())
+        SymComplex::from(self.clone()).norm().into()
     }
 
     #[inline]
     fn sqrt(&self) -> Self {
-        let (r, phi) = (self.norm_squared().sqrt(), self.im.atan2(&self.re));
-        let phi = phi.ref_div(&self.re.from_usize(2));
-        let r = r.sqrt();
-        Complex::new(r.ref_mul(&phi.cos()), r.ref_mul(&phi.sin()))
+        SymComplex::from(self.clone()).sqrt().into()
     }
 
     #[inline]
     fn log(&self) -> Self {
-        Complex::new(self.norm_squared().sqrt().log(), self.im.atan2(&self.re))
+        SymComplex::from(self.clone()).log().into()
     }
 
     #[inline]
@@ -532,16 +530,9 @@ where
 
     #[inline]
     fn powf(&self, e: &Self) -> Self {
-        if e.re == self.re.zero() && e.im == self.im.zero() {
-            self.one()
-        } else if e.im == self.im.zero() {
-            let (r, phi) = (self.norm_squared().sqrt(), self.im.atan2(&self.re));
-            let r = r.powf(&e.re);
-            let phi = phi * &e.re;
-            Complex::new(r.ref_mul(&phi.cos()), r.ref_mul(&phi.sin()))
-        } else {
-            (e * self.log()).exp()
-        }
+        SymComplex::from(self.clone())
+            .powf(&SymComplex::from(e.clone()))
+            .into()
     }
 }
 
@@ -600,6 +591,28 @@ mod tests {
         domains::float::DoubleFloat,
         transcendental::{coth, csch, sech, tanh},
     };
+
+    #[test]
+    fn complex_real_math_preserves_range_and_small_components() {
+        for scale in [1e-200_f64, 1., 1e200] {
+            let value = Complex::new(3. * scale, 4. * scale);
+            let norm = Real::norm(&value);
+            assert!((norm.re / scale - 5.).abs() < 1e-14);
+            assert_eq!(norm.im, 0.);
+            let inverse = FloatLike::inv(&value);
+            assert!((inverse.re * scale - 3. / 25.).abs() < 1e-14);
+            assert!((inverse.im * scale + 4. / 25.).abs() < 1e-14);
+            let half_power = Real::powf(&value, &Complex::new(0.5, 0.));
+            assert!((half_power.re / scale.sqrt() - 2.).abs() < 1e-14);
+            assert!((half_power.im / scale.sqrt() - 1.).abs() < 1e-14);
+        }
+        let root = Real::sqrt(&Complex::new(1e200_f64, 1e-100));
+        assert!((root.re / 1e100 - 1.).abs() < 1e-14);
+        assert!((root.im / 5e-201 - 1.).abs() < 1e-14);
+        let branch = Real::sqrt(&Complex::new(-4.0_f64, -0.0));
+        assert_eq!(branch.re, 0.);
+        assert_eq!(branch.im, -2.);
+    }
 
     #[test]
     fn complex_evaluation_domain_resolves_native_hyperbolics() {

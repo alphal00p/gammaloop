@@ -3,6 +3,7 @@ use std::{
     fs::{self},
     path::Path,
 };
+use symbolica::evaluate::ParameterRows;
 
 use color_eyre::Result;
 use eyre::{Context, eyre};
@@ -30,6 +31,7 @@ use crate::{
         cross_section::export::export_threshold_multiplier_collection,
         validate_process_runtime_settings,
     },
+    model::Model,
     momentum::ThreeMomentum,
     momentum::sample::{LoopMomenta, MomentumSample},
     processes::{
@@ -85,9 +87,18 @@ fn export_generic_evaluator<T: ExportAtomTo>(
         .collect::<Result<_>>()?;
 
     Ok(StandaloneGenericEvaluatorArchive {
+        parameter_rows: evaluator
+            .parameter_rows
+            .as_ref()
+            .map(|rows| {
+                rows.clone()
+                    .try_map_parameters(|parameter| T::export_atom_to(&parameter))
+            })
+            .transpose()?,
         exprs,
         additional_fn_map_entries,
         dual_shape: evaluator.dual_shape.clone(),
+        zero_components: evaluator.zero_components.clone(),
     })
 }
 
@@ -118,6 +129,21 @@ pub(super) fn export_evaluator_stack<T: ExportAtomTo>(
         .collect();
     Ok(StandaloneEvaluatorStackArchive {
         explicit_orientation_sum_only: evaluator_stack.explicit_orientation_sum_only,
+        parametric_rows: evaluator_stack
+            .parametric_rows
+            .as_ref()
+            .map(|catalog| -> Result<_> {
+                ParameterRows::new(
+                    catalog
+                        .parameters
+                        .iter()
+                        .map(T::export_atom_to)
+                        .collect::<Result<Vec<_>>>()?,
+                    catalog.rows.clone(),
+                )
+                .map_err(|error| eyre!(error))
+            })
+            .transpose()?,
         production_orientation_ids: evaluator_stack
             .production_orientation_ids()
             .iter()
@@ -180,13 +206,18 @@ fn export_evaluator_map<T: ExportAtomTo>(
 }
 
 fn standalone_rust_script() -> String {
-    include_str!("standalone_template.rs").replace(
+    let script = include_str!("standalone_template.rs").replace(
         "use crate::integrands::process::standalone;",
         &format!(
             "mod standalone {{\n{}\n}}",
             include_str!("../standalone.rs"),
         ),
-    )
+    );
+    let dependencies = include_str!(concat!(env!("OUT_DIR"), "/standalone_dependencies.toml"))
+        .lines()
+        .map(|line| format!("//! {line}\n"))
+        .collect::<String>();
+    script.replacen("//! ```\n", &format!("{dependencies}//! ```\n"), 1)
 }
 
 pub trait ExportAtomTo: Sized {
@@ -244,6 +275,7 @@ impl AmplitudeIntegrand {
         &self,
         symbolica_state: S,
         numeric_target: StandaloneNumericTarget,
+        model: &Model,
     ) -> Result<StandaloneEvaluatorArchive<S, T>> {
         if self
             .data
@@ -256,9 +288,9 @@ impl AmplitudeIntegrand {
             ));
         }
         let sample_inputs = match numeric_target {
-            StandaloneNumericTarget::Double => self.representative_input_for::<f64>()?,
-            StandaloneNumericTarget::Quad => self.representative_input_for::<f128>()?,
-            StandaloneNumericTarget::Arb => self.representative_input_for::<ArbPrec>()?,
+            StandaloneNumericTarget::Double => self.representative_input_for::<f64>(model)?,
+            StandaloneNumericTarget::Quad => self.representative_input_for::<f128>(model)?,
+            StandaloneNumericTarget::Arb => self.representative_input_for::<ArbPrec>(model)?,
         };
 
         let graph_terms = self
@@ -428,6 +460,7 @@ impl AmplitudeIntegrand {
     #[allow(clippy::type_complexity)]
     fn representative_input_for<T>(
         &self,
+        model: &Model,
     ) -> Result<Vec<(Vec<StandaloneComplexInput>, usize, usize)>>
     where
         T: StandaloneRepresentativeInputPrecision,
@@ -462,6 +495,15 @@ impl AmplitudeIntegrand {
 
         for (t, base_momentum_sample) in self.data.graph_terms.iter().zip(&base_mom_samples) {
             let mut p_build = t.param_builder.clone();
+            // Export need not follow numerical warmup. Refresh the same physical
+            // slots on this private copy, including runtime model overrides, before
+            // sample preparation fills momenta and polarizations.
+            p_build.update_runtime_values(&self.settings.general, model)?;
+            t.graph.validate_medium_parameters(
+                model,
+                self.settings.general.inverse_temperature,
+                &p_build,
+            )?;
             let momentum_sample = T::sample_from_base(base_momentum_sample);
             let input = T::get_parameters(
                 &mut p_build,
@@ -491,6 +533,7 @@ impl AmplitudeIntegrand {
         &self,
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
+        model: &Model,
     ) -> Result<()> {
         validate_process_runtime_settings(
             &self.settings,
@@ -506,7 +549,7 @@ impl AmplitudeIntegrand {
         match settings.format {
             StandaloneDataFormat::Binary => {
                 let standalone: StandaloneEvaluatorArchive<Vec<u8>, Vec<u8>> =
-                    self.create_archive(symbolica_state, settings.precision)?;
+                    self.create_archive(symbolica_state, settings.precision, model)?;
                 let binary = bincode::encode_to_vec(&standalone, bincode::config::standard())?;
                 standalone_path.add_extension("bin");
                 fs::write(&standalone_path, binary).with_context(|| {
@@ -518,7 +561,7 @@ impl AmplitudeIntegrand {
             }
             StandaloneDataFormat::Json => {
                 let standalone: StandaloneEvaluatorArchive<(), String> =
-                    self.create_archive((), settings.precision)?;
+                    self.create_archive((), settings.precision, model)?;
                 let json = serde_json::to_vec_pretty(&standalone)?;
                 standalone_path.add_extension("json");
                 fs::write(&standalone_path, json).with_context(|| {
@@ -560,9 +603,48 @@ mod tests {
     use super::{STANDALONE_EVALUATORS_VERSION, standalone_rust_script};
 
     #[test]
+    fn exact_row_export_still_requires_stored_source_atoms() -> eyre::Result<()> {
+        use crate::{
+            integrands::process::evaluators::GenericEvaluator, processes::EvaluatorSettings,
+        };
+        use symbolica::{evaluate::ParameterRows, prelude::*};
+
+        crate::initialisation::test_initialise()?;
+        let x = parse_lit!(standalone_source_rows::x);
+        let row_parameter = parse_lit!(standalone_source_rows::c);
+        let rows = ParameterRows::new(
+            vec![row_parameter.clone()],
+            vec![vec![1.into()], vec![2.into()]],
+        )
+        .map_err(|error| eyre::eyre!(error))?;
+        let evaluator = GenericEvaluator::new_from_raw_params(
+            [x.clone() * row_parameter],
+            &[x],
+            &FunctionMap::new(),
+            Vec::new(),
+            OptimizationSettings::new().cores(1),
+            None,
+            &EvaluatorSettings {
+                store_atom: false,
+                compile: false,
+                ..Default::default()
+            },
+            Some(rows),
+        )?;
+        let error = super::export_generic_evaluator::<String>(&evaluator)
+            .err()
+            .expect("exact bindings cannot replace a missing source expression");
+        assert!(error.to_string().contains("store_atom=true"), "{error}");
+        Ok(())
+    }
+
+    #[test]
     fn generated_standalone_loader_tracks_threshold_archive_version_and_fields() {
         let script = standalone_rust_script();
-        assert!(script.contains("symbolica = { version = \"=3.0.1\""));
+        for line in include_str!(concat!(env!("OUT_DIR"), "/standalone_dependencies.toml")).lines()
+        {
+            assert!(script.contains(&format!("//! {line}\n")));
+        }
         assert!(script.contains(&format!(
             "const STANDALONE_EVALUATORS_VERSION: u32 = {STANDALONE_EVALUATORS_VERSION};"
         )));

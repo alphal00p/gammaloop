@@ -6,6 +6,12 @@ default-members = ["crates/gammaloop-api"]
 [workspace.package]
 edition = "2024"
 
+# Workspace-local native evaluator revisions are also embedded in standalone exports.
+[patch.crates-io]
+symbolica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "21378ebc9e390a3e840f21893a443e81e4fe1c45" }
+numerica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "21378ebc9e390a3e840f21893a443e81e4fe1c45" }
+graphica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "21378ebc9e390a3e840f21893a443e81e4fe1c45" }
+
 [workspace.dependencies]
 ahash = "0.8.12"
 alphal00p-docs-macros = { path = "crates/alphal00p-docs-macros/" }

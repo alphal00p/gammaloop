@@ -33,7 +33,6 @@ use tracing::debug;
 
 use crate::dot;
 use crate::feyngen::diagram_generator::EdgeColor;
-use crate::feyngen::diagram_generator::feynman_graph_automorphism_group_size;
 use crate::graph::FeynmanGraph;
 use crate::initialisation::test_initialise;
 use crate::model::InputParamCard;
@@ -116,7 +115,7 @@ fn directed_self_loop_symmetry_factors_match_wick_contractions() {
                         .iter()
                         .filter(|edge| edge.directed && edge.vertices.0 == edge.vertices.1)
                         .count(),
-                    feynman_graph_automorphism_group_size(graph, group_size),
+                    group_size.clone(),
                 )
             })
             .sorted()

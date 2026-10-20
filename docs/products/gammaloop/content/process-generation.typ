@@ -211,8 +211,8 @@ local_uv_cts_from_expanded_4d_integrands = true
 
 Each entry of `runtime.stability.levels` can set `three_dimensional_representation = "cff"` or `three_dimensional_representation = "ltd"`, provided that
 representation was generated. Repeated precisions are allowed: a ladder may try double-precision
-LTD, then double-precision CFF, then a higher precision. CFF avoids the H-surface cancellations
-present in LTD, so switching representation supplies a distinct stability check. The numerical result, cut weights,
+LTD, then double-precision CFF, then a higher precision. LTD is typically faster to evaluate;
+CFF avoids H-surface cancellations and can be more stable. The numerical result, cut weights,
 and threshold-counterterm weights agree after the complete sums.
 For a degenerate higher-order pole, this comparison includes all derivative-order
 pieces of the same physical cut or threshold residue. Individual pieces can differ

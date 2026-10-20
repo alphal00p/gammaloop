@@ -28,7 +28,9 @@ use typed_index_collections::TiVec;
 
 use crate::{
     cff::{generation::ShiftRewrite, surface::HsurfaceID},
-    integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph, SplitPolarizations},
+    integrands::process::param_builder::{
+        FnMapEntry, ParamBuilder, ParamBuilderGraph, SplitPolarizations,
+    },
     model::{ArcParticle, Model, UFOSymbol},
     momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     momentum::signature::{ExternalSignature, SignatureLike},
@@ -198,8 +200,8 @@ impl Graph {
         &self,
         model: &Model,
         inverse_temperature: f64,
+        parameters: &ParamBuilder<f64>,
     ) -> eyre::Result<()> {
-        let parameters = &self.param_builder;
         let mode = parameters.medium_mode;
         if mode == MediumMode::Vacuum {
             return Ok(());
@@ -1246,7 +1248,7 @@ mod tests {
             graph.set_medium_mode(mode)?;
             graph.param_builder.update_model_values(&model)?;
             for beta in [1.0, 0.0, -1.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
-                let result = graph.validate_medium_parameters(&model, beta);
+                let result = graph.validate_medium_parameters(&model, beta, &graph.param_builder);
                 assert_eq!(result.is_ok(), !mode.is_finite_temperature() || beta == 1.0);
                 if let Err(error) = result {
                     assert!(error.to_string().contains("inverse_temperature"));
@@ -1256,7 +1258,7 @@ mod tests {
                 model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
                 model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-mu)));
                 graph.param_builder.update_model_values(&model)?;
-                let result = graph.validate_medium_parameters(&model, 1.0);
+                let result = graph.validate_medium_parameters(&model, 1.0, &graph.param_builder);
                 assert_eq!(result.is_ok(), mode == MediumMode::Vacuum || mu.abs() < 2.0);
                 if let Err(error) = result {
                     assert!(error.to_string().contains("thermal_domain"));
@@ -1264,6 +1266,38 @@ mod tests {
             }
             model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(0.0)));
             model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(0.0)));
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn thermal_parameter_validation_uses_supplied_runtime_values() -> eyre::Result<()> {
+        test_initialise()?;
+        let mut model = load_generic_model("sm");
+        model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(0.0)));
+        model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(0.0)));
+        let mut graph: Graph = r#"
+            digraph exported_thermal_domain {
+                node [num=1]; edge [num=1];
+                A -> A [particle="G+" mass=2];
+            }
+        "#
+        .into_graph(&model)?;
+        graph.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
+        for mu in [0.5, 2.0] {
+            model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
+            model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-mu)));
+            let mut parameters = graph.param_builder.clone();
+            parameters.update_model_values(&model)?;
+            assert_eq!(
+                graph
+                    .validate_medium_parameters(&model, 1.0, &parameters)
+                    .is_ok(),
+                mu < 2.0,
+            );
+            // Export prepares a private copy; validating the untouched graph
+            // would incorrectly keep accepting its original zero potential.
+            graph.validate_medium_parameters(&model, 1.0, &graph.param_builder)?;
         }
         Ok(())
     }
@@ -1296,7 +1330,9 @@ mod tests {
             model.get_parameter_mut("minus_muG")?.value = Some(-mu);
             graph.param_builder.update_model_values(&model)?;
             assert_eq!(
-                graph.validate_medium_parameters(&model, 1.0).is_ok(),
+                graph
+                    .validate_medium_parameters(&model, 1.0, &graph.param_builder)
+                    .is_ok(),
                 valid,
                 "mass override MT+1 with MT={mass}, mu={mu}"
             );
@@ -1357,7 +1393,8 @@ mod tests {
                     ] {
                         graph.set_medium_mode(mode)?;
                         graph.param_builder.update_model_values(&model)?;
-                        let result = graph.validate_medium_parameters(&model, 1.0);
+                        let result =
+                            graph.validate_medium_parameters(&model, 1.0, &graph.param_builder);
                         assert_eq!(
                             result.is_ok(),
                             mode == MediumMode::Vacuum || anti_mu == -mu,
@@ -1377,7 +1414,7 @@ mod tests {
                 model.get_parameter_mut("muB")?.value = Some(Complex::new(F(0.0), F(0.5)));
                 graphs[0].param_builder.update_model_values(&model)?;
                 let error = graphs[0]
-                    .validate_medium_parameters(&model, 1.0)
+                    .validate_medium_parameters(&model, 1.0, &graphs[0].param_builder)
                     .unwrap_err();
                 assert!(
                     error.to_string().contains("finite real chemical potential"),
@@ -1418,7 +1455,8 @@ mod tests {
                 ] {
                     graph.set_medium_mode(mode)?;
                     graph.param_builder.update_model_values(&model)?;
-                    let result = graph.validate_medium_parameters(&model, 1.0);
+                    let result =
+                        graph.validate_medium_parameters(&model, 1.0, &graph.param_builder);
                     assert_eq!(
                         result.is_ok(),
                         mode == MediumMode::Vacuum || parameter != Some("muQ") || mu == 0.0,
@@ -1497,7 +1535,7 @@ mod tests {
             set_masses(&mut model, &mut cycle, [2.0, 3.0])?;
             cycle.validate_denominator_hsurfaces(&model, &no_externals, &denominators)?;
             set_masses(&mut model, &mut cycle, [2.0, coincident_mass])?;
-            cycle.validate_medium_parameters(&model, 1.0)?;
+            cycle.validate_medium_parameters(&model, 1.0, &cycle.param_builder)?;
             assert!(degenerate(cycle.validate_denominator_hsurfaces(
                 &model,
                 &no_externals,
@@ -1574,7 +1612,8 @@ mod tests {
                 ] {
                     graph.set_medium_mode(mode)?;
                     graph.param_builder.update_model_values(&model)?;
-                    let result = graph.validate_medium_parameters(&model, 1.0);
+                    let result =
+                        graph.validate_medium_parameters(&model, 1.0, &graph.param_builder);
                     // Vacuum has no thermal occupations; absent and literal-zero
                     // potentials have no zero-temperature occupation step.
                     assert_eq!(

@@ -41,6 +41,7 @@ use crate::{
     momentum::sample::{ExternalFourMomenta, MomentumSample},
     momentum::{Helicity, PolType},
     numerator::ParsingNet,
+    settings::runtime::GeneralSettings,
     utils::{
         F, FloatLike, GS, PrecisionUpgradable, TENSORLIB, VarFloat, f128,
         hyperdual_utils::DualOrNot, symbolica_ext::LOGPRINTOPTS, tracing::StatusRenderable,
@@ -712,7 +713,8 @@ impl<C, T: FloatLike + Decode<C>> Decode<C> for ParamCache<T> {
     }
 }
 
-#[derive(Clone, bincode_trait_derive::Encode)]
+#[derive(Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct ParamBuilder<T: FloatLike = f64> {
     pub(crate) medium_mode: MediumMode,
     pub values: Vec<Vec<Complex<F<T>>>>,
@@ -725,36 +727,10 @@ pub struct ParamBuilder<T: FloatLike = f64> {
     pub fn_map: FunctionMap,
 }
 
-impl<C: GammaLoopContext, T: FloatLike + Decode<C>> Decode<C> for ParamBuilder<T> {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        let medium_mode = Decode::decode(decoder)?;
-        let values = Decode::decode(decoder)?;
-        let pairs = Decode::decode(decoder)?;
-        let polarization_cache = Decode::decode(decoder)?;
-        let reps: Vec<FnMapEntry> = Decode::decode(decoder)?;
-        // Consume the existing wire field, then rebuild from the recorded entries:
-        // Symbolica's imported map can retain stale inline argument symbol IDs.
-        let _: FunctionMap = Decode::decode(decoder)?;
-        let mut fn_map = FunctionMap::new();
-        for entry in &reps {
-            entry
-                .register(&mut fn_map)
-                .map_err(bincode::error::DecodeError::OtherString)?;
-        }
-        Ok(Self {
-            medium_mode,
-            values,
-            pairs,
-            polarization_cache,
-            reps,
-            fn_map,
-        })
-    }
-}
-
-#[derive(Clone, bincode_trait_derive::Encode, Debug, PartialEq, Eq, Hash)]
+#[derive(
+    Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, Debug, PartialEq, Eq, Hash,
+)]
+#[trait_decode(trait = GammaLoopContext)]
 pub struct FnMapEntry {
     pub lhs: Atom,
     pub rhs: Atom,
@@ -762,31 +738,6 @@ pub struct FnMapEntry {
     pub tags: Vec<Atom>,
     pub inlining: InliningPolicy,
     pub is_alias: bool,
-}
-
-impl<C: GammaLoopContext> Decode<C> for FnMapEntry {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
-        let lhs = Decode::decode(decoder)?;
-        let rhs = Decode::decode(decoder)?;
-        let args: Vec<Indeterminate> = Decode::decode(decoder)?;
-        // The Symbol/Atom is remapped on import; Indeterminate's inline symbol
-        // cache is not. Recreate the formal from its remapped representation.
-        let args = args
-            .into_iter()
-            .map(|arg| Indeterminate::try_from(Atom::from(arg)))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(bincode::error::DecodeError::OtherString)?;
-        Ok(Self {
-            lhs,
-            rhs,
-            args,
-            tags: Decode::decode(decoder)?,
-            inlining: Decode::decode(decoder)?,
-            is_alias: Decode::decode(decoder)?,
-        })
-    }
 }
 
 pub type SerializedFnMapEntry<T> = (T, T, Vec<T>, Vec<T>, InliningPolicy, bool);
@@ -815,7 +766,9 @@ impl FnMapEntry {
                 self.tags.clone(),
                 self.args.clone(),
                 self.rhs.clone(),
-                FunctionRegistrationOptions::new().inlining(self.inlining),
+                FunctionRegistrationOptions::new()
+                    .inlining(self.inlining)
+                    .prune_unused_arguments(true),
             )
             .map_err(|error| error.to_string())
     }
@@ -859,6 +812,24 @@ impl FnMapEntry {
 impl<T: FloatLike> Default for ParamBuilder<T> {
     fn default() -> Self {
         Self::new_empty()
+    }
+}
+
+impl ParamBuilder<f64> {
+    /// Refresh settings and model slots before numerical warmup or standalone export.
+    pub(crate) fn update_runtime_values(
+        &mut self,
+        settings: &GeneralSettings,
+        model: &Model,
+    ) -> Result<()> {
+        self.m_uv_value(Complex::new_re(F(settings.m_uv)));
+        self.renormalization_localization_scale_value(Complex::new_re(F(
+            settings.renormalization_localization_scale
+        )));
+        self.mu_r_sq_value(Complex::new_re(F(settings.mu_r_sq())));
+        self.inverse_temperature_value(Complex::new_re(F(settings.inverse_temperature)));
+        self.numerator_sampling_scale_value(Complex::new_re(F(settings.numerator_sampling_scale)));
+        self.update_model_values(model)
     }
 }
 
@@ -1367,7 +1338,7 @@ impl<T: FloatLike> ParamBuilder<T> {
             new.add_tagged_function::<Symbol>(
                 function.get_symbol(),
                 function.iter().map(|arg| arg.to_owned()).collect(),
-                lhs.to_string(),
+                Default::default(),
                 vec![],
                 rhs,
             )
@@ -1389,7 +1360,7 @@ impl<T: FloatLike> ParamBuilder<T> {
                         Atom::num(edge_id.0 as i64),
                         Atom::from(ExpandedIndex::from_iter([i])),
                     ],
-                    format!("Q({edge_id}, {i})"),
+                    Default::default(),
                     vec![],
                     lmb.loop_atom(
                         edge_id,
@@ -1989,6 +1960,41 @@ mod tests {
     }
 
     #[test]
+    fn model_refresh_preserves_persisted_parameter_order_and_dual_seeds() {
+        test_initialise().unwrap();
+        let model = Model::from_str(
+            include_str!("../../../../../assets/models/json/scalars/scalars_2p_3p.json").into(),
+            "json",
+        )
+        .unwrap();
+        let mut builder = ParamBuilder::<f64>::new_empty();
+        builder.pairs.model_parameters = model.generate_params().into_iter().collect();
+        let size = builder.pairs.model_parameters.params.len();
+        builder.values = vec![vec![Complex::new_re(F(0.0)); size]];
+        builder.update_model_values(&model).unwrap();
+        let expected = builder.values[0].iter().rev().cloned().collect::<Vec<_>>();
+        assert_ne!(builder.values[0], expected);
+
+        builder.pairs.model_parameters.params.reverse();
+        builder.values[0].fill(Complex::new_re(F(-7.0)));
+        builder.initialize_duals(3);
+        for values in builder.values.iter_mut().skip(1) {
+            values.fill(Complex::new_re(F(-7.0)));
+        }
+        builder.update_model_values(&model).unwrap();
+        for (index, values) in builder.values.iter().enumerate() {
+            for (components, expected) in values.chunks(index + 1).zip(&expected) {
+                assert_eq!(&components[0], expected);
+                assert!(
+                    components[1..]
+                        .iter()
+                        .all(|seed| *seed == Complex::new_re(F(-7.0)))
+                );
+            }
+        }
+    }
+
+    #[test]
     fn model_values_follow_saved_names_in_all_derivative_buffers() {
         use crate::model::{
             Coupling, CouplingName, Parameter, ParameterName, ParameterNature, ParameterType,
@@ -2560,6 +2566,7 @@ mod tests {
                     OptimizationSettings::default(),
                     None,
                     &EvaluatorSettings::default(),
+                    None,
                 )
                 .unwrap()
             };

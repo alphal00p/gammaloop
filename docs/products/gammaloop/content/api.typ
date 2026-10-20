@@ -302,8 +302,8 @@ and convention metadata.
 
 This is the stored graph-level native catalogue. It is not a catalogue of all projected UV or
 threshold-counterterm expressions, nor an evaluated, fully normalized production integrand.
-Native map IDs and keys remain separate from runtime complete-sum slots. Use the evaluation
-methods for physical values.
+Native map IDs and keys also remain separate from runtime complete-sum slots and any internal
+coalescing of numerator coefficient rows. Use the evaluation methods for physical values.
 
 == Sample evaluation contract
 

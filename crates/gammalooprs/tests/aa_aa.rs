@@ -2,7 +2,7 @@ use std::time::Instant;
 
 use gammalooprs::LogMessage;
 use gammalooprs::graph::parse::IntoGraph;
-use gammalooprs::integrands::process::evaluators::EvaluatorStack;
+use gammalooprs::integrands::process::evaluators::{EvaluatorStack, GenericEvaluatorFloat};
 use gammalooprs::processes::{ContractionMode, EvaluatorSettings, ExecutionMode};
 use gammalooprs::utils::{F, GS};
 use gammalooprs::{dot, graph::Graph, uv::UltravioletGraph};
@@ -133,7 +133,7 @@ fn aaa() {
                             Atom::num(edge_id.0 as i64),
                             Atom::from(ExpandedIndex::from_iter([i])),
                         ],
-                        format!("Q({edge_id}, {i})"),
+                        Default::default(),
                         vec![],
                         graph.loop_momentum_basis.loop_atom(
                             edge_id,
@@ -221,10 +221,11 @@ fn aaa() {
 
         let time = std::time::Instant::now();
         for _ in 0..10000 {
-            evaluator
-                .single_parametric
-                .f64_eager
-                .evaluate(&values, &mut out);
+            <f64 as GenericEvaluatorFloat>::evaluate_into(
+                &mut evaluator.single_parametric,
+                &values,
+                &mut out,
+            );
         }
         let elapsed = time.elapsed();
 

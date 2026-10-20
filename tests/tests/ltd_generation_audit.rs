@@ -152,8 +152,7 @@ helicities = [0, 0]
                     source.threshold_counterterms.iter().any(|counterterm| {
                         counterterm
                             .parametric
-                            .iter()
-                            .map(|(_, expression)| expression)
+                            .iter_expressions()
                             .any(|atom| !atom.is_zero())
                     })
                 }),
@@ -165,8 +164,7 @@ helicities = [0, 0]
                 assert!(
                     source
                         .all_mighty_integrand
-                        .iter()
-                        .map(|(_, expression)| expression)
+                        .iter_expressions()
                         .any(|atom| !atom.is_zero())
                 );
             }
@@ -189,8 +187,7 @@ helicities = [0, 0]
                                 .any(|source| {
                                     source
                                         .integrands
-                                        .iter()
-                                        .map(|(_, expression)| expression)
+                                        .iter_expressions()
                                         .any(|atom| !atom.is_zero())
                                 })
                         })

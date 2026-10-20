@@ -1053,7 +1053,6 @@ pub struct LUCounterTermEvaluators {
 impl LUCounterTermEvaluators {
     fn residue_evaluators(
         parametric_integrands: &ParametricIntegrands,
-        representation: RepresentationMode,
         param_builder: &ParamBuilder,
         settings: &GlobalSettings,
         orientations: &TiVec<OrientationID, EdgeVec<Orientation>>,
@@ -1062,14 +1061,17 @@ impl LUCounterTermEvaluators {
         let mut timings = EvaluatorBuildTimings::default();
         let evaluators = parametric_integrands
             .integrands
-            .iter()
-            .map(|(index, integrand)| {
+            .cut_indices()
+            .map(|index| {
                 let dual_shape = shape_from_cut_cff_index(index);
                 let (evaluator, evaluator_timings) = EvaluatorStack::from_integrand_with_timings(
-                    integrand,
+                    parametric_integrands
+                        .integrands
+                        .atom(index)
+                        .expect("every integrand cut has a registered scalar lane"),
                     param_builder,
                     parametric_integrands.integrands.numerators(),
-                    representation,
+                    parametric_integrands.integrands.parametric_terms(index),
                     (!settings.generation.requires_complete_orientation_sum())
                         .then_some((&orientations.raw, production_orientation_ids)),
                     dual_shape,
@@ -1166,7 +1168,6 @@ impl LUCounterTermEvaluators {
                 .map(|parametric_integrands| {
                     let (evaluators, evaluator_timings) = Self::residue_evaluators(
                         parametric_integrands,
-                        representation,
                         param_builder,
                         settings,
                         orientations,
@@ -1183,7 +1184,6 @@ impl LUCounterTermEvaluators {
                 .map(|parametric_integrands| {
                     let (evaluators, evaluator_timings) = Self::residue_evaluators(
                         parametric_integrands,
-                        representation,
                         param_builder,
                         settings,
                         orientations,
@@ -1198,7 +1198,6 @@ impl LUCounterTermEvaluators {
             let iterated_evaluator = payload.iterated.map_ref(|parametric_integrands| {
                 let (evaluators, evaluator_timings) = Self::residue_evaluators(
                     parametric_integrands,
-                    representation,
                     param_builder,
                     settings,
                     orientations,

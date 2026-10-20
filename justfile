@@ -108,18 +108,34 @@ check-symbolica-feature-isolation:
         exit 1
       fi
     done
-    for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock"; do
-      for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
-        package="${specification%:*}"
-        version="${specification#*:}"
-        expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
-        resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
-        if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $version; found ${resolved:-none}" >&2
-          exit 1
-        fi
-      done
-    done
+    python3 - "$root" <<'PYTHON'
+    import pathlib, re, sys, tomllib
+
+    root = pathlib.Path(sys.argv[1])
+    registry = "registry+https://github.com/rust-lang/crates.io-index"
+    stock = {"symbolica": ("3.0.1", registry), "numerica": ("3.0.1", registry), "graphica": ("3.0.0", registry)}
+    patches = tomllib.loads((root / "Cargo.toml").read_text()).get("patch", {}).get("crates-io", {})
+    native = stock
+    if any(name in patches for name in stock):
+        url = "https://github.com/ValentinHirschi/symbolica"
+        cohort = [patches.get(name) for name in stock]
+        if not all(isinstance(entry, dict) and set(entry) == {"git", "rev"}
+                   and entry["git"] == url and isinstance(entry["rev"], str)
+                   and re.fullmatch(r"[0-9a-f]{40}", entry["rev"])
+                   for entry in cohort):
+            raise SystemExit("native Symbolica, Numerica and Graphica require the approved immutable Git cohort")
+        revisions = {entry["rev"] for entry in cohort}
+        if len(revisions) != 1:
+            raise SystemExit("native Symbolica, Numerica and Graphica must share one Git revision")
+        revision = revisions.pop()
+        native = {name: ("3.0.1", f"git+{url}?rev={revision}#{revision}") for name in stock}
+    for lock, expected in [(root / "Cargo.lock", native), (root / "tydenso/Cargo.lock", stock)]:
+        packages = tomllib.loads(lock.read_text())["package"]
+        for name, (version, source) in expected.items():
+            resolved = [package for package in packages if package["name"] == name]
+            if len(resolved) != 1 or resolved[0].get("version") != version or resolved[0].get("source") != source:
+                raise SystemExit(f"{lock} must resolve exactly one {name} at {version} from {source}")
+    PYTHON
 
 # Keep Pyodide's portable arithmetic isolated from native code generation and Hakari.
 check-spynso-wasm:

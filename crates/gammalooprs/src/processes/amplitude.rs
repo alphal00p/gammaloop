@@ -245,12 +245,13 @@ impl Amplitude {
         &self,
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
+        model_for_settings: &impl Fn(&RuntimeSettings) -> Result<Model>,
     ) -> Result<()> {
         if let Some(integrand) = &self.integrand {
-            integrand.export_standalone(path, settings)?
+            integrand.export_standalone(path, settings, model_for_settings)?
         } else {
             return Err(eyre!(
-                "Cannot warm up amplitude {} without integrand",
+                "Cannot export standalone amplitude {} without integrand",
                 self.name
             ));
         }
@@ -1526,7 +1527,7 @@ impl AmplitudeGraph {
                     expressions.len()
                 ));
             };
-            let mut roots = expr.integrands.iter().map(|(index, _)| index);
+            let mut roots = expr.integrands.cut_indices();
             let index = roots
                 .next()
                 .ok_or_else(|| eyre!("amplitude UV integrand has no root residue"))?;
@@ -2781,6 +2782,7 @@ fn build_threshold_counterterm_helper(
         evaluator_settings.optimization_settings(),
         None,
         evaluator_settings,
+        None,
     )
     .unwrap()
     .into_eager_only()
@@ -5115,11 +5117,7 @@ pub mod test {
             let generated = &generated[&RepresentationMode::Cff];
             assert_eq!(generated.len(), 1, "{orchestrator}");
             assert_eq!(generated[0].cuts, expected_cut, "{orchestrator}");
-            let residues = generated[0]
-                .integrands
-                .iter()
-                .map(|(index, _)| index)
-                .collect::<Vec<_>>();
+            let residues = generated[0].integrands.cut_indices().collect::<Vec<_>>();
             assert_eq!(residues.len(), 1, "{orchestrator}");
             assert_eq!(*residues[0], CutCFFIndex::new_all_none());
         }
