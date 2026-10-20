@@ -18,6 +18,8 @@ use symbolica::{
     printer::{PrintOptions, PrintState},
     symbol, tag,
 };
+mod mathml;
+
 /// Presentation-only tensor head sources, carried with the symbol's tags.
 pub const TENSOR_PRINT_HEAD_PREFIX: &str = "spenso::print-head:";
 /// Marks a user callable, as distinct from Spenso's own tensor print callback.
@@ -899,6 +901,9 @@ pub fn tensor_print(
     options: &PrintOptions,
     state: &PrintState,
 ) -> Option<String> {
+    if options.mode.is_mathml() {
+        return mathml::tensor(atom, options, state);
+    }
     let resolved = SpensoPrintSettings::resolve(options)?;
     if let Some(custom) = tensor_custom_print(atom, options, state) {
         return Some(custom);
@@ -1688,6 +1693,9 @@ impl SpensoTags {
     }
 
     fn print_dot(a: AtomView<'_>, opt: &PrintOptions, state: &PrintState) -> Option<String> {
+        if opt.mode.is_mathml() {
+            return mathml::dot(a, opt, state);
+        }
         let resolved = SpensoPrintSettings::resolve(opt)?;
         let settings = resolved.presentation;
         let parens = settings.parens;
@@ -1714,17 +1722,19 @@ impl SpensoTags {
             {
                 return None;
             }
-            // A dot is one scalar factor. Separate consecutive factors without
-            // grouping parentheses; standalone dots retain their compact spacing.
+            let body = format!(r#"{} class("normal", dot) {}"#, a.label, b.label);
+            let body = if state.in_product || state.in_exp_base {
+                format!("lr(({body}))")
+            } else {
+                body
+            };
+            // Keep factor spacing outside the contraction and away from power bases.
             let gap = if state.in_product && !state.in_exp_base {
                 " #h(0.12em)"
             } else {
                 ""
             };
-            return Some(format!(
-                r#"{} class("normal", dot) {}{gap}"#,
-                a.label, b.label
-            ));
+            return Some(format!("{body}{gap}"));
         }
 
         let mut out = String::new();
@@ -3027,7 +3037,7 @@ mod tests {
     }
 
     #[test]
-    fn dot_products_print_with_spacing() {
+    fn dot_products_group_factors_and_power_bases() {
         let vectors = [
             crate::vector_symbol!("dot_spacing::p"),
             crate::vector_symbol!("dot_spacing::q"),
@@ -3048,16 +3058,17 @@ mod tests {
         let printed = product.printer(options.clone()).to_string();
         assert!(matches!(
             printed.as_str(),
-            r#"p class("normal", dot) q #h(0.12em) r class("normal", dot) s #h(0.12em)"#
-                | r#"r class("normal", dot) s #h(0.12em) p class("normal", dot) q #h(0.12em)"#
+            r#"lr((p class("normal", dot) q)) #h(0.12em) lr((r class("normal", dot) s)) #h(0.12em)"#
+                | r#"lr((r class("normal", dot) s)) #h(0.12em) lr((p class("normal", dot) q)) #h(0.12em)"#
         ));
-        // Spacing must not become the base to which an exponent attaches.
-        assert!(
-            !left
-                .pow(2)
-                .printer(options)
-                .to_string()
-                .contains("#h(0.12em)")
+        let power = left.pow(2).printer(options.clone()).to_string();
+        assert_eq!(power, r#"lr((p class("normal", dot) q))^2"#);
+        let mut state = PrintState::new();
+        state.in_product = true;
+        state.in_exp_base = true;
+        assert_eq!(
+            SpensoTags::print_dot(left.as_view(), &options, &state).unwrap(),
+            r#"lr((p class("normal", dot) q))"#
         );
     }
 

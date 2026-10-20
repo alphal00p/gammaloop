@@ -680,12 +680,15 @@
   ) {
     return (ctx.default)()
   }
-  // Momentum notation: a trailing power applies to the contraction of these
-  // vector labels, so the dot product needs no additional parentheses.
+  // Fence the contraction as one scalar factor, including the last factor
+  // where no following-factor hint is available, and as a whole power base.
   let body = _tight((left.label, math.class("normal", $dot$), right.label))
+  body = _parentheses(body)
   // A renderer may supply the next-factor hint to separate an implicit
   // multiplier; standalone calls need no trailing gap.
-  if ctx.at("followed-by-factor", default: false) { body + h(settings.factor-gap) } else { body }
+  if ctx.at("followed-by-factor", default: false) and not ctx.power-base {
+    body + h(settings.factor-gap)
+  } else { body }
 }
 
 #let _render-chain(ctx, settings) = {
