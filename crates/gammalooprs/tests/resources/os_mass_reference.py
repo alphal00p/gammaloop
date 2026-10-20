@@ -1,4 +1,4 @@
-"""Numerically check one private, natively certified QCD mass-reference input.
+"""Check certified QCD mass inputs and an optional separate D09 vector input.
 
 The Rust fixture owns graph generation, tensor/color algebra, phases, source
 weights and scaleless certificates. This consumer checks their finite scalar
@@ -43,6 +43,16 @@ POLICY = {
     "maxeval": 1000000,
     "seed": 1337,
     "comparison_bound": "1e-6*(1+abs(reference))",
+}
+# Retained run of this same pinned backend/policy after exact native D09 vector
+# admission, independent of production counterterm construction. This measured
+# finite datum is not an analytic constant or a four-dimensional IR proof.
+D09_VECTOR_NUMERICAL_REFERENCE = {
+    "finite_prepared": "-19.0743405536087186",
+    "reported_absolute_error": "6.386262723980348e-7",
+    "source_revision": "c9532785fbde412355d762bb81020624bb8799f3",
+    "closed_receipt_sha256": "615bbd0efbd6e9fe0c9f9531ca885ac7ead2e857c57636cf05697909ecc99ecb",
+    "normalization": "a^2*CF^2, amputated Sigma, p^2=m^2=mu_bar^2=1",
 }
 
 
@@ -158,6 +168,160 @@ def backend_input(prepared, coefficient, powers=None):
         "dimensionality": "4-2*eps",
         "powerlist": powers or [1] * len(prepared["propagators"]),
         "replacement_rules": [("p*p", "1")],
+    }
+
+
+def prepare_vector(payload, mass):
+    """Bind a separate A projection to the original D09 chart and full d trace."""
+    assert payload["projection"] == "pslash/(4*Nc*p_squared)"
+    assert payload["source_kernel_weight"] == "1"
+    assert payload["external_ordering"] == "-1"
+    assert payload["numerator_prefactor"] == "1"
+    assert payload["propagator_prescription"] == "Feynman+i0"
+    vector = prepare(payload["source"])
+    source = vector["source"]
+    assert source["name"] == "D09" and source["loops"] == 2
+    assert source["light_flavor"] is None and not source["integral_zero_certified"]
+    # Only the finite scalar numerator differs. Keep every original edge,
+    # repeated line, signed momentum, mass, power and scalar-product binding.
+    assert {k: v for k, v in source.items() if k != "color_rows"} == {
+        k: v for k, v in mass["source"].items() if k != "color_rows"
+    }
+    l, k = source["loop_momenta"]
+    p = vector["symbols"]["p"]
+    loop_symbols = {name: vector["symbols"][name] for name in (l, k, "p")}
+    l, k = (loop_symbols[name] for name in (l, k))
+    for pole, (edge, momentum, mass_squared) in zip(
+        source["propagators"],
+        [(2, l, "1"), (3, k - l, "0"), (4, k, "1"), (5, k, "1"), (6, k - p, "0")],
+        strict=True,
+    ):
+        assert pole["edge"] == edge and pole["mass_squared"] == mass_squared
+        assert sp.Poly(
+            polynomial(pole["momentum"], loop_symbols) - momentum, l, k, p
+        ).is_zero
+    dots = vector["dots"]
+    kk = dots[(str(k), str(k))]
+    kl = dots[tuple(sorted((str(k), str(l))))]
+    pk = dots[tuple(sorted((str(k), "p")))]
+    pl = dots[tuple(sorted((str(l), "p")))]
+    # Tr(pslash N)/(4 Nc p^2), N=gamma_mu(k/+m)gamma_nu(l/+m)
+    # gamma^nu(k/+m)gamma^mu. No external Dirac equation and no A+B inference.
+    expected = (2 - D) ** 2 * (2 * kl * pk + (1 - kk) * pl) + 2 * D * (2 - D) * pk
+    variables = [
+        vector["symbols"][entry["variable"]] for entry in source["scalar_products"]
+    ]
+    assert sp.Poly(vector["rows"]["CF2"] - expected, D, *variables).is_zero
+    return vector
+
+
+def vector_protocol_controls(payload, mass):
+    """Reject concrete source/protocol errors before any backend package exists."""
+    mutations = {
+        "early_D4": lambda value: value["source"]["color_rows"][0].update(
+            coefficient=re.sub(
+                r"\bd\b", "4", value["source"]["color_rows"][0]["coefficient"]
+            )
+        ),
+        "mass_projector": lambda value: value["source"].update(
+            color_rows=mass["source"]["color_rows"]
+        ),
+        "duplicate_source_edge": lambda value: value["source"]["propagators"][1].update(
+            edge=2
+        ),
+        "wrong_kernel_sign": lambda value: value.update(source_kernel_weight="-1"),
+        "wrong_external_ordering": lambda value: value.update(external_ordering="1"),
+        "wrong_prescription": lambda value: value.update(
+            propagator_prescription="principal_value"
+        ),
+    }
+    for mutate in mutations.values():
+        changed = json.loads(json.dumps(payload))
+        mutate(changed)
+        try:
+            prepare_vector(changed, mass)
+        except AssertionError:
+            continue
+        raise AssertionError("malformed optional vector source was admitted")
+    return list(mutations)
+
+
+def vector_reference(rows, checks):
+    # Independent proper insertion. Keep the mass and vector masters through
+    # epsilon^1, and substitute d=4-2eps only after the full ordered trace.
+    h = sp.exp(sp.EulerGamma * EPS) * sp.gamma(EPS)
+    j1 = h / ((1 - 2 * EPS) * (2 - 2 * EPS))
+    m2_j2 = h / (2 * (1 - 2 * EPS))
+    f = h * (3 - 2 * EPS) / (1 - 2 * EPS)
+    proper = {-2: sp.Integer(5), -1: sp.Integer(12), 0: 32 + 11 * sp.pi**2 / 12}
+    exact = sp.series(
+        (2 - (4 - 2 * EPS)) * (j1 / EPS - 2 * f * m2_j2), EPS, 0, 1
+    ).removeO()
+    assert (
+        sp.simplify(exact - sum(value * EPS**power for power, value in proper.items()))
+        == 0
+    )
+    prepared = combine(
+        [
+            (1, rows),
+            (1, {power: (complex(value), 0j) for power, value in proper.items()}),
+        ]
+    )
+    # Source-derived amputated convention: W=-(U-UO), i*Omega=+a^2*CF^2.
+    # External ordering -1 stays outside. Signed-pole/source receipt:
+    # 459298b98222213e8f615ab8212f0def89d43d9027e6885e090bfc6573da904e
+    # Numeric source/phase receipt is retained above (615bbd0e...).
+    uv = {-2: (0.5 + 0j, 0j), -1: (-0.25 + 0j, 0j)}
+    residual = {
+        power: value
+        for power, value in combine([(1, prepared), (1, uv)]).items()
+        if power < 0
+    }
+    # Each pole residual has reference zero: the unchanged bound is exactly
+    # 1e-6 per real/imaginary component. Extra negative powers are checked too.
+    compare("D09_vector_signed_UV_pole_residual", residual, {}, checks)
+    compare(
+        "D09_vector_finite_numerical_regression",
+        {0: prepared[0]},
+        {0: float(D09_VECTOR_NUMERICAL_REFERENCE["finite_prepared"])},
+        checks,
+    )
+    finite = checks[-1]
+    finite["reference_kind"] = "retained_pinned_backend_numerical_regression"
+    finite["new_bare_reported_absolute_error"] = finite[
+        "sum_reported_absolute_errors"
+    ].copy()
+    finite["reference_reported_absolute_error"] = [
+        float(D09_VECTOR_NUMERICAL_REFERENCE["reported_absolute_error"]),
+        0.0,
+    ]
+    finite["linear_sum_reported_absolute_errors"] = [
+        actual + reference
+        for actual, reference in zip(
+            finite["new_bare_reported_absolute_error"],
+            finite["reference_reported_absolute_error"],
+            strict=True,
+        )
+    ]
+    finite["uncertainty_policy"] = (
+        "Linear absolute error sum; no Gaussian independence claim; comparison center bound unchanged"
+    )
+    return {
+        "proper_exact": {str(power): sp.sstr(value) for power, value in proper.items()},
+        "prepared": {
+            str(power): {
+                "value": [value.real, value.imag],
+                "bare_error": [error.real, error.imag],
+            }
+            for power, (value, error) in sorted(prepared.items())
+        },
+        "finite_reference": D09_VECTOR_NUMERICAL_REFERENCE,
+        "passed": all(
+            row["passed"] for row in checks if row["scope"].startswith("D09_vector_")
+        ),
+        "ordinary_4D_IR_integrability_proved": False,
+        "simultaneous_CFF_exchange_proved": False,
+        "production_R2_term_added": False,
     }
 
 
@@ -291,6 +455,13 @@ def main():
     assert all(s["loops"] == (1 if s["name"] == "D0" else 2) for s in sources)
     assert [s["name"] for s in sources if s["integral_zero_certified"]] == ["D03"]
     prepared = {source["name"]: prepare(source) for source in sources}
+    vector = None
+    vector_controls = []
+    if "vector_source" in data:
+        vector = prepare_vector(data["vector_source"], prepared["D09"])
+        vector_controls = vector_protocol_controls(
+            data["vector_source"], prepared["D09"]
+        )
     light = [source for source in sources if source["light_flavor"] is not None]
     assert len(light) == 5 and {source["light_flavor"] for source in light} == set(
         range(1, 6)
@@ -419,6 +590,9 @@ def main():
         "native_sources": 13,
         "two_loop_sources": 12,
         "numeric_cases": [name for name, _, _ in cases],
+        "optional_numeric_cases": ["D09-vector"] if vector is not None else [],
+        "optional_vector_source_checked": vector is not None,
+        "optional_vector_protocol_controls": vector_controls,
         "scalar_and_denominator_serialization_exact": True,
         "exact_light_and_crossed_reuse": True,
         "retained_scaleless_zero": "D03",
@@ -491,6 +665,16 @@ def main():
             expected,
             checks,
         )
+    vector_report = None
+    vector_result = None
+    if vector is not None:
+        vector_rows, vector_report = integrate(
+            "D09-vector",
+            backend_input(vector, vector["rows"]["CF2"]),
+            output / "D09-vector",
+            0,
+        )
+        vector_result = vector_reference(vector_rows, checks)
     summary = {
         **validation,
         "integration_performed": True,
@@ -511,6 +695,8 @@ def main():
         "production_OS_forest_integrated_condition_evaluated": False,
         "checks": checks,
         "backend_cases": {name: result[1] for name, result in evaluations.items()},
+        "optional_vector_backend_case": vector_report,
+        "optional_vector_reference": vector_result,
         "insertion_source": "Known analytic one-loop f, g and beta0; not production counterterm integration",
         "uncertainty_policy": "Linear absolute error sums; no Gaussian confidence claim",
         "reference_assembly_note": "Zm reconstruction is the bare comparison with known insertions, not a second independent two-loop integration",
