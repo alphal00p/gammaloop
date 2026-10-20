@@ -330,6 +330,7 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         crate::utils::vakint()?,
         orientation,
         &generation.uv,
+        &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
     )?;
     let recording = guard.finish();
     assert!(

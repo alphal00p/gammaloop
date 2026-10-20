@@ -447,6 +447,7 @@ fn export_hedge_poset_forest(
                     eyre!("Computed UV forest export requires its stored production CFF expression")
                 })?,
                 &generation_settings.uv,
+                &mut super::approx::projected_4d::Local4dProjectionContext::default(),
             )?;
             forests.export_node_expressions(forest_index, post_process)?
         }

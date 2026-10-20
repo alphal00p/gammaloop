@@ -1346,6 +1346,7 @@ impl Forests {
         vakint: &Vakint,
         orientation: OrientationProjection<'_>,
         settings: &UVgenerationSettings,
+        projection_context: &mut Local4dProjectionContext,
     ) -> Result<()> {
         if settings.generate_integrated || settings.local_uv_cts_from_expanded_4d_integrands {
             // The projected route needs local 4D coefficients even when their
@@ -1365,8 +1366,6 @@ impl Forests {
                     .integrated = Some(zero.clone());
             }
         }
-        let mut projection_context = Local4dProjectionContext::default();
-
         for (compatible_subset, cutset) in self.cuts.clone() {
             let localizer = Localizer::new(&cutset, orientation);
             for (order, nidx) in self
@@ -1385,7 +1384,7 @@ impl Forests {
                     &cutset,
                     localizer,
                     settings,
-                    &mut projection_context,
+                    projection_context,
                 )?;
                 self.compute_store
                     .entry(operation)
@@ -1839,6 +1838,7 @@ mod tests {
                     true,
                 ),
                 &settings.uv,
+                &mut Local4dProjectionContext::default(),
             )?;
 
             assert_eq!(forests.compute_store.entries.len(), forests.graph.n_nodes());
@@ -2287,6 +2287,7 @@ mod tests {
                             crate::utils::vakint()?,
                             projection,
                             &settings.uv,
+                            &mut Local4dProjectionContext::default(),
                         )?;
                         results.push(forests.orientation_parametric_exprs(&graph, &settings.uv)?);
                     }
