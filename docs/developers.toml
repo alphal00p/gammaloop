@@ -1135,7 +1135,9 @@ end_anchor = "#[cfg(test)]"
 # Reviewed 2026-10-16: Admit a validated fixed-coordinate basis only as an operand of a closed external dot; reject standalone, invalid-component, open-port and active-loop cases.
 # Reviewed 2026-10-20: Successive native attachments retain remaining shared ports
 # inside products without obstructing contractions through closed native coefficients.
-digest = "a368502f5f518da70b03bb4120334b222e9f08e0"
+# Reviewed 2026-10-20: Native incidence uses only complete Minkowski slots or
+# declared projector markers; equal scalar payloads and vector IDs are not ports.
+digest = "8375e68bc00affeb538695d1c5f460271cf2d4f6"
 
 [[section.note.scope]]
 path = "crates/vakint/src/projection.rs"

@@ -326,11 +326,16 @@ impl LorentzTensor {
             .any(|expression| {
                 let native_attachment = |factor| {
                     // Earlier attachments turn a native leaf into a product.
-                    // Only its remaining shared ports make this contraction opaque.
+                    // Only declared Lorentz ports make this contraction opaque;
+                    // scalar payloads may also equal a raw dummy label.
                     matches!(factor, AtomView::Fun(leaf)
                         if leaf.get_symbol().has_tag(&SPENSO_TAG.tensor)
                             && ![S.k, S.p].contains(&leaf.get_symbol())
-                            && leaf.iter().any(|argument| shared.iter().any(|index| index.as_view() == argument)))
+                            && leaf.iter().any(|argument| {
+                                let is_port = VakintTerm::spenso_minkowski_slot_parts(argument).is_some()
+                                    || matches!(argument, AtomView::Fun(index) if index.get_symbol() == S.tensor_index);
+                                is_port && shared.iter().any(|index| index.as_view() == argument)
+                            }))
                 };
                 expression.get_all_symbols(true).contains(&S.tensor)
                     || match expression.as_view() {
@@ -609,6 +614,73 @@ mod tests {
             let parsed = LorentzTensor::parse(input.as_view(), &Atom::num(4)).unwrap();
             assert!(parsed.is_scalar());
             assert_eq!(parsed.expression, input);
+        }
+    }
+
+    #[test]
+    fn native_scalar_arguments_are_not_lorentz_ports() {
+        use symbolica::{function, symbol};
+
+        let _ = &*S;
+        let coefficient = spenso::tensor_symbol!("native_scalar_coefficient");
+        let mu = Atom::var(symbol!("native_scalar_mu"));
+        let nu = Atom::var(symbol!("native_scalar_nu"));
+        for index in [Atom::num(1), mu] {
+            let coefficient = function!(coefficient, &index);
+            let numerator = &coefficient * function!(S.k, 1, &index) + function!(S.k, 2, &index);
+            let metric = &numerator * function!(S.g, &index, &nu);
+            let expected = &coefficient * function!(S.k, 1, &nu) + function!(S.k, 2, &nu);
+            assert_eq!(
+                LorentzTensor::parse(metric.as_view(), &Atom::num(4))
+                    .unwrap()
+                    .expression,
+                expected,
+            );
+            let dot = &numerator * function!(S.k, 3, &index);
+            let expected = &coefficient * S.dot(function!(S.k, 1), function!(S.k, 3))
+                + S.dot(function!(S.k, 2), function!(S.k, 3));
+            assert_eq!(
+                LorentzTensor::parse(dot.as_view(), &Atom::num(4))
+                    .unwrap()
+                    .expression,
+                expected,
+            );
+        }
+    }
+
+    #[test]
+    fn native_metric_renaming_preserves_coincident_scalar_payloads_and_vector_ids() {
+        use spenso::structure::representation::RepName;
+        use symbolica::{function, symbol};
+
+        let _ = &*S;
+        let mink = Minkowski {}.new_rep(symbol!("native_payload_dimension"));
+        let tensor = spenso::tensor_symbol!("native_payload_tensor");
+        let family = Atom::var(symbol!("native_payload_family"));
+        let other = Atom::var(symbol!("native_payload_other"));
+        let replacement = Atom::var(symbol!("native_payload_replacement"));
+        for payload in [Atom::num(1), Atom::var(symbol!("native_payload_label"))] {
+            for [source, attached, target] in [
+                [
+                    mink.to_symbolic([payload.clone()]),
+                    mink.to_symbolic([other.clone()]),
+                    mink.to_symbolic([replacement.clone()]),
+                ],
+                [
+                    function!(S.tensor_index, &family, &payload, 0),
+                    function!(S.tensor_index, &family, &other, 0),
+                    function!(S.tensor_index, &family, &replacement, 0),
+                ],
+            ] {
+                let input = function!(S.g, &source, &target)
+                    * function!(tensor, &payload, &source, &attached)
+                    * function!(S.k, &payload, &attached);
+                let expected = function!(tensor, &payload, &target, &attached)
+                    * function!(S.k, &payload, &attached);
+                let parsed = LorentzTensor::parse(input.as_view(), &Atom::num(4)).unwrap();
+                assert_eq!(parsed.expression, expected);
+                assert!(!parsed.is_scalar());
+            }
         }
     }
 
