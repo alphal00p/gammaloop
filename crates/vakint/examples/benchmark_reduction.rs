@@ -140,7 +140,7 @@ impl Options {
             ensure!(engine.cache_statistics(4)?.attached, "4L cache is absent");
         }
         let loader_seconds = start.elapsed().as_secs_f64();
-        let input = vakint_parse!(&case.input)?;
+        let input = vakint_parse!(&case.input).map_err(eyre::Report::msg)?;
         let settings = VakintSettings {
             evaluation_order: match self.backend {
                 Backend::Fmft => EvaluationOrder::fmft_only(Some(FMFTOptions {
@@ -349,12 +349,16 @@ impl Validation {
                 "RustRedMaster(rustred_family_{},{powers})",
                 master.family_sha256
             );
-            let basis = vakint_parse!(&master.exact_basis_expression)?
-                .replace(vakint_parse!("ep")?.to_pattern())
+            let basis = vakint_parse!(&master.exact_basis_expression)
+                .map_err(eyre::Report::msg)?
+                .replace(vakint_parse!("ep").map_err(eyre::Report::msg)?.to_pattern())
                 .with(Atom::var(vakint_symbol!(
                     &VakintSettings::default().epsilon_symbol
                 )));
-            aliases.push(Replacement::new(vakint_parse!(&source)?, basis));
+            aliases.push(Replacement::new(
+                vakint_parse!(&source).map_err(eyre::Report::msg)?,
+                basis,
+            ));
         }
         for case in cases {
             let selected = runs
@@ -381,10 +385,19 @@ impl Validation {
                 let output = records[0]["output"]
                     .as_str()
                     .ok_or_else(|| eyre::eyre!("missing output expression"))?;
-                Ok(vakint_parse!(output)?
-                    .replace(vakint_parse!("mUVsq")?.to_pattern())
+                Ok(vakint_parse!(output)
+                    .map_err(eyre::Report::msg)?
+                    .replace(
+                        vakint_parse!("mUVsq")
+                            .map_err(eyre::Report::msg)?
+                            .to_pattern(),
+                    )
                     .with(Atom::num(1))
-                    .replace(vakint_parse!(&VakintSettings::default().mu_r_sq_symbol)?.to_pattern())
+                    .replace(
+                        vakint_parse!(&VakintSettings::default().mu_r_sq_symbol)
+                            .map_err(eyre::Report::msg)?
+                            .to_pattern(),
+                    )
                     .with(Atom::num(1)))
             };
             let form = get("fmft")?;
