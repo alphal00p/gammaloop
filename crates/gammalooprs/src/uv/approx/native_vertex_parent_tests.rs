@@ -5163,8 +5163,95 @@ impl QcdMassReference {
             }
             let observed =
                 std::cell::RefCell::new(BTreeMap::<Atom, SymbolicTensor<IndexedStructure>>::new());
-            let observer =
-                |integral: &Atom, coefficient: &SymbolicTensor<IndexedStructure>| -> Result<()> {
+            if physical_four {
+                // Only external matrix words are constant in the active loops.
+                // Keep the complete momentum/causal coefficient opaque and use the
+                // same integration owner on that scalar coefficient. Literal equal
+                // coefficient rows share one constant matrix word sum.
+                let filter = spenso::shadowing::TensorCollectFilter::Reps([
+                    LibraryRep::from(Bispinor {}),
+                    LibraryRep::from(idenso::representations::ColorFundamental {}),
+                ]);
+                let partial: SymbolicTensor<PartialStructure> = open_sum.clone().into();
+                let rows = partial.coefficient_list(filter)?;
+                let recomposed = open_sum
+                    .with_checked_expression(Atom::add_many(rows.iter().map(
+                        |(word, coefficient)| word.expression() * coefficient.expression(),
+                    )))?;
+                eyre::ensure!(
+                    open_sum.coefficients_equal(&recomposed, filter)?
+                        == symbolica::id::ConditionResult::True
+                );
+                let mut scalar_inputs = BTreeMap::<
+                    Atom,
+                    (
+                        SymbolicTensor<IndexedStructure>,
+                        SymbolicTensor<IndexedStructure>,
+                    ),
+                >::new();
+                for (word, coefficient) in rows {
+                    if word.expression().is_zero() || coefficient.expression().is_zero() {
+                        continue;
+                    }
+                    eyre::ensure!(coefficient.is_scalar());
+                    for head in [GS.emr_mom, GS.loop_mom, GS.den, GS.os_mom] {
+                        eyre::ensure!(
+                            !word.expression().contains_symbol(head),
+                            "an angular matrix spectator retained an active momentum or causal denominator"
+                        );
+                    }
+                    let word = actual_open.with_checked_expression(word.expression().clone())?;
+                    let coefficient = coefficient.try_into_indexed()?;
+                    let key = coefficient.expression().clone();
+                    if let Some((matrix, _)) = scalar_inputs.get_mut(&key) {
+                        *matrix = matrix.try_add(&word)?;
+                    } else {
+                        scalar_inputs.insert(key, (word, coefficient));
+                    }
+                }
+                eyre::ensure!(!scalar_inputs.is_empty());
+                let input_count = scalar_inputs.len();
+                for (input_index, (matrix, scalar)) in scalar_inputs.into_values().enumerate() {
+                    let observer = |integral: &Atom,
+                                    coefficient: &SymbolicTensor<IndexedStructure>|
+                     -> Result<()> {
+                        eyre::ensure!(coefficient.is_scalar());
+                        let complete = matrix.with_checked_expression(
+                            matrix.expression() * coefficient.expression(),
+                        )?;
+                        let mut classes = observed.borrow_mut();
+                        if let Some(sum) = classes.get_mut(integral) {
+                            *sum = sum.try_add(&complete)?;
+                        } else {
+                            classes.insert(integral.clone(), complete);
+                        }
+                        Ok(())
+                    };
+                    debug_tags!(#uv, #integrated, #inspect;
+                        stage = "native_d09_constant_matrix_scalar_angular_input", file.source = ?source,
+                        physical_four, emitted_child, input_index, input_count,
+                        scalar_bytes = scalar.expression().as_view().get_byte_size(),
+                        matrix_bytes = matrix.expression().as_view().get_byte_size(),
+                        exact_native_recomposition = true,
+                        "Constant native external matrix word multiplies one unchanged scalar angular input"
+                    );
+                    let scalar_sector = FourDSector {
+                        atom: scalar.clone(),
+                        ..sector.clone()
+                    }
+                    .with_scheme_integrand(scalar);
+                    let scalar_local =
+                        Local4dCts(FourDSectors::new(vec![scalar_sector], Vec::new())?);
+                    let integrator = integrated::Integrated::new(crate::utils::vakint()?, &backend)
+                        .with_angular_observer(&observer);
+                    let result =
+                        integrator.run(&scalar_local, ctx, parent, given, parent, given)?;
+                    eyre::ensure!(result.physical_pole()?.is_scalar());
+                }
+            } else {
+                let observer = |integral: &Atom,
+                                coefficient: &SymbolicTensor<IndexedStructure>|
+                 -> Result<()> {
                     let mut classes = observed.borrow_mut();
                     if let Some(sum) = classes.get_mut(integral) {
                         *sum = sum.try_add(coefficient)?;
@@ -5173,17 +5260,19 @@ impl QcdMassReference {
                     }
                     Ok(())
                 };
-            let open_sector = FourDSector {
-                atom: open_sum.clone(),
-                ..sector.clone()
+                let open_sector = FourDSector {
+                    atom: open_sum.clone(),
+                    ..sector.clone()
+                }
+                .with_scheme_integrand(open_sum);
+                let open_local = Local4dCts(FourDSectors::new(vec![open_sector], Vec::new())?);
+                let open_integrator =
+                    integrated::Integrated::new(crate::utils::vakint()?, &backend)
+                        .with_angular_observer(&observer);
+                let open_result =
+                    open_integrator.run(&open_local, ctx, parent, given, parent, given)?;
+                eyre::ensure!(open_result.physical_pole()?.rank() == 4);
             }
-            .with_scheme_integrand(open_sum);
-            let open_local = Local4dCts(FourDSectors::new(vec![open_sector], Vec::new())?);
-            let open_integrator = integrated::Integrated::new(crate::utils::vakint()?, &backend)
-                .with_angular_observer(&observer);
-            let open_result =
-                open_integrator.run(&open_local, ctx, parent, given, parent, given)?;
-            eyre::ensure!(open_result.physical_pole()?.rank() == 4);
             let classes = observed.into_inner();
             eyre::ensure!(!classes.is_empty());
             for (integral, coefficient) in classes {
@@ -5197,10 +5286,18 @@ impl QcdMassReference {
                                 basis.expression() * trace.expression(),
                             )?)?;
                 }
-                let difference = Self::reduce_parent_external_frame(
-                    "actual native vacuum angular coefficient lies in I/gamma0 before scalar masters",
-                    &coefficient.try_sub(&reconstruction)?,
-                )?;
+                let raw_difference = coefficient.try_sub(&reconstruction)?;
+                let difference = if physical_four {
+                    // Angular reduction leaves scalar radial K products in D.
+                    // Only their finite external bis4/cof3 matrix coefficients
+                    // are materialized; the radial words remain opaque.
+                    Self::materialize_finite_external_matrix_coefficients(&raw_difference)?
+                } else {
+                    Self::reduce_parent_external_frame(
+                        "actual native vacuum angular coefficient lies in I/gamma0 before scalar masters",
+                        &raw_difference,
+                    )?
+                };
                 Self::certify_finite_tagged_rows_zero(
                     "actual native vacuum angular coefficient lies in I/gamma0 before scalar masters",
                     difference,
