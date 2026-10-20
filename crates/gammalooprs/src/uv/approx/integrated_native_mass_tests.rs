@@ -45,6 +45,11 @@ enum NativeQuarkTrace {
     Vector,
 }
 
+enum NativeNumericalReference<'a> {
+    MassAndVector,
+    RegulatedVector(&'a serde_json::Value),
+}
+
 impl QcdMassReference {
     /// Open a complete source-derived quark closing word on its native frame.
     /// Keep momentum specialization, normalization and Gram controls at callers.
@@ -2042,81 +2047,102 @@ fn native_d09_vector_projection_exports_original_scalar_coordinates() -> Result<
     Ok(())
 }
 
+impl QcdMassReference {
+    fn numerical_reference_input(&self) -> Result<serde_json::Value> {
+        use symbolica_utils::AtomPrintExt;
+        let reference = self;
+        let projections = reference.certified_projections()?;
+        let sources = projections
+            .iter()
+            .map(|(diagram, projected)| projected.numeric_input(diagram, &reference.model))
+            .collect::<Result<Vec<_>>>()?;
+        let (diagram, _) = projections
+            .iter()
+            .find(|(diagram, _)| diagram.name() == "D09")
+            .ok_or_else(|| eyre!("native rainbow D09 is missing"))?;
+        let vector = reference.project_quark_trace(diagram, NativeQuarkTrace::Vector)?;
+        vector.certify_rainbow(NativeQuarkTrace::Vector)?;
+        let vector_source = serde_json::json!({
+            "projection": "pslash/(4*Nc*p_squared)",
+            "source_kernel_weight": vector.kernel_weight.to_bare_ordered_string(),
+            "external_ordering": vector.external_ordering.to_bare_ordered_string(),
+            "numerator_prefactor": vector.numerator_prefactor.to_bare_ordered_string(),
+            // The common projection owner refuses source widths/custom poles;
+            // scalar families do not encode the explicit physical i0 convention.
+            "propagator_prescription": "Feynman+i0",
+            "source": vector.numeric_input(diagram, &reference.model)?,
+        });
+        Ok(serde_json::json!({"sources": sources, "vector_source": vector_source}))
+    }
+
+    fn numerical_reference(&self, mode: NativeNumericalReference<'_>) -> Result<serde_json::Value> {
+        use color_eyre::eyre::WrapErr;
+        use std::{
+            fs,
+            process::Command,
+            time::{SystemTime, UNIX_EPOCH},
+        };
+        let directory = std::env::temp_dir().join(format!(
+            "gammaloop-os-mass-reference-{}-{}",
+            std::process::id(),
+            SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
+        ));
+        fs::create_dir(&directory)?;
+        let input = directory.join("native-sources.json");
+        let script = directory.join("os_mass_reference.py");
+        let output = directory.join("results");
+        let mut native_input = self.numerical_reference_input()?;
+        let regulated_vector = match mode {
+            NativeNumericalReference::MassAndVector => false,
+            NativeNumericalReference::RegulatedVector(source) => {
+                native_input["emitted_regulated_source"] = source.clone();
+                true
+            }
+        };
+        fs::write(&input, serde_json::to_vec_pretty(&native_input)?)?;
+        fs::write(
+            &script,
+            include_str!("../../../tests/resources/os_mass_reference.py"),
+        )?;
+        let python = std::env::var("PYTHON_BIN_PATH")
+            .unwrap_or_else(|_| "gammaloop-os-mass-reference-python".to_owned());
+        let log = fs::File::create(directory.join("backend.log"))?;
+        let mut command = Command::new(python);
+        command.arg(&script);
+        if regulated_vector {
+            command.arg("--regulated-vector-only");
+        }
+        let status = command
+            .arg(&input)
+            .arg(&output)
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .status()
+            .wrap_err_with(|| {
+                format!(
+                    "failed to launch pinned reference backend; inputs retained at {}",
+                    directory.display()
+                )
+            })?;
+        ensure!(
+            status.success(),
+            "independent two-loop bare-mass reference failed; retained inputs and backend log at {}",
+            directory.display()
+        );
+        let summary: serde_json::Value =
+            serde_json::from_slice(&fs::read(output.join("summary.json"))?)?;
+        if std::env::var_os("GAMMALOOP_TESTS_NO_CLEAN_STATE").is_none() {
+            fs::remove_dir_all(directory)?;
+        }
+        Ok(summary)
+    }
+}
+
 #[test]
 fn native_two_loop_qcd_bare_mass_matches_primary_reference() -> Result<()> {
-    use color_eyre::eyre::WrapErr;
-    use std::{
-        fs,
-        process::Command,
-        time::{SystemTime, UNIX_EPOCH},
-    };
-    use symbolica_utils::AtomPrintExt;
     crate::initialisation::test_initialise()?;
     let reference = QcdMassReference::new()?;
-    let projections = reference.certified_projections()?;
-    let sources = projections
-        .iter()
-        .map(|(diagram, projected)| projected.numeric_input(diagram, &reference.model))
-        .collect::<Result<Vec<_>>>()?;
-    let (diagram, _) = projections
-        .iter()
-        .find(|(diagram, _)| diagram.name() == "D09")
-        .ok_or_else(|| eyre!("native rainbow D09 is missing"))?;
-    let vector = reference.project_quark_trace(diagram, NativeQuarkTrace::Vector)?;
-    vector.certify_rainbow(NativeQuarkTrace::Vector)?;
-    let vector_source = serde_json::json!({
-        "projection": "pslash/(4*Nc*p_squared)",
-        "source_kernel_weight": vector.kernel_weight.to_bare_ordered_string(),
-        "external_ordering": vector.external_ordering.to_bare_ordered_string(),
-        "numerator_prefactor": vector.numerator_prefactor.to_bare_ordered_string(),
-        // The common projection owner refuses source widths/custom poles;
-        // scalar families do not encode the explicit physical i0 convention.
-        "propagator_prescription": "Feynman+i0",
-        "source": vector.numeric_input(diagram, &reference.model)?,
-    });
-    let directory = std::env::temp_dir().join(format!(
-        "gammaloop-os-mass-reference-{}-{}",
-        std::process::id(),
-        SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos()
-    ));
-    fs::create_dir(&directory)?;
-    let input = directory.join("native-sources.json");
-    let script = directory.join("os_mass_reference.py");
-    let output = directory.join("results");
-    fs::write(
-        &input,
-        serde_json::to_vec_pretty(&serde_json::json!({
-            "sources": sources,
-            "vector_source": vector_source,
-        }))?,
-    )?;
-    fs::write(
-        &script,
-        include_str!("../../../tests/resources/os_mass_reference.py"),
-    )?;
-    let python = std::env::var("PYTHON_BIN_PATH")
-        .unwrap_or_else(|_| "gammaloop-os-mass-reference-python".to_owned());
-    let log = fs::File::create(directory.join("backend.log"))?;
-    let status = Command::new(python)
-        .arg(&script)
-        .arg(&input)
-        .arg(&output)
-        .stdout(log.try_clone()?)
-        .stderr(log)
-        .status()
-        .wrap_err_with(|| {
-            format!(
-                "failed to launch pinned reference backend; inputs retained at {}",
-                directory.display()
-            )
-        })?;
-    ensure!(
-        status.success(),
-        "independent two-loop bare-mass reference failed; retained inputs and backend log at {}",
-        directory.display()
-    );
-    let summary: serde_json::Value =
-        serde_json::from_slice(&fs::read(output.join("summary.json"))?)?;
+    let summary = reference.numerical_reference(NativeNumericalReference::MassAndVector)?;
     ensure!(summary["one_loop_anchors_passed"] == true);
     ensure!(summary["bare_four_color_reference_passed"] == true);
     ensure!(summary["independent_insertions_reconstruct_Zm_reference"] == true);
@@ -2129,7 +2155,6 @@ fn native_two_loop_qcd_bare_mass_matches_primary_reference() -> Result<()> {
         file.reference = %summary,
         "Independent bare reference and insertions agree; production forest remains a separate condition"
     );
-    fs::remove_dir_all(directory)?;
     Ok(())
 }
 
@@ -2991,6 +3016,8 @@ impl QcdMassReference {
     }
 }
 
+#[path = "native_emitted_integration_tests.rs"]
+mod native_emitted_integration_tests;
 #[path = "native_gluon_prefix_tests.rs"]
 mod native_gluon_prefix_tests;
 #[path = "native_self_energy_prefix_tests.rs"]
@@ -4843,6 +4870,81 @@ fn native_d09_emitted_vacuum_policy_field_matches_actual_source_rows() -> Result
         unit_rest = true, unit_scales = true, emitted_vacuum_policy_field = true,
         full_unregulated_R2 = false, new_production_R2_term = false,
         "Actual native W coefficients survive the observed finalizer in the independently known field direction"
+    );
+    // This comparison uses the actual complete production forest and its
+    // dimensional addbacks. The independent backend receives only the native
+    // source/poles, never the emitted estimate or a fitted coefficient.
+    let emitted = native_emitted_integration_tests::two_loop(&reference)?;
+    let dimensional = reference.numerical_reference(NativeNumericalReference::RegulatedVector(
+        &emitted["source"]["regulated_source"],
+    ))?;
+    ensure!(dimensional["passed"] == true);
+    ensure!(dimensional["emitted_regulated_source_bound"] == true);
+    let target = dimensional["finite_vector_reference"]["value"][0]
+        .as_f64()
+        .ok_or_else(|| eyre!("missing independent regulated vector reference"))?;
+    let target_error = dimensional["finite_vector_reference"]["bare_reported_absolute_error"][0]
+        .as_f64()
+        .ok_or_else(|| eyre!("missing independent regulated vector error"))?;
+    let estimates = emitted["integrations"]
+        .as_array()
+        .ok_or_else(|| eyre!("missing independently seeded emitted integrals"))?;
+    ensure!(estimates.len() == 4);
+    let mut values = Vec::new();
+    for estimate in estimates {
+        let value = estimate["value"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted vector value"))?;
+        let error = estimate["error"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted integration error"))?;
+        ensure!(value.is_finite() && error.is_finite() && error > 0.0);
+        let imaginary = estimate["imaginary"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted imaginary coefficient"))?;
+        let imaginary_error = estimate["imaginary_error"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted imaginary error"))?;
+        ensure!(imaginary.is_finite() && imaginary_error.is_finite());
+        ensure!(
+            imaginary.abs() <= 5.0 * imaginary_error + 1.0e-9 * (1.0 + target.abs()),
+            "the below-threshold emitted coefficient has an unexpected imaginary part: {estimate}"
+        );
+        // Predeclared numerical acceptance: resolve the coefficient to one
+        // percent, then require five combined standard errors plus 1e-3.
+        ensure!(
+            error <= 0.01 * (1.0 + target.abs()),
+            "emitted vector uncertainty is unresolved: {estimate}"
+        );
+        let bound = 5.0 * error.hypot(target_error) + 1.0e-3;
+        ensure!(
+            (value - target).abs() <= bound,
+            "complete emitted vector {value} +/- {error} disagrees with dimensional {target} +/- {target_error}; {emitted}"
+        );
+        let r = 11.0 / 36.0 + std::f64::consts::PI.powi(2) / 12.0;
+        for wrong in [0.0, target + r, target - r] {
+            ensure!(
+                (value - wrong).abs() > bound,
+                "the emitted field comparison cannot resolve the wrong mass-only/missing/doubled R2 control"
+            );
+        }
+        values.push((value, error));
+    }
+    for (index, (value, error)) in values.iter().enumerate() {
+        for (other, other_error) in &values[index + 1..] {
+            ensure!(
+                (value - other).abs() <= 5.0 * error.hypot(*other_error) + 1.0e-3,
+                "emitted integrations disagree across seeds or auxiliary scales"
+            );
+        }
+    }
+    crate::debug_tags!(#uv,#integrated,#cff,#summary;
+        stage="native_d09_complete_emitted_regulated_vector_reference",
+        file.emitted=%emitted, file.dimensional=%dimensional,
+        source_poles_and_dimensional_numerator_bound=true,
+        production_complete_forest_integrated=true, matched_positive_gluon_mass=true,
+        uniform_unregulated_limit_claimed=false,
+        "Complete emitted OS forest agrees with the matched dimensional field reference"
     );
     Ok(())
 }
