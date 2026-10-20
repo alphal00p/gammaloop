@@ -704,7 +704,7 @@ mod tests {
             atomic::{AtomicUsize, Ordering},
         };
         crate::test_support::test_initialize();
-        let cooking = crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
+        let cooking = crate::CookSettings::reversible().preserve_tags();
         let rep = Minkowski {}.new_rep(4).to_lib();
         let scope = symbol!("indexed_cooked_open_scope");
         let open = AbstractIndex::Open {
@@ -712,9 +712,8 @@ mod tests {
             axis: 1,
         };
         for source in [open, open.scoped(scope)] {
-            let encoded = cooking
-                .try_cook_indices(rep.slot::<AbstractIndex, _>(source).to_atom().as_view())
-                .unwrap();
+            let encoded = cooking.try_cook(source.to_atom().as_view()).unwrap();
+            let encoded = rep.to_symbolic([encoded]);
             let slot = LibrarySlot::<AbstractIndex>::try_from(encoded.as_view()).unwrap();
             assert!(matches!(slot.aind, AbstractIndex::Symbol(_)));
             let nested = function!(
@@ -754,9 +753,10 @@ mod tests {
             function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0),
             function!(arbitrary, open.to_atom()),
         ] {
-            let raw = function!(rep.rep.symbol(), 4, label);
-            let encoded = cooking.try_cook_indices(raw.as_view()).unwrap();
+            let encoded = cooking.try_cook(label.as_view()).unwrap();
+            let encoded = rep.to_symbolic([encoded]);
             let slot = LibrarySlot::<AbstractIndex>::try_from(encoded.as_view()).unwrap();
+            assert!(matches!(slot.aind, AbstractIndex::Symbol(_)));
             let source = PartialTensor::from_declared_parts(
                 Atom::Zero,
                 PartialStructure::from_logical_slots([rep.slot(PartialIndex::Explicit(slot.aind))]),
@@ -980,15 +980,17 @@ mod tests {
         assert_eq!(restored, source);
         assert_eq!(restored.structure.logical_slots(), slots);
         assert!(restored.proofs.shallow_graph.get().is_none());
-        let cooked_open = crate::CookSettings::indices()
-            .with_mode(crate::CookMode::ReversibleEncoding)
-            .try_cook_indices(
-                rep.slot::<AbstractIndex, _>(AbstractIndex::Open { owner: 47, axis: 1 })
+        let cooked_open = crate::CookSettings::reversible()
+            .preserve_tags()
+            .try_cook(
+                AbstractIndex::Open { owner: 47, axis: 1 }
                     .to_atom()
                     .as_view(),
             )
             .unwrap();
+        let cooked_open = rep.to_symbolic([cooked_open]);
         let cooked_open = LibrarySlot::<AbstractIndex>::try_from(cooked_open.as_view()).unwrap();
+        assert!(matches!(cooked_open.aind, AbstractIndex::Symbol(_)));
         for (expression, slots) in [
             (Atom::one(), slots.to_vec()),
             (

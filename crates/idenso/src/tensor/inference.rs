@@ -5064,16 +5064,12 @@ pub(crate) mod tests {
         let expected = slots
             .into_iter()
             .rev()
-            .map(|slot| {
-                settings
-                    .try_cook_indices(composition::port_atom(slot).as_view())
-                    .unwrap()
-            })
+            .map(composition::port_atom)
             .collect::<Vec<_>>();
         INFERENCE_CALLS.with(|count| count.set(0));
         let cooked = original.with_cooked_indices(&settings).unwrap();
         assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
-        assert_ne!(cooked.expression, expression);
+        assert_eq!(cooked.expression, expression);
         assert_eq!(
             cooked
                 .structure
@@ -5084,7 +5080,13 @@ pub(crate) mod tests {
             expected
         );
 
-        let target = expected[0].clone();
+        let unknown = FunctionBuilder::new(symbolica::symbol!("cooking_callback_unknown_index"))
+            .add_arg(2)
+            .finish();
+        let raw_slot = representation.to_symbolic([unknown]);
+        let target = settings.try_cook_indices(raw_slot.as_view()).unwrap();
+        assert_ne!(target, raw_slot);
+        let slot = Slot::<LibraryRep, AbstractIndex>::try_from(target.as_view()).unwrap();
         let callback = spenso::tensor_symbol!(
             "cooking_callback_strips_ports",
             norm = move |node, output| {
@@ -5095,12 +5097,12 @@ pub(crate) mod tests {
                 }
             }
         );
-        let expression = FunctionBuilder::new(callback)
-            .add_arg(composition::port_atom(slots[1]))
-            .finish();
+        let expression = FunctionBuilder::new(callback).add_arg(raw_slot).finish();
         let value = SymbolicTensor::<PartialStructure>::new(
             expression,
-            PartialStructure::from_logical_slots([slots[1]]),
+            PartialStructure::from_logical_slots([slot
+                .rep()
+                .slot(PartialIndex::Explicit(slot.aind()))]),
         );
         assert!(value.with_cooked_indices(&settings).is_err());
     }

@@ -322,16 +322,13 @@ mod tests {
         crate::test_support::test_initialize();
         let settings =
             crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
-        let raw_slot = function!(
-            Euclidean {}
-                .to_symbolic(std::iter::empty::<Atom>())
-                .as_fun_view()
-                .unwrap()
-                .get_symbol(),
-            2,
-            function!(spenso::index_symbol!("typed_component_owned_index"), 7, 2)
-        );
-        let cooked_slot = settings.try_cook_indices(raw_slot.as_view()).unwrap();
+        let raw_index = function!(spenso::index_symbol!("typed_component_owned_index"), 7, 2);
+        let cooked_index = crate::CookSettings::reversible()
+            .cook_function(raw_index.as_fun_view().unwrap())
+            .unwrap();
+        let rep = Euclidean {}.new_rep(2);
+        let raw_slot = rep.to_symbolic([raw_index]);
+        let cooked_slot = rep.to_symbolic([cooked_index]);
         assert_ne!(cooked_slot, raw_slot);
         let ordinary = SymbolicTensor::infer(function!(
             spenso::tensor_symbol!("typed_component_decoded_vector"),
@@ -393,12 +390,14 @@ mod tests {
         crate::test_support::test_initialize();
         let settings =
             crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
-        let raw_slot = Euclidean {}.new_rep(2).to_symbolic([function!(
-            spenso::index_symbol!("component_lifetime_index"),
-            11,
-            3
-        )]);
-        let cooked_slot = settings.try_cook_indices(raw_slot.as_view()).unwrap();
+        let raw_index = function!(spenso::index_symbol!("component_lifetime_index"), 11, 3);
+        let cooked_index = crate::CookSettings::reversible()
+            .cook_function(raw_index.as_fun_view().unwrap())
+            .unwrap();
+        let rep = Euclidean {}.new_rep(2);
+        let raw_slot = rep.to_symbolic([raw_index]);
+        let cooked_slot = rep.to_symbolic([cooked_index]);
+        assert_ne!(cooked_slot, raw_slot);
         let graph = Arc::new(Mutex::new(
             None::<Weak<crate::tensor::SymbolicNet<AbstractIndex>>>,
         ));

@@ -1331,10 +1331,11 @@ impl Spensor {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1373,10 +1374,11 @@ impl Spensor {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1415,10 +1417,11 @@ impl Spensor {
     ///     Keys must identify existing external axes. Each axis may be renamed
     ///     once; renaming must preserve the external interface.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1509,10 +1512,11 @@ impl Spensor {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
