@@ -98,9 +98,9 @@ typst-svg = { path = "vendor/typst-svg" }
 clarabel = { path = "vendor/clarabel" }
 # Shared lazy FormattedOutput; see examples/reproducers/symbolic-display in Feynkit.
 # Shared responsive renderer API: symbolica-dev/symbolica#100.
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "fba2261dd7ebe6e602ac0cc801030fc7c35d1c11" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "fba2261dd7ebe6e602ac0cc801030fc7c35d1c11" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "fba2261dd7ebe6e602ac0cc801030fc7c35d1c11" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "f79482b0af90e33b05e8085e99ef93d3654cd309" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "f79482b0af90e33b05e8085e99ef93d3654cd309" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "f79482b0af90e33b05e8085e99ef93d3654cd309" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 
 # Reuse optimized Symbolica while keeping workspace debug builds inexpensive.
