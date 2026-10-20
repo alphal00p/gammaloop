@@ -4459,24 +4459,107 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
         inventory.sort();
         Ok::<_, color_eyre::eyre::Report>(inventory)
     };
+    // The only freshly allocated labels admitted here are the internal bis4
+    // projector ports of this rest-frame two-component forest. Original source
+    // ports and every prescribed denominator are held literally fixed.
     let exact_vacuum_equal = |left: &SymbolicTensor<IndexedStructure>,
                               right: &SymbolicTensor<IndexedStructure>|
      -> Result<()> {
+        use crate::numerator::aind::Aind;
+        use idenso::representations::Bispinor;
+        use spenso::structure::{
+            representation::{LibrarySlot, RepName},
+            slot::IsAbstractSlot,
+        };
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
         ensure!(left.structure().logical_slots() == right.structure().logical_slots());
         ensure!(!left.expression().contains_symbol(lambda_symbol));
         ensure!(!right.expression().contains_symbol(lambda_symbol));
         let original_denominators = denominator_inventory(left)?;
         ensure!(original_denominators == denominator_inventory(right)?);
-        let canonical_left = left.canonize()?;
-        let canonical_right = right.canonize()?;
-        for (original, canonical) in [(left, &canonical_left), (right, &canonical_right)] {
-            ensure!(original.structure().logical_slots() == canonical.structure().logical_slots());
-            ensure!(original_denominators == denominator_inventory(canonical)?);
+        let fresh_ports = |expression: &Atom| -> Result<BTreeSet<Aind>> {
+            let mut indices = BTreeSet::new();
+            let mut invalid = false;
+            expression.visitor(&mut |view| {
+                if let Ok(slot) = LibrarySlot::<Aind>::try_from(view) {
+                    if matches!(slot.aind, Aind::Dummy(_)) {
+                        invalid |= slot.rep() != Bispinor {}.new_rep(4).to_lib();
+                        indices.insert(slot.aind);
+                    }
+                    return false;
+                }
+                true
+            });
+            ensure!(
+                !invalid,
+                "D09 fresh projector labels must be internal bis4 ports"
+            );
+            ensure!(
+                indices.len() <= 2,
+                "D09 has at most two rest-frame OS projector ports"
+            );
+            Ok(indices)
+        };
+        let raw_left = cooking.uncook(left.expression().as_view());
+        let raw_right = cooking.uncook(right.expression().as_view());
+        let left_indices = fresh_ports(&raw_left)?.into_iter().collect::<Vec<_>>();
+        let right_indices = fresh_ports(&raw_right)?.into_iter().collect::<Vec<_>>();
+        ensure!(left_indices.len() == right_indices.len());
+        for tensor in [left, right] {
+            for slot in tensor.structure().logical_slots() {
+                let raw = cooking.uncook(slot.to_atom().as_view());
+                ensure!(
+                    fresh_ports(&raw)?.is_empty(),
+                    "external ports are immutable"
+                );
+            }
         }
-        // Compare the COMPLETE raw W, retaining the consumed-loop coefficient
-        // and all numerator factors. physical_terms above certifies only poles.
-        ensure!(canonical_left.same_value(&canonical_right));
-        Ok(())
+        for term in &original_denominators {
+            for (edge, momentum, mass, polynomial) in term {
+                let complete = function!(crate::utils::GS.den, *edge, momentum, mass, polynomial);
+                ensure!(fresh_ports(&cooking.uncook(complete.as_view()))?.is_empty());
+            }
+        }
+        let mut candidates = vec![right_indices.clone()];
+        if right_indices.len() == 2 {
+            candidates.push(vec![right_indices[1], right_indices[0]]);
+        }
+        for candidate in candidates {
+            let map = left_indices
+                .iter()
+                .copied()
+                .zip(candidate.iter().copied())
+                .collect::<BTreeMap<_, _>>();
+            let inverse = candidate
+                .iter()
+                .copied()
+                .zip(left_indices.iter().copied())
+                .collect::<BTreeMap<_, _>>();
+            let rename = |source: &Atom, map: &BTreeMap<Aind, Aind>| {
+                source.replace_map(|view, _, output| {
+                    if let Ok(slot) = LibrarySlot::<Aind>::try_from(view)
+                        && let Some(index) = map.get(&slot.aind)
+                    {
+                        **output = slot.rep().slot::<Aind, _>(*index).to_atom();
+                    }
+                })
+            };
+            let renamed = rename(&raw_left, &map);
+            ensure!(rename(&renamed, &inverse) == raw_left);
+            let native = left.with_checked_expression(cooking.try_cook(renamed.as_view())?)?;
+            ensure!(native.structure().logical_slots() == left.structure().logical_slots());
+            ensure!(denominator_inventory(&native)? == original_denominators);
+            // Literal equality of the COMPLETE W is the certificate. Only its
+            // two witnessed contracted spinor labels may have changed.
+            if native.same_value(right) {
+                return Ok(());
+            }
+        }
+        Err(eyre!(
+            "D09 complete W has no exact fresh-projector-port bijection"
+        ))
     };
     let original_child = uv_limit(&empty, &ctx, child, &root, child, &root)?;
     let regulated_child = uv_limit(&empty, &regulated_ctx, child, &root, child, &root)?;
@@ -4493,6 +4576,12 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
         original_child.active_sectors()[0].integration_atom(),
         regulated_child.active_sectors()[0].integration_atom(),
     )?;
+    let child_w = original_child.active_sectors()[0].integration_atom();
+    let wrong_weight = child_w.with_checked_expression(child_w.expression() * Atom::num(2))?;
+    ensure!(
+        exact_vacuum_equal(child_w, &wrong_weight).is_err(),
+        "projector-port renaming must retain the complete scalar weight"
+    );
     let backend = vakint::VakintSettings {
         number_of_terms_in_epsilon_expansion: 3,
         evaluation_order: vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
