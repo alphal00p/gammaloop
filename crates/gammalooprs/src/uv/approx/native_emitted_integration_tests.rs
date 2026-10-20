@@ -762,6 +762,208 @@ impl EmittedVectorIntegral {
         )
     }
 
+    fn certify_pointwise_controls(&mut self) -> Result<serde_json::Value> {
+        let momenta = [[0.0, 0.0, 0.7], [0.8, 0.0, -0.4]];
+        let baseline = self.evaluate(&momenta)?;
+        let rotated = self.evaluate(&[[0.7, 0.0, 0.0], [-0.4, 0.8, 0.0]])?;
+        ensure!(
+            (baseline.re.0 - rotated.re.0).abs() <= 1.0e-9 * (1.0 + baseline.re.0.abs()),
+            "rest-frame rotation changed the complete scalar"
+        );
+        let precise_values = self
+            .values
+            .iter()
+            .map(|value| {
+                Complex::new(
+                    F::<ArbPrec>::from_ff64(value.re),
+                    F::<ArbPrec>::from_ff64(value.im),
+                )
+            })
+            .collect::<Vec<_>>();
+        let precise = <ArbPrec as GenericEvaluatorFloat>::get_evaluator_single(&mut self.evaluator)(
+            &precise_values,
+        );
+        let precise_re = -self.normalization * precise.im.into_f64();
+        ensure!((rotated.re.0 - precise_re).abs() < 1.0e-9 * (1.0 + precise_re.abs()));
+        let mut tail_checks = Vec::new();
+        for radius in [1.0e2, 1.0e3, 1.0e5] {
+            for hierarchy in [false, true] {
+                let r = radius;
+                let s = if hierarchy { 0.7 } else { radius * 0.8 };
+                let point = [[0.0, 0.0, r], [s * 0.8, 0.0, s * 0.6]];
+                let actual = self.evaluate(&point)?;
+                let binary = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
+                    &mut self.evaluator,
+                )(&self.values);
+                let values = self
+                    .values
+                    .iter()
+                    .map(|value| {
+                        Complex::new(
+                            F::<ArbPrec>::from_ff64(value.re),
+                            F::<ArbPrec>::from_ff64(value.im),
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                let precise = <ArbPrec as GenericEvaluatorFloat>::get_evaluator_single(
+                    &mut self.evaluator,
+                )(&values);
+                let reference = -self.normalization * precise.im.into_f64();
+                let binary = -self.normalization * binary.im.0;
+                let relative = (actual.re.0 - reference).abs() / reference.abs().max(1.0e-300);
+                if radius <= 1.0e3 {
+                    ensure!(
+                        relative < 1.0e-5,
+                        "binary complete-forest tail precision below switch: r={r}, s={s}, relative={relative}"
+                    );
+                } else {
+                    ensure!(
+                        actual.re.0 == reference,
+                        "hard-tail policy did not use the same retained arbitrary-precision evaluator"
+                    );
+                }
+                tail_checks.push(serde_json::json!({"r":r,"s":s,"hierarchical":hierarchy,
+                "policy_value":actual.re.0,"f64_value":binary,"precise_value":reference,"policy_relative_error":relative}));
+            }
+        }
+        Ok(serde_json::json!({
+            "pointwise_rotation_and_precision_checks":true,
+            "reference_point_normalized":[baseline.re.0, baseline.im.0],
+            "tail_precision_checks":tail_checks,
+        }))
+    }
+
+    fn certify_soft_charts(&mut self) -> Result<Vec<serde_json::Value>> {
+        ensure!(self.gluon_mass == 0.0 && self.coordinates.len() == 2);
+        let d_l = Atom::var(symbol!("native_emitted_soft_partition::D_l"; Scalar));
+        let d_q = Atom::var(symbol!("native_emitted_soft_partition::D_q"; Scalar));
+        ensure!(
+            (&d_q / (&d_l + &d_q) + &d_l / (&d_l + &d_q) - Atom::one())
+                .together()
+                .is_zero(),
+            "the two native soft charts do not form an exact partition of unity"
+        );
+        let mut chart_checks = Vec::new();
+        for xs in [[0.37, 0.41, 0.63], [0.012, 0.019, 0.92], [0.83, 0.94, 0.04]] {
+            let samples = EmittedVectorIntegral::soft_chart_samples(&xs)?;
+            ensure!(samples.len() == 4);
+            for (image, (momenta, weighted_jacobian)) in samples.into_iter().enumerate() {
+                let radius = xs[0] / (1.0 - xs[0]);
+                let ratio = xs[1];
+                let norm = |vector: &[f64; 3]| {
+                    vector.iter().map(|value| value * value).sum::<f64>().sqrt()
+                };
+                let [l, k] = momenta;
+                let q: [f64; 3] = std::array::from_fn(|component| l[component] - k[component]);
+                let h = if image < 2 { l } else { q };
+                let expected_h = if image % 2 == 0 {
+                    radius
+                } else {
+                    radius * ratio
+                };
+                let expected_k = if image % 2 == 0 {
+                    radius * ratio
+                } else {
+                    radius
+                };
+                ensure!((norm(&h) - expected_h).abs() < 1.0e-14 * (1.0 + radius));
+                ensure!((norm(&k) - expected_k).abs() < 1.0e-14 * (1.0 + radius));
+                let l_scale = norm(&l).max(norm(&k));
+                let q_scale = norm(&q).max(norm(&k));
+                let d_l = norm(&l).powi(2) * l_scale * (1.0 + l_scale).powi(2);
+                let d_q = norm(&q).powi(2) * q_scale * (1.0 + q_scale).powi(2);
+                ensure!((d_q / (d_l + d_q) + d_l / (d_l + d_q) - 1.0).abs() < 1.0e-15);
+                let value = self.evaluate(&momenta)?;
+                let rotated = momenta.map(|vector| [vector[2], vector[0], vector[1]]);
+                let orbit = self.evaluate(&rotated)?;
+                ensure!((value.re.0 - orbit.re.0).abs() <= 1.0e-9 * (1.0 + value.re.0.abs()));
+                chart_checks.push(
+                    serde_json::json!({"xs":xs,"image":image,"native_l":l,"native_k":k,
+                "native_q":q,"weighted_jacobian":weighted_jacobian,"value":value.re.0,
+                "orbit_value":orbit.re.0,"partition_sum":d_q/(d_l+d_q)+d_l/(d_l+d_q)}),
+                );
+            }
+        }
+        Ok(chart_checks)
+    }
+
+    fn qualify_massless_case(case: &str, seed: u64, uv_mass: f64, localization: f64) -> Result<()> {
+        crate::initialisation::test_initialise()?;
+        let reference = QcdMassReference::new()?;
+        let mut integral = Self::new(&reference, 2)?;
+        // Bind the actual native full-D numerator and both typed pole headers
+        // to the single independent data owner before any Monte Carlo sampling.
+        let bound = QcdMassReference::certify_emitted_vector_reference(&integral.source)?;
+        let target = bound["massless"]["numerical_reference"]["finite_prepared"]
+            .as_str()
+            .ok_or_else(|| eyre!("missing pinned massless vector reference"))?
+            .parse::<f64>()?;
+        let target_error = bound["massless"]["numerical_reference"]["reported_absolute_error"]
+            .as_str()
+            .ok_or_else(|| eyre!("missing pinned massless vector error"))?
+            .parse::<f64>()?;
+        ensure!(target.is_finite() && target_error.is_finite() && target_error > 0.0);
+        let one_loop = Self::one_loop_calibration(&reference, 0.0)?;
+        integral.set_gluon_mass(0.0)?;
+        integral.set_auxiliary_scales(uv_mass, localization)?;
+        let pointwise = integral.certify_pointwise_controls()?;
+        let charts = integral.certify_soft_charts()?;
+        ensure!(charts.len() == 12);
+        // Preserve the statistics and acceptance chosen before the bounded
+        // pilot: 20 training batches, 100k samples each, and the
+        // same complete-forest 1000-bit soft/hard arithmetic policy.
+        let estimate = integral.integrate(seed, 100_000, 20)?;
+        let value = estimate["value"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted vector value"))?;
+        let error = estimate["error"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted vector uncertainty"))?;
+        let imaginary = estimate["imaginary"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted imaginary coefficient"))?;
+        let imaginary_error = estimate["imaginary_error"]
+            .as_f64()
+            .ok_or_else(|| eyre!("missing emitted imaginary uncertainty"))?;
+        ensure!(
+            value.is_finite() && error.is_finite() && error > 0.0 && error <= 0.025,
+            "massless emitted vector uncertainty is unresolved: {estimate}"
+        );
+        ensure!(
+            imaginary.is_finite()
+                && imaginary_error.is_finite()
+                && imaginary.abs() <= 5.0 * imaginary_error + 1.0e-9 * (1.0 + target.abs()),
+            "massless emitted coefficient has an unexpected imaginary part: {estimate}"
+        );
+        let bound_error = 5.0 * error.hypot(target_error) + 1.0e-3;
+        ensure!(
+            (value - target).abs() <= bound_error,
+            "massless emitted vector {value} +/- {error} disagrees with dimensional {target} +/- {target_error}"
+        );
+        let r = 11.0 / 36.0 + std::f64::consts::PI.powi(2) / 12.0;
+        for wrong in [0.0, target + r, target - r] {
+            ensure!(
+                (value - wrong).abs() > bound_error,
+                "massless emitted field cannot distinguish a wrong zero or finite-shifted reference"
+            );
+        }
+        let qualified = serde_json::json!({
+            "case":case,"source":integral.source,"one_loop_calibration":one_loop,
+            "pointwise_controls":pointwise,"soft_chart_checks":charts,
+            "exact_soft_chart_partition":true,"estimate":estimate,
+            "dimensional_reference":bound["massless"],"target":target,"target_error":target_error,
+            "absolute_error_cap":0.025,"comparison_bound":bound_error,
+            "source_headers_bound_before_sampling":true,"production_complete_forest_integrated":true,
+            "physical_massless_gluon_forest_integrated":true,"uniform_unregulated_limit_claimed":false,
+        });
+        crate::debug_tags!(#uv,#integrated,#cff,#summary;
+            stage="native_d09_massless_emitted_vector_case", case, seed, uv_mass, localization,
+            value, error, process_id=std::process::id(), file.qualification=%qualified,
+            "One bounded complete massless emitted OS forest agrees with the independent dimensional field reference"
+        );
+        Ok(())
+    }
+
     fn one_loop_calibration(
         reference: &QcdMassReference,
         gluon_mass: f64,
@@ -808,69 +1010,7 @@ fn native_emitted_one_loop_vector_matches_massless_and_positive_mass_references(
 pub(super) fn two_loop(reference: &QcdMassReference) -> Result<serde_json::Value> {
     let one_loop = EmittedVectorIntegral::one_loop_calibration(reference, 1.0)?;
     let mut integral = EmittedVectorIntegral::new(reference, 2)?;
-    let momenta = [[0.0, 0.0, 0.7], [0.8, 0.0, -0.4]];
-    let baseline = integral.evaluate(&momenta)?;
-    let rotated = integral.evaluate(&[[0.7, 0.0, 0.0], [-0.4, 0.8, 0.0]])?;
-    ensure!(
-        (baseline.re.0 - rotated.re.0).abs() <= 1.0e-9 * (1.0 + baseline.re.0.abs()),
-        "rest-frame rotation changed the complete scalar"
-    );
-    let precise_values = integral
-        .values
-        .iter()
-        .map(|value| {
-            Complex::new(
-                F::<ArbPrec>::from_ff64(value.re),
-                F::<ArbPrec>::from_ff64(value.im),
-            )
-        })
-        .collect::<Vec<_>>();
-    let precise = <ArbPrec as GenericEvaluatorFloat>::get_evaluator_single(&mut integral.evaluator)(
-        &precise_values,
-    );
-    let precise_re = -integral.normalization * precise.im.into_f64();
-    ensure!((rotated.re.0 - precise_re).abs() < 1.0e-9 * (1.0 + precise_re.abs()));
-    let mut tail_checks = Vec::new();
-    for radius in [1.0e2, 1.0e3, 1.0e5] {
-        for hierarchy in [false, true] {
-            let r = radius;
-            let s = if hierarchy { 0.7 } else { radius * 0.8 };
-            let point = [[0.0, 0.0, r], [s * 0.8, 0.0, s * 0.6]];
-            let actual = integral.evaluate(&point)?;
-            let binary = <f64 as GenericEvaluatorFloat>::get_evaluator_single(
-                &mut integral.evaluator,
-            )(&integral.values);
-            let values = integral
-                .values
-                .iter()
-                .map(|value| {
-                    Complex::new(
-                        F::<ArbPrec>::from_ff64(value.re),
-                        F::<ArbPrec>::from_ff64(value.im),
-                    )
-                })
-                .collect::<Vec<_>>();
-            let precise = <ArbPrec as GenericEvaluatorFloat>::get_evaluator_single(
-                &mut integral.evaluator,
-            )(&values);
-            let reference = -integral.normalization * precise.im.into_f64();
-            let binary = -integral.normalization * binary.im.0;
-            let relative = (actual.re.0 - reference).abs() / reference.abs().max(1.0e-300);
-            if radius <= 1.0e3 {
-                ensure!(
-                    relative < 1.0e-5,
-                    "binary complete-forest tail precision below switch: r={r}, s={s}, relative={relative}"
-                );
-            } else {
-                ensure!(
-                    actual.re.0 == reference,
-                    "hard-tail policy did not use the same retained arbitrary-precision evaluator"
-                );
-            }
-            tail_checks.push(serde_json::json!({"r":r,"s":s,"hierarchical":hierarchy,
-                "policy_value":actual.re.0,"f64_value":binary,"precise_value":reference,"policy_relative_error":relative}));
-        }
-    }
+    let controls = integral.certify_pointwise_controls()?;
     let first = integral.integrate(2026102102, 100_000, 10)?;
     let second = integral.integrate(2026102103, 100_000, 10)?;
     integral.set_auxiliary_scales(2.0, 1.0)?;
@@ -878,72 +1018,32 @@ pub(super) fn two_loop(reference: &QcdMassReference) -> Result<serde_json::Value
     integral.set_auxiliary_scales(1.0, 2.0)?;
     let changed_localization = integral.integrate(2026102105, 100_000, 10)?;
     integral.set_auxiliary_scales(1.0, 1.0)?;
-    let massless_one_loop = EmittedVectorIntegral::one_loop_calibration(reference, 0.0)?;
-    integral.set_gluon_mass(0.0)?;
-    let d_l = Atom::var(symbol!("native_emitted_soft_partition::D_l"; Scalar));
-    let d_q = Atom::var(symbol!("native_emitted_soft_partition::D_q"; Scalar));
-    ensure!(
-        (&d_q / (&d_l + &d_q) + &d_l / (&d_l + &d_q) - Atom::one())
-            .together()
-            .is_zero(),
-        "the two native soft charts do not form an exact partition of unity"
-    );
-    let mut chart_checks = Vec::new();
-    for xs in [[0.37, 0.41, 0.63], [0.012, 0.019, 0.92], [0.83, 0.94, 0.04]] {
-        let samples = EmittedVectorIntegral::soft_chart_samples(&xs)?;
-        ensure!(samples.len() == 4);
-        for (image, (momenta, weighted_jacobian)) in samples.into_iter().enumerate() {
-            let radius = xs[0] / (1.0 - xs[0]);
-            let ratio = xs[1];
-            let norm =
-                |vector: &[f64; 3]| vector.iter().map(|value| value * value).sum::<f64>().sqrt();
-            let [l, k] = momenta;
-            let q: [f64; 3] = std::array::from_fn(|component| l[component] - k[component]);
-            let h = if image < 2 { l } else { q };
-            let expected_h = if image % 2 == 0 {
-                radius
-            } else {
-                radius * ratio
-            };
-            let expected_k = if image % 2 == 0 {
-                radius * ratio
-            } else {
-                radius
-            };
-            ensure!((norm(&h) - expected_h).abs() < 1.0e-14 * (1.0 + radius));
-            ensure!((norm(&k) - expected_k).abs() < 1.0e-14 * (1.0 + radius));
-            let l_scale = norm(&l).max(norm(&k));
-            let q_scale = norm(&q).max(norm(&k));
-            let d_l = norm(&l).powi(2) * l_scale * (1.0 + l_scale).powi(2);
-            let d_q = norm(&q).powi(2) * q_scale * (1.0 + q_scale).powi(2);
-            ensure!((d_q / (d_l + d_q) + d_l / (d_l + d_q) - 1.0).abs() < 1.0e-15);
-            let value = integral.evaluate(&momenta)?;
-            let rotated = momenta.map(|vector| [vector[2], vector[0], vector[1]]);
-            let orbit = integral.evaluate(&rotated)?;
-            ensure!((value.re.0 - orbit.re.0).abs() <= 1.0e-9 * (1.0 + value.re.0.abs()));
-            chart_checks.push(
-                serde_json::json!({"xs":xs,"image":image,"native_l":l,"native_k":k,
-                "native_q":q,"weighted_jacobian":weighted_jacobian,"value":value.re.0,
-                "orbit_value":orbit.re.0,"partition_sum":d_q/(d_l+d_q)+d_l/(d_l+d_q)}),
-            );
-        }
-    }
-    let unregulated_first = integral.integrate(2026102111, 100_000, 20)?;
-    let unregulated_second = integral.integrate(2026102112, 100_000, 20)?;
-    integral.set_auxiliary_scales(2.0, 1.0)?;
-    let unregulated_uv_mass = integral.integrate(2026102113, 100_000, 20)?;
-    integral.set_auxiliary_scales(1.0, 2.0)?;
-    let unregulated_localization = integral.integrate(2026102114, 100_000, 20)?;
-    integral.set_auxiliary_scales(1.0, 1.0)?;
     Ok(
         serde_json::json!({"source":integral.source,"one_loop_calibration":one_loop,
-        "pointwise_rotation_and_precision_checks":true,"tail_precision_checks":tail_checks,
+        "pointwise_rotation_and_precision_checks":true,"tail_precision_checks":controls["tail_precision_checks"],
         "integrations":[first,second,changed_uv_mass,changed_localization],
-        "unregulated_integrations":[unregulated_first,unregulated_second,unregulated_uv_mass,unregulated_localization],
-        "unregulated_one_loop_calibration":massless_one_loop,
-        "unregulated_chart_checks":chart_checks,"exact_soft_chart_partition":true,
         "measure":"plain d3k d3l, rest-frame 8pi2 radial reduction",
         "threshold_regulator":"both typed physical gluon masses=lambda=1",
         "absolute_unregulated_integrability_claimed":false}),
     )
+}
+
+#[test]
+fn native_emitted_massless_vector_unit_seed_one() -> Result<()> {
+    EmittedVectorIntegral::qualify_massless_case("unit_seed_one", 2026102111, 1.0, 1.0)
+}
+
+#[test]
+fn native_emitted_massless_vector_unit_seed_two() -> Result<()> {
+    EmittedVectorIntegral::qualify_massless_case("unit_seed_two", 2026102112, 1.0, 1.0)
+}
+
+#[test]
+fn native_emitted_massless_vector_uv_mass_two() -> Result<()> {
+    EmittedVectorIntegral::qualify_massless_case("uv_mass_two", 2026102113, 2.0, 1.0)
+}
+
+#[test]
+fn native_emitted_massless_vector_localization_two() -> Result<()> {
+    EmittedVectorIntegral::qualify_massless_case("localization_two", 2026102114, 1.0, 2.0)
 }
