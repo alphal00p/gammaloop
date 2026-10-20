@@ -55,6 +55,12 @@ D09_VECTOR_NUMERICAL_REFERENCE = {
     "closed_receipt_sha256": "615bbd0efbd6e9fe0c9f9531ca885ac7ead2e857c57636cf05697909ecc99ecb",
     "normalization": "a^2*CF^2, amputated Sigma, p^2=m^2=mu_bar^2=1",
 }
+# Canonical JSON (sorted keys, separators=(',', ':')) of the qualified c953
+# backend input dictionary, not its outer policy/requested-order envelope.
+# The retained input file SHA is 1c3552b96fe27d6d9a696a2c99e80cbd43ce77750270b6de1b6fa51056d89440.
+D09_VECTOR_BACKEND_INPUT_SHA256 = (
+    "01ecb7d5c3f696f7c7d70344f846d7233a5c92075d5e5165e82b992a812d6b20"
+)
 
 
 def polynomial(text, symbols):
@@ -274,7 +280,13 @@ def vector_protocol_controls(payload, mass, gluon_mass_squared="0"):
 
 
 def regulated_vector_reference(
-    vector, mass, source_path, output, validate_only, emitted_regulated_source=None
+    vector,
+    mass,
+    source_path,
+    output,
+    validate_only,
+    emitted_regulated_source=None,
+    emitted_unregulated_source=None,
 ):
     """Independent dimensional reference; never the emitted CFF integral.
 
@@ -380,6 +392,22 @@ def regulated_vector_reference(
                 emitted_regulated_source, sort_keys=True, separators=(",", ":")
             ).encode()
         ).hexdigest()
+    emitted_unregulated_sha256 = None
+    emitted_unregulated_input_sha256 = None
+    if emitted_unregulated_source is not None:
+        original = prepare_vector(vector, mass, "0")
+        emitted = prepare_vector(emitted_unregulated_source, mass, "0")
+        emitted_inputs = backend_input(emitted, emitted["rows"]["CF2"])
+        assert emitted_inputs == backend_input(original, original["rows"]["CF2"])
+        emitted_unregulated_input_sha256 = hashlib.sha256(
+            json.dumps(emitted_inputs, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        assert emitted_unregulated_input_sha256 == D09_VECTOR_BACKEND_INPUT_SHA256
+        emitted_unregulated_sha256 = hashlib.sha256(
+            json.dumps(
+                emitted_unregulated_source, sort_keys=True, separators=(",", ":")
+            ).encode()
+        ).hexdigest()
     output.mkdir(parents=True)
     validation = {
         "mode": "matched_positive_gluon_mass_D09_vector_only",
@@ -395,6 +423,11 @@ def regulated_vector_reference(
             if emitted_source_sha256 is not None
             else "REFERENCE_PENDING_CURRENT_EMITTED_INPUT_BINDING"
         ),
+        "emitted_unregulated_source_bound": emitted_unregulated_sha256 is not None,
+        "emitted_unregulated_source_sha256": emitted_unregulated_sha256,
+        "emitted_unregulated_backend_input_sha256": emitted_unregulated_input_sha256,
+        "unregulated_vector_reference_kind": "retained_pinned_backend_numerical_regression",
+        "unregulated_vector_reference": D09_VECTOR_NUMERICAL_REFERENCE,
         "protocol_negative_controls": controls,
         "proper_moments": moment_report,
         "proper_coefficients": proper_report,
@@ -675,6 +708,7 @@ def main():
             output,
             args.validate_only,
             data.get("emitted_regulated_source"),
+            data.get("emitted_unregulated_source"),
         )
         return
     crossed = prepared["D11"]
