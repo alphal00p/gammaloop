@@ -111,6 +111,13 @@ components. The stored disconnected value provides the product of
 component pole projections and the product of component
 finite-counterterm projections.
 
+The Vakint return boundary restores Lorentz representations around source
+abstract indices in momenta and metrics before further tensor operations.
+Existing typed slots keep their dimension and identity; generated integer
+indices remain scoped to the current UV node. A source label such as
+`hedge(5)` must return as `mink(dim,hedge(5))`, rather than as an untyped
+momentum argument mixed with typed tensor factors.
+
 The aggregate is sufficient when every component uses the same terminal
 prescription. At terminal use, the hedge-poset backend nevertheless
 returns to the component nodes, selects each component\'s own pole or

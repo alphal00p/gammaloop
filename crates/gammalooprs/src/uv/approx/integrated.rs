@@ -356,76 +356,7 @@ impl Integrated<'_> {
             "Raw post vakint "
         );
 
-        res = res
-            .replace(parse_lit!(vakint::cl2))
-            .with(parse_lit!(cl2))
-            .replace(parse_lit!(vakint::sqrt3))
-            .with(parse_lit!(sqrt(3)));
-
-        let vk_metric = vakint_symbol!("g");
-        let mink = Minkowski {}.new_rep(GS.dim);
-
-        // apply metric
-        res = res
-            .replace(vakint::symbols::S.p.call_args([W_.i_, W_.j_]))
-            .when(W_.j_.filter(|r| r.is_integer().is_true()))
-            .with(
-                vakint::symbols::S.p.call_args([
-                    Atom::var(W_.i_),
-                    mink.to_symbolic([GS
-                        .uvaind
-                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
-                ]),
-            )
-            .replace(
-                vakint::symbols::S
-                    .p
-                    .call_args([Atom::var(W_.i_), vakint::symbols::S.dot_dummy_ind(W_.j_)]),
-            )
-            .when(W_.j_.filter(|r| r.is_integer().is_true()))
-            .with(
-                vakint::symbols::S.p.call_args([
-                    Atom::var(W_.i_),
-                    mink.to_symbolic([GS
-                        .uvaind
-                        .call_args([Atom::num(current.topo_order()), Atom::var(W_.j_)])]),
-                ]),
-            )
-            .replace(vakint::symbols::S.p.call_args([W_.x__]))
-            .with(GS.emr_mom.call_args([W_.x__]));
-        res = res
-            .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
-            .with(function!(GS.emr_mom, W_.x___, W_.y_))
-            .replace(function!(
-                vk_metric,
-                vakint::symbols::S.dot_dummy_ind(W_.x_),
-                W_.y_
-            ))
-            .when(W_.x_.filter(|r| r.is_integer().is_true()))
-            .with(function!(
-                vk_metric,
-                mink.to_symbolic([GS
-                    .uvaind
-                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.x_)])]),
-                W_.y_
-            ))
-            .replace(function!(
-                vk_metric,
-                W_.x_,
-                vakint::symbols::S.dot_dummy_ind(W_.y_)
-            ))
-            .when(W_.y_.filter(|r| r.is_integer().is_true()))
-            .with(function!(
-                vk_metric,
-                mink.to_symbolic([GS
-                    .uvaind
-                    .call_args([Atom::num(current.topo_order()), Atom::var(W_.y_)])]),
-                W_.x_
-            ))
-            .replace(function!(vk_metric, W_.x_, W_.y_))
-            .with(function!(ETS.metric, W_.x_, W_.y_));
-
-        res = res.replace(vakint::symbols::S.cmplx_i).with(Atom::i());
+        res = Self::restore_numerator(res, current.topo_order());
 
         res = res
             .simplify_metrics()
@@ -475,6 +406,85 @@ impl Integrated<'_> {
 
         // println!("\nIntegrated CT:\n{}\n", res);
         Ok(res)
+    }
+
+    fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
+        res = res
+            .replace(parse_lit!(vakint::cl2))
+            .with(parse_lit!(cl2))
+            .replace(parse_lit!(vakint::sqrt3))
+            .with(parse_lit!(sqrt(3)));
+
+        let mink = Minkowski {}.new_rep(GS.dim);
+        for (source, target) in [
+            (vakint::symbols::S.k, GS.loop_mom),
+            (vakint::symbols::S.p, GS.emr_mom),
+        ] {
+            res = res
+                .replace(function!(source, W_.i_, W_.j_))
+                .when(W_.j_.filter(|index| index.is_integer().is_true()))
+                .with(function!(
+                    source,
+                    W_.i_,
+                    mink.to_symbolic([function!(GS.uvaind, topology_order, W_.j_)])
+                ))
+                .replace(function!(
+                    source,
+                    W_.i_,
+                    vakint::symbols::S.dot_dummy_ind(W_.j_)
+                ))
+                .when(W_.j_.filter(|index| index.is_integer().is_true()))
+                .with(function!(
+                    source,
+                    W_.i_,
+                    mink.to_symbolic([function!(GS.uvaind, topology_order, W_.j_)])
+                ))
+                // Native projection retains a source index's identity while
+                // omitting its representation. Only numeric backend dummies
+                // belong to the topology-local chart above.
+                .replace(function!(source, W_.i_, W_.j_))
+                .when(W_.j_.filter(|index| Aind::try_from(index).is_ok()))
+                .with(function!(
+                    source,
+                    W_.i_,
+                    mink.to_symbolic([Atom::var(W_.j_)])
+                ))
+                .replace(function!(source, W_.x___))
+                .with(function!(target, W_.x___));
+        }
+
+        let vk_metric = vakint_symbol!("g");
+        res = res
+            .replace(function!(vk_metric, W_.x_, W_.y_) * function!(GS.emr_mom, W_.x___, W_.x_))
+            .with(function!(GS.emr_mom, W_.x___, W_.y_));
+        res = res.replace_map(|view, _, output| {
+            let symbolica::atom::AtomView::Fun(metric) = view else {
+                return;
+            };
+            if metric.get_symbol() != vk_metric || metric.get_nargs() != 2 {
+                return;
+            }
+            let slots = [metric.get(0), metric.get(1)].map(|slot| {
+                let raw_index = if let symbolica::atom::AtomView::Fun(index) = slot
+                    && index.get_symbol() == vakint::symbols::S.dot_dummy_ind
+                    && index.get_nargs() == 1
+                {
+                    index.get(0)
+                } else {
+                    slot
+                };
+                if raw_index.is_integer().is_true() {
+                    mink.to_symbolic([function!(GS.uvaind, topology_order, raw_index)])
+                } else if Aind::try_from(raw_index).is_ok() {
+                    mink.to_symbolic([raw_index.to_owned()])
+                } else {
+                    slot.to_owned()
+                }
+            });
+            **output = function!(ETS.metric, &slots[0], &slots[1]);
+        });
+
+        res.replace(vakint::symbols::S.cmplx_i).with(Atom::i())
     }
 }
 
@@ -1220,6 +1230,97 @@ mod tests {
     use crate::initialisation::test_initialise;
 
     use super::*;
+
+    #[test]
+    fn restored_vakint_source_indices_keep_identity_and_representation() {
+        test_initialise().unwrap();
+
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let other_dimension = Minkowski {}.new_rep(6);
+        for (source, target) in [
+            (vakint::symbols::S.k, GS.loop_mom),
+            (vakint::symbols::S.p, GS.emr_mom),
+        ] {
+            for index in [
+                Aind::Hedge(5, 0),
+                Aind::Vertex(2, 1),
+                Aind::UVTerm(3, 4),
+                Aind::Dummy(7),
+                Aind::Symbol(symbolica::symbol!("restored_vakint_source_label")),
+            ] {
+                let index = Atom::from(index);
+                assert_eq!(
+                    Integrated::restore_numerator(function!(source, 2, &index), 19),
+                    function!(target, 2, mink.to_symbolic([index]))
+                );
+            }
+
+            let index = Atom::from(Aind::Hedge(5, 0));
+            for slot in [
+                mink.to_symbolic([index.clone()]),
+                other_dimension.to_symbolic([index]),
+            ] {
+                assert_eq!(
+                    Integrated::restore_numerator(function!(source, 2, &slot), 19),
+                    function!(target, 2, slot)
+                );
+            }
+            for dummy in [Atom::num(5), vakint::symbols::S.dot_dummy_ind(5)] {
+                assert_eq!(
+                    Integrated::restore_numerator(function!(source, 2, dummy), 19),
+                    function!(target, 2, mink.to_symbolic([function!(GS.uvaind, 19, 5)]))
+                );
+            }
+        }
+
+        let source = Atom::from(Aind::Hedge(5, 0));
+        let represented = other_dimension.to_symbolic([Atom::from(Aind::Hedge(7, 0))]);
+        assert_eq!(
+            Integrated::restore_numerator(
+                function!(vakint::symbols::S.g, &source, &represented),
+                19
+            ),
+            function!(ETS.metric, mink.to_symbolic([source]), represented)
+        );
+        assert_eq!(
+            Integrated::restore_numerator(
+                function!(vakint::symbols::S.g, 5, vakint::symbols::S.dot_dummy_ind(7)),
+                19
+            ),
+            function!(
+                ETS.metric,
+                mink.to_symbolic([function!(GS.uvaind, 19, 5)]),
+                mink.to_symbolic([function!(GS.uvaind, 19, 7)])
+            )
+        );
+    }
+
+    #[test]
+    fn restored_vakint_source_indices_close_mixed_tensor_and_dot_sums() {
+        test_initialise().unwrap();
+
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let h5 = Atom::from(Aind::Hedge(5, 0));
+        let h7 = Atom::from(Aind::Hedge(7, 0));
+        let q1 = function!(GS.emr_mom, 1, mink.to_symbolic([]));
+        let q4 = function!(GS.emr_mom, 4, mink.to_symbolic([]));
+        let source = function!(vakint::symbols::S.p, 1, &h5)
+            * function!(vakint::symbols::S.p, 1, &h7)
+            * function!(GS.emr_mom, 1, mink.to_symbolic([h5]))
+            * function!(GS.emr_mom, 4, mink.to_symbolic([h7]))
+            + function!(SPENSO_TAG.dot, &q1, &q4);
+
+        // A nested counterterm has restored source labels beside still-native
+        // propagator slots. Both summands must have the same closed interface
+        // before the next subgraph is materialized as a tensor network.
+        let restored = Integrated::restore_numerator(source, 19)
+            .undo_schoonschip::<Aind>()
+            .unwrap()
+            .to_dots();
+        let expected =
+            (function!(SPENSO_TAG.dot, &q1, &q1) + 1) * function!(SPENSO_TAG.dot, &q1, &q4);
+        assert!((restored - expected).expand().is_zero());
+    }
 
     #[test]
     fn integrated_counterterm_projects_one_laurent_expansion() {

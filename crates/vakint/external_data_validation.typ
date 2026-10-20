@@ -2,7 +2,8 @@
 
 This records completed migration checks as of 20 October 2026. The focused
 suites overlap; their counts are not a combined whole-repository test result.
-Outstanding end-to-end and repository-CI checks are listed separately below.
+The completed end-to-end scientific checks and the remaining repository-CI gate
+are recorded separately below.
 
 #let evidence(path, body) = link(
   "https://github.com/alphal00p/vakint-external-data/blob/fced6061d2037272bc76c15bd0396b9ac7287bf7/" + path,
@@ -247,16 +248,21 @@ original dependency result after explicitly mapping only its old scalar DOT head
 declaration to the local DOT declaration. Both preserve the same symmetric,
 linear dot product and every argument; production registration checks are
 unchanged. The local probe completes in about 0.26 seconds; this is a contraction
-measurement, not an end-to-end QCD timing claim. The full QCD scalar comparison remains pending after successful complete
-preparations.
+measurement, not an end-to-end QCD timing claim. The complete QCD scalar comparison passed with exact symbolic equality, as
+recorded below.
 
 The QCD fixture contracts vector coefficients exposed by expansion before gamma
 collection. The independent four-gamma control and all five fixture controls
 pass. Complete original and candidate preparations each produced 8,306 scalar
 terms, 21 contributions and five recorded guards. Their exact irreducible
-nonzero predicates agree: `D`, `D-1` and `D+2`. The complete canonical scalar
-comparison remains pending; equal counts and guard sets alone do not establish
-it.
+nonzero predicates agree: `D`, `D-1` and `D+2`. The complete strict Rust comparison
+passed after both inputs were admitted and routed to
+`I5L_32745_pinch_8_9_12` with unknown-integral fallback disabled. Exact symbolic
+subtraction and rational combination returned zero. This used no IBP reduction,
+numerical tolerance or DOT declaration rewrites in the complete inputs; the
+explicit compatibility mapping used by isolated trace probes had zero matches
+here. Source, library, binary and input hashes bind the completed preparations
+and comparison to runtime commit `c398e309de1767fcecbe841f6555080e10700fb6`.
 
 The complete native registry/cache/capability matrix passed all 64 selected tests,
 including actual five-loop witness admission/reuse. The fresh 38-root four-loop
@@ -264,8 +270,7 @@ campaign completed with 30 newly stored roots and eight strictly reused captured
 descendants. Every selected root has a validated durable record, all four cold
 term/ordered-guard controls agree, and fresh-process value/mass/hit/limit checks
 passed. Its two optional metadata capture exhaustions are recorded separately
-from successful root completion. The full five-loop canonical scalar comparison is still running; completed
-preparations alone do not establish input parity.
+from successful root completion.
 
 A separate authentic five-loop catalog test passed after validating all 905
 terminal records against the immutable v0.1.0 manifest. Retain preserves a real
@@ -299,9 +304,9 @@ against the current FeynKit branch in
 #link("https://github.com/alphal00p/gammaloop/pull/156")[PR 156]. Its 123 graph
 tests and all-target Clippy pass. Its exact final-source checks/upload command
 completed successfully at `d39d9bf206d8f858efedc9281f034cddb50c51fa`; the PR was pushed,
-marked non-draft and labeled `final-review`. Hosted checks remain independent
-of that completed local gate. Already-fixed dependency issues were incorporated without duplicate
-upstream submissions.
+marked non-draft and labeled `final-review`. Its
+#link("https://nix-ci.com/gh:alphal00p:gammaloop/reject-native-dot-metadata-fallback/d39d9bf206d8f858efedc9281f034cddb50c51fa")[hosted NixCI check also passed]. Already-fixed dependency issues were
+incorporated without duplicate upstream submissions.
 
 Python build producers now use the complete manifest normal-dependency closure,
 including optional UFO and FeynKit Python sources. This follows the existing
@@ -312,9 +317,41 @@ with matching source hashes. The corrected dependency producer compiled the
 real UFO loader and GammaLoop API successfully. No Rust API or Cargo manifest
 was changed.
 
+Two final serialization corrections follow existing upstream fixes. Hedge metadata is
+passed unquoted to Linnet, which owns DOT quoting; the final split-forward
+round-trip assertions remain unchanged. FORM input uses the upstream exact-tree
+serializer, including explicit complex components, to preserve precedence,
+symbol identities and unit imaginary coefficients. FORM scripts and master
+formulas are unchanged. Two formatter regressions pass across 34 exact
+round-trip cases. Four existing display expectations within the two-loop ghost
+test omit the unit numerator before the imaginary unit, matching the current
+printer. Each complete old/new expression is an identical exact Atom; all
+other bytes of that test source, including numerical and forest-size assertions,
+are preserved. These serialization paths do not alter the completed QCD
+contraction or RustRed coefficient evaluation.
+
+A subsequent UV integration regression exposed bare source-index labels beside
+already typed Lorentz slots after Vakint evaluation. The existing upstream
+restoration boundary supplies the missing inverse to numerator projection:
+returned momenta and metrics regain their source Lorentz representation,
+existing typed dimensions and labels are preserved, and numerical/dot-generated
+indices keep their topology-qualified chart. Two focused restoration controls
+pass, including an independent scalar identity for the previously incompatible
+mixed tensor/dot sum. The complete two-loop ghost regression also passes,
+including all six graphs, unchanged scientific expression checks, exact
+legacy/new forest comparisons and original forest-size assertions. Matching
+all-target Vakint/GammaLoop Clippy passes with `-D warnings`. No tensor parser
+or safety check is bypassed.
+
 == Final repository-CI result — pending completion
 
-To be filled after the final Nix build, required checks, cache upload and push
-complete. Record the tested Vakint commit, Nix result paths, upload result,
-hosted check URLs and any remaining failures. No whole-repository CI pass or
-final-review readiness is claimed by the focused evidence above.
+The exact checks/upload recipe at `c398e309de1767fcecbe841f6555080e10700fb6`
+completed static checks and reached the core runtime suite, where two DOT
+round trips rejected doubly quoted hedge metadata and one two-loop ghost test
+rejected the serialized imaginary unit in FORM input. The command exited one
+before upload. Both original DOT round trips and their two hedge unit tests
+now pass with the upstream quoting correction. The formatter regressions,
+index-restoration controls and full ghost calculation also pass after the
+corrections above. Final corrected-source repository checks and successful
+upload remain required before publication of the main PR; no whole-repository
+pass is inferred from these focused results.

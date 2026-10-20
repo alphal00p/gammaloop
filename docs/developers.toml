@@ -159,8 +159,8 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-17"
-review_ref = "c9f4e32acd2c"
+reviewed_at = "2026-10-20"
+review_ref = "c398e309de1767fcecbe841f6555080e10700fb6"
 products = ["gammaloop"]
 topics = ["uv", "renormalization"]
 review_triggers = ["crates/gammalooprs/src/uv/**", "crates/gammalooprs/src/graph/**"]
@@ -503,11 +503,11 @@ title = "Vakint implementation architecture"
 summary = "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests."
 source = "docs/architecture/vakint-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-08-18"
+status = "Implemented · reviewed 2026-10-20"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-19"
-review_ref = "a7c424bb01bb4183ef1bce46a8f1dbb4ce70263d"
+reviewed_at = "2026-10-20"
+review_ref = "c398e309de1767fcecbe841f6555080e10700fb6"
 products = ["vakint"]
 topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
 review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
@@ -524,7 +524,10 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-19: The architecture now records immutable RustRed snapshots, explicit
 # master modes, exact-combination capability checks, and the in-process FeynKit tensor
 # default.
-digest = "96ba715daa038185684adca6589add6bf216f738"
+# Reviewed 2026-10-20: FORM input now follows the existing upstream exact-tree
+# serializer, with explicit complex components, symbol identities and parentheses.
+# FORM programs, master formulas, output decoding and ownership are unchanged.
+digest = "c139ea366d60f8eb38af3af873082a036490da1d"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"

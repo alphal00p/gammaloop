@@ -133,6 +133,9 @@ selected evaluation order, validates the loop-normalization expression, and enfo
 4.2.1 and pySecDec >= 1.6.4 when those tools are selected.
 
 FORM programs, headers, and run templates are embedded in the Rust binary with `include_str!`.
+Input serialization follows the exact expression tree, retaining symbol identities and argument
+order instead of invoking display callbacks. Complex coefficients have explicit real and
+imaginary components and parentheses, including a numeric coefficient for the imaginary unit.
 For each run, Vakint renders those resources into a uniquely named temporary directory, launches
 the configured process, reads `out.txt`, and removes the directory when `clean_tmp_dir` is true.
 pySecDec can reuse a caller-selected output directory; the implementation labels this unsafe for

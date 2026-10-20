@@ -68,7 +68,7 @@ use std::{
 };
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::{
-    coefficient::CoefficientView,
+    coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
 #[cfg(feature = "symbolica_community_module")]
@@ -6142,6 +6142,65 @@ Evaluated (n_loops=1, mu_r=1) :
         Ok(indices.iter().cloned().collect::<Vec<_>>())
     }
 
+    fn serialize_expression(expression: AtomView) -> String {
+        // Backend input follows the exact AST, including its existing argument
+        // order and antisymmetric signs. Display callbacks must never supply
+        // algebra or symbol identities, and complex numbers need parentheses.
+        match expression {
+            AtomView::Num(number) => {
+                if number.get_coeff_view().is_real() {
+                    return expression.to_canonical_string();
+                }
+                // Serialize the two components explicitly. Display printing
+                // may omit a unit imaginary numerator, while backend adapters
+                // need an explicit numeric token for their imaginary unit.
+                let (real, imaginary) = match number.get_coeff_view().to_owned() {
+                    Coefficient::Complex(value) => (Atom::num(value.re), Atom::num(value.im)),
+                    Coefficient::Float(value) => (Atom::num(value.re), Atom::num(value.im)),
+                    _ => return format!("({})", expression.to_canonical_string()),
+                };
+                format!(
+                    "({}+({})*1𝑖)",
+                    real.to_canonical_string(),
+                    imaginary.to_canonical_string()
+                )
+            }
+            AtomView::Var(variable) => get_full_name(&variable.get_symbol()),
+            AtomView::Fun(function) => format!(
+                "{}({})",
+                get_full_name(&function.get_symbol()),
+                function
+                    .iter()
+                    .map(Self::serialize_expression)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            ),
+            AtomView::Pow(power) => {
+                let (base, exponent) = power.get_base_exp();
+                format!(
+                    "({})^({})",
+                    Self::serialize_expression(base),
+                    Self::serialize_expression(exponent)
+                )
+            }
+            AtomView::Mul(product) => format!(
+                "({})",
+                product
+                    .iter()
+                    .map(Self::serialize_expression)
+                    .collect::<Vec<_>>()
+                    .join("*")
+            ),
+            AtomView::Add(sum) => format!(
+                "({})",
+                sum.iter()
+                    .map(Self::serialize_expression)
+                    .collect::<Vec<_>>()
+                    .join("+")
+            ),
+        }
+    }
+
     pub fn sanitize_user_expressions(
         &self,
         settings: &VakintSettings,
@@ -6180,10 +6239,8 @@ Evaluated (n_loops=1, mu_r=1) :
             }
         });
 
-        // let mut processed_str =
-        //     AtomPrinter::new_with_options(processed.as_view(), PrintOptions::file_no_namespace())
-        //         .to_string();
-        let mut processed_str = expression.to_canonical_string();
+        // Preserve namespaces, symbol attributes and complex numeric precedence.
+        let mut processed_str = Self::serialize_expression(expression.as_view());
         // println!("Original expression: {}", expression.to_canonical_string());
         // Identify user indices in p and k structures
         let mut indices = Vakint::identify_vector_indices(expression.as_view())?;
@@ -6226,22 +6283,20 @@ Evaluated (n_loops=1, mu_r=1) :
                         .with(function!(metric, &integer_index, &idx2));
                 }
             } else {
-                let litteral_form_name = format!(
-                    "[{}]",
-                    user_i.to_canonically_ordered_string(
-                        CanonicalOrderingSettings::new().include_attributes(false)
-                    )
-                );
+                let litteral_form_name =
+                    format!("[{}]", Vakint::serialize_expression(user_i.as_view()));
                 expression_no_indices = expression_no_indices
                     .replace(user_i.to_pattern())
                     .with(Atom::num(0));
-                processed_str =
-                    processed_str.replace(&user_i.to_canonical_string(), &litteral_form_name);
+                processed_str = processed_str.replace(
+                    &Vakint::serialize_expression(user_i.as_view()),
+                    &litteral_form_name,
+                );
                 form_header_indices.push(litteral_form_name);
             }
         }
         if substitute_indices {
-            processed_str = expression_no_indices.to_canonical_string();
+            processed_str = Self::serialize_expression(expression_no_indices.as_view());
         }
         processed_str = undress_vakint_symbols(&processed_str);
 
@@ -6347,8 +6402,8 @@ Evaluated (n_loops=1, mu_r=1) :
         if !substitute_indices {
             indices.clear();
         }
+        // Numeric serialization emits an explicit coefficient before the unit.
         string_replacements.insert("𝑖".into(), "*i_".into());
-        //processed_str = processed_str.replace("𝑖", " i_");
         // println!("String replacements: {}", string_replacements.iter().map(|(k,v)| format!("{} -> {}", k, v)).collect::<Vec<_>>().join(", "));
 
         processed_str = utils::multi_string_replace(processed_str, &string_replacements);
@@ -6742,6 +6797,106 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn form_serialization_handles_unit_imaginary_coefficients() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let x = vk_parse!("form_imaginary_test::x").unwrap();
+        let y = vk_parse!("form_imaginary_test::y").unwrap();
+        let imaginary = Atom::i();
+        for expression in [
+            imaginary.clone(),
+            -&imaginary,
+            &imaginary * &x,
+            -&imaginary * &x,
+            &imaginary / 3,
+            &imaginary * &x * Atom::num((2, 3)),
+            function!(
+                vk_symbol!("form_imaginary_test"),
+                &imaginary,
+                1 - &imaginary
+            ),
+            (1 + &imaginary) * (&x + &y),
+            imaginary.clone().pow(&x),
+            x.pow(&imaginary),
+        ] {
+            for substitute_indices in [false, true] {
+                let (_, serialized, indices) = vakint
+                    .prepare_expression_for_form(
+                        &settings,
+                        expression.clone(),
+                        substitute_indices,
+                        &[],
+                    )
+                    .unwrap();
+                assert!(!serialized.contains('𝑖'), "{serialized}");
+                assert!(!serialized.contains("**"), "{serialized}");
+                let restored = vakint
+                    .process_form_output(
+                        &settings,
+                        serialized.clone(),
+                        indices,
+                        BTreeMap::default(),
+                    )
+                    .unwrap();
+                assert_eq!(restored, expression, "FORM input: {serialized}");
+            }
+        }
+    }
+
+    #[test]
+    fn form_serialization_preserves_complex_precedence_and_symbol_identity() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let custom = symbolica::symbol!(
+            "user_space::serialization_custom",
+            print = |_atom, _options, _state| Some("display_only".into())
+        );
+        let real = symbolica::symbol!("user_space::serialization_real"; Real);
+        let antisymmetric = symbolica::symbol!("user_space::serialization_antisymmetric";
+            Antisymmetric;
+            print = |_atom, _options, _state| Some("display_only_antisymmetric".into()),
+            tags = ["user_space::tensor_tag"]);
+        let complex = Atom::one() + Atom::i() * 2;
+        let custom_coefficient = function!(custom, &complex) * Atom::var(real);
+        for expression in [
+            complex.clone() * vk_parse!("user_space::x+user_space::y").unwrap(),
+            complex.clone()
+                * vk_parse!("numeric_group_0(1)+numeric_group_1_suffix+numeric_group_2").unwrap(),
+            complex.clone().pow(vk_parse!("user_space::power").unwrap()),
+            vk_parse!("user_space::x").unwrap().pow(&complex),
+            custom_coefficient,
+            function!(
+                antisymmetric,
+                vk_parse!("user_space::y").unwrap(),
+                vk_parse!("user_space::x").unwrap()
+            ) * &complex,
+            complex
+                * vk_parse!("tensor(user_space::chain(mink(D,mu)),mink(D,mu))*k(1,mink(D,mu))")
+                    .unwrap(),
+        ] {
+            for substitute_indices in [false, true] {
+                let (_, serialized, indices) = vakint
+                    .sanitize_user_expressions(
+                        &settings,
+                        expression.as_view(),
+                        substitute_indices,
+                        &[],
+                    )
+                    .unwrap();
+                let restored = vakint
+                    .process_form_output(
+                        &settings,
+                        serialized.clone(),
+                        indices,
+                        BTreeMap::default(),
+                    )
+                    .unwrap();
+                assert_eq!(restored, expression, "FORM input: {serialized}");
+            }
+        }
+    }
 
     #[test]
     #[allow(clippy::unnecessary_operation)]

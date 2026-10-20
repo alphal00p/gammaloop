@@ -197,7 +197,7 @@ fn finite_part_ghost_2loop() {
     // F3 (140 -> GS -> 0, not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/16*ep^-2 + 1/32*ep^-1; native GammaLoop / RQFT = -1.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/32*ε+1𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/32*ε+𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
@@ -212,7 +212,7 @@ fn finite_part_ghost_2loop() {
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/8*ep^-2 + 1/16*ep^-1; native GammaLoop / RQFT = -1.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/16*ε+1𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/16*ε+𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
@@ -226,7 +226,7 @@ fn finite_part_ghost_2loop() {
     // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = -1
     // after preserving the antisymmetric color orientation.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-1𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
@@ -257,7 +257,7 @@ fn finite_part_ghost_2loop() {
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = +1/24*ep^-1; native GammaLoop / RQFT = -1.
     insta::assert_snapshot!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(cas(2,coad(8)))^2*-1𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(cas(2,coad(8)))^2*-𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
