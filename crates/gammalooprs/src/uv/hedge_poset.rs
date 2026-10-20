@@ -1860,6 +1860,187 @@ mod tests {
     }
 
     #[test]
+    fn integrated_os_rainbow_retains_nonzero_owned_scheme_coefficients() -> Result<()> {
+        use crate::uv::{
+            CTIdentifier, CTRenormalizationRule, orchestrator::validate_local_counterterm_schemes,
+        };
+
+        test_initialise()?;
+        // Exactly the public run-card graph, before external on-shell spinors
+        // can annihilate its field-like finite scheme correction.
+        let mut graphs = Graph::import_dot(
+            include_str!(
+                "../../../../tests/resources/graphs/local_nested_soft_top_self_energy.dot"
+            ),
+            &standard_model(),
+        )?;
+        assert_eq!(graphs.len(), 1);
+        let graph = graphs.remove(0);
+        let identifier = CTIdentifier::new(BTreeSet::from([-6, 6]), Some(BTreeSet::from([6, 21])));
+        let settings = GenerationSettings {
+            explicit_orientation_sum_only: true,
+            uv: UVgenerationSettings {
+                generate_integrated: true,
+                local_uv_cts_from_expanded_4d_integrands: true,
+                orchestrator: crate::uv::UVOrchestrator::HedgePoset,
+                add_marker: false,
+                renormalization_prescription: RenormalizationPrescriptionSettings {
+                    overrides: vec![CTRenormalizationRule::new(
+                        identifier.clone(),
+                        ApproximationType::OS,
+                    )],
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        let cuts = CutStructure::empty(&graph);
+        assert!(validate_local_counterterm_schemes(
+            &graph,
+            &cuts,
+            &settings.uv
+        )?);
+        let mut forests = Wood::new(cuts, &graph, &graph.model, &settings)?.unfold();
+        assert_eq!(
+            forests
+                .wood
+                .vakint_settings
+                .number_of_terms_in_epsilon_expansion,
+            3
+        );
+        // [], [child], [parent], [child,parent]; no disjoint or extra history.
+        assert_eq!(forests.graph.n_nodes(), 4);
+        let mut histories = BTreeSet::new();
+        let mut child_node = None;
+        let mut nested_parent_node = None;
+        for (node, _, operation) in forests.graph.iter_nodes() {
+            assert!(!forests.graph.is_disjoint_union(node));
+            let source = forests.source_spinney(node);
+            let edges = graph
+                .paired_edges(source.filter())
+                .into_iter()
+                .map(|edge| edge.0)
+                .collect::<Vec<_>>();
+            histories.insert((edges.clone(), operation.key.op_count()));
+            if edges == [3, 4] {
+                child_node = Some(node);
+            } else if edges == [2, 3, 4, 5, 6] && operation.key.op_count() == 2 {
+                nested_parent_node = Some(node);
+            }
+            if !operation.key.is_empty() {
+                assert_eq!(source.renormalization_scheme, ApproximationType::OS);
+                assert_eq!(source.dod, 1);
+                assert_eq!(
+                    graph.ct_identifier(source.filter(), &graph.model),
+                    identifier
+                );
+            }
+        }
+        assert_eq!(
+            histories,
+            BTreeSet::from([
+                (vec![], 0),
+                (vec![3, 4], 1),
+                (vec![2, 3, 4, 5, 6], 1),
+                (vec![2, 3, 4, 5, 6], 2),
+            ])
+        );
+        forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
+
+        let mut nonzero = BTreeSet::new();
+        for (node, _, operation) in forests.graph.iter_nodes() {
+            if operation.key.is_empty() {
+                continue;
+            }
+            let computed = forests.compute_store.require(operation)?;
+            let local = computed.local_4d(operation)?;
+            let finite = computed
+                .integrated(operation)?
+                .physical_finite_counterterm()?;
+            assert_eq!(
+                finite.structure().logical_slots(),
+                local.atom().structure().logical_slots()
+            );
+            assert!(
+                !finite.is_zero(),
+                "{operation}: integrated finite payload disappeared"
+            );
+            // A retained-coefficient witness, not completeness of an independent
+            // open tensor basis or a replacement for the physical R2 reference.
+            assert!(
+                finite
+                    .coefficients_are_zero(TensorCollectFilter::<0>::Tensors)?
+                    .is_false(),
+                "{operation}: need an exactly nonzero retained finite coefficient",
+            );
+            let source = forests.source_spinney(node);
+            nonzero.insert((graph.n_loops(source.filter()), operation.key.op_count()));
+        }
+        assert_eq!(nonzero, BTreeSet::from([(1, 1), (2, 1), (2, 2)]));
+
+        let child = child_node.expect("the physical one-loop OS child exists");
+        let operation = &forests.graph[child];
+        let integrated = forests
+            .compute_store
+            .require(operation)?
+            .integrated(operation)?;
+        let expected = integrated.finite_counterterm()?;
+        assert!(
+            expected.expression().contains_symbol(GS.dim_epsilon),
+            "the finite child retains positive epsilon orders for the parent pole"
+        );
+        let complete_child = forests.recursion_input_4d(child)?;
+        let frozen = complete_child
+            .sectors()
+            .filter(|sector| !sector.frozen_lmbs().is_empty())
+            .collect::<Vec<_>>();
+        assert_eq!(frozen.len(), 1);
+        assert!(frozen[0].active_components.is_empty());
+        assert_eq!(
+            frozen[0].frozen_lmbs(),
+            std::slice::from_ref(&forests.source_spinney(child).lmb)
+        );
+        assert_eq!(
+            frozen[0].atom, expected,
+            "recursion carries the actual positive-epsilon coefficient exactly once"
+        );
+
+        let parent = nested_parent_node.expect("the completed-child parent history exists");
+        let operation = &forests.graph[parent];
+        let local = forests
+            .compute_store
+            .require(operation)?
+            .local_4d(operation)?;
+        let sectors = local.active_sectors();
+        assert_eq!(
+            sectors.len(),
+            2,
+            "the parent acts on both local-child and finite-child sectors"
+        );
+        assert_eq!(
+            sectors
+                .iter()
+                .filter(|sector| sector.frozen_lmbs().is_empty())
+                .count(),
+            1
+        );
+        let frozen_parent = sectors
+            .iter()
+            .filter(|sector| !sector.frozen_lmbs().is_empty())
+            .collect::<Vec<_>>();
+        assert_eq!(frozen_parent.len(), 1);
+        assert_eq!(frozen_parent[0].active_components.len(), 1);
+        assert_eq!(frozen_parent[0].frozen_lmbs(), frozen[0].frozen_lmbs());
+        assert_ne!(
+            frozen_parent[0].integration_atom().expression(),
+            frozen_parent[0].atom.expression(),
+            "the OS mass branch stays local while the vacuum remainder is integrated"
+        );
+        Ok(())
+    }
+
+    #[test]
     fn vacuum_subtraction_prunes_only_full_observable_spinneys() -> Result<()> {
         use crate::settings::global::MediumMode;
 

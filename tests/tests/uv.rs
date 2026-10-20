@@ -6073,7 +6073,7 @@ mod slow {
     }
 
     #[test]
-    fn integrated_os_rainbow_generation_matches_all_routes() -> Result<()> {
+    fn local_os_integrated_rainbow_generation_matches_all_routes() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         OsRouteFixture::IntegratedNestedOsTopSelfEnergy
             .check_routes("os_integrated_rainbow_route_matrix")
