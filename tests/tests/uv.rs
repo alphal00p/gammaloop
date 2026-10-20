@@ -3528,6 +3528,14 @@ impl OsRouteFixture {
         if source_log.is_file() {
             std::fs::copy(source_log, &profile_log)?;
         }
+        let phase_records = if profile_log.is_file() {
+            std::fs::read_to_string(&profile_log)?
+                .lines()
+                .map(serde_json::from_str::<Value>)
+                .collect::<std::result::Result<Vec<_>, _>>()?
+        } else {
+            Vec::new()
+        };
         for (route_index, state) in retained_states.into_iter().enumerate() {
             let artifacts = state
                 .parent()
@@ -3538,6 +3546,88 @@ impl OsRouteFixture {
             report["memory_scope"] =
                 "generation_sampled_process_rss_with_prior_route_allocations".into();
             report["profile_log"] = json!(profile_log.is_file().then_some(&profile_log));
+            let window_start = report["generation_started_unix_milliseconds"]
+                .as_u64()
+                .ok_or_else(|| eyre::eyre!("generation phase report has no start time"))?;
+            let window_end = report["generation_finished_unix_milliseconds"]
+                .as_u64()
+                .ok_or_else(|| eyre::eyre!("generation phase report has no finish time"))?;
+            let mut phases = Map::new();
+            for (stage, name) in [
+                ("hedge_poset_4d_node_done", "counterterm_4d_and_scheme"),
+                ("direct_3d_construction", "counterterm_direct_taylor"),
+                (
+                    "direct_3d_finite_prefix_construction",
+                    "counterterm_finite_prefix",
+                ),
+                ("raw_cff_generation", "cff_raw_requests"),
+                ("exact_cff_preparation", "cff_exact_preparation"),
+                ("exact_cff_assignment_selection", "cff_exact_requests"),
+                ("cff_surface_conversion", "cff_surface_conversion"),
+            ] {
+                let records = phase_records
+                    .iter()
+                    .filter(|record| {
+                        record["stage"].as_str() == Some(stage)
+                            && record["empty_history"].as_bool() != Some(true)
+                            && record["finished_unix_milliseconds"]
+                                .as_u64()
+                                .is_some_and(|time| window_start <= time && time <= window_end)
+                    })
+                    .collect::<Vec<_>>();
+                let mut seconds = 0.0;
+                for record in &records {
+                    let elapsed = record["elapsed_ms"]
+                        .as_f64()
+                        .ok_or_else(|| eyre::eyre!("{stage} has no completed duration"))?;
+                    eyre::ensure!(elapsed.is_finite() && elapsed >= 0.0);
+                    seconds += elapsed / 1000.0;
+                }
+                phases.insert(
+                    name.to_string(),
+                    json!({
+                        "seconds": (!records.is_empty()).then_some(seconds),
+                        "completed_call_count": records.len(),
+                        "native_payload_cache_hits": records.iter()
+                            .filter(|record| record["native_payload_cache_hit"].as_bool() == Some(true))
+                            .count(),
+                    }),
+                );
+            }
+            if matches!(self, OsRouteFixture::IntegratedNestedOsTopSelfEnergy) {
+                for required in [
+                    "counterterm_4d_and_scheme",
+                    "cff_raw_requests",
+                    "cff_surface_conversion",
+                ] {
+                    eyre::ensure!(
+                        phases[required]["completed_call_count"]
+                            .as_u64()
+                            .unwrap_or(0)
+                            > 0,
+                        "{required}: integrated rainbow phase was not measured"
+                    );
+                }
+                let required = if route_index == 0 {
+                    "cff_exact_requests"
+                } else {
+                    "counterterm_direct_taylor"
+                };
+                eyre::ensure!(
+                    phases[required]["completed_call_count"]
+                        .as_u64()
+                        .unwrap_or(0)
+                        > 0,
+                    "{required}: route-specific integrated rainbow phase was not measured"
+                );
+            }
+            report["generation_phase_measurements"] = json!({
+                "window_started_unix_milliseconds": window_start,
+                "window_finished_unix_milliseconds": window_end,
+                "duration_scope": "completed_direct_inclusive_calls; categories_may_overlap_and_must_not_be_summed",
+                "missing_scope": "null_seconds_means_no_completed_observed_call",
+                "clocks": phases,
+            });
             std::fs::write(report_path, serde_json::to_vec_pretty(&report)?)?;
             let intermediate_log = artifacts.join("generation_profile.jsonl");
             if intermediate_log.is_file() {
