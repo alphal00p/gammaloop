@@ -11,12 +11,13 @@ import itertools
 import json
 import math
 import multiprocessing
-from pathlib import Path
 import re
 import subprocess
 import sys
 import time
+from pathlib import Path
 
+import mpmath as mp
 import sympy as sp
 
 EPS = sp.Symbol("eps")
@@ -171,7 +172,7 @@ def backend_input(prepared, coefficient, powers=None):
     }
 
 
-def prepare_vector(payload, mass):
+def prepare_vector(payload, mass, gluon_mass_squared="0"):
     """Bind a separate A projection to the original D09 chart and full d trace."""
     assert payload["projection"] == "pslash/(4*Nc*p_squared)"
     assert payload["source_kernel_weight"] == "1"
@@ -184,16 +185,42 @@ def prepare_vector(payload, mass):
     assert source["light_flavor"] is None and not source["integral_zero_certified"]
     # Only the finite scalar numerator differs. Keep every original edge,
     # repeated line, signed momentum, mass, power and scalar-product binding.
-    assert {k: v for k, v in source.items() if k != "color_rows"} == {
-        k: v for k, v in mass["source"].items() if k != "color_rows"
-    }
+    assert gluon_mass_squared in ("0", "1")
+    if gluon_mass_squared == "0":
+        assert {k: v for k, v in source.items() if k != "color_rows"} == {
+            k: v for k, v in mass["source"].items() if k != "color_rows"
+        }
+    else:
+        assert {
+            k: v for k, v in source.items() if k not in ("color_rows", "propagators")
+        } == {
+            k: v
+            for k, v in mass["source"].items()
+            if k not in ("color_rows", "propagators")
+        }
+        for pole, original in zip(
+            source["propagators"], mass["source"]["propagators"], strict=True
+        ):
+            expected = original.copy()
+            if expected["edge"] in (3, 6):
+                assert expected["mass_squared"] == "0"
+                expected["mass_squared"] = "1"
+            assert {k: v for k, v in pole.items() if k != "polynomial"} == {
+                k: v for k, v in expected.items() if k != "polynomial"
+            }
     l, k = source["loop_momenta"]
     p = vector["symbols"]["p"]
     loop_symbols = {name: vector["symbols"][name] for name in (l, k, "p")}
     l, k = (loop_symbols[name] for name in (l, k))
     for pole, (edge, momentum, mass_squared) in zip(
         source["propagators"],
-        [(2, l, "1"), (3, k - l, "0"), (4, k, "1"), (5, k, "1"), (6, k - p, "0")],
+        [
+            (2, l, "1"),
+            (3, k - l, gluon_mass_squared),
+            (4, k, "1"),
+            (5, k, "1"),
+            (6, k - p, gluon_mass_squared),
+        ],
         strict=True,
     ):
         assert pole["edge"] == edge and pole["mass_squared"] == mass_squared
@@ -215,7 +242,7 @@ def prepare_vector(payload, mass):
     return vector
 
 
-def vector_protocol_controls(payload, mass):
+def vector_protocol_controls(payload, mass, gluon_mass_squared="0"):
     """Reject concrete source/protocol errors before any backend package exists."""
     mutations = {
         "early_D4": lambda value: value["source"]["color_rows"][0].update(
@@ -239,11 +266,160 @@ def vector_protocol_controls(payload, mass):
         changed = json.loads(json.dumps(payload))
         mutate(changed)
         try:
-            prepare_vector(changed, mass)
+            prepare_vector(changed, mass, gluon_mass_squared)
         except AssertionError:
             continue
         raise AssertionError("malformed optional vector source was admitted")
     return list(mutations)
+
+
+def regulated_vector_reference(vector, mass, source_path, output, validate_only):
+    """Independent dimensional reference; never the emitted CFF integral.
+
+    A unit positive scalar mass changes only the original gluon poles. The
+    unchanged native ordered numerator and source phase remain the anchor.
+    """
+    payload = json.loads(json.dumps(vector))
+    symbols = prepare(payload["source"])["symbols"]
+    for pole in payload["source"]["propagators"]:
+        if pole["edge"] in (3, 6):
+            assert pole["mass_squared"] == "0"
+            pole["mass_squared"] = "1"
+            pole["polynomial"] = sp.sstr(polynomial(pole["polynomial"], symbols) - 1)
+    regulated = prepare_vector(payload, mass, "1")
+    controls = vector_protocol_controls(payload, mass, "1")
+    for edge in (3, 6):
+        wrong = json.loads(json.dumps(payload))
+        pole = next(p for p in wrong["source"]["propagators"] if p["edge"] == edge)
+        pole["mass_squared"] = "0"
+        pole["polynomial"] = sp.sstr(polynomial(pole["polynomial"], symbols) + 1)
+        try:
+            prepare_vector(wrong, mass, "1")
+        except AssertionError:
+            controls.append(f"missing_gluon_mass_edge_{edge}")
+        else:
+            raise AssertionError("a missing matched gluon regulator was admitted")
+
+    # Delta=x^2+(1-x)*lambda^2 at p^2=m^2=1. H=exp(gamma*eps)*Gamma(eps).
+    # J1=H*int (1-x)*Delta^-eps; J2=-eps*H*int x*(1-x)*Delta^(-1-eps).
+    # The cubic Minkowski denominator supplies the minus sign in J2.
+    # f_lambda=H*int [2+(2-2eps)*x]*Delta^-eps is the OS mass coefficient.
+    # CT_child=(kslash-m)/eps-f_lambda*m, with fields in MS-bar.
+    # P_lambda=(2-d)*(J1/eps-2*f_lambda*J2), d=4-2eps.
+    # J1 through eps^1, f_lambda through eps^0 and J2 through eps^1 suffice;
+    # retain f_lambda's eps^1 coefficient too as an enclosing-operation witness.
+    with mp.workdps(80):
+        delta = lambda x: x * x - x + 1
+        integrands = {
+            "L1": lambda x: (1 - x) * mp.log(delta(x)),
+            "L2": lambda x: (1 - x) * mp.log(delta(x)) ** 2,
+            "R0": lambda x: x * (1 - x) / delta(x),
+            "R1": lambda x: x * (1 - x) * mp.log(delta(x)) / delta(x),
+            "I0": lambda x: (2 + 2 * x) * mp.log(delta(x)),
+            "f1_log": lambda x: (
+                (1 + x) * mp.log(delta(x)) ** 2 + 2 * x * mp.log(delta(x))
+            ),
+        }
+        moments = {name: mp.quad(fn, [0, 1]) for name, fn in integrands.items()}
+        l1, l2, r0, r1, i0 = (moments[name] for name in ("L1", "L2", "R0", "R1", "I0"))
+        assert abs(l1 - (-1 + mp.pi / (2 * mp.sqrt(3)))) < mp.mpf("1e-70")
+        assert abs(r0 - (-1 + 2 * mp.pi / (3 * mp.sqrt(3)))) < mp.mpf("1e-70")
+        assert abs(i0 - (-6 + mp.sqrt(3) * mp.pi)) < mp.mpf("1e-70")
+        finite = -l2 - mp.zeta(2) / 2 + 12 * r1 + 4 * i0 * r0 - 2 * l1 + 16 * r0
+        proper = {
+            -2: mp.mpf(-1),
+            -1: 11 - 7 * mp.pi / mp.sqrt(3),
+            0: finite,
+        }
+        moment_report = {name: mp.nstr(value, 75) for name, value in moments.items()}
+        moment_report["f1"] = mp.nstr(moments["f1_log"] + 3 * mp.zeta(2) / 2, 75)
+        proper_report = {
+            str(power): mp.nstr(value, 75) for power, value in proper.items()
+        }
+        epsilon_checks = []
+        for epsilon in (mp.mpf("1e-12"), mp.mpf("2e-12")):
+            h = mp.exp(mp.euler * epsilon) * mp.gamma(epsilon)
+            j1 = h * mp.quad(
+                lambda x, epsilon=epsilon: (1 - x) * delta(x) ** (-epsilon), [0, 1]
+            )
+            j2 = (
+                -epsilon
+                * h
+                * mp.quad(
+                    lambda x, epsilon=epsilon: x * (1 - x) * delta(x) ** (-1 - epsilon),
+                    [0, 1],
+                )
+            )
+            f = h * mp.quad(
+                lambda x, epsilon=epsilon: (
+                    (2 + (2 - 2 * epsilon) * x) * delta(x) ** (-epsilon)
+                ),
+                [0, 1],
+            )
+            direct = (-2 + 2 * epsilon) * (j1 / epsilon - 2 * f * j2)
+            remainder = direct - sum(
+                value * epsilon**power for power, value in proper.items()
+            )
+            assert abs(remainder) < 100 * epsilon
+            epsilon_checks.append(
+                {
+                    "epsilon": mp.nstr(epsilon, 25),
+                    "finite_subtracted_remainder": mp.nstr(remainder, 60),
+                    "absolute_bound": mp.nstr(100 * epsilon, 25),
+                }
+            )
+    inputs = backend_input(regulated, regulated["rows"]["CF2"])
+    output.mkdir(parents=True)
+    validation = {
+        "mode": "matched_positive_gluon_mass_D09_vector_only",
+        "input_sha256": hashlib.sha256(source_path.read_bytes()).hexdigest(),
+        "script_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+        "normalization": "a^2*CF^2, amputated Sigma, p^2=m^2=mu_bar^2=lambda^2=1",
+        "regulated_source": payload,
+        "backend_inputs": inputs,
+        "protocol_negative_controls": controls,
+        "proper_moments": moment_report,
+        "proper_coefficients": proper_report,
+        "proper_direct_dimensional_parameter_checks": epsilon_checks,
+        "proper_finite_formula": "-L2-zeta(2)/2+12*R1+4*I0*R0-2*L1+16*R0",
+        "signed_parent_MS_poles": {"-2": "1/2", "-1": "-1/4", "0": "0"},
+        "policy": POLICY,
+        "integration_performed": False,
+        "production_OS_forest_integrated_condition_evaluated": False,
+    }
+    (output / "validation.json").write_text(json.dumps(validation, indent=2))
+    if validate_only:
+        return
+    multiprocessing.set_start_method("fork")
+    rows, report = integrate("D09-vector-massive-gluon", inputs, output / "bare", 0)
+    prepared = combine(
+        [
+            (1, rows),
+            (1, {power: (complex(value), 0j) for power, value in proper.items()}),
+        ]
+    )
+    complete = combine([(1, prepared), (1, {-2: (0.5 + 0j, 0j), -1: (-0.25 + 0j, 0j)})])
+    checks = []
+    compare(
+        "D09_regulated_vector_signed_UV_pole_residual",
+        {power: value for power, value in complete.items() if power < 0},
+        {},
+        checks,
+    )
+    summary = {
+        **validation,
+        "integration_performed": True,
+        "backend_case": report,
+        "checks": checks,
+        "finite_vector_reference": {
+            "value": [complete[0][0].real, complete[0][0].imag],
+            "bare_reported_absolute_error": [complete[0][1].real, complete[0][1].imag],
+        },
+        "passed": all(row["passed"] for row in checks),
+        "unregulated_limit_or_CFF_exchange_proved": False,
+    }
+    (output / "summary.json").write_text(json.dumps(summary, indent=2))
+    assert summary["passed"], "matched-regulator reference UV poles do not cancel"
 
 
 def vector_reference(rows, checks):
@@ -444,6 +620,7 @@ def combine(terms):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--validate-only", action="store_true")
+    parser.add_argument("--regulated-vector-only", action="store_true")
     parser.add_argument("input", type=Path)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
@@ -471,6 +648,16 @@ def main():
         assert {
             k: v for k, v in source.items() if k not in ("name", "light_flavor")
         } == {k: v for k, v in light[0].items() if k not in ("name", "light_flavor")}
+    if args.regulated_vector_only:
+        assert vector is not None, "the native vector source is required"
+        regulated_vector_reference(
+            data["vector_source"],
+            prepared["D09"],
+            source_path,
+            output,
+            args.validate_only,
+        )
+        return
     crossed = prepared["D11"]
     assert sp.Poly(
         crossed["rows"]["CF2"] + 2 * crossed["rows"]["CFCA"],
