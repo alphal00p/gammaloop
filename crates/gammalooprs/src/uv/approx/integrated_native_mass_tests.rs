@@ -4159,14 +4159,28 @@ impl QcdMassReference {
                     .external_structure_iter()
                     .map(|slot| slot.to_atom())
                     .collect::<Vec<_>>();
+                // The explicit library returned native index payloads; the
+                // retained IndexedStructure carries their reversible encoding.
+                // Compare the same representation, including variance and exact
+                // named payload, and certify both encoding directions.
+                let source_ports = expected
+                    .iter()
+                    .map(|slot| -> Result<Atom> {
+                        let encoded = slot.to_atom();
+                        let native = cooking.uncook(encoded.as_view());
+                        ensure!(cooking.try_cook(native.as_view())? == encoded);
+                        Ok(native)
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                ensure!(ports.len() == source_ports.len());
+                for native in &ports {
+                    ensure!(
+                        cooking.uncook(cooking.try_cook(native.as_view())?.as_view()) == *native
+                    );
+                }
                 ensure!(
                     ports.iter().cloned().collect::<BTreeSet<_>>()
-                        == input
-                            .structure()
-                            .logical_slots()
-                            .iter()
-                            .map(|slot| slot.to_atom())
-                            .collect::<BTreeSet<_>>()
+                        == source_ports.iter().cloned().collect::<BTreeSet<_>>()
                 );
                 let mut entries = Vec::new();
                 for (index, value) in tensor.iter_flat() {
@@ -4185,6 +4199,7 @@ impl QcdMassReference {
         };
         drop(library);
         let result = input.with_checked_expression(cooking.try_cook(expression.as_view())?)?;
+        ensure!(result.structure().logical_slots() == input.structure().logical_slots());
         // Reuse the established finite native-component equality owner. Its
         // compact scalar normalization does not distribute the graph numerator.
         let difference = cooking.uncook(input.try_sub(&result)?.expression().as_view());
@@ -4192,4 +4207,288 @@ impl QcdMassReference {
         ensure!(cache.canonicalize(&difference)?.is_zero);
         Ok(result)
     }
+}
+
+/// A common positive scalar gluon mass is an analytic IR rearrangement only.
+/// It changes physical denominators, never the source Feynman-gauge numerator.
+#[test]
+fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<()> {
+    use crate::{
+        graph::edge::EdgeMass,
+        model::UFOSymbol,
+        uv::{
+            ApproximationType, Spinney, UltravioletGraph,
+            approx::{
+                ForestNodeLike, Rooted, UVCtx,
+                local_4d::{FourDSector, Full4dCts, Local4dCts, uv_limit},
+            },
+            hedge_poset::OwnedForestNode,
+            uv_graph::UVE,
+        },
+    };
+    use linnet::half_edge::{
+        involution::EdgeIndex,
+        subgraph::{Inclusion, SubSetOps},
+    };
+
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let mut records = reference.certify_os_quark_proper_prefix()?;
+    ensure!(records.len() == 1);
+    let record = records
+        .remove(&("D09".to_owned(), vec![2, 3]))
+        .ok_or_else(|| eyre!("native D09 OS child missing"))?;
+    let graph = &record.graph;
+    let child = &record.given;
+    let settings = &record.settings;
+    ensure!(settings.generate_integrated && !settings.add_marker);
+    ensure!(settings.on_shell_velocity()? == [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero]);
+    // MH is already a validated native scalar parameter. It is absent from
+    // this QCD source, and remains algebraically independent of MT and mUV.
+    // The analytic reference below takes its value lambda strictly positive.
+    let _parameter = graph.model.parameter("MH")?;
+    let lambda = Atom::from(UFOSymbol::from("MH"));
+    let lambda_symbol = UFOSymbol::from("MH").0;
+    let root = OwnedForestNode {
+        spinney: Spinney::empty(graph),
+        topo_order: 0,
+    };
+    let empty = Full4dCts::from_factorized_local(&Local4dCts::root());
+    let uncut = graph.full_filter().subtract(&graph.initial_state_cut.left);
+    let mut parents = graph
+        .classified_spinneys(&uncut, &graph.model, settings, &graph.loop_momentum_basis)?
+        .into_iter()
+        .filter(|component| {
+            component.n_components() == 1
+                && component.dod == 1
+                && component.renormalization_scheme == ApproximationType::OS
+                && graph.n_loops(component.filter()) == 2
+                && component.filter().includes(child.subgraph())
+        })
+        .collect::<Vec<_>>();
+    ensure!(parents.len() == 1);
+    let parent_spinney = parents.remove(0);
+    let mut regulated = graph.clone();
+    for edge in [EdgeIndex(3), EdgeIndex(6)] {
+        ensure!(graph[edge].particle_pdg_code(&graph.model) == Some(21));
+        ensure!(graph[edge].mass_atom(&graph.model).is_zero());
+        let particle = graph[edge].particle.particle();
+        let numerator = graph[edge].num.clone();
+        let target = &mut regulated.underlying[edge];
+        target.particle = target.particle.clone().override_mass(Some(lambda.clone()));
+        target.mass = EdgeMass::from_atom(lambda.clone(), &graph.model, &graph.param_builder)?;
+        ensure!(target.particle.particle() == particle);
+        ensure!(
+            target.num == numerator,
+            "the IR regulator cannot change the gauge numerator"
+        );
+        ensure!(target.mass_atom(&graph.model) == lambda);
+    }
+    ensure!(regulated.loop_momentum_basis == graph.loop_momentum_basis);
+    let ctx = UVCtx::new(graph, &graph.model, settings);
+    let regulated_ctx = UVCtx::new(&regulated, &regulated.model, settings);
+    let parent = OwnedForestNode {
+        spinney: parent_spinney.clone(),
+        topo_order: 1,
+    };
+    let source = graph
+        .numerator(parent.subgraph(), root.subgraph())?
+        .to_d_dim(crate::utils::GS.dim)?
+        .color_simplify()?
+        .state
+        .expr;
+    let regulated_source = regulated
+        .numerator(parent.subgraph(), root.subgraph())?
+        .to_d_dim(crate::utils::GS.dim)?
+        .color_simplify()?
+        .state
+        .expr;
+    ensure!(source.same_value(&regulated_source));
+    ensure!(!source.expression().contains_symbol(lambda_symbol));
+    let original_bare = source.with_checked_expression(
+        source.expression() * graph.denominator(parent.subgraph(), &graph.model, |_| -1),
+    )?;
+    let regulated_bare = regulated_source.with_checked_expression(
+        regulated_source.expression()
+            * regulated.denominator(parent.subgraph(), &regulated.model, |_| -1),
+    )?;
+    let original_terms = FourDSector::new(
+        original_bare,
+        vec![(
+            parent.subgraph().clone(),
+            parent.subgraph().clone(),
+            parent.lmb().clone(),
+        )],
+        Vec::new(),
+    )
+    .physical_terms()?;
+    let regulated_terms = FourDSector::new(
+        regulated_bare.clone(),
+        vec![(
+            parent.subgraph().clone(),
+            parent.subgraph().clone(),
+            parent.lmb().clone(),
+        )],
+        Vec::new(),
+    )
+    .physical_terms()?;
+    ensure!(original_terms.len() == 1 && regulated_terms.len() == 1);
+    ensure!(
+        original_terms[0]
+            .numerator
+            .same_value(&regulated_terms[0].numerator)
+    );
+    ensure!(original_terms[0].denominators.len() == regulated_terms[0].denominators.len());
+    for (original, regulator) in original_terms[0]
+        .denominators
+        .iter()
+        .zip(&regulated_terms[0].denominators)
+    {
+        ensure!(original.source_edge == regulator.source_edge);
+        ensure!(original.momentum == regulator.momentum);
+        let shifted = [EdgeIndex(3), EdgeIndex(6)].contains(&original.source_edge);
+        let shift = if shifted { lambda.pow(2) } else { Atom::Zero };
+        ensure!(regulator.mass_squared == &original.mass_squared + &shift);
+        // Denominator-only quadratic arithmetic; the graph numerator is untouched.
+        ensure!(
+            (&regulator.full_expr - &original.full_expr + &shift)
+                .expand()
+                .is_zero()
+        );
+    }
+    let branches = regulated.on_shell_branches(
+        &regulated.model,
+        &regulated_bare,
+        parent.subgraph(),
+        parent.lmb(),
+        &settings.on_shell_velocity()?,
+    )?;
+    for branch in branches {
+        let terms = FourDSector::new(
+            branch,
+            vec![(
+                parent.subgraph().clone(),
+                parent.subgraph().clone(),
+                parent.lmb().clone(),
+            )],
+            Vec::new(),
+        )
+        .physical_terms()?;
+        ensure!(!terms.is_empty());
+        for term in terms {
+            for denominator in term.denominators {
+                if [EdgeIndex(3), EdgeIndex(6)].contains(&denominator.source_edge) {
+                    ensure!(denominator.mass_squared == lambda.pow(2));
+                }
+            }
+        }
+    }
+    let original_child = uv_limit(&empty, &ctx, child, &root, child, &root)?;
+    let regulated_child = uv_limit(&empty, &regulated_ctx, child, &root, child, &root)?;
+    ensure!(original_child.active_sectors().len() == 1);
+    ensure!(regulated_child.active_sectors().len() == 1);
+    ensure!(
+        regulated_child
+            .atom()
+            .expression()
+            .contains_symbol(lambda_symbol)
+    );
+    ensure!(!regulated_child.atom().same_value(original_child.atom()));
+    ensure!(
+        original_child.active_sectors()[0]
+            .integration_atom()
+            .same_value(regulated_child.active_sectors()[0].integration_atom()),
+        "the actual one-loop signed vacuum W must be regulator independent"
+    );
+    let backend = vakint::VakintSettings {
+        number_of_terms_in_epsilon_expansion: 3,
+        evaluation_order: vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+            vakint::AlphaLoopOptions {
+                susbstitute_masters: false,
+            },
+        )]),
+        ..settings.vakint.true_settings()
+    };
+    let regulated_integrated = super::Integrated::new(crate::utils::vakint()?, &backend).run(
+        &regulated_child,
+        &regulated_ctx,
+        child,
+        &root,
+        child,
+        &root,
+    )?;
+    let regulated_prefix = Full4dCts::recursion_input(
+        &regulated_child,
+        &regulated_integrated,
+        ApproximationType::OS,
+        false,
+        child.lmb(),
+    )?;
+    let original_finite = record
+        .completed
+        .sectors()
+        .filter(|sector| !sector.frozen_lmbs().is_empty())
+        .collect::<Vec<_>>();
+    let regulated_finite = regulated_prefix
+        .sectors()
+        .filter(|sector| !sector.frozen_lmbs().is_empty())
+        .collect::<Vec<_>>();
+    ensure!(original_finite.len() == 1 && regulated_finite.len() == 1);
+    ensure!(
+        original_finite[0]
+            .atom
+            .expression()
+            .contains_symbol(crate::utils::GS.dim_epsilon)
+    );
+    ensure!(
+        original_finite[0]
+            .atom
+            .same_value(&regulated_finite[0].atom)
+    );
+    ensure!(original_finite[0].frozen_lmbs() == regulated_finite[0].frozen_lmbs());
+    let mut inputs = 0;
+    for (given, original_prefix, new_prefix) in [
+        (&root, &empty, &empty),
+        (child, &record.completed, &regulated_prefix),
+    ] {
+        let parent = OwnedForestNode {
+            spinney: parent_spinney.clone(),
+            topo_order: given.topo_order + 1,
+        };
+        let original = uv_limit(original_prefix, &ctx, &parent, given, &parent, given)?;
+        let regulator = uv_limit(new_prefix, &regulated_ctx, &parent, given, &parent, given)?;
+        ensure!(original.active_sectors().len() == regulator.active_sectors().len());
+        ensure!(original.active_sectors().len() == if given.topo_order == 0 { 1 } else { 2 });
+        for (original, regulator) in original
+            .active_sectors()
+            .iter()
+            .zip(regulator.active_sectors())
+        {
+            ensure!(original.active_components == regulator.active_components);
+            ensure!(original.frozen_lmbs() == regulator.frozen_lmbs());
+            ensure!(
+                original
+                    .integration_atom()
+                    .same_value(regulator.integration_atom()),
+                "the actual parent signed W changed under the physical IR regulator"
+            );
+            ensure!(
+                !regulator
+                    .integration_atom()
+                    .expression()
+                    .contains_symbol(lambda_symbol)
+            );
+            inputs += 1;
+        }
+    }
+    ensure!(inputs == 3);
+    crate::debug_tags!(#uv, #integrated, #summary;
+        stage = "native_d09_ir_mass_vacuum_invariance",
+        original_child_vacuum_equal = true, child_positive_epsilon_coefficient_equal = true,
+        parent_original_vacuum_inputs = inputs, typed_gluon_mass_overrides = 2,
+        physical_local_changed = true, native_gauge_numerator_unchanged = true,
+        two_loop_backend_repeated = false, unregulated_exchange_proved = false,
+        "A physical positive gluon-mass rearrangement preserves the actual three signed vacuum inputs"
+    );
+    Ok(())
 }
