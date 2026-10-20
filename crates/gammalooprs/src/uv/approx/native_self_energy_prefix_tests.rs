@@ -365,7 +365,7 @@ impl QcdMassReference {
                     child.lmb().loop_edges.iter().copied().collect::<Vec<_>>() == [EdgeIndex(2)]
                 );
                 let rainbow = reference.project(&diagram)?;
-                rainbow.certify_rainbow()?;
+                rainbow.certify_rainbow(NativeQuarkTrace::Mass)?;
                 ensure!(
                     rainbow.kernel_weight.is_one()
                         && (diagram.numerator_prefactor().is_scalar()

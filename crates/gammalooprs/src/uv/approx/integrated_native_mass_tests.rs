@@ -1377,7 +1377,7 @@ impl MassProjection {
 
         Ok(())
     }
-    fn certify_rainbow(&self) -> Result<()> {
+    fn certify_rainbow(&self, projection: NativeQuarkTrace) -> Result<()> {
         let d = Atom::var(symbol!("native_mass_reference::d"));
         let cf = Atom::var(symbol!("native_mass_reference::CF"));
         let mass_symbol = symbol!("UFO::MT");
@@ -1396,10 +1396,17 @@ impl MassProjection {
         let kl = kin.scalar_product(k, l)?;
         let pk = kin.scalar_product(p, k)?;
         let pl = kin.scalar_product(p, l)?;
-        let expected = (Atom::num(2) - &d).pow(2)
+        let vector = (Atom::num(2) - &d).pow(2)
             * (Atom::num(2) * &kl * &pk + (Atom::one() - &kk) * &pl)
-            + Atom::num(2) * &d * (Atom::num(2) - &d) * (&pk + &kl)
-            + d.pow(2) * (&kk + Atom::one());
+            + Atom::num(2) * &d * (Atom::num(2) - &d) * &pk;
+        let expected = match projection {
+            NativeQuarkTrace::Mass => {
+                vector
+                    + Atom::num(2) * &d * (Atom::num(2) - &d) * &kl
+                    + d.pow(2) * (&kk + Atom::one())
+            }
+            NativeQuarkTrace::Vector => vector,
+        };
         let actual = expanded_phi.replace(mass_symbol).with(1);
         ensure!(
             (actual - Atom::i() * coupling.pow(4) * cf.pow(2) * &expected)
@@ -1462,7 +1469,7 @@ impl QcdMassReference {
                 let nonabelian = projected.colors.iter().find(|(key, _)| *key == &cf * &ca);
                 match (abelian, nonabelian) {
                     (Some(_), None) => {
-                        projected.certify_rainbow()?;
+                        projected.certify_rainbow(NativeQuarkTrace::Mass)?;
                         rainbows += 1;
                     }
                     (Some((_, a)), Some((_, n))) => {
@@ -1821,6 +1828,7 @@ fn native_d09_vector_projection_exports_original_scalar_coordinates() -> Result<
         .find(|diagram| diagram.name() == "D09")
         .ok_or_else(|| eyre!("native rainbow D09 is missing"))?;
     let vector = reference.project_quark_trace(diagram, NativeQuarkTrace::Vector)?;
+    vector.certify_rainbow(NativeQuarkTrace::Vector)?;
     let family = &vector.family;
     ensure!(family.loop_momenta().len() == 2 && family.external_momenta().len() == 1);
     let l = &family.loop_momenta()[0];
@@ -1883,7 +1891,7 @@ fn native_d09_vector_projection_exports_original_scalar_coordinates() -> Result<
     // A separate mass projection is only a secondary control after the direct
     // vector identity above. It must not silently stand in for A.
     let mass_projection = reference.project(diagram)?;
-    mass_projection.certify_rainbow()?;
+    mass_projection.certify_rainbow(NativeQuarkTrace::Mass)?;
     let identity_scalar =
         &d * (Atom::num(2) * (Atom::num(2) - &d) * &sp[1] + &d * (&sp[3] + Atom::one()));
     ensure!(
@@ -2042,13 +2050,30 @@ fn native_two_loop_qcd_bare_mass_matches_primary_reference() -> Result<()> {
         process::Command,
         time::{SystemTime, UNIX_EPOCH},
     };
+    use symbolica_utils::AtomPrintExt;
     crate::initialisation::test_initialise()?;
     let reference = QcdMassReference::new()?;
-    let sources = reference
-        .certified_projections()?
+    let projections = reference.certified_projections()?;
+    let sources = projections
         .iter()
         .map(|(diagram, projected)| projected.numeric_input(diagram, &reference.model))
         .collect::<Result<Vec<_>>>()?;
+    let (diagram, _) = projections
+        .iter()
+        .find(|(diagram, _)| diagram.name() == "D09")
+        .ok_or_else(|| eyre!("native rainbow D09 is missing"))?;
+    let vector = reference.project_quark_trace(diagram, NativeQuarkTrace::Vector)?;
+    vector.certify_rainbow(NativeQuarkTrace::Vector)?;
+    let vector_source = serde_json::json!({
+        "projection": "pslash/(4*Nc*p_squared)",
+        "source_kernel_weight": vector.kernel_weight.to_bare_ordered_string(),
+        "external_ordering": vector.external_ordering.to_bare_ordered_string(),
+        "numerator_prefactor": vector.numerator_prefactor.to_bare_ordered_string(),
+        // The common projection owner refuses source widths/custom poles;
+        // scalar families do not encode the explicit physical i0 convention.
+        "propagator_prescription": "Feynman+i0",
+        "source": vector.numeric_input(diagram, &reference.model)?,
+    });
     let directory = std::env::temp_dir().join(format!(
         "gammaloop-os-mass-reference-{}-{}",
         std::process::id(),
@@ -2060,7 +2085,10 @@ fn native_two_loop_qcd_bare_mass_matches_primary_reference() -> Result<()> {
     let output = directory.join("results");
     fs::write(
         &input,
-        serde_json::to_vec_pretty(&serde_json::json!({"sources": sources}))?,
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "sources": sources,
+            "vector_source": vector_source,
+        }))?,
     )?;
     fs::write(
         &script,
@@ -2093,6 +2121,8 @@ fn native_two_loop_qcd_bare_mass_matches_primary_reference() -> Result<()> {
     ensure!(summary["bare_four_color_reference_passed"] == true);
     ensure!(summary["independent_insertions_reconstruct_Zm_reference"] == true);
     ensure!(summary["SU3_reference_passed"] == true);
+    ensure!(summary["optional_vector_source_checked"] == true);
+    ensure!(summary["optional_vector_reference"]["passed"] == true);
     ensure!(summary["production_OS_forest_integrated_condition_evaluated"] == false);
     crate::debug_tags!(#uv, #integrated, #summary;
         stage = "native_two_loop_qcd_bare_mass_reference",
