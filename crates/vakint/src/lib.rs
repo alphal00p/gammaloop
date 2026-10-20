@@ -2767,7 +2767,19 @@ impl VakintTerm {
         let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
         let numerator =
             Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
-        let reduced = reducer.reduce(numerator.as_view())?.into_expression();
+        // This is Vakint's raw-index boundary. Admit the complete converted
+        // tensor once, retaining compound dimension and index provenance until
+        // reduction returns to Vakint's notation.
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = reducer.admit(
+            cooking
+                .try_cook(numerator.as_view())
+                .map_err(|error| VakintError::SymbolicaError(error.to_string()))?,
+        )?;
+        let reduced = reducer.reduce(&numerator)?.into_expression()?;
+        let reduced = cooking.uncook(reduced.expression().as_view());
         let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);
         let reduced =
             Self::spenso_to_vakint_numerator(reduced.as_view(), dimension, &opaque_compact_vectors);
