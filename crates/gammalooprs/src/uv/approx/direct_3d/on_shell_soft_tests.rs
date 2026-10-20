@@ -335,6 +335,19 @@ fn complete_three_loop_local_os_forest_has_bounded_uniform_soft_flats() -> Resul
 
 #[test]
 fn rainbow_hierarchy_coordinates_resolve_all_three_soft_normals_exactly() -> Result<()> {
+    use crate::{
+        utils::GS,
+        uv::{
+            UVgenerationSettings, UltravioletGraph,
+            approx::{ForestNodeLike, local_4d::on_shell_forest_tests::nested_quark_fixture},
+            uv_graph::UVE,
+        },
+    };
+    use linnet::half_edge::{
+        involution::{EdgeIndex, Flow},
+        subgraph::SubSetLike,
+    };
+
     crate::initialisation::test_initialise()?;
     // Geometry only: the three normals are r=e2-p, q=e3-e2 and u=e3-p.
     // In particular u<<r is q approximately -r, not q approximately zero.
@@ -378,6 +391,136 @@ fn rainbow_hierarchy_coordinates_resolve_all_three_soft_normals_exactly() -> Res
             }
         }
     }
+    let (graph, parent, child, _) = nested_quark_fixture(false)?;
+    assert_eq!(
+        graph
+            .loop_momentum_basis
+            .loop_edges
+            .iter()
+            .copied()
+            .collect::<Vec<_>>(),
+        [EdgeIndex(2), EdgeIndex(3)]
+    );
+    // Certify the physical inner-gluon plane from the stored source routing.
+    let physical = graph
+        .loop_momentum_basis
+        .loop_atom::<Atom>(EdgeIndex(4), GS.emr_mom, &[], true)
+        + graph
+            .loop_momentum_basis
+            .ext_atom::<Atom>(EdgeIndex(4), GS.emr_mom, &[], true);
+    let expected = function!(GS.emr_mom, 3) - function!(GS.emr_mom, 2);
+    assert!(
+        (&physical - &expected).expand().is_zero() || (&physical + &expected).expand().is_zero()
+    );
+    let settings = UVgenerationSettings {
+        on_shell_subtraction_velocity: ["5/4", "1/4", "1/2", "1/2"].map(str::to_owned),
+        ..Default::default()
+    };
+    let velocity = settings.on_shell_velocity()?;
+    let future = [15, 3, 6, 6].map(Atom::num);
+    let mass = graph[EdgeIndex(0)].mass_atom(&graph.model);
+    assert!(!mass.is_zero());
+    assert_eq!(mass, graph[EdgeIndex(2)].mass_atom(&graph.model));
+    for (owner, node) in [(EdgeIndex(0), &parent), (EdgeIndex(2), &child)] {
+        let crown = graph.dummy_less_full_crown(node.subgraph());
+        let incoming = crown
+            .included_iter()
+            .filter(|hedge| graph.flow(*hedge) == Flow::Sink)
+            .collect::<Vec<_>>();
+        assert_eq!(incoming.len(), 1);
+        assert_eq!(graph[&incoming[0]], owner);
+        for sign in [1, -1] {
+            // The two actual component owners retain the same fixed velocity;
+            // only the branch's signed physical mass chooses its center.
+            let point = GS
+                .on_shell_momentum(owner, &(Atom::num(sign) * &mass), &velocity)
+                .replace(mass.to_pattern())
+                .with(12);
+            for (axis, component) in future.iter().enumerate() {
+                assert_eq!(
+                    GS.resolve_os_momenta(&GS.indexed_momentum(&point, &[GS.cind(axis)])),
+                    Atom::num(sign) * component
+                );
+            }
+        }
+    }
+    let variable = symbol!("os_fixed_center_geometry::rho");
+    let radius = Atom::var(variable);
+    let mut charts = 0;
+    for live_sign in [1, -1] {
+        let external = future
+            .clone()
+            .map(|component| Atom::num(live_sign) * component);
+        for relative_signs in [[-1, -1], [1, -1], [-1, 1]] {
+            let center_signs = relative_signs.map(|sign| live_sign * sign);
+            let centers = center_signs.map(|sign| {
+                std::array::from_fn::<_, 3, _>(|axis| Atom::num(sign) * &future[axis + 1])
+            });
+            let offset: [Atom; 3] =
+                std::array::from_fn(|axis| &centers[1][axis] - &centers[0][axis]);
+            let mixed = center_signs[0] != center_signs[1];
+            let norm2 = |v: &[Atom; 3]| v.iter().map(|x| x.pow(2)).sum::<Atom>();
+            assert_eq!(norm2(&offset), Atom::num(if mixed { 324 } else { 0 }));
+            for power in [2, 3] {
+                for stratum in [
+                    SoftStratum::RainbowOuterHierarchy(power),
+                    SoftStratum::RainbowPhysicalChildHierarchy(power),
+                    SoftStratum::RainbowFixedChildHierarchy(power),
+                ] {
+                    if mixed && matches!(stratum, SoftStratum::RainbowPhysicalChildHierarchy(_)) {
+                        continue;
+                    }
+                    for ray in 0..2 {
+                        let normals = stratum.momenta(&radius, ray);
+                        let loops = std::array::from_fn::<_, 2, _>(|index| {
+                            std::array::from_fn::<_, 3, _>(|axis| {
+                                &centers[index][axis] + &normals[index][axis]
+                            })
+                        });
+                        let r: [Atom; 3] =
+                            std::array::from_fn(|axis| &loops[0][axis] - &centers[0][axis]);
+                        let w: [Atom; 3] =
+                            std::array::from_fn(|axis| &loops[1][axis] - &centers[1][axis]);
+                        let q: [Atom; 3] =
+                            std::array::from_fn(|axis| &loops[1][axis] - &loops[0][axis]);
+                        assert_eq!(r, normals[0]);
+                        assert_eq!(w, normals[1]);
+                        for index in 0..2 {
+                            for axis in 0..3 {
+                                assert_eq!(
+                                    loops[index][axis].replace(variable).with(0),
+                                    centers[index][axis]
+                                );
+                            }
+                        }
+                        for axis in 0..3 {
+                            // Normalize only this finite scalar rho polynomial;
+                            // no graph numerator enters the geometry certificate.
+                            assert!(
+                                (&q[axis] - &offset[axis] - (&w[axis] - &r[axis]))
+                                    .expand()
+                                    .is_zero()
+                            );
+                            assert_eq!(q[axis].replace(variable).with(0), offset[axis]);
+                            assert_eq!(
+                                external[axis + 1],
+                                Atom::num(live_sign) * &future[axis + 1]
+                            );
+                        }
+                        let small = match stratum {
+                            SoftStratum::RainbowOuterHierarchy(_) => r,
+                            SoftStratum::RainbowPhysicalChildHierarchy(_) => q,
+                            SoftStratum::RainbowFixedChildHierarchy(_) => w,
+                            _ => unreachable!(),
+                        };
+                        assert!((norm2(&small) - radius.pow(2 * power)).expand().is_zero());
+                        charts += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(charts, 56);
     Ok(())
 }
 
@@ -468,6 +611,113 @@ mod slow {
                                     "{stratum:?}, ray {ray}, sign {sign}: hierarchical weight violates the derived candidate rho^{} margin: {weighted:?}",
                                     power - 1
                                 );
+                            }
+                        }
+                    }
+                }
+            }
+            if future[1..].iter().all(|component| *component == 0) {
+                continue;
+            }
+            // Keep the original 48 matched-center groups above unchanged. These
+            // additional 56 groups fix the live external point while choosing
+            // the two component-owned OS centers independently. At rest all
+            // spatial centers coincide, so only the nonaxial frame is repeated.
+            for sign in [1, -1] {
+                let external = future.map(|component| Atom::num(sign * component));
+                for (center_class, relative_signs) in [
+                    ("opposite", [-1, -1]),
+                    ("mixed_outer_matched", [1, -1]),
+                    ("mixed_child_matched", [-1, 1]),
+                ] {
+                    let center_signs = relative_signs.map(|relative| sign * relative);
+                    let centers = center_signs.map(|center_sign| {
+                        std::array::from_fn::<_, 3, _>(|axis| {
+                            Atom::num(center_sign * future[axis + 1])
+                        })
+                    });
+                    let offset: [Atom; 3] =
+                        std::array::from_fn(|axis| &centers[1][axis] - &centers[0][axis]);
+                    let mixed = center_signs[0] != center_signs[1];
+                    assert_eq!(
+                        offset
+                            .iter()
+                            .map(|component| component.pow(2))
+                            .sum::<Atom>(),
+                        Atom::num(if mixed { 324 } else { 0 })
+                    );
+                    for power in [2, 3] {
+                        for stratum in [
+                            SoftStratum::RainbowOuterHierarchy(power),
+                            SoftStratum::RainbowPhysicalChildHierarchy(power),
+                            SoftStratum::RainbowFixedChildHierarchy(power),
+                        ] {
+                            if mixed
+                                && matches!(stratum, SoftStratum::RainbowPhysicalChildHierarchy(_))
+                            {
+                                continue;
+                            }
+                            let expected_margin = if mixed { power } else { power - 1 };
+                            for ray in 0..2 {
+                                let mut weighted = Vec::new();
+                                for exponent in 3..=7 {
+                                    let denominator = 1usize << exponent;
+                                    let radius = Atom::one() / Atom::num(denominator);
+                                    let loops = stratum
+                                        .momenta(&radius, ray)
+                                        .into_iter()
+                                        .enumerate()
+                                        .map(|(index, normal)| {
+                                            std::array::from_fn(|axis| {
+                                                &centers[index][axis] + &normal[axis]
+                                            })
+                                        })
+                                        .collect::<Vec<_>>();
+                                    let values = evaluator.evaluate(&external, &loops)?;
+                                    let norm =
+                                        values.values().try_fold(zero.clone(), |norm, value| {
+                                            let component = value.clone().norm().re;
+                                            eyre::ensure!(
+                                                component.is_finite(),
+                                                "finite complete fixed-center rainbow tensor"
+                                            );
+                                            Ok::<_, eyre::Report>(norm.max(component))
+                                        })?;
+                                    assert!(
+                                        norm > zero,
+                                        "nonzero complete fixed-center rainbow control"
+                                    );
+                                    let numeric_radius = &unit / unit.from_usize(denominator);
+                                    weighted.push(
+                                        norm * numeric_radius.powi(stratum.radial_measure_power()),
+                                    );
+                                }
+                                crate::debug_tags!(#uv, #local, #soft, #summary;
+                                    stage="complete_rainbow_fixed_center_soft_control", route=ROUTE,
+                                    center_class, stratum=?stratum, power, ray, sign,
+                                    center_sigma=center_signs[0], center_tau=center_signs[1],
+                                    relative_center_sigma=relative_signs[0], relative_center_tau=relative_signs[1],
+                                    radial_measure_power=stratum.radial_measure_power(), expected_margin,
+                                    file.velocity=?velocity, file.external=?external, file.centers=?centers,
+                                    file.physical_child_center_offset=?offset, file.weighted=?weighted,
+                                    source_assumptions=if mixed { "opposite ordered P_sigma P_tau endpoint; inner fixed-O soft pole and doubled-quark CFF leading coefficient; candidate r^-2 w^-2" } else { "complete child at the opposite matched endpoint; same-center three-normal candidate bounds" },
+                                    "Independent fixed-center finite-grid control; not a uniform CFF/epsilon theorem"
+                                );
+                                // The mixed physical inner gluon remains hard:
+                                // q=(tau-sigma)*p_vec+w-r. Ordered P_sigma P_tau=0
+                                // removes the leading outer doubled-quark pole.
+                                // The candidate r^-2 w^-2 leaves margin a after
+                                // rho^(3a+2); opposite same-center cases retain
+                                // the original a-1 hypothesis. Neither is a
+                                // proof of a uniform angular CFF remainder.
+                                let maximum_growth = unit.from_usize(3)
+                                    / unit.from_usize(1usize << (expected_margin + 1));
+                                for tail in weighted[2..].windows(2) {
+                                    assert!(
+                                        tail[1] <= &maximum_growth * &tail[0],
+                                        "{center_class}, {stratum:?}, ray {ray}, live sign {sign}: fixed-center weight violates candidate rho^{expected_margin}: {weighted:?}"
+                                    );
+                                }
                             }
                         }
                     }
