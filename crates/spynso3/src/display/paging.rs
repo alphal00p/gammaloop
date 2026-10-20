@@ -207,7 +207,6 @@ impl TensorLeaves {
         payload.set_item("tree", PyBytes::new(py, &bytes))?;
         payload.set_item("settings", settings)?;
         payload.set_item("notation", self.notation.as_deref().unwrap_or(NOTATION_TYP))?;
-        payload.set_item("render", RENDER_TYP)?;
         payload.set_item("power_base", state.in_exp_base)?;
         let remaining = deadline
             .saturating_duration_since(Instant::now())

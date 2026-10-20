@@ -17,20 +17,6 @@ from symbolica.community.tensor import (
 )
 
 
-def formatted_viewer(expression):
-    viewers = []
-
-    def create(*args, **kwargs):
-        viewer = MathMLViewer(*args, **kwargs)
-        viewers.append(viewer)
-        return viewer
-
-    with patch("_symbolica_paging.MathMLViewer", side_effect=create):
-        expression.formatted()._repr_mimebundle_(include=["text/html"])
-    assert len(viewers) == 1
-    return viewers[0]
-
-
 class BrowserPagingTests(unittest.TestCase):
     def setUp(self):
         self.value = TensorExpression(
@@ -229,7 +215,7 @@ class BrowserPagingTests(unittest.TestCase):
         ):
             page = pager._page()
         self.assertPage(page)
-        native = formatted_viewer(original)._page()
+        native = original.mathml_viewer().page()
         self.assertEqual(
             [ET.tostring(root) for root in self.assertPage(page)],
             [ET.tostring(root) for root in self.assertPage(native)],
@@ -266,7 +252,7 @@ class BrowserPagingTests(unittest.TestCase):
             with self.subTest(label=label):
                 value = TensorExpression(E(expression))
                 original = value.to_expression()
-                pager, native = value.paged(), formatted_viewer(original)
+                pager, native = value.paged(), original.mathml_viewer()
                 self.addCleanup(pager.close)
                 self.addCleanup(native.close)
                 for layout in range(8):

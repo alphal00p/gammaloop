@@ -91,11 +91,15 @@ zoom as `expression.to_expression()`. Spenso supplies only tensor notation
 leaves, retaining logical index order and custom printers without expanding
 or changing the expression.
 
-Use `expression.paged(page_size=25)` to request the viewer explicitly. Page
-sizes range from 1 to 500; rendering budgets may shorten a page. Notebook
+Use `expression.paged(page_size=25)` to request the tensor viewer explicitly.
+`expression.to_expression().mathml_viewer()` opens the same viewer with
+native Symbolica notation. Page sizes range from 1 to 500; rendering budgets
+may shorten a page. Notebook
 display requires the Community assembly's `notebook-display` extra, which
-provides the widget and the isolated Typst notation compiler. Explicit `to_html()`
-and `to_svg()` exports remain complete and use the embedded renderer.
+provides the widget. Native notation workers use the embedded Rust Typst
+compiler with a rendering deadline; no Python Typst package is required.
+Explicit `to_html()` and `to_svg()` exports remain complete and use the
+embedded renderer.
 
 === Pyodide builds
 

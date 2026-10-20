@@ -5,7 +5,6 @@ import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
 
-import typst
 from symbolica import E, S, Symbol
 from symbolica.community.tensor import (
     AUTO,
@@ -18,6 +17,7 @@ from symbolica.community.tensor import (
     dot,
     trace,
 )
+from symbolica.community.tensor_native import _compile_typst
 
 
 def mathml(document):
@@ -41,7 +41,7 @@ class OpenPortDisplayTests(unittest.TestCase):
         settings = settings or DisplaySettings()
         original, structure = expression.to_expression(), expression.structure
         source = expression.to_typst(settings=settings)
-        native = typst.compile(f"$ {source} $".encode(), format="html").decode()
+        native = bytes(_compile_typst(f"$ {source} $", "html")).decode()
         rich = expression.to_html(settings=settings)
         for document in (native, rich):
             root = mathml(document)
@@ -66,7 +66,7 @@ class OpenPortDisplayTests(unittest.TestCase):
         single, product = p * q, (p * q) * (r * s)
         for value in (single, product):
             source = value.to_typst()
-            native = typst.compile(f"$ {source} $".encode(), format="html").decode()
+            native = bytes(_compile_typst(f"$ {source} $", "html")).decode()
             for document in (native, value.to_html()):
                 with self.subTest(product=value == product, native=document == native):
                     nodes = list(mathml(document))
@@ -121,8 +121,8 @@ class OpenPortDisplayTests(unittest.TestCase):
         settings = DisplaySettings(show_dimensions=True)
         for output in (
             a.to_html(settings=settings),
-            typst.compile(
-                f"$ {a.to_typst(settings=settings)} $".encode(), format="html"
+            bytes(
+                _compile_typst(f"$ {a.to_typst(settings=settings)} $", "html")
             ).decode(),
         ):
             self.assertEqual(visible(mathml(output)).count("□"), 2)
@@ -263,9 +263,7 @@ class OpenPortDisplayTests(unittest.TestCase):
                 with self.subTest(prefix=prefix, remaining=remaining):
                     original, structure = value.to_expression(), value.structure
                     source = value.to_typst()
-                    native = typst.compile(
-                        f"$ {source} $".encode(), format="html"
-                    ).decode()
+                    native = bytes(_compile_typst(f"$ {source} $", "html")).decode()
                     rich = value.to_html()
                     for document in (native, rich):
                         text = visible(mathml(document))
@@ -314,9 +312,10 @@ class OpenPortDisplayTests(unittest.TestCase):
                     self.assertEqual((before[component] - after[component]).expand(), 0)
 
                 qualified = DisplaySettings(show_dimensions=True)
-                native = typst.compile(
-                    f"$ {contracted.to_typst(settings=qualified)} $".encode(),
-                    format="html",
+                native = bytes(
+                    _compile_typst(
+                        f"$ {contracted.to_typst(settings=qualified)} $", "html"
+                    )
                 ).decode()
                 rich = contracted.to_html(settings=qualified)
                 self.assertEqual(visible(mathml(native)), visible(mathml(rich)))
@@ -353,8 +352,8 @@ class OpenPortDisplayTests(unittest.TestCase):
         self.assertEqual(value.rank, 1)
         self.assertEqual(sum("data-spenso-open-axis" in n.attrib for n in nodes), 1)
         qualified = DisplaySettings(show_dimensions=True)
-        native = typst.compile(
-            f"$ {value.to_typst(settings=qualified)} $".encode(), format="html"
+        native = bytes(
+            _compile_typst(f"$ {value.to_typst(settings=qualified)} $", "html")
         ).decode()
         rich = value.to_html(settings=qualified)
         self.assertEqual(visible(mathml(native)), visible(mathml(rich)))

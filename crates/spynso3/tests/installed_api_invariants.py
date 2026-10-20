@@ -5,7 +5,6 @@ import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
 
-import typst
 from symbolica import E, S
 from symbolica.community.tensor import (
     DisplaySettings,
@@ -15,6 +14,7 @@ from symbolica.community.tensor import (
     to_svg,
     to_typst,
 )
+from symbolica.community.tensor_native import _compile_typst
 
 
 def mathml(document):
@@ -37,7 +37,7 @@ class InvariantDisplayTests(unittest.TestCase):
 
     def assert_renderers_agree(self, expression, expected, settings):
         source = to_typst(expression, settings=settings)
-        document = typst.compile(f"$ {source} $".encode(), format="html").decode()
+        document = bytes(_compile_typst(f"$ {source} $", "html")).decode()
         rich = to_html(expression, settings=settings)
         self.assertEqual(visible(mathml(document)), expected)
         self.assertEqual(visible(mathml(rich)), expected)
