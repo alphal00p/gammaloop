@@ -28,9 +28,11 @@ Current qualification as of 20 October 2026 is summarized below and detailed
 in #link(<latest-feynkit-replay-qualification>)[Latest FeynKit replay and
 current-source qualification]. The combined source has its own closed
 forty-case qualification, followed by the vector-reference and independent
-signed-center qualifications below. Earlier source-79 results and the
-separately bound numerical reference retain their original source and run
-identities.
+signed-center qualifications below. The complete emitted D09 check adds
+seven ordinary and five main-only cases on `d2214081`, documented in
+#link(<complete-emitted-rainbow-integration>)[Complete emitted rainbow integration].
+Earlier source-79 results and the separately bound numerical references
+retain their original source and run identities.
 
 #table(columns: (1.25fr, 0.9fr, 2.85fr),
   table.header([Source or claim], [Closed result], [Boundary and remaining work]),
@@ -61,6 +63,11 @@ identities.
     [Eight ordinary cases include the exact coordinate certificates; the
      full-main scan covers 104 groups, 520 points and 208 tail inequalities.
      Exact export equality binds the maintained numerical reference.],
+  [Complete emitted `d2214081`], [7 ordinary + 5 main cases],
+    [The native four-history D09 CFF forest, including dimensional addbacks,
+     agrees with independent positive-mass and physical zero-gluon-mass
+     references. All six physical seed/auxiliary-scale pairs pass; see
+     #link(<complete-emitted-rainbow-integration>)[Complete emitted rainbow integration].],
   [Performance qualification], [Six ordinary cases pass],
     [Both nested direct routes meet the unchanged 240-second cap on
      `c8eade36`. Quiet paired measurements remain separate.],
@@ -3655,6 +3662,197 @@ reference uses the same pinned backend and policy as the retained datum; its
 independence is from production counterterm construction. Integration of the
 complete production OS forest and the physical four-dimensional R2 condition
 remain separate validation boundaries.
+
+=== Complete emitted rainbow integration
+<complete-emitted-rainbow-integration>
+
+The integrated tests observe the original native D09 source through the
+production four-history forest: bare, child, parent, and parent acting on the
+complete child. Its source-derived temporal closing word is attached after
+the component operations. At unit rest the raw vector coefficient uses
+$Theta[X]=op("Tr")[gamma^0 X]/(4N_c)$; this is distinct from the complementary
+$Psi[X]=(Theta[X]-op("Tr")[X]/(4N_c))/2$ used above for the Y direction.
+For the actual emitted amplitude F, with its retained external ordering
+$q_e=-1$ and unit tree factor, the normalized observable is
+
+$ A_("emitted")=i/(q_e a^2 C_F^2)
+  integral dif^3 bold(l) dif^3 bold(k) Theta[F]. $
+
+CFF supplies the active-loop energy phases and spatial factors
+$i^L/(2pi)^(3L)$. The frozen localization kernels integrate to one under plain
+spatial measure; no additional loop normalization is applied. The analytic
+child coefficient remains inside the enclosing operation, with its consumed
+loop marker, until physical publication. The existing dimensional addback
+already owns the vacuum-policy finite shift $11/36+pi^2/12$; this test adds
+no independent R2 counterterm.
+
+The positive-mass control assigns the same positive scalar mass
+$lambda=1$ to the two original gluon denominators, leaving their gauge
+numerators and native source phase unchanged. The physical top mass and
+renormalization scale are one. The original positive-mass run binds the actual typed pole inventory to the
+independent dimensional reference before its bare integral is generated.
+With $Delta=x^2+(1-x)lambda^2$ and
+$H=e^(gamma_E epsilon)op("Gamma")(epsilon)$, the proper insertion is
+
+$ J_1=H integral_0^1 dif x (1-x) Delta^(-epsilon), quad
+  J_2=-epsilon H integral_0^1 dif x x(1-x)Delta^(-1-epsilon), $
+$ f_lambda=H integral_0^1 dif x [2+(2-2epsilon)x]Delta^(-epsilon), quad
+  P_lambda=(2-d)(J_1/epsilon-2 f_lambda J_2). $
+
+At positive unit lambda its poles are
+$-1/epsilon^2+(11-7pi/sqrt(3))/epsilon$ and its finite coefficient is
+1.6467812737679397. The signed parent UV poles remain
+$1/(2epsilon^2)-1/(4epsilon)$. The one-loop normalization control is
+$A^(1)/(a C_F)=-1+pi/sqrt(3)$; using the zero-mass OS shift in this positive-mass
+comparison would change the scheme.
+
+The positive-mass source `20d6abb3` closes in run
+`6dbcd63e-5159-4588-9419-5a61eb20471a` (654.811 suite seconds). Its four
+complete histories give 36 exact denominator/source-preparation certificates.
+Four independent seeds each use one million samples. In units of
+$a^2 C_F^2$, the independent dimensional reference is
+$-2.511189682186968 plus.minus 4.0609673 times 10^(-7)$, while the actual
+production-emitted integrals are
+
+#table(columns: (0.7fr, 0.7fr, 0.8fr, 1.5fr, 1.5fr),
+  table.header([UV mass M], [Kernel scale L], [Seed suffix], [Vector coefficient], [Reported error]),
+  [1], [1], [2102], [-2.516894430802007], [0.004599335516365239],
+  [1], [1], [2103], [-2.5138101260753083], [0.0046052555881586545],
+  [2], [1], [2104], [-2.5140573775916426], [0.013544692959054258],
+  [1], [2], [2105], [-2.511681514201179], [0.0045357376157203425],
+)
+The full seeds are 2026102102 through 2026102105. Every comparison to the
+common reference and all six pairwise auxiliary-scale/seed comparisons pass
+the declared five-combined-error bound plus 0.001. This is a controlled
+positive-gluon-mass test; it does not alone certify physical massless QCD.
+The source, retained binary, guarded 3539 inputs and independent backend
+retain their original identities.
+
+The maintained data owner is
+`crates/gammalooprs/tests/resources/os_d09_vector_reference.json`. It retains
+both complete source headers, numerical centres and errors, and the original
+source/backend receipts. Exact header equality includes the native full-dimensional
+numerator, projector, source phase, all five prescribed pole occurrences and
+coordinate metadata. Each massless case rejects a changed header before Monte Carlo sampling.
+Rust and Python read this single owner. The pure Rust emitted tests consume
+its embedded bytes and require no Python runtime; the independently maintained
+bare-reference case retains its separate pinned backend launcher. Nix's
+existing compile-time fixture boundary explicitly includes the JSON file.
+
+The physical zero-gluon-mass comparison specializes the same typed mass to
+zero only after every component operation. Its original four histories and
+complete prescribed denominators are retained. The native zero-mass source
+and backend input are bound exactly to the independently qualified vector
+reference above; its reference value and uncertainty retain their original
+source and run identities. A separate one-loop control then gives
+$A^(1)/(a C_F)=-2$. No numerical limit in lambda is used.
+
+For the zero-mass two-loop integral, the native chart $(l,k)$ and gluon chart
+$(q=l-k,k)$ cover the local soft normals. Each chart is split into two radial
+sectors $(h,k)=(R,R t)$ and $(R t,R)$, with $R=x/(1-x)$ and relative cosine
+$z=2u-1$. The Jacobian is $16pi^2 h^2 k^2 R/(1-x)^2$.
+The positive chart densities give an exact partition of unity before the
+four weighted images are summed. Precision increases in the soft and hard
+regions; neither region is clipped. Independent seeds and separate auxiliary
+UV/localization-scale variations test the complete integrated result.
+
+The physical massless reference remains
+$-19.0743405536087186 plus.minus 6.3862627 times 10^(-7)$ from `c9532785`.
+It is independently repeated at `edefbb2c` as
+$-19.07434047342197 plus.minus 7.5664505 times 10^(-7)$; neither old run
+is relabelled as a fresh integration on the new source.
+
+Four separate main-only Rust cases preserve two million samples each,
+in twenty batches of 100000. The explicit four-image map gives eight million
+complete-forest evaluations per case. Cases select two unit-scale seeds,
+doubled UV mass, and doubled localization scale. Their per-case uncertainty
+must be at most 0.025, and agreement with the common independently bound
+reference uses $5 sqrt(delta^2+delta_("ref")^2)+0.001$. Original phase,
+source and finite-addback ownership are unchanged. Ordinary regressions keep
+240 seconds, and every main case keeps 7200 seconds; splitting the workload
+adds no timeout relaxation. The existing integration group permits two cases
+at once. No Python dependency is introduced into the core main runner.
+
+Each case must also distinguish the alternative numerical references zero
+and $A_("ref") plus.minus (11/36+pi^2/12)$ at that same bound. These are
+resolution checks against displaced references. They do not mutate an emitted
+counterterm and are not source-level missing/doubled-R2 tests. Exact source
+and vacuum-policy certificates retain their separate assertions.
+
+Runtime CI checks every case against the same reference. Qualification also
+recomputes all six pairwise distances across the four closed estimates,
+with their original source and run identities. Passing each case against the common reference does not logically imply
+those six pairwise bounds.
+
+The physical complete-forest run closes on `d2214081` in
+`f9074043-32b6-4b00-a124-518bf64dcee0` (4562.292 suite seconds for five cases,
+including the positive-mass regression). All 3540 tracked inputs and the
+independently retained test executable are unchanged across the run. Every
+physical case has the same four histories, 36 exact denominator certificates
+and the required factorized-numerator reconstruction, twelve chart/orbit
+checks, and both independently normalized source headers.
+
+#table(columns: (0.55fr, 0.55fr, 0.9fr, 1.55fr, 1.3fr, 1fr),
+  table.header([UV mass M], [Kernel scale L], [Seed suffix],
+    [Vector coefficient], [Reported error], [MC seconds]),
+  [1], [1], [2111], [-19.081912826], [0.018474295], [1949.740],
+  [1], [1], [2112], [-19.090437618], [0.018268826], [1938.747],
+  [2], [1], [2113], [-19.056645455], [0.020323260], [1917.749],
+  [1], [2], [2114], [-19.094920331], [0.018421307], [2064.681],
+)
+The full seeds are 2026102111 through 2026102114. Each physical estimate
+agrees with the independently retained dimensional reference within 1.12
+reported combined errors. All six pairwise comparisons pass. The largest
+pairwise distance, between the two auxiliary-scale variations, is
+0.0382748758010 against its declared bound 0.138147679016.
+The frozen input/reference admission, statistics, individual controls and
+pairwise calculations are retained in
+`target/emitted-mass-r2/integrated-forest-20261020/bounded-closed/`;
+its receipt SHA256 is
+`9720ef0c62fcebf387ff7fdae8c241402152f6adccdbb38dd26f8818f2217bbe`.
+
+Seven ordinary cases also close on this exact source. Five source, one-loop
+and operator cases pass in `e9e8fa56-b694-4806-b372-4fda28187a20`
+(1.280 seconds). The exact gluon-mass specialization passes in
+`7d5c240f-865a-4bb4-a6ae-0b5164c4dacf` (17.016 seconds), preserving the
+frozen child coefficient and all three parent vacuum inputs. The exact
+native D09 bare/completed-child mass condition passes in
+`55d3ffca-d9c8-4450-bebd-25a94f5d17ad` (144.861 seconds), under the
+unchanged 240-second ordinary cap. The two one-loop normalization values are
+0.8119628853 with reported error 0.0011223435 for positive unit gluon mass,
+and -2.0042404886 with error 0.0055547291 for zero gluon mass; their independent
+references are the analytic values above. Strict Clippy, formatting and the
+native producer pass. Canonical `just ci-update` leaves both generated files
+byte-identical; compiled-list checks select all four large cases in the full
+and slow profiles and none in the ordinary profiles.
+
+The two-hour monolithic pilot was stopped after 1.1 million physical samples
+when measured batch costs forecast a timeout. That interrupted run remains
+an explicitly incomplete pilot. Splitting preserves its numerical/source
+owners, precision policy, maps, statistics and comparisons; it does not
+convert the interrupted run into a pass or widen a physics bound.
+
+Construction and integration diagnostics remain distinct. For the unit-scale
+first-seed case, complete fixture construction takes 15.962 seconds.
+Four forest-node phases take 4.278 seconds, including 1.154 seconds of local
+four-dimensional construction. Projection, exact certification and composition
+take 6.473 seconds; its 30 raw CFF recursions total 0.012165 seconds and are
+nested within that projection measurement. Evaluator preparation/build takes
+0.698 seconds. The compact root occupies 123433 Atom bytes and the 31 retained
+numerator definitions 112757 bytes; no diagnostic expansion is used.
+Its two-million-sample integration takes 1949.740 seconds for eight million
+complete evaluator calls, of which 165760 use the retained 1000-bit evaluator
+and account for 1278.120 seconds. These are construction/MC observations under
+concurrent load, not an isolated evaluator-throughput or paired performance gate.
+The five-case command reports maximum child-process RSS of 277956 KiB through
+GNU time; this is not a sum of simultaneous worker memories. The existing
+performance-gate trigger policy is unchanged.
+
+This closes the actual complete native D09 finite-vector comparison at the
+unit rest point, with on-shell mass and MS-bar field/coupling prescriptions.
+Exact reconstruction, local-limit matrices and numerical integrated conditions
+retain their separate source/run evidence. The numerical comparisons do not
+supply an algebraic identity or a uniform-limit theorem.
 
 === Independent signed centers in the boosted rainbow
 
