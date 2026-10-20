@@ -4,10 +4,10 @@ use crate::tensor::composition::{ExplicitIndexOccurrences, ProductPlan, TensorCo
 use crate::tensor::inference::{InterfaceInference, TensorInferenceError, TensorInterface};
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
-use std::sync::Arc;
 use std::mem;
-use symbolica::symbol;
+use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::symbol;
 
 #[derive(Clone, Copy)]
 pub(super) enum ProductAlgebra {
@@ -111,7 +111,9 @@ impl SymbolicTensor<PartialStructure> {
     ///
     /// The native tensor-power owner first validates index multiplicities and
     /// the resulting interface. Multiplication then uses the same word route
-    /// as an explicitly written product; no separate nilpotency rule is used.
+    /// as an explicitly written product. Each repeated occurrence receives an
+    /// independent bound-index scope while explicit free ports keep their
+    /// identities; no separate nilpotency rule is used.
     pub fn pow_word(&self, head: Symbol, exponent: u32) -> Result<Self, TensorCompositionError> {
         let scalar_exponent = Self::infer(Atom::num(exponent))
             .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
@@ -122,8 +124,23 @@ impl SymbolicTensor<PartialStructure> {
             .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
         let initial = ProductPlan::Scalar.apply_word(head, &identity, self)?;
         let mut result = if exponent == 0 { identity } else { initial };
+        let dummies = Self::reserved_dummies([self]);
+        let mut used = self.expression.get_all_symbols(true);
         for _ in 1..exponent {
-            result = result.multiply_word(head, self)?;
+            let scope = loop {
+                let scope = dummies
+                    .fresh_index()
+                    .to_atom()
+                    .get_symbol()
+                    .expect("native dummy indices are symbols");
+                if used.insert(scope) {
+                    break scope;
+                }
+            };
+            let copy = self.wrap_indices(scope, true).map_err(|error| {
+                TensorCompositionError::InvalidResultInterface(error.to_string())
+            })?;
+            result = result.multiply_word(head, &copy)?;
         }
         let occurrences = Arc::clone(result.proofs.occurrences.get().expect("published word history"));
         ProductAlgebra::Word(head).finish(result.expression, expected.structure, occurrences, &[self], "pow_word")
@@ -901,6 +918,74 @@ mod tests {
                 .expression
                 .contains_symbol(symbol!("word_product_tests::right_bound"))
         );
+    }
+
+    #[test]
+    fn word_power_freshens_closed_contractions_before_exterior_normalization() {
+        use spenso::structure::slot::SlotMatcher;
+        let head = head();
+        let closed = SymbolicTensor::word(
+            head,
+            &[
+                component("word_power_scopes::a", 281),
+                component("word_power_scopes::b", 281),
+            ],
+        )
+        .unwrap()
+        .wrap_indices(
+            AbstractIndex::Dummy(0).to_atom().get_symbol().unwrap(),
+            true,
+        )
+        .unwrap();
+        let canonical = |tensor: &SymbolicTensor<PartialStructure>| {
+            let mut slots = SlotMatcher::default();
+            let mut indices = std::collections::BTreeMap::new();
+            tensor.expression.visitor(&mut |part| {
+                if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(part) {
+                    indices.insert(slot.to_atom(), slot.rep());
+                    return false;
+                }
+                true
+            });
+            let canonical = tensor.expression.canonize_tensors(indices).unwrap();
+            let replacements = canonical
+                .dummy_indices
+                .into_iter()
+                .enumerate()
+                .map(|(position, (source, representation))| {
+                    symbolica::id::Replacement::new(
+                        symbolica::id::Pattern::Literal(source),
+                        symbolica::id::Pattern::Literal(
+                            representation
+                                .slot::<AbstractIndex, _>(AbstractIndex::Dummy(position))
+                                .to_atom(),
+                        ),
+                    )
+                })
+                .collect::<Vec<_>>();
+            canonical.canonical_form.replace_multiple(&replacements)
+        };
+        let left = closed
+            .wrap_indices(symbol!("word_power_scopes::left"), true)
+            .unwrap();
+        let right = closed
+            .wrap_indices(symbol!("word_power_scopes::right"), true)
+            .unwrap();
+        let squared = closed.pow_word(head, 2).unwrap();
+        let explicit = left.multiply_word(head, &right).unwrap();
+        assert!(!squared.is_zero());
+        assert!(squared.is_scalar());
+        assert_eq!(canonical(&squared), canonical(&explicit));
+        let third = closed
+            .wrap_indices(symbol!("word_power_scopes::third"), true)
+            .unwrap();
+        let cubed = closed.pow_word(head, 3).unwrap();
+        assert!(!cubed.is_zero());
+        assert_eq!(
+            canonical(&cubed),
+            canonical(&explicit.multiply_word(head, &third).unwrap())
+        );
+        assert!(closed.pow_word(head, 1).unwrap().same_value(&closed));
     }
 
     #[test]
