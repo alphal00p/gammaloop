@@ -3077,3 +3077,163 @@ marker and vacuum mass must undergo the parent's hard scaling before any unit
 specialization. A complete open reconstruction and the three shifted soft
 surfaces remain separate gates. No full emitted R2 or general HV/CDR claim
 follows from these scalar comparisons or from the matched mass identity.
+
+=== Independent references and qualified OS mechanism
+
+The final two changes separate complete finite-matrix/pole certificates
+(`e7036dfc`) from the source-bound analytic child reference (`3b04cc25`).
+They sit above OS base `3dc81ff7`, shared dual-port fix `0a24ecb9` and
+FeynKit `d39d9bf2`. That shared repair recognizes explicit and compact
+represented dual ports in the existing direct-argument tensor filter;
+foreign function scopes remain opaque. Original named references are retained.
+State format 22, all 74 protected scopes and the existing CI/performance
+policy pass the pinned audit. The complete final tree equals `1abbe1ba`.
+
+The first change passes its actual core-only library-test build in 389.255
+seconds and strict Clippy in 19.755 seconds. Four ordinary regressions pass
+in 0.349 seconds, run `ce33faac-c49e-46b3-bf02-03e468ac4430`: both new
+certificate cases, the dimensional-radial finite basis and captured Laurent
+recomposition. The final source passes Clippy in 22.497 seconds and its full
+producer in 48.171 seconds. Original pole source, momentum, mass,
+prescription and power stay literal. Matrix weights and consumed-child scale
+powers have independent wrong-input controls; graph factors remain intact.
+
+The source-bound one-loop reference uses the actual quark/gluon poles,
+$Delta=x m^2+(1-x)lambda^2-x(1-x)p^2$, and the affine numerator
+$d M+(2-d)K(k)$, with $F=K(p)-M$ on its original ports and phase.
+At $lambda=0$, $p^2=m^2$, and unit scales,
+$J_0=1/(1-2epsilon)$, $J_1=1/((1-2epsilon)(2-2epsilon))$ and
+$G_e=e^(gamma_E epsilon) op("Gamma")(epsilon)$ independently give
+$G_e(3-2epsilon)J_0=3/epsilon+4+epsilon(8+pi^2/4)+O(epsilon^2)$ and
+$G_e(2-d)J_1+1/epsilon=-2-epsilon(4+pi^2/12)+O(epsilon^2)$.
+The second value is the MS-subtracted endpoint coefficient, not an OS field
+renormalization condition. These anchors retain formal-dimensional numerator
+algebra, one Minkowski measure and one forest sign. Depth one serves one
+enclosing simple pole; the separate depth-two gate covers two poles.
+Positive lambda certifies a different source denominator, not these
+lambda-zero Beta values.
+
+The child gate on `1abbe1ba` passes in 2.963 seconds, run
+`1a303bee-759a-4b70-8826-0d4e8641efc9`. Eight ordered products cover both
+signs, rest and nonaxial boost, and both fermion endpoints. Only after the
+complete ordered product has no unconstrained Lorentz direction does the
+existing finite matrix owner admit components zero through three. Scalar D
+is retained. Adding a native mass carrier must fail on the same endpoint.
+The scale/pole certificate passes in 0.109 seconds, run
+`d7411cb5-eeac-4b76-b2fd-8b0a47305202`, including changed source, momentum,
+mass, prescription, power and consumed-child scale controls. Fixed on-shell
+points remain local to their component.
+
+At unit mass, unit scale and rest, divide the independent original-W rows
+below by $Omega Y$, where $Omega=-i a^2 C_F^2 omega$ retains the actual source
+weight and $Y=gamma^0-I$. Every $W=U O-U$ already owns its forest minus.
+Both integrations remain D dimensional; subscript four changes the active
+physical numerator, not the denominators or angular measure.
+#table(columns: (2.4fr, 2fr),
+  table.header([Vacuum-policy difference], [Coefficient through finite order]),
+  [Bare $I_D(W_4-W_D)$], [$-7/(6epsilon)+23/36$],
+  [Proper-local $I_D(W_4-W_D)$], [$7/(3epsilon)-5/3$],
+  [Frozen-finite active $I_D(W_4[C_e]-W_D[C_e])$], [$4/3$],
+  [Frozen child $I_D(W_4[C_0]-W_4[C_e])$], [$pi^2/12$],
+  [Complete UV-vacuum sum], [$7/(6epsilon)+11/36+pi^2/12$],
+)
+Here $C_e=1-pi^2 epsilon/12+O(epsilon^2)$ and $C_0=1$. The unknown absolute
+bare finite master cancels in its difference; no absolute bare finite
+reference is inferred. Omitting the bare angular epsilon-two term shifts
+its finite row by $5/36$; omitting the child's epsilon-one term loses the
+distinct $pi^2/12$.
+
+Actual bare, proper-local and proper-finite W comparisons on `1abbe1ba`
+pass in runs `4983332c-e5a3-453e-b648-a3989bbab6ec` (17.095 seconds),
+`21e386b3-1451-4a10-a9e8-66b5b7b1b0b7` (135.625 seconds) and
+`8710cfe0-5860-4679-aedf-11770b73e443` (50.704 seconds).
+Source, pre-master open-span and fourteen scalar-reference checks bind the
+independent coefficients to all three actual inputs and both calibrated
+duals. The aggregate is checked from their actual rows; the connected finite
+master cancels before summing sources. This is a UV-vacuum policy difference,
+not the physical bare two-loop R2 or a general-scale independence claim.
+With $r=11/36+pi^2/12$ and $A=-"Fin" I(W)$, the finite addback difference is
+$A_4-A_D=-Omega r Y$. The existing analytic addback already uses D, so no
+additional counterterm is inserted. Its minus is distinct from the forest sign.
+
+The final 39-case ledger is complete on physics source `3b04cc25`, producer
+41. Five native mechanism cases retain their original `1abbe1ba` source,
+UUIDs and times: all 2702 guarded inputs and the actual core executable
+are byte-identical. The public case retains source `3dc81ff7` through its
+identical UV executable and unchanged guarded runtime inputs. The remaining
+33 cases execute freshly on `3b04cc25`; exact case identities count once.
+The closed fresh batches and their suite times are:
+#table(columns: (1.7fr, 2.7fr, 0.7fr),
+  table.header([Batch and case count], [Run UUID], [Seconds]),
+  [Ordinary references, 17], [`9659a679-be58-4c21-865d-90b20d15bba8`], [35.620],
+  [Full26 field and mass, 1], [`69a43e37-759c-4c04-bb71-56ce104ef371`], [443.606],
+  [Emitted mass and grid, 2], [`fee073ec-8fb8-4072-a061-b8f9e599aca6`], [132.205],
+  [Soft hierarchy, 1], [`01a01b4b-f8fc-4765-a773-1240d9e4646c`], [124.517],
+  [Complete UV matrices, 6], [`de88b39d-bdb1-41e4-97bf-c7360ae75f0c`], [528.037],
+  [Graph admission, 6], [`c19bab24-75f2-4d5a-93da-9ff8a793259e`], [0.088],
+)
+The ordinary batch includes the eight rest/boost references, exact soft
+coordinate geometry, finite matrix/Laurent regressions and two regulator/frame
+checks. These are actual batch times, not inferred subgroup or performance
+measurements. Ordinary cases retain 240 seconds; existing full-main cases
+retain 7200 seconds. The independent consumers and exact case ledger preserve
+every source, selection, runtime artifact and retained executable identity.
+
+The fresh full26 case contains twelve bare and fourteen proper inputs,
+497 denominator/frame certificates and 104 literal projector attachments.
+All 26 actual finite matrices are nonzero while their mass projections vanish,
+without auxiliary-scale specialization. The generic MS field polynomial is
+$w_2=44/(9epsilon^2)-35/(3epsilon)$, with its independent wrong-reference
+controls. The dimensional source/loop normalization is checked independently;
+this gate does not repeat the historical bare numerical integration.
+
+The complete emitted matched-rest certificate proves $Phi[R]=0$ before
+integration, with original factorized numerators and full prescribed poles.
+All 336 rows are covered once. Bare coverage is 49 rows: 33 native-certified
+zeros and 16 signed-class members; only 17 are raw literal zeros. Completed
+coverage is 287 rows: 195 native-certified zeros, 52 direct/reversible members
+and 40 members in two exact linear triples; only 63 are raw literal zeros.
+Two 405-node QQ(i) grids certify both original triples with matching
+original-plus-one controls. Source/parent incidences remain 8+41 and 54+233,
+in five and seventeen parent chunks respectively.
+
+A well-defined linear integration of this complete zero remains zero; the
+matched mass condition needs neither removal of lambda nor exchange of
+D-to-four with integration. It assigns no values to divergent isolated terms.
+The independent dimensional full26/mass references fix the physical QCD
+normalization. The complementary field direction Y is invisible to Phi:
+$Psi=(gamma^0-I)/(8N_c)$ has $Psi[Y]=1$. MS-bar fields do not require this
+closure to vanish. Its emitted finite/R2 transport and integrated comparison
+remain separate from the qualified zero-mass claim. Psi is a native test
+closure, not another production projector.
+
+The fresh local-only UV matrix resolves all 259 spanning-tree-LMB/nonempty
+hard-subset limits at 25 scales from $10^8$ to $10^12$. Every subtracted fit
+passes; matched bare domains show 122 UV failures, four unstable fits and
+133 finite limits, with a resolved divergence in each fixture. Eighteen
+subtracted and 126 bare ArbPrec retries remain recorded. Complete orientation
+sums are tested; representation-local checks retain their small separate gates.
+The hierarchy checks 48 groups, 240 finite nonzero ArbPrec values and 96 tail
+inequalities for fixed signed rest/nonaxial endpoints. Worst ratios 0.514505
+and 0.252150 meet bounds 0.75 and 0.375. These finite grids do not prove a
+uniform dimensional or angular limit or a UV/IR integration exchange.
+
+The retained public run on `3dc81ff7` takes 101.066 seconds, UUID
+`bbd7513f-9153-408e-8a79-de702fcabd4a`, for three routes, two loop points and
+five repeats. All values are finite and nonzero; maximum recorded relative
+route difference is `1.826e-15`. Its completed production clocks are:
+#table(columns: (1.8fr, 1fr, 1fr, 1fr),
+  table.header([Duration (s)], [Projected 4D], [Explicit direct], [Orientation direct]),
+  [4D CT and scheme], [5.21742], [5.12271], [4.93814],
+  [Direct Taylor / finite prefix], [No calls], [1.11669 / 0.19016], [1.07866 / 0.16486],
+  [Raw CFF requests], [0.0165560], [0.00335726], [0.00304752],
+  [Exact CFF preparation / requests], [0.0886278 / 1.98562], [0.000699892 / 0.00933384], [0.000748433 / 0.00978161],
+  [CFF surface conversion], [0.00217806], [0.000191281], [0.000199432],
+  [Evaluator construction], [1.30314], [10.47935], [11.86201],
+)
+Scopes are inclusive and can overlap. Medians of ten evaluator summary means
+are 30.1215, 60.3942 and 635.110 µs. Factorized roots plus definitions occupy
+232637, 452594 and 471417 bytes; sampled RSS is 94236672, 251195392 and
+310034432 bytes including prior route allocations. These are correctness-run
+diagnostics, not isolated peaks or a paired performance gate. Source and
+run identity remain `3dc81ff7` even though its exact inputs qualify reuse.
