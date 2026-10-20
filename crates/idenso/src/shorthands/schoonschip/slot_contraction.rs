@@ -690,6 +690,25 @@ impl SlotContraction {
         slots: &mut SlotMatcher,
     ) -> SlotReplacement {
         let head = function.get_symbol();
+        // A compact argument of an ordinary tensor retains the established
+        // Schoonschip slot convention. An actual metric/vector pair instead
+        // carries two rank-one operands: keep the source vector's own variance
+        // so those complete operands still form a valid dual contraction.
+        let oriented_replacement = || {
+            let value = replacement();
+            if source.representation.is_dual()
+                && (head == self.metric || head.has_tag(&self.tags.rank1))
+                && let AtomView::Fun(vector) = value.as_view()
+                && vector.get_symbol().has_tag(&self.tags.rank1)
+            {
+                return self.replace_argument(
+                    vector,
+                    vector.get_nargs() - 1,
+                    source.representation.to_symbolic([source.dimension]),
+                );
+            }
+            value
+        };
         if head.is_scalar() || !matches!(slots.classify(function.as_view()), SlotMatch::Other) {
             return SlotReplacement::Absent;
         }
@@ -698,7 +717,7 @@ impl SlotContraction {
                 return SlotReplacement::Absent;
             };
             return if source.matches(&endpoint) {
-                let result = self.replace_argument(function, position, replacement());
+                let result = self.replace_argument(function, position, oriented_replacement());
                 SlotReplacement::Replaced(result)
             } else if linear && source.same_index(&endpoint) {
                 SlotReplacement::Ambiguous
@@ -710,7 +729,7 @@ impl SlotContraction {
         for (position, argument) in function.iter().enumerate() {
             let replaced = if let Some(endpoint) = Endpoint::parse(argument, slots) {
                 if source.matches(&endpoint) {
-                    let replacement = replacement();
+                    let replacement = oriented_replacement();
                     if head == self.tags.chain
                         && position < 2
                         && matches!(replacement.as_view(), AtomView::Fun(vector)
@@ -1540,5 +1559,212 @@ mod tests {
                 .schoonschip_with_settings(&SchoonschipSettings::default().without_rank1_tensors()),
             parse("slot_contraction_p(mink(4,a))"),
         );
+    }
+
+    #[test]
+    fn dual_vector_metric_reduction_preserves_native_components_and_admission() {
+        use crate::{
+            dirac::GammaSimplifySettings,
+            tensor::{AlgebraSettings, SymbolicTensor},
+        };
+        use spenso::{
+            network::{
+                ExecutionResult, Network, Sequential, SmallestDegree,
+                library::{
+                    function_lib::Wrap,
+                    symbolic::{ExplicitKey, TensorLibrary},
+                },
+                parsing::{ParseSettings, ShadowedStructure},
+                store::NetworkStore,
+            },
+            structure::{
+                abstract_index::{AIND_SYMBOLS, AbstractIndex},
+                representation::RepName,
+            },
+            tensors::{data::DenseTensor, parametric::ParamTensor},
+        };
+        use symbolica::{atom::Symbol, function};
+
+        type Net = Network<
+            NetworkStore<ParamTensor<ShadowedStructure<AbstractIndex>>, Atom>,
+            ExplicitKey<AbstractIndex>,
+            Symbol,
+            AbstractIndex,
+        >;
+        crate::test_support::test_initialize();
+        let base = crate::representations::ColorFundamental {}
+            .new_rep(3)
+            .to_lib();
+        let dual = base.dual();
+        let p = SPENSO_TAG.rank_one_tensor_symbol("dual_metric_component_regression::p");
+        let q = SPENSO_TAG.rank_one_tensor_symbol("dual_metric_component_regression::q");
+        let entries = [
+            vec![
+                Atom::one() + Atom::i(),
+                Atom::num(2) - Atom::i(),
+                Atom::num(3) + Atom::num(2) * Atom::i(),
+            ],
+            vec![
+                Atom::num(7) + Atom::num(2) * Atom::i(),
+                Atom::num(-3) + Atom::i(),
+                Atom::num(5) - Atom::num(4) * Atom::i(),
+            ],
+            vec![
+                Atom::num(-2) + Atom::num(5) * Atom::i(),
+                Atom::num(3) + Atom::num(2) * Atom::i(),
+                Atom::one() - Atom::i(),
+            ],
+            vec![
+                Atom::num(4) - Atom::i(),
+                Atom::num(-2) + Atom::i(),
+                Atom::num(2) - Atom::num(3) * Atom::i(),
+            ],
+        ];
+        let mut library =
+            TensorLibrary::<ParamTensor<ExplicitKey<AbstractIndex>>, AbstractIndex>::new();
+        library.update_ids_from::<ParamTensor<ExplicitKey<AbstractIndex>>>();
+        for (head, representation, data) in [
+            (p, base, entries[0].clone()),
+            (p, dual, entries[1].clone()),
+            (q, base, entries[2].clone()),
+            (q, dual, entries[3].clone()),
+        ] {
+            let key = ExplicitKey::<AbstractIndex>::from_iter([representation], head, None);
+            library.insert_explicit(key.map_canonical(|structure| {
+                ParamTensor::param(
+                    DenseTensor::from_storage_data(data, structure)
+                        .unwrap()
+                        .into(),
+                )
+            }));
+        }
+        let functions = Wrap::new_lib();
+        let component = |atom: &Atom| {
+            let mut network =
+                Net::try_from_view(atom.as_view(), &library, &ParseSettings::default()).unwrap();
+            network
+                .execute::<Sequential, SmallestDegree, _, _, _>(&library, &functions)
+                .unwrap();
+            match network.result_scalar().unwrap() {
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::One => Atom::one(),
+                ExecutionResult::Val(value) => value.into_owned(),
+            }
+        };
+        let a = AbstractIndex::Normal(927101);
+        let b = AbstractIndex::Normal(927102);
+        let algebra = AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            epsilon: true,
+            ..Default::default()
+        };
+        for (rp, rq, vp, vq) in [
+            (base, dual, &entries[0], &entries[3]),
+            (dual, base, &entries[1], &entries[2]),
+        ] {
+            let metric = function!(
+                ETS.metric,
+                rp.dual().to_symbolic([Atom::from(a)]),
+                rq.dual().to_symbolic([Atom::from(b)])
+            );
+            let left = function!(p, rp.to_symbolic([Atom::from(a)]));
+            let right = function!(q, rq.to_symbolic([Atom::from(b)]));
+            let expected = Atom::add_many(vp.iter().zip(vq).map(|(p, q)| p * q));
+            let wrong_partner = if rp == base { &entries[2] } else { &entries[3] };
+            assert_ne!(
+                expected,
+                Atom::add_many(vp.iter().zip(wrong_partner).map(|(p, q)| p * q))
+            );
+            let factors = [&metric, &left, &right]
+                .map(|factor| SymbolicTensor::infer_indexed(factor.clone()).unwrap());
+            for order in [
+                [0, 1, 2],
+                [0, 2, 1],
+                [1, 0, 2],
+                [1, 2, 0],
+                [2, 0, 1],
+                [2, 1, 0],
+            ] {
+                let product = factors[order[0]]
+                    .clone()
+                    .multiply(factors[order[1]].clone())
+                    .unwrap()
+                    .multiply(factors[order[2]].clone())
+                    .unwrap();
+                assert!(product.is_scalar());
+                assert_eq!(component(product.expression()), expected);
+                let reused = SymbolicTensor::infer_indexed(Atom::Zero)
+                    .unwrap()
+                    .with_checked_expression(product.expression().clone())
+                    .unwrap();
+                for input in [product, reused] {
+                    let reduced = input.simplify_algebra(&algebra).unwrap();
+                    assert!(
+                        SymbolicTensor::infer_indexed(reduced.expression().clone())
+                            .unwrap()
+                            .is_scalar()
+                    );
+                    assert_eq!(component(reduced.expression()), expected);
+                    let dotted = reduced.to_dots().unwrap();
+                    assert!(
+                        SymbolicTensor::infer_indexed(dotted.expression().clone())
+                            .unwrap()
+                            .is_scalar()
+                    );
+                    assert_eq!(component(dotted.expression()), expected);
+                    assert!(
+                        dotted
+                            .simplify_algebra(&algebra)
+                            .unwrap()
+                            .same_value(&dotted)
+                    );
+                }
+            }
+        }
+        // The exact fixed selectors that occur when a native quark matrix is
+        // closed use the same reducer, with no selector-specific value rule.
+        for coordinate in 0..3 {
+            let selectors = function!(
+                ETS.metric,
+                dual.to_symbolic([Atom::from(a)]),
+                base.to_symbolic([Atom::from(b)])
+            ) * function!(
+                ETS.delta,
+                function!(AIND_SYMBOLS.cind, coordinate),
+                base.to_symbolic([Atom::from(a)])
+            ) * function!(
+                ETS.delta,
+                function!(AIND_SYMBOLS.cind, coordinate),
+                dual.to_symbolic([Atom::from(b)])
+            );
+            let input = SymbolicTensor::infer_indexed(selectors).unwrap();
+            assert_eq!(component(input.expression()), Atom::one());
+            let reduced = input.simplify_algebra(&algebra).unwrap().to_dots().unwrap();
+            assert!(
+                SymbolicTensor::infer_indexed(reduced.expression().clone())
+                    .unwrap()
+                    .is_scalar()
+            );
+            assert_eq!(component(reduced.expression()), Atom::one());
+        }
+        let same_variance = function!(
+            SPENSO_TAG.dot,
+            function!(p, base.to_symbolic([])),
+            function!(q, base.to_symbolic([]))
+        );
+        assert!(SymbolicTensor::infer_indexed(same_variance).is_err());
+        let wrong_dimension = function!(
+            SPENSO_TAG.dot,
+            function!(p, base.to_symbolic([])),
+            function!(
+                q,
+                crate::representations::ColorFundamental {}
+                    .new_rep(4)
+                    .to_lib()
+                    .dual()
+                    .to_symbolic([])
+            )
+        );
+        assert!(SymbolicTensor::infer_indexed(wrong_dimension).is_err());
     }
 }
