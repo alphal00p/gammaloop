@@ -13,8 +13,9 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     domains::rational::Rational,
+    function,
     id::{Pattern, Replacement},
     parser::ParseSettings,
     printer::CanonicalOrderingSettings,
@@ -519,6 +520,129 @@ pub struct LorentzStructure {
     pub name: String,
     pub spins: Vec<i64>,
     pub structure: Atom,
+}
+
+/// Index, `idx` spelling of the leg and cofactor shared by the summands of
+/// one vertex momentum combination.
+type MomentumCombinationKey = (Atom, Option<Atom>, Atom);
+
+impl LorentzStructure {
+    /// Return the structure with each vertex momentum combination rewritten
+    /// to the equivalent one with the fewest momenta.
+    ///
+    /// UFO momenta are all incoming, so `P(μ,1) + … + P(μ,n)` vanishes at an
+    /// `n`-point vertex. Summands `c_i R P(μ,i)` with the same index `μ` and
+    /// cofactor `R` form one combination. Subtracting `c R (P(μ,1) + … +
+    /// P(μ,n))`, for the coefficient `c` that more legs share than carry
+    /// none, removes those legs: the FeynRules ghost rule `P(3,2) + P(3,3)`
+    /// becomes `-P(3,1)`. Summands with several momenta keep their form,
+    /// nothing is expanded, and a structure without a shorter equivalent is
+    /// returned unchanged, so the reduction is idempotent.
+    pub fn reduced_by_momentum_conservation(&self) -> Atom {
+        let momentum = symbol!("UFO::P");
+        if !self.structure.contains_symbol(momentum) {
+            return self.structure.clone();
+        }
+        let legs = self.spins.len();
+        let summands = match self.structure.as_view() {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            summand => vec![summand],
+        };
+        let mut combinations = BTreeMap::<MomentumCombinationKey, Vec<Atom>>::new();
+        let mut rest = Vec::new();
+        for summand in summands {
+            match Self::momentum_summand(summand, legs) {
+                Some((key, leg, coefficient)) => {
+                    let coefficients = combinations
+                        .entry(key)
+                        .or_insert_with(|| vec![Atom::Zero; legs]);
+                    coefficients[leg] = &coefficients[leg] + coefficient;
+                }
+                None => rest.push(summand.to_owned()),
+            }
+        }
+        let mut reduced = false;
+        for coefficients in combinations.values_mut() {
+            let count = |value: &Atom| coefficients.iter().filter(|c| *c == value).count();
+            let zeros = count(&Atom::Zero);
+            let shift = coefficients
+                .iter()
+                .filter(|c| !c.is_zero())
+                .max_by_key(|c| count(c))
+                .filter(|c| count(c) > zeros)
+                .cloned();
+            if let Some(shift) = shift {
+                for coefficient in coefficients.iter_mut() {
+                    *coefficient = &*coefficient - &shift;
+                }
+                reduced = true;
+            }
+        }
+        if !reduced {
+            return self.structure.clone();
+        }
+        let leg_index = symbol!("UFO::idx");
+        for ((index, spelling, cofactor), coefficients) in combinations {
+            for (leg, coefficient) in coefficients.into_iter().enumerate() {
+                if coefficient.is_zero() {
+                    continue;
+                }
+                let leg = Atom::num(leg as i64 + 1);
+                let leg = match &spelling {
+                    Some(representation) => function!(leg_index, representation, leg),
+                    None => leg,
+                };
+                rest.push(coefficient * &cofactor * function!(momentum, &index, leg));
+            }
+        }
+        Atom::add_many(rest)
+    }
+
+    /// Split `c R P(μ,i)` into its combination key, zero-based leg and
+    /// coefficient. Other summands, including those with several momenta,
+    /// return `None`.
+    fn momentum_summand(
+        summand: AtomView<'_>,
+        legs: usize,
+    ) -> Option<(MomentumCombinationKey, usize, Atom)> {
+        let momentum = symbol!("UFO::P");
+        let factors = match summand {
+            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+            factor => vec![factor],
+        };
+        let mut coefficient = Atom::num(1);
+        let mut cofactor = Atom::num(1);
+        let mut arguments = None;
+        for factor in factors {
+            match factor {
+                AtomView::Num(_) => coefficient *= factor,
+                AtomView::Fun(function)
+                    if function.get_symbol() == momentum && arguments.is_none() =>
+                {
+                    arguments = Some(function.iter().collect::<Vec<_>>());
+                }
+                _ if factor.contains_symbol(momentum) => return None,
+                _ => cofactor *= factor,
+            }
+        }
+        let [index, leg] = arguments?[..] else {
+            return None;
+        };
+        let (spelling, leg) = match leg {
+            AtomView::Fun(function)
+                if function.get_symbol() == symbol!("UFO::idx") && function.get_nargs() == 2 =>
+            {
+                let mut arguments = function.iter();
+                let representation = arguments.next()?.to_owned();
+                (Some(representation), arguments.next()?)
+            }
+            leg => (None, leg),
+        };
+        let leg = usize::try_from(i64::try_from(leg).ok()?).ok()?;
+        (1..=legs)
+            .contains(&leg)
+            .then(|| ((index.to_owned(), spelling, cofactor), leg - 1, coefficient))
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -3127,5 +3251,68 @@ mod tests {
             }) if name == "GC1"
         ));
         assert_eq!(model.to_json().unwrap(), original);
+    }
+
+    #[test]
+    fn momentum_conservation_shortens_only_reducible_lorentz_structures() {
+        let parse = |spins: &[i64], structure: &str| LorentzStructure {
+            name: "L".to_owned(),
+            spins: spins.to_vec(),
+            structure: parse_expression(EntityKind::LorentzStructure, "L", "structure", structure)
+                .unwrap(),
+        };
+        let ghost: &[i64] = &[-1, -1, 3];
+        for (spins, structure, reduced) in [
+            // The FeynRules ghost-gluon rule, in both UFO leg spellings.
+            (ghost, "P(3,2) + P(3,3)", "-P(3,1)"),
+            (
+                ghost,
+                "P(idx(1,3),idx(1,2)) + P(idx(1,3),idx(1,3))",
+                "-P(idx(1,3),idx(1,1))",
+            ),
+            (
+                &[1, 1, 1, 1],
+                "2*P(1,1) + 2*P(1,2) + 2*P(1,3) - P(1,4)",
+                "-3*P(1,4)",
+            ),
+            // A complete sum vanishes; its cofactor and other summands stay.
+            (
+                &[3, 3, 3],
+                "P(3,1)*Metric(1,2) + P(3,2)*Metric(1,2) + P(3,3)*Metric(1,2) \
+                 + P(1,2)*Metric(2,3)",
+                "P(1,2)*Metric(2,3)",
+            ),
+            // Shortest forms, products of momenta and factorized sums stay.
+            (ghost, "P(3,2)", "P(3,2)"),
+            (&[3, 1, 1], "P(1,2) - P(1,3)", "P(1,2) - P(1,3)"),
+            (
+                &[1, 1, 1],
+                "P(-1,2)*P(-1,2) + P(-1,2)*P(-1,3)",
+                "P(-1,2)*P(-1,2) + P(-1,2)*P(-1,3)",
+            ),
+            (ghost, "(P(3,2) + P(3,3))*2", "(P(3,2) + P(3,3))*2"),
+        ] {
+            let mut lorentz = parse(spins, structure);
+            lorentz.structure = lorentz.reduced_by_momentum_conservation();
+            assert_eq!(
+                lorentz.structure,
+                parse(spins, reduced).structure,
+                "{structure}"
+            );
+            assert_eq!(
+                lorentz.reduced_by_momentum_conservation(),
+                lorentz.structure,
+                "{structure}"
+            );
+        }
+
+        let model = Model::standard_model();
+        let reducible = model
+            .lorentz_structures()
+            .iter()
+            .filter(|lorentz| lorentz.reduced_by_momentum_conservation() != lorentz.structure)
+            .map(|lorentz| lorentz.name.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(reducible, ["UUV1"]);
     }
 }

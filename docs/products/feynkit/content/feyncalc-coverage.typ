@@ -1107,8 +1107,9 @@ Their sum is $C_A xi/(2epsilon)$ and vanishes in Landau gauge.
 
 The shared SM model supplies the canonical UFO `UUV1` rule
 `P(3,2) + P(3,3)`, equal to $-p_1$ when all vertex momenta are incoming.
-Both FeynKit and GammaLoop consume that rule; the notebook only specializes
-the gluon propagator's gauge parameter. Shared graph finalization remaps
+Both FeynKit and GammaLoop consume that rule, which FeynKit instantiates as the
+shorter $-p_1$ by momentum conservation; the notebook only specializes the
+gluon propagator's gauge parameter. Shared graph finalization remaps
 indices inside momentum arguments before transporting their momentum carriers.
 Each signed carrier is transported once, including when a sign change causes
 a product to collapse. This preserves linearity of sums for incoming neutral
