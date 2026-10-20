@@ -2593,7 +2593,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#5f1fba510e185bb5bd90be8c13a243ff4621a92b"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=ba2664bf7758fb8daa1a21569bf2b42d61326d14#ba2664bf7758fb8daa1a21569bf2b42d61326d14"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4284,7 +4284,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#5f1fba510e185bb5bd90be8c13a243ff4621a92b"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=ba2664bf7758fb8daa1a21569bf2b42d61326d14#ba2664bf7758fb8daa1a21569bf2b42d61326d14"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -6331,6 +6331,7 @@ dependencies = [
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
+ "self_cell",
  "serde_json",
  "spenso",
  "spenso-hep-lib",
@@ -6524,7 +6525,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#5f1fba510e185bb5bd90be8c13a243ff4621a92b"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=ba2664bf7758fb8daa1a21569bf2b42d61326d14#ba2664bf7758fb8daa1a21569bf2b42d61326d14"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",

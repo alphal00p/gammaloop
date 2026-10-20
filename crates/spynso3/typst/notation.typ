@@ -992,7 +992,8 @@
   notation: default-notation(),
   annotate: none,
   block: false,
+  power-base: false,
 ) = {
-  let body = core.render-tree(tree, notation: notation, annotate: annotate)
+  let body = core.render-tree(tree, notation: notation, annotate: annotate, power-base: power-base)
   if block { math.equation(body, block: true) } else { body }
 }

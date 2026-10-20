@@ -639,6 +639,8 @@ fn display_options_with_settings(
 #[derive(Default)]
 struct IndexAliases {
     entries: HashMap<(Symbol, Atom), (Option<usize>, IndexDisplay)>,
+    // Display labels which new aliases must leave available to their owners.
+    reserved_labels: HashMap<Symbol, HashSet<String>>,
     // Source spellings belong only to presentation. Encoded indices remain
     // the identity keys of both ordinary aliases and portable render records.
     source_indices: HashMap<(Symbol, Atom), Atom>,
@@ -752,6 +754,7 @@ impl IndexAliases {
         }
         let mut aliases = Self {
             source_indices,
+            reserved_labels: occupied.clone(),
             ..Self::default()
         };
         for (_, (representation, index, source, palette)) in pending {
