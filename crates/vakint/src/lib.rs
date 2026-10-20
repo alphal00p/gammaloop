@@ -7,6 +7,7 @@ pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
 mod hpl;
+mod lorentz;
 mod master_precision;
 pub mod matad;
 pub mod matad_numerics;
@@ -88,7 +89,7 @@ use crate::alphaloop_numerics::DIRECT_SUBSTITUTIONS;
 #[allow(unused)]
 use symbolica::{
     atom::{
-        Atom, AtomCore, AtomView, FunctionBuilder, SliceType, Symbol, Var,
+        AliasedAtom, Atom, AtomCore, AtomView, FunctionBuilder, SliceType, Symbol, Var,
         representation::InlineNum,
     },
     domains::{
@@ -2890,7 +2891,12 @@ impl VakintTerm {
         // FORM. Closed loop-loop products, in contrast, use the native compact
         // invariant path and must not be reopened into a spurious tensor rank.
         Self::validate_spenso_loop_dots(self.numerator.as_view())?;
-        let vakint_dots = self.numerator.replace_map(|term, _context, out| {
+        // Close independent scalar contractions before the collector distributes
+        // products of tensor sums. The checked reducer below still owns loop
+        // projection, scalar-only admission, and the tensor rank limits.
+        let numerator =
+            lorentz::LorentzTensor::parse(self.numerator.as_view(), &dimension)?.expression;
+        let vakint_dots = numerator.replace_map(|term, _context, out| {
             let AtomView::Fun(function) = term else {
                 return;
             };
@@ -2902,8 +2908,13 @@ impl VakintTerm {
                 **out = FunctionBuilder::new(S.dot).add_args(arguments).finish();
             }
         });
-        let representation = Minkowski::selfless_symbol().call(&dimension);
-        let native_scalar_dots = vakint_dots.replace_map(|term, _context, out| {
+        // Closed loop invariants are coefficients of the remaining tensor.
+        // Keep them opaque through collection: distributing their scalar powers
+        // would introduce a projector expansion where no tensor rank remains.
+        let mut coefficient_aliases = Vec::new();
+        let coefficient_head = vk_symbol!("tensor_scalar_coefficient");
+        let mut coefficient_index = 0;
+        let tensor_numerator = vakint_dots.replace_map(|term, _context, out| {
             let AtomView::Fun(function) = term else {
                 return;
             };
@@ -2918,19 +2929,17 @@ impl VakintTerm {
             }) {
                 return;
             }
-            **out = FunctionBuilder::new(SPENSO_TAG.dot)
-                .add_args(arguments.iter().map(|argument| {
-                    let AtomView::Fun(vector) = argument else {
-                        unreachable!()
-                    };
-                    FunctionBuilder::new(S.k)
-                        .add_args(vector.iter())
-                        .add_arg(&representation)
-                        .finish()
-                }))
-                .finish();
+            let alias = loop {
+                let alias = function!(coefficient_head, coefficient_index);
+                coefficient_index += 1;
+                if !vakint_dots.contains(&alias) {
+                    break alias;
+                }
+            };
+            coefficient_aliases.push((alias.clone(), term.to_owned()));
+            **out = alias;
         });
-        let indexed_numerator = Vakint::convert_from_dot_notation(native_scalar_dots.as_view());
+        let indexed_numerator = Vakint::convert_from_dot_notation(tensor_numerator.as_view());
         // Preserve Vakint's historical spelling of paired scalar powers.
         let reducer = TensorReducer::new(dimension)
             .with_integrated_head(S.k)
@@ -2986,6 +2995,11 @@ impl VakintTerm {
         if let Some(error) = failure {
             return Err(error);
         }
+        let mut restored = AliasedAtom::from(reduced);
+        for (alias, coefficient) in coefficient_aliases {
+            restored.register_alias(alias, coefficient);
+        }
+        reduced = restored.into_inner();
         if !settings.use_dot_product_notation {
             reduced = Vakint::convert_from_dot_notation(reduced.as_view());
             reduced = Self::repair_expanded_spenso_vector_slots(reduced.as_view());
@@ -5948,6 +5962,7 @@ Evaluated (n_loops=1, mu_r=1) :
                     }
                 }
                 dummy += 1;
+                let first_new_dummy = dummy;
 
                 let mut a = a.to_owned();
                 loop {
@@ -6028,7 +6043,48 @@ Evaluated (n_loops=1, mu_r=1) :
                     a = new;
                     dummy += 1;
                 }
-                a
+                // Each copy of a powered scalar sum owns independent dummy
+                // contractions. Keep those copies factorized: expanding the
+                // numerator before conversion would hide index capture.
+                // FORM expands these powers; reused indices would let it contract
+                // loop vectors together instead of with their external partners.
+                a.replace_map_bottom_up(|view, _, out| {
+                    let AtomView::Pow(power) = view else {
+                        return;
+                    };
+                    let (base, exponent) = power.get_base_exp();
+                    let Ok(exponent) = i64::try_from(exponent) else {
+                        return;
+                    };
+                    let copies = exponent.unsigned_abs();
+                    if copies < 2 || !matches!(base, AtomView::Add(_) | AtomView::Mul(_)) {
+                        return;
+                    }
+                    let mut indices = base
+                        .replace(&dummy_pat)
+                        .match_iter()
+                        .filter_map(|m| usize::try_from(&m[&S.a_]).ok())
+                        // Existing indexed tensors keep their contractions;
+                        // only dots converted in this call introduce copies.
+                        .filter(|index| *index >= first_new_dummy)
+                        .collect::<Vec<_>>();
+                    indices.sort_unstable();
+                    indices.dedup();
+                    if indices.is_empty() {
+                        return;
+                    }
+                    let mut product = Atom::one();
+                    for _ in 0..copies {
+                        let replacements = indices.iter().map(|index| {
+                            let replacement =
+                                Replacement::new(S.dot_dummy_ind(*index), S.dot_dummy_ind(dummy));
+                            dummy += 1;
+                            replacement
+                        });
+                        product *= base.replace_multiple(replacements);
+                    }
+                    **out = product.pow(exponent.signum());
+                })
             })
     }
 
@@ -6797,6 +6853,117 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn closed_scalar_coefficients_restore_collision_safe_aliases() {
+        Vakint::initialize_vakint_symbols();
+        let input =
+            vk_parse!("tensor_scalar_coefficient(0)*dot(k(1),k(1))^3*k(2,71)*k(2,72)").unwrap();
+        let expected = vk_parse!(
+            "tensor_scalar_coefficient(0)*dot(k(1),k(1))^3*dot(k(2),k(2))*g(71,72)/(4-2*ε)"
+        )
+        .unwrap();
+        for use_dot_product_notation in [false, true] {
+            let settings = VakintSettings {
+                use_dot_product_notation,
+                ..Default::default()
+            };
+            let mut term = VakintTerm {
+                numerator: input.clone(),
+                integral: Atom::one(),
+                vectors: Vec::new(),
+            };
+            term.tensor_reduce_feynkit(&settings, false).unwrap();
+            let actual = if use_dot_product_notation {
+                term.numerator
+            } else {
+                Vakint::convert_to_dot_notation(term.numerator.as_view())
+            };
+            assert!(
+                (actual - &expected).expand().together().is_zero(),
+                "dot notation: {use_dot_product_notation}"
+            );
+
+            let mut rejected = VakintTerm {
+                numerator: input.clone(),
+                integral: Atom::one(),
+                vectors: Vec::new(),
+            };
+            assert!(rejected.tensor_reduce_feynkit(&settings, true).is_err());
+            assert_eq!(rejected.numerator, input);
+        }
+    }
+
+    #[test]
+    fn scalar_scope_closure_preserves_guarded_legacy_integrated_powers() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings::default();
+        for power in [2, 4, 6, 20] {
+            let input = vk_parse!(format!("k(1,71)^{power}")).unwrap();
+            let expected = vk_parse!(format!("dot(k(1),k(1))^{}", power / 2)).unwrap();
+            let actual = VakintTerm::scalar_product_form(&settings, input.as_view()).unwrap();
+            assert_eq!(actual, expected, "power {power}");
+        }
+        let over_rank = vk_parse!("k(1,71)^22").unwrap();
+        assert!(matches!(
+            VakintTerm::scalar_product_form(&settings, over_rank.as_view()),
+            Err(VakintError::FeynKitTensorReduction(
+                feynkit_tensor::TensorReductionError::UnsupportedRank {
+                    rank: 22,
+                    maximum: 20
+                }
+            ))
+        ));
+        for expression in [
+            "k(1,71)^4*k(2,71)^2",
+            "k(1,71)^4*p(1,71)",
+            "k(1,71)^4*g(71,72)",
+        ] {
+            let input = vk_parse!(expression).unwrap();
+            assert!(
+                VakintTerm::scalar_product_form(&settings, input.as_view()).is_err(),
+                "{expression}"
+            );
+        }
+    }
+
+    #[test]
+    fn dot_conversion_preserves_composite_power_dummy_scopes() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings::default();
+        let spectator = vk_parse!("(alpha+beta)^7").unwrap();
+        for expression in [
+            "(dot(k(1),k(1))-1)^11",
+            "(dot(k(1),k(2))+dot(k(1),k(1)))^2*(dot(k(1),k(2))-1)^3",
+            "(dot(k(1),k(2))+1)^-2",
+        ] {
+            let scalar = &spectator * vk_parse!(expression).unwrap();
+            let converted = Vakint::convert_from_dot_notation(scalar.as_view());
+            assert!(converted.contains(&spectator));
+            assert_eq!(
+                Vakint::convert_from_dot_notation(converted.as_view()),
+                converted,
+                "dot conversion must be idempotent: {expression}"
+            );
+            // Inverting a reciprocal exposes its repeated contractions without
+            // asking the scalar service to integrate a non-polynomial numerator.
+            let (indexed, expected) = if expression.ends_with("^-2") {
+                (converted.pow(-1), scalar.pow(-1))
+            } else {
+                (converted, scalar)
+            };
+            let restored = VakintTerm::scalar_product_form(&settings, indexed.as_view()).unwrap();
+            assert!(
+                (restored - expected).expand().together().is_zero(),
+                "{expression}"
+            );
+        }
+        let indexed = vk_parse!("(p(5,dot_dummy_ind(9))+k(1,dot_dummy_ind(9)))^2").unwrap();
+        assert_eq!(
+            Vakint::convert_from_dot_notation(indexed.as_view()),
+            indexed
+        );
+    }
 
     #[test]
     fn form_serialization_handles_unit_imaginary_coefficients() {

@@ -69,8 +69,8 @@ the accepted computed files match the runtime numerical payloads byte-for-byte.
 These archived proofs are an evidence-only follow-up; release payloads are unchanged.
 For P11 (`PR4d`), the
 #producer_evidence("producer-4L-P11-validation.json.gz", [accepted producer receipt])
-has SHA256
-`2809d9a3621549ae19a01ae3f4265adc33ced281f1e8d843b6835e37bc42ab73`
+(SHA256
+`2809d9a3621549ae19a01ae3f4265adc33ced281f1e8d843b6835e37bc42ab73`)
 records 50 stable significant digits, independent refinement and a 70-digit
 internal comparison. This validates the extra digits beyond the older 29-digit
 FORM literal. A separate
@@ -183,7 +183,7 @@ Tydenso Wasm-target source check and native-feature exclusion check also passed.
 Existing compressed Wasm assets were not regenerated, and no rebuilt-asset
 interoperability result is claimed.
 
-The final Cargo package inventory contains 315 files, with no removed
+The final Cargo package inventory contains 316 files, with no removed
 `artifacts/` tree, prepared caches or 4L/5L runtime packs. Building the crate archive
 with `cargo package --allow-dirty --no-verify` stops at the existing Git-only
 `rustred` dependency without a crates.io version requirement. No registry version
@@ -228,7 +228,7 @@ H rank-four reference with unchanged assertions and tolerances. A 48-test
 scalar/tensor integration selection passed; after the collected-power correction,
 all 24 affected tensor frontend tests and all 52 active tensor unit tests passed
 again. Both focused collected-power regressions passed, and five old/new tensor
-prepass comparisons have exactly zero algebraic differences. The final Python
+prepass comparisons have exactly zero algebraic differences. The validated Python
 extension passed all twenty subprocess checks. The suites overlap.
 
 The consolidated algebra adapters required two corrections already represented
@@ -343,15 +343,33 @@ legacy/new forest comparisons and original forest-size assertions. Matching
 all-target Vakint/GammaLoop Clippy passes with `-D warnings`. No tensor parser
 or safety check is bypassed.
 
+Closed indexed scalar powers also require independent dummy scopes. The existing
+upstream composite-power freshening pass preserves original indices and creates
+new labels only for dots opened by that conversion. A factorized Lorentz owner
+validates original multiplicities and closes raw scalar bases before collection;
+validated pure-loop invariants then remain exact scalar coefficients through the
+unchanged checked tensor reducer. Native tensor components, expanded source
+ports and mixed-interface sums retain their provenance and checked reduction.
+
+All 43 focused/frontend checks pass: eight owner controls, six original numerator
+scope tests, three conversion/legacy/alias controls, two FORM serializer controls
+and all 24 existing frontend cases. This includes denominator power eleven,
+exact parent-key transport, alias collision and failure rollback, the existing
+rank-20 acceptance/rank-22 refusal, and genuine ambiguity errors. Relevant
+Clippy, formatting and independent owner review pass. No original numerator or
+frontend assertion, tensor rank/expansion limit, FORM source, master table,
+FeynKit/Idenso/Spenso implementation or dependency pin changed in this repair.
+The package inventory now contains 316 files, including the new private owner,
+with no prepared caches or 4L/5L runtime packs.
+
 == Final repository-CI result — pending completion
 
-The exact checks/upload recipe at `c398e309de1767fcecbe841f6555080e10700fb6`
-completed static checks and reached the core runtime suite, where two DOT
-round trips rejected doubly quoted hedge metadata and one two-loop ghost test
-rejected the serialized imaginary unit in FORM input. The command exited one
-before upload. Both original DOT round trips and their two hedge unit tests
-now pass with the upstream quoting correction. The formatter regressions,
-index-restoration controls and full ghost calculation also pass after the
-corrections above. Final corrected-source repository checks and successful
-upload remain required before publication of the main PR; no whole-repository
-pass is inferred from these focused results.
+The exact checks/upload recipe at `35bb428a81a6d0aad6d079b16e41e8196defb212`
+passed Clippy, formatting, the workspace graph and doctests. Its Vakint runtime
+ran 332 tests: 329 passed, three numerator-scope cases failed, and 24 were
+skipped. The three failures exposed reused contraction labels and false rank
+growth. The scope repair above now passes those cases and the full affected
+frontend selection. The failed run exited one before upload; its logs and
+successful producer outputs are retained. Final corrected-source repository
+checks, the numerical acceptance rerun and successful upload remain required
+before publication of the main PR.

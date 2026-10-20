@@ -507,7 +507,7 @@ status = "Implemented · reviewed 2026-10-20"
 lifecycle = "current"
 owner = "unassigned"
 reviewed_at = "2026-10-20"
-review_ref = "c398e309de1767fcecbe841f6555080e10700fb6"
+review_ref = "35bb428a81a6d0aad6d079b16e41e8196defb212"
 products = ["vakint"]
 topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
 review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
@@ -527,7 +527,20 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-20: FORM input now follows the existing upstream exact-tree
 # serializer, with explicit complex components, symbol identities and parentheses.
 # FORM programs, master formulas, output decoding and ownership are unchanged.
-digest = "c139ea366d60f8eb38af3af873082a036490da1d"
+# Reviewed 2026-10-20: factorized Lorentz closure preserves original index
+# multiplicities before expansion, and protects validated loop invariants as
+# coefficients through the existing checked tensor reducer. Raw legacy powers
+# retain their shared rank bound; projection and ambiguity guards are unchanged.
+digest = "2a26b3d41971371af06e149b55f3223e2d76f487"
+
+[[section.note.scope]]
+path = "crates/vakint/src/lorentz.rs"
+symbol = "vakint::lorentz::LorentzTensor"
+anchor = "pub(crate) struct LorentzTensor {"
+# Reviewed 2026-10-20: the factorized contraction owner records consumed and
+# free indices, preserves native source-port provenance, and defers native or
+# mixed-interface sectors to the existing checked reducer.
+digest = "149c84a217f25b65217bc5363b652591bd78f467"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"

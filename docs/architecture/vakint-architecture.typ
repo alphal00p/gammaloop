@@ -107,7 +107,12 @@ AtomView
 `to_canonical`, `tensor_reduce`, and `evaluate_integral` expose narrower stages. Canonicalization
 tries registered topologies in order, derives replacement rules, normalizes momentum routing,
 and can emit the short topology form. The FeynKit tensor reducer works in process with explicit
-index scopes and exact coefficients. The optional FORM tensor path maps vectors and indices into
+index scopes and exact coefficients. Before tensor collection, factorized Lorentz closure
+validates original index multiplicities and contracts only connected raw-index components.
+Closed loop invariants remain scalar coefficients through projection, preserving powers and
+preventing spurious tensor-rank growth. Native tensor components retain their slots and pass
+through the checked reducer; its projection, ambiguity and rank guards remain authoritative.
+The optional FORM tensor path maps vectors and indices into
 FORM syntax, runs the embedded reduction program, and maps the result back to Symbolica.
 
 Integral evaluation matches again so that it has the canonical topology and numerator mapping.
