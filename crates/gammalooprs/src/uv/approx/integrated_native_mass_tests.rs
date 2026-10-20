@@ -92,6 +92,180 @@ pub(in crate::uv) enum D09VacuumSource {
 
 type CertifiedMassPole = (usize, Atom, Atom, Atom);
 
+/// Source-owned unit-rest frame retained with the actual vacuum trace rows.
+/// Only these certified boundary momenta are specialized; active loop carriers
+/// and the surrounding graph remain untouched.
+pub(in crate::uv) struct D09VacuumFrame {
+    pub(in crate::uv) closing_duals: [SymbolicTensor<IndexedStructure>; 2],
+    pub(in crate::uv) open_basis: [SymbolicTensor<IndexedStructure>; 2],
+    pub(in crate::uv) external_points: BTreeMap<linnet::half_edge::involution::EdgeIndex, Atom>,
+    pub(in crate::uv) mass: Atom,
+    pub(in crate::uv) lmb: crate::graph::LoopMomentumBasis,
+}
+
+impl D09VacuumFrame {
+    pub(in crate::uv) fn at_point(
+        &self,
+        input: &SymbolicTensor<IndexedStructure>,
+        graph: &crate::graph::Graph,
+        parent: &crate::uv::hedge_poset::OwnedForestNode,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        use crate::{
+            graph::lmb::LMBext,
+            utils::{GS, W_},
+            uv::approx::ForestNodeLike,
+        };
+        use linnet::half_edge::involution::EdgeIndex;
+        let routed = GS
+            .erase_uv_momentum_provenance(input.expression())
+            .replace_multiple(graph.uv_wrapped_replacement(
+                parent.subgraph(),
+                &self.lmb,
+                &[W_.x___],
+            ));
+        let mut unexpected = false;
+        let expression = routed.replace_map(|view, _, output| {
+            if let AtomView::Fun(momentum) = view
+                && momentum.get_symbol() == GS.emr_mom
+            {
+                if momentum.get_nargs() == 0 {
+                    unexpected = true;
+                    return;
+                }
+                let Ok(edge) = usize::try_from(momentum.get(0)) else {
+                    unexpected = true;
+                    return;
+                };
+                let edge = EdgeIndex(edge);
+                if let Some(point) = self.external_points.get(&edge) {
+                    let indices = momentum
+                        .iter()
+                        .skip(1)
+                        .map(|index| index.to_owned())
+                        .collect::<Vec<_>>();
+                    **output = GS.indexed_momentum(point, &indices);
+                } else if ![EdgeIndex(2), EdgeIndex(4)].contains(&edge) {
+                    unexpected = true;
+                }
+            }
+        });
+        ensure!(!unexpected, "D09 fixed-point view has an unowned momentum");
+        Ok(input.with_checked_expression(
+            GS.resolve_os_momenta(&expression)
+                .replace(self.mass.to_pattern())
+                .with(1),
+        )?)
+    }
+
+    /// Finite external matrix only: the Laurent owner acts before D/epsilon
+    /// specialization, and scalar radial coefficients stay outside components.
+    pub(in crate::uv) fn unit_finite(
+        &self,
+        input: &SymbolicTensor<IndexedStructure>,
+        graph: &crate::graph::Graph,
+        parent: &crate::uv::hedge_poset::OwnedForestNode,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        use crate::utils::GS;
+        let point = self.at_point(input, graph, parent)?;
+        ensure!(point.rank() == 4);
+        for head in [
+            GS.den,
+            GS.emr_mom,
+            GS.loop_mom,
+            GS.os_mom,
+            GS.integrated_loop_scale,
+        ] {
+            ensure!(!point.expression().contains_symbol(head));
+        }
+        let normalized = point.simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+            ..Default::default()
+        })?;
+        let unit = normalized
+            .expression()
+            .replace(GS.m_uv_expansion)
+            .with(GS.m_uv_vacuum)
+            .replace(GS.m_uv_vacuum)
+            .with(1)
+            .replace(GS.mu_r_sq)
+            .with(1);
+        let expansion = super::series(&super::Integrated::dimensionally_regularized(&unit), 0)?;
+        let finite = normalized.with_checked_expression(super::truncate(&expansion, true))?;
+        // The remaining Lorentz block must be supported by fixed physical
+        // selectors. Never turn an unresolved internal D trace into Minkowski4.
+        use crate::numerator::aind::Aind;
+        use spenso::structure::slot::SlotMatcher;
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let raw = cooking.uncook(finite.expression().as_view());
+        let mut matcher = SlotMatcher::default();
+        let mut lorentz = BTreeSet::new();
+        let mut fixed = BTreeSet::new();
+        let mut invalid = false;
+        raw.visitor(&mut |view| {
+            if let AtomView::Fun(selector) = view
+                && selector.get_symbol() == GS.delta_vec
+                && selector.get_nargs() == 2
+                && let Some((representation, _)) = matcher.port_representation(selector.get(1))
+                && representation
+                    == spenso::structure::representation::LibraryRep::from(Minkowski {})
+            {
+                invalid |= !matches!(matcher.concrete_component(selector.get(0)), Some(Ok(0..=3)));
+                // A compact representation is an implicit port local to this
+                // fixed selector. It cannot cover a different compact occurrence.
+                if matcher
+                    .parse_representation::<Minkowski>(selector.get(1))
+                    .is_ok()
+                {
+                    return false;
+                }
+                fixed.insert(selector.get(1).to_owned());
+            }
+            if matcher.parse::<Minkowski, Aind>(view).is_ok() {
+                lorentz.insert(view.to_owned());
+                return false;
+            }
+            if matcher.parse_representation::<Minkowski>(view).is_ok() {
+                invalid = true;
+                return false;
+            }
+            true
+        });
+        if invalid || lorentz != fixed {
+            crate::debug_tags!(#uv, #integrated, #inspect;
+                stage = "native_d09_finite_frame_direction_rejected", invalid,
+                file.lorentz = ?lorentz, file.fixed = ?fixed,
+                file.input = %raw.to_canonical_string(),
+                "Finite physical admission retains the exact unresolved direction"
+            );
+        }
+        ensure!(
+            !invalid && lorentz == fixed,
+            "unit-rest finite carrier has an unresolved Lorentz direction"
+        );
+        let finite = finite.map_representation_dimensions(|representation, dimension| {
+            if representation == spenso::structure::representation::LibraryRep::from(Minkowski {}) {
+                dimension.replace(GS.dim).with(4)
+            } else {
+                dimension.to_owned()
+            }
+        })?;
+        QcdMassReference::materialize_finite_external_matrix_coefficients(&finite)
+    }
+}
+
+struct D09VacuumScalarRows {
+    frame: D09VacuumFrame,
+    dimensional: SymbolicTensor<IndexedStructure>,
+    physical_four: SymbolicTensor<IndexedStructure>,
+    production_finite: SymbolicTensor<IndexedStructure>,
+    weighted_difference: [Atom; 2],
+    source_weight: Atom,
+    external_ordering: Atom,
+    omega: Atom,
+}
+
 // Actual source/child incidence retains the certified scalar transfer and the
 // same native input consumed by the complete inventory and overall operators.
 type CertifiedMassPrefixes = BTreeMap<(String, Vec<usize>), CertifiedMassPrefix>;
@@ -123,6 +297,8 @@ struct MassProjection {
     // Edge identity, routed momentum, squared mass, full unit-mass polynomial.
     poles: Vec<CertifiedMassPole>,
     kernel_weight: Atom,
+    // Existing source-derived amplitude/kernel conversion; never fitted to CTs.
+    external_ordering: Atom,
     numerator_prefactor: Atom,
     coupling_definitions: Vec<(String, Atom)>,
     scaleless: bool,
@@ -1047,6 +1223,7 @@ impl QcdMassReference {
             colors: color_rows,
             poles,
             kernel_weight: kernel_factor,
+            external_ordering: ordering_factor,
             numerator_prefactor: numerator_prefactor.clone(),
             coupling_definitions,
             scaleless,
@@ -4059,6 +4236,254 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
     Ok(())
 }
 
+/// Main-push only: all three original W sources feed one paired, observed
+/// finite-emission certificate. The reference never defines either carrier.
+#[test]
+fn native_d09_emitted_vacuum_policy_field_matches_actual_source_rows() -> Result<()> {
+    use crate::{
+        utils::GS,
+        uv::{
+            Spinney,
+            approx::{
+                Rooted, UVCtx,
+                local_4d::{Full4dCts, Local4dCts},
+            },
+            hedge_poset::OwnedForestNode,
+        },
+    };
+    crate::initialisation::test_initialise()?;
+    let reference = QcdMassReference::new()?;
+    let mut records = reference.certify_os_quark_proper_prefix()?;
+    ensure!(records.len() == 1);
+    let record = records
+        .remove(&("D09".to_owned(), vec![2, 3]))
+        .ok_or_else(|| eyre!("the actual native D09 OS child is missing"))?;
+    let root = OwnedForestNode {
+        spinney: Spinney::empty(&record.graph),
+        topo_order: 0,
+    };
+    let bare_prefix = Full4dCts::from_factorized_local(&Local4dCts::root());
+    // One bare parent and one completed-child parent own all three source rows.
+    let bare = reference.certify_actual_overall_mass_input(&record, &root, &bare_prefix)?;
+    let bare_rows = reference.certify_d09_vacuum_scalar_rows(
+        &record,
+        &root,
+        &bare_prefix,
+        &bare,
+        D09VacuumSource::Bare,
+    )?;
+    // A different supplied vector in the same formal space is not fixed by
+    // the endpoint's selector. Reject it before any representation maps to 4.
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let unknown = symbol!(
+        "native_d09_field_control::unknown_vector",
+        tags = [
+            spenso::network::tags::SPENSO_TAG.rank1.clone(),
+            spenso::network::tags::SPENSO_TAG.tensor.clone()
+        ]
+    );
+    let vector = function!(unknown, Minkowski {}.to_symbolic([GS.dim]));
+    let basis = cooking.uncook(bare_rows.frame.open_basis[1].expression().as_view());
+    let uncontrolled = basis.replace_map(|view, _, output| {
+        if let AtomView::Fun(gamma) = view
+            && gamma.get_symbol() == idenso::dirac::AGS.gamma0
+        {
+            **output = function!(
+                idenso::dirac::AGS.gamma,
+                gamma.get(0),
+                gamma.get(1),
+                &vector
+            );
+        }
+    });
+    let controlled = basis.replace_map(|view, _, output| {
+        if let AtomView::Fun(gamma) = view
+            && gamma.get_symbol() == idenso::dirac::AGS.gamma0
+        {
+            **output = function!(
+                idenso::dirac::AGS.gamma,
+                gamma.get(0),
+                gamma.get(1),
+                function!(GS.delta_vec, GS.cind(0), Minkowski {}.to_symbolic([GS.dim]))
+            );
+        }
+    });
+    ensure!(uncontrolled.contains_symbol(unknown));
+    ensure!(controlled.contains_symbol(GS.delta_vec));
+    // Equal compact representation atoms have separate implicit binders.
+    // The fixed selector in this term cannot fix the unknown vector's port.
+    let uncontrolled = bare_rows.frame.open_basis[1]
+        .with_checked_expression(cooking.try_cook((&uncontrolled + controlled).as_view())?)?;
+    let error = bare_rows
+        .frame
+        .unit_finite(&uncontrolled, &record.graph, &bare.0)
+        .expect_err("an unresolved supplied vector must not enter the physical block");
+    ensure!(error.to_string().contains("unresolved Lorentz direction"));
+    // Source binding precedes transport: compare the COMPLETE production
+    // matrix, rather than the mass closure which annihilates this direction.
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "actual bare dimensional finite output reconstructs from its actual WD rows",
+        bare_rows
+            .production_finite
+            .try_sub(&bare_rows.dimensional)?,
+    )?;
+    let mut bare_four = bare.2.clone();
+    bare_four.finite_counterterm = bare_rows.physical_four.clone();
+    ensure!(bare_four.pole == bare.2.pole && bare_four.scale_power == bare.2.scale_power);
+    let ctx = UVCtx::new(&record.graph, &record.graph.model, &record.settings);
+    // The runtime amplitude retains the generated external field ordering.
+    // The W references use the amputated Grassmann kernel; project() already
+    // proves their source-only ratio, before any new vacuum integration.
+    let bare_observed = reference.certify_d09_vacuum_policy_field_emission(
+        &record.diagram,
+        &ctx,
+        &bare,
+        &bare_rows.frame,
+        &bare_four,
+        (&bare_rows.source_weight, &bare_rows.external_ordering),
+    )?;
+    // Qualify the bare source/observer boundary before the expensive proper
+    // source traces. All original proper and aggregate assertions follow.
+    let proper =
+        reference.certify_actual_overall_mass_input(&record, &record.given, &record.completed)?;
+    let local_rows = reference.certify_d09_vacuum_scalar_rows(
+        &record,
+        &record.given,
+        &record.completed,
+        &proper,
+        D09VacuumSource::ProperLocal,
+    )?;
+    let finite_rows = reference.certify_d09_vacuum_scalar_rows(
+        &record,
+        &record.given,
+        &record.completed,
+        &proper,
+        D09VacuumSource::ProperFinite,
+    )?;
+    for rows in [&local_rows, &finite_rows] {
+        ensure!(rows.source_weight == bare_rows.source_weight && rows.omega == bare_rows.omega);
+        ensure!(rows.external_ordering == bare_rows.external_ordering);
+        ensure!(rows.frame.mass == bare_rows.frame.mass);
+        ensure!(rows.frame.lmb == bare_rows.frame.lmb);
+        ensure!(rows.frame.external_points == bare_rows.frame.external_points);
+        for index in 0..2 {
+            ensure!(
+                rows.frame.open_basis[index].structure().logical_slots()
+                    == bare_rows.frame.open_basis[index]
+                        .structure()
+                        .logical_slots()
+            );
+            QcdMassReference::certify_finite_tagged_rows_zero(
+                "all D09 source rows retain the same calibrated native open frame",
+                QcdMassReference::materialize_finite_external_matrix_coefficients(
+                    &rows.frame.open_basis[index].try_sub(&bare_rows.frame.open_basis[index])?,
+                )?,
+            )?;
+        }
+    }
+    let proper_dimensional = local_rows.dimensional.try_add(&finite_rows.dimensional)?;
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "actual completed-child dimensional finite output reconstructs from both actual WD sources",
+        local_rows.production_finite.try_sub(&proper_dimensional)?,
+    )?;
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "both proper source observers borrow the same production finite output",
+        local_rows
+            .production_finite
+            .try_sub(&finite_rows.production_finite)?,
+    )?;
+    // The diagnostic counterparts are constructed from ACTUAL W4/C0 rows,
+    // independently of original A_D and independently of the reference below.
+    let proper_four = local_rows
+        .physical_four
+        .try_add(&finite_rows.physical_four)?;
+    let mut completed_four = proper.2.clone();
+    completed_four.finite_counterterm = proper_four;
+    ensure!(
+        completed_four.pole == proper.2.pole && completed_four.scale_power == proper.2.scale_power
+    );
+    let proper_observed = reference.certify_d09_vacuum_policy_field_emission(
+        &record.diagram,
+        &ctx,
+        &proper,
+        &local_rows.frame,
+        &completed_four,
+        (&local_rows.source_weight, &local_rows.external_ordering),
+    )?;
+    let actual = [0usize, 1].map(|dual| {
+        &bare_rows.weighted_difference[dual]
+            + &local_rows.weighted_difference[dual]
+            + &finite_rows.weighted_difference[dual]
+    });
+    let observed = [0usize, 1].map(|dual| {
+        reference
+            .model
+            .expand_couplings(&(&bare_observed[dual] + &proper_observed[dual]))
+    });
+    for dual in 0..2 {
+        let finite = super::truncate(&super::series(&actual[dual], 0)?, true);
+        QcdMassReference::certify_finite_tagged_rows_zero(
+            "actual emitted finite coefficient retains the source ordering times the kernel W difference",
+            SymbolicTensor::infer_indexed(&observed[dual] - &bare_rows.external_ordering * finite)?,
+        )?;
+    }
+    let phi = &observed[0] + &observed[1];
+    let psi = (&observed[1] - &observed[0]) / Atom::num(2);
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "observed vacuum-policy difference is invisible to Phi",
+        SymbolicTensor::infer_indexed(phi.clone())?,
+    )?;
+    let nonzero_field = SymbolicTensor::infer_indexed(psi.clone())?;
+    let zero_field_rejected = QcdMassReference::certify_finite_tagged_rows_zero(
+        "zeroing the observed complementary field carrier is rejected",
+        nonzero_field,
+    )
+    .is_err();
+    ensure!(zero_field_rejected);
+    // The independent reference enters only AFTER both actual input bindings
+    // and the observed emitted difference have been certified.
+    let epsilon = Atom::var(GS.dim_epsilon);
+    let pi = Atom::var(symbolica::atom::Symbol::PI);
+    let r = Atom::num((11, 36)) + pi.pow(2) / Atom::num(12);
+    let expected_kernel_field = &bare_rows.omega * &r;
+    let expected_field = &bare_rows.external_ordering * &expected_kernel_field;
+    for (dual, value) in actual.iter().enumerate() {
+        let sign = Atom::num(if dual == 0 { -1 } else { 1 });
+        let expected = &sign * &bare_rows.omega * (Atom::num((7, 6)) / &epsilon + &r);
+        QcdMassReference::certify_finite_tagged_rows_zero(
+            "actual complete D09 Laurent vacuum-policy residual matches independent reference",
+            SymbolicTensor::infer_indexed(value - expected)?,
+        )?;
+    }
+    QcdMassReference::certify_finite_tagged_rows_zero(
+        "observed complementary finite field coefficient matches independent reference",
+        SymbolicTensor::infer_indexed(&psi - &expected_field)?,
+    )?;
+    let wrong_closure = SymbolicTensor::infer_indexed(&phi - &expected_field)?;
+    let phi_substitution_rejected = QcdMassReference::certify_finite_tagged_rows_zero(
+        "Phi cannot replace the complementary field diagnostic",
+        wrong_closure,
+    )
+    .is_err();
+    ensure!(phi_substitution_rejected);
+    crate::debug_tags!(#uv, #integrated, #cff, #summary;
+        stage = "native_d09_emitted_vacuum_policy_field", original_sources = 3,
+        actual_bare_and_completed_dimensional_carriers_bound = true,
+        actual_four_d_counterparts_independently_reconstructed = true,
+        file.actual_laurent = ?actual.iter().map(|row| row.to_canonical_string()).collect::<Vec<_>>(),
+        file.actual_Phi = %phi.to_canonical_string(), file.actual_Psi = %psi.to_canonical_string(),
+        file.reference_Psi = %expected_field.to_canonical_string(),
+        file.reference_kernel_Psi = %expected_kernel_field.to_canonical_string(),
+        file.source_external_ordering = %bare_rows.external_ordering.to_canonical_string(),
+        unit_rest = true, unit_scales = true, emitted_vacuum_policy_field = true,
+        full_unregulated_R2 = false, new_production_R2_term = false,
+        "Actual native W coefficients survive the observed finalizer in the independently known field direction"
+    );
+    Ok(())
+}
+
 #[test]
 fn native_d09_proper_local_vacuum_scalar_traces_match_independent_tadpoles() -> Result<()> {
     QcdMassReference::certify_d09_vacuum_scalar_reference(D09VacuumSource::ProperLocal)
@@ -4076,16 +4501,13 @@ fn native_d09_proper_finite_vacuum_scalar_traces_keep_child_epsilon() -> Result<
 
 impl QcdMassReference {
     fn certify_d09_vacuum_scalar_reference(source: D09VacuumSource) -> Result<()> {
-        use crate::{
-            utils::GS,
-            uv::{
-                ApproximationType, Spinney,
-                approx::{
-                    ForestNodeLike, Rooted, UVCtx,
-                    local_4d::{Full4dCts, Local4dCts},
-                },
-                hedge_poset::OwnedForestNode,
+        use crate::uv::{
+            ApproximationType, Spinney,
+            approx::{
+                ForestNodeLike, Rooted,
+                local_4d::{Full4dCts, Local4dCts},
             },
+            hedge_poset::OwnedForestNode,
         };
         crate::initialisation::test_initialise()?;
         let reference = QcdMassReference::new()?;
@@ -4095,12 +4517,6 @@ impl QcdMassReference {
             .remove(&("D09".to_owned(), vec![2, 3]))
             .ok_or_else(|| eyre!("the actual native D09 OS child is missing"))?;
         ensure!(record.given.renormalization_scheme() == ApproximationType::OS);
-        // Same independent source-weight owner as the full native mass/field gate.
-        // It is read before any new scalar integration, never fitted to an output.
-        let source_projection = reference.project(&record.diagram)?;
-        let source_weight =
-            &source_projection.kernel_weight * &source_projection.numerator_prefactor;
-        ensure!(!source_weight.is_zero());
         ensure!(record.diagram.loop_momentum_basis().loop_edges.len() == 2);
         let root = OwnedForestNode {
             spinney: Spinney::empty(&record.graph),
@@ -4113,12 +4529,35 @@ impl QcdMassReference {
             (&record.given, &record.completed)
         };
         let actual = reference.certify_actual_overall_mass_input(&record, given, prefix)?;
-        let traces = reference.certify_d09_vacuum_angular_traces(
+        reference
+            .certify_d09_vacuum_scalar_rows(&record, given, prefix, &actual, source)
+            .map(|_| ())
+    }
+
+    fn certify_d09_vacuum_scalar_rows(
+        &self,
+        record: &CertifiedMassPrefix,
+        given: &crate::uv::hedge_poset::OwnedForestNode,
+        prefix: &crate::uv::approx::local_4d::Full4dCts,
+        actual: &(
+            crate::uv::hedge_poset::OwnedForestNode,
+            crate::uv::approx::local_4d::Local4dCts,
+            super::IntegratedCts,
+        ),
+        source: D09VacuumSource,
+    ) -> Result<D09VacuumScalarRows> {
+        use crate::{utils::GS, uv::approx::UVCtx};
+        let reference = self;
+        let source_projection = reference.project(&record.diagram)?;
+        let source_weight =
+            &source_projection.kernel_weight * &source_projection.numerator_prefactor;
+        ensure!(!source_weight.is_zero());
+        let (traces, frame) = reference.certify_d09_vacuum_angular_traces(
             &record.diagram,
             &UVCtx::new(&record.graph, &record.graph.model, &record.settings),
             given,
             prefix,
-            &actual,
+            actual,
             source,
         )?;
 
@@ -4158,6 +4597,7 @@ impl QcdMassReference {
             .with_representation_payloads(true, true);
         let mut records = Vec::new();
         let mut actual_series = Vec::new();
+        let mut native_series = Vec::new();
         for (index, trace) in traces.iter().enumerate() {
             ensure!(trace.is_scalar());
             // The finite-row owner expects completed scalar coefficients. Use the
@@ -4169,6 +4609,23 @@ impl QcdMassReference {
             ensure!(
                 !normalized.expression().contains_symbol(CS.cas)
                     && !normalized.expression().contains_symbol(CS.idx)
+            );
+            let native_unit = normalized
+                .expression()
+                .replace(symbol!("UFO::MT"))
+                .with(1)
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum)
+                .replace(GS.m_uv_vacuum)
+                .with(1)
+                .replace(GS.mu_r_sq)
+                .with(1);
+            native_series.push(
+                super::series(
+                    &super::Integrated::dimensionally_regularized(&native_unit),
+                    0,
+                )?
+                .to_atom(),
             );
             let weighted = reference
                 .model
@@ -4319,7 +4776,47 @@ impl QcdMassReference {
             full_open_matrix_proved = true, emitted_R2_proved = false,
             "Actual D09 source-selected W scalar-dual Laurent traces match independent vacuum references"
         );
-        Ok(())
+        let physical_start = if source == D09VacuumSource::ProperFinite {
+            4
+        } else {
+            2
+        };
+        let mut dimensional = frame.open_basis[0].with_checked_expression(Atom::Zero)?;
+        let mut physical_four = dimensional.clone();
+        for dual in 0..2 {
+            let d = super::truncate(&super::series(&native_series[dual], 0)?, true);
+            let four = super::truncate(
+                &super::series(&native_series[physical_start + dual], 0)?,
+                true,
+            );
+            dimensional = dimensional.try_add(
+                &frame.open_basis[dual]
+                    .with_checked_expression(-d * frame.open_basis[dual].expression())?,
+            )?;
+            physical_four = physical_four.try_add(
+                &frame.open_basis[dual]
+                    .with_checked_expression(-four * frame.open_basis[dual].expression())?,
+            )?;
+        }
+        let dimensional = frame.unit_finite(&dimensional, &record.graph, &actual.0)?;
+        let physical_four = frame.unit_finite(&physical_four, &record.graph, &actual.0)?;
+        let production_finite = frame.unit_finite(
+            &actual.2.physical_finite_counterterm()?,
+            &record.graph,
+            &actual.0,
+        )?;
+        let weighted_difference =
+            [0usize, 1].map(|dual| &actual_series[physical_start + dual] - &actual_series[dual]);
+        Ok(D09VacuumScalarRows {
+            frame,
+            dimensional,
+            physical_four,
+            production_finite,
+            weighted_difference,
+            source_weight,
+            external_ordering: source_projection.external_ordering,
+            omega: prefactor,
+        })
     }
 }
 

@@ -73,6 +73,289 @@ pub(crate) enum ProjectedAssemblySkip {
     EmptyIntegrated,
 }
 
+impl ProjectedAssemblyEmission {
+    /// Compare two independently admitted local emissions of the SAME source.
+    /// Fresh registered scalar weights and one prepared family are binders,
+    /// not physical momentum/port names. Every rebinding has an exact inverse.
+    pub(crate) fn certify_same_local_source(&self, other: &Self) -> Result<()> {
+        let (ProjectedAssemblySource::Local(left), ProjectedAssemblySource::Local(right)) =
+            (&self.source, &other.source)
+        else {
+            bail!("local-source comparison requires two local emissions");
+        };
+        ensure!(Arc::ptr_eq(&left.child, &right.child) && left.sector == right.sector);
+        ensure!(self.key == other.key && self.tree_factor == other.tree_factor);
+        ensure!(
+            left.outer_arguments == right.outer_arguments
+                && left.frozen_factor == right.frozen_factor
+                && left.routed_numerator == right.routed_numerator
+                && left.outer == right.outer,
+            "the registered-name comparison cannot change a physical local operand"
+        );
+        ensure!(
+            !left.call_weights.is_empty() && left.call_weights.keys().eq(right.call_weights.keys())
+        );
+        ensure!(
+            left.prepared_calls.len() == left.call_weights.len()
+                && right.prepared_calls.len() == right.call_weights.len()
+        );
+        let coefficient = symbol!("gammalooprs::uv::numerator_coefficient"; Scalar);
+        let family = symbol!("gammalooprs::uv::numerator_family");
+        let weight_pairs = left
+            .call_weights
+            .iter()
+            .map(|(call, target)| {
+                let source = &right.call_weights[call];
+                (source.clone(), target.clone())
+            })
+            .collect::<Vec<_>>();
+        for (source, target) in &weight_pairs {
+            let (AtomView::Fun(source_call), AtomView::Fun(target_call)) =
+                (source.as_view(), target.as_view())
+            else {
+                bail!("a registered scalar weight lost its function binding");
+            };
+            ensure!(
+                source_call.get_symbol() == coefficient
+                    && target_call.get_symbol() == coefficient
+                    && source_call.get_nargs() == 2
+                    && target_call.get_nargs() == 2
+                    && matches!(source_call.get(0), AtomView::Var(_))
+                    && matches!(target_call.get(0), AtomView::Var(_))
+                    && usize::try_from(source_call.get(1)).is_ok()
+                    && source_call.get(1) == target_call.get(1)
+            );
+            ensure!(
+                !left.child.rhs.expression().contains(source.as_view())
+                    && !left.child.rhs.expression().contains(target.as_view()),
+                "a fresh scalar weight cannot capture the retained child body"
+            );
+        }
+        ensure!(
+            weight_pairs
+                .iter()
+                .map(|(a, _)| a)
+                .collect::<BTreeSet<_>>()
+                .len()
+                == weight_pairs.len()
+                && weight_pairs
+                    .iter()
+                    .map(|(_, b)| b)
+                    .collect::<BTreeSet<_>>()
+                    .len()
+                    == weight_pairs.len()
+        );
+        let rebind = |expression: &Atom, pairs: &[(Atom, Atom)], inverse: bool| {
+            expression.replace_multiple(pairs.iter().map(|(source, target)| {
+                let (source, target) = if inverse {
+                    (target, source)
+                } else {
+                    (source, target)
+                };
+                Replacement::new(source.to_pattern(), target.clone())
+            }))
+        };
+        let rebound_carrier = rebind(&right.routed_carrier, &weight_pairs, false);
+        ensure!(rebind(&rebound_carrier, &weight_pairs, true) == right.routed_carrier);
+        ensure!(
+            rebound_carrier == left.routed_carrier,
+            "routed carriers differ after their complete registered weight bijection"
+        );
+
+        ensure!(left.prepared.tags.len() == 1 && right.prepared.tags.len() == 1);
+        ensure!(
+            left.prepared.inlining == right.prepared.inlining
+                && left.prepared.is_alias == right.prepared.is_alias
+        );
+        ensure!(
+            left.prepared.rhs.structure().logical_slots()
+                == right.prepared.rhs.structure().logical_slots()
+        );
+        let left_parameters = left
+            .prepared
+            .args
+            .iter()
+            .cloned()
+            .map(Atom::from)
+            .collect::<Vec<_>>();
+        let right_parameters = right
+            .prepared
+            .args
+            .iter()
+            .cloned()
+            .map(Atom::from)
+            .collect::<Vec<_>>();
+        let child_parameters = left
+            .child
+            .args
+            .iter()
+            .cloned()
+            .map(Atom::from)
+            .collect::<Vec<_>>();
+        ensure!(
+            left_parameters.starts_with(&child_parameters)
+                && right_parameters.starts_with(&child_parameters)
+                && left_parameters.len() == right_parameters.len()
+                && left_parameters.len() == child_parameters.len() + left.outer_arguments.len()
+        );
+        let parameter_pairs = right_parameters[child_parameters.len()..]
+            .iter()
+            .cloned()
+            .zip(left_parameters[child_parameters.len()..].iter().cloned())
+            .collect::<Vec<_>>();
+        for (source, target) in &parameter_pairs {
+            let (AtomView::Fun(source_call), AtomView::Fun(target_call)) =
+                (source.as_view(), target.as_view())
+            else {
+                bail!("an outer formal parameter lost its registered scalar binding");
+            };
+            ensure!(
+                source_call.get_symbol() == coefficient
+                    && target_call.get_symbol() == coefficient
+                    && source_call.get_nargs() == 2
+                    && target_call.get_nargs() == 2
+                    && usize::try_from(source_call.get(0)).is_ok()
+                    && usize::try_from(target_call.get(0)).is_ok()
+                    && usize::try_from(source_call.get(1)).is_ok()
+                    && source_call.get(1) == target_call.get(1)
+            );
+            ensure!(
+                !left.child.rhs.expression().contains(source.as_view())
+                    && !left.child.rhs.expression().contains(target.as_view())
+            );
+        }
+        ensure!(
+            parameter_pairs
+                .iter()
+                .map(|(a, _)| a)
+                .collect::<BTreeSet<_>>()
+                .len()
+                == parameter_pairs.len()
+                && parameter_pairs
+                    .iter()
+                    .map(|(_, b)| b)
+                    .collect::<BTreeSet<_>>()
+                    .len()
+                    == parameter_pairs.len()
+        );
+        let rhs = right.prepared.rhs.with_checked_expression(rebind(
+            right.prepared.rhs.expression(),
+            &parameter_pairs,
+            false,
+        ))?;
+        ensure!(
+            rebind(rhs.expression(), &parameter_pairs, true) == *right.prepared.rhs.expression()
+        );
+        ensure!(
+            rhs == left.prepared.rhs,
+            "typed prepared RHS differs after its ordered outer-formal bijection"
+        );
+        let left_tag = &left.prepared.tags[0];
+        let right_tag = &right.prepared.tags[0];
+        ensure!(
+            matches!(left_tag.as_view(), AtomView::Var(_))
+                && matches!(right_tag.as_view(), AtomView::Var(_))
+        );
+        for tag in [left_tag, right_tag] {
+            ensure!(!left.child.tags.contains(tag));
+            ensure!(
+                !left
+                    .outer
+                    .numerators()
+                    .iter()
+                    .any(|entry| entry.tags.contains(tag))
+            );
+        }
+        let rename_family = |expression: &Atom, source: &Atom, target: &Atom| -> Result<Atom> {
+            let mut malformed = false;
+            let result = expression.replace_map(|view, _, output| {
+                if let AtomView::Fun(call) = view
+                    && call.get_symbol() == family
+                    && call.get_nargs() > 0
+                    && call.get(0) == source.as_view()
+                {
+                    if call.get_nargs() != right_parameters.len() + 1 {
+                        malformed = true;
+                        return;
+                    }
+                    **output = family.call_args(
+                        std::iter::once(target.clone())
+                            .chain(call.iter().skip(1).map(|argument| argument.to_owned())),
+                    );
+                }
+            });
+            ensure!(
+                !malformed,
+                "a prepared family call has an unbound argument tuple"
+            );
+            Ok(result)
+        };
+        let lhs = rename_family(
+            &rebind(&right.prepared.lhs, &parameter_pairs, false),
+            right_tag,
+            left_tag,
+        )?;
+        ensure!(lhs == left.prepared.lhs);
+        ensure!(
+            rebind(
+                &rename_family(&lhs, left_tag, right_tag)?,
+                &parameter_pairs,
+                true
+            ) == right.prepared.lhs
+        );
+        for (call, left_weight) in &left.call_weights {
+            let right_weight = &right.call_weights[call];
+            let left_call = left
+                .prepared_calls
+                .get(left_weight)
+                .ok_or_else(|| eyre!("left source occurrence has no prepared call"))?;
+            let right_call = right
+                .prepared_calls
+                .get(right_weight)
+                .ok_or_else(|| eyre!("right source occurrence has no prepared call"))?;
+            let rebound = rename_family(right_call, right_tag, left_tag)?;
+            ensure!(rebound == *left_call);
+            ensure!(rename_family(&rebound, left_tag, right_tag)? == *right_call);
+        }
+        let mapped = rename_family(&right.mapped_carrier, right_tag, left_tag)?;
+        ensure!(mapped == left.mapped_carrier);
+        ensure!(rename_family(&mapped, left_tag, right_tag)? == right.mapped_carrier);
+        // Replace only the one definition whose complete typed binding was
+        // certified above. All other catalog entries retain their original Arc.
+        let mut replacements = 0usize;
+        let definitions = other
+            .mapped
+            .numerators()
+            .iter()
+            .map(|entry| {
+                if Arc::ptr_eq(entry, &right.prepared) {
+                    replacements += 1;
+                    Arc::clone(&left.prepared)
+                } else {
+                    Arc::clone(entry)
+                }
+            })
+            .collect::<Vec<_>>();
+        ensure!(replacements == 1);
+        let rebound = other
+            .mapped
+            .fallible_map(|atom| rename_family(atom, right_tag, left_tag))?
+            .with_numerators(definitions)?;
+        ensure!(
+            rebound == self.mapped,
+            "complete mapped roots/catalogue differ after the registered definition rebinding"
+        );
+        let inverse = rebound
+            .fallible_map(|atom| rename_family(atom, left_tag, right_tag))?
+            .with_numerators(other.mapped.numerators().iter().cloned())?;
+        ensure!(
+            inverse == other.mapped,
+            "the complete factorized local emission did not round-trip its binding"
+        );
+        Ok(())
+    }
+}
+
 #[derive(Clone, Default, Debug)]
 pub(crate) struct ProjectedAssemblyCertificate {
     pub(crate) sector_count: usize,
