@@ -4141,71 +4141,118 @@ impl QcdMassReference {
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
-        let source = cooking.uncook(input.expression().as_view());
-        let explicit = source.undo_dots::<crate::numerator::aind::Aind>()?;
-        let mut network = explicit.parse_into_net()?;
-        let library = crate::utils::TENSORLIB.read().unwrap();
-        network
-            .execute::<Sequential, SmallestDegree, _, _, _>(&*library, &*crate::utils::FUN_LIB)?;
-        let expression = match network.result_tensor(&*library)? {
-            ExecutionResult::Zero => Atom::Zero,
-            ExecutionResult::One => {
-                ensure!(input.is_scalar());
-                Atom::one()
-            }
-            ExecutionResult::Val(tensor) => {
-                ensure!(tensor.size()? <= 4 * 4 * 3 * 3);
-                let ports = tensor
-                    .external_structure_iter()
-                    .map(|slot| slot.to_atom())
-                    .collect::<Vec<_>>();
-                // The explicit library returned native index payloads; the
-                // retained IndexedStructure carries their reversible encoding.
-                // Compare the same representation, including variance and exact
-                // named payload, and certify both encoding directions.
-                let source_ports = expected
-                    .iter()
-                    .map(|slot| -> Result<Atom> {
-                        let encoded = slot.to_atom();
-                        let native = cooking.uncook(encoded.as_view());
-                        ensure!(cooking.try_cook(native.as_view())? == encoded);
-                        Ok(native)
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                ensure!(ports.len() == source_ports.len());
-                for native in &ports {
-                    ensure!(
-                        cooking.uncook(cooking.try_cook(native.as_view())?.as_view()) == *native
-                    );
-                }
-                ensure!(
-                    ports.iter().cloned().collect::<BTreeSet<_>>()
-                        == source_ports.iter().cloned().collect::<BTreeSet<_>>()
-                );
-                let mut entries = Vec::new();
-                for (index, value) in tensor.iter_flat() {
-                    if value.is_zero() {
-                        continue;
-                    }
-                    let index = tensor.expanded_index(index)?;
-                    let basis =
-                        Atom::mul_many(ports.iter().zip(index.iter()).map(|(port, coordinate)| {
-                            function!(ETS.delta, function!(AIND_SYMBOLS.cind, *coordinate), port)
-                        }));
-                    entries.push(value * basis.as_view());
-                }
-                Atom::add_many(entries)
-            }
-        };
-        drop(library);
-        let result = input.with_checked_expression(cooking.try_cook(expression.as_view())?)?;
-        ensure!(result.structure().logical_slots() == input.structure().logical_slots());
-        // Reuse the established finite native-component equality owner. Its
-        // compact scalar normalization does not distribute the graph numerator.
-        let difference = cooking.uncook(input.try_sub(&result)?.expression().as_view());
+        // Collect complete native tensor words before finite execution. The
+        // original scalar coefficients (including the child epsilon/log jet)
+        // stay opaque spectators, rather than being copied into every component.
+        // Tensors includes compact dots: active physical momentum dependence
+        // must remain in the finite word, not in a D-dimensional scalar weight.
+        let partial: SymbolicTensor<PartialStructure> = input.clone().into();
+        let filter = spenso::shadowing::TensorCollectFilter::<0>::Tensors;
+        let rows = partial.coefficient_list(filter)?;
+        let recomposed = input.with_checked_expression(Atom::add_many(
+            rows.iter()
+                .map(|(word, coefficient)| word.expression() * coefficient.expression()),
+        ))?;
+        ensure!(
+            input.coefficients_equal(&recomposed, filter)? == symbolica::id::ConditionResult::True
+        );
+        let mut materialized = input.with_checked_expression(Atom::Zero)?;
         let mut cache = crate::uv::overlap_numerators::NumeratorJetCache::default();
-        ensure!(cache.canonicalize(&difference)?.is_zero);
-        Ok(result)
+        for (word, coefficient) in rows {
+            if word.expression().is_zero() || coefficient.expression().is_zero() {
+                continue;
+            }
+            ensure!(coefficient.is_scalar());
+            for head in [
+                crate::utils::GS.emr_mom,
+                crate::utils::GS.loop_mom,
+                crate::utils::GS.den,
+            ] {
+                ensure!(!coefficient.expression().contains_symbol(head));
+            }
+            let word = input.with_checked_expression(word.expression().clone())?;
+            let source = cooking.uncook(word.expression().as_view());
+            let explicit = source.undo_dots::<crate::numerator::aind::Aind>()?;
+            let mut network = explicit.parse_into_net()?;
+            let library = crate::utils::TENSORLIB.read().unwrap();
+            network.execute::<Sequential, SmallestDegree, _, _, _>(
+                &*library,
+                &*crate::utils::FUN_LIB,
+            )?;
+            let expression = match network.result_tensor(&*library)? {
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::One => {
+                    return Err(eyre!(
+                        "a nonzero complete native quark word became a scalar one"
+                    ));
+                }
+                ExecutionResult::Val(tensor) => {
+                    ensure!(tensor.size()? <= 4 * 4 * 3 * 3);
+                    let ports = tensor
+                        .external_structure_iter()
+                        .map(|slot| slot.to_atom())
+                        .collect::<Vec<_>>();
+                    // The explicit library returned native index payloads; the
+                    // retained IndexedStructure carries their reversible encoding.
+                    // Compare the same representation, including variance and exact
+                    // named payload, and certify both encoding directions.
+                    let source_ports = expected
+                        .iter()
+                        .map(|slot| -> Result<Atom> {
+                            let encoded = slot.to_atom();
+                            let native = cooking.uncook(encoded.as_view());
+                            ensure!(cooking.try_cook(native.as_view())? == encoded);
+                            Ok(native)
+                        })
+                        .collect::<Result<Vec<_>>>()?;
+                    ensure!(ports.len() == source_ports.len());
+                    for native in &ports {
+                        ensure!(
+                            cooking.uncook(cooking.try_cook(native.as_view())?.as_view())
+                                == *native
+                        );
+                    }
+                    ensure!(
+                        ports.iter().cloned().collect::<BTreeSet<_>>()
+                            == source_ports.iter().cloned().collect::<BTreeSet<_>>()
+                    );
+                    let mut entries = Vec::new();
+                    for (index, value) in tensor.iter_flat() {
+                        if value.is_zero() {
+                            continue;
+                        }
+                        let index = tensor.expanded_index(index)?;
+                        let basis = Atom::mul_many(ports.iter().zip(index.iter()).map(
+                            |(port, coordinate)| {
+                                function!(
+                                    ETS.delta,
+                                    function!(AIND_SYMBOLS.cind, *coordinate),
+                                    port
+                                )
+                            },
+                        ));
+                        entries.push(value * basis.as_view());
+                    }
+                    Atom::add_many(entries)
+                }
+            };
+            drop(library);
+            let result = word.with_checked_expression(cooking.try_cook(expression.as_view())?)?;
+            ensure!(result.structure().logical_slots() == input.structure().logical_slots());
+            // Certify this bounded tensor word, with all scalar spectators absent.
+            // The existing component/byte caps and exact compact zero owner remain
+            // unchanged. Multiplication by its original coefficient preserves this
+            // proved word equality without materializing the complete graph sum.
+            let difference = cooking.uncook(word.try_sub(&result)?.expression().as_view());
+            ensure!(cache.canonicalize(&difference)?.is_zero);
+            materialized =
+                materialized
+                    .try_add(&result.with_checked_expression(
+                        result.expression() * coefficient.expression(),
+                    )?)?;
+        }
+        ensure!(materialized.structure().logical_slots() == input.structure().logical_slots());
+        Ok(materialized)
     }
 }
 
