@@ -243,6 +243,8 @@ impl SymbolicTensor<PartialStructure> {
     /// before normalization. Thus two copies of an unresolved vector do not
     /// become identical components and vanish. Written explicit indices retain
     /// their identities and contract through ordinary tensor interface rules.
+    /// The nonzero result's logical ports follow the normalized word expression,
+    /// including any operand permutation caused by its symmetry attributes.
     /// Native normalization may produce zero; the resulting tensor retains its
     /// planned interface. A detached zero Atom cannot recover that information.
     ///
@@ -324,7 +326,8 @@ impl SymbolicTensor<PartialStructure> {
                     .map(|operand| operand.expression.as_view()),
             )
             .finish();
-        Self::validate_interface(&expression, &interface)?;
+        let interface = composition::interface_in_atom_order(&expression, &interface)
+            .map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
         Self::from_validated_parts(expression, interface, Arc::new(occurrences)).finish_parts()
     }
 
@@ -434,6 +437,21 @@ mod tests {
                 .rank(),
             2
         );
+    }
+
+    #[test]
+    fn tensor_word_normalized_port_order_round_trips_independently_of_operand_order() {
+        let head = head();
+        let a = component("tensor_word_tests::order_a", 21);
+        let b = component("tensor_word_tests::order_b", 22);
+        for operands in [[a.clone(), b.clone()], [b, a]] {
+            let word = SymbolicTensor::word(head, &operands).unwrap();
+            let restored = SymbolicTensor::infer(word.expression.clone()).unwrap();
+            assert!(word.same_value(&restored));
+        }
+        let open = unresolved("tensor_word_tests::order_unresolved");
+        let word = SymbolicTensor::word(head, &[open.clone(), open]).unwrap();
+        assert!(word.same_value(&SymbolicTensor::infer(word.expression.clone()).unwrap()));
     }
 
     #[test]
