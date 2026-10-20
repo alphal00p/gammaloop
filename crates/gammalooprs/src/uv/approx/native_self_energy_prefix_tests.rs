@@ -88,6 +88,29 @@ impl QcdMassReference {
             );
             Ok(tensor.with_checked_expression(expression)?)
         };
+        // Open only compact vector arguments through the existing native
+        // parser. Products and sums of the graph numerator stay factorized.
+        let expose_vectors = |tensor: &SymbolicTensor<IndexedStructure>|
+         -> Result<SymbolicTensor<IndexedStructure>> {
+            let tensor = super::super::simplify(&tensor.with_checked_expression(
+                GS.erase_uv_momentum_provenance(tensor.expression()),
+            )?)?;
+            let expanded = cooking.uncook(tensor.expression().as_view())
+                .parse_to_symbolic_net::<Aind>(&ParseSettings {
+                    shorthand_parsing: ShorthandParsing::Expand {
+                        schoonschip: SchoonschipExpansionMode {
+                            inner_products: false,
+                            expand_inside_chains: true,
+                            expand_schoonship: true,
+                        },
+                        trace: false,
+                        chain: false,
+                    },
+                    ..Default::default()
+                })?
+                .simple_execute::<()>()?;
+            Ok(tensor.with_checked_expression(cooking.try_cook(expanded.as_view())?)?)
+        };
         let quadratic = |momentum: &Atom, mass_squared: &Atom| {
             let represented =
                 GS.indexed_momentum(momentum, &[Minkowski {}.new_rep(GS.dim).to_symbolic([])]);
@@ -238,6 +261,275 @@ impl QcdMassReference {
                     )?
                     .try_sub(&mass_matrix)?),
                 )?;
+                // Admit the independent one-loop J0/J1 parameter reference on
+                // this actual native source. M and K retain its original phase;
+                // the existing field_matrix is K-M, never an OS field counterterm.
+                let kinetic_matrix = field_matrix.try_add(&mass_matrix)?;
+                let complete_reference = mass_matrix.with_checked_expression(
+                    &d * mass_matrix.expression()
+                        + (Atom::num(2) - &d) * kinetic_matrix.expression(),
+                )?;
+                Self::certify_finite_tagged_rows_zero(
+                    "native child complete affine numerator binds its J0/J1 matrix carriers",
+                    super::super::simplify(
+                        &evaluate_vector(&source_numerator, EdgeIndex(2), &parent_vector)?
+                            .try_sub(&complete_reference)?,
+                    )?,
+                )?;
+                ensure!(!mass_matrix.is_zero() && !kinetic_matrix.is_zero());
+                let x = Atom::var(symbol!("native_os_prefix::feynman_x"; Scalar));
+                let one_minus_x = Atom::one() - &x;
+                let exposed_source = expose_vectors(&source_numerator)?;
+                let exposed_zero = evaluate_vector(&exposed_source, EdgeIndex(2), &Atom::Zero)?;
+                let exposed_parent =
+                    evaluate_vector(&exposed_source, EdgeIndex(2), &parent_vector)?;
+                let shifted = evaluate_vector(
+                    &exposed_source,
+                    EdgeIndex(2),
+                    &(&loop_vector + &one_minus_x * &parent_vector),
+                )?;
+                let shifted_reference = exposed_source.try_add(
+                    &exposed_parent
+                        .try_sub(&exposed_zero)?
+                        .with_checked_expression(
+                            &one_minus_x
+                                * (exposed_parent.expression() - exposed_zero.expression()),
+                        )?,
+                )?;
+                Self::certify_finite_tagged_rows_zero(
+                    "native numerator loop shift leaves only the linear odd child moment",
+                    super::super::simplify(&shifted.try_sub(&shifted_reference)?)?,
+                )?;
+
+                // This positive scalar regulator is local to the original
+                // child's gluon. It cannot change its Feynman-gauge numerator.
+                let lambda = Atom::from(crate::model::UFOSymbol::from("MH"));
+                let _parameter = model.parameter("MH")?;
+                let mut regulated_graph = graph.clone();
+                let gluon = &mut regulated_graph.underlying[EdgeIndex(3)];
+                let original_particle = gluon.particle.particle();
+                let original_numerator = gluon.num.clone();
+                gluon.particle = gluon.particle.clone().override_mass(Some(lambda.clone()));
+                gluon.mass = crate::graph::edge::EdgeMass::from_atom(
+                    lambda.clone(),
+                    model,
+                    &graph.param_builder,
+                )?;
+                ensure!(gluon.particle.particle() == original_particle);
+                ensure!(gluon.num == original_numerator);
+                let regulated_source = regulated_graph
+                    .numerator(child.subgraph(), &empty)?
+                    .to_d_dim(GS.dim)?
+                    .color_simplify()?
+                    .state
+                    .expr;
+                ensure!(regulated_source.same_value(&source_numerator));
+                let regulated_bare = regulated_source.with_checked_expression(
+                    regulated_source.expression()
+                        * regulated_graph.denominator(child.subgraph(), model, |_| -1),
+                )?;
+                let parameter_sector = FourDSector::new(
+                    regulated_bare,
+                    vec![(
+                        child.subgraph().clone(),
+                        child.subgraph().clone(),
+                        child.lmb().clone(),
+                    )],
+                    Vec::new(),
+                );
+                let parameter_terms = parameter_sector.physical_terms()?;
+                ensure!(parameter_terms.len() == 1);
+                let poles = &parameter_terms[0].denominators;
+                ensure!(poles.len() == 2);
+                let quark = poles
+                    .iter()
+                    .find(|pole| pole.source_edge == EdgeIndex(2))
+                    .ok_or_else(|| eyre!("native parameter reference lost source quark two"))?;
+                let gluon = poles
+                    .iter()
+                    .find(|pole| pole.source_edge == EdgeIndex(3))
+                    .ok_or_else(|| eyre!("native parameter reference lost source gluon three"))?;
+                ensure!(quark.mass_squared == mass.pow(2));
+                ensure!(gluon.mass_squared == lambda.pow(2));
+                let quark_polynomial = quark.polynomial_in_lmb(child.lmb())?;
+                let gluon_polynomial = gluon.polynomial_in_lmb(child.lmb())?;
+                let mut reference_pole = (*quark).clone();
+                reference_pole.full_expr = quadratic(&loop_vector, &mass.pow(2));
+                let quark_reference = reference_pole.polynomial_in_lmb(child.lmb())?;
+                let quark_identity = (&quark_polynomial - &quark_reference).expand().is_zero();
+                ensure!(quark_identity);
+                reference_pole.full_expr =
+                    quadratic(&(&loop_vector - &parent_vector), &lambda.pow(2));
+                let gluon_reference = reference_pole.polynomial_in_lmb(child.lmb())?;
+                let gluon_identity = (&gluon_polynomial - &gluon_reference).expand().is_zero();
+                ensure!(gluon_identity);
+                let parent_squared = quadratic(&parent_vector, &Atom::Zero);
+                let delta = &x * mass.pow(2) + &one_minus_x * lambda.pow(2)
+                    - &x * &one_minus_x * &parent_squared;
+                reference_pole.full_expr =
+                    quadratic(&(&loop_vector - &one_minus_x * &parent_vector), &delta);
+                // Only these bounded quadratic propagator polynomials expand.
+                let completed_square = reference_pole.polynomial_in_lmb(child.lmb())?;
+                let parameter_identity =
+                    (&x * &quark_polynomial + &one_minus_x * &gluon_polynomial - &completed_square)
+                        .expand()
+                        .is_zero();
+                ensure!(parameter_identity);
+                let below_shell = Atom::var(symbol!("native_os_prefix::below_shell_delta"; Scalar));
+                let delta_below = &x * mass.pow(2) + &one_minus_x * lambda.pow(2)
+                    - &x * &one_minus_x * (mass.pow(2) - &below_shell);
+                let delta_os = x.pow(2) * mass.pow(2) + &one_minus_x * lambda.pow(2);
+                let below_shell_identity =
+                    (&delta_below - &delta_os - &x * &one_minus_x * &below_shell)
+                        .expand()
+                        .is_zero();
+                ensure!(below_shell_identity);
+                ensure!(!(&one_minus_x * lambda.pow(2)).is_zero());
+
+                for reference_velocity in [
+                    [Atom::one(), Atom::Zero, Atom::Zero, Atom::Zero],
+                    [
+                        Atom::num((5, 4)),
+                        Atom::num((1, 4)),
+                        Atom::num((1, 2)),
+                        Atom::num((1, 2)),
+                    ],
+                ] {
+                    for sigma in [1, -1] {
+                        let point = GS.on_shell_momentum(
+                            owner,
+                            &(Atom::num(sigma) * &mass),
+                            &reference_velocity,
+                        );
+                        let endpoint = evaluate_vector(&field_matrix, owner, &point)?;
+                        let raw = cooking.uncook(endpoint.expression().as_view());
+                        // The source retains formal D. Embed only the helper's
+                        // new Minkowski-4 projector block in that same frame.
+                        let retained_frame = raw.map_mink_dim(GS.dim);
+                        ensure!(retained_frame == raw);
+                        // Source flow chooses row for the left product and
+                        // column for the right product. No matrices commute.
+                        for hedge in [outgoing, incoming] {
+                            let slash =
+                                crate::uv::approx::local_4d::on_shell_tests::gamma_velocity_at_port(
+                                    &graph,
+                                    &raw,
+                                    hedge.0,
+                                    &reference_velocity,
+                                ).map_mink_dim(GS.dim);
+                            let projected = endpoint.with_checked_expression(cooking.try_cook(
+                                ((&raw + Atom::num(sigma) * slash) / Atom::num(2)).as_view(),
+                            )?)?;
+                            // Expose compact vectors on the complete ordered
+                            // product before admitting the fixed physical block.
+                            let projected = expose_vectors(&projected)?;
+                            // This isolated endpoint has no active momentum or
+                            // unconstrained Lorentz direction. Admit its fixed
+                            // physical subspace, keeping all scalar D coefficients.
+                            let raw = cooking.uncook(projected.expression().as_view());
+                            ensure!(!raw.contains_symbol(GS.emr_mom));
+                            ensure!(!raw.contains_symbol(GS.loop_mom));
+                            ensure!(!raw.contains_symbol(GS.os_mom));
+                            let mut matcher = spenso::structure::slot::SlotMatcher::default();
+                            let mut lorentz = BTreeSet::new();
+                            let mut fixed = BTreeSet::new();
+                            let mut invalid = false;
+                            raw.visitor(&mut |view| {
+                                if matcher.parse::<Minkowski, Aind>(view).is_ok() {
+                                    lorentz.insert(view.to_owned());
+                                    return false;
+                                }
+                                if let AtomView::Fun(selector) = view
+                                    && selector.get_symbol() == GS.delta_vec
+                                    && selector.get_nargs() == 2
+                                    && let Some((representation, _)) =
+                                        matcher.port_representation(selector.get(1))
+                                    && representation
+                                        == spenso::structure::representation::LibraryRep::from(
+                                            Minkowski {},
+                                        )
+                                {
+                                    invalid |= !matches!(
+                                        matcher.concrete_component(selector.get(0)),
+                                        Some(Ok(0..=3))
+                                    );
+                                    fixed.insert(selector.get(1).to_owned());
+                                }
+                                true
+                            });
+                            ensure!(
+                                !invalid && lorentz == fixed,
+                                "analytic-child endpoint must contain only fixed physical Lorentz directions"
+                            );
+                            let physical = projected.with_checked_expression(
+                                cooking.try_cook(raw.map_mink_dim(4).as_view())?,
+                            )?;
+                            let exact =
+                                Self::materialize_native_four_component_numerator(&physical)?;
+                            Self::certify_finite_tagged_rows_zero(
+                                "native complete-child field carrier has both ordered endpoint zeros",
+                                exact,
+                            )?;
+                            if sigma == 1
+                                && hedge == outgoing
+                                && reference_velocity[1..].iter().all(|value| value.is_zero())
+                            {
+                                let mass_source =
+                                    cooking.uncook(mass_matrix.expression().as_view());
+                                ensure!(
+                                    !mass_source.contains_symbol(
+                                        spenso::structure::representation::LibraryRep::from(
+                                            Minkowski {}
+                                        )
+                                        .symbol()
+                                    )
+                                );
+                                let shifted = physical.try_add(&mass_matrix)?;
+                                let shifted =
+                                    Self::materialize_native_four_component_numerator(&shifted)?;
+                                let rejected = Self::certify_finite_tagged_rows_zero(
+                                    "same actual endpoint rejects an added nonzero native mass carrier",
+                                    shifted,
+                                ).is_err();
+                                ensure!(rejected);
+                            }
+                        }
+                    }
+                }
+                let beta_mass = super::super::series(
+                    &(&physical_master * (Atom::num(3) - Atom::num(2) * &epsilon) * &j0),
+                    1,
+                )?
+                .to_atom();
+                Self::certify_finite_tagged_rows_zero(
+                    "J0/J1 endpoint beta integrals retain actual native OS mass normalization through epsilon one",
+                    mass_matrix.with_checked_expression(
+                        &measure * mass_matrix.expression() * (&beta_mass - &f),
+                    )?,
+                )?;
+                let endpoint_field = &physical_master * (Atom::num(2) - &d) * &j1 + epsilon.pow(-1);
+                let endpoint_field =
+                    super::super::Integrated::dimensionally_regularized(&endpoint_field);
+                let endpoint_field = super::super::series(&endpoint_field, 1)?.to_atom();
+                let expected_field =
+                    -Atom::num(2) - &epsilon * (Atom::num(4) + pi.pow(2) / Atom::num(12));
+                Self::certify_finite_tagged_rows_zero(
+                    "native MS-field child endpoint has the independent finite and epsilon-one parameter coefficients",
+                    field_matrix.with_checked_expression(
+                        &measure * field_matrix.expression() * (endpoint_field - expected_field),
+                    )?,
+                )?;
+                crate::debug_tags!(#uv, #integrated, #summary;
+                    stage = "native_os_child_parametric_source_reference",
+                    original_quark_source = 2, original_gluon_source = 3,
+                    feynman_parameter_denominator_exact = true,
+                    numerator_shift_exact = true, source_phase_retained = true,
+                    ordered_endpoint_products = 8, independent_beta_depth = 1,
+                    incoming_hedge = incoming.0, outgoing_hedge = outgoing.0,
+                    finite_native_endpoint_components = true, mass_shift_control = true,
+                    lambda_source_local = true, unregulated_fubini_proved = false,
+                    "Actual native child binds the independent J0/J1 source and endpoint reference"
+                );
                 let mut moment = source_numerator.with_checked_expression(Atom::Zero)?;
                 for (sigma, branch) in [1, -1].into_iter().zip(branches) {
                     let sector = FourDSector::new(
@@ -287,27 +579,7 @@ impl QcdMassReference {
                         // affine/moment check, as in the independent one-loop
                         // oracle. A compact gamma(lambda*q) is not a scalar
                         // coefficient until its linear argument is exposed.
-                        let numerator =
-                            super::super::simplify(&term.numerator.with_checked_expression(
-                                GS.erase_uv_momentum_provenance(term.numerator.expression()),
-                            )?)?;
-                        let expanded = cooking
-                            .uncook(numerator.expression().as_view())
-                            .parse_to_symbolic_net::<Aind>(&ParseSettings {
-                                shorthand_parsing: ShorthandParsing::Expand {
-                                    schoonschip: SchoonschipExpansionMode {
-                                        inner_products: false,
-                                        expand_inside_chains: true,
-                                        expand_schoonship: true,
-                                    },
-                                    trace: false,
-                                    chain: false,
-                                },
-                                ..Default::default()
-                            })?
-                            .simple_execute::<()>()?;
-                        let numerator = numerator
-                            .with_checked_expression(cooking.try_cook(expanded.as_view())?)?;
+                        let numerator = expose_vectors(&term.numerator)?;
                         let at_zero = evaluate_vector(&numerator, EdgeIndex(2), &Atom::Zero)?;
                         let lambda = Atom::var(symbol!("native_os_prefix::linear_loop_scale"));
                         Self::certify_finite_tagged_rows_zero(
