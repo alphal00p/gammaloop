@@ -1564,6 +1564,21 @@ impl InterfaceInference {
             || symbol == CS.f
             || symbol == CS.t;
         if !builtin {
+            if let Some(family) = crate::color::ScopedColorFamily::from_symbol(symbol)
+                .map_err(TensorInferenceError::invalid)?
+            {
+                crate::color::ScopedColorFamily::validate_arguments(symbol, arguments)
+                    .map_err(TensorInferenceError::invalid)?;
+                let symbols = family.scoped_to_native();
+                let adopted = arguments
+                    .iter()
+                    .map(|argument| argument.rename_symbols(&symbols))
+                    .collect::<Vec<_>>();
+                let adopted = adopted.iter().map(Atom::as_view).collect::<Vec<_>>();
+                // Signature validation, including resolved compact channels,
+                // remains owned by the native generator/structure factories.
+                self.builtin_tensor_structure(symbols[&symbol], &adopted, logical_arguments)?;
+            }
             return Ok(None);
         }
 
@@ -1950,6 +1965,10 @@ impl InterfaceInference {
                     || symbol == SPENSO_TAG.scalar
                     || symbol == SPENSO_TAG.pure_scalar
                 {
+                    return false;
+                }
+                if let Err(error) = crate::color::ScopedColorFamily::validate_function(function) {
+                    syntax_error = Some(TensorInferenceError::invalid(error));
                     return false;
                 }
                 let arguments = function.iter().collect::<Vec<_>>();

@@ -35,9 +35,11 @@ use super::representations::{ColorAdjoint, ColorFundamental};
 mod casimir;
 mod conjugate;
 mod macros;
+mod scoped;
 pub(crate) mod simplify;
 
 pub use conjugate::color_conj_impl;
+pub use scoped::{ColorFamilyConvention, ColorFamilyDeclaration, ScopedColorFamily};
 
 #[derive(Debug)]
 pub enum ColorError {
