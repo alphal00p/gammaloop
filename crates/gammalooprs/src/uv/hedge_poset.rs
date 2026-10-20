@@ -1301,15 +1301,25 @@ impl Forests {
         {
             debug!(order, nidx=%nidx, key=%self.graph[nidx], "Computing hedge-poset 4D term");
             let operation = self.graph[nidx].clone();
+            let node_started = std::time::Instant::now();
             let (local_4d, integrated) =
                 self.compute_4d_for_node(nidx, graph, model, vakint, settings)?;
+            let node_elapsed = node_started.elapsed();
             let cover = operation
                 .covers()
                 .unwrap_or_else(|| self.graph.empty_subgraph())
                 .string_label();
             let source = self.source_spinney(nidx).filter().string_label();
-            debug_tags!(#generation, #uv, #integrated, #graph, #term, #inspect;
+            debug_tags!(#generation, #uv, #integrated, #graph, #term, #inspect, #profile, #summary;
                 stage = "hedge_poset_4d_node_done",
+                graph_name = %graph.name,
+                empty_history = operation.key.is_empty(),
+                elapsed_ms = node_elapsed.as_secs_f64() * 1000.0,
+                finished_unix_milliseconds = u64::try_from(
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)?
+                        .as_millis(),
+                )?,
                 order,
                 node_index = %nidx,
                 forest_term = %operation,

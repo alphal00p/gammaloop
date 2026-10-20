@@ -1416,8 +1416,13 @@ impl<'a> Direct3dApproximation<'a> {
                 atom,
             ))
         })?;
-        crate::debug_tags!(#generation, #uv, #local, #three_d, #profile;
+        crate::debug_tags!(#generation, #uv, #local, #three_d, #profile, #summary;
             stage = "direct_3d_construction",
+            finished_unix_milliseconds = u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis(),
+            )?,
             graph = %self.graph.name,
             current = %current.log_display(),
             given = %given.log_display(),
@@ -1437,6 +1442,7 @@ impl<'a> Direct3dApproximation<'a> {
         marker_current: &M,
         marker_given: &M,
     ) -> Result<Direct3dCts> {
+        let started = Instant::now();
         // Each finite effective vertex retains its connected source owner.
         // Equal masses in disjoint integrated prefixes must remain distinct
         // until an enclosing operation contains their respective components.
@@ -1575,14 +1581,28 @@ impl<'a> Direct3dApproximation<'a> {
             frozen_integrands,
         };
 
-        Direct3dCts::from_sectors(vec![sector])?.map(|atom| {
+        let local = Direct3dCts::from_sectors(vec![sector])?.map(|atom| {
             Ok(UvMarker::new(ctx.settings).apply(
                 UvOperation::Approx,
                 marker_current.subgraph(),
                 marker_given.subgraph(),
                 atom,
             ))
-        })
+        })?;
+        crate::debug_tags!(#generation, #uv, #local, #three_d, #profile, #summary;
+            stage = "direct_3d_finite_prefix_construction",
+            graph = %self.graph.name,
+            current = %current.log_display(),
+            given = %given.log_display(),
+            elapsed_ms = started.elapsed().as_secs_f64() * 1000.0,
+            finished_unix_milliseconds = u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis(),
+            )?,
+            "Constructed direct local-3D sectors from a complete finite prefix"
+        );
+        Ok(local)
     }
 }
 

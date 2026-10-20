@@ -4430,6 +4430,54 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
             }
         }
     }
+    // O allocates a fresh contracted spinor port at every invocation. Compare
+    // through the existing native index owner after binding every prescribed
+    // denominator occurrence; no momentum, mass or provenance is normalized away.
+    let denominator_inventory = |value: &SymbolicTensor<IndexedStructure>| {
+        let sector = FourDSector::new(value.clone(), Vec::new(), Vec::new());
+        let mut inventory = sector
+            .physical_terms()?
+            .into_iter()
+            .map(|term| {
+                let mut occurrences = term
+                    .denominators
+                    .into_iter()
+                    .map(|denominator| {
+                        (
+                            denominator.source_edge.0,
+                            denominator.momentum,
+                            denominator.mass_squared,
+                            denominator.full_expr,
+                        )
+                    })
+                    .collect::<Vec<_>>();
+                // Powers remain repeated occurrences with their source owners.
+                occurrences.sort();
+                occurrences
+            })
+            .collect::<Vec<_>>();
+        inventory.sort();
+        Ok::<_, color_eyre::eyre::Report>(inventory)
+    };
+    let exact_vacuum_equal = |left: &SymbolicTensor<IndexedStructure>,
+                              right: &SymbolicTensor<IndexedStructure>|
+     -> Result<()> {
+        ensure!(left.structure().logical_slots() == right.structure().logical_slots());
+        ensure!(!left.expression().contains_symbol(lambda_symbol));
+        ensure!(!right.expression().contains_symbol(lambda_symbol));
+        let original_denominators = denominator_inventory(left)?;
+        ensure!(original_denominators == denominator_inventory(right)?);
+        let canonical_left = left.canonize()?;
+        let canonical_right = right.canonize()?;
+        for (original, canonical) in [(left, &canonical_left), (right, &canonical_right)] {
+            ensure!(original.structure().logical_slots() == canonical.structure().logical_slots());
+            ensure!(original_denominators == denominator_inventory(canonical)?);
+        }
+        // Compare the COMPLETE raw W, retaining the consumed-loop coefficient
+        // and all numerator factors. physical_terms above certifies only poles.
+        ensure!(canonical_left.same_value(&canonical_right));
+        Ok(())
+    };
     let original_child = uv_limit(&empty, &ctx, child, &root, child, &root)?;
     let regulated_child = uv_limit(&empty, &regulated_ctx, child, &root, child, &root)?;
     ensure!(original_child.active_sectors().len() == 1);
@@ -4441,12 +4489,10 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
             .contains_symbol(lambda_symbol)
     );
     ensure!(!regulated_child.atom().same_value(original_child.atom()));
-    ensure!(
-        original_child.active_sectors()[0]
-            .integration_atom()
-            .same_value(regulated_child.active_sectors()[0].integration_atom()),
-        "the actual one-loop signed vacuum W must be regulator independent"
-    );
+    exact_vacuum_equal(
+        original_child.active_sectors()[0].integration_atom(),
+        regulated_child.active_sectors()[0].integration_atom(),
+    )?;
     let backend = vakint::VakintSettings {
         number_of_terms_in_epsilon_expansion: 3,
         evaluation_order: vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
@@ -4513,12 +4559,7 @@ fn native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs() -> Result<
         {
             ensure!(original.active_components == regulator.active_components);
             ensure!(original.frozen_lmbs() == regulator.frozen_lmbs());
-            ensure!(
-                original
-                    .integration_atom()
-                    .same_value(regulator.integration_atom()),
-                "the actual parent signed W changed under the physical IR regulator"
-            );
+            exact_vacuum_equal(original.integration_atom(), regulator.integration_atom())?;
             ensure!(
                 !regulator
                     .integration_atom()

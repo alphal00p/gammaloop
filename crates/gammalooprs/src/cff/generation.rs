@@ -776,8 +776,13 @@ impl Graph {
             active_loop_count: source.active_loop_count(),
             contract_subgraph: source.contract_subgraph(),
         };
-        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile, #summary;
             stage = "exact_cff_preparation",
+            finished_unix_milliseconds = u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis(),
+            )?,
             graph = %self.name,
             elapsed_ms = preparation_started.elapsed().as_secs_f64() * 1000.0,
             degree_analysis_ms,
@@ -997,8 +1002,14 @@ impl Graph {
             .unwrap_or_default();
         let template_build_time = template_build_times.values().copied().sum::<Duration>();
         let selection_time = selection_started.elapsed();
-        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile;
+        crate::debug_tags!(#generation, #uv, #local, #four_d, #cff, #profile, #summary;
             stage = "exact_cff_assignment_selection",
+            elapsed_ms = selection_time.as_secs_f64() * 1000.0,
+            finished_unix_milliseconds = u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis(),
+            )?,
             graph = %self.name,
             admitted_candidates = seen_bounds.len(),
             native_rows = selected_count,
@@ -1218,8 +1229,13 @@ impl Graph {
         }
 
         let elapsed = request_started.elapsed();
-        crate::debug_tags!(#generation, #cff, #profile;
+        crate::debug_tags!(#generation, #uv, #cff, #profile, #summary;
             stage = "raw_cff_generation",
+            finished_unix_milliseconds = u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis(),
+            )?,
             graph = %self.name,
             native_source_maps = generated.expression.orientations.len(),
             elapsed_ms = elapsed.as_secs_f64() * 1000.0,
@@ -1338,6 +1354,7 @@ impl Graph {
         GeneratedThreeDExpression<Esurface, Hsurface>,
         BTreeMap<EsurfaceID, CffEnergyFactorOwnership>,
     )> {
+        let conversion_started = Instant::now();
         let GeneratedThreeDExpression {
             representation,
             mut expression,
@@ -1470,6 +1487,17 @@ impl Graph {
             orientation.variants = remapped_variants;
         }
 
+        crate::debug_tags!(#generation, #uv, #cff, #profile, #summary;
+            stage = "cff_surface_conversion",
+            graph = %self.name,
+            elapsed_ms = conversion_started.elapsed().as_secs_f64() * 1000.0,
+            finished_unix_milliseconds = u64::try_from(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)?
+                    .as_millis(),
+            )?,
+            "Converted generated CFF surfaces at their shared production boundary"
+        );
         Ok((
             GeneratedThreeDExpression {
                 representation,
