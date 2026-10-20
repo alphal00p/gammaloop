@@ -142,7 +142,8 @@ IBP coverage. Cached/uncached 1L–4L parity passed with the final native bindin
   precision, oversized Float annotations, missing validated caps, tagged HPLs,
   nonfinite data and snapshot-bound coefficients. Fifteen combined numerical,
   #link("src/rustred_evaluation/experimental.rs")[four-loop finalizer] and loader
-  checks passed; the subsequent final capability selection passed 14 tests.
+  checks passed; a subsequent capability selection passed 14 tests; the final native matrix
+  passed all 16 master-capability checks.
   These include exact alias handling without masking malformed data or discarding
   a richer available representation. Scalar MATAD comparison also passed after
   independently checking exact zero poles before numerical comparison.
@@ -212,7 +213,7 @@ Actual offline Nix-vendor resolution agrees with Cargo for all 695 selected-CI
 nodes and 822 all-feature nodes, including dependency edges and enabled features.
 Hakari and generated CI graph checks pass. The obsolete Git-Spenso vendor
 augmentation was removed after that proof. All required new fixture and stub
-inputs were checked in the Nix source. The final coherent Python extension downloaded and activated all five published
+inputs were checked in the Nix source. The pre-trace-backport Python extension downloaded and activated all five published
 packs. A clean `unshare --user --map-root-user --net` process reused that same
 installation and produced identical 80-digit one-loop numerical output, with no
 network interface. Development recorder path-serialization failures were retained
@@ -233,7 +234,21 @@ callbacks as complete monomials; otherwise a repeated vector can be dropped.
 The local QCD fixture adapter also expands metric sums around gamma/color
 contraction. Independent Clifford pairings agree through ten gamma matrices
 (945 pairings), and the targeted six-gamma regression passes. Neither correction
-changes FORM formulas or acceptance tolerances. The complete native registry/cache/capability matrix passed all 64 selected tests,
+changes FORM formulas or acceptance tolerances.
+
+Closed ordinary gamma traces also reuse the existing dimension-generic repeated
+word rules before pairing recursion, following the upstream word-builder design.
+All 235 selected Idenso package tests pass, including the three new repeated-slash,
+formal-dimension and refusal tests; the existing ignores and default filters are
+unchanged. The captured physical twenty-gamma expression agrees exactly with the
+original dependency result after explicitly mapping only its old scalar DOT head
+declaration to the local DOT declaration. Both preserve the same symmetric,
+linear dot product and every argument; production registration checks are
+unchanged. The local probe completes in about 0.26 seconds; this is a contraction
+measurement, not an end-to-end QCD timing claim. Full QCD input parity is still
+pending its complete rerun.
+
+The complete native registry/cache/capability matrix passed all 64 selected tests,
 including actual five-loop witness admission/reuse. The fresh 38-root four-loop
 campaign completed with 30 newly stored roots and eight strictly reused captured
 descendants. Every selected root has a validated durable record, all four cold
@@ -242,11 +257,21 @@ passed. Its two optional metadata capture exhaustions are recorded separately
 from successful root completion. Full five-loop QCD scalar input parity is still
 pending its complete run.
 
+A separate authentic five-loop catalog test passed after validating all 905
+terminal records against the immutable v0.1.0 manifest. Retain preserves a real
+family-qualified terminal and its ordered powers. Direct numerical finalization
+and retained-catalog numerical resolution both reject it with its identity,
+package version, declared/uncomputed status and existing parent-topology DOT
+path. Both routes return exact zero when rational epsilon coefficients cancel
+that terminal. This check loads no IBP application and makes no claim of
+successful numerical five-loop evaluation. It is an additional check beyond the
+64-test native matrix. Formatting and all-target Clippy also passed.
+
 Fifteen inherited Idenso snapshots were refreshed after exact validation of
 seventeen old/new expression pairs and a bijection preserving all six external
 DOT slots. Three fresh processes reproduced the same new port order. All 232
 Idenso tests and the complete 575-test Nix Spenso group passed, with the existing
-skips unchanged; production algebra and CI selection were not modified.
+skips unchanged; that snapshot refresh changed no production algebra or CI selection.
 
 Generated Python signatures now follow the tested
 `symbolica.community.hepkit.vakint` module and include cumulative loaders, master

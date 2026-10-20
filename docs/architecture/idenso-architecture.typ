@@ -96,6 +96,12 @@ invariant substitutions, Schoonschip depth and traversal, and cooking source/tag
 change the result form. Reproducible callers should record the exact settings and the order in
 which independent rewrite families ran.
 
+Ordinary closed traces reuse the open-word adjacent and repeated-pair Clifford
+rules before expanding the remaining trace into pairings. Generated metric terms
+use the existing chain-aware Schoonschip contraction. The same dimension guards
+apply to open and closed words; a formal Lorentz dimension does not authorize
+four-dimensional gamma5 or Chisholm rules.
+
 Most pattern engines use a local fixed-point loop: transform the current atom, compare it with
 the previous atom, and stop when unchanged. That guarantees termination only for the implemented
 oriented rule set; custom rules composed by a caller remain the caller's responsibility.

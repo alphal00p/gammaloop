@@ -44,6 +44,11 @@ APIs and shared Symbolica expressions. Spynso's embedded `typst/*.typ` files are
 production inputs to its package and dependent builds. Its display integration
 test mocks Typst and checks the missing-optional-renderer behavior.
 
+GammaLoop's renormalization graphs and FeynKit model fixtures belong to the
+compile-time test source closure. This includes integration tests that embed a
+model from another workspace package; Rust source filtering alone does not
+carry their DOT and JSON inputs into the sandbox.
+
 Vakint's production source closure contains cache-free 1L–3L runtime data.
 Prepared caches and 4L/5L RustRed packs are external data. Native reduction tests
 receive an explicitly pinned external-data snapshot at the terminal test boundary;

@@ -40,6 +40,21 @@ static TRACE_TERMINALS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
     )]
 });
 
+#[derive(Clone, Copy)]
+enum DiracWord<'a> {
+    Chain(AtomView<'a>, AtomView<'a>),
+    Trace(AtomView<'a>),
+}
+
+impl DiracWord<'_> {
+    fn build(self, factors: Vec<Atom>) -> Atom {
+        match self {
+            Self::Chain(start, end) => chain!(start, end; factors),
+            Self::Trace(rep) => DiracSimplifier::trace_or_terminal(rep, factors),
+        }
+    }
+}
+
 /// Controls how open gamma chains are reordered during simplification.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GammaChainOrdering {
@@ -395,7 +410,7 @@ impl<'settings> DiracSimplifier<'settings> {
             return Some(id_atom(*start, *end));
         }
 
-        Self::contract_adjacent_gamma_pair(*start, *end, &factors)
+        Self::contract_adjacent_gamma_pair(DiracWord::Chain(*start, *end), &factors)
             .or_else(|| {
                 factor_kinds
                     .has_non_pure_gamma()
@@ -429,7 +444,10 @@ impl<'settings> DiracSimplifier<'settings> {
             })
             .or_else(|| match self.settings.chain_ordering {
                 GammaChainOrdering::RepeatedPairs => {
-                    Self::bubble_repeated_gamma_towards_contraction(*start, *end, &factors)
+                    Self::bubble_repeated_gamma_towards_contraction(
+                        DiracWord::Chain(*start, *end),
+                        &factors,
+                    )
                 }
                 GammaChainOrdering::Canonical => {
                     Self::canonicalize_gamma_chain_order(*start, *end, &factors)
@@ -442,8 +460,7 @@ impl DiracSimplifier<'_> {
     /// Contracts adjacent equal-index gammas:
     /// `...[gamma(mu), gamma(mu)]... -> g(mu, mu) * ...[...]...`.
     fn contract_adjacent_gamma_pair(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
         for (i, pair) in factors.windows(2).enumerate() {
@@ -463,7 +480,7 @@ impl DiracSimplifier<'_> {
             Self::extend_factors(&mut rest, &factors[..i]);
             Self::extend_factors(&mut rest, &factors[i + 2..]);
 
-            return Some(g!(mu, nu) * chain!(start, end; rest));
+            return Some(g!(mu, nu) * word.build(rest));
         }
 
         None
@@ -557,8 +574,7 @@ impl DiracSimplifier<'_> {
     /// Repeated-pair mode only pays the anticommutation cost when it exposes a
     /// contraction in the next fixed-point step.
     fn bubble_repeated_gamma_towards_contraction(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
     ) -> Option<Atom> {
         let (_i, j) = Self::shortest_repeated_gamma_pair(factors)?;
@@ -566,7 +582,7 @@ impl DiracSimplifier<'_> {
             return None;
         }
 
-        Self::anticommute_adjacent_gamma_pair(start, end, factors, j - 1)
+        Self::anticommute_adjacent_gamma_pair(word, factors, j - 1)
     }
 
     /// Applies short 4D Chisholm contractions around repeated endpoint gammas:
@@ -773,7 +789,11 @@ impl DiracSimplifier<'_> {
             };
 
             if mu > nu {
-                return Self::anticommute_adjacent_gamma_pair(start, end, factors, i);
+                return Self::anticommute_adjacent_gamma_pair(
+                    DiracWord::Chain(start, end),
+                    factors,
+                    i,
+                );
             }
         }
 
@@ -851,8 +871,7 @@ impl DiracSimplifier<'_> {
     }
 
     fn anticommute_adjacent_gamma_pair(
-        start: AtomView<'_>,
-        end: AtomView<'_>,
+        word: DiracWord<'_>,
         factors: &[DiracFactor<'_>],
         swap_at: usize,
     ) -> Option<Atom> {
@@ -869,12 +888,12 @@ impl DiracSimplifier<'_> {
         // Run the local metric term through chain-aware Schoonschip before it can
         // swell the Clifford expansion.
         let metric_term =
-            Atom::num(2) * Self::generated_metric_chain_term(start, end, mu, nu, metric_rest);
+            Atom::num(2) * Self::generated_metric_word_term(word, mu, nu, metric_rest);
 
         let mut swapped = Self::owned_factors(factors);
         swapped.swap(swap_at, swap_at + 1);
 
-        Some(metric_term - chain!(start, end; swapped))
+        Some(metric_term - word.build(swapped))
     }
 
     fn generated_metric_chain_term(
@@ -884,7 +903,16 @@ impl DiracSimplifier<'_> {
         nu: AtomView<'_>,
         factors: Vec<Atom>,
     ) -> Atom {
-        (g!(mu, nu) * chain!(start, end; factors)).schoonschip_with_settings(
+        Self::generated_metric_word_term(DiracWord::Chain(start, end), mu, nu, factors)
+    }
+
+    fn generated_metric_word_term(
+        word: DiracWord<'_>,
+        mu: AtomView<'_>,
+        nu: AtomView<'_>,
+        factors: Vec<Atom>,
+    ) -> Atom {
+        (g!(mu, nu) * word.build(factors)).schoonschip_with_settings(
             &SchoonschipSettings::single_pass(None).with_chain_like_functions(),
         )
     }
@@ -1100,9 +1128,9 @@ impl DiracSimplifier<'_> {
     /// Evaluates a Dirac trace.
     ///
     /// The pass first handles four-dimensional special factors (`gamma0`,
-    /// `gamma5`), then falls back to ordinary gamma traces:
-    /// odd traces vanish and even traces recurse by contracting the first gamma
-    /// with each later gamma.
+    /// `gamma5`), then reduces repeated ordinary gammas with the shared word
+    /// identities. Odd traces vanish; remaining even traces recurse by
+    /// contracting the first gamma with each later gamma.
     fn simplify_trace_node(self, f: FunView) -> Option<Atom> {
         let (rep, factors) = shadowing::trace_parts(f)?;
 
@@ -1138,6 +1166,16 @@ impl DiracSimplifier<'_> {
         if factors.len() % 2 == 1 {
             // Tr(gamma(mu_1)...gamma(mu_{2n+1})) -> 0.
             return Some(Atom::Zero);
+        }
+
+        // Clifford identities for an open word remain valid after taking its
+        // trace. Reduce repeated slashes or indices before branching over all
+        // pairings, preserving the existing dimension-compatibility guards.
+        let word = DiracWord::Trace(rep);
+        if let Some(reduced) = Self::contract_adjacent_gamma_pair(word, &factors)
+            .or_else(|| Self::bubble_repeated_gamma_towards_contraction(word, &factors))
+        {
+            return Some(reduced);
         }
 
         let first = trace_mink_indices[0];
@@ -1341,5 +1379,91 @@ impl DiracSimplifier<'_> {
         let trace = trace.to_owned();
         let simplified = trace.replace_multiple_repeat(TRACE_TERMINALS.as_ref());
         (simplified != trace).then_some(simplified)
+    }
+}
+
+#[cfg(test)]
+mod trace_word_tests {
+    use super::*;
+    use crate::{gamma, gamma5, test_support::test_initialize};
+    use spenso::{p, q, s, slot};
+
+    #[test]
+    fn trace_word_repeated_compact_slashes_are_dimension_generic() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        for rep in [&reps.mink4, &reps.mink_d] {
+            let p = p!(rep);
+            let q = q!(rep);
+            let input = trace!(&spin; [
+                gamma!(p.clone()),
+                gamma!(q.clone()),
+                gamma!(p.clone()),
+                gamma!(q.clone()),
+            ]);
+            // Tr(p/ q/ p/ q/) = 4 [2(p.q)^2 - p^2 q^2].
+            let expected =
+                Atom::num(4) * (Atom::num(2) * g!(&p, &q).pow(2) - g!(&p, &p) * g!(&q, &q));
+            assert!((input.simplify_gamma() - expected).expand().is_zero());
+            assert_eq!(
+                input.simplify_gamma_with(
+                    GammaSimplifySettings::default().without_trace_evaluation()
+                ),
+                input
+            );
+        }
+    }
+
+    #[test]
+    fn trace_word_repeated_formal_dimension_pairs_keep_dimension_dependence() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let dimension = Atom::var(s!(d));
+        let mu = slot!(reps.mink_d, mu).into_atom();
+        let nu = slot!(reps.mink_d, nu).into_atom();
+        let p = p!(&reps.mink_d);
+        let paired = trace!(&spin; [
+            gamma!(&mu), gamma!(&nu), gamma!(&mu), gamma!(&nu),
+        ]);
+        // Tr(gamma_mu gamma_nu gamma_mu gamma_nu) = 4 D(2-D).
+        let expected = Atom::num(4) * &dimension * (Atom::num(2) - &dimension);
+        assert!((paired.simplify_gamma() - expected).expand().is_zero());
+        let slash_pair = trace!(&spin; [
+            gamma!(&p), gamma!(&mu), gamma!(&p), gamma!(&mu),
+        ]);
+        // Tr(p/ gamma_mu p/ gamma_mu) = 4(2-D)p^2.
+        let expected = Atom::num(4) * (Atom::num(2) - &dimension) * g!(&p, &p);
+        assert!((slash_pair.simplify_gamma() - expected).expand().is_zero());
+    }
+
+    #[test]
+    fn trace_word_shortcuts_preserve_dimension_and_special_factor_guards() {
+        let reps = test_initialize();
+        let spin = reps.bis4.to_symbolic([]);
+        let p = p!(&reps.mink_d);
+        let q = q!(&reps.mink4);
+        let factors = [gamma!(&p), gamma!(&q), gamma!(&p), gamma!(&q)];
+        let parsed: Vec<_> = factors
+            .iter()
+            .map(|factor| DiracFactor::parse(factor.as_view()))
+            .collect();
+        let word = DiracWord::Trace(spin.as_view());
+        // The repeated p pair does not authorize a Clifford swap across a
+        // gamma whose visible Lorentz dimension differs.
+        assert!(
+            DiracSimplifier::gamma_mink_index_sequence_for(TRACE_GAMMA_RECURSION, &parsed)
+                .is_none()
+        );
+        assert!(
+            DiracSimplifier::bubble_repeated_gamma_towards_contraction(word, &parsed).is_none()
+        );
+        assert!(DiracSimplifier::anticommute_adjacent_gamma_pair(word, &parsed, 0).is_none());
+        let mixed = trace!(&spin; factors);
+        assert_eq!(mixed.simplify_gamma(), mixed);
+        // The ordinary-word shortcut must not admit an unsupported gamma5
+        // trace by interpreting a formal Lorentz dimension as integer four.
+        let mu = slot!(reps.mink_d, mu);
+        let axial = trace!(&spin; [gamma5!(), gamma!(mu), gamma!(mu)]);
+        assert_eq!(axial.simplify_gamma(), axial);
     }
 }

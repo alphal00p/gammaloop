@@ -564,7 +564,10 @@ symbol = "vakint::rustred_evaluation::data::RustRedData"
 anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-19: snapshot ownership and coefficient-level capabilities
 # are documented in the RustRed data and numerical-capability architecture.
-digest = "b778fae95dfdcfdb800178aa369012be758f5b81"
+# Reviewed 2026-10-20: appended cfg(test) acceptance authenticates the real 5L
+# uncomputed terminals, numerical errors, and exact cancellation. Production
+# snapshot ownership and APIs are unchanged.
+digest = "d8d2fc4123b648414e3bcd42bc88dcdccd1b27ab"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
@@ -927,7 +930,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # snapshot. Removed source references follow the existing FeynKit migration.
 # The maintained CI guide records these source boundaries; producer ownership
 # and the separate documentation cache contract are unchanged.
-digest = "b44d60f005be099ca7b0ff401bb9b81df00630a6"
+# Reviewed 2026-10-20: renormalization DOT and cross-package model JSON
+# fixtures are compile-time test inputs, matching the existing upstream source
+# ownership fix. The CI guide now records this sandbox boundary.
+digest = "47a104006024b60b30465fba3fd1f8aa16608797"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

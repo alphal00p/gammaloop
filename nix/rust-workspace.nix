@@ -470,8 +470,11 @@
       "tests/resources/graphs/epemttbar.dot"
     ];
     gammalooprs = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/gammalooprs/tests/fixtures/renormalization"
       "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
+    "gammaloop-integration-tests" = ["crates/feynkit-model/tests/fixtures"];
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {

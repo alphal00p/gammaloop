@@ -469,3 +469,127 @@ impl Vakint {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{RustRedMasterMode, VakintSettings, vakint_parse};
+
+    #[test]
+    #[ignore = "requires the authenticated v0.1.0 5L data pack; no IBP application is loaded"]
+    fn authentic_five_loop_declared_terminals_remain_uncomputed() {
+        Vakint::initialize_vakint_symbols();
+        let source = Source::Directory(
+            super::super::cache_tests::external_path()
+                .canonicalize()
+                .unwrap(),
+        );
+        let release: ReleaseManifest =
+            serde_json::from_slice(&source.read("manifest.json").unwrap()).unwrap();
+        assert_eq!(release.schema, RELEASE_SCHEMA);
+        assert_eq!(release.version, "v0.1.0");
+        let pack = release
+            .loop_packs
+            .iter()
+            .find(|pack| pack.loop_count == 5)
+            .unwrap();
+        assert_eq!(
+            pack.manifest_sha256,
+            "44d047c2bd280e24ecda4730096bdc0fa449afd0f6fcba90f1002d886ed06f51"
+        );
+        // Authenticate the real 5L pack and its payloads without constructing
+        // an IBP application, attaching caches, or loading lower-loop packs.
+        let data = Arc::new(LoopData::load(source, pack, &release.version).unwrap());
+        assert_eq!(data.manifest.masters.len(), 905);
+        for terminal in &data.manifest.masters {
+            assert_eq!(terminal["kind"], "uncomputed-terminal");
+            assert_eq!(terminal["status"], "not_computed");
+            assert!(terminal["coefficients"].as_array().unwrap().is_empty());
+            assert!(
+                terminal["available_epsilon_powers"]
+                    .as_array()
+                    .unwrap()
+                    .is_empty()
+            );
+        }
+        let terminal = &data.manifest.masters[0];
+        let identity = terminal["master_id"].as_str().unwrap();
+        assert_eq!(
+            identity,
+            "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m1_m1_m1_p0_p1_p1_p0_p0_p1_p0_p0_p1_p0_p1_p1"
+        );
+        let powers: Vec<i64> = serde_json::from_value(terminal["powers"].clone()).unwrap();
+        assert_eq!(powers, [-1, -1, -1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1]);
+        let family = data
+            .manifest
+            .families
+            .iter()
+            .find(|family| family["sha256"] == terminal["family_sha256"])
+            .unwrap();
+        let graph = data
+            .path(terminal["parent_graph"].as_str().unwrap())
+            .unwrap()
+            .unwrap();
+        assert!(graph.is_file());
+        assert_eq!(graph.extension().unwrap(), "dot");
+        let loops = BTreeMap::from([(5, Arc::clone(&data))]);
+        let catalog = super::super::masters::MasterCatalog::load(&loops, &release.version).unwrap();
+        let master = catalog.symbol(family["fingerprint"].as_str().unwrap(), &powers);
+        let settings = VakintSettings {
+            epsilon_symbol: "ep".into(),
+            number_of_terms_in_epsilon_expansion: 6,
+            run_time_decimal_precision: 32,
+            ..Default::default()
+        };
+        let retained = catalog
+            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Retain)
+            .unwrap();
+        assert_eq!(retained, master);
+        let direct_error = catalog
+            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
+            .unwrap_err()
+            .to_string();
+        let retained_error = catalog
+            .resolve_numerical(retained, &settings)
+            .unwrap_err()
+            .to_string();
+        for error in [&direct_error, &retained_error] {
+            assert!(error.contains(identity), "{error}");
+            assert!(
+                error.contains("declared terminal has no computed coefficients"),
+                "{error}"
+            );
+            assert!(error.contains(&release.version), "{error}");
+            assert!(error.contains(graph.to_str().unwrap()), "{error}");
+            assert!(!error.contains("undeclared residual master"), "{error}");
+        }
+        // The cancellation is meromorphic and requires exact combination of
+        // rational epsilon coefficients before inspecting the unavailable data.
+        let prefactor = vakint_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
+        let cancelling = prefactor * master;
+        assert!(!cancelling.is_zero());
+        assert!(
+            catalog
+                .finalize(
+                    cancelling.clone(),
+                    &settings,
+                    5,
+                    RustRedMasterMode::Numerical
+                )
+                .unwrap()
+                .is_zero()
+        );
+        assert!(
+            catalog
+                .resolve_numerical(cancelling, &settings)
+                .unwrap()
+                .is_zero()
+        );
+        eprintln!(
+            "Authenticated {} declared/uncomputed terminals in {}; selected {identity}, powers {powers:?}, graph {}; Retain and both exact-cancellation routes passed. Direct error: {direct_error}; retained-catalog error: {retained_error}",
+            data.manifest.masters.len(),
+            release.version,
+            graph.display(),
+        );
+    }
+}
