@@ -133,6 +133,10 @@ explicit real and imaginary coefficients, including a unit imaginary numerator;
 the FORM adapter then maps the imaginary unit to `i_`. This preserves valid
 syntax for coefficients such as `i/16` without changing their value.
 
+Saved FORM indices retain the caller's epsilon symbol, including dimensions
+inside native Lorentz slots. These same index atoms identify vector-map sources,
+so the mapping uses the caller's convention before restoring concrete FORM indices.
+
 FORM programs, headers, and run templates are embedded in the Rust binary with `include_str!`.
 For each run, Vakint renders those resources into a uniquely named temporary directory, launches
 the configured process, reads `out.txt`, and removes the directory when `clean_tmp_dir` is true.
