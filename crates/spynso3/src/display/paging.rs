@@ -278,7 +278,7 @@ impl MathMLPageSource for PageSource {
         );
         let mut page = MathMLPage::new(
             format!(
-                "<style>{NOTEBOOK_STYLE}</style>{}",
+                "<style>{NOTEBOOK_LAYOUT_STYLE}</style>{}",
                 rendered
                     .html
                     .replacen("<math ", "<math data-spenso-math=\"\" ", 1)
