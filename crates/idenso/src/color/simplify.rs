@@ -2978,7 +2978,7 @@ impl<'a> SymmetricInvariantView<'a> {
         let AtomView::Fun(f) = expr else {
             return None;
         };
-        if f.get_symbol() != CS.d || f.get_nargs() < 4 {
+        if f.get_symbol() != CS.d || CS.invariant_metadata(f).ok().flatten().is_none() {
             return None;
         }
 

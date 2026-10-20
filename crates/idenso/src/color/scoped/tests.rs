@@ -646,3 +646,125 @@ fn scoped_color_fresh_process_archive_restores_native_action() {
         String::from_utf8_lossy(&output.stderr)
     );
 }
+
+#[test]
+fn scoped_color_symmetric_invariant_representation_is_metadata() {
+    let family = family("symmetric_metadata");
+    let representation = family.declaration.fundamental.new_rep(3);
+    let adjoint = family.declaration.adjoint.new_rep(8);
+    let slots = (1..=3)
+        .map(|index| {
+            adjoint
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+                .to_atom()
+        })
+        .collect();
+    let source = Tensor::infer(CS.symmetric_d(representation.to_symbolic([]), slots)).unwrap();
+    assert_eq!(source.rank(), 3, "the leading representation is metadata");
+    assert_eq!(source.canonize().unwrap().rank(), 3);
+    assert_eq!(source.contract(Default::default()).unwrap().rank(), 3);
+    assert_eq!(source.dirac_adjoint(true).unwrap().rank(), 3);
+    let slot = |index| {
+        adjoint
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(index))
+            .to_atom()
+    };
+    let metric =
+        Tensor::infer(spenso::network::library::symbolic::ETS.metric_literal(slot(3), slot(4)))
+            .unwrap();
+    let contracted = source
+        .multiply(&metric)
+        .unwrap()
+        .contract(Default::default())
+        .unwrap();
+    let expected = Tensor::infer(CS.symmetric_d(
+        representation.to_symbolic([]),
+        vec![slot(1), slot(2), slot(4)],
+    ))
+    .unwrap();
+    assert_eq!(
+        contracted.canonize().unwrap().expression(),
+        expected.canonize().unwrap().expression()
+    );
+    let formal = CS.symmetric_d(
+        Atom::var(symbol!("scoped_color::formal_symmetric_label")),
+        vec![slot(1), slot(2), slot(3)],
+    );
+    let AtomView::Fun(function) = formal.as_view() else {
+        unreachable!()
+    };
+    assert!(CS.invariant_representations(function).is_err());
+    assert_eq!(Tensor::infer(formal).unwrap().rank(), 3);
+}
+
+#[test]
+fn scoped_color_native_invariant_metadata_validates_arity_and_compact_payloads() {
+    let owner = family("invariant_metadata");
+    let fundamental = owner.declaration.fundamental.new_rep(3);
+    let other = family("invariant_metadata_other");
+    let other_fundamental = other.declaration.fundamental.new_rep(3);
+    let metadata = |expression: &Atom| {
+        let AtomView::Fun(function) = expression.as_view() else {
+            unreachable!()
+        };
+        CS.invariant_representations(function)
+    };
+    let degree = Atom::var(symbol!("scoped_color::invariant_degree"));
+    for invariant in [
+        CS.cas(&degree, fundamental.to_symbolic([])),
+        CS.idx(2, fundamental.to_symbolic([])),
+    ] {
+        assert_eq!(metadata(&invariant).unwrap(), Some(vec![fundamental]));
+        assert_eq!(Tensor::infer(invariant).unwrap().rank(), 0);
+    }
+    let mixed = CS.gram(
+        4,
+        fundamental.to_symbolic([]),
+        other_fundamental.to_symbolic([]),
+    );
+    assert_eq!(
+        metadata(&mixed).unwrap(),
+        Some(vec![fundamental, other_fundamental])
+    );
+    let wrong_dimension = owner.declaration.fundamental.new_rep(999);
+    let invariant = CS.cas(2, wrong_dimension.to_symbolic([]));
+    assert_eq!(metadata(&invariant).unwrap(), Some(vec![wrong_dimension]));
+    let formal = Atom::var(symbol!("scoped_color::formal_invariant_label"));
+    for invariant in [
+        CS.cas(2, &formal),
+        CS.gram(4, &formal, other_fundamental.to_symbolic([])),
+    ] {
+        assert!(metadata(&invariant).is_err());
+        assert_eq!(Tensor::infer(invariant).unwrap().rank(), 0);
+    }
+    for invariant in [
+        function!(CS.cas, fundamental.to_symbolic([])),
+        function!(CS.cas, 2, fundamental.to_symbolic([]), 99),
+        function!(CS.idx, 2),
+        function!(CS.gram, 4, fundamental.to_symbolic([])),
+        CS.cas(
+            2,
+            fundamental
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(1))
+                .to_atom(),
+        ),
+        CS.cas(
+            fundamental
+                .slot::<AbstractIndex, _>(AbstractIndex::Normal(1))
+                .to_atom(),
+            fundamental.to_symbolic([]),
+        ),
+        CS.cas(
+            function!(
+                spenso::tensor_symbol!("scoped_color::invariant_tensor_degree"),
+                fundamental
+                    .slot::<AbstractIndex, _>(AbstractIndex::Normal(1))
+                    .to_atom()
+            ),
+            fundamental.to_symbolic([]),
+        ),
+    ] {
+        assert!(metadata(&invariant).is_err(), "{invariant}");
+        assert!(Tensor::infer(invariant.clone()).is_err(), "{invariant}");
+    }
+}
