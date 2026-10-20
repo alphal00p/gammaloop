@@ -384,7 +384,14 @@ fn hedge_poset_parametric_integrands(
 ) -> Result<Vec<ParametricIntegrands>> {
     let wood = HedgePosetWood::new(cut_structure, graph, model, settings)?;
     let mut forests = wood.unfold();
-    forests.compute(graph, model, vakint, orientation, &settings.uv)?;
+    forests.compute(
+        graph,
+        model,
+        vakint,
+        orientation,
+        &settings.uv,
+        &mut super::approx::projected_4d::Local4dProjectionContext::default(),
+    )?;
     forests.orientation_parametric_exprs(graph, &settings.uv)
 }
 

@@ -172,6 +172,7 @@ impl PhysicalOverlapInput {
             crate::utils::vakint()?,
             orientation,
             &generation.uv,
+            &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
         )?;
         let mut nodes = Vec::with_capacity(inventory.len());
         for (node, steps, forest_sign) in inventory {

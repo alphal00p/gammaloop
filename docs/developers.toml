@@ -392,7 +392,9 @@ anchor = "impl UVOrchestrator {"
 # owner before checking a massless parent with a still-massive top bubble.
 # Reviewed 2026-10-18 at 89e6043c: native carriers and fixed-frame ownership
 # passed the local, analytic, route and persistence controls in the OS note.
-digest = "a489fcb4c020675241dd4b41e16e5c1ad71f9efb"
+# Reviewed 2026-10-21: complete-forest projection accepts an explicit diagnostic
+# context; production callers retain their default and all subtraction ownership.
+digest = "7ceaa85ee3cf0d216777e812b8c480e8d8396823"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
