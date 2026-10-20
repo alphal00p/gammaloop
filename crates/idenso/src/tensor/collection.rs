@@ -2381,6 +2381,72 @@ mod tests {
         );
         assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
+
+    #[test]
+    fn coefficient_rep_filter_keeps_dual_color_selectors_out_of_scalar_weights() {
+        use crate::representations::{Bispinor, ColorFundamental};
+        use spenso::structure::{abstract_index::AIND_SYMBOLS, representation::RepName};
+        use symbolica::function;
+        crate::test_support::test_initialize();
+        let row = Atom::var(symbolica::symbol!("coefficient_dual_selector_row"));
+        let column = Atom::var(symbolica::symbol!("coefficient_dual_selector_column"));
+        let spin_row = Bispinor {}.new_rep(4).to_symbolic([row.clone()]);
+        let spin_column = Bispinor {}.new_rep(4).to_symbolic([column.clone()]);
+        let color_row = ColorFundamental {}.new_rep(3).to_symbolic([row]);
+        let color_column = function!(
+            AIND_SYMBOLS.dind,
+            ColorFundamental {}.new_rep(3).to_symbolic([column])
+        );
+        let coordinate = |n: i32| function!(AIND_SYMBOLS.cind, n);
+        let selected = function!(ETS.delta, coordinate(2), &spin_row)
+            * function!(ETS.delta, coordinate(1), &spin_column)
+            * function!(ETS.delta, coordinate(0), &color_row)
+            * function!(ETS.delta, coordinate(2), &color_column);
+        let identity = function!(ETS.metric, &spin_row, &spin_column)
+            * function!(ETS.metric, &color_row, &color_column);
+        let x = Atom::var(symbolica::symbol!("coefficient_dual_selector_x"; Scalar));
+        let y = Atom::var(symbolica::symbol!("coefficient_dual_selector_y"; Scalar));
+        let u = Atom::var(symbolica::symbol!("coefficient_dual_selector_u"; Scalar));
+        let v = Atom::var(symbolica::symbol!("coefficient_dual_selector_v"; Scalar));
+        let spectator = (&x + &y).pow(11) * (&u + &v).pow(-2);
+        let d = Atom::var(symbolica::symbol!("coefficient_dual_selector_D"));
+        let rep = spenso::structure::representation::Minkowski {}
+            .new_rep(spenso::structure::dimension::Dimension::try_from(d.as_view()).unwrap())
+            .to_symbolic([]);
+        let momentum = SPENSO_TAG.rank_one_tensor_symbol("coefficient_dual_selector_k");
+        let radial = function!(
+            SPENSO_TAG.dot,
+            function!(momentum, 1, &rep),
+            function!(momentum, 2, &rep)
+        );
+        let scalar = &spectator * &radial;
+        let filter = TensorCollectFilter::Reps([Bispinor {}.into(), ColorFundamental {}.into()]);
+        for body in [selected.clone(), &selected + &identity] {
+            let source = SymbolicTensor::infer(&body * &scalar).unwrap();
+            let before = source.clone();
+            let rows = source.coefficient_list(filter).unwrap();
+            assert!(!rows.is_empty());
+            assert!(
+                rows.iter()
+                    .all(|(word, coefficient)| word.rank() == 4 && coefficient.is_scalar())
+            );
+            assert!(
+                rows.iter()
+                    .all(|(_, coefficient)| coefficient.expression() == &scalar)
+            );
+            let recomposed = source
+                .with_checked_expression(Atom::add_many(
+                    rows.iter()
+                        .map(|(word, coefficient)| word.expression() * coefficient.expression()),
+                ))
+                .unwrap();
+            assert_eq!(
+                source.coefficients_equal(&recomposed, filter).unwrap(),
+                symbolica::id::ConditionResult::True
+            );
+            assert_eq!(source, before);
+        }
+    }
 }
 
 #[cfg(test)]

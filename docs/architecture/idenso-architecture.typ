@@ -432,7 +432,11 @@ Each family retains its internal kernel:
 - `IndexTooling` parses enough structure to canonicalize tensor indices, list dangling slots,
   wrap all indices or only dummies, and form adjoints;
 - Typed `collect` and `coefficient_list` use the shared graph/tape owner to retain selected
-  representation sectors while keeping unrelated coefficients factored;
+  representation sectors while keeping unrelated coefficients factored. Their
+  representation filter parses written direct ports through `SlotMatcher`,
+  including dual wrappers on explicit and compact representations. Fixed
+  component selectors retain their selected tensor interfaces; ordinary opaque
+  `F(Q(...))` calls, `pure_scalar` and `bracket` keep their existing boundaries;
 - the shared component contractor and internal chain/dot normalization own metric
   contraction, compact scalar products, open chains and closed traces;
 - the Dirac pass collects bispinor chains and applies dimension-gated Clifford, trace,
