@@ -79,6 +79,10 @@ mod tests {
         assert!(templates
             .join("crates/linnest/typst/linnest.wasm")
             .is_file());
+        // linnest.wasm compiles in the Apache-2.0 Clarabel solver.
+        assert!(templates
+            .join("crates/linnest/typst/LICENSE.clarabel")
+            .is_file());
         assert!(templates
             .join("crates/linnest/typst/src/curve.typ")
             .is_file());

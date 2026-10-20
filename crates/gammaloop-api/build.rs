@@ -31,7 +31,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         &manifest.join("../../assets/embedded/drawing/templates"),
         |path| path.extension().is_some_and(|extension| extension == "typ"),
     )?;
-    build_assets::embed_typst_packages(&mut embedded_assets, &manifest.join(".."), &[])?;
+    build_assets::embed_typst_packages(
+        &mut embedded_assets,
+        &manifest.join(".."),
+        &["LICENSE.clarabel"],
+    )?;
 
     // Re-run if directory metadata changes
     println!("cargo:rerun-if-changed={}", models_dir.display());

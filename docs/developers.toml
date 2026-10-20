@@ -601,7 +601,10 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # Reviewed 2026-10-15: Embedding now uses include_dir while retaining canonical
 # generated asset paths and shared drawing callbacks. This migration record remains
 # historical below its implemented preface.
-digest = "3dca6f84cadbe237f3beaa7ab05e11cea309cd41"
+# No-impact attestation 2026-10-20: extract_templates is byte-identical; build.rs
+# now also embeds LICENSE.clarabel, and the layout test requires it beside the
+# extracted linnest.wasm.
+digest = "c4f745637667a0636007761939af54836ead9458"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
