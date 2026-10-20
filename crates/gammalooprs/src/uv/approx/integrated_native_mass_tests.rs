@@ -83,6 +83,13 @@ impl QcdMassReference {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(in crate::uv) enum D09VacuumSource {
+    Bare,
+    ProperLocal,
+    ProperFinite,
+}
+
 type CertifiedMassPole = (usize, Atom, Atom, Atom);
 
 // Actual source/child incidence retains the certified scalar transfer and the
@@ -175,7 +182,7 @@ fn native_finite_scalar_certificate_preserves_captured_d09_laurent_recomposition
 impl QcdMassReference {
     /// Certify only the finite scalar rows of a completed, preprocessed tensor.
     /// Callers retain their distinct Dirac/color preprocessing contracts.
-    fn certify_finite_tagged_rows_zero(
+    pub(in crate::uv) fn certify_finite_tagged_rows_zero(
         label: &str,
         tensor: SymbolicTensor<IndexedStructure>,
     ) -> Result<()> {
@@ -3836,142 +3843,353 @@ fn native_two_loop_overall_os_mass_condition_matches_independent_reference() -> 
 
 #[test]
 fn native_d09_proper_local_vacuum_scalar_traces_match_independent_tadpoles() -> Result<()> {
-    use crate::{
-        utils::GS,
-        uv::{
-            ApproximationType,
-            approx::{ForestNodeLike, UVCtx},
-        },
-    };
-    crate::initialisation::test_initialise()?;
-    let reference = QcdMassReference::new()?;
-    let mut records = reference.certify_os_quark_proper_prefix()?;
-    ensure!(records.len() == 1);
-    let record = records
-        .remove(&("D09".to_owned(), vec![2, 3]))
-        .ok_or_else(|| eyre!("the actual native D09 OS child is missing"))?;
-    ensure!(record.given.renormalization_scheme() == ApproximationType::OS);
-    // Same independent source-weight owner as the full native mass/field gate.
-    // It is read before any new scalar integration, never fitted to an output.
-    let source_projection = reference.project(&record.diagram)?;
-    let source_weight = &source_projection.kernel_weight * &source_projection.numerator_prefactor;
-    ensure!(!source_weight.is_zero());
-    ensure!(record.diagram.loop_momentum_basis().loop_edges.len() == 2);
-    let backend = vakint::VakintSettings {
-        number_of_terms_in_epsilon_expansion: 3,
-        evaluation_order: vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
-            vakint::AlphaLoopOptions {
-                susbstitute_masters: false,
-            },
-        )]),
-        ..record.settings.vakint.true_settings()
-    };
-    let actual =
-        reference.certify_actual_overall_mass_input(&record, &record.given, &record.completed)?;
-    let traces = reference.certify_d09_proper_local_vacuum_angular_traces(
-        &record.diagram,
-        &UVCtx::new(&record.graph, &record.graph.model, &record.settings),
-        &record.given,
-        &record.completed,
-        &actual,
-        &backend,
-    )?;
+    QcdMassReference::certify_d09_vacuum_scalar_reference(D09VacuumSource::ProperLocal)
+}
 
-    let epsilon = Atom::var(GS.dim_epsilon);
-    let pi = Atom::var(symbolica::atom::Symbol::PI);
-    let coupling = Atom::var(symbol!("UFO::G"));
-    let a = coupling.pow(2) / (Atom::num(16) * pi.pow(2));
-    let cf = Atom::num((4, 3));
-    // The source-only i*G^4*CF^2 calibration precedes the new integrals.
-    // Two MSbar Minkowski measures supply i^2/(16*pi^2)^2. The signed
-    // child -U is already inside c(D); run(W) receives no further forest sign.
-    let prefactor = -Atom::i() * a.pow(2) * cf.pow(2) * &source_weight;
-    ensure!(!prefactor.is_zero());
-    // Independent radial Gamma recurrence: T2=e^(gamma_E*eps)*Gamma(eps)
-    // at m=MUV=muR=1, T2^2=eps^-2+pi^2/6+O(eps).
-    // Native source absorption and numerator-only lift are prerequisites.
-    // c(D)=(D-2)^2(D+2)/24=1-7eps/3+5eps^2/3-eps^3/3.
-    let dimensional = epsilon.pow(-2) - Atom::num((7, 3)) / &epsilon
-        + Atom::num((5, 3))
-        + pi.pow(2) / Atom::num(6);
-    let physical_four = epsilon.pow(-2) + pi.pow(2) / Atom::num(6);
-    let cooking = CookSettings::indices()
-        .with_mode(CookMode::ReversibleEncoding)
-        .with_representation_payloads(true, true);
-    let mut records = Vec::new();
-    for (index, trace) in traces.iter().enumerate() {
-        ensure!(trace.is_scalar());
-        // The finite-row owner expects completed scalar coefficients. Use the
-        // existing SU(3) invariant owner before comparing to numerical CF=4/3.
-        let normalized = trace.simplify_algebra(&AlgebraSettings {
-            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
-            ..Default::default()
-        })?;
-        ensure!(
-            !normalized.expression().contains_symbol(CS.cas)
-                && !normalized.expression().contains_symbol(CS.idx)
-        );
-        let weighted = reference
-            .model
-            .expand_couplings(&(source_weight.clone() * normalized.expression()));
-        // Unit scales are imposed after the actual operators and integration.
-        let unit = weighted
-            .replace(symbol!("UFO::MT"))
-            .with(1)
-            .replace(GS.m_uv_expansion)
-            .with(GS.m_uv_vacuum)
-            .replace(GS.m_uv_vacuum)
-            .with(1)
-            .replace(GS.mu_r_sq)
-            .with(1);
-        let series =
-            super::series(&super::Integrated::dimensionally_regularized(&unit), 0)?.to_atom();
-        let sign = Atom::num(if index % 2 == 0 { -1 } else { 1 });
-        let expected = &sign
-            * &prefactor
-            * if index < 2 {
-                &dimensional
-            } else {
-                &physical_four
-            };
-        let difference =
-            trace.with_checked_expression(cooking.try_cook((&series - &expected).as_view())?)?;
-        QcdMassReference::certify_finite_tagged_rows_zero(
-            "absolute actual proper-local D09 vacuum scalar Laurent trace",
-            difference,
+#[test]
+fn native_d09_bare_vacuum_scalar_traces_match_independent_connected_poles() -> Result<()> {
+    QcdMassReference::certify_d09_vacuum_scalar_reference(D09VacuumSource::Bare)
+}
+
+#[test]
+fn native_d09_proper_finite_vacuum_scalar_traces_keep_child_epsilon() -> Result<()> {
+    QcdMassReference::certify_d09_vacuum_scalar_reference(D09VacuumSource::ProperFinite)
+}
+
+impl QcdMassReference {
+    fn certify_d09_vacuum_scalar_reference(source: D09VacuumSource) -> Result<()> {
+        use crate::{
+            utils::GS,
+            uv::{
+                ApproximationType, Spinney,
+                approx::{
+                    ForestNodeLike, Rooted, UVCtx,
+                    local_4d::{Full4dCts, Local4dCts},
+                },
+                hedge_poset::OwnedForestNode,
+            },
+        };
+        crate::initialisation::test_initialise()?;
+        let reference = QcdMassReference::new()?;
+        let mut records = reference.certify_os_quark_proper_prefix()?;
+        ensure!(records.len() == 1);
+        let record = records
+            .remove(&("D09".to_owned(), vec![2, 3]))
+            .ok_or_else(|| eyre!("the actual native D09 OS child is missing"))?;
+        ensure!(record.given.renormalization_scheme() == ApproximationType::OS);
+        // Same independent source-weight owner as the full native mass/field gate.
+        // It is read before any new scalar integration, never fitted to an output.
+        let source_projection = reference.project(&record.diagram)?;
+        let source_weight =
+            &source_projection.kernel_weight * &source_projection.numerator_prefactor;
+        ensure!(!source_weight.is_zero());
+        ensure!(record.diagram.loop_momentum_basis().loop_edges.len() == 2);
+        let root = OwnedForestNode {
+            spinney: Spinney::empty(&record.graph),
+            topo_order: 0,
+        };
+        let bare = Full4dCts::from_factorized_local(&Local4dCts::root());
+        let (given, prefix) = if source == D09VacuumSource::Bare {
+            (&root, &bare)
+        } else {
+            (&record.given, &record.completed)
+        };
+        let actual = reference.certify_actual_overall_mass_input(&record, given, prefix)?;
+        let traces = reference.certify_d09_vacuum_angular_traces(
+            &record.diagram,
+            &UVCtx::new(&record.graph, &record.graph.model, &record.settings),
+            given,
+            prefix,
+            &actual,
+            source,
         )?;
-        // Direct nonzero leading coefficient: a zero trace cannot pass merely
-        // through a permissive scalar-zero normalization or a blind mass Phi.
-        let rows = series
-            .coefficient_list_exact(std::slice::from_ref(&epsilon))
-            .ok_or_else(|| {
-                eyre!("D09 absolute scalar trace exceeds the unchanged Laurent scope")
+
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let pi = Atom::var(symbolica::atom::Symbol::PI);
+        let coupling = Atom::var(symbol!("UFO::G"));
+        let a = coupling.pow(2) / (Atom::num(16) * pi.pow(2));
+        let cf = Atom::num((4, 3));
+        // The source-only i*G^4*CF^2 calibration precedes the new integrals.
+        // Two MSbar Minkowski measures supply i^2/(16*pi^2)^2. The signed
+        // child -U is already inside c(D); run(W) receives no further forest sign.
+        let prefactor = -Atom::i() * a.pow(2) * cf.pow(2) * &source_weight;
+        ensure!(!prefactor.is_zero());
+        // Independent radial Gamma recurrence: T2=e^(gamma_E*eps)*Gamma(eps)
+        // at m=MUV=muR=1, T2^2=eps^-2+pi^2/6+O(eps).
+        // Native source absorption and numerator-only lift are prerequisites.
+        // c(D)=(D-2)^2(D+2)/24=1-7eps/3+5eps^2/3-eps^3/3.
+        let q = pi.pow(2) / Atom::num(12);
+        let (dimensional, physical_four) = match source {
+            D09VacuumSource::ProperLocal => (
+                epsilon.pow(-2) - Atom::num((7, 3)) / &epsilon
+                    + Atom::num((5, 3))
+                    + pi.pow(2) / Atom::num(6),
+                epsilon.pow(-2) + pi.pow(2) / Atom::num(6),
+            ),
+            D09VacuumSource::Bare => (
+                -Atom::num((1, 2)) * epsilon.pow(-2) + Atom::num((13, 12)) / &epsilon,
+                -Atom::num((1, 2)) * epsilon.pow(-2) - Atom::num((1, 12)) / &epsilon,
+            ),
+            D09VacuumSource::ProperFinite => (
+                epsilon.pow(-1) - Atom::num((4, 3)) - &q,
+                epsilon.pow(-1) - &q,
+            ),
+        };
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let mut records = Vec::new();
+        let mut actual_series = Vec::new();
+        for (index, trace) in traces.iter().enumerate() {
+            ensure!(trace.is_scalar());
+            // The finite-row owner expects completed scalar coefficients. Use the
+            // existing SU(3) invariant owner before comparing to numerical CF=4/3.
+            let normalized = trace.simplify_algebra(&AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
             })?;
-        let leading = rows
-            .iter()
-            .find(|(monomial, _)| *monomial == epsilon.pow(-2))
-            .map(|(_, coefficient)| coefficient)
-            .ok_or_else(|| eyre!("D09 scalar trace lost its independently nonzero double pole"))?;
-        ensure!(!leading.is_zero());
-        ensure!((leading - &sign * &prefactor).together().is_zero());
-        records.push(serde_json::json!({
-            "physical_four": index >= 2,
-            "dual": if index % 2 == 0 { "identity/12" } else { "gamma0/12" },
-            "actual": series.to_canonical_string(),
-            "reference": expected.to_canonical_string(),
-            "double_pole": leading.to_canonical_string(),
-        }));
+            ensure!(
+                !normalized.expression().contains_symbol(CS.cas)
+                    && !normalized.expression().contains_symbol(CS.idx)
+            );
+            let weighted = reference
+                .model
+                .expand_couplings(&(source_weight.clone() * normalized.expression()));
+            // Unit scales are imposed after the actual operators and integration.
+            let unit = weighted
+                .replace(symbol!("UFO::MT"))
+                .with(1)
+                .replace(GS.m_uv_expansion)
+                .with(GS.m_uv_vacuum)
+                .replace(GS.m_uv_vacuum)
+                .with(1)
+                .replace(GS.mu_r_sq)
+                .with(1);
+            let series =
+                super::series(&super::Integrated::dimensionally_regularized(&unit), 0)?.to_atom();
+            let sign = Atom::num(if index % 2 == 0 { -1 } else { 1 });
+            let expected = &sign
+                * &prefactor
+                * if index < 2 {
+                    dimensional.clone()
+                } else if index < 4 {
+                    physical_four.clone()
+                } else {
+                    epsilon.pow(-1)
+                };
+            let compared = if source == D09VacuumSource::Bare {
+                super::truncate(&super::series(&series, 0)?, false)
+            } else {
+                series.clone()
+            };
+            let difference = trace
+                .with_checked_expression(cooking.try_cook((&compared - &expected).as_view())?)?;
+            QcdMassReference::certify_finite_tagged_rows_zero(
+                "absolute actual D09 source-selected vacuum scalar Laurent trace",
+                difference,
+            )?;
+            // Direct nonzero leading coefficient: a zero trace cannot pass merely
+            // through a permissive scalar-zero normalization or a blind mass Phi.
+            let rows = series
+                .coefficient_list_exact(std::slice::from_ref(&epsilon))
+                .ok_or_else(|| {
+                    eyre!("D09 absolute scalar trace exceeds the unchanged Laurent scope")
+                })?;
+            let leading_power = if source == D09VacuumSource::ProperFinite {
+                -1
+            } else {
+                -2
+            };
+            let leading = rows
+                .iter()
+                .find(|(monomial, _)| *monomial == epsilon.pow(leading_power))
+                .map(|(_, coefficient)| coefficient)
+                .ok_or_else(|| {
+                    eyre!("D09 scalar trace lost its independently nonzero double pole")
+                })?;
+            ensure!(!leading.is_zero());
+            let leading_weight = if source == D09VacuumSource::Bare {
+                Atom::num((-1, 2))
+            } else {
+                Atom::one()
+            };
+            ensure!(
+                (leading - &sign * &prefactor * &leading_weight)
+                    .together()
+                    .is_zero()
+            );
+            actual_series.push(series.clone());
+            records.push(serde_json::json!({
+                "physical_four": index >= 2,
+                "dual": if index % 2 == 0 { "identity/12" } else { "gamma0/12" },
+                "actual": series.to_canonical_string(),
+                "reference": expected.to_canonical_string(),
+                "double_pole": leading.to_canonical_string(),
+            }));
+        }
+        ensure!(
+            records.len()
+                == if source == D09VacuumSource::ProperFinite {
+                    6
+                } else {
+                    4
+                }
+        );
+        if source == D09VacuumSource::Bare {
+            // The connected finite master cancels from the angular difference.
+            // No finite master value is read or fitted to define this reference.
+            for dual in 0..2 {
+                let sign = Atom::num(if dual == 0 { -1 } else { 1 });
+                let difference = &actual_series[dual + 2] - &actual_series[dual];
+                let expected =
+                    &sign * &prefactor * (-Atom::num((7, 6)) / &epsilon + Atom::num((23, 36)));
+                let tensor = traces[dual].with_checked_expression(
+                    cooking.try_cook((&difference - &expected).as_view())?,
+                )?;
+                Self::certify_finite_tagged_rows_zero(
+                    "actual bare D09 angular difference needs no finite sunset master",
+                    tensor,
+                )?;
+                // Independent epsilon-two loss is finite 5/36. Dropping it changes
+                // 23/36 to 7/9, so this is a nonzero depth witness.
+                let insufficient =
+                    &sign * &prefactor * (-Atom::num((7, 6)) / &epsilon + Atom::num((7, 9)));
+                let wrong = traces[dual].with_checked_expression(
+                    cooking.try_cook((&difference - insufficient).as_view())?,
+                )?;
+                ensure!(
+                    Self::certify_finite_tagged_rows_zero(
+                        "actual bare angular difference rejects omitted epsilon-two moment",
+                        wrong.clone()
+                    )
+                    .is_err()
+                );
+            }
+        }
+        if source == D09VacuumSource::ProperFinite {
+            for dual in 0..2 {
+                let sign = Atom::num(if dual == 0 { -1 } else { 1 });
+                let loss = &actual_series[dual + 4] - &actual_series[dual + 2];
+                let expected = &sign * &prefactor * &q;
+                let tensor = traces[dual]
+                    .with_checked_expression(cooking.try_cook((&loss - &expected).as_view())?)?;
+                Self::certify_finite_tagged_rows_zero(
+                    "actual frozen child epsilon-one feeds the outer simple pole",
+                    tensor,
+                )?;
+                ensure!(!expected.is_zero());
+                let omitted =
+                    traces[dual].with_checked_expression(cooking.try_cook(loss.as_view())?)?;
+                ensure!(
+                    Self::certify_finite_tagged_rows_zero(
+                        "actual frozen child outer pole rejects omitted epsilon-one coefficient",
+                        omitted.clone()
+                    )
+                    .is_err()
+                );
+            }
+        }
+        crate::debug_tags!(#uv, #integrated, #summary;
+            stage = "native_d09_vacuum_independent_scalar_reference", file.source = ?source,
+            file.records = %serde_json::to_string(&records)?,
+            file.source_weight = %source_weight.to_canonical_string(),
+            original_terms = if source == D09VacuumSource::ProperLocal { 4 } else { 2 },
+            active_loops = if source == D09VacuumSource::ProperFinite { 1 } else { 2 },
+            frozen_loops = if source == D09VacuumSource::ProperFinite { 1 } else { 0 },
+            absolute_poles_proved = true, absolute_finite_proved = source != D09VacuumSource::Bare,
+            bare_included = source == D09VacuumSource::Bare, finite_child_included = source == D09VacuumSource::ProperFinite,
+            full_open_matrix_proved = true, emitted_R2_proved = false,
+            "Actual D09 source-selected W scalar-dual Laurent traces match independent vacuum references"
+        );
+        Ok(())
     }
-    ensure!(records.len() == 4);
-    crate::debug_tags!(#uv, #integrated, #summary;
-        stage = "native_d09_proper_local_vacuum_independent_scalar_reference",
-        file.records = %serde_json::to_string(&records)?,
-        file.source_weight = %source_weight.to_canonical_string(),
-        original_terms = 4, active_loops = 2, frozen_loops = 0,
-        absolute_dimensional_traces_proved = true, absolute_physical_four_traces_proved = true,
-        bare_included = false, finite_child_included = false,
-        full_open_matrix_proved = false, emitted_R2_proved = false,
-        "Actual proper-local W scalar-dual Laurent traces match independent Gamma tadpoles"
-    );
-    Ok(())
+}
+
+impl QcdMassReference {
+    /// Materialize only the admitted finite numerator, never a causal shell.
+    pub(in crate::uv) fn materialize_native_four_component_numerator(
+        input: &SymbolicTensor<IndexedStructure>,
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
+        use idenso::representations::Bispinor;
+        use idenso::shorthands::UndoShorthands;
+        use spenso::structure::representation::LibraryRep;
+        use spenso::{
+            iterators::IteratableTensor,
+            network::library::symbolic::ETS,
+            network::{ExecutionResult, Sequential, SmallestDegree},
+            structure::{abstract_index::AIND_SYMBOLS, slot::IsAbstractSlot},
+        };
+        let expected = input.structure().logical_slots();
+        ensure!(expected.len() == 4);
+        let mut spin = 0usize;
+        let mut color = 0usize;
+        for slot in &expected {
+            if slot.rep_name().base() == LibraryRep::from(Bispinor {}) {
+                ensure!(slot.dim().to_symbolic() == Atom::num(4));
+                spin += 1;
+            } else if slot.rep_name().base() == LibraryRep::from(ColorFundamental {}) {
+                ensure!(slot.dim().to_symbolic() == Atom::num(3));
+                color += 1;
+            } else {
+                return Err(eyre!(
+                    "D09 finite numerator has an unexpected external representation"
+                ));
+            }
+        }
+        ensure!(spin == 2 && color == 2);
+        ensure!(!input.expression().contains_symbol(crate::utils::GS.den));
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let source = cooking.uncook(input.expression().as_view());
+        let explicit = source.undo_dots::<crate::numerator::aind::Aind>()?;
+        let mut network = explicit.parse_into_net()?;
+        let library = crate::utils::TENSORLIB.read().unwrap();
+        network
+            .execute::<Sequential, SmallestDegree, _, _, _>(&*library, &*crate::utils::FUN_LIB)?;
+        let expression = match network.result_tensor(&*library)? {
+            ExecutionResult::Zero => Atom::Zero,
+            ExecutionResult::One => {
+                ensure!(input.is_scalar());
+                Atom::one()
+            }
+            ExecutionResult::Val(tensor) => {
+                ensure!(tensor.size()? <= 4 * 4 * 3 * 3);
+                let ports = tensor
+                    .external_structure_iter()
+                    .map(|slot| slot.to_atom())
+                    .collect::<Vec<_>>();
+                ensure!(
+                    ports.iter().cloned().collect::<BTreeSet<_>>()
+                        == input
+                            .structure()
+                            .logical_slots()
+                            .iter()
+                            .map(|slot| slot.to_atom())
+                            .collect::<BTreeSet<_>>()
+                );
+                let mut entries = Vec::new();
+                for (index, value) in tensor.iter_flat() {
+                    if value.is_zero() {
+                        continue;
+                    }
+                    let index = tensor.expanded_index(index)?;
+                    let basis =
+                        Atom::mul_many(ports.iter().zip(index.iter()).map(|(port, coordinate)| {
+                            function!(ETS.delta, function!(AIND_SYMBOLS.cind, *coordinate), port)
+                        }));
+                    entries.push(value * basis.as_view());
+                }
+                Atom::add_many(entries)
+            }
+        };
+        drop(library);
+        let result = input.with_checked_expression(cooking.try_cook(expression.as_view())?)?;
+        // Reuse the established finite native-component equality owner. Its
+        // compact scalar normalization does not distribute the graph numerator.
+        let difference = cooking.uncook(input.try_sub(&result)?.expression().as_view());
+        let mut cache = crate::uv::overlap_numerators::NumeratorJetCache::default();
+        ensure!(cache.canonicalize(&difference)?.is_zero);
+        Ok(result)
+    }
 }

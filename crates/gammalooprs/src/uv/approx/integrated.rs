@@ -523,9 +523,25 @@ pub(super) fn simplify(
     Ok(dotted)
 }
 
+#[cfg(test)]
+type AngularObserver<'a> = dyn Fn(&Atom, &SymbolicTensor<IndexedStructure>) -> Result<()> + 'a;
+
 pub(crate) struct Integrated<'a> {
     pub vakint: &'a Vakint,
     pub vakint_settings: &'a vakint::VakintSettings,
+    #[cfg(test)]
+    angular_observer: Option<&'a AngularObserver<'a>>,
+}
+
+#[cfg(test)]
+impl<'a> Integrated<'a> {
+    pub(in crate::uv) fn with_angular_observer(
+        mut self,
+        observer: &'a AngularObserver<'a>,
+    ) -> Self {
+        self.angular_observer = Some(observer);
+        self
+    }
 }
 
 impl Integrated<'_> {
@@ -566,6 +582,8 @@ impl Integrated<'_> {
         Integrated {
             vakint,
             vakint_settings,
+            #[cfg(test)]
+            angular_observer: None,
         }
     }
 
@@ -1100,6 +1118,24 @@ impl Integrated<'_> {
                         log.numerator = term.numerator,
                         "Completed projected numerator algebra before Laurent expansion"
                     );
+                }
+                #[cfg(test)]
+                if let Some(observer) = self.angular_observer {
+                    let cooking = CookSettings::indices()
+                        .with_mode(CookMode::ReversibleEncoding)
+                        .with_representation_payloads(true, true);
+                    for term in &integrand_vakint.0 {
+                        let restored =
+                            Self::restore_numerator(term.numerator.clone(), current.topo_order());
+                        let coefficient = integrand
+                            .with_checked_expression(cooking.try_cook(restored.as_view())?)?;
+                        let coefficient = if source_ports.is_empty() {
+                            coefficient
+                        } else {
+                            coefficient.reindex_interface_ports(&source_ports)?
+                        };
+                        observer(&term.integral, &coefficient)?;
+                    }
                 }
                 let started = std::time::Instant::now();
                 debug_tags!(#uv, #integrated, #diagnostic_stage;

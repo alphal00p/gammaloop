@@ -6,7 +6,10 @@ use crate::{
     initialisation::test_initialise,
     numerator::AppliedFeynmanRule,
     uv::{
-        approx::{integrated, integrated::native_mass_tests::QcdMassReference},
+        approx::{
+            integrated,
+            integrated::native_mass_tests::{D09VacuumSource, QcdMassReference},
+        },
         hedge_poset::OwnedForestNode,
         orchestrator::validate_local_counterterm_schemes,
     },
@@ -4244,16 +4247,16 @@ impl QcdMassReference {
 }
 
 impl QcdMassReference {
-    /// Actual proper-local W only. Two calibrated scalar traces, not open R2.
-    pub(in crate::uv) fn certify_d09_proper_local_vacuum_angular_traces(
+    /// Original source-selected W. Two calibrated scalar traces, not open R2.
+    pub(in crate::uv) fn certify_d09_vacuum_angular_traces(
         &self,
         diagram: &feynkit_graph::FeynmanDiagram,
         ctx: &UVCtx<'_>,
         given: &OwnedForestNode,
         prefix: &Full4dCts,
         actual: &(OwnedForestNode, Local4dCts, IntegratedCts),
-        backend: &vakint::VakintSettings,
-    ) -> Result<[SymbolicTensor<IndexedStructure>; 4]> {
+        source: D09VacuumSource,
+    ) -> Result<Vec<SymbolicTensor<IndexedStructure>>> {
         use crate::uv::Spinney;
         let (parent, local, _) = actual;
         let graph = ctx.graph;
@@ -4262,14 +4265,30 @@ impl QcdMassReference {
             .with_representation_payloads(true, true);
         eyre::ensure!(diagram.name() == "D09" && graph.name == "D09");
         eyre::ensure!(parent.renormalization_scheme() == ApproximationType::OS);
-        eyre::ensure!(given.renormalization_scheme() == ApproximationType::OS);
-        eyre::ensure!(parent.dod() == 1 && given.dod() == 1);
-        eyre::ensure!(graph.n_loops(parent.subgraph()) == 2);
-        eyre::ensure!(graph.n_loops(given.subgraph()) == 1);
-        eyre::ensure!(graph.paired_edges(given.subgraph()) == [EdgeIndex(2), EdgeIndex(3)]);
+        eyre::ensure!(parent.dod() == 1 && graph.n_loops(parent.subgraph()) == 2);
+        match source {
+            D09VacuumSource::Bare => {
+                eyre::ensure!(given.topo_order == 0);
+                eyre::ensure!(graph.n_loops(given.subgraph()) == 0);
+            }
+            D09VacuumSource::ProperLocal | D09VacuumSource::ProperFinite => {
+                eyre::ensure!(given.renormalization_scheme() == ApproximationType::OS);
+                eyre::ensure!(given.dod() == 1 && graph.n_loops(given.subgraph()) == 1);
+                eyre::ensure!(graph.paired_edges(given.subgraph()) == [EdgeIndex(2), EdgeIndex(3)]);
+            }
+        }
         eyre::ensure!(ctx.settings.generate_integrated && !ctx.settings.add_marker);
         eyre::ensure!(ctx.settings.vakint.normalization == "MSbar");
         eyre::ensure!(ctx.settings.vakint.additional_normalization == "1");
+        let backend = vakint::VakintSettings {
+            number_of_terms_in_epsilon_expansion: 3,
+            evaluation_order: vakint::EvaluationOrder(vec![vakint::EvaluationMethod::AlphaLoop(
+                vakint::AlphaLoopOptions {
+                    susbstitute_masters: false,
+                },
+            )]),
+            ..ctx.settings.vakint.true_settings()
+        };
         eyre::ensure!(matches!(
             &backend.integral_normalization_factor,
             vakint::LoopNormalizationFactor::MSbar
@@ -4280,45 +4299,72 @@ impl QcdMassReference {
         let selected = local
             .active_sectors()
             .iter()
-            .filter(|sector| sector.frozen_lmbs.is_empty() && sector.active_components.len() == 2)
+            .filter(|sector| match source {
+                D09VacuumSource::Bare => {
+                    sector.frozen_lmbs.is_empty() && sector.active_components.len() == 1
+                }
+                D09VacuumSource::ProperLocal => {
+                    sector.frozen_lmbs.is_empty() && sector.active_components.len() == 2
+                }
+                D09VacuumSource::ProperFinite => {
+                    sector.frozen_lmbs.len() == 1 && sector.active_components.len() == 1
+                }
+            })
             .collect::<Vec<_>>();
         let [sector] = selected.as_slice() else {
-            return Err(eyre!(
-                "D09 needs exactly one original two-active proper-local W sector"
-            ));
+            return Err(eyre!("D09 needs exactly one original {source:?} W sector"));
         };
         let sector = *sector;
         let retained_local = local.clone();
         let retained_w = sector.integration_atom().clone();
-        eyre::ensure!(
-            !retained_w.expression().contains_symbol(GS.dim_epsilon)
-                && !retained_w
-                    .expression()
-                    .contains_symbol(GS.integrated_loop_scale),
-            "the proper-local UV gate excludes integrated child coefficients"
-        );
-        eyre::ensure!(
-            sector.active_components[0]
-                .2
-                .loop_edges
-                .iter()
-                .copied()
-                .eq([EdgeIndex(2)])
-        );
-        eyre::ensure!(
-            sector.active_components[1]
-                .2
-                .loop_edges
-                .iter()
-                .copied()
-                .eq([EdgeIndex(4)])
-        );
+        match source {
+            D09VacuumSource::Bare | D09VacuumSource::ProperLocal => {
+                eyre::ensure!(
+                    !retained_w.expression().contains_symbol(GS.dim_epsilon)
+                        && !retained_w
+                            .expression()
+                            .contains_symbol(GS.integrated_loop_scale),
+                    "an unintegrated W source cannot contain a consumed child coefficient"
+                );
+            }
+            D09VacuumSource::ProperFinite => {
+                eyre::ensure!(retained_w.expression().contains_symbol(GS.dim_epsilon));
+                eyre::ensure!(
+                    retained_w
+                        .expression()
+                        .contains_symbol(GS.integrated_loop_scale)
+                );
+                eyre::ensure!(
+                    sector.frozen_lmbs[0]
+                        .loop_edges
+                        .iter()
+                        .copied()
+                        .eq([EdgeIndex(2)])
+                );
+            }
+        }
+        let expected_frames: &[&[EdgeIndex]] = match source {
+            D09VacuumSource::Bare => &[&[EdgeIndex(2), EdgeIndex(4)]],
+            D09VacuumSource::ProperLocal => &[&[EdgeIndex(2)], &[EdgeIndex(4)]],
+            D09VacuumSource::ProperFinite => &[&[EdgeIndex(4)]],
+        };
+        eyre::ensure!(sector.active_components.len() == expected_frames.len());
+        for ((_, _, frame), expected) in sector.active_components.iter().zip(expected_frames) {
+            eyre::ensure!(
+                frame
+                    .loop_edges
+                    .iter()
+                    .copied()
+                    .eq(expected.iter().copied())
+            );
+        }
         eyre::ensure!(sector.inherited_loop_edges == [EdgeIndex(2), EdgeIndex(4)]);
         eyre::ensure!(sector.scheme_integrand.is_some() && !retained_w.same_value(&sector.atom));
         let actual_open = &sector.atom;
-        let (closing_duals, open_basis): (
+        let (closing_duals, open_basis, open_kinetic): (
             [SymbolicTensor<IndexedStructure>; 2],
             [SymbolicTensor<IndexedStructure>; 2],
+            SymbolicTensor<IndexedStructure>,
         ) = {
             use crate::numerator::AppliedFeynmanRule;
             use color_eyre::eyre::{ensure, eyre};
@@ -4420,6 +4466,7 @@ impl QcdMassReference {
             let closing_p = projector.try_sub(&zero_projector)?;
             let closing_p =
                 closing_p.with_checked_expression(Atom::num(12) * closing_p.expression())?;
+            let open_kinetic = Self::open_native_quark_dual(&closing_p, actual_open)?;
             let rest_p = closing_p.with_checked_expression(closing_p.expression().replace_map(
                 |view, _, output| {
                     if let AtomView::Fun(momentum) = view
@@ -4472,7 +4519,7 @@ impl QcdMassReference {
                     );
                 }
             }
-            (closing_duals, open_basis)
+            (closing_duals, open_basis, open_kinetic)
         };
 
         // The point belongs to the actual incoming source and its signed
@@ -4517,25 +4564,27 @@ impl QcdMassReference {
                 eyre::ensure!(data.particle.mass_atom(ctx.model).is_zero());
             }
         }
-        let local_prefixes = prefix
+        let selected_prefixes = prefix
             .sectors()
-            .filter(|value| value.frozen_lmbs.is_empty() && value.active_components.len() == 1)
+            .filter(|value| match source {
+                D09VacuumSource::Bare => {
+                    value.frozen_lmbs.is_empty() && value.active_components.is_empty()
+                }
+                D09VacuumSource::ProperLocal => {
+                    value.frozen_lmbs.is_empty() && value.active_components.len() == 1
+                }
+                D09VacuumSource::ProperFinite => {
+                    value.frozen_lmbs.len() == 1 && value.active_components.is_empty()
+                }
+            })
+            .cloned()
             .collect::<Vec<_>>();
-        let [local_prefix] = local_prefixes.as_slice() else {
-            return Err(eyre!(
-                "D09 requires the actual one-active local child prefix"
-            ));
-        };
-        let local_prefix = *local_prefix;
         eyre::ensure!(
-            local_prefix.active_components[0]
-                .2
-                .loop_edges
-                .iter()
-                .copied()
-                .eq([EdgeIndex(2)])
+            selected_prefixes.len() == 1,
+            "D09 source needs one actual child-prefix sector"
         );
-        let isolated = Full4dCts(FourDSectors::new(vec![local_prefix.clone()], Vec::new())?);
+        let local_prefix = &selected_prefixes[0];
+        let isolated = Full4dCts(FourDSectors::new(selected_prefixes.clone(), Vec::new())?);
         let lmb = compatible_lmb(ctx, parent, given, &isolated)?;
         eyre::ensure!(
             lmb.loop_edges
@@ -4679,38 +4728,11 @@ impl QcdMassReference {
             Ok(())
         };
 
-        // Exact source absorption. Keep the parent's hard rescaling of mUV
-        // and its terminal denominator policy inside the existing t_raw owner.
-        let root = OwnedForestNode {
-            spinney: Spinney::empty(graph),
-            topo_order: 0,
-        };
-        let bare = Full4dCts::from_factorized_local(&Local4dCts::root());
-        let child_lmb = compatible_lmb(ctx, given, &root, &bare)?;
-        eyre::ensure!(child_lmb.loop_edges.iter().copied().eq([EdgeIndex(2)]));
-        let child_source = grow(&bare, ctx, given, &root)?;
-        let signed_child_u = -t_raw(&child_source, ctx, given, &root, &child_lmb)?;
-        eyre::ensure!(
-            signed_child_u.structure().canonical().external_structure()
-                == local_prefix
-                    .atom
-                    .structure()
-                    .canonical()
-                    .external_structure()
-        );
-        let co_graph = grow_factor(ctx, parent, given)?;
-        let absorbed_source = finalize(signed_child_u.multiply(co_graph)?)?;
+        // Certify complete UO-U against the immutable original source sector.
+        // Parent operations act on the complete child, including its log jet
+        // and S^4 consumed-measure marker in the finite-child source.
         let actual_source = grow(&isolated, ctx, parent, given)?;
         let ordinary = t_raw(&actual_source, ctx, parent, given, &lmb)?;
-        let absorbed = t_raw(&absorbed_source, ctx, parent, given, &lmb)?;
-        for physical_four in [false, true] {
-            rational_zero(
-                "actual D09 parent-U absorbs child O-UO at unit rest",
-                &ordinary,
-                &absorbed,
-                physical_four,
-            )?;
-        }
         let [positive, negative] = graph.on_shell_branches(
             ctx.model,
             &actual_source,
@@ -4728,41 +4750,135 @@ impl QcdMassReference {
         )?;
         let [positive, negative] =
             graph.on_shell_branches(ctx.model, &ordinary, parent.subgraph(), &lmb, &velocity)?;
-        let [absorbed_positive, absorbed_negative] = graph.on_shell_branches(
-            ctx.model,
-            &absorbed_source,
-            parent.subgraph(),
-            &lmb,
-            &velocity,
-        )?;
-        let absorbed_on_shell = absorbed_positive.try_add(&absorbed_negative)?;
-        let absorbed_overlap = t_raw(
-            &absorbed_on_shell
-                .with_checked_expression(GS.resolve_os_momenta(absorbed_on_shell.expression()))?,
-            ctx,
-            parent,
-            given,
-            &lmb,
-        )?;
         for physical_four in [false, true] {
             rational_zero(
-                "actual D09 proper-local parent UO=OU",
+                "actual D09 source parent UO=OU",
                 &overlap,
                 &positive.try_add(&negative)?,
                 physical_four,
             )?;
             rational_zero(
-                "actual D09 original proper-local W is UO-U",
+                "actual D09 original source W is UO-U",
                 &retained_w,
                 &overlap.try_sub(&ordinary)?,
                 physical_four,
             )?;
-            rational_zero(
-                "actual D09 original proper-local W equals absorbed-child W",
-                &retained_w,
-                &absorbed_overlap.try_sub(&absorbed)?,
-                physical_four,
+        }
+        if source == D09VacuumSource::ProperLocal {
+            // Preserve the existing stricter proper-local absorption certificate.
+            let root = OwnedForestNode {
+                spinney: Spinney::empty(graph),
+                topo_order: 0,
+            };
+            let bare = Full4dCts::from_factorized_local(&Local4dCts::root());
+            let child_lmb = compatible_lmb(ctx, given, &root, &bare)?;
+            eyre::ensure!(child_lmb.loop_edges.iter().copied().eq([EdgeIndex(2)]));
+            let child_source = grow(&bare, ctx, given, &root)?;
+            let signed_child_u = -t_raw(&child_source, ctx, given, &root, &child_lmb)?;
+            eyre::ensure!(
+                signed_child_u.structure().canonical().external_structure()
+                    == local_prefix
+                        .atom
+                        .structure()
+                        .canonical()
+                        .external_structure()
+            );
+            let absorbed_source =
+                finalize(signed_child_u.multiply(grow_factor(ctx, parent, given)?)?)?;
+            let absorbed = t_raw(&absorbed_source, ctx, parent, given, &lmb)?;
+            let [positive, negative] = graph.on_shell_branches(
+                ctx.model,
+                &absorbed_source,
+                parent.subgraph(),
+                &lmb,
+                &velocity,
             )?;
+            let absorbed_on_shell = positive.try_add(&negative)?;
+            let absorbed_overlap = t_raw(
+                &absorbed_on_shell.with_checked_expression(
+                    GS.resolve_os_momenta(absorbed_on_shell.expression()),
+                )?,
+                ctx,
+                parent,
+                given,
+                &lmb,
+            )?;
+            for physical_four in [false, true] {
+                rational_zero(
+                    "actual D09 parent-U absorbs child O-UO at unit rest",
+                    &ordinary,
+                    &absorbed,
+                    physical_four,
+                )?;
+                rational_zero(
+                    "actual D09 original proper-local W equals absorbed-child W",
+                    &retained_w,
+                    &absorbed_overlap.try_sub(&absorbed)?,
+                    physical_four,
+                )?;
+            }
+        }
+
+        if source == D09VacuumSource::ProperFinite {
+            let frozen = &selected_prefixes[0];
+            let t = Atom::var(GS.rescale);
+            let scaled = frozen.atom.with_checked_expression(graph.uv_rescaled(
+                parent.subgraph(),
+                2,
+                &lmb,
+                &lmb,
+                frozen.atom.expression(),
+            ))?;
+            let expected_scaled = frozen.atom.with_checked_expression(
+                frozen
+                    .atom
+                    .expression()
+                    .replace(GS.m_uv_vacuum)
+                    .with(Atom::var(GS.m_uv_vacuum) / &t)
+                    .replace(GS.integrated_loop_scale)
+                    .with(Atom::var(GS.integrated_loop_scale) * &t)
+                    * t.pow(-8),
+            )?;
+            Self::certify_parent_tensor_zero(
+                "actual finite child scalar log jet and consumed measure hard grading",
+                &scaled.try_sub(&expected_scaled)?,
+            )?;
+            // Only this already integrated scalar child is projected. The
+            // parent active Lorentz representations and all denominators stay D.
+            let frozen_zero = FourDSector {
+                atom: frozen.atom.with_checked_expression(
+                    frozen.atom.expression().replace(GS.dim_epsilon).with(0),
+                )?,
+                ..frozen.clone()
+            };
+            let isolated_zero = Full4dCts(FourDSectors::new(vec![frozen_zero], Vec::new())?);
+            let source_zero = grow(&isolated_zero, ctx, parent, given)?;
+            let ordinary_zero = t_raw(&source_zero, ctx, parent, given, &lmb)?;
+            let [positive, negative] = graph.on_shell_branches(
+                ctx.model,
+                &source_zero,
+                parent.subgraph(),
+                &lmb,
+                &velocity,
+            )?;
+            let os_zero = positive.try_add(&negative)?;
+            let overlap_zero = t_raw(
+                &os_zero.with_checked_expression(GS.resolve_os_momenta(os_zero.expression()))?,
+                ctx,
+                parent,
+                given,
+                &lmb,
+            )?;
+            let retained_zero = retained_w
+                .with_checked_expression(retained_w.expression().replace(GS.dim_epsilon).with(0))?;
+            for physical_four in [false, true] {
+                rational_zero(
+                    "actual D09 finite scalar epsilon-zero projection commutes with complete parent operator",
+                    &retained_zero,
+                    &overlap_zero.try_sub(&ordinary_zero)?,
+                    physical_four,
+                )?;
+            }
         }
 
         // Independently calibrate the source phase/color/coupling before any
@@ -4776,13 +4892,14 @@ impl QcdMassReference {
                 == Atom::i() * &coupling
         );
         let empty = graph.empty_subgraph();
-        let source = graph
-            .numerator(parent.subgraph(), &empty)?
-            .to_d_dim(GS.dim)?
-            .color_simplify()?
-            .state
-            .expr;
-        let zero_momenta = source
+        {
+            let source = graph
+                .numerator(parent.subgraph(), &empty)?
+                .to_d_dim(GS.dim)?
+                .color_simplify()?
+                .state
+                .expr;
+            let zero_momenta = source
             .expression()
             .replace_map(|view, _, output| {
                 if matches!(view, AtomView::Fun(momentum) if momentum.get_symbol() == GS.emr_mom) {
@@ -4791,29 +4908,113 @@ impl QcdMassReference {
             })
             .replace(mass.to_pattern())
             .with(1);
-        let source = AppliedFeynmanRule::new(cooking.uncook(zero_momenta.as_view()))?.expr;
-        eyre::ensure!(
-            source.structure().canonical().external_structure()
-                == actual_open.structure().canonical().external_structure()
-        );
-        let source_trace = integrated::simplify(&closing_duals[0].clone().multiply(source)?)?;
-        let source_trace = source_trace
-            .with_checked_expression(graph.model.expand_couplings(source_trace.expression()))?;
-        let expected_phase =
-            Atom::i() * coupling.pow(4) * Atom::num((4, 3)).pow(2) * Atom::var(GS.dim).pow(2);
-        Self::certify_parent_tensor_zero(
-            "D09 independent zero-momentum native phase and CF-squared source",
-            &source_trace.with_checked_expression(source_trace.expression() - &expected_phase)?,
-        )?;
+            let source = AppliedFeynmanRule::new(cooking.uncook(zero_momenta.as_view()))?.expr;
+            eyre::ensure!(
+                source.structure().canonical().external_structure()
+                    == actual_open.structure().canonical().external_structure()
+            );
+            let source_trace = integrated::simplify(&closing_duals[0].clone().multiply(source)?)?;
+            let source_trace = source_trace
+                .with_checked_expression(graph.model.expand_couplings(source_trace.expression()))?;
+            let expected_phase =
+                Atom::i() * coupling.pow(4) * Atom::num((4, 3)).pow(2) * Atom::var(GS.dim).pow(2);
+            Self::certify_parent_tensor_zero(
+                "D09 independent zero-momentum native phase and CF-squared source",
+                &source_trace
+                    .with_checked_expression(source_trace.expression() - &expected_phase)?,
+            )?;
+        }
+        if source == D09VacuumSource::Bare {
+            // Independent ordered cubic source identity. Keep the p-linear
+            // source word, rather than infer a generic gamma orientation from
+            // symmetric gamma0. Native color/spin ownership is unchanged.
+            let source_cubic = graph
+                .numerator(parent.subgraph(), &empty)?
+                .to_d_dim(GS.dim)?
+                .color_simplify()?
+                .state
+                .expr;
+            let source_cubic = source_cubic.with_checked_expression(
+                graph
+                    .model
+                    .expand_couplings(source_cubic.expression())
+                    .replace(mass.to_pattern())
+                    .with(0)
+                    .replace_multiple(graph.normal_emr_replacement(
+                        parent.subgraph(),
+                        &lmb,
+                        &[] as &[Atom],
+                        |_| true,
+                    )),
+            )?;
+            for physical_four in [false, true] {
+                let source_cubic = prepare_numerator(&source_cubic, physical_four)?;
+                let d = if physical_four {
+                    Atom::num(4)
+                } else {
+                    Atom::var(GS.dim)
+                };
+                let rep = (Minkowski {}).to_symbolic([&d]);
+                let k = function!(GS.emr_mom, 2);
+                let l = function!(GS.emr_mom, 4);
+                let dot = |left: &Atom, right: &Atom| {
+                    function!(
+                        SPENSO_TAG.dot,
+                        GS.indexed_momentum(left, std::slice::from_ref(&rep)),
+                        GS.indexed_momentum(right, std::slice::from_ref(&rep))
+                    )
+                };
+                let slash = |momentum: &Atom| -> Result<SymbolicTensor<IndexedStructure>> {
+                    let expression = open_kinetic.expression().replace_map(|view, _, output| {
+                        if let AtomView::Fun(p) = view
+                            && p.get_symbol() == GS.emr_mom
+                        {
+                            let indices = p
+                                .iter()
+                                .skip(1)
+                                .map(|index| index.to_owned())
+                                .collect::<Vec<_>>();
+                            **output = GS.indexed_momentum(momentum, &indices);
+                        }
+                    });
+                    let word = open_kinetic.with_checked_expression(expression)?;
+                    Ok(word.map_representation_dimensions(|r, dimension| {
+                        if r == LibraryRep::from(Minkowski {}) {
+                            d.clone()
+                        } else {
+                            dimension.to_owned()
+                        }
+                    })?)
+                };
+                let slash_k = slash(&k)?;
+                let slash_l = slash(&l)?;
+                let expected = slash_l.with_checked_expression(
+                    Atom::i()
+                        * coupling.pow(4)
+                        * Atom::num((4, 3)).pow(2)
+                        * (&d - Atom::num(2)).pow(2)
+                        * (Atom::num(2) * dot(&k, &l) * slash_l.expression()
+                            - dot(&l, &l) * slash_k.expression()),
+                )?;
+                Self::certify_parent_tensor_zero(
+                    "independent D09 bare cubic word retains positive odd k,l,l carrier signs",
+                    &source_cubic.try_sub(&expected)?,
+                )?;
+            }
+        }
 
         let terms = FourDTerm::from_tensor(&retained_w)?;
-        eyre::ensure!(terms.len() == 4);
-        let expected_powers = [
-            [1usize, 2, 1, 1, 1],
-            [1, 2, 1, 1, 2],
-            [1, 1, 1, 1, 1],
-            [1, 1, 1, 1, 2],
-        ];
+        let expected_powers: &[[usize; 5]] = match source {
+            D09VacuumSource::Bare => &[[1, 1, 1, 1, 1], [1, 1, 1, 1, 2]],
+            D09VacuumSource::ProperLocal => &[
+                [1, 2, 1, 1, 1],
+                [1, 2, 1, 1, 2],
+                [1, 1, 1, 1, 1],
+                [1, 1, 1, 1, 2],
+            ],
+            D09VacuumSource::ProperFinite => &[[0, 0, 1, 1, 1], [0, 0, 1, 1, 2]],
+        };
+        eyre::ensure!(terms.len() == expected_powers.len());
         let k = function!(GS.emr_mom, 2);
         let l = function!(GS.emr_mom, 4);
         let rep = (Minkowski {}).new_rep(GS.dim).to_symbolic([]);
@@ -4832,16 +5033,14 @@ impl QcdMassReference {
                 powers[denominator.source_edge.0 - 2] += 1;
                 let expected_momentum = match denominator.source_edge.0 {
                     2 => k.clone(),
+                    3 if source == D09VacuumSource::Bare => &l - &k,
                     3 => -&k,
                     _ => l.clone(),
                 };
                 eyre::ensure!(denominator.momentum == expected_momentum);
                 eyre::ensure!(denominator.mass_squared == Atom::var(GS.m_uv_expansion).pow(2));
-                let expected_polynomial = square(if denominator.source_edge.0 <= 3 {
-                    &k
-                } else {
-                    &l
-                }) - Atom::var(GS.m_uv_vacuum).pow(2);
+                let expected_polynomial =
+                    square(&expected_momentum) - Atom::var(GS.m_uv_vacuum).pow(2);
                 eyre::ensure!(
                     (denominator.polynomial_in_lmb(&lmb)? - expected_polynomial)
                         .expand()
@@ -4853,13 +5052,107 @@ impl QcdMassReference {
             descriptors.push(serde_json::json!({"term":ordinal,"source_edge_powers":powers}));
         }
 
-        let integrator = integrated::Integrated::new(crate::utils::vakint()?, backend);
+        let integrator = integrated::Integrated::new(crate::utils::vakint()?, &backend);
         let mut traces = Vec::new();
-        for physical_four in [false, true] {
+        let cases: &[(bool, bool)] = if source == D09VacuumSource::ProperFinite {
+            &[(false, false), (true, false), (true, true)]
+        } else {
+            &[(false, false), (true, false)]
+        };
+        for &(physical_four, emitted_child) in cases {
+            let mut open_sum = actual_open.with_checked_expression(Atom::Zero)?;
+            for term in &terms {
+                let numerator = if emitted_child {
+                    term.numerator.with_checked_expression(
+                        term.numerator.expression().replace(GS.dim_epsilon).with(0),
+                    )?
+                } else {
+                    term.numerator.clone()
+                };
+                let numerator = prepare_numerator(&numerator, physical_four)?;
+                let numerator = if physical_four {
+                    Self::materialize_native_four_component_numerator(&numerator)?
+                } else {
+                    numerator
+                };
+                let denominator = Atom::mul_many(term.denominators.iter().map(|pole| {
+                    function!(
+                        GS.den,
+                        pole.source_edge.0,
+                        &pole.momentum,
+                        &pole.mass_squared,
+                        &pole.full_expr
+                    )
+                    .pow(-1)
+                }));
+                open_sum = open_sum.try_add(
+                    &numerator.with_checked_expression(numerator.expression() * denominator)?,
+                )?;
+            }
+            let observed =
+                std::cell::RefCell::new(BTreeMap::<Atom, SymbolicTensor<IndexedStructure>>::new());
+            let observer =
+                |integral: &Atom, coefficient: &SymbolicTensor<IndexedStructure>| -> Result<()> {
+                    let mut classes = observed.borrow_mut();
+                    if let Some(sum) = classes.get_mut(integral) {
+                        *sum = sum.try_add(coefficient)?;
+                    } else {
+                        classes.insert(integral.clone(), coefficient.clone());
+                    }
+                    Ok(())
+                };
+            let open_sector = FourDSector {
+                atom: open_sum.clone(),
+                ..sector.clone()
+            }
+            .with_scheme_integrand(open_sum);
+            let open_local = Local4dCts(FourDSectors::new(vec![open_sector], Vec::new())?);
+            let open_integrator = integrated::Integrated::new(crate::utils::vakint()?, &backend)
+                .with_angular_observer(&observer);
+            let open_result =
+                open_integrator.run(&open_local, ctx, parent, given, parent, given)?;
+            eyre::ensure!(open_result.physical_pole()?.rank() == 4);
+            let classes = observed.into_inner();
+            eyre::ensure!(!classes.is_empty());
+            for (integral, coefficient) in classes {
+                let mut reconstruction = coefficient.with_checked_expression(Atom::Zero)?;
+                for (dual, basis) in closing_duals.iter().zip(&open_basis) {
+                    let trace = integrated::simplify(&dual.clone().multiply(coefficient.clone())?)?;
+                    eyre::ensure!(trace.is_scalar());
+                    reconstruction =
+                        reconstruction
+                            .try_add(&basis.with_checked_expression(
+                                basis.expression() * trace.expression(),
+                            )?)?;
+                }
+                let difference = Self::reduce_parent_external_frame(
+                    "actual native vacuum angular coefficient lies in I/gamma0 before scalar masters",
+                    &coefficient.try_sub(&reconstruction)?,
+                )?;
+                Self::certify_finite_tagged_rows_zero(
+                    "actual native vacuum angular coefficient lies in I/gamma0 before scalar masters",
+                    difference,
+                )?;
+                debug_tags!(#uv, #integrated, #inspect;
+                    stage = "native_d09_vacuum_pre_master_open_span", file.source = ?source,
+                    physical_four, emitted_child,
+                    file.integral = %integral.to_canonical_string(),
+                    file.coefficient = %cooking.uncook(coefficient.expression().as_view()).to_canonical_string(),
+                    original_native_ports = true, scalar_master_evaluated_for_certificate = false,
+                    "Actual integration's pre-master native coefficient reconstructs in the complete external matrix basis"
+                );
+            }
             for (dual_index, dual) in closing_duals.iter().enumerate() {
                 let mut sum = SymbolicTensor::infer_indexed(Atom::Zero)?;
                 for term in &terms {
-                    let numerator = prepare_numerator(&term.numerator, physical_four)?;
+                    let numerator = if emitted_child {
+                        term.numerator.with_checked_expression(
+                            term.numerator.expression().replace(GS.dim_epsilon).with(0),
+                        )?
+                    } else {
+                        term.numerator.clone()
+                    };
+                    let numerator = prepare_numerator(&numerator, physical_four)?;
                     let closed = integrated::simplify(&dual.clone().multiply(numerator)?)?;
                     eyre::ensure!(closed.is_scalar());
                     let closed = if physical_four {
@@ -4926,13 +5219,13 @@ impl QcdMassReference {
                     .try_sub(&result.physical_finite_counterterm()?)?;
                 eyre::ensure!(laurent.is_scalar());
                 debug_tags!(#uv, #integrated, #inspect;
-                    stage = "native_d09_proper_local_vacuum_scalar_trace", physical_four, dual_index,
+                    stage = "native_d09_vacuum_scalar_trace", file.source = ?source, physical_four, emitted_child, dual_index,
                     file.trace = %cooking.uncook(laurent.expression().as_view()).to_canonical_string(),
-                    source_absorption_proved = true, original_terms = terms.len(),
+                    source_absorption_proved = source == D09VacuumSource::ProperLocal, original_terms = terms.len(),
                     file.denominator_inventory = %serde_json::to_string(&descriptors)?,
                     negative_denominators_remain_dimensional = true,
-                    finite_child_included = false, bare_included = false,
-                    open_matrix_proved = false, emitted_R2_proved = false,
+                    finite_child_included = source == D09VacuumSource::ProperFinite, bare_included = source == D09VacuumSource::Bare,
+                    open_matrix_proved = true, emitted_R2_proved = false,
                     "Actual proper-local W scalar input uses original frames and the existing Integrated owner"
                 );
                 traces.push(laurent);
@@ -4942,8 +5235,7 @@ impl QcdMassReference {
             local == &retained_local && sector.integration_atom().same_value(&retained_w)
         );
         eyre::ensure!(open_basis.iter().all(|value| value.rank() == 4));
-        traces
-            .try_into()
-            .map_err(|_| eyre!("D09 needs exactly four complete scalar traces"))
+        eyre::ensure!(traces.len() == cases.len() * 2);
+        Ok(traces)
     }
 }
