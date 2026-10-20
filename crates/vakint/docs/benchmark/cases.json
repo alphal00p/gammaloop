@@ -1,0 +1,154 @@
+[
+  {
+    "case": "0:2",
+    "family": "H",
+    "power": 2,
+    "powers": [
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(5,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,2)*vakint::{}::prop(2,vakint::{}::edge(2,6),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(6,5),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(3,4),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(4,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(6,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(4,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(2,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(9,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1))",
+    "kind": "base"
+  },
+  {
+    "case": "1:2",
+    "family": "FG",
+    "power": 2,
+    "powers": [
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(5,3),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,2)*vakint::{}::prop(2,vakint::{}::edge(3,4),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(4,5),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(2,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(5,1),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(4,2),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(1,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(3,2),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1))",
+    "kind": "base"
+  },
+  {
+    "case": "2:2",
+    "family": "BMW",
+    "power": 2,
+    "powers": [
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,2)*vakint::{}::prop(2,vakint::{}::edge(2,5),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(3,4),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(4,5),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(2,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(4,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(4)+vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(5,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(1,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+-1*vakint::{spenso::tensor,spenso::rank1}::k(4)+vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1))",
+    "kind": "base"
+  },
+  {
+    "case": "3:2",
+    "family": "X",
+    "power": 2,
+    "powers": [
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(5,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,2)*vakint::{}::prop(2,vakint::{}::edge(2,6),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(6,5),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(4,3),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(3,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(6,4),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(3,2),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(1,4),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(9,vakint::{}::edge(2,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1))",
+    "kind": "base"
+  },
+  {
+    "case": "0:4",
+    "family": "H",
+    "power": 4,
+    "powers": [
+      4,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(5,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,4)*vakint::{}::prop(2,vakint::{}::edge(2,6),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(6,5),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(3,4),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(4,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(6,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(4,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(2,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(9,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1))",
+    "kind": "held-out"
+  },
+  {
+    "case": "1:4",
+    "family": "FG",
+    "power": 4,
+    "powers": [
+      4,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(5,3),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,4)*vakint::{}::prop(2,vakint::{}::edge(3,4),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(4,5),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(2,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(5,1),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(4,2),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(1,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(3,2),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1))",
+    "kind": "held-out"
+  },
+  {
+    "case": "2:4",
+    "family": "BMW",
+    "power": 4,
+    "powers": [
+      4,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(1,2),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,4)*vakint::{}::prop(2,vakint::{}::edge(2,5),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(3,4),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(4,5),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(2,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(4,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(4)+vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(5,3),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(1,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+-1*vakint::{spenso::tensor,spenso::rank1}::k(4)+vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1))",
+    "kind": "held-out"
+  },
+  {
+    "case": "3:4",
+    "family": "X",
+    "power": 4,
+    "powers": [
+      4,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0
+    ],
+    "input": "vakint::{}::topo(vakint::{}::prop(1,vakint::{}::edge(5,1),vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,4)*vakint::{}::prop(2,vakint::{}::edge(2,6),vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(3,vakint::{}::edge(6,5),vakint::{spenso::tensor,spenso::rank1}::k(3),vakint::{}::mUVsq,1)*vakint::{}::prop(4,vakint::{}::edge(4,3),vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(5,vakint::{}::edge(3,5),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(1),vakint::{}::mUVsq,1)*vakint::{}::prop(6,vakint::{}::edge(6,4),-1*vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(2),vakint::{}::mUVsq,1)*vakint::{}::prop(7,vakint::{}::edge(3,2),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(8,vakint::{}::edge(1,4),-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1)*vakint::{}::prop(9,vakint::{}::edge(2,1),-1*vakint::{spenso::tensor,spenso::rank1}::k(1)+-1*vakint::{spenso::tensor,spenso::rank1}::k(2)+vakint::{spenso::tensor,spenso::rank1}::k(3)+vakint::{spenso::tensor,spenso::rank1}::k(4),vakint::{}::mUVsq,1))",
+    "kind": "held-out"
+  }
+]
