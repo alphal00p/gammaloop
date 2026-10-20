@@ -700,12 +700,13 @@ impl FeynmanDiagram {
     fn fragment_numerator(
         graph: &HedgeGraph<DiagramEdge, DiagramVertex>,
     ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
-        Ok(SymbolicTensor::multiply_many(
+        let product = SymbolicTensor::multiply_many(
             graph
                 .iter_edges()
                 .map(|(_, _, edge)| &edge.data.numerator)
                 .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator)),
-        )?)
+        )?;
+        NumeratorInterface::canonical_ports(product)
     }
 
     /// Replace local numerator fragments in the finalized index frame and
@@ -1971,6 +1972,7 @@ impl FeynmanDiagram {
                 .exact_fallback(true);
             if !coefficients.into_iter().all(|(tensor, coefficient)| {
                 tensor.is_zero()
+                    || coefficient.is_zero()
                     || coefficient.is_scalar()
                         && coefficient.expression().check_zero_with(&zero_settings)
                             == symbolica::id::ConditionResult::True
@@ -3022,8 +3024,10 @@ mod tests {
     use super::*;
     use spenso::structure::representation::Euclidean;
     use spenso::tensor_symbol;
+    use std::env;
+    use std::process::Command;
     use std::sync::Arc;
-    use symbolica::function;
+    use symbolica::{function, symbol};
 
     fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
@@ -4179,6 +4183,67 @@ mod tests {
     }
 
     #[test]
+    fn fragment_products_export_their_ports_without_metadata() {
+        let original = one_loop();
+        let [left, right] = [0, 1].map(|position| original.vertices().nth(position).unwrap().0);
+        // Concatenation puts the left port first. Canonical order and, with the
+        // right head registered first, Symbolica's term order both put it last.
+        let right_head = tensor_symbol!("feynkit_graph::fragment_port_right");
+        let left_head = tensor_symbol!("feynkit_graph::fragment_port_left");
+        let vector = |head, owner: usize| {
+            let index = function!(symbols::hedge_index(), owner, 1);
+            NumeratorInterface::admit(
+                function!(head, Minkowski {}.new_rep(4).to_symbolic([index])),
+                None,
+            )
+            .unwrap()
+        };
+        let diagram = original
+            .with_numerator_fragments(
+                [(left, vector(left_head, 2)), (right, vector(right_head, 1))],
+                [],
+            )
+            .unwrap();
+        assert!(NumeratorInterface::export(diagram.numerator()).1.is_none());
+        assert!(!diagram.to_json().unwrap().contains("num_interface"));
+        assert!(!diagram.to_dot().unwrap().contains("num_interface"));
+        for restored in [
+            FeynmanDiagram::from_json(diagram.model_arc(), &diagram.to_json().unwrap()).unwrap(),
+            FeynmanDiagram::from_dot(diagram.model_arc(), &diagram.to_dot().unwrap()).unwrap(),
+        ] {
+            assert!(restored.numerator().same_value(diagram.numerator()));
+        }
+    }
+
+    #[test]
+    fn imports_aggregates_that_declare_their_ports_in_another_order() {
+        let original = one_loop();
+        let [left, right] = [0, 1].map(|position| original.vertices().nth(position).unwrap().0);
+        let head = tensor_symbol!("feynkit_graph::declared_port_order");
+        let port = |owner: usize| {
+            let index = function!(symbols::hedge_index(), owner, 1);
+            Minkowski {}.new_rep(4).to_symbolic([index])
+        };
+        let vector = |owner| NumeratorInterface::admit(function!(head, port(owner)), None).unwrap();
+        let diagram = original
+            .with_numerator_fragments([(left, vector(1)), (right, vector(2))], [])
+            .unwrap();
+        let (expression, _) = NumeratorInterface::export(diagram.numerator());
+        // Artifacts written by other processes or versions may list the
+        // aggregate's ports in either order; both describe the same numerator.
+        for owners in [[1, 2], [2, 1]] {
+            let interface = NumeratorInterface(owners.map(port).to_vec());
+            let declared =
+                NumeratorInterface::admit(expression.clone(), Some(interface.clone())).unwrap();
+            let mut source = diagram.serde_view();
+            source.num_interface = Some(interface);
+            let source = serde_json::to_string(&source).unwrap();
+            let restored = FeynmanDiagram::from_json(diagram.model_arc(), &source).unwrap();
+            assert!(restored.numerator().same_value(&declared));
+        }
+    }
+
+    #[test]
     fn validates_factored_and_expanded_numerators_and_rejects_mismatches() {
         let factored =
             Atom::parse("(x+y)*(x-y)", "validation_test", ParseSettings::default()).unwrap();
@@ -5120,5 +5185,111 @@ mod tests {
             builder.build().and_then(|diagram| diagram.validate()),
             Err(DiagramError::DuplicateExternalIndex(0))
         ));
+    }
+    #[test]
+    fn source_codec_round_trips_across_registration_orders() {
+        const ORDER: &str = "FEYNKIT_CODEC_REGISTRATION_ORDER";
+        const ARTIFACT: &str = "FEYNKIT_CODEC_SOURCE_ARTIFACT";
+        const PREFIX: &str = "FEYNKIT_CODEC_ARTIFACT=";
+        if let Ok(order) = env::var(ORDER) {
+            let names = if order == "forward" {
+                [
+                    "feynkit_graph::source_codec_alpha",
+                    "feynkit_graph::source_codec_beta",
+                ]
+            } else {
+                [
+                    "feynkit_graph::source_codec_beta",
+                    "feynkit_graph::source_codec_alpha",
+                ]
+            };
+            for name in names {
+                let _ = symbol!(name);
+            }
+            let original = one_loop();
+            if let Ok(artifact) = env::var(ARTIFACT) {
+                let [json, dot]: [String; 2] = serde_json::from_str(&artifact).unwrap();
+                for restored in [
+                    FeynmanDiagram::from_json(original.model_arc(), &json).unwrap(),
+                    FeynmanDiagram::from_dot(original.model_arc(), &dot).unwrap(),
+                ] {
+                    assert_eq!(restored.to_json().unwrap(), json);
+                    assert_eq!(restored.to_dot().unwrap(), dot);
+                }
+                println!("{PREFIX}{artifact}");
+                return;
+            }
+            let [left, right] = [0, 1].map(|position| original.vertices().nth(position).unwrap().0);
+            let head = tensor_symbol!("feynkit_graph::source_codec_vector");
+            let vector = |name| {
+                NumeratorInterface::admit(
+                    function!(
+                        head,
+                        Minkowski {}
+                            .new_rep(4)
+                            .to_symbolic([Atom::var(symbol!(name))])
+                    ),
+                    None,
+                )
+                .unwrap()
+            };
+            let diagram = original
+                .with_numerator_fragments(
+                    [
+                        (left, vector("feynkit_graph::source_codec_beta")),
+                        (right, vector("feynkit_graph::source_codec_alpha")),
+                    ],
+                    [],
+                )
+                .unwrap();
+            let zero = diagram
+                .numerator()
+                .with_checked_expression(Atom::Zero)
+                .unwrap();
+            let ports = NumeratorInterface::export(&zero).1.unwrap().to_json();
+            assert!(
+                ports.find("source_codec_alpha").unwrap()
+                    < ports.find("source_codec_beta").unwrap()
+            );
+            let json = diagram.to_json().unwrap();
+            let dot = diagram.to_dot().unwrap();
+            assert!(!json.contains("\"num_interface\""));
+            assert!(!dot.contains("num_interface="));
+            println!("{PREFIX}{}", serde_json::to_string(&[json, dot]).unwrap());
+            return;
+        }
+        let run = |order: &str, artifact: Option<&str>| {
+            let mut command = Command::new(env::current_exe().unwrap());
+            command
+                .args([
+                    "--exact",
+                    "tests::source_codec_round_trips_across_registration_orders",
+                    "--nocapture",
+                ])
+                .env(ORDER, order);
+            if let Some(artifact) = artifact {
+                command.env(ARTIFACT, artifact);
+            }
+            let output = command.output().unwrap();
+            assert!(
+                output.status.success(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .find_map(|line| line.split_once(PREFIX).map(|(_, artifact)| artifact))
+                .unwrap()
+                .to_owned()
+        };
+        let artifacts = [run("forward", None), run("reverse", None)];
+        assert_eq!(artifacts[0], artifacts[1]);
+        for artifact in &artifacts {
+            for order in ["forward", "reverse"] {
+                assert_eq!(run(order, Some(artifact)), *artifact);
+            }
+        }
     }
 }

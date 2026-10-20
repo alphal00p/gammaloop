@@ -3519,17 +3519,15 @@ impl Generator {
             })
             .collect::<Vec<_>>();
         let template = self.interaction_template(rule_id, legs)?;
-        let numerator = match &*template {
+        // Raw rules declare no axis order. Keep the source codec's order
+        // after actual-owner admission and checked template transport.
+        let numerator = NumeratorInterface::canonical_ports(match &*template {
             NumeratorTemplate::Dynamic => NumeratorInterface::admit(
                 self.interaction_expression(rule_id, instantiation)?,
                 None,
             )?,
             NumeratorTemplate::Admitted { .. } => template.instantiate(instantiation)?,
-        }
-        // Raw rules declare no axis order. Named interfaces use the same
-        // canonical convention after actual-owner admission and template
-        // transport; leaf argument order continues to specify the tensor.
-        .canonicalize_named_interface();
+        })?;
         self.numerators
             .interactions
             .write()
@@ -3736,14 +3734,13 @@ impl Generator {
                     .or_insert_with(|| Arc::new(template)),
             )
         };
-        let numerator = match &*template {
+        let numerator = NumeratorInterface::canonical_ports(match &*template {
             NumeratorTemplate::Dynamic => NumeratorInterface::admit(
                 instantiation.propagator_expression(&propagator, particle.color)?,
                 None,
             )?,
             NumeratorTemplate::Admitted { .. } => template.instantiate(&instantiation)?,
-        }
-        .canonicalize_named_interface();
+        })?;
         self.numerators
             .propagators
             .write()
@@ -7749,8 +7746,7 @@ mod tests {
                         .unwrap(),
                     None,
                 )
-                .unwrap()
-                .canonicalize_named_interface();
+                .unwrap();
                 assert_eq!(actual.expression(), expected.expression());
                 assert_eq!(
                     actual.structure().logical_slots(),
@@ -7805,14 +7801,14 @@ mod tests {
                         .unwrap(),
                     None,
                 )
-                .unwrap()
-                .canonicalize_named_interface();
+                .unwrap();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{expression}: {permutation:?}"
                 );
                 assert_eq!(actual.presentation_atom(), *actual.expression());
+                assert!(NumeratorInterface::export(&actual).1.is_none());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),
@@ -7858,14 +7854,14 @@ mod tests {
                         .unwrap(),
                     None,
                 )
-                .unwrap()
-                .canonicalize_named_interface();
+                .unwrap();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{expression}: {hedges:?}"
                 );
                 assert_eq!(actual.presentation_atom(), *actual.expression());
+                assert!(NumeratorInterface::export(&actual).1.is_none());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),
@@ -7897,7 +7893,11 @@ mod tests {
             let model = Model::from_json(&definition.to_string()).unwrap();
             let rule = model.vertex_rule_id("V1").unwrap();
             let generator = Generator::new(model);
-            for hedges in [[0, 1, 2], [27, 11, 19]] {
+            for (hedges, expected_free) in [
+                ([0, 1, 2], [0, 1]),
+                ([27, 11, 19], [11, 27]),
+                ([2, 10, 19], [10, 2]),
+            ] {
                 let legs = array::from_fn::<_, 3, _>(|index| NumeratorHalfEdge {
                     edge: index + 3,
                     hedge: hedges[index],
@@ -7927,7 +7927,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_eq!(
                     expected_indices,
-                    [hedges[0].min(hedges[1]), hedges[0].max(hedges[1])].map(|hedge| {
+                    expected_free.map(|hedge| {
                         PartialIndex::Explicit(AbstractIndex::Named(
                             symbols::hedge_index().into(),
                             hedge,
@@ -7935,15 +7935,15 @@ mod tests {
                         ))
                     })
                 );
-                // Composite axes are canonical; exact payload comparisons
+                // Composite axes use source order; exact payload comparisons
                 // below retain the authored leaf argument order.
-                let expected = expected.canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{scalar}"
                 );
                 assert_eq!(actual.presentation_atom(), *actual.expression());
+                assert!(NumeratorInterface::export(&actual).1.is_none());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),
@@ -7975,7 +7975,11 @@ mod tests {
             let particle = generator.model.particle_by_id(particle_id).unwrap();
             let (propagator, reversed) = generator.propagator_numerator(particle).unwrap();
             assert!(!reversed);
-            for (edge, hedges) in [(3, [0, 1]), (5, [27, 11])] {
+            for (edge, hedges, expected_free) in [
+                (3, [0, 1], [0, 1]),
+                (5, [27, 11], [11, 27]),
+                (7, [2, 10], [10, 2]),
+            ] {
                 let legs = [Flow::Source, Flow::Sink].map(|flow| NumeratorHalfEdge {
                     edge,
                     hedge: hedges[usize::from(flow == Flow::Sink)],
@@ -8003,7 +8007,7 @@ mod tests {
                     .collect::<Vec<_>>();
                 assert_eq!(
                     expected_indices,
-                    [hedges[0].min(hedges[1]), hedges[0].max(hedges[1])].map(|hedge| {
+                    expected_free.map(|hedge| {
                         PartialIndex::Explicit(AbstractIndex::Named(
                             symbols::hedge_index().into(),
                             hedge,
@@ -8011,13 +8015,13 @@ mod tests {
                         ))
                     })
                 );
-                let expected = expected.canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{scalar}"
                 );
                 assert_eq!(actual.presentation_atom(), *actual.expression());
+                assert!(NumeratorInterface::export(&actual).1.is_none());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),

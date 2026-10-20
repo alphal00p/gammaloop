@@ -388,8 +388,9 @@ between typed generation stages.
 The generator's model-bound numerator cache retains admitted templates for rules
 whose explicit index identities can be localized injectively. Instantiation
 transports their logical ports and scoped index history, including identities
-absent from a normalized zero, and restores the raw rule's occurrence-based
-logical axis order. `NumeratorInterface::translate` owns this transport for
+absent from a normalized zero. Open axes retain occurrence-based logical order;
+fully named raw-rule outputs use the source codec's order after localization.
+`NumeratorInterface::translate` owns this transport for
 both templates and existing graph factors, retaining checked callback boundaries
 and using Idenso's metadata-preserving index renaming. Rules with unresolved ports, callback-sensitive notation or
 ambiguous scoped aliases remain source expressions until localized at their
@@ -428,6 +429,17 @@ The shared `NumeratorInterface` codec owns source admission and export. Live
 diagram-to-runtime conversion copies the existing carriers; it does not pass
 them through that codec again. Diagram DOT/JSON retains expression strings and
 adds ordered interface metadata only when the expression cannot recover it.
+Without metadata, admission orders explicit ports by their source notation
+instead of registration-dependent native slot order. The aggregate fragment
+product and raw generator factors use the same source order after checked
+template localization. Native permutations preserve leaf arguments and hidden
+index history; every interface containing an open port stays positional. Label transport keeps a
+canonical order, declared or inferred, canonical for the new labels; any other
+order, which only a declaration produces, moves positionally. Metadata and port
+order therefore do not depend on the process or thread schedule. Validation
+matches the aggregate's explicit ports with the fragment product by label, so an
+artifact that declares the same ports in another order still imports and keeps
+that order.
 `num_interface` describes node, edge and aggregate numerator ports;
 `numerator_prefactor_interface` and `projector_interface` describe the two
 graph-wide factors. `GlobalPrefactor`'s own JSON uses `num_interface` and
