@@ -273,7 +273,9 @@ def vector_protocol_controls(payload, mass, gluon_mass_squared="0"):
     return list(mutations)
 
 
-def regulated_vector_reference(vector, mass, source_path, output, validate_only):
+def regulated_vector_reference(
+    vector, mass, source_path, output, validate_only, emitted_regulated_source=None
+):
     """Independent dimensional reference; never the emitted CFF integral.
 
     A unit positive scalar mass changes only the original gluon poles. The
@@ -369,6 +371,15 @@ def regulated_vector_reference(vector, mass, source_path, output, validate_only)
                 }
             )
     inputs = backend_input(regulated, regulated["rows"]["CF2"])
+    emitted_source_sha256 = None
+    if emitted_regulated_source is not None:
+        emitted = prepare_vector(emitted_regulated_source, mass, "1")
+        assert backend_input(emitted, emitted["rows"]["CF2"]) == inputs
+        emitted_source_sha256 = hashlib.sha256(
+            json.dumps(
+                emitted_regulated_source, sort_keys=True, separators=(",", ":")
+            ).encode()
+        ).hexdigest()
     output.mkdir(parents=True)
     validation = {
         "mode": "matched_positive_gluon_mass_D09_vector_only",
@@ -377,6 +388,13 @@ def regulated_vector_reference(vector, mass, source_path, output, validate_only)
         "normalization": "a^2*CF^2, amputated Sigma, p^2=m^2=mu_bar^2=lambda^2=1",
         "regulated_source": payload,
         "backend_inputs": inputs,
+        "emitted_regulated_source_bound": emitted_source_sha256 is not None,
+        "emitted_regulated_source_sha256": emitted_source_sha256,
+        "input_binding_status": (
+            "BOUND_CURRENT_EMITTED_TYPED_SOURCE"
+            if emitted_source_sha256 is not None
+            else "REFERENCE_PENDING_CURRENT_EMITTED_INPUT_BINDING"
+        ),
         "protocol_negative_controls": controls,
         "proper_moments": moment_report,
         "proper_coefficients": proper_report,
@@ -656,6 +674,7 @@ def main():
             source_path,
             output,
             args.validate_only,
+            data.get("emitted_regulated_source"),
         )
         return
     crossed = prepared["D11"]
