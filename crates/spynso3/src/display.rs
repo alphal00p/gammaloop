@@ -1225,11 +1225,11 @@ pub(crate) fn format_structured_output_rich(
     settings: DisplaySettings,
     notation_source: Option<String>,
 ) -> PythonFormattedOutput {
-    if paging::is_large(&value) {
-        let notebook_value = Arc::clone(&value);
-        let notebook_settings = settings.clone();
-        let notebook_notation = notation_source.clone();
-        return PythonFormattedOutput::lazy(move |py, backend| match backend {
+    let notebook_value = Arc::clone(&value);
+    let notebook_settings = settings.clone();
+    let notebook_notation = notation_source.clone();
+    let formatted = if paging::is_large(&value) {
+        PythonFormattedOutput::lazy(move |py, backend| match backend {
             FormattedOutputBackend::Html => paging::static_html(
                 py,
                 Arc::clone(&value),
@@ -1243,25 +1243,33 @@ pub(crate) fn format_structured_output_rich(
             )),
             FormattedOutputBackend::Latex => Ok(None),
         })
-        .with_notebook(move |py| {
-            paging::viewer(
+    } else {
+        PythonFormattedOutput::lazy(move |py, backend| {
+            let result = format_structured_backend(
                 py,
-                Arc::clone(&notebook_value),
-                notebook_settings.clone(),
-                notebook_notation.clone(),
-                paging::DEFAULT_PAGE_SIZE,
-            )
-        });
-    }
-    PythonFormattedOutput::lazy(move |py, backend| {
-        let result =
-            format_structured_backend(py, &value, &settings, notation_source.as_deref(), backend);
-        // Typst is optional; LaTeX remains the notebook fallback.
-        if matches!(backend, FormattedOutputBackend::Html) {
-            Ok(result.ok())
-        } else {
-            result.map(Some)
-        }
+                &value,
+                &settings,
+                notation_source.as_deref(),
+                backend,
+            );
+            // Typst is optional; LaTeX remains the notebook fallback.
+            if matches!(backend, FormattedOutputBackend::Html) {
+                Ok(result.ok())
+            } else {
+                result.map(Some)
+            }
+        })
+    };
+    // Small notebook expressions share the same zoom and inspection controls.
+    // Static representations above retain their existing complete exports.
+    formatted.with_notebook(move |py| {
+        paging::viewer(
+            py,
+            Arc::clone(&notebook_value),
+            notebook_settings.clone(),
+            notebook_notation.clone(),
+            paging::DEFAULT_PAGE_SIZE,
+        )
     })
 }
 

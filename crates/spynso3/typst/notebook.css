@@ -11,7 +11,7 @@
 }
 
 [data-spenso-math] math {
-  font-family: var(--spenso-math-font);
+  font-family: var(--spenso-math-font, "Spenso Offline Math", "STIX Two Math", math);
   font-size: var(--spenso-math-font-size, 21px);
   font-synthesis: none;
 }

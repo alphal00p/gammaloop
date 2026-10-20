@@ -4209,7 +4209,7 @@ impl TensorExpression {
     /// Parameters
     /// ----------
     /// page_size : int, default 25
-    ///     Maximum entries shown on a page: 25, 100, 250, or 500. Rendering may
+    ///     Maximum entries shown on a page, between 1 and 500. Rendering may
     ///     show fewer entries when an individual expression is large.
     /// settings : DisplaySettings, optional
     ///     Tensor notation, index labels, and other presentation preferences.
