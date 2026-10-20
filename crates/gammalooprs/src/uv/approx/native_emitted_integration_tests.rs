@@ -49,6 +49,7 @@ struct EmittedVectorIntegral {
     uv_mass_slots: [usize; 2],
     localization_slot: usize,
     physical_slots: [usize; 3],
+    gluon_mass: f64,
 }
 
 impl EmittedVectorIntegral {
@@ -63,6 +64,18 @@ impl EmittedVectorIntegral {
         ensure!(projection.kernel_weight.is_one() && projection.numerator_prefactor.is_one());
         ensure!(projection.external_ordering == Atom::num(-1));
         let mut graph = Graph::from_feynkit(&diagram, None, true)?;
+        if loops == 2 {
+            ensure!(
+                graph
+                    .loop_momentum_basis
+                    .loop_edges
+                    .iter()
+                    .map(|edge| edge.0)
+                    .eq([2, 4]),
+                "the D09 soft charts require the certified native inner l=e2 and outer k=e4 basis"
+            );
+            projection.certify_rainbow(NativeQuarkTrace::Vector)?;
+        }
         let full = graph.full_filter();
         let empty = graph.empty_subgraph();
         let original_numerator = graph.numerator(&full, &empty)?.state.expr;
@@ -120,6 +133,13 @@ impl EmittedVectorIntegral {
                 (&regulated.full_expr - &old.full_expr + &shift)
                     .expand()
                     .is_zero()
+            );
+            ensure!(
+                regulated.full_expr.replace(lambda.to_pattern()).with(0) == old.full_expr,
+                "typed gluon-mass zero specialization changed the original prescribed polynomial"
+            );
+            ensure!(
+                regulated.mass_squared.replace(lambda.to_pattern()).with(0) == old.mass_squared
             );
             typed_denominators.push(serde_json::json!({"edge":old.source_edge.0,
                 "momentum":old.momentum.to_canonical_string(),"mass_squared":regulated.mass_squared.to_canonical_string(),
@@ -477,7 +497,15 @@ impl EmittedVectorIntegral {
             "numerator_bytes":physical.numerators().iter().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
             "construction_seconds":started.elapsed().as_secs_f64(), "evaluator_timings":format!("{timings:?}"),
             "coupling_g":g, "normalization_i_times":normalization,
-            "native_vector_source":native_vector_source,
+            "native_vector_source":native_vector_source.clone(),
+            "unregulated_source":{
+                "projection":"pslash/(4*Nc*p_squared)",
+                "source_kernel_weight":projection.kernel_weight.to_bare_ordered_string(),
+                "external_ordering":projection.external_ordering.to_bare_ordered_string(),
+                "numerator_prefactor":projection.numerator_prefactor.to_bare_ordered_string(),
+                "propagator_prescription":"Feynman+i0",
+                "source":native_vector_source.clone(),
+            },
             "regulated_source":{
                 "projection":"pslash/(4*Nc*p_squared)",
                 "source_kernel_weight":projection.kernel_weight.to_bare_ordered_string(),
@@ -488,6 +516,9 @@ impl EmittedVectorIntegral {
             },
             "typed_denominator_inventory":typed_denominators,
             "typed_denominator_shift_identity":true,"native_full_D_numerator_unchanged":true,
+            "typed_zero_mass_denominator_specialization":true,
+            "massless_specialization_scope":"same native quark OS histories; O and degree-one Taylor before numerical MH=0",
+            "vacuum_invariance_reference":"native_d09_positive_gluon_mass_preserves_all_three_vacuum_inputs",
             "typed_gluon_mass_parameter_slots":1,"physical_MT_parameter_value":1,
             "complete_forest_histories":histories,
             "denominator_reconstruction_certificates":projection_context.denominator_reconstruction_certificates,
@@ -506,6 +537,7 @@ impl EmittedVectorIntegral {
             uv_mass_slots,
             localization_slot,
             physical_slots,
+            gluon_mass: 1.0,
         })
     }
 
@@ -518,9 +550,21 @@ impl EmittedVectorIntegral {
         ensure!(
             self.physical_slots
                 .iter()
-                .all(|position| self.values[*position] == Complex::new_re(F(1.0))),
+                .zip([1.0, self.gluon_mass, 1.0])
+                .all(|(position, value)| self.values[*position] == Complex::new_re(F(value))),
             "an auxiliary-scale variation changed the physical mass, gluon mass or renormalization scale"
         );
+        Ok(())
+    }
+
+    fn set_gluon_mass(&mut self, mass: f64) -> Result<()> {
+        ensure!(mass == 0.0 || mass == 1.0);
+        ensure!(
+            self.values[self.physical_slots[0]] == Complex::new_re(F(1.0))
+                && self.values[self.physical_slots[2]] == Complex::new_re(F(1.0))
+        );
+        self.gluon_mass = mass;
+        self.values[self.physical_slots[1]] = Complex::new_re(F(mass));
         Ok(())
     }
 
@@ -535,10 +579,27 @@ impl EmittedVectorIntegral {
         // Hard-region cancellation is performed on the COMPLETE forest in the
         // same evaluator. Keep the original finite f64 sample as the input
         // boundary, and increase arithmetic precision rather than cutting tails.
-        let precise = momenta
+        let hard = momenta
             .iter()
             .flatten()
             .any(|coordinate| coordinate.abs() > 1.0e3);
+        let norm = |momentum: &[f64; 3]| {
+            momentum
+                .iter()
+                .map(|value| value * value)
+                .sum::<f64>()
+                .sqrt()
+        };
+        let soft = self.gluon_mass == 0.0 && {
+            let mut minimum = momenta.iter().map(norm).fold(f64::INFINITY, f64::min);
+            if momenta.len() == 2 {
+                minimum = minimum.min(norm(&std::array::from_fn(|component| {
+                    momenta[0][component] - momenta[1][component]
+                })));
+            }
+            minimum < 1.0e-3
+        };
+        let precise = hard || soft;
         let (real, imaginary) = if precise {
             let started = std::time::Instant::now();
             let values = self
@@ -573,6 +634,47 @@ impl EmittedVectorIntegral {
         ))
     }
 
+    /// Two linear physical charts, each split into its two Hepp sectors.
+    /// The channel partition is evaluated on the native l,k point, and the
+    /// complete emitted forest is evaluated once for each weighted image.
+    fn soft_chart_samples(xs: &[f64]) -> Result<Vec<([[f64; 3]; 2], f64)>> {
+        ensure!(xs.len() == 3 && xs.iter().all(|x| *x > 0.0 && *x < 1.0));
+        let radius = xs[0] / (1.0 - xs[0]);
+        let ratio = xs[1];
+        let z = 2.0 * xs[2] - 1.0;
+        let sine = (1.0 - z * z).sqrt();
+        let mut samples = Vec::with_capacity(4);
+        for channel in 0..2 {
+            for sector in 0..2 {
+                let (h, k) = if sector == 0 {
+                    (radius, radius * ratio)
+                } else {
+                    (radius * ratio, radius)
+                };
+                let hard = [0.0, 0.0, k];
+                let radial = [h * sine, 0.0, h * z];
+                let l = if channel == 0 {
+                    radial
+                } else {
+                    std::array::from_fn(|component| radial[component] + hard[component])
+                };
+                let q: [f64; 3] = std::array::from_fn(|component| l[component] - hard[component]);
+                let l2 = l.iter().map(|value| value * value).sum::<f64>();
+                let q2 = q.iter().map(|value| value * value).sum::<f64>();
+                let l_scale = l2.sqrt().max(k);
+                let q_scale = q2.sqrt().max(k);
+                let d_l = l2 * l_scale * (1.0 + l_scale).powi(2);
+                let d_q = q2 * q_scale * (1.0 + q_scale).powi(2);
+                let partition = (if channel == 0 { d_q } else { d_l }) / (d_l + d_q);
+                let jacobian = 16.0 * std::f64::consts::PI.powi(2) * h * h * k * k * radius
+                    / (1.0 - xs[0]).powi(2);
+                ensure!(partition.is_finite() && jacobian.is_finite());
+                samples.push(([l, hard], partition * jacobian));
+            }
+        }
+        Ok(samples)
+    }
+
     fn integrate(
         &mut self,
         seed: u64,
@@ -597,22 +699,34 @@ impl EmittedVectorIntegral {
                 let Sample::Continuous(weight, xs) = &sample else {
                     return Err(eyre!("continuous grid emitted noncontinuous sample"));
                 };
-                let r = xs[0] / (1.0 - xs[0]);
-                let jacobian_r = r * r / (1.0 - xs[0]).powi(2);
-                let (momenta, jacobian) = if dimensions == 1 {
-                    (vec![[0.0, 0.0, r]], 4.0 * std::f64::consts::PI * jacobian_r)
+                let (re, im) = if dimensions == 3 && self.gluon_mass == 0.0 {
+                    let mut real = 0.0;
+                    let mut imaginary = 0.0;
+                    // These are four explicit integration images, not a
+                    // randomly selected channel. There is no factor of 1/4.
+                    for (momenta, weight) in Self::soft_chart_samples(xs)? {
+                        let value = self.evaluate(&momenta)?;
+                        real += weight * value.re.0;
+                        imaginary += weight * value.im.0;
+                    }
+                    (real, imaginary)
                 } else {
-                    let s = xs[1] / (1.0 - xs[1]);
-                    let z = 2.0 * xs[2] - 1.0;
-                    (
-                        vec![[0.0, 0.0, r], [s * (1.0 - z * z).sqrt(), 0.0, s * z]],
-                        16.0 * std::f64::consts::PI.powi(2) * jacobian_r * s * s
-                            / (1.0 - xs[1]).powi(2),
-                    )
+                    let r = xs[0] / (1.0 - xs[0]);
+                    let jacobian_r = r * r / (1.0 - xs[0]).powi(2);
+                    let (momenta, jacobian) = if dimensions == 1 {
+                        (vec![[0.0, 0.0, r]], 4.0 * std::f64::consts::PI * jacobian_r)
+                    } else {
+                        let s = xs[1] / (1.0 - xs[1]);
+                        let z = 2.0 * xs[2] - 1.0;
+                        (
+                            vec![[0.0, 0.0, r], [s * (1.0 - z * z).sqrt(), 0.0, s * z]],
+                            16.0 * std::f64::consts::PI.powi(2) * jacobian_r * s * s
+                                / (1.0 - xs[1]).powi(2),
+                        )
+                    };
+                    let value = self.evaluate(&momenta)?;
+                    (value.re.0 * jacobian, value.im.0 * jacobian)
                 };
-                let value = self.evaluate(&momenta)?;
-                let re = value.re.0 * jacobian;
-                let im = value.im.0 * jacobian;
                 grid.add_training_sample(&sample, re.abs())
                     .map_err(|error| eyre!(error))?;
                 real.add_sample(re * weight, Some(&sample));
@@ -641,14 +755,30 @@ impl EmittedVectorIntegral {
             "precise_seconds":self.precise_seconds-initial_precise_seconds,
             "uv_mass":self.values[self.uv_mass_slots[0]].re.0,
             "localization_scale":self.values[self.localization_slot].re.0,
-            "precision_policy":"ArbPrec for max absolute loop component > 1000; f64 otherwise"}),
+            "gluon_mass":self.gluon_mass,
+            "integration_map":if self.gluon_mass == 0.0 && dimensions == 3 {"two soft charts times two Hepp sectors, explicit sum"} else {"product radial"},
+            "precision_policy":if self.gluon_mass == 0.0 {"ArbPrec for max absolute loop component > 1000 or minimum native soft norm < 0.001; f64 otherwise"}
+                else {"ArbPrec for max absolute loop component > 1000; f64 otherwise"}}),
         )
     }
 
-    fn one_loop_calibration(reference: &QcdMassReference) -> Result<serde_json::Value> {
+    fn one_loop_calibration(
+        reference: &QcdMassReference,
+        gluon_mass: f64,
+    ) -> Result<serde_json::Value> {
         let mut calibration = Self::new(reference, 1)?;
-        let measured = calibration.integrate(2026102101, 20_000, 6)?;
-        let expected = -1.0 + std::f64::consts::PI / 3.0_f64.sqrt();
+        calibration.set_gluon_mass(gluon_mass)?;
+        let seed = if gluon_mass == 0.0 {
+            2026102110
+        } else {
+            2026102101
+        };
+        let measured = calibration.integrate(seed, 20_000, 6)?;
+        let expected = if gluon_mass == 0.0 {
+            -2.0
+        } else {
+            -1.0 + std::f64::consts::PI / 3.0_f64.sqrt()
+        };
         let value = measured["value"].as_f64().unwrap();
         let error = measured["error"].as_f64().unwrap();
         ensure!(
@@ -662,19 +792,21 @@ impl EmittedVectorIntegral {
 }
 
 #[test]
-fn native_emitted_one_loop_vector_matches_positive_mass_reference() -> Result<()> {
+fn native_emitted_one_loop_vector_matches_massless_and_positive_mass_references() -> Result<()> {
     crate::initialisation::test_initialise()?;
     let reference = QcdMassReference::new()?;
-    let measured = EmittedVectorIntegral::one_loop_calibration(&reference)?;
-    crate::debug_tags!(#uv,#integrated,#summary;
-        stage="native_emitted_one_loop_vector_calibration", file.measured=%serde_json::to_string(&measured)?,
-        "Production-emitted one-loop field coefficient matches its independent positive-mass reference"
-    );
+    for gluon_mass in [1.0, 0.0] {
+        let measured = EmittedVectorIntegral::one_loop_calibration(&reference, gluon_mass)?;
+        crate::debug_tags!(#uv,#integrated,#summary;
+            stage="native_emitted_one_loop_vector_calibration", file.measured=%serde_json::to_string(&measured)?,
+            "Production-emitted one-loop field coefficient matches its independent reference"
+        );
+    }
     Ok(())
 }
 
 pub(super) fn two_loop(reference: &QcdMassReference) -> Result<serde_json::Value> {
-    let one_loop = EmittedVectorIntegral::one_loop_calibration(reference)?;
+    let one_loop = EmittedVectorIntegral::one_loop_calibration(reference, 1.0)?;
     let mut integral = EmittedVectorIntegral::new(reference, 2)?;
     let momenta = [[0.0, 0.0, 0.7], [0.8, 0.0, -0.4]];
     let baseline = integral.evaluate(&momenta)?;
@@ -746,10 +878,70 @@ pub(super) fn two_loop(reference: &QcdMassReference) -> Result<serde_json::Value
     integral.set_auxiliary_scales(1.0, 2.0)?;
     let changed_localization = integral.integrate(2026102105, 100_000, 10)?;
     integral.set_auxiliary_scales(1.0, 1.0)?;
+    let massless_one_loop = EmittedVectorIntegral::one_loop_calibration(reference, 0.0)?;
+    integral.set_gluon_mass(0.0)?;
+    let d_l = Atom::var(symbol!("native_emitted_soft_partition::D_l"; Scalar));
+    let d_q = Atom::var(symbol!("native_emitted_soft_partition::D_q"; Scalar));
+    ensure!(
+        (&d_q / (&d_l + &d_q) + &d_l / (&d_l + &d_q) - Atom::one())
+            .together()
+            .is_zero(),
+        "the two native soft charts do not form an exact partition of unity"
+    );
+    let mut chart_checks = Vec::new();
+    for xs in [[0.37, 0.41, 0.63], [0.012, 0.019, 0.92], [0.83, 0.94, 0.04]] {
+        let samples = EmittedVectorIntegral::soft_chart_samples(&xs)?;
+        ensure!(samples.len() == 4);
+        for (image, (momenta, weighted_jacobian)) in samples.into_iter().enumerate() {
+            let radius = xs[0] / (1.0 - xs[0]);
+            let ratio = xs[1];
+            let norm =
+                |vector: &[f64; 3]| vector.iter().map(|value| value * value).sum::<f64>().sqrt();
+            let [l, k] = momenta;
+            let q: [f64; 3] = std::array::from_fn(|component| l[component] - k[component]);
+            let h = if image < 2 { l } else { q };
+            let expected_h = if image % 2 == 0 {
+                radius
+            } else {
+                radius * ratio
+            };
+            let expected_k = if image % 2 == 0 {
+                radius * ratio
+            } else {
+                radius
+            };
+            ensure!((norm(&h) - expected_h).abs() < 1.0e-14 * (1.0 + radius));
+            ensure!((norm(&k) - expected_k).abs() < 1.0e-14 * (1.0 + radius));
+            let l_scale = norm(&l).max(norm(&k));
+            let q_scale = norm(&q).max(norm(&k));
+            let d_l = norm(&l).powi(2) * l_scale * (1.0 + l_scale).powi(2);
+            let d_q = norm(&q).powi(2) * q_scale * (1.0 + q_scale).powi(2);
+            ensure!((d_q / (d_l + d_q) + d_l / (d_l + d_q) - 1.0).abs() < 1.0e-15);
+            let value = integral.evaluate(&momenta)?;
+            let rotated = momenta.map(|vector| [vector[2], vector[0], vector[1]]);
+            let orbit = integral.evaluate(&rotated)?;
+            ensure!((value.re.0 - orbit.re.0).abs() <= 1.0e-9 * (1.0 + value.re.0.abs()));
+            chart_checks.push(
+                serde_json::json!({"xs":xs,"image":image,"native_l":l,"native_k":k,
+                "native_q":q,"weighted_jacobian":weighted_jacobian,"value":value.re.0,
+                "orbit_value":orbit.re.0,"partition_sum":d_q/(d_l+d_q)+d_l/(d_l+d_q)}),
+            );
+        }
+    }
+    let unregulated_first = integral.integrate(2026102111, 100_000, 20)?;
+    let unregulated_second = integral.integrate(2026102112, 100_000, 20)?;
+    integral.set_auxiliary_scales(2.0, 1.0)?;
+    let unregulated_uv_mass = integral.integrate(2026102113, 100_000, 20)?;
+    integral.set_auxiliary_scales(1.0, 2.0)?;
+    let unregulated_localization = integral.integrate(2026102114, 100_000, 20)?;
+    integral.set_auxiliary_scales(1.0, 1.0)?;
     Ok(
         serde_json::json!({"source":integral.source,"one_loop_calibration":one_loop,
         "pointwise_rotation_and_precision_checks":true,"tail_precision_checks":tail_checks,
         "integrations":[first,second,changed_uv_mass,changed_localization],
+        "unregulated_integrations":[unregulated_first,unregulated_second,unregulated_uv_mass,unregulated_localization],
+        "unregulated_one_loop_calibration":massless_one_loop,
+        "unregulated_chart_checks":chart_checks,"exact_soft_chart_partition":true,
         "measure":"plain d3k d3l, rest-frame 8pi2 radial reduction",
         "threshold_regulator":"both typed physical gluon masses=lambda=1",
         "absolute_unregulated_integrability_claimed":false}),
