@@ -176,6 +176,15 @@ anchor = "impl UVOrchestrator {"
 # are unchanged; a test uses the existing EMR-vector symbol helper.
 digest = "286c229322a3f7453c9ce7caefdd7e7438f81c2d"
 
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/integrated.rs"
+symbol = "gammalooprs::uv::approx::integrated::Integrated"
+anchor = "impl Integrated<'_> {"
+# Reviewed 2026-10-20: source Lorentz metadata is restored before Laurent
+# algebra, while scalar evanescent factors remain in the expansion. Only the
+# known projector dimension is unified; native tensor safety checks remain.
+digest = "7c2b99908ca0304c7f1a5eca91b6680f02565702"
+
 [[section.note]]
 id = "spenso-parsing-flow"
 title = "Spenso parsing flow"
@@ -531,7 +540,10 @@ anchor = "pub struct Vakint {"
 # multiplicities before expansion, and protects validated loop invariants as
 # coefficients through the existing checked tensor reducer. Raw legacy powers
 # retain their shared rank bound; projection and ambiguity guards are unchanged.
-digest = "2a26b3d41971371af06e149b55f3223e2d76f487"
+# Reviewed 2026-10-20: saved FORM indices return in the caller's epsilon
+# convention, and literal indices reuse exact registered representation data.
+# Vector mappings stay consistent; conflicting declarations are still errors.
+digest = "d304d889c7dbdac94cdd2333cfce046ae8e2232c"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"

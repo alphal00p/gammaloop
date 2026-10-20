@@ -6487,7 +6487,44 @@ Evaluated (n_loops=1, mu_r=1) :
             additional_user_symbols,
         )?;
 
+        // Index metadata bypasses FORM and also identifies vector-mapping
+        // sources. Return it in the caller's epsilon convention, as at input.
+        let indices = indices
+            .into_iter()
+            .map(|index| {
+                index
+                    .replace(vk_parse!("ep").unwrap().to_pattern())
+                    .with(vk_parse!(&settings.epsilon_symbol).unwrap())
+            })
+            .collect();
+
         Ok((form_header_additions, expression_str, indices))
+    }
+
+    fn parse_form_output_expression(expression: &str) -> Result<Atom, String> {
+        use symbolica::{
+            atom::UserData,
+            parser::{ParseSettings, Token},
+            state::{State, Workspace},
+            with_default_namespace,
+        };
+
+        // Literal indices carry canonical declarations, which omit user data.
+        // Reuse exact registered declarations, retaining representation metadata
+        // and the parser's rejection of conflicting attributes or tags.
+        let mut symbols = State::symbol_iter()
+            .filter(|(symbol, _)| !matches!(symbol.get_data(), UserData::None))
+            .map(|(symbol, _)| (Atom::var(symbol).to_canonical_string().into(), symbol))
+            .collect();
+        let namespace = with_default_namespace!(expression, NAMESPACE);
+        Workspace::get_local().with(|workspace| {
+            Token::parse_with_atom_info(
+                expression,
+                ParseSettings::default(),
+                Some((&namespace, &mut symbols, workspace)),
+            )?
+            .to_atom(&namespace, &mut symbols, workspace)
+        })
     }
 
     pub fn process_form_output(
@@ -6531,7 +6568,7 @@ Evaluated (n_loops=1, mu_r=1) :
         //         .join("\n")
         // );
         // Map back the integer indices to the original expressions if substitutions took place
-        match vk_parse!(processed_form_str.as_str()) {
+        match Self::parse_form_output_expression(&processed_form_str) {
             Ok(mut processed) => {
                 processed = processed
                     .replace(vk_parse!("rat(x_,y_)").unwrap().to_pattern())
@@ -6962,6 +6999,70 @@ mod tests {
         assert_eq!(
             Vakint::convert_from_dot_notation(indexed.as_view()),
             indexed
+        );
+    }
+
+    #[test]
+    fn form_roundtrip_restores_epsilon_in_saved_lorentz_indices() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            epsilon_symbol: "form_saved_index::epsilon".into(),
+            ..Default::default()
+        };
+        let epsilon = vk_parse!(&settings.epsilon_symbol).unwrap();
+        let mu = vk_parse!("form_saved_index::mu").unwrap();
+        let index = function!(
+            Minkowski::selfless_symbol(),
+            Atom::num(4) - 2 * &epsilon,
+            &mu
+        );
+        let coefficient = Atom::one() + &epsilon;
+        let source = function!(vk_symbol!("p1"), &index);
+        let target = function!(S.p, 1, &index);
+        let metric = &coefficient * function!(vk_symbol!(METRIC_SYMBOL), &index, &mu);
+        for (expression, expected, mapping) in [
+            (
+                &coefficient * function!(vk_symbol!("vec1"), vk_parse!("p1").unwrap(), &index),
+                &coefficient * &target,
+                BTreeMap::from([(source, target)]),
+            ),
+            (metric.clone(), metric, BTreeMap::default()),
+        ] {
+            for substitute_indices in [false, true] {
+                let (_, serialized, indices) = vakint
+                    .prepare_expression_for_form(
+                        &settings,
+                        expression.clone(),
+                        substitute_indices,
+                        &[],
+                    )
+                    .unwrap();
+                assert_eq!(indices.is_empty(), !substitute_indices);
+                assert!(
+                    indices
+                        .iter()
+                        .all(|index| !index.contains_symbol(vk_symbol!("ep")))
+                );
+                let restored = vakint
+                    .process_form_output(&settings, serialized, indices, mapping.clone())
+                    .unwrap();
+                assert_eq!(restored, expected);
+                assert!(!restored.contains_symbol(vk_symbol!("ep")));
+            }
+        }
+        let declaration = Atom::var(Minkowski::selfless_symbol()).to_canonical_string();
+        assert!(declaration.contains("spenso::self_dual"));
+        let conflicting =
+            declaration.replacen("spenso::self_dual", "form_saved_index::conflicting_tag", 1);
+        assert!(
+            vakint
+                .process_form_output(
+                    &settings,
+                    format!("{conflicting}(4,form_saved_index::mu)"),
+                    Vec::new(),
+                    BTreeMap::default(),
+                )
+                .is_err()
         );
     }
 

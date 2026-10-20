@@ -10,6 +10,7 @@ use symbolica::{
 };
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Once, OnceLock};
 use vakint::{
@@ -113,35 +114,75 @@ pub fn get_vakint(mut vakint_settings: VakintSettings) -> TestVakint {
             .retain(|method| !matches!(method, EvaluationMethod::PySecDec(_)));
     }
     static VAKINT_INSTANCE: OnceLock<Vakint> = OnceLock::new();
-    let mut vakint = VAKINT_INSTANCE
-        .get_or_init(|| Vakint::new().expect("Failed to initialize vakint"))
-        .clone();
-    if std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").is_some() {
-        vakint = external_vakint();
-    }
+    let vakint = if std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").is_some()
+        || EXTERNAL_DATASET.get().is_some()
+    {
+        external_vakint()
+    } else {
+        VAKINT_INSTANCE
+            .get_or_init(|| Vakint::new().expect("Failed to initialize vakint"))
+            .clone()
+    };
     TestVakint {
         vakint,
         settings: vakint_settings,
     }
 }
 
+static EXTERNAL_DATASET: OnceLock<(Vakint, PathBuf)> = OnceLock::new();
+
 #[allow(dead_code)]
-pub fn external_data_path() -> std::path::PathBuf {
-    std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
-        .map(std::path::PathBuf::from)
-        .expect("set VAKINT_TEST_EXTERNAL_DATA to a validated external-data checkout for this test")
+fn external_dataset() -> &'static (Vakint, PathBuf) {
+    #[cfg(all(unix, not(target_arch = "wasm32")))]
+    {
+        EXTERNAL_DATASET.get_or_init(|| {
+            let mut engine = Vakint::new().expect("Failed to initialize vakint");
+            let options = vakint::OfficialExternalDataOptions {
+                version: "latest".into(),
+                local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+                    .map(PathBuf::from),
+                refresh: false,
+                ..Default::default()
+            };
+            let report = engine
+                .load_official_external_data(4, &options)
+                .expect("Failed to load official 1L–4L external data for acceptance tests");
+            eprintln!(
+                "Vakint acceptance external data: version={} path={}",
+                report.version,
+                report.path.display()
+            );
+            for pack in &report.loops {
+                eprintln!(
+                    "  {}L: {} cache_available={} path={}",
+                    pack.loop_count,
+                    pack.source,
+                    pack.cache_available,
+                    pack.path.display()
+                );
+            }
+            (engine, report.path)
+        })
+    }
+    #[cfg(not(all(unix, not(target_arch = "wasm32"))))]
+    {
+        panic!("Official external-data acceptance tests require a native Unix target")
+    }
+}
+
+#[allow(dead_code)]
+pub fn ensure_external_data_loaded() {
+    let _ = external_dataset();
+}
+
+#[allow(dead_code)]
+pub fn external_data_path() -> PathBuf {
+    external_dataset().1.clone()
 }
 
 #[allow(dead_code)]
 pub fn external_vakint() -> Vakint {
-    static EXTERNAL: OnceLock<Vakint> = OnceLock::new();
-    EXTERNAL
-        .get_or_init(|| {
-            let mut engine = Vakint::new().unwrap();
-            engine.load_external_data(external_data_path(), 4).unwrap();
-            engine
-        })
-        .clone()
+    external_dataset().0.clone()
 }
 
 /// The public retained result now uses family-qualified integral identities.

@@ -331,7 +331,11 @@ impl Integrated<'_> {
             );
         }
         integrand_vakint.tensor_reduce(self.vakint, self.vakint_settings)?;
-        for (term_index, t) in integrand_vakint.0.iter().enumerate() {
+        for (term_index, t) in integrand_vakint.0.iter_mut().enumerate() {
+            // Projector slots and retained source slots share one native
+            // Lorentz representation. Restore that metadata before the
+            // backend's Laurent expansion, keeping scalar epsilon factors.
+            t.numerator = Self::restore_lorentz_dimensions(&t.numerator);
             debug_tags!(#uv,#integrated,#vakint,#trace,#tensor_reduce;
                 term_index = %term_index,
                 log.integral = t.integral,
@@ -358,12 +362,7 @@ impl Integrated<'_> {
 
         res = Self::restore_numerator(res, current.topo_order());
 
-        res = res
-            .simplify_metrics()
-            .metric_shorthand_to_dot()
-            .replace(GS.dim)
-            .max_level(0)
-            .with(Atom::var(GS.dim_epsilon) * (-2) + 4);
+        res = Self::dimensionally_regularized(&res.simplify_metrics().metric_shorthand_to_dot());
 
         debug_tags!(#uv, #integrated, #vakint, #inspect, #trace, #replace;
             log.res = res,
@@ -408,14 +407,43 @@ impl Integrated<'_> {
         Ok(res)
     }
 
+    fn dimensionally_regularized(numerator: &Atom) -> Atom {
+        let minkowski = Minkowski {}.to_symbolic([GS.dim]).get_symbol().unwrap();
+        let dimension = Atom::var(GS.dim);
+        let regulated = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        numerator.replace_map(|view, _, out| {
+            if view.get_symbol() == Some(minkowski) {
+                // A retained open Lorentz basis keeps its representation. All
+                // scalar occurrences, including inside function coefficients,
+                // must instead participate in the Laurent expansion.
+                **out = view.to_owned();
+            } else if view == dimension.as_view() {
+                **out = regulated.clone();
+            }
+        })
+    }
+
+    fn restore_lorentz_dimensions(numerator: &Atom) -> Atom {
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let minkowski = mink.to_symbolic([]).get_symbol().unwrap();
+        let regulated_dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        // The projector works in 4-2*epsilon while opaque source slots retain
+        // d. These are the same Lorentz representation; unify only metadata,
+        // leaving every scalar evanescent coefficient for the later expansion.
+        numerator
+            .replace(function!(minkowski, &regulated_dimension, W_.x___))
+            .with(function!(minkowski, GS.dim, W_.x___))
+    }
+
     fn restore_numerator(mut res: Atom, topology_order: usize) -> Atom {
+        let mink = Minkowski {}.new_rep(GS.dim);
+        res = Self::restore_lorentz_dimensions(&res);
         res = res
             .replace(parse_lit!(vakint::cl2))
             .with(parse_lit!(cl2))
             .replace(parse_lit!(vakint::sqrt3))
             .with(parse_lit!(sqrt(3)));
 
-        let mink = Minkowski {}.new_rep(GS.dim);
         for (source, target) in [
             (vakint::symbols::S.k, GS.loop_mom),
             (vakint::symbols::S.p, GS.emr_mom),
@@ -1228,8 +1256,131 @@ impl VakintMomentumSolution {
 #[cfg(test)]
 mod tests {
     use crate::initialisation::test_initialise;
+    use spenso::structure::slot::{DummyAind, ParseableAind};
 
     use super::*;
+
+    #[test]
+    fn projector_lorentz_metadata_is_constant_during_laurent_expansion() {
+        test_initialise().unwrap();
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let a = spin.to_symbolic([Aind::Hedge(3, 1).to_atom()]);
+        let b = spin.to_symbolic([Aind::Hedge(4, 1).to_atom()]);
+        let mu = mink.to_symbolic([Aind::Hedge(12, 1).to_atom()]);
+        let dummy = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let regulated_mu = mu
+            .replace(GS.dim)
+            .with(Atom::num(4) - Atom::num(2) * &epsilon);
+        let gamma = function!(idenso::dirac::AGS.gamma, &a, &b, &dummy);
+        let scalar = (Atom::var(GS.dim) - 4) * (&epsilon + 1) / &epsilon;
+        let source = &scalar * &gamma * function!(vakint::symbols::S.g, &dummy, regulated_mu);
+        assert!(
+            series(&source, 1)
+                .unwrap()
+                .to_atom()
+                .contains_symbol(symbolica::atom::Symbol::DERIVATIVE),
+            "a regulated tensor slot must be restored before scalar Laurent algebra"
+        );
+        let normalized = Integrated::restore_lorentz_dimensions(&source);
+        let expected = &scalar * gamma * function!(vakint::symbols::S.g, &dummy, &mu);
+        assert_eq!(normalized, expected);
+        assert_eq!(
+            Integrated::restore_lorentz_dimensions(&normalized),
+            normalized,
+            "metadata restoration is idempotent"
+        );
+        let expanded = series(&normalized, 1).unwrap().to_atom();
+        assert!(!expanded.contains_symbol(symbolica::atom::Symbol::DERIVATIVE));
+        let restored = Integrated::restore_numerator(expanded, 0).simplify_metrics();
+        let regularized = Integrated::dimensionally_regularized(&restored);
+        let expected = Atom::num(-2) * function!(idenso::dirac::AGS.gamma, &a, &b, &mu);
+        assert!(
+            (regularized.clone() - (&epsilon + 1) * &expected)
+                .expand()
+                .is_zero()
+        );
+        let finite = truncate(&series(&regularized, 0).unwrap(), true);
+        assert!((finite - expected).expand().is_zero());
+        for head in [vakint::symbols::S.k, vakint::symbols::S.p] {
+            assert_eq!(
+                Integrated::restore_lorentz_dimensions(&function!(head, 1, &mu)),
+                function!(head, 1, &mu),
+                "dimension normalization must retain the Vakint momentum ABI"
+            );
+        }
+    }
+
+    #[test]
+    fn scalar_dimensions_are_substituted_inside_functions_but_not_lorentz_slots() {
+        test_initialise().unwrap();
+        let slot = Minkowski {}
+            .new_rep(GS.dim)
+            .to_symbolic([Aind::new_dummy().to_atom()]);
+        let logarithm = symbolica::symbol!("log");
+        let tensor = symbolica::symbol!("dimension_test_tensor");
+        let input = function!(logarithm, GS.dim) * function!(tensor, &slot);
+        let expected = function!(
+            logarithm,
+            Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon)
+        ) * function!(tensor, &slot);
+        assert_eq!(Integrated::dimensionally_regularized(&input), expected);
+        let dimension = Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon);
+        let projected_slot = slot.replace(GS.dim).with(dimension);
+        let evanescent = Atom::var(GS.dim) - Atom::num(4);
+        assert_eq!(
+            Integrated::restore_numerator(&evanescent * function!(tensor, projected_slot), 0),
+            evanescent * function!(tensor, &slot),
+            "restoration unifies Lorentz metadata without changing scalar d dependence"
+        );
+        let other_slot = Minkowski {}
+            .new_rep(6)
+            .to_symbolic([Aind::new_dummy().to_atom()]);
+        let other = function!(tensor, &other_slot);
+        assert_eq!(Integrated::restore_numerator(other.clone(), 0), other);
+        assert_eq!(Integrated::dimensionally_regularized(&other), other);
+    }
+
+    #[test]
+    fn restored_projector_metadata_closes_mixed_native_gamma_sum() {
+        test_initialise().unwrap();
+        let mink = Minkowski {}.new_rep(GS.dim);
+        let spin = Bispinor {}.new_rep(4);
+        let a = spin.to_symbolic([Aind::Hedge(3, 1).to_atom()]);
+        let b = spin.to_symbolic([Aind::Hedge(4, 1).to_atom()]);
+        let mu = mink.to_symbolic([Aind::Hedge(12, 1).to_atom()]);
+        let dummy = mink.to_symbolic([Aind::new_dummy().to_atom()]);
+        let regulated_mu = mu
+            .replace(GS.dim)
+            .with(Atom::num(4) - Atom::num(2) * Atom::var(GS.dim_epsilon));
+        let gamma = function!(idenso::dirac::AGS.gamma, &a, &b, &mu);
+        let epsilon = Atom::var(GS.dim_epsilon);
+        let scalar = (Atom::var(GS.dim) - 4) / &epsilon;
+        let source = &scalar
+            * function!(idenso::dirac::AGS.gamma, &a, &b, &dummy)
+            * function!(vakint::symbols::S.g, &dummy, regulated_mu)
+            + &gamma;
+        let restored = Integrated::restore_numerator(source, 0).simplify_metrics();
+        assert!(
+            (restored.clone() - (&scalar + 1) * &gamma)
+                .expand()
+                .is_zero()
+        );
+        let regularized = Integrated::dimensionally_regularized(&restored);
+        assert!((regularized + &gamma).expand().is_zero());
+        assert_eq!(
+            series(
+                &(Integrated::dimensionally_regularized(&scalar) * &epsilon),
+                1
+            )
+            .unwrap()
+            .to_atom()
+            .expand(),
+            -2 * epsilon,
+            "scalar evanescent terms must survive the metadata restoration"
+        );
+    }
 
     #[test]
     fn restored_vakint_source_indices_keep_identity_and_representation() {

@@ -9,6 +9,9 @@ release identities, numerical evidence, completed checks and remaining gates.
 
 == Explicit loading
 
+The official-download API and options below are available on native Unix targets.
+They are not exposed on Windows or WebAssembly targets.
+
 ```rust
 use vakint::{OfficialExternalDataOptions, Vakint};
 let mut engine = Vakint::new()?;
@@ -54,6 +57,27 @@ or a sealed 1L–3L rules file; bare programs retain the active master values an
 discard the preceding program's cache attachment. The
 explicit native cache load/import/download methods and the saved-application
 path interface remain available. No ordinary evaluation initiates a download.
+
+== Four-loop acceptance tests
+
+The four-loop numerical acceptance gates call the official loader with maximum
+loop count four, version `latest` and `refresh=false`. On first use it downloads
+missing packs into the test process's current directory; subsequent processes
+reuse the validated installation without network access. Cargo normally runs a
+test binary from its package directory. Set `VAKINT_TEST_EXTERNAL_DATA` to an
+existing checkout or a different installation base to override that location.
+Managed `.vakint-external-data` directories are ignored by Git.
+
+The scientific gates retain their explicit execution flags and FORM requirements.
+For example, this existing gate uses the RustRed backend and an archived
+independent reference without invoking FORM:
+
+```sh
+cargo test -p vakint --test rustred_four_loop_tests \
+  h_rank_four_matches_reference_without_form -- --ignored --nocapture
+```
+
+Ordinary tests using only the vendored snapshot continue to run offline.
 
 == Master representation and numerical capability
 

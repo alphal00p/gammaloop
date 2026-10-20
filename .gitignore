@@ -291,3 +291,6 @@ crates/gammaloop-api/test_path.toml
 
 # Marimo editor session state
 __marimo__/
+
+# Downloaded official Vakint loop packs, wherever tests or callers install them.
+.vakint-external-data/

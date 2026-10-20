@@ -114,6 +114,10 @@ preventing spurious tensor-rank growth. Native tensor components retain their sl
 through the checked reducer; its projection, ambiguity and rank guards remain authoritative.
 The optional FORM tensor path maps vectors and indices into
 FORM syntax, runs the embedded reduction program, and maps the result back to Symbolica.
+Saved index atoms retain the caller's epsilon symbol so vector mappings and returned
+metadata agree. Literal native indices reuse exact registered Symbolica declarations;
+conflicting attributes or tags still fail parsing. This transport does not alter FORM
+programs, master formulas or scalar epsilon coefficients.
 
 Integral evaluation matches again so that it has the canonical topology and numerator mapping.
 It then walks `settings.evaluation_order` and selects the first method whose topology, loop count,

@@ -13,6 +13,7 @@ mod external_master_oracle;
 #[test]
 #[ignore = "four-loop native numerator acceptance; explicit bounded execution required"]
 fn h_rank_four_matches_reference_without_form() {
+    test_utils::ensure_external_data_loaded();
     let case = acceptance_inputs::cases()
         .into_iter()
         .find(|case| case.name == "test_integrate_4l_h_rank_4")
@@ -66,6 +67,7 @@ fn h_rank_four_matches_reference_without_form() {
 #[test]
 #[ignore = "four-loop public RustRed/FMFT numerical inventory; explicit oracle executable required"]
 fn all_fifteen_numerical_references_match_fmft_and_public_rustred() {
+    test_utils::ensure_external_data_loaded();
     let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH").unwrap();
     let filter = std::env::var("VAKINT_4L_CANDIDATE_FAMILY_FILTER").ok();
     assert!(

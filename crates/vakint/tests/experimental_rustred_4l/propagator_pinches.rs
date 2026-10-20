@@ -126,6 +126,7 @@ fn fg_mixed_momentum_cancellation_fmft() {
 #[test]
 #[ignore = "release four-loop public RustRed acceptance and independent FMFT oracle"]
 fn sixteen_numerator_propagator_pinches_match_fmft_and_rustred() {
+    test_utils::ensure_external_data_loaded();
     test_utils::run_multi_lane_acceptance(|| {
         Vakint::initialize_vakint_symbols();
         let form = std::env::var("VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH")

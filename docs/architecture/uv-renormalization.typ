@@ -118,6 +118,12 @@ indices remain scoped to the current UV node. A source label such as
 `hedge(5)` must return as `mink(dim,hedge(5))`, rather than as an untyped
 momentum argument mixed with typed tensor factors.
 
+After tensor projection, the known regulated Minkowski slot dimension is restored
+to the source representation before backend Laurent expansion. Representation
+metadata stays constant during that scalar algebra, preventing derivatives of
+metric/index declarations. Scalar evanescent factors still expand, including
+inside function coefficients; unrelated representation dimensions are preserved.
+
 The aggregate is sufficient when every component uses the same terminal
 prescription. At terminal use, the hedge-poset backend nevertheless
 returns to the component nodes, selects each component\'s own pole or

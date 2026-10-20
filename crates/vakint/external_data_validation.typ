@@ -2,8 +2,8 @@
 
 This records completed migration checks as of 20 October 2026. The focused
 suites overlap; their counts are not a combined whole-repository test result.
-The completed end-to-end scientific checks and the remaining repository-CI gate
-are recorded separately below.
+Completed scientific checks and the remaining validation/delivery gates are
+recorded separately below.
 
 #let evidence(path, body) = link(
   "https://github.com/alphal00p/vakint-external-data/blob/fced6061d2037272bc76c15bd0396b9ac7287bf7/" + path,
@@ -37,10 +37,10 @@ are recorded separately below.
   #link("https://github.com/alphal00p/rustred/commit/62886f036eef01cba7d4236b6575faf50417e200")[62886f036eef01cba7d4236b6575faf50417e200].
   Saved-cache codecs and authenticated program-binding schemas are unchanged.
 
-Both upstream PRs were open at this snapshot. Symbolica's fork coverage job
-lacked the license secret and aborted; the
-licensed local library run passed 834 tests, with one ignored. This does not
-turn the failed hosted check into a pass. RustRed's hosted NixCI check was pending.
+The licensed Symbolica library run passed 834 tests, with one ignored. A fork
+coverage run lacked the license secret and aborted; local validation does not
+turn that hosted check into a pass. Symbolica's CLA was handled independently
+and requires no further action for this delivery.
 
 == Data, provenance and limits
 
@@ -125,6 +125,16 @@ IBP coverage. Cached/uncached 1L–4L parity passed with the final native bindin
   no external network interface and returned identical 1L numerical output.
   Version, loop selection, cache availability and downloaded/reused status
   were machine-checked. These are functional checks, not timing benchmarks.
+- The four-loop scientific test helper now shares one official-data engine and
+  its resolved path. It requests maximum loop count four, version `latest` and
+  `refresh=false`. With `VAKINT_TEST_EXTERNAL_DATA` absent, the path option
+  remains `None`: the loader uses the actual test process working directory,
+  rather than a repository or build-directory default. An explicit override
+  still accepts a checkout or managed installation base. Ordinary vendored
+  construction remains offline unless an external context is explicitly chosen.
+  Native Unix is the supported official-download platform; the three scientific
+  entry points retain their original assertions, tolerances, ignores and FORM
+  requirements. See #link("external_data.typ")[test loading and execution].
 - The #link("src/rustred_evaluation/masters_acceptance_tests.rs")[four new-order acceptance tests]
   passed for 2L sunset epsilon^4, 3L `miBN` epsilon^4, the 3L five-line integral
   epsilon^3 and external 4L `PR2` epsilon^3. They check loaded metadata,
@@ -222,14 +232,11 @@ the same extension. Download, baseline and isolated reuse all passed every
 assertion and exited zero without recorder failures. The module SHA256 was
 `ac081c32cfdbc4cda27b8e262ca86d874cd311fde8eff2e1a13cc02cb7654abb` throughout.
 
-The consolidated numerical rerun passed the complete fifteen-case four-loop
-inventory, all sixteen numerator/pinch pairs and the independent FORM-free
-H rank-four reference with unchanged assertions and tolerances. A 48-test
-scalar/tensor integration selection passed; after the collected-power correction,
-all 24 affected tensor frontend tests and all 52 active tensor unit tests passed
-again. Both focused collected-power regressions passed, and five old/new tensor
-prepass comparisons have exactly zero algebraic differences. The validated Python
-extension passed all twenty subprocess checks. The suites overlap.
+The consolidated scalar/tensor integration and collected-power regressions
+passed, including all affected tensor frontend cases. Five old/new tensor
+prepass comparisons have exactly zero algebraic differences. The revision-specific
+four-loop numerical results below retain the original scientific assertions and
+tolerances.
 
 The consolidated algebra adapters required two corrections already represented
 in the original dependency behavior. Collected positive powers must reach
@@ -261,8 +268,17 @@ passed after both inputs were admitted and routed to
 subtraction and rational combination returned zero. This used no IBP reduction,
 numerical tolerance or DOT declaration rewrites in the complete inputs; the
 explicit compatibility mapping used by isolated trace probes had zero matches
-here. Source, library, binary and input hashes bind the completed preparations
-and comparison to runtime commit `c398e309de1767fcecbe841f6555080e10700fb6`.
+here. Source, library, binary and input hashes bind the original preparation to
+`93ce035278ab1feb93e0e6215ad85eb79dbc5e75` and the candidate/comparison to the
+`c398e309de1767fcecbe841f6555080e10700fb6` runtime source cohort.
+
+A call-path audit against `00ed8877f629f8bb42578813c8a286104cb5e3fa` confirms
+fourteen called or related method bodies and twenty-one transitive source/pin
+scopes are unchanged at that revision. The sealed preparation and strict
+canonicalization do not enter the indexed-scope path; the later UV-restoration
+and FORM-I/O repairs are also outside those paths. This is source-path impact
+evidence, not a rerun with final binaries. Numerical RustRed evaluation enters
+the changed tensor prepass and is covered by the separate numerical gates below.
 
 The complete native registry/cache/capability matrix passed all 64 selected tests,
 including actual five-loop witness admission/reuse. The fresh 38-root four-loop
@@ -284,11 +300,10 @@ successful numerical five-loop evaluation. It is an additional check beyond the
 
 Fifteen inherited Idenso snapshots were refreshed after exact validation of
 seventeen old/new expression pairs and a bijection preserving all six external
-DOT slots. Three fresh processes reproduced the same new port order. All 232
-Idenso tests before the trace backport passed. The completed candidate passes
-all 235 selected Idenso package tests and the 578-test Nix Spenso group, with
-existing skips unchanged. The snapshot refresh changed no production algebra or
-CI selection.
+DOT slots. Three fresh processes reproduced the same new port order. All 235
+selected Idenso package tests and the 578-test Nix Spenso group pass, with
+existing skips unchanged. The refresh changed no production algebra or CI
+selection.
 
 Generated Python signatures now follow the tested
 `symbolica.community.hepkit.vakint` module and include cumulative loaders, master
@@ -307,6 +322,15 @@ completed successfully at `d39d9bf206d8f858efedc9281f034cddb50c51fa`; the PR was
 marked non-draft and labeled `final-review`. Its
 #link("https://nix-ci.com/gh:alphal00p:gammaloop/reject-native-dot-metadata-fallback/d39d9bf206d8f858efedc9281f034cddb50c51fa")[hosted NixCI check also passed]. Already-fixed dependency issues were
 incorporated without duplicate upstream submissions.
+
+Two further focused submissions against the current FeynKit branch are prepared:
+native multiattachment tensor-port preservation at
+`070556bcab0eff348188f27b0dfc44c173ffee46`, and FORM saved-index epsilon
+restoration at `2e231c0e2ee6967c2ab61b070ecbbe654c5391bf`. Their focused tests,
+Clippy, formatting and architecture-scope checks pass. Their exact final-source
+checks/upload recipes are still pending completion; no push, PR URL or hosted-CI
+success is claimed yet. The latest dependency already contains the registered
+symbol-data parser fix, so the second submission does not duplicate that repair.
 
 Python build producers now use the complete manifest normal-dependency closure,
 including optional UFO and FeynKit Python sources. This follows the existing
@@ -359,17 +383,87 @@ rank-20 acceptance/rank-22 refusal, and genuine ambiguity errors. Relevant
 Clippy, formatting and independent owner review pass. No original numerator or
 frontend assertion, tensor rank/expansion limit, FORM source, master table,
 FeynKit/Idenso/Spenso implementation or dependency pin changed in this repair.
-The package inventory now contains 316 files, including the new private owner,
-with no prepared caches or 4L/5L runtime packs.
+All three numerical gates also pass on the corrected `00ed8877` source: the
+sixteen numerator/pinch pairs, complete fifteen-case four-loop inventory and
+independent FORM-free H rank-four reference. Their reference data, scientific
+assertions and tolerances are unchanged.
 
-== Final repository-CI result — pending completion
+== Final metadata and UV integration checks
 
-The exact checks/upload recipe at `35bb428a81a6d0aad6d079b16e41e8196defb212`
-passed Clippy, formatting, the workspace graph and doctests. Its Vakint runtime
-ran 332 tests: 329 passed, three numerator-scope cases failed, and 24 were
-skipped. The three failures exposed reused contraction labels and false rank
-growth. The scope repair above now passes those cases and the full affected
-frontend selection. The failed run exited one before upload; its logs and
-successful producer outputs are retained. Final corrected-source repository
-checks, the numerical acceptance rerun and successful upload remain required
-before publication of the main PR.
+The native UV boundary now restores the known regulated projector dimension to
+the retained source Lorentz representation before the backend's Laurent
+expansion. Scalar epsilon coefficients, including evanescent factors multiplying
+poles, still participate in that expansion; tensor dimension metadata does not
+become a formal derivative. Source labels, unrelated represented dimensions and
+Vakint's momentum/metric ABI remain intact. The existing strict tensor-network
+slot checks are unchanged.
+
+FORM's saved index table now returns in the caller's epsilon convention, which
+also preserves vector-mapping source identity. Its parsing boundary reuses the
+existing registered symbol declarations so attributed native indices round-trip
+without suppressing incompatible-declaration errors. Thirteen focused checks
+pass: eight FORM/restoration controls, the two raised-cut selection integrations,
+the threshold-cut association integration, `addbar`, and the complete six-graph
+two-loop ghost regression. The controls include both index-substitution modes,
+metric/vector mappings, altered-tag refusal, derivative absence and the exact
+finite evanescent contribution. Existing scientific/forest assertions remain
+unchanged. Relevant all-target Clippy, formatting and diff checks pass; all
+fourteen checked FORM scripts, templates, master/HPL sources are byte-identical.
+The retained receipt is `uv-lorentz-metadata-final-validation.json` (SHA256
+`c88b8d2fa37963215a7fb5fd186933fbc558798c19b1ed7968a11d661a6d3427`).
+
+Eight tracked DOT fixtures also required eleven model-fingerprint metadata
+updates. The two old fingerprints are reproduced exactly by restoring only the
+former explicit unit numerator (`1𝑖` versus `𝑖`) in the serialized models. Reparsing those models
+returns the same canonical data, and their original source assets are unchanged.
+Every other fixture byte, including topology, algebra, cuts and indices, is
+preserved. All eleven affected diagrams pass strict import and exact round-trip;
+the old fingerprints remain rejected. These are metadata refreshes, not relaxed
+model validation.
+
+The GL20 local-event snapshot changes only 53 numerical leaves; 694 leaves,
+all keys/array order, metadata, sample point and cut/event identity are unchanged.
+The public f64 API reproduces three fresh archived candidate outputs exactly.
+A forced arbitrary-precision run uses the same algorithm at 1,000 *bits*, with
+an f64 result boundary. At this single ill-conditioned point, old and new
+snapshots have the same worst complex-relative difference from that reference,
+about `2.62237e-12`; their largest mutual change is about `59.4068` double
+machine epsilons relative to complex scale. This is a precision-escalation
+comparison, not an independent physics oracle, a general forward-error bound or
+per-component ULP validation. No small imaginary component is clamped or
+filtered. After independent review, only expected numerical data was refreshed;
+the original test, strict full-precision assertion and tolerances are unchanged.
+Three fresh strict snapshot replays pass with `INSTA_UPDATE=no`.
+
+All 53 declared architecture scopes match their exact registered hashes. The
+follow-up metadata/UV repairs add no runtime files and leave the recorded
+316-file package inventory unchanged.
+
+The current CWD-default four-loop rerun also passes all three scientific gates
+in fresh network-isolated processes, with `VAKINT_TEST_EXTERNAL_DATA` unset.
+Maximum four, `latest` and `refresh=false` resolve v0.1.0 beneath the actual
+working directory; each process reports validated reuse and available caches
+for all four packs. The numerical references, assertions and tolerances are
+unchanged. This separately validates the new official-loading test path after
+the earlier `00ed8877` numerical run. Its retained result receipt is
+`official-cwd-four-loop-results.json` (SHA256
+`7ea7dac9e6570d96a112536969e64fd52770658e01f30199e2cf0e5fa7f9eac1`).
+
+== Final repository-CI and delivery gates
+
+The exact `just ci-checks-and-upload` run at
+`00ed8877f629f8bb42578813c8a286104cb5e3fa` passed static checks and its complete
+Vakint runtime selection: 343 passed, 24 skipped. The core selections passed
+341, 19 and 436 tests respectively, and the Python selection passed all five.
+The integration group ran 108 tests: 98 passed and ten failed, with 67 skipped.
+Those failures exposed the fingerprint metadata, tensor-interface and numerical
+snapshot issues addressed above. The aggregate run exited one before upload;
+319 valid producer outputs were retained. Successful groups and partial
+documentation test output do not make the failed aggregate or its upload complete.
+
+The corrected source has the focused validation recorded here. Its exact full
+repository checks and successful upload still remain required, followed by the
+same checks on the final report/source commit. Delivery is a normal push to
+`origin/vakint_rustred`, without a main-repository PR. The separate upstream
+submissions retain their own checks/upload, PR and review-label requirements.
+This report does not claim final CI, upload or delivery completion.
