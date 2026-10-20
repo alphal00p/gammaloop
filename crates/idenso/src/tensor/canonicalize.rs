@@ -46,6 +46,16 @@ const CYCLE_SYMMETRY_MARKER: usize = usize::MAX - 2;
 struct TensorColor {
     head: Symbol,
     arguments: Vec<Atom>,
+    /// Fixed metadata argument positions for a selected-slot declaration.
+    metadata_positions: Vec<usize>,
+    /// Native subgroup positions in the physical function arguments.
+    groups: Vec<(Vec<usize>, bool)>,
+}
+
+impl TensorColor {
+    fn has_antisymmetry(&self) -> bool {
+        self.head.is_antisymmetric() || self.groups.iter().any(|(_, antisymmetric)| *antisymmetric)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -357,9 +367,17 @@ fn contains_antisymmetric_tensor<Aind: AbsInd>(network: &SymbolicNet<Aind>) -> b
         let NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) = node else {
             return false;
         };
-        network.store.tensors[*index]
-            .name()
-            .is_some_and(|head| head.is_antisymmetric())
+        network.store.tensors[*index].name().is_some_and(|head| {
+            head.is_antisymmetric()
+                || spenso::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(head)
+                    .ok()
+                    .flatten()
+                    .is_some_and(|declaration| {
+                        declaration.groups().any(|(kind, _)| {
+                            kind == spenso::shadowing::FactorProjector::Antisymmetric
+                        })
+                    })
+        })
     })
 }
 
@@ -391,7 +409,7 @@ fn project_network<Aind: AbsInd + ParseableAind>(
     // projected region vanish. Avoid wiring an unrelated region's slots.
     if !graph.nodes().iter().any(|node| {
         matches!(&node.data,
-        TensorGraphNode::Tensor(color) if color.head.is_antisymmetric())
+        TensorGraphNode::Tensor(color) if color.has_antisymmetry())
     }) {
         return None;
     }
@@ -464,8 +482,10 @@ fn add_tensor<Aind: AbsInd + ParseableAind>(
         .structure
         .external_structure_iter()
         .collect::<Vec<_>>();
-    let color = tensor_color(tensor, &slots)?;
+    let (color, argument_positions) = tensor_color(tensor, &slots)?;
     let head = color.head;
+    let groups = color.groups.clone();
+    let argument_count = slots.len() + color.arguments.len();
     let unordered = head.is_symmetric() || head.is_antisymmetric() || head.is_cyclesymmetric();
     let header = graph.add_node(TensorGraphNode::Tensor(color));
     let mut network_slots = network
@@ -491,14 +511,24 @@ fn add_tensor<Aind: AbsInd + ParseableAind>(
 
     let mut cycle_slots = Vec::with_capacity(slots.len());
     for (position, (slot, network_slot)) in slots.iter().copied().zip(network_slots).enumerate() {
+        let argument = argument_positions[position];
         let vertex = graph.add_node(TensorGraphNode::Slot(SlotColor::External(slot)));
-        let visible_position = if unordered { 0 } else { position };
+        let visible_position = if unordered {
+            0
+        } else if let Some(group) = groups
+            .iter()
+            .position(|(positions, _)| positions.contains(&argument))
+        {
+            argument_count + group
+        } else {
+            argument
+        };
         graph
             .add_edge(
                 header,
                 vertex,
                 true,
-                HiddenData::new((visible_position, None), position),
+                HiddenData::new((visible_position, None), argument),
             )
             .unwrap();
         slot_copies
@@ -535,7 +565,7 @@ fn add_tensor<Aind: AbsInd + ParseableAind>(
 fn tensor_color<Aind: AbsInd + ParseableAind>(
     tensor: &SymbolicTensor<OrderedStructure<LibraryRep, Aind>>,
     slots: &[LibrarySlot<Aind>],
-) -> Option<TensorColor> {
+) -> Option<(TensorColor, Vec<usize>)> {
     let AtomView::Fun(function) = tensor.expression.as_view() else {
         return None;
     };
@@ -558,10 +588,49 @@ fn tensor_color<Aind: AbsInd + ParseableAind>(
         return None;
     }
 
-    Some(TensorColor {
-        head: function.get_symbol(),
-        arguments,
-    })
+    let mut argument_positions = (0..slots.len()).collect::<Vec<_>>();
+    let mut metadata_positions = Vec::new();
+    let groups = if let Some(declaration) =
+        spenso::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(function.get_symbol())
+            .ok()?
+    {
+        let mut unmatched = slots
+            .iter()
+            .enumerate()
+            .map(|(position, slot)| (position, slot.to_atom()))
+            .collect::<Vec<_>>();
+        for (argument, value) in function.iter().enumerate() {
+            if let Some(found) = unmatched
+                .iter()
+                .position(|(_, slot)| slot.as_view() == value)
+            {
+                let (position, _) = unmatched.remove(found);
+                argument_positions[position] = argument;
+            } else {
+                metadata_positions.push(argument);
+            }
+        }
+        declaration
+            .groups()
+            .map(|(kind, group)| {
+                (
+                    group.to_vec(),
+                    kind == spenso::shadowing::FactorProjector::Antisymmetric,
+                )
+            })
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    Some((
+        TensorColor {
+            head: function.get_symbol(),
+            arguments,
+            metadata_positions,
+            groups,
+        },
+        argument_positions,
+    ))
 }
 
 fn add_incidence<Aind: AbsInd>(graph: &mut TensorGraph<Aind>, parent: usize, child: usize) {
@@ -698,7 +767,7 @@ fn generator_is_odd<Aind: AbsInd>(graph: &TensorGraph<Aind>, cycles: &[Vec<usize
         let TensorGraphNode::Tensor(color) = &graph.node(node_index).data else {
             continue;
         };
-        if !color.head.is_antisymmetric() {
+        if !color.has_antisymmetry() {
             continue;
         }
 
@@ -726,14 +795,36 @@ fn generator_is_odd<Aind: AbsInd>(graph: &TensorGraph<Aind>, cycles: &[Vec<usize
         }
 
         induced_permutation.sort_unstable_by_key(|(source, _)| *source);
-        odd ^= Permutation::from_map(
-            induced_permutation
-                .into_iter()
-                .map(|(_, target)| target)
-                .collect(),
-        )
-        .sign()
-            < 0;
+        if color.head.is_antisymmetric() {
+            odd ^= Permutation::from_map(
+                induced_permutation
+                    .iter()
+                    .map(|(_, target)| *target)
+                    .collect(),
+            )
+            .sign()
+                < 0;
+        }
+        for (group, antisymmetric) in &color.groups {
+            if !antisymmetric {
+                continue;
+            }
+            let permutation = group
+                .iter()
+                .map(|position| {
+                    let target = induced_permutation
+                        .iter()
+                        .find(|(source, _)| source == position)
+                        .expect("tensor automorphism preserves selected slots")
+                        .1;
+                    group
+                        .iter()
+                        .position(|position| *position == target)
+                        .expect("tensor automorphism preserves slot groups")
+                })
+                .collect();
+            odd ^= Permutation::from_map(permutation).sign() < 0;
+        }
     }
     odd
 }
