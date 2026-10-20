@@ -403,7 +403,11 @@ end_anchor = "                coefficient = Atom::from(integrand_vakint).replace
 # algebra, then scalar Laurent evaluation. This range owns the phase ordering required
 # by evanescent coefficients.
 # Reviewed 2026-10-17: Scalar stage timers preserve tensor projection, native dimensional algebra and scalar backend evaluation order.
-digest = "46b735343d9c8be6b69c1bf738fda6a0733a2f4c"
+# Reviewed 2026-10-20: a cfg(test) observer borrows completed angular terms
+# before scalar-master evaluation, restoring their reversible native ports only
+# in a checked copy. Projection, dimensional algebra, Laurent depth and settings
+# remain owned by the same production sequence; no coefficient is replaced.
+digest = "6c5428121e1a615f25febf802b11aac36ce2fe58"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/uv/approx/integrated.rs"
