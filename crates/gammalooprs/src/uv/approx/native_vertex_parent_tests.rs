@@ -4829,10 +4829,20 @@ impl QcdMassReference {
                 &lmb,
                 frozen.atom.expression(),
             ))?;
+            let frozen_source = GS.erase_uv_momentum_provenance(frozen.atom.expression());
+            let mut hard_carriers = 0;
+            let expected_source = frozen_source.replace_map(|view, _, output| {
+                if let AtomView::Fun(momentum) = view
+                    && momentum.get_symbol() == GS.emr_mom
+                {
+                    assert_eq!(momentum.get(0), Atom::num(4).as_view());
+                    hard_carriers += 1;
+                    **output = view.to_owned() / &t;
+                }
+            });
+            eyre::ensure!(hard_carriers > 0);
             let expected_scaled = frozen.atom.with_checked_expression(
-                frozen
-                    .atom
-                    .expression()
+                expected_source
                     .replace(GS.m_uv_vacuum)
                     .with(Atom::var(GS.m_uv_vacuum) / &t)
                     .replace(GS.integrated_loop_scale)
@@ -4841,7 +4851,9 @@ impl QcdMassReference {
             )?;
             Self::certify_parent_tensor_zero(
                 "actual finite child scalar log jet and consumed measure hard grading",
-                &scaled.try_sub(&expected_scaled)?,
+                &scaled
+                    .with_checked_expression(GS.erase_uv_momentum_provenance(scaled.expression()))?
+                    .try_sub(&expected_scaled)?,
             )?;
             // Only this already integrated scalar child is projected. The
             // parent active Lorentz representations and all denominators stay D.
@@ -4996,9 +5008,16 @@ impl QcdMassReference {
                         * (Atom::num(2) * dot(&k, &l) * slash_l.expression()
                             - dot(&l, &l) * slash_k.expression()),
                 )?;
-                Self::certify_parent_tensor_zero(
+                let difference = integrated::simplify(&source_cubic.try_sub(&expected)?)?
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(
+                            ColorSimplifySettings::default().with_cof_dimension_invariants(),
+                        ),
+                        ..Default::default()
+                    })?;
+                Self::certify_finite_tagged_rows_zero(
                     "independent D09 bare cubic word retains positive odd k,l,l carrier signs",
-                    &source_cubic.try_sub(&expected)?,
+                    difference,
                 )?;
             }
         }

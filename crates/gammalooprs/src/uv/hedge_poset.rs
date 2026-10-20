@@ -1861,6 +1861,7 @@ mod tests {
 
     #[test]
     fn integrated_os_rainbow_retains_nonzero_owned_scheme_coefficients() -> Result<()> {
+        use crate::numerator::symbolica_ext::NumeratorAtomExt;
         use crate::uv::{
             CTIdentifier, CTRenormalizationRule, orchestrator::validate_local_counterterm_schemes,
         };
@@ -1948,6 +1949,10 @@ mod tests {
         );
         forests.integrate(&graph, &graph.model, crate::utils::vakint()?, &settings.uv)?;
 
+        let scale_log = function!(
+            symbolica::atom::Symbol::LOG,
+            Atom::var(GS.m_uv_vacuum).pow(2) / Atom::var(GS.mu_r_sq)
+        );
         let mut nonzero = BTreeSet::new();
         for (node, _, operation) in forests.graph.iter_nodes() {
             if operation.key.is_empty() {
@@ -1966,16 +1971,74 @@ mod tests {
                 !finite.is_zero(),
                 "{operation}: integrated finite payload disappeared"
             );
-            // A retained-coefficient witness, not completeness of an independent
-            // open tensor basis or a replacement for the physical R2 reference.
+            let source = forests.source_spinney(node);
+            let loops = graph.n_loops(source.filter());
+            // The source has already completed its actual operators and analytic
+            // integration. Keep the original positive-epsilon payload unchanged;
+            // inspect a separate constant-epsilon, generic-scale coefficient.
+            let constant = finite.with_checked_expression(
+                finite.expression().replace(GS.dim_epsilon).with(Atom::Zero),
+            )?;
+            let normalized = constant.simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
+            })?;
+            let rows = normalized
+                .expression()
+                .coefficient_list_exact(std::slice::from_ref(&scale_log))
+                .ok_or_else(|| eyre!("{operation}: finite scale-log polynomial was refused"))?;
+            assert_eq!(
+                rows.iter()
+                    .map(|(monomial, _)| monomial.clone())
+                    .collect::<BTreeSet<_>>(),
+                (0..=loops)
+                    .map(|power| scale_log.pow(power as i64))
+                    .collect::<BTreeSet<_>>(),
+                "{operation}: complete finite scale-log degree follows the source loop count",
+            );
+            let recomposed = Atom::add_many(
+                rows.iter()
+                    .map(|(monomial, coefficient)| monomial * coefficient),
+            );
             assert!(
-                finite
+                normalized
+                    .with_checked_expression(normalized.expression() - recomposed)?
+                    .coefficients_are_zero(TensorCollectFilter::<0>::Tensors)?
+                    .is_true(),
+                "{operation}: all scale-log rows must exactly reconstruct the original finite tensor",
+            );
+            let coefficient = rows
+                .iter()
+                .find(|(monomial, _)| *monomial == scale_log.pow(loops as i64))
+                .expect("the independently bounded highest scale-log row exists")
+                .1
+                .clone();
+            let mut exact = true;
+            coefficient.visitor(&mut |view| {
+                if let symbolica::atom::AtomView::Num(number) = view {
+                    exact &= matches!(
+                        number.get_coeff_view(),
+                        symbolica::coefficient::CoefficientView::Natural(..)
+                            | symbolica::coefficient::CoefficientView::Large(..)
+                    );
+                }
+                true
+            });
+            assert!(
+                exact,
+                "{operation}: the nonzero witness must have exact rational coefficients"
+            );
+            // A nonzero retained coefficient at generic auxiliary scale, not
+            // completeness of an independent open tensor basis. Numerical
+            // master constants stay untouched in the unselected constant row.
+            assert!(
+                normalized
+                    .with_checked_expression(coefficient)?
                     .coefficients_are_zero(TensorCollectFilter::<0>::Tensors)?
                     .is_false(),
-                "{operation}: need an exactly nonzero retained finite coefficient",
+                "{operation}: need an exactly nonzero highest scale-log coefficient",
             );
-            let source = forests.source_spinney(node);
-            nonzero.insert((graph.n_loops(source.filter()), operation.key.op_count()));
+            nonzero.insert((loops, operation.key.op_count()));
         }
         assert_eq!(nonzero, BTreeSet::from([(1, 1), (2, 1), (2, 2)]));
 
