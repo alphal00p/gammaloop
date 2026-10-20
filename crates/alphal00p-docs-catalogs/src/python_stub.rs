@@ -1011,7 +1011,7 @@ class Engine:
             ("linnet-py", "linnet_py"),
             ("spynso3", "symbolica.community.spenso"),
             ("idenso-community", "symbolica.community.idenso"),
-            ("vakint-community", "symbolica.community.vakint"),
+            ("vakint-community", "symbolica.community.hepkit.vakint"),
         ];
         let mut catalogs = BTreeMap::new();
         for (component, module) in components {

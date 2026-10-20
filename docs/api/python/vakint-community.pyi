@@ -2,7 +2,11 @@
 # ruff: noqa: E501, F401
 
 import builtins
+import os
+import pathlib
+import symbolica
 import typing
+from symbolica.community.feynkit import FeynmanDiagram, IntegralFamily
 from symbolica.core import Expression
 
 @typing.final
@@ -10,19 +14,51 @@ class Vakint:
     r"""
     Vakint engine and settings used for matching, reduction, and evaluation.
 
-    Construct one instance and reuse it: initialization processes the complete topology library.
+    Construct one instance and reuse it. Initialization prepares lower-loop data;
+    the five-loop catalogue is attached only after successful artifact loading.
     """
-    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None) -> Vakint:
+    def load_external_data(self, path: builtins.str | os.PathLike | pathlib.Path, max_loop_count: builtins.int) -> None:
+        r"""
+        Load a local external-data checkout without network access.
+        """
+    def load_rustred_artifacts(self, loop_count: builtins.int, path: builtins.str | os.PathLike | pathlib.Path) -> None:
+        r"""
+        Load a local loop pack, or a sealed lower-loop native rules file.
+        """
+    def load_official_external_data(self, max_loop_count: builtins.int, version: builtins.str = 'latest', local_artifacts_path: typing.Optional[builtins.str | os.PathLike | pathlib.Path] = None, refresh: builtins.bool = False) -> dict:
+        r"""
+        Install all official loop packs through the requested maximum, or load a
+        supplied checkout directly. Existing validated installations work offline.
+        """
+    def __new__(cls, run_time_decimal_precision: typing.Optional[builtins.int] = None, evaluation_order: typing.Optional[typing.Sequence[VakintEvaluationMethod]] = None, tensor_reduction_method: typing.Optional[builtins.str] = None, epsilon_symbol: typing.Optional[Expression] = None, mu_r_sq_symbol: typing.Optional[Expression] = None, form_exe_path: typing.Optional[builtins.str] = None, python_exe_path: typing.Optional[builtins.str] = None, verify_numerator_identification: typing.Optional[builtins.bool] = None, integral_normalization_factor: typing.Optional[builtins.str] = None, allow_unknown_integrals: typing.Optional[builtins.bool] = None, clean_tmp_dir: typing.Optional[builtins.bool] = None, number_of_terms_in_epsilon_expansion: typing.Optional[builtins.int] = None, use_dot_product_notation: typing.Optional[builtins.bool] = None, temporary_directory: typing.Optional[builtins.str] = None, rustred_artifact_path: typing.Optional[builtins.str] = None, rustred_cache_bytes: typing.Optional[builtins.int] = None, rustred_cache_terms: typing.Optional[builtins.int] = None, rustred_product_cache_bytes: typing.Optional[builtins.int] = None, rustred_product_cache_terms: typing.Optional[builtins.int] = None, rustred_cache_policy: builtins.str = 'evict-lru', rustred_scalar_max_work: typing.Optional[builtins.int] = None) -> Vakint:
         r"""
         Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
         Note that the creation of a Vakint instance involves the processing and creation of the library of all known topologies, which can be time consuming.
+        External executables are validated when an operation needs them, so the FeynKit tensor backend can be used on systems without FORM.
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import Vakint
-        >>> vakint = Vakint(evaluation_order=[])
-        >>> vakint is not None
-        True
+        vakint = Vakint(
+            integral_normalization_factor="MSbar",
+            mu_r_sq_symbol=S("mursq"),
+            # If you select 5 terms, then MATAD will be used, but for 4 and fewer, alphaLoop is will be used as
+            # it is first in the evaluation_order supplied.
+            number_of_terms_in_epsilon_expansion=4,
+            evaluation_order=[
+                VakintEvaluationMethod.new_alphaloop_method(),
+                VakintEvaluationMethod.new_matad_method(),
+                VakintEvaluationMethod.new_fmft_method(),
+                VakintEvaluationMethod.new_pysecdec_method(
+                    min_n_evals=10_000,
+                    max_n_evals=1000_000,
+                    numerical_masses=masses,
+                    numerical_external_momenta=external_momenta
+                ),
+            ],
+            tensor_reduction_method="feynkit",
+            form_exe_path="form",
+            python_exe_path="python3",
+        )
         ```
 
         An empty evaluation order is appropriate for matching, canonicalization, and tensor
@@ -36,6 +72,8 @@ class Vakint:
             The decimal precision to be used during the evaluation. Default is 17.
         evaluation_order : Optional[Sequence[VakintEvaluationMethod]]
             A list of `VakintEvaluationMethod` instances specifying the order in which evaluation methods are to be applied. Default is all available methods in a sensible order.
+        tensor_reduction_method : Optional[str]
+            Numerator tensor-reduction backend: "feynkit" is the default, native backend and does not require FORM; "alphaloop" explicitly selects the historical FORM projector.
         epsilon_symbol : Optional[Expression]
             The symbol to be used for the dimensional regularisation parameter epsilon. Default is "ε".
         mu_r_sq_symbol : Optional[Expression]
@@ -58,6 +96,102 @@ class Vakint:
             Whether to use dot product notation for scalar products. Default is False.
         temporary_directory : Optional[str]
             The path to the temporary directory to be used. Default is None, in which case a system temporary directory will be used.
+        rustred_artifact_path : Optional[str]
+            Saved application package for exact symbolic five-loop RustRed reduction.
+            Use master_mode="retain" for reduction without coefficient evaluation.
+        rustred_cache_bytes : Optional[int]
+            Saved-application coefficient-cache byte budget. Setting it selects
+            byte-governed caching unless rustred_cache_terms is also supplied.
+        rustred_cache_terms : Optional[int]
+            Optional separate aggregate coefficient-term cache ceiling.
+        rustred_product_cache_bytes : Optional[int]
+            Separate lower-factor cache budget; not an aggregate with the saved
+            application cache. Defaults to the native 1 GiB allowance.
+        rustred_product_cache_terms : Optional[int]
+            Explicit lower-factor aggregate term ceiling. A byte override alone
+            selects byte-governed caching for this independent cache.
+        rustred_cache_policy : str
+            "evict-lru" (default) evicts inactive completed saved-rule results;
+            "fail-on-limit" preserves them and reports a cache-limit error.
+            A protected working set that cannot fit still errors under LRU.
+        rustred_scalar_max_work : Optional[int]
+            Exact scalar work allowance per five-loop caller-numerator lowering.
+            None retains the native 16-million default. Does not enlarge entry
+            domains or configure lower-loop/factor programs or process RSS.
+        """
+    def load_rustred_application(self, path: builtins.str) -> None:
+        r"""
+        Explicitly load a local five-loop application package once.
+        Also selects this package in the engine settings.
+        """
+    def rustred_application_cache_statistics(self) -> builtins.dict[builtins.str, builtins.int]:
+        r"""
+        Saved-rule cache occupancy and cumulative work counters. Byte counts
+        describe charged coefficient payloads, not total process RSS.
+        `recomputed_nodes` counts repeated cache misses within a single request;
+        no unbounded cross-request history is retained.
+        """
+    def clear_rustred_application_cache(self) -> None:
+        r"""
+        Clear saved-rule and lower-factor memoization without changing the
+        admitted scope. Cumulative work/eviction counters are not reset.
+        """
+    def prepare_cache(self, n_loops: builtins.int, output_path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: builtins.str = 'evict-lru', cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None, time_limit_seconds: typing.Optional[builtins.int] = None, checkpoint_interval_seconds: typing.Optional[builtins.int] = None, max_roots: typing.Optional[builtins.int] = None, batch_records: typing.Optional[builtins.int] = None, extra_dots: typing.Optional[builtins.int] = None, numerator_rank: typing.Optional[builtins.int] = None, workload: typing.Optional[typing.Sequence[tuple[builtins.int, typing.Sequence[builtins.int]]]] = None, resume: builtins.bool = True, progress: typing.Optional[typing.Any] = None, cancel: typing.Optional[typing.Any] = None, progress_interval_seconds: builtins.float = 1.0) -> dict:
+        r"""
+        Explicitly prepare a finite native cache for one through four loops.
+        No cache attaches automatically and no numerical masters are computed.
+        Inspect the returned status: resource/time/cancellation stops are partial.
+        `workload` is a sequence of `(namespace, complete_integer_powers)` pairs;
+        otherwise the native all-pinch relative-dot/rank primer is used.
+
+        The GIL is released during native work. `progress(report)` runs between
+        roots (throttled) and may return False to cancel; `cancel()` is a polled
+        predicate. Python signals and callback errors stop cooperatively after
+        the current native operation, checkpoint completed roots, then re-raise
+        with `cache_report` attached when possible. No hard deadline is promised.
+        """
+    def load_cache(self, n_loops: builtins.int, path: builtins.str, *, ram_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, cache_policy: typing.Optional[builtins.str] = None, lookup_budget_policy: typing.Optional[builtins.str] = None, cache_terms: typing.Optional[builtins.int] = None, cache_integrals: typing.Optional[builtins.int] = None, max_rule_applications: typing.Optional[builtins.int] = None) -> None:
+        r"""
+        Attach an exact read-only native cache bundle. Omitted settings preserve
+        the active RAM, work, eviction and lookup policies. A new attachment
+        uses native defaults, not preparation's larger RAM default.
+        """
+    def save_cache(self, n_loops: builtins.int, output_path: builtins.str, *, mode: builtins.str, disk_bytes: typing.Optional[builtins.int] = None, resume: builtins.bool = False) -> dict:
+        r"""
+        Explicitly save `resident-roots` or a portable `full-snapshot`.
+        The latter copies captured bases without coefficient decoding, then
+        writes the resident overlay and requires a new destination. Partial
+        reports distinguish base-copy success from overlay completion.
+        """
+    def import_cache(self, n_loops: builtins.int, archive_path: builtins.str, output_path: builtins.str, *, sha256: builtins.str, max_archive_bytes: typing.Optional[builtins.int] = None, max_extracted_bytes: typing.Optional[builtins.int] = None, max_entries: typing.Optional[builtins.int] = None, max_temporary_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None) -> dict:
+        r"""
+        Import a trusted SHA-256 checked USTAR gzip archive into a new native
+        snapshot directory. This does not attach the cache to evaluation.
+        """
+    def download_cache(self, n_loops: builtins.int, url: builtins.str, output_path: builtins.str, *, sha256: builtins.str, max_archive_bytes: typing.Optional[builtins.int] = None, max_extracted_bytes: typing.Optional[builtins.int] = None, max_entries: typing.Optional[builtins.int] = None, max_temporary_bytes: typing.Optional[builtins.int] = None, disk_bytes: typing.Optional[builtins.int] = None, timeout_seconds: typing.Optional[builtins.float] = None) -> dict:
+        r"""
+        Explicit HTTP(S) download with a required trusted checksum. Supply the
+        final URL: redirects are refused. Load the published snapshot separately.
+        """
+    def clear_cache(self, n_loops: builtins.int) -> None:
+        r"""
+        Clear only the attached native RAM cache; preserve its read-only files
+        and cumulative counters. No program is loaded for an empty attachment.
+        """
+    def cache_statistics(self, n_loops: builtins.int) -> dict:
+        r"""
+        Return aggregate and exact-namespace cache telemetry. Coefficient payload
+        and I/O buffers are separate; neither is a measurement of process RSS.
+        """
+    def evaluate_rustred_symbolic(self, integral_expression: Expression) -> tuple[Expression, builtins.list[Expression], builtins.list[tuple[Expression, builtins.str]]]:
+        r"""
+        Apply the selected five-loop package and retain its symbolic conditions.
+
+        Returns `(value, nonzero_conditions, families)`, where `families` contains
+        `(master_label, full_family_fingerprint)` pairs. Conditions are exact
+        expressions required to be nonzero at generic dimension. No numerical
+        master values are substituted. The ordinary native tensor prepass runs
+        before scalar application, with the same settings as `evaluate`.
         """
     def numerical_result_from_expression(self, expr: Expression) -> VakintNumericalResult:
         r"""
@@ -66,7 +200,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> result = vakint.numerical_result_from_expression(
         ...     E("vakint::ε^-2 + 1 + 0.12*vakint::ε^-1")
@@ -88,7 +222,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> evaluated = E(
         ...     "muvsq*vakint::ε^-1 + mursq",
@@ -120,7 +254,7 @@ class Vakint:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import Vakint, VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import Vakint, VakintNumericalResult
         >>> vakint = Vakint(evaluation_order=[])
         >>> result = VakintNumericalResult([
         ...     (-1, (2.0, 0.0)),
@@ -138,7 +272,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> integral = E(
         ...     "topo(prop(18,edge(7,7),k(99),muvsq,1))",
@@ -159,12 +293,13 @@ class Vakint:
         """
     def tensor_reduce(self, integral_expression: Expression) -> Expression:
         r"""
-        Reduce the tensor integrals in a Vakint expression to scalar integrals.
+        Convert a vakint expression to a form where tensor integrals are reduced to scalar integrals.
+        The backend is selected by `tensor_reduction_method` when constructing `Vakint`.
 
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import Vakint
+        >>> from symbolica.community.hepkit.vakint import Vakint
         >>> vakint = Vakint(evaluation_order=[])
         >>> integral = E(
         ...     "k(1,101)*k(1,102)*topo(prop(1,edge(1,1),k(1),muvsq,1))",
@@ -188,7 +323,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import Vakint, VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
         >>> vakint = Vakint(
         ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
         ... )
@@ -218,7 +353,7 @@ class Vakint:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import Vakint, VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
         >>> vakint = Vakint(
         ...     evaluation_order=[VakintEvaluationMethod.new_alphaloop_method()]
         ... )
@@ -258,11 +393,36 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> alphaloop_method = VakintEvaluationMethod.new_alphaloop_method()
         >>> "AlphaLoop" in str(alphaloop_method)
         True
         ```
+        """
+    @classmethod
+    def new_rustred_method(cls, master_mode: builtins.str = 'numerical') -> VakintEvaluationMethod:
+        r"""
+        Create the opt-in FORM-independent RustRed scalar-integral evaluation method.
+
+        This method leaves Vakint's tensor-reduction selection unchanged. It uses
+        shipped closing artifacts for supported one- through three-loop equal-mass
+        vacuum families and guarded, finite-tested candidate programs at four loops.
+        Four-loop success is pointwise reduction, not arbitrary-index closure.
+        The default FeynKit tensor prepass is also FORM-independent; explicitly
+        choosing the historical AlphaLoop tensor prepass still requires FORM.
+
+        ## Examples
+        ```python
+        rustred_method = VakintEvaluationMethod.new_rustred_method(
+            master_mode="numerical"
+        )
+        ```
+
+        Parameters
+        ----------
+
+        master_mode : str
+           "retain", "symbolic", or "numerical" (default).
         """
     @classmethod
     def new_matad_method(cls, expand_masters: typing.Optional[builtins.bool] = None, susbstitute_masters: typing.Optional[builtins.bool] = None, substitute_hpls: typing.Optional[builtins.bool] = None, direct_numerical_substition: typing.Optional[builtins.bool] = None) -> VakintEvaluationMethod:
@@ -271,7 +431,7 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> matad_method = VakintEvaluationMethod.new_matad_method(
         ...     expand_masters=True,
         ...     susbstitute_masters=True,
@@ -307,7 +467,7 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> fmft_method = VakintEvaluationMethod.new_fmft_method(
         ...     expand_masters=True,
         ...     susbstitute_masters=True,
@@ -336,7 +496,7 @@ class VakintEvaluationMethod:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintEvaluationMethod
+        >>> from symbolica.community.hepkit.vakint import VakintEvaluationMethod
         >>> pysecdec_method = VakintEvaluationMethod.new_pysecdec_method(
         ...     quiet=True,
         ...     relative_precision=1e-7,
@@ -383,6 +543,14 @@ class VakintExpression:
 
     Construct this wrapper from a Symbolica expression before applying Vakint operations.
     """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display through Symbolica's native rich expression printer.
+        """
+    def formatted(self, **options: typing.Any) -> typing.Any:
+        r"""
+        Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
+        """
     def __str__(self) -> builtins.str:
         r"""
         String representation of the VakintExpression.
@@ -394,7 +562,7 @@ class VakintExpression:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import VakintExpression
+        >>> from symbolica.community.hepkit.vakint import VakintExpression
         >>> integral = VakintExpression(E('''
         ...     k(1,11)*k(1,11)
         ...     *topo(prop(1,edge(1,1),k(1),muvsq,1))
@@ -410,7 +578,7 @@ class VakintExpression:
         ## Examples
         ```python
         >>> from symbolica import E
-        >>> from symbolica.community.vakint import VakintExpression
+        >>> from symbolica.community.hepkit.vakint import VakintExpression
         >>> integral = E('''
         ...     (
         ...         k(1,11)*k(2,11)*k(1,22)*k(2,22)
@@ -442,13 +610,28 @@ class VakintNumericalResult:
     r"""
     Numerical Laurent series in the dimensional-regularization parameter epsilon.
     """
+    def to_expression(self, epsilon_symbol: typing.Optional[Expression] = None) -> Expression:
+        r"""
+        Return a native Symbolica expression without rounding coefficients to Python floats.
+
+        The default variable is `vakint::ε`. Use `Vakint.numerical_result_to_expression`
+        when the originating engine has a custom epsilon symbol.
+        """
+    def _repr_html_(self) -> builtins.str:
+        r"""
+        Display through Symbolica's native rich expression printer.
+        """
+    def formatted(self, **options: typing.Any) -> typing.Any:
+        r"""
+        Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
+        """
     def __str__(self) -> builtins.str:
         r"""
         String representation of the numerical result.
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ...     (-2, (0.0, 57169.95521898031)),
@@ -468,7 +651,7 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ...     (-2, (0.0, 57169.95521898031)),
@@ -487,7 +670,7 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ...     (-2, (0.0, 57169.95521898031)),
@@ -512,7 +695,7 @@ class VakintNumericalResult:
 
         ## Examples
         ```python
-        >>> from symbolica.community.vakint import VakintNumericalResult
+        >>> from symbolica.community.hepkit.vakint import VakintNumericalResult
         >>> result1 = VakintNumericalResult([
         ...     (-3, (0.0, -11440.53140354612)),
         ... ])
@@ -539,4 +722,16 @@ class VakintNumericalResult:
         max_pull : Optional[float]
            The maximum pull for comparison. Default is 3.0.
         """
+
+def integral_from_diagram(diagram: FeynmanDiagram, family: IntegralFamily, numerator: Expression, *, powers: typing.Sequence[int] | None = None, physical_slots: typing.Optional[typing.Sequence[builtins.int]] = None, parameter_substitutions: typing.Mapping[symbolica.Expression, symbolica.Expression] | None = None, external_momenta: typing.Sequence[symbolica.Expression] = Vec :: new()) -> VakintExpression:
+    r"""
+    Build a native VakintExpression from a routed, uncut vacuum graph.
+
+    The family must retain the graph's stored loop basis; `physical_slots` maps
+    sorted graph edges to zero-based family indices and defaults to the prefix.
+    Nonpositive physical powers contract edges; auxiliary powers must be nonpositive. Numerators use native
+    Kinematics.scalar_product notation. Spectator order defines numerical vector
+    IDs. Parameter substitutions are simultaneous and must already be reflected
+    in the family's physical denominators. No graph factor is inserted.
+    """
 

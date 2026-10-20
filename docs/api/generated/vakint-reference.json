@@ -136,12 +136,12 @@
       "propagator_slots": 8
     },
     {
-      "name": "I4L_FG_pinch_2_4_7",
+      "name": "I4L_FG_pinch_3_4_8",
       "loops": 4,
       "propagator_slots": 8
     },
     {
-      "name": "I4L_FG_pinch_3_4_8",
+      "name": "I4L_FG_pinch_3_7_8",
       "loops": 4,
       "propagator_slots": 8
     },

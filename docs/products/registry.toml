@@ -153,5 +153,5 @@ rust_components = [
   { id = "vakint", package = "vakint", kind = "library", version_source = "crates/vakint/Cargo.toml" },
 ]
 python_components = [
-  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.vakint", features = ["symbolica_community_module", "python_stubgen"] },
+  { id = "vakint-community", package = "vakint", kind = "symbolica-community-module", version_source = "crates/vakint/Cargo.toml", module = "symbolica.community.hepkit.vakint", features = ["symbolica_community_module", "python_stubgen"] },
 ]

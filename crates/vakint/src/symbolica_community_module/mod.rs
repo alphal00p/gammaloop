@@ -62,9 +62,12 @@ macro_rules! define_vakint_python_surface {
             Ok(())
         }
 
-        /// The classes registered on `symbolica.community.hepkit.vakint`.
+        /// Public names registered on `symbolica.community.hepkit.vakint`.
         #[cfg(feature = "python_stubgen")]
-        pub const PYTHON_STUB_SURFACE: &[&str] = &[$(<$class as PyClass>::NAME,)+];
+        pub const PYTHON_STUB_SURFACE: &[&str] = &[
+            $(<$class as PyClass>::NAME,)+
+            "integral_from_diagram",
+        ];
     };
 }
 

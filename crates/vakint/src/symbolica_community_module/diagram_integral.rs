@@ -17,7 +17,10 @@ use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 /// Kinematics.scalar_product notation. Spectator order defines numerical vector
 /// IDs. Parameter substitutions are simultaneous and must already be reflected
 /// in the family's physical denominators. No graph factor is inserted.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
+#[cfg_attr(
+    feature = "python_stubgen",
+    pyo3_stub_gen::derive::gen_stub_pyfunction(module = "symbolica.community.hepkit.vakint")
+)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pyfunction]
 #[pyo3(signature = (diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=Vec::new()), text_signature = "(diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=())")]

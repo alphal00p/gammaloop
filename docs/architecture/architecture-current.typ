@@ -270,7 +270,7 @@ projection, marker, and backend-boundary invariants are documented in
   separately owned terminal event loop, as documented in the maintained
   #link("ratatui-integration-dashboard.typ")[integration dashboard architecture].
 
-Zero-loop integrands use a point integration domain: samples have unit
+Zero-loop integrands use a point integration domain: continuous samples have unit
 weight and no coordinates, and sampling draws no random numbers. The grid
 adapter preserves native settings validation and delegates positive
 dimensions to the native continuous grid.

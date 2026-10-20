@@ -52,16 +52,16 @@ color_feyncalc_structure_loop_to_adjoint_delta_id3 [ColorSu3, ColorDefault, enab
 cas(2,coad(8))*g(coad(8,a),coad(8,b))
 
 color_feyncalc_structure_times_open_chain_id4 [ColorSu3, ColorDefault, enabled]
-1𝑖/2*cas(2,coad(8))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,a),in,out))
+cas(2,coad(8))*chain(cof(3,i),dind(cof(3,j)),t(coad(8,a),in,out))*𝑖/2
 
 color_feyncalc_delta_closes_doubled_two_generator_chain_id18 [ColorSu3, ColorDefault, enabled]
 2*g(coad(8,i),coad(8,j))*idx(2,cof(3))
 
 color_feyncalc_three_generator_trace_terminal_id30 [ColorSu3, ColorDefault, enabled]
-1𝑖/2*f(coad(8,i),coad(8,j),coad(8,k))*idx(2,cof(3))+trace(cof(3),sym(t(coad(8,i),in,out),t(coad(8,j),in,out),t(coad(8,k),in,out)))
+f(coad(8,i),coad(8,j),coad(8,k))*idx(2,cof(3))*𝑖/2+trace(cof(3),sym(t(coad(8,i),in,out),t(coad(8,j),in,out),t(coad(8,k),in,out)))
 
 color_feyncalc_repeated_trace_pair_id52 [ColorSu3, ColorDefault, enabled]
 -4*cas(2,coad(8))*idx(2,cof(3))+8*cas(2,cof(3))*idx(2,cof(3))
 
 color_form_four_generator_trace_terminal [ColorSu3, ColorDefault, enabled]
--1/6*f(coad(8,a),coad(8,c),coad(8,x))*f(coad(8,b),coad(8,d),coad(8,x))*idx(2,cof(3))+1/3*f(coad(8,a),coad(8,d),coad(8,x))*f(coad(8,b),coad(8,c),coad(8,x))*idx(2,cof(3))+1𝑖/2*f(coad(8,a),coad(8,b),coad(8,x))*trace(cof(3),sym(t(coad(8,c),in,out),t(coad(8,d),in,out),t(coad(8,x),in,out)))+1𝑖/2*f(coad(8,c),coad(8,d),coad(8,x))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,x),in,out)))+trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out)))
+-1/6*f(coad(8,a),coad(8,c),coad(8,x))*f(coad(8,b),coad(8,d),coad(8,x))*idx(2,cof(3))+1/3*f(coad(8,a),coad(8,d),coad(8,x))*f(coad(8,b),coad(8,c),coad(8,x))*idx(2,cof(3))+f(coad(8,a),coad(8,b),coad(8,x))*trace(cof(3),sym(t(coad(8,c),in,out),t(coad(8,d),in,out),t(coad(8,x),in,out)))*𝑖/2+f(coad(8,c),coad(8,d),coad(8,x))*trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,x),in,out)))*𝑖/2+trace(cof(3),sym(t(coad(8,a),in,out),t(coad(8,b),in,out),t(coad(8,c),in,out),t(coad(8,d),in,out)))

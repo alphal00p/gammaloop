@@ -553,7 +553,10 @@ anchor = "pub struct VakintWrapper {"
 # wrapper contracts and required tool boundaries explicit without changing behavior.
 # Reviewed 2026-10-19: The Python wrapper exposes cumulative data loading and explicit RustRed
 # master modes through the same engine, without a separate reduction pipeline.
-digest = "b2b445135f89c0a2e15469b7defbc02903525d48"
+# Reviewed 2026-10-20: stub metadata now declares the existing diagram-ingress
+# function and follows the tested hepkit.vakint module. Numerical and reduction
+# method bodies are unchanged; generated signatures match the registered surface.
+digest = "ecf80468ac9003745ac6e3fba0b352a795c3376e"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/data.rs"

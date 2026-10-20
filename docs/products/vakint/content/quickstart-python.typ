@@ -14,7 +14,7 @@ python -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install "symbolica==2.2.0"
-python -c "import symbolica.community.vakint as vakint; print(vakint.__name__)"
+python -c "import symbolica.community.hepkit.vakint as vakint; print(vakint.__name__)"
 ```
 
 There is no separate `vakint` Python wheel. Follow
@@ -27,7 +27,7 @@ Save this as `vakint_quickstart.py`:
 // docs-example: compile vakint-community-quickstart
 ```python
 from symbolica import E
-from symbolica.community.vakint import Vakint
+from symbolica.community.hepkit.vakint import Vakint
 
 engine = Vakint(evaluation_order=[])
 integral = E(

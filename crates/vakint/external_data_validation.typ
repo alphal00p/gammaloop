@@ -45,7 +45,7 @@ turn the failed hosted check into a pass. RustRed's hosted NixCI check was pendi
 
 #table(
   columns: (0.6fr, 1fr, 1fr, 1fr, 1.4fr),
-  [Loops], [Declared keys], [Numeric coefficients], [Exact coefficients], [Completed cache roots],
+  [Loops], [Declared keys], [Numeric coefficients], [Symbolic coefficients], [Completed cache roots],
   [1], [1], [6], [6], [5],
   [2], [2], [13], [13], [77],
   [3], [38], [252], [252], [2,320],
@@ -53,7 +53,7 @@ turn the failed hosted check into a pass. RustRed's hosted NixCI check was pendi
   [5], [905], [0], [0], [No prepared cache],
 )
 
-The release contains 739 numerical and 635 exact coefficients. Its 104
+The release contains 739 numerical and 635 symbolic coefficients. Its 104
 numerical-only four-loop coefficients have validated caps of 50 digits (100
 coefficients) or 200 digits (four coefficients). Exact rational/HPL/zeta formulas
 are evaluated at requested precision; working precision cannot enlarge a finite
@@ -181,14 +181,13 @@ Tydenso Wasm-target source check and native-feature exclusion check also passed.
 Existing compressed Wasm assets were not regenerated, and no rebuilt-asset
 interoperability result is claimed.
 
-The Cargo package inventory check passed: 309 files, with no removed `artifacts/`
-tree, prepared caches or 4L/5L runtime packs. Building the crate archive with
-`cargo package --allow-dirty --no-verify` stops at the pre-existing Git-only
-`feynkit-graph` dependency without a crates.io version requirement. Publishing
-Vakint itself is outside this migration's scope; workspace compilation and
-the published external-data packs are the delivery targets. That initial packaging result predates the workspace dependency consolidation
-described below; package inventory and archive checks will be repeated against
-the final source. The numerical dependency pins were retained.
+The final Cargo package inventory contains 315 files, with no removed
+`artifacts/` tree, prepared caches or 4L/5L runtime packs. Building the crate archive
+with `cargo package --allow-dirty --no-verify` stops at the existing Git-only
+`rustred` dependency without a crates.io version requirement. No registry version
+was invented. Publishing Vakint itself is outside this migration's scope;
+workspace compilation and the published external-data packs are the delivery
+targets.
 
 == Consolidated workspace dependencies
 
@@ -213,9 +212,50 @@ Actual offline Nix-vendor resolution agrees with Cargo for all 695 selected-CI
 nodes and 822 all-feature nodes, including dependency edges and enabled features.
 Hakari and generated CI graph checks pass. The obsolete Git-Spenso vendor
 augmentation was removed after that proof. All required new fixture and stub
-inputs were checked in the Nix source. Coordinated native-cache, scalar and
-four-loop numerical revalidation is still in progress for this consolidated
-snapshot; the earlier complete numerical evidence above predates this mapping.
+inputs were checked in the Nix source. The final coherent Python extension downloaded and activated all five published
+packs. A clean `unshare --user --map-root-user --net` process reused that same
+installation and produced identical 80-digit one-loop numerical output, with no
+network interface. Development recorder path-serialization failures were retained
+and corrected; the final isolated run passed every assertion and exited zero.
+
+The consolidated numerical rerun passed the complete fifteen-case four-loop
+inventory, all sixteen numerator/pinch pairs and the independent FORM-free
+H rank-four reference with unchanged assertions and tolerances. A 48-test
+scalar/tensor integration selection passed; after the collected-power correction,
+all 24 affected tensor frontend tests and all 52 active tensor unit tests passed
+again. Both focused collected-power regressions passed, and five old/new tensor
+prepass comparisons have exactly zero algebraic differences. The final Python
+extension passed all twenty subprocess checks. The suites overlap.
+
+The consolidated algebra adapters required two corrections already represented
+in the original dependency behavior. Collected positive powers must reach
+callbacks as complete monomials; otherwise a repeated vector can be dropped.
+The local QCD fixture adapter also expands metric sums around gamma/color
+contraction. Independent Clifford pairings agree through ten gamma matrices
+(945 pairings), and the targeted six-gamma regression passes. Neither correction
+changes FORM formulas or acceptance tolerances. The complete native registry/cache/capability matrix passed all 64 selected tests,
+including actual five-loop witness admission/reuse. The fresh 38-root four-loop
+campaign completed with 30 newly stored roots and eight strictly reused captured
+descendants. Every selected root has a validated durable record, all four cold
+term/ordered-guard controls agree, and fresh-process value/mass/hit/limit checks
+passed. Its two optional metadata capture exhaustions are recorded separately
+from successful root completion. Full five-loop QCD scalar input parity is still
+pending its complete run.
+
+Fifteen inherited Idenso snapshots were refreshed after exact validation of
+seventeen old/new expression pairs and a bijection preserving all six external
+DOT slots. Three fresh processes reproduced the same new port order. All 232
+Idenso tests and the complete 575-test Nix Spenso group passed, with the existing
+skips unchanged; production algebra and CI selection were not modified.
+
+Generated Python signatures now follow the tested
+`symbolica.community.hepkit.vakint` module and include cumulative loaders, master
+modes and the existing diagram-ingress function. Declared, stub and runtime
+surfaces agree on all five exports. Stub regeneration/check, all 23 catalog
+tests, formatting and relevant all-target Clippy passed. The runtime topology
+reference still contains 27 entries; native graph isomorphism and both original
+and final Python hosts confirm that its refreshed FG contraction labels describe
+the same existing graph classes and supported short forms.
 
 A further native/compact DOT discriminator defect was reproduced and submitted
 against the current FeynKit branch in

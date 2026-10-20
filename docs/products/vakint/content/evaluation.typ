@@ -146,7 +146,7 @@ prevents a partially substituted expression from being mistaken for a fully nume
 ])
 
 #boundary("Python is an embedded community module", [
-  `symbolica.community.vakint` is registered into a Symbolica installation; it is not a
+  `symbolica.community.hepkit.vakint` is registered into a Symbolica installation; it is not a
   standalone PyPI package. Constructing its `Vakint` class validates the configured backends.
   Pass an empty evaluation order for pure matching work on machines without FORM/pySecDec.
 ])

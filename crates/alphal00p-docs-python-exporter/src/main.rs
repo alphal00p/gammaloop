@@ -183,7 +183,7 @@ fn validate_vakint_stub_surface(
         .map(|name| (*name).to_owned())
         .collect::<BTreeSet<_>>();
     let runtime = pyo3::Python::attach(|py| {
-        let module = pyo3::types::PyModule::new(py, "symbolica.community.vakint")?;
+        let module = pyo3::types::PyModule::new(py, "symbolica.community.hepkit.vakint")?;
         vakint::symbolica_community_module::VakintWrapper::register_module(&module)?;
         public_module_names(&module)
     })?;
@@ -247,7 +247,7 @@ fn gather(component: &str) -> Result<(&'static str, pyo3_stub_gen::StubInfo), Bo
         #[cfg(feature = "idenso")]
         "idenso-community" => Ok(("symbolica.community.idenso", idenso::stub_info()?)),
         #[cfg(feature = "vakint")]
-        "vakint-community" => Ok(("symbolica.community.vakint", vakint::stub_info()?)),
+        "vakint-community" => Ok(("symbolica.community.hepkit.vakint", vakint::stub_info()?)),
         _ => Err(format!(
             "component {component} is not enabled; select its matching Cargo feature"
         )
