@@ -79,11 +79,10 @@ fn word_adjoint_conjugates_exact_scalar_weights_and_reverses_generators() {
         Atom::var(symbol!("word_adjoint::real"; Real, Scalar)),
         Atom::var(symbol!("word_adjoint::complex"; Scalar)),
     ] {
-        let scalar = SymbolicTensor::infer(weight).unwrap();
+        let scalar = SymbolicTensor::infer(weight.clone()).unwrap();
         let source = scalar.multiply_word(head, &word).unwrap();
         let actual = source.dirac_adjoint_word(head, bar).unwrap();
-        let expected = scalar
-            .dirac_adjoint(true)
+        let expected = SymbolicTensor::infer(weight.conj())
             .unwrap()
             .multiply_word(head, &reversed)
             .unwrap();
