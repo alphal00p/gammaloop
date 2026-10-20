@@ -13,6 +13,9 @@ enum SoftStratum {
     ChildOnShellGluon,
     OuterGluon,
     SimultaneousGluons,
+    RainbowOuterHierarchy(i32),
+    RainbowPhysicalChildHierarchy(i32),
+    RainbowFixedChildHierarchy(i32),
     DisjointLeftGluon,
     DisjointRightGluon,
     DisjointGluons,
@@ -44,6 +47,32 @@ impl SoftStratum {
                 soft.clone(),
                 std::array::from_fn(|index| &soft[index] + Atom::num(transverse[index]) * radius),
             ],
+            Self::RainbowOuterHierarchy(power)
+            | Self::RainbowPhysicalChildHierarchy(power)
+            | Self::RainbowFixedChildHierarchy(power) => {
+                // Exact rational unit directions with two transverse angles.
+                let first = [Atom::one(), Atom::Zero, Atom::Zero];
+                let second = if ray == 0 {
+                    [Atom::num((3, 5)), Atom::num((4, 5)), Atom::Zero]
+                } else {
+                    [Atom::num((-3, 5)), Atom::Zero, Atom::num((4, 5))]
+                };
+                let large = std::array::from_fn::<_, 3, _>(|axis| &first[axis] * radius);
+                let small =
+                    std::array::from_fn::<_, 3, _>(|axis| &second[axis] * radius.pow(power));
+                match self {
+                    Self::RainbowOuterHierarchy(_) => vec![
+                        std::array::from_fn(|axis| &first[axis] * radius.pow(power)),
+                        std::array::from_fn(|axis| &second[axis] * radius),
+                    ],
+                    Self::RainbowPhysicalChildHierarchy(_) => vec![
+                        large.clone(),
+                        std::array::from_fn(|axis| &large[axis] + &small[axis]),
+                    ],
+                    Self::RainbowFixedChildHierarchy(_) => vec![large, small],
+                    _ => unreachable!(),
+                }
+            }
             // Each component owns its own subtraction point. The second
             // soft gluon is measured from zero, without a shift by the first
             // component's loop momentum.
@@ -92,6 +121,9 @@ impl SoftStratum {
             // Both three-dimensional loop vectors scale together. The radial
             // measure of this six-dimensional stratum is rho^5 d rho.
             Self::SimultaneousGluons | Self::DisjointGluons => 5,
+            Self::RainbowOuterHierarchy(power)
+            | Self::RainbowPhysicalChildHierarchy(power)
+            | Self::RainbowFixedChildHierarchy(power) => 3 * power + 2,
             Self::ThreeLoopFlat { normal_slots, .. } => {
                 // Rank r means 3r independent real normal coordinates.
                 3 * normal_slots.iter().filter(|slot| slot.is_some()).count() as i32 - 1
@@ -115,7 +147,7 @@ fn check_soft_rays(
     } else {
         2
     };
-    let mut evaluator = fixture.full_forest_evaluator(route)?;
+    let mut evaluator = fixture.full_forest_evaluator(route, false, ["1", "0", "0", "0"])?;
     // Numerical external data do not alter the prepared native forest.
     // Reuse its retained families and compiled scalar output probe across
     // the coincident-center and generic-external batches.
@@ -299,4 +331,149 @@ fn complete_three_loop_local_os_forest_has_bounded_uniform_soft_flats() -> Resul
             ([5, 1, 2, 3], strata.as_slice()),
         ],
     )
+}
+
+#[test]
+fn rainbow_hierarchy_coordinates_resolve_all_three_soft_normals_exactly() -> Result<()> {
+    crate::initialisation::test_initialise()?;
+    // Geometry only: the three normals are r=e2-p, q=e3-e2 and u=e3-p.
+    // In particular u<<r is q approximately -r, not q approximately zero.
+    for power in [2, 3] {
+        for stratum in [
+            SoftStratum::RainbowOuterHierarchy(power),
+            SoftStratum::RainbowPhysicalChildHierarchy(power),
+            SoftStratum::RainbowFixedChildHierarchy(power),
+        ] {
+            assert_eq!(stratum.radial_measure_power(), 3 * power + 2);
+            for ray in 0..2 {
+                for exponent in 3..=7 {
+                    let radius = Atom::one() / Atom::num(1usize << exponent);
+                    let loops = stratum.momenta(&radius, ray);
+                    let r = &loops[0];
+                    let u = &loops[1];
+                    let q: [Atom; 3] = std::array::from_fn(|axis| &u[axis] - &r[axis]);
+                    let norm2 = |v: &[Atom; 3]| v.iter().map(|x| x.pow(2)).sum::<Atom>();
+                    assert!(!norm2(r).is_zero());
+                    assert!(!norm2(&q).is_zero());
+                    assert!(!norm2(u).is_zero());
+                    assert!(
+                        (norm2(r)
+                            - match stratum {
+                                SoftStratum::RainbowOuterHierarchy(_) => radius.pow(2 * power),
+                                _ => radius.pow(2),
+                            })
+                        .is_zero()
+                    );
+                    let small = match stratum {
+                        SoftStratum::RainbowOuterHierarchy(_) => r,
+                        SoftStratum::RainbowPhysicalChildHierarchy(_) => &q,
+                        SoftStratum::RainbowFixedChildHierarchy(_) => u,
+                        _ => unreachable!(),
+                    };
+                    assert!((norm2(small) - radius.pow(2 * power)).is_zero());
+                    for axis in 0..3 {
+                        assert!((&q[axis] + &r[axis] - &u[axis]).is_zero());
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+mod slow {
+    use super::*;
+
+    #[test]
+    fn complete_os_rainbow_has_bounded_hierarchical_soft_controls() -> Result<()> {
+        crate::initialisation::test_initialise()?;
+        let fixture = DirectForestFixture::OsQuarkInQuark;
+        // The integrated public rainbow agrees across all three routes. Its
+        // projected route had the fastest evaluator in the retained 2026-10-20
+        // correctness run; retain the smaller equivalence cases for all routes.
+        const ROUTE: usize = 2;
+        let unit = F(ArbPrec::default()).one();
+        let zero = unit.zero();
+        for (future, velocity) in [
+            ([12, 0, 0, 0], ["1", "0", "0", "0"]),
+            ([15, 3, 6, 6], ["5/4", "1/4", "1/2", "1/2"]),
+        ] {
+            // One actual finite-child forest and fixed component frame, reused for
+            // both signed external endpoints and every hierarchy/angular point.
+            let mut evaluator = fixture.full_forest_evaluator(ROUTE, true, velocity)?;
+            for sign in [1, -1] {
+                let external = future.map(|value| Atom::num(sign * value));
+                for power in [2, 3] {
+                    for stratum in [
+                        SoftStratum::RainbowOuterHierarchy(power),
+                        SoftStratum::RainbowPhysicalChildHierarchy(power),
+                        SoftStratum::RainbowFixedChildHierarchy(power),
+                    ] {
+                        for ray in 0..2 {
+                            let mut weighted = Vec::new();
+                            for exponent in 3..=7 {
+                                let denominator = 1usize << exponent;
+                                let radius = Atom::one() / Atom::num(denominator);
+                                let loops = stratum
+                                    .momenta(&radius, ray)
+                                    .into_iter()
+                                    .map(|normal| {
+                                        std::array::from_fn(|axis| {
+                                            &external[axis + 1] + &normal[axis]
+                                        })
+                                    })
+                                    .collect::<Vec<_>>();
+                                let values = evaluator.evaluate(&external, &loops)?;
+                                let norm =
+                                    values.values().try_fold(zero.clone(), |norm, value| {
+                                        let component = value.clone().norm().re;
+                                        eyre::ensure!(
+                                            component.is_finite(),
+                                            "finite complete hierarchical rainbow tensor"
+                                        );
+                                        Ok::<_, eyre::Report>(norm.max(component))
+                                    })?;
+                                assert!(
+                                    norm > zero,
+                                    "nonzero complete hierarchical rainbow control"
+                                );
+                                let numeric_radius = &unit / unit.from_usize(denominator);
+                                weighted.push(
+                                    norm * numeric_radius.powi(stratum.radial_measure_power()),
+                                );
+                            }
+                            crate::debug_tags!(#uv, #local, #soft, #summary;
+                                stage = "complete_rainbow_hierarchical_soft_control",
+                                route = ROUTE, stratum = ?stratum, power, ray, sign,
+                                radial_measure_power = stratum.radial_measure_power(),
+                                expected_margin = power - 1,
+                                file.velocity = ?velocity, file.external = ?external,
+                                file.weighted = ?weighted,
+                                "Finite-grid causal-power-count control; not a uniform IR/epsilon proof"
+                            );
+                            // Independent chart power count: with r and u as the
+                            // two vector coordinates, rho/rho^a has Jacobian
+                            // rho^(3a+2). The candidate causal bounds r^-2 u^-3,
+                            // q^-2 r^-3 and u^-2 r^-3 yield rho^(a-1) after that
+                            // measure. The first uses the matched outer endpoint
+                            // zero and one inner derivative. This grid TESTS that
+                            // necessary power-count hypothesis on native CFF data;
+                            // it does not prove its uniform angular remainder.
+                            // No exponent is fitted to the produced values.
+                            let maximum_growth =
+                                unit.from_usize(3) / unit.from_usize(1usize << power);
+                            for tail in weighted[2..].windows(2) {
+                                assert!(
+                                    tail[1] <= &maximum_growth * &tail[0],
+                                    "{stratum:?}, ray {ray}, sign {sign}: hierarchical weight violates the derived candidate rho^{} margin: {weighted:?}",
+                                    power - 1
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
 }

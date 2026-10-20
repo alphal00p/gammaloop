@@ -1330,8 +1330,18 @@ impl DirectForestFixture {
         Ok(())
     }
 
-    pub(super) fn full_forest_evaluator(self, route: usize) -> Result<ForestTensorEvaluator> {
+    pub(super) fn full_forest_evaluator(
+        self,
+        route: usize,
+        finite_prefix: bool,
+        velocity: [&str; 4],
+    ) -> Result<ForestTensorEvaluator> {
         if matches!(self, Self::OsQuarkInQuarkWithSpectator) {
+            assert!(
+                !finite_prefix,
+                "the complete three-loop radial fixture is local-only"
+            );
+            assert_eq!(velocity, ["1", "0", "0", "0"]);
             assert_eq!(
                 route, 2,
                 "complete three-loop radial checks use the validated projected route"
@@ -1539,11 +1549,8 @@ impl DirectForestFixture {
             let generated = generated.pop().unwrap();
             return ForestTensorEvaluator::new_shared(self, &graph, route, &generated.integrands);
         }
-        let (graph, expressions) = self.assemble(
-            DirectForestTerms::CompleteForest,
-            false,
-            ["1", "0", "0", "0"],
-        )?;
+        let (graph, expressions) =
+            self.assemble(DirectForestTerms::CompleteForest, finite_prefix, velocity)?;
         if matches!(
             self,
             Self::OsQuarkInGluon | Self::OsQuarkInQuark | Self::SoftGluonInQuark

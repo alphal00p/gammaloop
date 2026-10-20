@@ -67,7 +67,8 @@ not (binary(/pysecdec/) or test(=test_integrate_1l_decorated_indices_pysecdec)) 
 ) and not (
     test(=uv::approx::integrated::native_mass_tests::native_two_loop_overall_os_mass_condition_matches_independent_reference) or
     test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_three_loop_local_os_forest_has_bounded_uniform_soft_flats) or
-    test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_os_forest_has_bounded_radial_soft_controls) or
+    test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::slow::complete_os_rainbow_has_bounded_hierarchical_soft_controls) or
+test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_os_forest_has_bounded_radial_soft_controls) or
     test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_ir_forest_has_bounded_radial_soft_controls) or
     test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_completed_two_loop_os_parent_keeps_live_cograph) or
     test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_bare_two_loop_os_parent_keeps_live_cograph) or
@@ -330,6 +331,7 @@ inherits = "ci_full"
 default-filter = '''
 test(=uv::approx::integrated::native_mass_tests::native_two_loop_overall_os_mass_condition_matches_independent_reference) or
 test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_three_loop_local_os_forest_has_bounded_uniform_soft_flats) or
+test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::slow::complete_os_rainbow_has_bounded_hierarchical_soft_controls) or
 test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_os_forest_has_bounded_radial_soft_controls) or
 test(=uv::approx::direct_3d::kernel::on_shell_soft_tests::complete_os_in_ir_forest_has_bounded_radial_soft_controls) or
 test(=uv::approx::direct_3d::kernel::on_shell_tests::proper_direct_completed_two_loop_os_parent_keeps_live_cograph) or
