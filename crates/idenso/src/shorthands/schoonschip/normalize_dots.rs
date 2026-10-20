@@ -310,9 +310,21 @@ impl DotNormalizer {
             _ => return None,
         };
         let representation = self.slots.compact_representation(compact.as_view())?;
-        if !representation.is_base() {
-            return None;
-        }
+        // Complement only spaces which actually declare dual variance. Generic
+        // representation syntax keeps its established compact-slot convention.
+        let outer_representation =
+            if representation.is_base() && !representation.head().has_tag(&T.dualizable) {
+                compact.clone()
+            } else if representation.is_base() {
+                function!(
+                    spenso::structure::abstract_index::AIND_SYMBOLS.dind,
+                    representation.compact()
+                )
+            } else if representation.is_dual() {
+                representation.compact()
+            } else {
+                return None;
+            };
         if self.admission_only {
             let mut intrinsic = true;
             function.as_view().visitor(&mut |value| {
@@ -331,7 +343,7 @@ impl DotNormalizer {
         }
         // The compact final argument identifies even an untagged inner vector;
         // the outer function must have the rank-one tag checked by the caller.
-        let outer = Self::replace_last_argument(function, compact);
+        let outer = Self::replace_last_argument(function, outer_representation);
         Some(function!(self.metric, outer, inner))
     }
 
