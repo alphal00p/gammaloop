@@ -64,12 +64,15 @@ class OpenPortDisplayTests(unittest.TestCase):
             for name in ("p", "q", "r", "s")
         )
         single, product = p * q, (p * q) * (r * s)
-        for value in (single, product):
+        power = single**2
+        for value in (single, product, power):
+            original, structure = value.to_expression(), value.structure
             source = value.to_typst()
             native = bytes(_compile_typst(f"$ {source} $", "html")).decode()
             for document in (native, value.to_html()):
-                with self.subTest(product=value == product, native=document == native):
-                    nodes = list(mathml(document))
+                with self.subTest(value=value, native=document == native):
+                    root = mathml(document)
+                    nodes = list(visible_nodes(root))
                     dots = [i for i, node in enumerate(nodes) if node.text == "⋅"]
                     self.assertEqual(len(dots), 2 if value == product else 1)
                     for i in dots:
@@ -78,6 +81,7 @@ class OpenPortDisplayTests(unittest.TestCase):
                         self.assertNotEqual(nodes[i - 1].tag, "mspace")
                         self.assertNotEqual(nodes[i + 1].tag, "mspace")
                     if value == product:
+                        self.assertIn(visible(root), ("(p⋅q)(r⋅s)", "(r⋅s)(p⋅q)"))
                         gaps = [
                             n for n in nodes[dots[0] + 1 : dots[1]] if n.tag == "mspace"
                         ]
@@ -85,6 +89,17 @@ class OpenPortDisplayTests(unittest.TestCase):
                         self.assertEqual(gaps[0].attrib["width"], "0.12em")
                     else:
                         self.assertFalse(any(n.tag == "mspace" for n in nodes))
+                    if value == power:
+                        powers = [node for node in nodes if node.tag == "msup"]
+                        self.assertEqual(len(powers), 1)
+                        self.assertEqual(visible(powers[0][0]), "(p⋅q)")
+                        self.assertEqual(visible(powers[0][1]), "2")
+                    if value == single:
+                        self.assertEqual(
+                            visible(root), "p⋅q" if document == native else "(p⋅q)"
+                        )
+            self.assertEqual(value.to_expression(), original)
+            self.assertEqual(value.structure, structure)
 
     def test_factories_and_user_tensors_share_the_same_placeholder_convention(self):
         rep = Representation.euc(3)
@@ -132,7 +147,7 @@ class OpenPortDisplayTests(unittest.TestCase):
         p = TensorName.vector("open_display::p")(Representation.mink(4))
         self.assert_renderers_agree(p, "p□")
         scalar_product = dot(p, p)
-        self.assert_renderers_agree(scalar_product, "p⋅p")
+        self.assert_renderers_agree(scalar_product**2, "(p⋅p)2")
         self.assertNotIn("□", scalar_product.format_tensor())
         self.assertNotIn(r"\square", scalar_product.to_latex())
         self.assert_renderers_agree(gamma * gamma, "[γ□γ□]□0□1")

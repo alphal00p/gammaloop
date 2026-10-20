@@ -1,6 +1,6 @@
 //! Canonical graph symbols shared with GammaLoop.
 use spenso::{
-    network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG},
+    network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG, TENSOR_PRINT_HEAD_PREFIX},
     shadowing::symbolica_utils::SpensoPrintSettings,
     utils::{to_subscript, to_superscript},
 };
@@ -54,7 +54,10 @@ pub fn hedge_index() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
         symbol!(
             "gammalooprs::hedge",
-            print = |a, opt, _state| {
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return spenso::network::tags::tensor_print(a, opt, state);
+                }
                 match opt.custom_print_mode.get("spenso") {
                     Some(PrintUserData::Integer(i)) => {
                         let AtomView::Fun(f) = a else {
@@ -86,7 +89,7 @@ pub fn hedge_index() -> Symbol {
                     _ => None,
                 }
             },
-            tags = [SPENSO_TAG.index.clone()]
+            tags = [SPENSO_TAG.index.clone(), "spenso::index-label:h".to_owned()]
         )
     });
     *SymbolicaInitLazy::new(&SYMBOL)
@@ -195,7 +198,12 @@ pub fn epsilon() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
         symbol!(
             "gammalooprs::ϵ",
-            print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ") },
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return spenso::network::tags::tensor_print(a, opt, state);
+                }
+                spenso_print_scripted_indexed!(a, opt, "ϵ")
+            },
             tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
         )
     });
@@ -206,10 +214,19 @@ pub fn epsilonbar() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
         symbol!(
             "gammalooprs::ϵbar",
-            print = |a, opt, _state| {
-                spenso_print_scripted_indexed!(a, opt, "ϵ̅", "overline(epsilon.alt)")
+            print = |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return spenso::network::tags::tensor_print(a, opt, state);
+                }
+                spenso_print_scripted_indexed!(a, opt, "ϵ̅", "macron(epsilon.alt)")
             },
-            tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+            tags = [
+                SPENSO_TAG.rank1.clone(),
+                SPENSO_TAG.tensor.clone(),
+                format!("{TENSOR_PRINT_HEAD_PREFIX}typst:macron(epsilon.alt)"),
+                format!(r"{TENSOR_PRINT_HEAD_PREFIX}latex:\bar{{\epsilon}}"),
+                format!("{TENSOR_PRINT_HEAD_PREFIX}mathml:<mover><mi>ϵ</mi><mo>¯</mo></mover>")
+            ]
         )
     });
     *SymbolicaInitLazy::new(&SYMBOL)

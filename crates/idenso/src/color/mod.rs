@@ -408,7 +408,10 @@ pub static CS, CS_INNER: ColorSymbols = || {
     }
 
     ColorSymbols {
-        t: tensor_symbol!("spenso::t"; Real; print = |a, opt, _state| {
+        t: tensor_symbol!("spenso::t"; Real; print = |a, opt, state| {
+            if opt.mode.is_mathml() {
+                return spenso::network::tags::tensor_print(a, opt, state);
+            }
 
             match SpensoPrintSettings::resolve(opt) {
                 Some(resolved)=>{
@@ -482,7 +485,10 @@ pub static CS, CS_INNER: ColorSymbols = || {
                 _=>None}
 
         }),
-        f: tensor_symbol!("spenso::f"; Real, Antisymmetric; print = |a, opt, _state| {
+        f: tensor_symbol!("spenso::f"; Real, Antisymmetric; print = |a, opt, state| {
+            if opt.mode.is_mathml() {
+                return spenso::network::tags::tensor_print(a, opt, state);
+            }
 
             match SpensoPrintSettings::resolve(opt) {
                 Some(resolved)=>{

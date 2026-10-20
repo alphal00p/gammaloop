@@ -415,15 +415,17 @@ except feynkit.DiagramError:
     pass
 else:
     raise AssertionError("tensor reduction accepted both an expression and a projector")
-# Converting back to an ordinary expression keeps Symbolica's namespace and
-# nested bracket colors, just as if mink had no custom Spenso printer.
+# Standalone representation calls keep Symbolica's ordinary namespace behavior.
+# Inside tensors and dots, their tags also select compact custom notation.
 ordinary_numerator = scalar_graphs[0].numerator_expression().to_expression()
-control_numerator = ordinary_numerator.replace(
-    mink(tensor_dimension), core.S("printer_control::mink")(tensor_dimension)
-)
-assert ordinary_numerator._repr_html_() == control_numerator._repr_html_()
+ordinary_before = bytes(ordinary_numerator.__getstate__())
+representation = mink(tensor_dimension)
+control_representation = core.S("printer_control::mink")(tensor_dimension)
+assert representation._repr_html_() == control_representation._repr_html_()
 assert "spenso::" not in ordinary_numerator._repr_html_()
 assert "spenso::mink" in ordinary_numerator.format(show_namespaces=True, color_builtin_symbols=False, bracket_level_colors=None)
+assert isinstance(ordinary_numerator, core.Expression)
+assert bytes(ordinary_numerator.__getstate__()) == ordinary_before
 
 assert scalar_graphs[0].numerator_expression().rank == 0
 denominator = indexed_diagram.denominator_expression()
