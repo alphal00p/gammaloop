@@ -3111,6 +3111,7 @@ enum OsRouteFixture {
     PrimitiveBoostedTopSelfEnergy,
     AppendixB1NestedOsChild,
     NestedOsTopSelfEnergy,
+    IntegratedNestedOsTopSelfEnergy,
     SoftGluonInOsTop,
     DisjointOsTopSelfEnergies,
     ThreeLoopOsTopSelfEnergy,
@@ -3151,6 +3152,15 @@ impl OsRouteFixture {
                 "local_nested_os_top_self_energy.toml",
                 "local_nested_os_top_self_energy",
                 "local_nested_os_top_self_energy",
+                &[
+                    &[19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
+                    &[-41.0, 13.0, 23.0, 29.0, -17.0, 31.0],
+                ],
+            ),
+            OsRouteFixture::IntegratedNestedOsTopSelfEnergy => (
+                "integrated_nested_os_top_self_energy.toml",
+                "integrated_nested_os_top_self_energy",
+                "integrated_nested_os_top_self_energy",
                 &[
                     &[19.0, -29.0, 37.0, 11.0, 43.0, -23.0],
                     &[-41.0, 13.0, 23.0, 29.0, -17.0, 31.0],
@@ -3226,9 +3236,11 @@ fn run_os_route(
         generate_integrated,
         matches!(
             fixture,
-            OsRouteFixture::PrimitiveTopSelfEnergy | OsRouteFixture::PrimitiveBoostedTopSelfEnergy
+            OsRouteFixture::PrimitiveTopSelfEnergy
+                | OsRouteFixture::PrimitiveBoostedTopSelfEnergy
+                | OsRouteFixture::IntegratedNestedOsTopSelfEnergy
         ),
-        "the primitive fixture includes integrated OS terms; the nested fixture is local-only"
+        "primitive and complete-rainbow fixtures include integrated OS terms"
     );
     let generation_started_unix_milliseconds = u64::try_from(
         std::time::SystemTime::now()
@@ -3253,6 +3265,31 @@ fn run_os_route(
         [6, 21],
         1,
     )?;
+    if matches!(fixture, OsRouteFixture::IntegratedNestedOsTopSelfEnergy) {
+        let classified = classified_local_spinneys(&cli, process_name, integrand_name)?;
+        let connected = classified
+            .iter()
+            .filter(|component| component.n_components == 1)
+            .collect::<Vec<_>>();
+        let expected = CTIdentifier::new(BTreeSet::from([-6, 6]), Some(BTreeSet::from([6, 21])));
+        assert!(
+            connected.len() == 2
+                && connected.iter().all(|component| {
+                    component.scheme == ApproximationType::OS
+                        && component.dod == 1
+                        && component.identifier == expected
+                }),
+            "the complete rainbow must retain its OS child and parent: {connected:?}"
+        );
+        assert_eq!(
+            connected
+                .iter()
+                .map(|component| component.edge_ids.clone())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([vec![3, 4], vec![2, 3, 4, 5, 6]]),
+            "the complete rainbow must use the physical child and full parent domains"
+        );
+    }
     if matches!(fixture, OsRouteFixture::AppendixB1NestedOsChild) {
         assert_selected_local_identifier(
             &cli,
@@ -6033,6 +6070,13 @@ mod slow {
     fn local_os_nested_generation_matches_all_routes() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
         OsRouteFixture::NestedOsTopSelfEnergy.check_routes("os_quark_nested_route_matrix")
+    }
+
+    #[test]
+    fn integrated_os_rainbow_generation_matches_all_routes() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        OsRouteFixture::IntegratedNestedOsTopSelfEnergy
+            .check_routes("os_integrated_rainbow_route_matrix")
     }
 
     #[test]
