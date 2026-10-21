@@ -681,7 +681,7 @@ impl FeynmanDiagram {
             .map(|(_, _, edge)| &edge.data.numerator)
             .chain(graph.iter_nodes().map(|(_, _, vertex)| &vertex.numerator))
             .try_fold(SymbolicTensor::infer(Atom::one())?, |product, factor| {
-                Ok(product.multiply(factor)?)
+                Ok((product * factor)?)
             })
     }
 
