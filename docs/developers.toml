@@ -1087,7 +1087,10 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-16: Reserve numeric source slots as well as generated dummy labels; bind native compact representations in the common converter; retain explicit k/p source-slot provenance through native projection. Existing backend dispatch and factorization remain unchanged.
 # Reviewed 2026-10-17: Vakint tensor reduction admits a typed tensor for the native reducer and explicitly exports its result to the backend Atom ABI; tensor metadata belongs to the retained caller.
 # Reviewed 2026-10-17: The real raw-to-native adapter calls TensorReducer::admit once, retaining precise domain diagnostics on rejected source input while the typed reduce path remains unique.
-digest = "31f7ae5b6494963367647cdf7f0b186b74845b66"
+# Reviewed 2026-10-20: Saved FORM index dimensions retain the caller epsilon convention
+# so exact vector-map sources match. Existing registered-metadata parsing, conflicting
+# tag refusal, and backend algebra are unchanged.
+digest = "c2e489a41ac7a123e652811ebe421f3e0852fd1c"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
