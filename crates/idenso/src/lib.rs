@@ -1008,6 +1008,66 @@ pub mod test {
     };
 
     #[test]
+    fn typed_adjoint_dualizes_registered_representations() {
+        use crate::{representations::ColorFundamental, tensor::SymbolicTensor};
+        use spenso::structure::{
+            IndexedStructure,
+            representation::{LibraryRep, RepName},
+            slot::DualSlotTo,
+        };
+
+        test_initialize();
+        let field = spenso::tensor_symbol!("typed_adjoint::multiplet");
+        let custom = LibraryRep::new_dual("typed_adjoint::custom").unwrap();
+        let self_dual = LibraryRep::new_self_dual("typed_adjoint::self_dual").unwrap();
+        let color = LibraryRep::from(ColorFundamental {});
+        let mut failures = Vec::new();
+        for representation in [self_dual, custom, custom.dual(), color, color.dual()] {
+            let raw = function!(field, representation.new_rep(3).to_symbolic([Atom::num(7)]));
+            let source = SymbolicTensor::<IndexedStructure>::infer_indexed(raw).unwrap();
+            let expected_slots = source
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .map(|slot| slot.dual())
+                .collect::<Vec<_>>();
+            for preserve_indices in [false, true] {
+                let adjoint = match source.dirac_adjoint(preserve_indices) {
+                    Ok(adjoint) => adjoint,
+                    Err(error) => {
+                        failures.push(format!(
+                            "{representation:?}, preserve_indices={preserve_indices}: {error}"
+                        ));
+                        continue;
+                    }
+                };
+                assert_eq!(adjoint.structure().logical_slots(), expected_slots);
+                assert!(
+                    source
+                        .clone()
+                        .multiply(adjoint.clone())
+                        .unwrap()
+                        .is_scalar()
+                );
+                assert!(
+                    adjoint
+                        .dirac_adjoint(preserve_indices)
+                        .unwrap()
+                        .same_value(&source)
+                );
+                let zero = source
+                    .with_checked_expression(Atom::Zero)
+                    .unwrap()
+                    .dirac_adjoint(preserve_indices)
+                    .unwrap();
+                assert!(zero.is_zero());
+                assert_eq!(zero.structure().logical_slots(), expected_slots);
+            }
+        }
+        assert!(failures.is_empty(), "{}", failures.join("\n"));
+    }
+
+    #[test]
     fn canonicalization_of_closed_scalar_power_matches_fresh_contracted_copies() {
         test_initialize();
         let a = SPENSO_TAG.tensor_symbol("canonical_power::a");
