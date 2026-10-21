@@ -563,6 +563,12 @@ mod tests {
     fn generated_standalone_loader_tracks_threshold_archive_version_and_fields() {
         let script = standalone_rust_script();
         assert!(script.contains("symbolica = { version = \"=3.0.1\""));
+        assert!(script.contains("[patch.crates-io]"));
+        for dependency in ["symbolica", "numerica", "graphica"] {
+            assert!(script.contains(&format!(
+                "{dependency} = {{ git = \"https://github.com/ValentinHirschi/symbolica\", rev = \"953bec7f2d3743c2188c1c849a6b75509643c8a5\" }}"
+            )));
+        }
         assert!(script.contains(&format!(
             "const STANDALONE_EVALUATORS_VERSION: u32 = {STANDALONE_EVALUATORS_VERSION};"
         )));

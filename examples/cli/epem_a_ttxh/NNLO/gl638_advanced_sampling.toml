@@ -100,6 +100,7 @@ commands = ["""set global kv
   global.generation.orientation_pattern.pat='null'
   global.generation.uv.local_uv_cts_from_expanded_4d_integrands=true
   global.generation.evaluator.compile=$(compile:false)
+  global.generation.evaluator.inline_numerator_functions=$(inline_numerator_functions:true)
   global.generation.threshold_subtraction.esurface_existence_threshold=$(generation_threshold_tolerance:1e-14)
   global.n_cores.generate=$(generate_cores:4) global.n_cores.compile=$(generate_cores:4)
 """]

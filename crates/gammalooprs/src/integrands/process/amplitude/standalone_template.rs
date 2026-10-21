@@ -7,6 +7,11 @@
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
 //! symbolica = { version = "=3.0.1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+//!
+//! [patch.crates-io]
+//! symbolica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "953bec7f2d3743c2188c1c849a6b75509643c8a5" }
+//! numerica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "953bec7f2d3743c2188c1c849a6b75509643c8a5" }
+//! graphica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "953bec7f2d3743c2188c1c849a6b75509643c8a5" }
 //! ```
 
 #![allow(dead_code)]
@@ -29,7 +34,7 @@ use symbolica::{
     state::StateMap,
 };
 
-const STANDALONE_EVALUATORS_VERSION: u32 = 17;
+const STANDALONE_EVALUATORS_VERSION: u32 = 19;
 const ARB_PRECISION_BITS: u32 = 1000;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize, Encode, Decode)]
