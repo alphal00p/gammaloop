@@ -1,5 +1,7 @@
 use super::*;
 use crate::tensor::{AlgebraSettings, ReductionStatus};
+use spenso::index_symbol;
+use symbolica::{function, parse, parse_lit};
 
 #[test]
 fn massive_routed_trace_collects_coefficients_without_opening_spectators() {
@@ -409,5 +411,127 @@ fn collected_trace_coefficients_distribute_numerical_factors() {
                     .is_zero()
             );
         }
+    }
+}
+
+#[test]
+fn collected_trace_combines_exact_complex_rational_sector_weights() {
+    let reps = test_initialize();
+    let label = index_symbol!("idenso::collected_trace_complex::edge");
+    let [mu, nu, alpha, rho, sigma, tau, eta] =
+        [20, 10, 30, 40, 50, 60, 70].map(|i| reps.mink_d.to_symbolic([function!(label, i, 5)]));
+    let p = T.rank_one_tensor_symbol("idenso::collected_trace_complex::p");
+    let q = T.rank_one_tensor_symbol("idenso::collected_trace_complex::q");
+    let component = |head, port: &Atom| FunctionBuilder::new(head).add_arg(port).finish();
+    let weight = parse!("(1 + 2*𝑖)/3");
+    let route = |port: &Atom| Atom::i() * component(p, port) + &weight * component(q, port);
+    let dimension = minkowski_dimension(reps.mink_d.to_symbolic([]).as_view())
+        .unwrap()
+        .to_owned();
+    let word = |ports: &[&Atom], copy: i64| {
+        Atom::mul_many(ports.iter().enumerate().map(|(i, port)| {
+            let left = reps.bis4.to_symbolic([function!(label, i as i64, copy)]);
+            let right =
+                reps.bis4
+                    .to_symbolic([function!(label, ((i + 1) % ports.len()) as i64, copy)]);
+            gamma!(&left, &right, *port)
+        }))
+    };
+    let spectator = parse_lit!((collected_complex_a + collected_complex_b) ^ 12);
+    let settings = AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::default()),
+        ..Default::default()
+    };
+    assert!(settings.collect_coefficients);
+    let uncollected_settings = AlgebraSettings {
+        collect_coefficients: false,
+        ..settings.clone()
+    };
+
+    let six = route(&rho) * route(&sigma) * word(&[&alpha, &rho, &mu, &alpha, &sigma, &nu], 11);
+    let four = route(&tau) * route(&eta) * word(&[&tau, &mu, &eta, &nu], 12);
+    let source =
+        SymbolicTensor::infer(&spectator * (six - (dimension - Atom::num(4)) * four)).unwrap();
+    let result = source.simplify_algebra(&settings).unwrap();
+    let uncollected = source.simplify_algebra(&uncollected_settings).unwrap();
+    // gamma_alpha r_slash gamma_mu gamma^alpha = 4 r_mu + (D - 4) r_slash gamma_mu
+    // leaves 16 r_mu r_nu. Each tensor monomial has one exact coefficient;
+    // the literal expansion also pins i^2 = -1 for r = i p + (1 + 2i) q / 3.
+    let expected = &spectator
+        * (Atom::num(-16) * component(p, &mu) * component(p, &nu)
+            + parse!("(-32 + 16*𝑖)/3") * component(p, &mu) * component(q, &nu)
+            + parse!("(-32 + 16*𝑖)/3") * component(q, &mu) * component(p, &nu)
+            + parse!("(-48 + 64*𝑖)/9") * component(q, &mu) * component(q, &nu));
+    assert_eq!(result.expression, expected);
+    assert_ne!(uncollected.expression, expected);
+    // The uncollected result retains a product of vector sums. Expand only
+    // this generated tensor algebra, keeping the scalar spectator intact.
+    assert_eq!(
+        (&uncollected.expression / &spectator).expand(),
+        &expected / &spectator
+    );
+    assert_eq!(source.structure.logical_slots().len(), 2);
+    for (value, policy) in [(&result, &settings), (&uncollected, &uncollected_settings)] {
+        assert_eq!(value.structure, source.structure);
+        assert_eq!(value.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(value.simplify_algebra(policy).unwrap(), *value);
+        assert!(
+            value
+                .expression
+                .replace(spectator.to_pattern())
+                .with(Atom::Zero)
+                .is_zero()
+        );
+    }
+}
+
+#[test]
+fn cancellation_between_complex_routed_trace_sectors_preserves_typed_zero_ports() {
+    let reps = test_initialize();
+    let label = index_symbol!("idenso::collected_trace_complex_zero::edge");
+    let p = T.rank_one_tensor_symbol("idenso::collected_trace_complex_zero::p");
+    let q = T.rank_one_tensor_symbol("idenso::collected_trace_complex_zero::q");
+    let component = |head, port: &Atom| FunctionBuilder::new(head).add_arg(port).finish();
+    let weight = parse!("(1 + 2*𝑖)/3");
+    let route = |port: &Atom| Atom::i() * component(p, port) + &weight * component(q, port);
+    let spectator = parse_lit!((collected_complex_zero_x + collected_complex_zero_y) ^ 12);
+    let settings = AlgebraSettings {
+        gamma: Some(GammaSimplifySettings::default()),
+        ..Default::default()
+    };
+
+    for mink in [&reps.mink4, &reps.mink_d] {
+        let [mu, nu, alpha, rho, sigma, tau, eta, zeta] =
+            [20, 10, 30, 40, 50, 60, 70, 80].map(|i| mink.to_symbolic([function!(label, i, 5)]));
+        let dimension = minkowski_dimension(mink.to_symbolic([]).as_view())
+            .unwrap()
+            .to_owned();
+        let word = |ports: &[&Atom], copy: i64| {
+            Atom::mul_many(ports.iter().enumerate().map(|(i, port)| {
+                let left = reps.bis4.to_symbolic([function!(label, i as i64, copy)]);
+                let right =
+                    reps.bis4
+                        .to_symbolic([function!(label, ((i + 1) % ports.len()) as i64, copy)]);
+                gamma!(&left, &right, *port)
+            }))
+        };
+        // The same Clifford identity holds for r = i p + (1 + 2i) q / 3.
+        // Distinct dummy scopes force its complex products to cancel only
+        // after the six-, four- and two-gamma sectors have been evaluated.
+        let six = route(&rho) * route(&sigma) * word(&[&alpha, &rho, &mu, &alpha, &sigma, &nu], 11);
+        let four = route(&tau) * route(&eta) * word(&[&tau, &mu, &eta, &nu], 12);
+        let two = route(&zeta) * word(&[&zeta, &nu], 13);
+        let source = SymbolicTensor::infer(
+            &spectator
+                * (six - (dimension - Atom::num(4)) * four - Atom::num(4) * route(&mu) * two),
+        )
+        .unwrap();
+        assert!(!source.expression.is_zero());
+        assert_eq!(source.structure.logical_slots().len(), 2);
+        let result = source.simplify_algebra(&settings).unwrap();
+        assert_eq!(result.expression, Atom::Zero);
+        assert_eq!(result.structure, source.structure);
+        assert_eq!(result.reduction_status(), ReductionStatus::Complete);
+        assert_eq!(result.simplify_algebra(&settings).unwrap(), result);
     }
 }
