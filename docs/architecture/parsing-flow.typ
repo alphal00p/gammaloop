@@ -15,6 +15,15 @@ symbolic target retains the original interface. Eager construction uses the
 network's tensor-result boundary so completed lazy scalar multiples and sums
 are materialized with their coefficients intact.
 
+Ordinary selected-slot leaves may be resolved from an explicitly supplied
+component library before component-shadow inference. The structure owner
+validates the original declaration and observes its ordered signature; the
+library's separate `key_for_selected_slot_structure` policy must resolve that
+signature. `TensorLibrary` opts in through registered data or factories, whose
+components must satisfy the declared symmetries. Custom libraries default to
+refusal regardless of ordinary key lookup. Missing signatures retain the
+component-shadow diagnostic, as do direct structure inference and tensor words.
+
 == Entry Points
 <entry-points>
 External parsing starts from `NetworkParse` methods such as `parse_to_atom_net`.

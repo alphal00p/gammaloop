@@ -67,6 +67,24 @@ pub trait Library<S> {
     ) -> Result<Self::Key, LibraryError<Self::Key>>
     where
         S: TensorStructure;
+
+    /// Resolve components for an ordinary selected-slot tensor declaration.
+    ///
+    /// This is an explicit realization policy, independent of ordinary symbolic
+    /// key lookup. Implementations must resolve the complete declared signature,
+    /// including its original name, metadata and ordered representations. The
+    /// supplied component data must satisfy the tensor's declared symmetries.
+    /// A general-purpose or universal `key_for_structure` does not opt in.
+    fn key_for_selected_slot_structure(
+        &self,
+        _structure: &Canonicalized<S>,
+    ) -> Result<Self::Key, LibraryError<Self::Key>>
+    where
+        S: TensorStructure,
+    {
+        Err(LibraryError::InvalidKey)
+    }
+
     fn get<'a>(&'a self, key: &Self::Key) -> Result<Cow<'a, Self::Value>, LibraryError<Self::Key>>;
 }
 
