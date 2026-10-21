@@ -6,7 +6,8 @@ use pyo3::{
 mod pipeline;
 mod tooling;
 
-pub(crate) use pipeline::{PyReductionStatus, algebra_settings, contraction_representations};
+pub use pipeline::PyReductionStatus;
+pub(crate) use pipeline::{algebra_settings, contraction_representations};
 
 pub(crate) use tooling::{
     CanonicalizationError, CookingError, DiracAdjointError, Intern, NetworkToolingError,
