@@ -260,7 +260,10 @@ pub(crate) fn physical_full_h_fixture() -> Result<(Graph, GenerationSettings)> {
 #[ignore = "offline physical FullH algebra certificates; generates all 102 orientations without evaluators"]
 fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
     let (mut graph, generation) = physical_full_h_fixture()?;
-    let options = graph.production_cff_3d_expression_options(&generation)?;
+    let options = graph.production_3d_expression_options(
+        &generation,
+        three_dimensional_reps::RepresentationMode::Cff,
+    )?;
     let canonization = graph.get_esurface_canonization(&graph.loop_momentum_basis);
     let contract_edges = graph
         .iter_edges_of(
@@ -317,6 +320,8 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         crate::utils::vakint()?,
         orientation,
         &generation.uv,
+        true,
+        &mut crate::uv::approx::projected_4d::Local4dProjectionContext::default(),
     )?;
     let recording = guard.finish();
     assert!(

@@ -452,7 +452,8 @@ fn photons_phys_1l_inspect() -> Result<()> {
     // Direct six-pole and four-pinch residues reproduce both centers;
     // the current one gives (-5.127347252278015e-10, 2.827365556430783e-10).
     let target = Complex::new(-5.127347252277998e-10, 2.8273655564308247e-10);
-    assert_eq!(inspect, target);
+    F(inspect.re).assert_approx_eq(&F(target.re), &F(1.0e-13));
+    F(inspect.im).assert_approx_eq(&F(target.im), &F(1.0e-13));
 
     Ok(())
 }

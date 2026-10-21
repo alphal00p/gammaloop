@@ -745,6 +745,7 @@ mod tests {
         use crate::settings::runtime::OverlapSettings;
         generic_test_settings::<OverlapSettings>();
     }
+
     #[test]
     fn test_h_function_settings_serialize_deserialize() {
         use crate::settings::runtime::HFunctionSettings;

@@ -137,6 +137,168 @@ fn preprocess_graph(
     cross_section
 }
 
+#[test]
+fn ltd_cross_section_rejects_runtime_coincident_poles_after_reload() -> eyre::Result<()> {
+    use crate::{
+        integrands::process::MomentumSpaceEvaluationInput, momentum::ThreeMomentum,
+        settings::runtime::StabilityLevelSetting,
+    };
+    use three_dimensional_reps::RepresentationMode::{Cff, Ltd};
+
+    test_initialise()?;
+    for representations in [vec![Ltd, Cff], vec![Cff, Ltd]] {
+        for shared_mass_parameter in [false, true] {
+            let mut model = Model::from_str(SCALARS_2P_3P_MODEL.to_string(), "json")?;
+            model.get_parameter_mut("mass_scalar_1")?.value = Some(Complex::new_re(F(1.0)));
+            model.get_parameter_mut("mass_scalar_2")?.value = Some(Complex::new_re(F(2.0)));
+            let mut graph_text =
+                include_str!("../../../../tests/resources/graphs/bubble_dot_1t1b.dot")
+                    .replace("pdg=1001", "particle=scalar_1");
+            if !shared_mass_parameter {
+                graph_text =
+                    graph_text.replace("v2 -> v4 [id=2]", "v2 -> v4 [id=2, particle=scalar_2]");
+            }
+            let graph = graph_text.as_str().into_graph(&model)?;
+            let mut generation = generation_settings();
+            generation.three_dimensional_representations = representations.clone();
+            generation.uv.local_uv_cts_from_expanded_4d_integrands = true;
+            generation.uv.generate_integrated = false;
+            generation.evaluator.compile = false;
+            generation.threshold_subtraction.enable_thresholds = false;
+            let mut runtime = runtime_settings();
+            runtime.subtraction.disable_threshold_subtraction = true;
+            runtime.stability.rotation_axis.clear();
+            runtime.stability.levels = vec![StabilityLevelSetting::default_double()];
+            let mut cross_section = preprocess_graph(graph, &model, &generation, &runtime);
+            let definition = ProcessDefinition::from_graph_list(
+                std::slice::from_ref(&cross_section.supergraphs[0].graph),
+                GenerationType::CrossSection,
+                &model,
+            )?;
+            cross_section.build_integrand(
+                &model,
+                &definition,
+                &GlobalSettings {
+                    generation,
+                    ..Default::default()
+                },
+                (&runtime).into(),
+                &generation_pool(),
+            )?;
+            let input = MomentumSpaceEvaluationInput {
+                loop_momenta: vec![ThreeMomentum::new(F(0.35), F(0.27), F(0.63))],
+                integrator_weight: F(1.0),
+                graph_id: Some(0),
+                group_id: None,
+                orientation: None,
+                channel_id: None,
+            };
+            let integrand = cross_section.integrand.as_mut().unwrap();
+            integrand.warm_up(&model)?;
+            let initial = integrand.evaluate_momentum_configuration(&model, &input, false)?;
+            assert!(!initial.evaluation_metadata.is_nan);
+            assert!(initial.integrand_result.re.0.is_finite());
+            assert!(initial.integrand_result.im.0.is_finite());
+            assert!(
+                initial.integrand_result.re.0.abs() + initial.integrand_result.im.0.abs() > 0.0
+            );
+
+            let save_root = TemporaryDirectory::new("ltd-runtime-coincident-poles");
+            cross_section.save(&save_root.0, true)?;
+            let mut state_bytes = Vec::new();
+            State::export(&mut state_bytes)?;
+            let state_map = State::import(&mut Cursor::new(state_bytes), None)?;
+            let context = GammaLoopContextContainer {
+                model: &model,
+                state_map: &state_map,
+            };
+            let mut loaded = CrossSection::load(save_root.0.join("raised_cross_section"), context)?;
+            for integrand in [
+                cross_section.integrand.as_mut().unwrap(),
+                loaded.integrand.as_mut().unwrap(),
+            ] {
+                // The stored generated medium mode is authoritative, including
+                // after reload and when numerical temperature parameters vanish.
+                for mode in [
+                    three_dimensional_reps::MediumMode::ThermodynamicEquilibrium,
+                    three_dimensional_reps::MediumMode::ZeroTemperatureEquilibrium,
+                ] {
+                    let mut incompatible = integrand.clone();
+                    let ProcessIntegrand::CrossSection(payload) = &mut incompatible else {
+                        unreachable!()
+                    };
+                    payload.settings.general.inverse_temperature = 0.0;
+                    for term in &mut payload.data.graph_terms {
+                        term.graph.param_builder.medium_mode = mode;
+                    }
+                    let error = incompatible.warm_up(&model).unwrap_err();
+                    assert!(error.to_string().contains("LTD supports only vacuum"));
+                }
+                for mass in [1.0, -1.0] {
+                    model.get_parameter_mut("mass_scalar_2")?.value =
+                        Some(Complex::new_re(F(mass)));
+                    for selection in [None, Some(Cff), Some(Ltd)] {
+                        integrand.get_mut_settings().stability.levels =
+                            vec![StabilityLevelSetting {
+                                three_dimensional_representation: selection,
+                                ..StabilityLevelSetting::default_double()
+                            }];
+                        let warm_up = integrand.warm_up(&model);
+                        if !shared_mass_parameter && selection.unwrap_or(representations[0]) == Ltd
+                        {
+                            assert!(
+                                warm_up
+                                    .unwrap_err()
+                                    .to_string()
+                                    .contains("vanishes for every loop momentum")
+                            );
+                        } else {
+                            // Selecting CFF alone must not validate unused LTD denominators.
+                            // Coinciding CFF cut groups are a separate existing limitation.
+                            warm_up?;
+                            if shared_mass_parameter {
+                                let result = integrand
+                                    .evaluate_momentum_configuration(&model, &input, false)?;
+                                assert!(!result.evaluation_metadata.is_nan);
+                                for (actual, expected) in [
+                                    (result.integrand_result.re.0, initial.integrand_result.re.0),
+                                    (result.integrand_result.im.0, initial.integrand_result.im.0),
+                                ] {
+                                    assert!(
+                                        (actual - expected).abs()
+                                            <= 1e-12 * actual.abs().max(expected.abs())
+                                    );
+                                }
+                            }
+                        }
+                    }
+                    integrand.get_mut_settings().stability.levels = [Cff, Ltd]
+                        .into_iter()
+                        .map(|representation| StabilityLevelSetting {
+                            three_dimensional_representation: Some(representation),
+                            ..StabilityLevelSetting::default_double()
+                        })
+                        .collect();
+                    if shared_mass_parameter {
+                        integrand.warm_up(&model)?;
+                    } else {
+                        assert!(
+                            integrand
+                                .warm_up(&model)
+                                .unwrap_err()
+                                .to_string()
+                                .contains("vanishes for every loop momentum")
+                        );
+                    }
+                }
+                model.get_parameter_mut("mass_scalar_2")?.value = Some(Complex::new_re(F(2.0)));
+                integrand.warm_up(&model)?;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn assert_every_discovered_cut_is_grouped(cross_section: &CrossSection) {
     let graph = &cross_section.supergraphs[0];
     let grouped_cut_ids = graph
@@ -551,7 +713,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             assert_eq!(generated.left_thresholds.first().unwrap().max_occurence, 2);
             assert_eq!(generated.right_thresholds.first().unwrap().max_occurence, 2);
             assert_eq!(
-                generated
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
                     .left_atoms
                     .first()
                     .unwrap()
@@ -562,7 +724,7 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 single_indices(ThresholdCountertermSide::Left),
             );
             assert_eq!(
-                generated
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
                     .right_atoms
                     .first()
                     .unwrap()
@@ -572,9 +734,15 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     .collect::<BTreeSet<_>>(),
                 single_indices(ThresholdCountertermSide::Right),
             );
-            assert_eq!(generated.iterated.iter().count(), 1);
             assert_eq!(
-                generated
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
+                    .iterated
+                    .iter()
+                    .count(),
+                1
+            );
+            assert_eq!(
+                generated.integrands[&three_dimensional_reps::generation::RepresentationMode::Cff]
                     .iterated
                     .iter()
                     .next()
@@ -629,7 +797,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 assert_eq!(multipliers.left_variants().len(), 1);
                 assert_eq!(multipliers.right_variants().len(), 1);
                 assert_eq!(
-                    evaluators
+                    evaluators.integrands
+                        [&three_dimensional_reps::generation::RepresentationMode::Cff]
                         .left_thresholds_evaluator
                         .first()
                         .unwrap()
@@ -639,7 +808,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     single_indices(ThresholdCountertermSide::Left),
                 );
                 assert_eq!(
-                    evaluators
+                    evaluators.integrands
+                        [&three_dimensional_reps::generation::RepresentationMode::Cff]
                         .right_thresholds_evaluator
                         .first()
                         .unwrap()
@@ -649,7 +819,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                     single_indices(ThresholdCountertermSide::Right),
                 );
                 assert_eq!(
-                    evaluators
+                    evaluators.integrands
+                        [&three_dimensional_reps::generation::RepresentationMode::Cff]
                         .iterated_evaluator
                         .iter()
                         .next()
@@ -2632,9 +2803,7 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
             let generated = &cross_section.supergraphs[0];
             let production = &generated
                 .derived_data
-                .global_cff_expression
-                .as_ref()
-                .unwrap()
+                .expressions[&three_dimensional_reps::generation::RepresentationMode::Cff]
                 .expression;
             let group = generated
                 .derived_data
@@ -2645,7 +2814,10 @@ fn hosted_joint_kite_preserves_original_equations_and_physical_sum() {
                 .unwrap();
             let residues = production
                 .clone()
-                .select_esurface_residue(&group.related_esurface_group);
+                .select_esurface_residue(
+                    &group.related_esurface_group,
+                    three_dimensional_reps::RepresentationMode::Cff,
+                );
             for target in targets {
                 let id = production
                     .surfaces

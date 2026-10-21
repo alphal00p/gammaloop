@@ -4067,6 +4067,11 @@ mod thermal_reference_tests {
                 )
                 .unwrap();
                 let expression = &generated.expression;
+                // Keep the immutable surface/residual catalogue once. Each probe
+                // still evaluates exactly one original map and variant, without
+                // cloning every other residue for every scalar contribution.
+                let mut branch = expression.clone();
+                branch.orientations.clear();
                 let uses_uniform_scale = bounds
                     .iter()
                     .any(|(_, degree)| sampling_mode.is_active_for_degree(*degree));
@@ -4177,14 +4182,16 @@ mod thermal_reference_tests {
                         let numerator_expr = NumeratorExpr::parse(&numerator).unwrap();
                         let mut actual = 0.0;
                         for orientation in &expression.orientations {
+                            branch.orientations = vec![orientation.clone()].into();
+                            branch.orientations[OrientationID(0)].variants.clear();
                             for variant in &orientation.variants {
                                 let thermal = variant.thermal_weight.evaluate(distribution);
                                 // Reuse the full evaluator for every variant, including
                                 // numerator surfaces, maps and variant-local half edges.
-                                let mut branch = expression.clone();
-                                branch.orientations = vec![orientation.clone()].into();
-                                branch.orientations[OrientationID(0)].variants =
-                                    vec![variant.clone()];
+                                branch.orientations[OrientationID(0)].variants.clear();
+                                branch.orientations[OrientationID(0)]
+                                    .variants
+                                    .push(variant.clone());
                                 actual += thermal
                                     * ExpressionEvaluator::new(&parsed, &branch, &input)
                                         .evaluate(&numerator_expr)
@@ -4633,6 +4640,11 @@ mod thermal_reference_tests {
                         )
                     });
                     let expression = &generated.expression;
+                    // Keep the immutable surface/residual catalogue once. Each probe
+                    // still evaluates exactly one original map and variant, without
+                    // cloning every other residue for every scalar contribution.
+                    let mut branch = expression.clone();
+                    branch.orientations.clear();
                     let evaluator = ExpressionEvaluator::new(&parsed, expression, &input);
                     let energies = &evaluator.internal_energies;
                     let source_conversion = generated.source_conversion();
@@ -4712,6 +4724,8 @@ mod thermal_reference_tests {
                             let numerator_expr = NumeratorExpr::parse(&numerator).unwrap();
                             let mut actual = 0.0;
                             for orientation in &expression.orientations {
+                                branch.orientations = vec![orientation.clone()].into();
+                                branch.orientations[OrientationID(0)].variants.clear();
                                 let distribution = |edge: usize, sign: i32, order| {
                                     assert_eq!(
                                         order, 0,
@@ -4732,10 +4746,10 @@ mod thermal_reference_tests {
                                 };
                                 for variant in &orientation.variants {
                                     let thermal = variant.thermal_weight.evaluate(distribution);
-                                    let mut branch = expression.clone();
-                                    branch.orientations = vec![orientation.clone()].into();
-                                    branch.orientations[OrientationID(0)].variants =
-                                        vec![variant.clone()];
+                                    branch.orientations[OrientationID(0)].variants.clear();
+                                    branch.orientations[OrientationID(0)]
+                                        .variants
+                                        .push(variant.clone());
                                     let term = thermal
                                         * ExpressionEvaluator::new(&parsed, &branch, &input)
                                             .evaluate(&numerator_expr)

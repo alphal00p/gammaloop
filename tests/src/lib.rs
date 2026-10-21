@@ -2,6 +2,8 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+pub mod evaluation_comparison;
+
 use color_eyre::Result;
 
 use gammaloop_api::{

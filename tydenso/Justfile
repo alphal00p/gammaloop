@@ -91,7 +91,7 @@ check: build check-wasm-features
       unset CARGO_TARGET_DIR
       nix run --no-write-lock-file "path:$PWD#build"
     )
-    for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
+    for lock in Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
       for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
         package="${specification%:*}"
         version="${specification#*:}"

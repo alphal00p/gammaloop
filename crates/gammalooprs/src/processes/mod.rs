@@ -25,8 +25,9 @@ use crate::model::Model;
 
 mod generation_report;
 pub use generation_report::{
-    EvaluatorBuildTimings, GeneratedGraphKey, GeneratedGraphReport, GraphGenerationStats,
-    NamedGraphGenerationReport, merge_generated_graph_reports,
+    EvaluatorBuildTimings, GeneratedGraphKey, GeneratedGraphReport, GenerationTimings,
+    GraphGenerationStats, NamedGraphGenerationReport, RepresentationGenerationStats,
+    merge_generated_graph_reports,
 };
 mod generation_progress;
 pub use generation_progress::{
@@ -1010,12 +1011,22 @@ mod tests {
             amplitude.graph.param_builder.values
         );
         assert_eq!(
-            decoded.derived_data.all_mighty_integrand,
-            amplitude.derived_data.all_mighty_integrand
+            decoded
+                .derived_data
+                .representations
+                .keys()
+                .collect::<Vec<_>>(),
+            amplitude
+                .derived_data
+                .representations
+                .keys()
+                .collect::<Vec<_>>()
         );
-        assert_eq!(
-            decoded.derived_data.all_mighty_numerators,
-            amplitude.derived_data.all_mighty_numerators
-        );
+        for (representation, expected) in &amplitude.derived_data.representations {
+            assert_eq!(
+                decoded.derived_data.representations[representation].all_mighty_integrand,
+                expected.all_mighty_integrand
+            );
+        }
     }
 }

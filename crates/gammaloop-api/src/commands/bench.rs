@@ -27,14 +27,22 @@ use tracing::info;
 use crate::{
     commands::evaluate_samples::{with_warmed_integrand, EvaluateSamples},
     completion::CompletionArgExt,
+    integrand_info::IntegrandInfo,
     state::{ProcessRef, State},
 };
 use gammalooprs::{
-    integrands::{evaluation::EvaluationResultOutput, process::ProcessIntegrand},
+    integrands::{
+        evaluation::{EvaluationResultOutput, StabilityStatus},
+        process::ProcessIntegrand,
+    },
     model::Model,
-    settings::{runtime::StabilityLevelSetting, RuntimeSettings},
+    settings::{
+        runtime::{Precision, StabilityLevelSetting},
+        RuntimeSettings,
+    },
     utils::F,
 };
+use three_dimensional_reps::RepresentationMode;
 
 const BENCH_WARMUP_SAMPLES: usize = 10;
 const BENCH_DEFAULT_BATCHES: usize = 10;
@@ -126,7 +134,22 @@ pub struct Bench {
     pub json_output: Option<PathBuf>,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
+// Timings and estimated errors vary between samples; retain only the ordered
+// native attempts actually made, including their rotation counts.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+struct BenchAttempt {
+    precision: Precision,
+    three_dimensional_representation: RepresentationMode,
+    status: StabilityStatus,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct BenchAttemptSignature {
+    samples: usize,
+    attempts: Vec<BenchAttempt>,
+}
+
+#[derive(Debug, Clone, Serialize)]
 struct BenchBatchTiming {
     parameterization: f64,
     canonical_sampling: f64,
@@ -136,6 +159,12 @@ struct BenchBatchTiming {
     evaluator: f64,
     other: f64,
     total: f64,
+    /// Frequencies cover every timed sample; an empty attempt list is retained.
+    attempt_signatures: Vec<BenchAttemptSignature>,
+    /// Finite displayed real/imaginary extrema for every timed sample, after normalization.
+    displayed_result_bounds: Option<[[f64; 2]; 2]>,
+    /// Missing normalization or nonfinite displayed results; reporting does not reject a bench.
+    invalid_result_samples: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -169,6 +198,9 @@ struct BenchOutput {
     minimal_integrand: bool,
     parameterization_jacobian: Option<f64>,
     displayed_result: Complex<f64>,
+    /// Existing generated-payload inventory, collected outside benchmark timing.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    integrand_info: Option<IntegrandInfo>,
     batches: Vec<BenchBatchTiming>,
     summary: Vec<BenchSummaryRow>,
 }
@@ -319,7 +351,7 @@ impl Bench {
         process_id: usize,
         integrand_name: String,
         graph_name: Option<String>,
-    ) -> Result<(Option<f64>, Complex<f64>)> {
+    ) -> Result<BenchOutput> {
         let target = parse_bench_target_duration(&self.duration)?;
         let n_batches = self.n_batches.unwrap_or(BENCH_DEFAULT_BATCHES);
         if n_batches == 0 {
@@ -374,7 +406,7 @@ impl Bench {
                     )
                     .run_warmed(integrand, model)?;
                 let total_timing = batch_start.elapsed();
-                batch_timings.push(bench_batch_timing(total_timing, &batch)?);
+                batch_timings.push(bench_batch_timing(total_timing, &batch, self)?);
                 update_bench_progress(
                     &progress_bar,
                     batch_index + 1,
@@ -410,10 +442,10 @@ impl Bench {
             minimal_integrand: self.minimal_integrand,
             parameterization_jacobian: jacobian,
             displayed_result,
+            integrand_info: None,
             batches: batch_timings.clone(),
             summary: bench_summary_rows(&batch_timings),
         };
-        self.write_json_output(&bench_output)?;
 
         info!(
             "\n{}\n{}",
@@ -428,7 +460,7 @@ impl Bench {
             render_bench_table(&batch_timings)
         );
 
-        Ok((jacobian, displayed_result))
+        Ok(bench_output)
     }
 
     pub fn run(&self, state: &mut State) -> Result<()> {
@@ -447,7 +479,7 @@ impl Bench {
             |state| {
                 // Resolve the model and warm up once, outside every timed region,
                 // with event generation disabled for the whole benchmark.
-                with_warmed_integrand(
+                let mut output = with_warmed_integrand(
                     state,
                     process_id,
                     &integrand_name_for_restore,
@@ -455,10 +487,18 @@ impl Bench {
                     |integrand, model| {
                         self.run_benchmark(integrand, model, process_id, integrand_name, graph_name)
                     },
-                )
+                )?;
+                // Read the public inventory after timing and model warmup, once
+                // per JSON result, without repeating either inside a batch.
+                if self.json_output.is_some() {
+                    output.integrand_info = Some(state.get_integrand_info(
+                        Some(&ProcessRef::Id(process_id)),
+                        Some(&integrand_name_for_restore),
+                    )?);
+                }
+                self.write_json_output(&output)
             },
         )
-        .map(drop)
     }
 
     fn with_optional_minimal_integrand_settings<R>(
@@ -498,7 +538,14 @@ fn apply_minimal_integrand_settings(settings: &mut RuntimeSettings) {
     settings.observables = Default::default();
     settings.selectors = Default::default();
     settings.stability.rotation_axis = Vec::new();
-    settings.stability.levels = vec![StabilityLevelSetting::default_double()];
+    settings.stability.levels = vec![StabilityLevelSetting {
+        three_dimensional_representation: settings
+            .stability
+            .levels
+            .first()
+            .and_then(|level| level.three_dimensional_representation),
+        ..StabilityLevelSetting::default_double()
+    }];
     settings.stability.check_on_norm = false;
     settings.stability.escalate_if_exact_zero = false;
     settings.stability.loop_momenta_norm_escalation_factor = -1.0;
@@ -582,6 +629,7 @@ fn split_samples_into_batches(total_samples: usize, batches: usize) -> Vec<usize
 fn bench_batch_timing(
     total_timing: Duration,
     batch: &gammalooprs::integrands::evaluation::BatchSampleEvaluationResult,
+    bench: &Bench,
 ) -> Result<BenchBatchTiming> {
     let sample_count = batch.samples.len();
     if sample_count == 0 {
@@ -594,6 +642,9 @@ fn bench_batch_timing(
     let mut canonical_physical = 0.0;
     let mut event_processing = 0.0;
     let mut evaluator = 0.0;
+    let mut attempt_signatures: Vec<BenchAttemptSignature> = Vec::new();
+    let mut displayed_result_bounds: Option<[[f64; 2]; 2]> = None;
+    let mut invalid_result_samples = 0;
     for sample in &batch.samples {
         let metadata = sample
             .evaluation
@@ -609,6 +660,44 @@ fn bench_batch_timing(
             return Err(eyre!(
                 "bench metadata timing subsets exceed their inclusive totals"
             ));
+        }
+        // This owner runs after the evaluate_samples timer stopped. Missing
+        // attempts stay explicit; settings never supply a default identity.
+        let attempts = metadata
+            .stability_results
+            .iter()
+            .map(|attempt| BenchAttempt {
+                precision: attempt.precision,
+                three_dimensional_representation: attempt.representation,
+                status: attempt.status.clone(),
+            })
+            .collect::<Vec<_>>();
+        if let Some(signature) = attempt_signatures
+            .iter_mut()
+            .find(|signature| signature.attempts == attempts)
+        {
+            signature.samples += 1;
+        } else {
+            attempt_signatures.push(BenchAttemptSignature {
+                samples: 1,
+                attempts,
+            });
+        }
+        // Inspect the same normalization as the displayed warmup, after timing.
+        // Ordinary bench only reports these bounds; the LTD gate owns acceptance.
+        match bench.displayed_result_from_evaluation(&sample.evaluation) {
+            Ok((_, result)) if result.re.is_finite() && result.im.is_finite() => {
+                let values = [result.re, result.im];
+                if let Some(bounds) = displayed_result_bounds.as_mut() {
+                    for (range, value) in bounds.iter_mut().zip(values) {
+                        range[0] = range[0].min(value);
+                        range[1] = range[1].max(value);
+                    }
+                } else {
+                    displayed_result_bounds = Some(values.map(|value| [value, value]));
+                }
+            }
+            _ => invalid_result_samples += 1,
         }
         parameterization += metadata.parameterization_time.as_secs_f64();
         canonical_sampling += metadata.canonical_sampling_preparation_time.as_secs_f64();
@@ -652,6 +741,9 @@ fn bench_batch_timing(
         evaluator,
         other,
         total,
+        attempt_signatures,
+        displayed_result_bounds,
+        invalid_result_samples,
     })
 }
 
@@ -989,6 +1081,9 @@ mod tests {
                 evaluator: 1.7e-2,
                 other: 1.0e-5,
                 total: 1.74101e-2,
+                attempt_signatures: Vec::new(),
+                displayed_result_bounds: None,
+                invalid_result_samples: 0,
             },
             super::BenchBatchTiming {
                 parameterization: 1.2e-7,
@@ -999,6 +1094,9 @@ mod tests {
                 evaluator: 1.8e-2,
                 other: 1.0e-5,
                 total: 1.843012e-2,
+                attempt_signatures: Vec::new(),
+                displayed_result_bounds: None,
+                invalid_result_samples: 0,
             },
         ]);
 
@@ -1034,15 +1132,39 @@ mod tests {
             numerical_stability: None,
         };
 
+        let mut bench = super::Bench::default();
         // These nested counters must be displayed once, without changing the
         // inclusive sampling/physical totals or the integration checkpoint ABI.
+        let attempt = gammalooprs::integrands::evaluation::StabilityResult {
+            precision: super::Precision::Double,
+            representation: three_dimensional_reps::RepresentationMode::Cff,
+            estimated_relative_accuracy: None,
+            estimated_decimal_digits: None,
+            status: super::StabilityStatus::Stable(2),
+            total_time: Duration::from_micros(3),
+        };
         for sample in &mut batch.samples {
+            sample.evaluation.parameterization_jacobian = Some(super::F(1.0));
             let metadata = sample.evaluation.evaluation_metadata.as_mut().unwrap();
             metadata.canonical_sampling_preparation_time = Duration::from_nanos(500);
             metadata.canonical_physical_preparation_time = Duration::from_nanos(250);
+            metadata.stability_results = vec![attempt.clone()];
         }
-        let timing = bench_batch_timing(Duration::from_micros(30), &batch).unwrap();
+        let timing = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
 
+        assert_eq!(
+            timing.displayed_result_bounds,
+            Some([[0.0, 0.0], [0.0, 0.0]])
+        );
+        assert_eq!(timing.invalid_result_samples, 0);
+        assert_eq!(timing.attempt_signatures.len(), 1);
+        assert_eq!(timing.attempt_signatures[0].samples, 2);
+        assert_eq!(
+            serde_json::to_value(&timing.attempt_signatures).unwrap(),
+            serde_json::json!([
+                {"samples": 2, "attempts": [{"precision": "Double", "three_dimensional_representation": "cff", "status": {"Stable": 2}}]}
+            ])
+        );
         assert_close(timing.total, 15.0e-6);
         assert_close(timing.parameterization, 1.0e-6);
         assert_close(timing.canonical_sampling, 0.5e-6);
@@ -1061,6 +1183,137 @@ mod tests {
                 + timing.other,
             timing.total,
         );
+        // Isolate representation and precision: omitting either must merge
+        // a distinct sample incorrectly. Repeated precision also keeps order.
+        for (attempts, expected) in [
+            (
+                vec![gammalooprs::integrands::evaluation::StabilityResult {
+                    representation: three_dimensional_reps::RepresentationMode::Ltd,
+                    ..attempt.clone()
+                }],
+                serde_json::json!([
+                    {"precision": "Double", "three_dimensional_representation": "ltd", "status": {"Stable": 2}}
+                ]),
+            ),
+            (
+                vec![gammalooprs::integrands::evaluation::StabilityResult {
+                    precision: super::Precision::Quad,
+                    ..attempt.clone()
+                }],
+                serde_json::json!([
+                    {"precision": "Quad", "three_dimensional_representation": "cff", "status": {"Stable": 2}}
+                ]),
+            ),
+            (
+                vec![
+                    gammalooprs::integrands::evaluation::StabilityResult {
+                        representation: three_dimensional_reps::RepresentationMode::Ltd,
+                        status: super::StabilityStatus::Unstable(2),
+                        ..attempt.clone()
+                    },
+                    attempt.clone(),
+                ],
+                serde_json::json!([
+                    {"precision": "Double", "three_dimensional_representation": "ltd", "status": {"Unstable": 2}},
+                    {"precision": "Double", "three_dimensional_representation": "cff", "status": {"Stable": 2}}
+                ]),
+            ),
+        ] {
+            batch.samples[1]
+                .evaluation
+                .evaluation_metadata
+                .as_mut()
+                .unwrap()
+                .stability_results = attempts;
+            let changed = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
+            assert_eq!(changed.attempt_signatures.len(), 2);
+            assert_eq!(
+                changed
+                    .attempt_signatures
+                    .iter()
+                    .map(|signature| signature.samples)
+                    .sum::<usize>(),
+                batch.samples.len()
+            );
+            assert_eq!(changed.attempt_signatures[1].samples, 1);
+            assert_eq!(
+                serde_json::to_value(&changed.attempt_signatures[1].attempts).unwrap(),
+                expected
+            );
+        }
+        // Missing attempt evidence still accounts for the actual timed sample.
+        batch.samples[1]
+            .evaluation
+            .evaluation_metadata
+            .as_mut()
+            .unwrap()
+            .stability_results
+            .clear();
+        let missing = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
+        assert_eq!(missing.attempt_signatures.len(), 2);
+        assert_eq!(missing.attempt_signatures[1].samples, 1);
+        assert!(missing.attempt_signatures[1].attempts.is_empty());
+        // Different raw values/Jacobians may have the same displayed result.
+        // The external integrator weight is deliberately not applied again.
+        batch.samples[0].evaluation.integrand_result =
+            super::Complex::new(super::F(1.0), super::F(0.5));
+        batch.samples[0].evaluation.parameterization_jacobian = Some(super::F(2.0));
+        batch.samples[0].evaluation.integrator_weight = super::F(7.0);
+        batch.samples[1].evaluation.integrand_result =
+            super::Complex::new(super::F(2.0), super::F(1.0));
+        let normalized = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
+        assert_eq!(
+            normalized.displayed_result_bounds,
+            Some([[2.0, 2.0], [1.0, 1.0]])
+        );
+        assert_eq!(normalized.invalid_result_samples, 0);
+        assert_eq!(normalized.total, timing.total);
+        batch.samples[1].evaluation.integrand_result =
+            super::Complex::new(super::F(1.5), super::F(-1.0));
+        batch.samples[1].evaluation.parameterization_jacobian = Some(super::F(2.0));
+        let poisoned = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
+        assert_eq!(
+            poisoned.displayed_result_bounds,
+            Some([[2.0, 3.0], [-2.0, 1.0]])
+        );
+        assert_eq!(poisoned.invalid_result_samples, 0);
+        assert_eq!(poisoned.total, timing.total);
+        for (real, imaginary, jacobian) in [
+            (f64::NAN, 1.0, Some(1.0)),
+            (1.0, f64::INFINITY, Some(1.0)),
+            (1.0, 1.0, None),
+            (f64::MAX, 1.0, Some(2.0)),
+        ] {
+            batch.samples[1].evaluation.integrand_result =
+                super::Complex::new(super::F(real), super::F(imaginary));
+            batch.samples[1].evaluation.parameterization_jacobian = jacobian.map(super::F);
+            let invalid = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
+            assert_eq!(
+                invalid.displayed_result_bounds,
+                Some([[2.0, 2.0], [1.0, 1.0]])
+            );
+            assert_eq!(invalid.invalid_result_samples, 1);
+            assert_eq!(invalid.total, timing.total);
+            assert!(!serde_json::to_string(&invalid).unwrap().contains("null"));
+        }
+        batch.samples[0].evaluation.integrand_result.re = super::F(f64::NAN);
+        let invalid = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
+        assert_eq!(invalid.displayed_result_bounds, None);
+        assert_eq!(invalid.invalid_result_samples, 2);
+        // Momentum-space display ignores even a missing/nonfinite Jacobian.
+        bench.momentum_space = true;
+        batch.samples[0].evaluation.integrand_result =
+            super::Complex::new(super::F(1.0), super::F(0.5));
+        batch.samples[0].evaluation.parameterization_jacobian = Some(super::F(f64::NAN));
+        batch.samples[1].evaluation.integrand_result =
+            super::Complex::new(super::F(2.0), super::F(1.0));
+        batch.samples[1].evaluation.parameterization_jacobian = None;
+        let momentum = bench_batch_timing(Duration::from_micros(30), &batch, &bench).unwrap();
+        assert_eq!(
+            momentum.displayed_result_bounds,
+            Some([[1.0, 2.0], [0.5, 1.0]])
+        );
+        assert_eq!(momentum.invalid_result_samples, 0);
         let metadata = batch.samples[0]
             .evaluation
             .evaluation_metadata
@@ -1068,7 +1321,7 @@ mod tests {
             .unwrap();
         metadata.canonical_sampling_preparation_time =
             metadata.parameterization_time + Duration::from_nanos(1);
-        assert!(bench_batch_timing(Duration::from_micros(30), &batch).is_err());
+        assert!(bench_batch_timing(Duration::from_micros(30), &batch, &bench).is_err());
         let metadata = batch.samples[0]
             .evaluation
             .evaluation_metadata
@@ -1076,7 +1329,7 @@ mod tests {
             .unwrap();
         metadata.canonical_sampling_preparation_time = Duration::ZERO;
         metadata.canonical_physical_preparation_time = metadata.integrand_evaluation_time;
-        assert!(bench_batch_timing(Duration::from_micros(30), &batch).is_err());
+        assert!(bench_batch_timing(Duration::from_micros(30), &batch, &bench).is_err());
     }
 
     fn sample_with_metadata(

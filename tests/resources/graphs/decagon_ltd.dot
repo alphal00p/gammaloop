@@ -1,0 +1,37 @@
+// arXiv:1906.06138, Appendix B.1: p_i enters between k_(i-1) and k_i.
+// All external momenta are incoming; k_n is the loop momentum.
+digraph decagon {
+    overall_factor=1; num=1; projector=1;
+    node [num=1];
+    edge [num=1];
+    v01 -> v02 [id=0 mass="1/10"];
+    v02 -> v03 [id=1 mass="2/10"];
+    v03 -> v04 [id=2 mass="3/10"];
+    v04 -> v05 [id=3 mass="4/10"];
+    v05 -> v06 [id=4 mass="5/10"];
+    v06 -> v07 [id=5 mass="6/10"];
+    v07 -> v08 [id=6 mass="7/10"];
+    v08 -> v09 [id=7 mass="8/10"];
+    v09 -> v10 [id=8 mass="9/10"];
+    v10 -> v01 [id=9 mass="10/10" lmb_id=0];
+    p01 [style=invis];
+    p01 -> v01 [id=10 particle=scalar_0 mass=0];
+    p02 [style=invis];
+    p02 -> v02 [id=11 particle=scalar_0 mass=0];
+    p03 [style=invis];
+    p03 -> v03 [id=12 particle=scalar_0 mass=0];
+    p04 [style=invis];
+    p04 -> v04 [id=13 particle=scalar_0 mass=0];
+    p05 [style=invis];
+    p05 -> v05 [id=14 particle=scalar_0 mass=0];
+    p06 [style=invis];
+    p06 -> v06 [id=15 particle=scalar_0 mass=0];
+    p07 [style=invis];
+    p07 -> v07 [id=16 particle=scalar_0 mass=0];
+    p08 [style=invis];
+    p08 -> v08 [id=17 particle=scalar_0 mass=0];
+    p09 [style=invis];
+    p09 -> v09 [id=18 particle=scalar_0 mass=0];
+    p10 [style=invis];
+    p10 -> v10 [id=19 particle=scalar_0 mass=0];
+}

@@ -100,17 +100,28 @@ impl Localizer<'_> {
                 active_ct
             });
         }
-        let frozen_integrands = self
-            .cutset
-            .residue_selector
-            .generate_allowed_keys()
-            .into_iter()
-            .map(|index| (index, localizing_integrand.clone()))
-            .collect();
-
-        Ok(FrozenActiveCt {
-            active,
-            frozen_integrands,
-        })
+        if self.orientation.cff_options()?.representation
+            == three_dimensional_reps::RepresentationMode::Ltd
+        {
+            // A localized LTD source can have higher residue orders than the
+            // parent. The smooth factor multiplies every actual source order.
+            let mut localized = FrozenActiveCt::from(active);
+            localized.frozen_integrands = localized
+                .frozen_integrands
+                .map(|_| localizing_integrand.clone());
+            Ok(localized)
+        } else {
+            let frozen_integrands = self
+                .cutset
+                .residue_selector
+                .generate_allowed_keys()
+                .into_iter()
+                .map(|index| (index, localizing_integrand.clone()))
+                .collect();
+            Ok(FrozenActiveCt {
+                active,
+                frozen_integrands,
+            })
+        }
     }
 }

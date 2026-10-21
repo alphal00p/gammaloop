@@ -33,7 +33,10 @@ use crate::{
 };
 use symbolica::domains::{float::Real, integer::Integer, rational::Rational};
 
-use super::{RuntimeSettings, global::OrientationPattern};
+use super::{
+    RuntimeSettings,
+    global::{OrientationPattern, RepresentationMode},
+};
 
 #[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
@@ -216,9 +219,6 @@ impl IntegralUnit {
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
 pub struct GeneralSettings {
-    /// Evaluate through the loop-tree-duality representation where the selected integrand supports it.
-    #[serde(skip_serializing_if = "is_false")]
-    pub use_ltd: bool,
     /// Evaluator backend used for generated integrands.
     #[serde(skip_serializing_if = "IsDefault::is_default")]
     pub evaluator_method: EvaluatorMethod,
@@ -270,7 +270,6 @@ impl Default for GeneralSettings {
     fn default() -> Self {
         Self {
             evaluator_method: EvaluatorMethod::default(),
-            use_ltd: false,
             load_compiled_cff: false,
             enable_cache: false,
             debug_cache: false,
@@ -918,6 +917,63 @@ mod tests {
     }
 
     #[test]
+    fn stability_representation_defaults_to_first_generated_and_roundtrips() {
+        let _guard = ShowDefaultsGuard::new(false);
+        let mut level = StabilityLevelSetting::default_double();
+        assert_eq!(
+            level
+                .resolved_representation(&[RepresentationMode::Ltd, RepresentationMode::Cff])
+                .unwrap(),
+            RepresentationMode::Ltd
+        );
+        assert_eq!(
+            level
+                .resolved_representation(&[RepresentationMode::Cff, RepresentationMode::Ltd])
+                .unwrap(),
+            RepresentationMode::Cff
+        );
+        assert!(level.resolved_representation(&[]).is_err());
+        assert!(
+            !toml::to_string(&level)
+                .unwrap()
+                .contains("three_dimensional_representation")
+        );
+
+        level.three_dimensional_representation = Some(RepresentationMode::Cff);
+        assert!(
+            level
+                .resolved_representation(&[RepresentationMode::Ltd])
+                .is_err()
+        );
+        let serialized = toml::to_string(&level).unwrap();
+        assert!(serialized.contains(r#"three_dimensional_representation = "cff""#));
+        assert_eq!(
+            toml::from_str::<StabilityLevelSetting>(&serialized).unwrap(),
+            level
+        );
+        assert!(
+            toml::from_str::<StabilityLevelSetting>(&serialized.replace("cff", "unknown")).is_err()
+        );
+        let schema = serde_json::to_value(schemars::schema_for!(StabilityLevelSetting)).unwrap();
+        assert!(schema["properties"]["three_dimensional_representation"].is_object());
+        assert!(schema["properties"].get("3drep").is_none());
+        let error = toml::from_str::<StabilityLevelSetting>(
+            &serialized.replace("three_dimensional_representation", "3drep"),
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("unknown field `3drep`"));
+        drop(_guard);
+        let _guard = ShowDefaultsGuard::new(true);
+        let defaults = serde_json::to_value(StabilityLevelSetting::default_double()).unwrap();
+        assert!(defaults["three_dimensional_representation"].is_null());
+        assert!(defaults.get("three_dimensional_representation").is_some());
+        assert_eq!(
+            serde_json::from_value::<StabilityLevelSetting>(defaults).unwrap(),
+            StabilityLevelSetting::default_double()
+        );
+    }
+
+    #[test]
     fn stability_ecm_relative_tolerances_default_and_roundtrip() {
         let _guard = ShowDefaultsGuard::new(false);
         for settings in [
@@ -1193,7 +1249,7 @@ pub struct StabilitySettings {
     /// Rotations applied when comparing an unstable sample with an equivalent phase-space point.
     #[serde(skip_serializing_if = "is_default_rotation_axis")]
     pub rotation_axis: Vec<RotationSetting>,
-    /// Ordered numerical-precision levels and tolerances used during stability escalation.
+    /// Ordered precision and representation choices with tolerances for stability escalation.
     #[serde(skip_serializing_if = "is_default_stability_levels")]
     pub levels: Vec<StabilityLevelSetting>,
     /// Compare rotated results after normalizing by the result magnitude.
@@ -1269,6 +1325,9 @@ impl Default for StabilityRecordingSettings {
 pub struct StabilityLevelSetting {
     /// Numeric precision used for this escalation level.
     pub precision: Precision,
+    /// Representation for this attempt; omission selects the first generated representation.
+    #[serde(default, skip_serializing_if = "IsDefault::is_default")]
+    pub three_dimensional_representation: Option<RepresentationMode>,
     /// Maximum accepted relative error in the real component before escalating.
     pub required_precision_for_re: f64,
     /// Maximum accepted relative error in the imaginary component before escalating.
@@ -1300,9 +1359,31 @@ pub struct StabilityLevelSetting {
 }
 
 impl StabilityLevelSetting {
+    pub fn resolved_representation(
+        &self,
+        generated: &[RepresentationMode],
+    ) -> Result<RepresentationMode> {
+        let first = generated
+            .first()
+            .ok_or_else(|| eyre::eyre!("integrand has no generated 3D representations"))?;
+        let selected = self.three_dimensional_representation.unwrap_or(*first);
+        if !generated.contains(&selected) {
+            return Err(eyre::eyre!(
+                "Requested 3D representation `{selected}` was not generated; available representations: {}",
+                generated
+                    .iter()
+                    .map(ToString::to_string)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
+        Ok(selected)
+    }
+
     pub fn default_double() -> Self {
         Self {
             precision: Precision::Double,
+            three_dimensional_representation: None,
             required_precision_for_re: 1e-5,
             required_precision_for_im: 1e-5,
             ecm_relative_tolerance_for_re: 0.0,
@@ -1314,6 +1395,7 @@ impl StabilityLevelSetting {
     pub fn default_quad() -> Self {
         Self {
             precision: Precision::Quad,
+            three_dimensional_representation: None,
             required_precision_for_re: 1e-5,
             required_precision_for_im: 1e-5,
             ecm_relative_tolerance_for_re: 0.0,
@@ -1325,6 +1407,7 @@ impl StabilityLevelSetting {
     pub fn default_arb() -> Self {
         Self {
             precision: Precision::Arb,
+            three_dimensional_representation: None,
             required_precision_for_re: 1e-5,
             required_precision_for_im: 1e-5,
             ecm_relative_tolerance_for_re: 0.0,

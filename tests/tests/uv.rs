@@ -23,13 +23,17 @@ use gammaloop_api::{
 use gammaloop_integration_tests::{
     CLIState, clean_test, get_test_cli, get_tests_workspace_path, workspace_root,
 };
+use gammalooprs::cff::orientations::GraphOrientation;
 use gammalooprs::integrands::{
     HasIntegrand,
     evaluation::{EvaluationMetaData, PreciseEvaluationResultOutput, StabilityStatus},
 };
 use gammalooprs::observables::events::AdditionalWeightKey;
 use gammalooprs::processes::ProcessCollection;
-use gammalooprs::settings::runtime::{IntegralEstimate, SlotIntegrationResult};
+use gammalooprs::settings::{
+    global::RepresentationMode,
+    runtime::{IntegralEstimate, SlotIntegrationResult},
+};
 use gammalooprs::utils::{ArbPrec, F, FloatLike};
 use gammalooprs::uv::{
     ApproximationType, CTIdentifier, CTRenormalizationRule, UVOrchestrator, UVProfileAnalysis,
@@ -610,6 +614,7 @@ fn inspect_stability_accuracy_uses_the_final_accepted_precision() -> Result<()> 
     let mut metadata = EvaluationResult::zero().evaluation_metadata;
     metadata.stability_results = vec![
         StabilityResult {
+            representation: RepresentationMode::Cff,
             precision: Precision::Double,
             estimated_relative_accuracy: Some(F(0.02)),
             estimated_decimal_digits: None,
@@ -617,6 +622,7 @@ fn inspect_stability_accuracy_uses_the_final_accepted_precision() -> Result<()> 
             total_time: Duration::ZERO,
         },
         StabilityResult {
+            representation: RepresentationMode::Cff,
             precision: Precision::Quad,
             estimated_relative_accuracy: Some(F(1.0e-12)),
             estimated_decimal_digits: None,
@@ -660,6 +666,7 @@ fn inspect_stability_accuracy_rejects_unstable_and_nonfinite_final_results() {
 
     let mut metadata = EvaluationResult::zero().evaluation_metadata;
     metadata.stability_results.push(StabilityResult {
+        representation: RepresentationMode::Cff,
         precision: Precision::Quad,
         estimated_relative_accuracy: Some(F(1.0e-12)),
         estimated_decimal_digits: None,
@@ -2713,15 +2720,23 @@ fn assert_json_approx_eq(actual: &Value, expected: &Value, path: &str) {
     }
 }
 
+const SOFT_CT_ROUTES: [(bool, bool, RepresentationMode); 4] = [
+    (false, false, RepresentationMode::Cff),
+    (true, false, RepresentationMode::Cff),
+    (true, true, RepresentationMode::Cff),
+    (true, true, RepresentationMode::Ltd),
+];
+
 fn local_ct_cli(
     run_card: &str,
     test_name: &str,
     unsubtracted: bool,
     project_local_4d: bool,
     explicit_orientation_sum_only: bool,
+    representation: RepresentationMode,
 ) -> Result<CLIState> {
     let test_name = format!(
-        "{test_name}_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}"
+        "{test_name}_{representation}_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}"
     );
     let mut cli = get_test_cli(
         Some(run_card.into()),
@@ -2730,6 +2745,7 @@ fn local_ct_cli(
         true,
     )?;
     let generation = &mut cli.cli_settings.global.generation;
+    generation.three_dimensional_representations = vec![representation];
     generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
     if explicit_orientation_sum_only {
         generation.orientation_pattern = Default::default();
@@ -2796,21 +2812,24 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
         ),
     ] {
         let mut values = Vec::new();
-        let routes = [
-            (false, false, true),
-            (true, false, true),
-            (true, true, true),
-        ]
-        .into_iter()
-        .chain((name == "local_nested_soft_top_self_energy").then_some((true, false, false)));
+        let routes = SOFT_CT_ROUTES
+            .into_iter()
+            .map(|(explicit, from_4d, representation)| (explicit, from_4d, true, representation))
+            .chain((name == "local_nested_soft_top_self_energy").then_some((
+                true,
+                false,
+                false,
+                RepresentationMode::Cff,
+            )));
         for (
             explicit_orientation_sum_only,
             project_local_4d,
             project_integrated_uv_cts_onto_tensor_integrals,
+            representation,
         ) in routes
         {
             let test_name = format!(
-                "{name}_integrated_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}_project_integrated_{project_integrated_uv_cts_onto_tensor_integrals}"
+                "{name}_{representation}_integrated_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}_project_integrated_{project_integrated_uv_cts_onto_tensor_integrals}"
             );
             let mut cli = get_test_cli(
                 Some(format!("{name}.toml").into()),
@@ -2819,6 +2838,7 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
                 true,
             )?;
             let generation = &mut cli.cli_settings.global.generation;
+            generation.three_dimensional_representations = vec![representation];
             generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
             generation.orientation_pattern = Default::default();
             generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
@@ -2879,7 +2899,7 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
             };
             assert!(
                 value.value.re.is_finite() && value.value.im.is_finite(),
-                "{name} integrated local IR generation must evaluate finitely for explicit={explicit_orientation_sum_only}, project_local_4d={project_local_4d}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}: {:?}",
+                "{name} integrated local IR generation must evaluate finitely for explicit={explicit_orientation_sum_only}, project_local_4d={project_local_4d}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}, representation={representation}: {:?}",
                 value.value,
             );
             assert!(
@@ -2891,6 +2911,7 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
                     explicit_orientation_sum_only,
                     project_local_4d,
                     project_integrated_uv_cts_onto_tensor_integrals,
+                    representation,
                 ),
                 value,
             ));
@@ -2905,6 +2926,7 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
                 explicit_orientation_sum_only,
                 project_local_4d,
                 project_integrated_uv_cts_onto_tensor_integrals,
+                representation,
             ),
             value,
         ) in &values[1..]
@@ -2925,11 +2947,294 @@ fn local_ir_integrated_generation_succeeds_across_local_uv_routes() -> Result<()
                 relative_accuracy.is_finite()
                     && INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy < 1.0
                     && delta <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * relative_accuracy * scale,
-                "{name} integrated local IR routes disagree for explicit={explicit_orientation_sum_only}, project_local_4d={project_local_4d}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}: localized direct={:?}, value={:?}, delta={delta:.3e}, scale={scale:.3e}, accuracy={relative_accuracy:.3e}",
+                "{name} integrated local IR routes disagree for explicit={explicit_orientation_sum_only}, project_local_4d={project_local_4d}, project_integrated={project_integrated_uv_cts_onto_tensor_integrals}, representation={representation}: localized direct={:?}, value={:?}, delta={delta:.3e}, scale={scale:.3e}, accuracy={relative_accuracy:.3e}",
                 reference.value,
                 value.value,
             );
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn local_ir_threshold_counterterms_match_across_4d_representations() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    use gammaloop_integration_tests::evaluation_comparison::{
+        EventWeightComparison, assert_evaluation_outputs_match,
+    };
+    use gammalooprs::{
+        cff::surface::EsurfaceID,
+        integrands::{
+            evaluation::EvaluationResultOutput,
+            process::{ProcessIntegrand, evaluators::EvaluatorMethod},
+        },
+        observables::ThresholdCountertermComponentOccurrence,
+        processes::threshold_counterterms::ThresholdCountertermMetadataRegistry,
+    };
+
+    let name = "local_ir_gluon_self_energy";
+    let mut reference: Option<(
+        Vec<Atom>,
+        ThresholdCountertermMetadataRegistry,
+        Vec<EvaluationResultOutput>,
+    )> = None;
+    for representation in [RepresentationMode::Cff, RepresentationMode::Ltd] {
+        let label = format!("{name}_4d_{representation}_with_thresholds");
+        let mut cli = get_test_cli(
+            Some(format!("{name}.toml").into()),
+            get_tests_workspace_path().join(&label),
+            Some(label.clone()),
+            true,
+        )?;
+        let generation = &mut cli.cli_settings.global.generation;
+        generation.three_dimensional_representations = vec![representation];
+        generation.explicit_orientation_sum_only = true;
+        generation.orientation_pattern = Default::default();
+        generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+        generation.uv.local_uv_cts_from_expanded_4d_integrands = true;
+        generation.uv.subtract_uv = true;
+        generation.uv.generate_integrated = true;
+        generation.evaluator.compile = false;
+        generation.evaluator.summed = false;
+        generation.evaluator.summed_function_map = false;
+        generation.evaluator.iterative_orientation_optimization = false;
+        generation.threshold_subtraction.enable_thresholds = true;
+        generation.threshold_subtraction.disable_integrated_ct = false;
+        generation
+            .threshold_subtraction
+            .check_esurface_at_generation = true;
+        let runtime = &mut cli.default_runtime_settings;
+        runtime.general.evaluator_method = EvaluatorMethod::SingleParametric;
+        runtime.general.generate_events = true;
+        runtime.general.store_additional_weights_in_event = true;
+        runtime.subtraction.disable_threshold_subtraction = false;
+        gammaloop_integration_tests::run_commands(
+            &mut cli,
+            &[
+                "import model sm-default",
+                "remove processes",
+                &format!("import graphs ./tests/resources/graphs/{name}.dot -p {name} -i {name}"),
+            ],
+        )?;
+        // Automatic legacy-equivalent thresholds intentionally omit the rich
+        // metadata registry. Declare the existing two-edge threshold explicitly
+        // with its default variant, preserving the subtraction while recording
+        // its local and integrated components for this comparison.
+        let ProcessCollection::Amplitudes(amplitudes) =
+            &mut cli.state.process_list.processes[0].collection
+        else {
+            panic!("expected the soft gluon self-energy amplitude")
+        };
+        amplitudes.get_mut(name).unwrap().graphs[0]
+            .graph
+            .threshold_counterterms =
+            gammalooprs::graph::autogen::Autogen::explicit(serde_json::from_value(json!({
+                "schema_version": 1,
+                "cuts": [{"edges": [], "thresholds": [{"edges": [2, 3]}]}]
+            }))?);
+        cli.run_command(&format!("generate existing -p {name} -i {name}"))?;
+        let ProcessCollection::Amplitudes(amplitudes) =
+            &cli.state.process_list.processes[0].collection
+        else {
+            unreachable!()
+        };
+        assert!(
+            amplitudes[name].graphs[0]
+                .derived_data
+                .resolved_threshold_counterterms
+                .as_ref()
+                .unwrap()
+                .legacy_equivalent,
+            "the explicit threshold must preserve the default subtraction"
+        );
+        assert_generated_local_integrand(&cli, name, name, 3)?;
+        assert_eq!(
+            selected_local_identifiers(&cli, name, name, ApproximationType::IR)?.len(),
+            1,
+            "{label} must retain the selected soft self-energy component"
+        );
+        assert_selected_local_identifier(
+            &cli,
+            name,
+            name,
+            ApproximationType::IR,
+            [-21, 21],
+            [1],
+            1,
+        )?;
+
+        // Keep the existing timelike kinematics and inspect point. The two
+        // additional points probe both routings near the massless threshold.
+        let process_id = cli
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified(name.to_string())))?;
+        let mut evaluations = Vec::new();
+        let mut has_nonzero_threshold = false;
+        for point in [[0.13, 0.20, 0.27], [0.08, 0.02, 0.04], [0.08, 0.02, -0.04]] {
+            let points = Array2::from_shape_vec((1, 3), point.to_vec())?;
+            let result = evaluate_sample(
+                &mut cli.state,
+                &EvaluateSamples {
+                    process_id: Some(process_id),
+                    integrand_name: Some(name.to_string()),
+                    use_arb_prec: true,
+                    minimal_output: false,
+                    return_generated_events: Some(true),
+                    momentum_space: true,
+                    points: points.view(),
+                    integrator_weights: None,
+                    discrete_dims: None,
+                    graph_names: None,
+                    orientations: Some(vec![None]),
+                },
+            )?;
+            let evaluation = result.sample.evaluation;
+            let metadata = evaluation
+                .evaluation_metadata
+                .as_ref()
+                .ok_or_else(|| eyre::eyre!("{label} must report its accepted stability attempt"))?;
+            assert_eq!(
+                metadata.stability_results.last().unwrap().representation,
+                representation
+            );
+            stability_relative_accuracy(metadata, f64::EPSILON)?;
+            let components = evaluation
+                .event_groups
+                .iter()
+                .flat_map(|group| group.iter())
+                .filter_map(|event| event.additional_weights.threshold_counterterms.as_ref())
+                .flat_map(|decomposition| &decomposition.components)
+                .collect::<Vec<_>>();
+            assert!(
+                !components.is_empty(),
+                "{label} must record threshold components at {point:?}"
+            );
+            has_nonzero_threshold |= components.iter().any(|component| {
+                !component.evaluation_skipped
+                    && component.weighted.re.0.hypot(component.weighted.im.0) > 0.0
+            });
+            evaluations.push(evaluation);
+        }
+        assert!(
+            has_nonzero_threshold,
+            "{label} must exercise a nonzero threshold-counterterm contribution"
+        );
+        // Native raised-surface IDs follow each representation's discovery
+        // order. The existing group catalogue instead orders exact physical
+        // surface atoms. Compare complete inventories, then transport only IDs
+        // through its bijection; all numerical and component checks stay strict.
+        let ProcessCollection::Amplitudes(amplitudes) =
+            &cli.state.process_list.processes[process_id].collection
+        else {
+            unreachable!()
+        };
+        let amplitude = &amplitudes[name];
+        let [group] = amplitude.group_derived_data.raw.as_slice() else {
+            panic!("the soft fixture must have one graph group")
+        };
+        let physical_surfaces = group.esurface_atoms.raw.clone();
+        let mut raised_to_physical = BTreeMap::new();
+        for (physical_id, graphs) in group.esurface_map.iter_enumerated() {
+            let [Some(raised_id)] = graphs.raw.as_slice() else {
+                panic!("each physical surface must bind the fixture's single graph")
+            };
+            assert!(
+                raised_to_physical
+                    .insert(raised_id.0, physical_id.0)
+                    .is_none(),
+                "physical surface bindings must be bijective"
+            );
+        }
+        assert_eq!(raised_to_physical.len(), physical_surfaces.len());
+        let ProcessIntegrand::Amplitude(integrand) = amplitude.integrand.as_ref().unwrap() else {
+            unreachable!()
+        };
+        let mut registry = integrand.data.graph_terms[0]
+            .threshold_counterterm_metadata()
+            .expect("explicit thresholds must retain their metadata registry")
+            .clone();
+        for variant in &mut registry.variants {
+            for surface_id in variant.threshold_esurface_ids.iter_mut().chain(
+                variant
+                    .associations
+                    .iter_mut()
+                    .map(|entry| &mut entry.esurface_id),
+            ) {
+                let raised =
+                    amplitude.graphs[0].derived_data.raised_esurface_ids[EsurfaceID(*surface_id)];
+                *surface_id = raised_to_physical[&raised.0];
+            }
+        }
+        if let Some((expected_surfaces, expected_registry, _)) = &reference {
+            assert_eq!(physical_surfaces, *expected_surfaces);
+            // Includes the exact threshold-edge associations, component/variant
+            // IDs, multipliers, parent/subspace choices and generated/active flags.
+            assert_eq!(registry, *expected_registry);
+        }
+        let mut comparable_evaluations = evaluations.clone();
+        for evaluation in &mut comparable_evaluations {
+            for event in evaluation
+                .event_groups
+                .iter_mut()
+                .flat_map(|group| group.iter_mut())
+            {
+                let weights = &mut event.additional_weights.weights;
+                let count = weights.len();
+                *weights = std::mem::take(weights)
+                    .into_iter()
+                    .map(|(mut key, value)| {
+                        match &mut key {
+                            AdditionalWeightKey::AmplitudeThresholdCounterterm {
+                                esurface_id,
+                                ..
+                            }
+                            | AdditionalWeightKey::AmplitudeThresholdCountertermVariant {
+                                esurface_id,
+                                ..
+                            } => {
+                                *esurface_id = raised_to_physical[&*esurface_id];
+                            }
+                            _ => {}
+                        }
+                        (key, value)
+                    })
+                    .collect();
+                assert_eq!(
+                    weights.len(),
+                    count,
+                    "physical key mapping must not merge weights"
+                );
+                if let Some(decomposition) = &mut event.additional_weights.threshold_counterterms {
+                    for component in &mut decomposition.components {
+                        let ThresholdCountertermComponentOccurrence::Amplitude {
+                            raised_esurface_id,
+                            ..
+                        } = &mut component.occurrence
+                        else {
+                            panic!("the soft fixture must record amplitude occurrences")
+                        };
+                        *raised_esurface_id = raised_to_physical[&*raised_esurface_id];
+                    }
+                }
+            }
+        }
+        if let Some((_, _, reference)) = &reference {
+            for (point, (actual, expected)) in comparable_evaluations
+                .iter()
+                .zip(reference.iter())
+                .enumerate()
+            {
+                assert_evaluation_outputs_match(
+                    actual,
+                    expected,
+                    &format!("{label}: point {point}"),
+                    EventWeightComparison::PhysicalResidues,
+                );
+            }
+        } else {
+            reference = Some((physical_surfaces, registry, comparable_evaluations));
+        }
+        clean_test(&cli.cli_settings.state.folder);
     }
     Ok(())
 }
@@ -4155,6 +4460,7 @@ fn cli_soft_profile_orientation_fits(
 fn run_dgse_local_ir_profiles_are_non_vacuous(
     project_local_4d: bool,
     explicit_orientation_sum_only: bool,
+    representation: RepresentationMode,
 ) -> Result<()> {
     const BOUNDED_SOFT_SCALING: f64 = 3.0;
     const MINIMUM_SOFT_IMPROVEMENT: f64 = 1.0;
@@ -4168,6 +4474,7 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
         false,
         project_local_4d,
         explicit_orientation_sum_only,
+        representation,
     )?;
     let classified = classified_local_spinneys(&subtracted, "dgse", "dgse")?;
     assert_selected_local_identifier(
@@ -4186,18 +4493,34 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
         Some(&ProcessRef::Unqualified("dgse".to_string())),
         Some(&"dgse".to_string()),
     )?;
-    // Keep physical-signature uniqueness separate from the report's runtime slot labels.
-    assert_eq!(
-        integrand_info
-            .graph_groups
-            .iter()
-            .flat_map(|group| &group.orientations)
-            .map(|orientation| &orientation.signature)
-            .collect::<BTreeSet<_>>()
-            .len(),
-        EXPECTED_ORIENTATIONS,
-        "the unfiltered DGSE fixture must generate every expected acyclic orientation"
-    );
+    if representation == RepresentationMode::Cff {
+        let amplitude = match &subtracted.state.process_list.processes[process_id].collection {
+            ProcessCollection::Amplitudes(amplitudes) => amplitudes
+                .get("dgse")
+                .expect("missing generated DGSE amplitude"),
+            ProcessCollection::CrossSections(_) => {
+                return Err(eyre::eyre!("DGSE must be an amplitude"));
+            }
+        };
+        // Complete-sum evaluation exposes one runtime slot, while the native
+        // source retains every physical orientation in all three CFF routes.
+        assert_eq!(
+            amplitude
+                .graphs
+                .iter()
+                .flat_map(|graph| {
+                    &graph.derived_data.representations[&representation]
+                        .expression
+                        .expression
+                        .orientations
+                })
+                .map(|entry| entry.data.orientation.orientation_delta().to_string())
+                .collect::<BTreeSet<_>>()
+                .len(),
+            EXPECTED_ORIENTATIONS,
+            "the unfiltered DGSE fixture must generate every expected acyclic orientation"
+        );
+    }
     let generated_orientation_labels = integrand_info
         .graph_groups
         .iter()
@@ -4216,11 +4539,13 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
             format!("{label}|sigma({})", orientation.orientation_id)
         })
         .collect::<BTreeSet<_>>();
-    assert_eq!(
-        generated_orientation_labels.len(),
-        EXPECTED_ORIENTATIONS,
-        "the unfiltered DGSE fixture must generate every expected acyclic orientation"
-    );
+    if !explicit_orientation_sum_only {
+        assert_eq!(
+            generated_orientation_labels.len(),
+            EXPECTED_ORIENTATIONS,
+            "orientation-local DGSE evaluation must expose every generated orientation"
+        );
+    }
     let soft_export = subtracted.state.process_list.processes[process_id].export_uv_forest_graph(
         "dgse",
         0,
@@ -4316,6 +4641,7 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
             false,
             project_local_4d,
             explicit_orientation_sum_only,
+            representation,
         )?;
         let uv_process_id = uv_only
             .state
@@ -4372,6 +4698,7 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
         true,
         project_local_4d,
         explicit_orientation_sum_only,
+        representation,
     )?;
     let bare_ir = Profile::InfraRed(ir_settings)
         .run(&mut bare.state, &bare.cli_settings)?
@@ -4439,11 +4766,9 @@ fn run_dgse_local_ir_profiles_are_non_vacuous(
 #[test]
 fn dgse_local_ir_profiles_are_non_vacuous() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    for (explicit_orientation_sum_only, project_local_4d) in
-        [(false, false), (true, false), (true, true)]
-    {
+    for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
         println!(
-            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
         );
         let test = std::thread::Builder::new()
             .name("dgse-local-ir-profile".to_string())
@@ -4452,6 +4777,7 @@ fn dgse_local_ir_profiles_are_non_vacuous() -> Result<()> {
                 run_dgse_local_ir_profiles_are_non_vacuous(
                     project_local_4d,
                     explicit_orientation_sum_only,
+                    representation,
                 )
             })?;
         test.join()
@@ -4615,11 +4941,9 @@ fn dgse_local_ir_generation_orientation_filter_profiles_one_orientation() -> Res
 #[test]
 fn massless_quark_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    for (explicit_orientation_sum_only, project_local_4d) in
-        [(false, false), (true, false), (true, true)]
-    {
+    for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
         println!(
-            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
         );
         const CARD: &str = "local_ir_quark_self_energy.toml";
         const NAME: &str = "local_ir_quark_self_energy";
@@ -4630,6 +4954,7 @@ fn massless_quark_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
             false,
             project_local_4d,
             explicit_orientation_sum_only,
+            representation,
         )?;
         assert_selected_local_identifier(
             &subtracted,
@@ -4661,6 +4986,7 @@ fn massless_quark_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
             true,
             project_local_4d,
             explicit_orientation_sum_only,
+            representation,
         )?;
         assert_matched_local_routes(&subtracted, &bare, NAME, NAME)?;
         let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
@@ -4690,11 +5016,9 @@ fn massless_quark_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
 #[test]
 fn massless_gluon_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    for (explicit_orientation_sum_only, project_local_4d) in
-        [(false, false), (true, false), (true, true)]
-    {
+    for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
         println!(
-            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
         );
         const CARD: &str = "local_ir_gluon_self_energy.toml";
         const NAME: &str = "local_ir_gluon_self_energy";
@@ -4705,6 +5029,7 @@ fn massless_gluon_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
             false,
             project_local_4d,
             explicit_orientation_sum_only,
+            representation,
         )?;
         assert_selected_local_identifier(
             &subtracted,
@@ -4733,6 +5058,7 @@ fn massless_gluon_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
             true,
             project_local_4d,
             explicit_orientation_sum_only,
+            representation,
         )?;
         assert_matched_local_routes(&subtracted, &bare, NAME, NAME)?;
         let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
@@ -4757,27 +5083,37 @@ fn massless_gluon_self_energy_local_ir_profile_is_non_vacuous() -> Result<()> {
     Ok(())
 }
 
-const SOFT_CFF_PERSISTENCE_MODE: &str = "GAMMALOOP_SOFT_CFF_PERSISTENCE_MODE";
-const SOFT_CFF_PERSISTENCE_STATE: &str = "GAMMALOOP_SOFT_CFF_PERSISTENCE_STATE";
-const SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D: &str =
-    "GAMMALOOP_SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D";
+const SOFT_CT_PERSISTENCE_MODE: &str = "GAMMALOOP_SOFT_CT_PERSISTENCE_MODE";
+const SOFT_CT_PERSISTENCE_STATE: &str = "GAMMALOOP_SOFT_CT_PERSISTENCE_STATE";
+const SOFT_CT_PERSISTENCE_PROJECT_LOCAL_4D: &str = "GAMMALOOP_SOFT_CT_PERSISTENCE_PROJECT_LOCAL_4D";
+
+const SOFT_CT_PERSISTENCE_REPRESENTATION: &str = "GAMMALOOP_SOFT_CT_PERSISTENCE_REPRESENTATION";
+const SOFT_CT_PERSISTENCE_SUMMED_FUNCTION_MAP: &str =
+    "GAMMALOOP_SOFT_CT_PERSISTENCE_SUMMED_FUNCTION_MAP";
 
 #[test]
-#[ignore = "spawned by soft_cff_state_survives_a_fresh_process_reload"]
-fn soft_cff_state_round_trip_child() -> Result<()> {
+#[ignore = "spawned by soft_ct_state_survives_a_fresh_process_reload"]
+fn soft_ct_state_round_trip_child() -> Result<()> {
     const CARD: &str = "local_ir_gluon_self_energy.toml";
     const NAME: &str = "local_ir_gluon_self_energy";
 
-    let Ok(mode) = env::var(SOFT_CFF_PERSISTENCE_MODE) else {
+    let Ok(mode) = env::var(SOFT_CT_PERSISTENCE_MODE) else {
         return Ok(());
     };
-    let state_path = env::var_os(SOFT_CFF_PERSISTENCE_STATE)
+    let state_path = env::var_os(SOFT_CT_PERSISTENCE_STATE)
         .map(PathBuf::from)
-        .ok_or_else(|| eyre::eyre!("missing {SOFT_CFF_PERSISTENCE_STATE} child state path"))?;
+        .ok_or_else(|| eyre::eyre!("missing {SOFT_CT_PERSISTENCE_STATE} child state path"))?;
 
-    let project_local_4d: bool = env::var(SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D)?.parse()?;
+    let project_local_4d: bool = env::var(SOFT_CT_PERSISTENCE_PROJECT_LOCAL_4D)?.parse()?;
+    let representation = match env::var(SOFT_CT_PERSISTENCE_REPRESENTATION)?.as_str() {
+        "cff" => RepresentationMode::Cff,
+        "ltd" => RepresentationMode::Ltd,
+        other => return Err(eyre::eyre!("unknown persistence representation {other}")),
+    };
+    let summed_function_map: bool = env::var(SOFT_CT_PERSISTENCE_SUMMED_FUNCTION_MAP)?.parse()?;
+    let expected_path = state_path.join("soft_ct_persistence_reference.json");
     let worker = std::thread::Builder::new()
-        .name(format!("soft-cff-persistence-{mode}"))
+        .name(format!("soft-ct-persistence-{mode}"))
         .stack_size(128 * 1024 * 1024)
         .spawn(move || -> Result<()> {
             match mode.as_str() {
@@ -4785,21 +5121,32 @@ fn soft_cff_state_round_trip_child() -> Result<()> {
                     let mut cli = get_test_cli(
                         Some(CARD.into()),
                         &state_path,
-                        Some("soft_cff_persistence_save".to_string()),
+                        Some("soft_ct_persistence_save".to_string()),
                         true,
                     )?;
                     let generation = &mut cli.cli_settings.global.generation;
+                    generation.three_dimensional_representations = vec![representation];
                     generation.explicit_orientation_sum_only = true;
+                    generation.evaluator.summed = false;
+                    generation.evaluator.summed_function_map = summed_function_map;
+                    generation.evaluator.compile = false;
                     generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
                     generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
                     assert!(!generation.uv.generate_integrated);
+                    cli.default_runtime_settings.general.evaluator_method = if summed_function_map {
+                        gammalooprs::integrands::process::evaluators::EvaluatorMethod::SummedFunctionMap
+                    } else {
+                        gammalooprs::integrands::process::evaluators::EvaluatorMethod::SingleParametric
+                    };
                     cli.run_command("run generate")?;
                     assert_generated_local_integrand(&cli, NAME, NAME, 3)?;
+                    let value = evaluate_momentum_sample(&mut cli, NAME, NAME, &[0.13, 0.20, 0.27], None, f64::EPSILON)?.value;
                     cli.save_state()?;
+                    fs::write(&expected_path, serde_json::to_vec(&[value.re, value.im])?)?;
                 }
                 "load" => {
                     let mut loaded = StateLoadOption {
-                        state_folder: Some(state_path),
+                        state_folder: Some(state_path.clone()),
                         ..Default::default()
                     }
                     .load()?;
@@ -4811,14 +5158,17 @@ fn soft_cff_state_round_trip_child() -> Result<()> {
                     assert!(loaded.cli_settings.global.generation.explicit_orientation_sum_only);
                     assert!(
                 loaded.state_load_summary.is_some(),
-                "the load child started a blank state instead of deserializing the saved soft CFF"
+                "the load child started a blank state instead of deserializing the saved soft CT"
             );
-                    loaded
-                        .cli_session()
-                        .execute_command(CommandHistory::from_raw_string(&format!(
+                    assert_eq!(loaded.cli_settings.global.generation.three_dimensional_representations, [representation]);
+                    assert_eq!(loaded.cli_settings.global.generation.evaluator.summed_function_map, summed_function_map);
+                    let expected: [f64; 2] = serde_json::from_slice(&fs::read(&expected_path)?)?;
+                    for regenerate in [false, true] {
+                    if regenerate {
+                        loaded.cli_session().execute_command(CommandHistory::from_raw_string(&format!(
                             "generate existing -p {NAME} -i {NAME}"
                         ))?)?;
-
+                    }
                     let process_id = loaded
                         .state
                         .resolve_process_ref(Some(&ProcessRef::Unqualified(NAME.to_string())))?;
@@ -4836,17 +5186,16 @@ NAME,
                     )?;
                     assert_unique_uv_forest_term_identities(
                         &export,
-                        "fresh-process soft-CFF state",
+                        "fresh-process soft-CT state",
                     );
 
                     let n_dim = integrand.get_n_dim();
                     let graph_name = integrand
                         .graph_name_by_id(0)
-                        .ok_or_else(|| eyre::eyre!("reloaded soft-CFF integrand has no graph 0"))?
+                        .ok_or_else(|| eyre::eyre!("reloaded soft-CT integrand has no graph 0"))?
                         .to_string();
-                    let point = (0..n_dim)
-                        .map(|index| 0.13 + 0.07 * index as f64)
-                        .collect::<Vec<_>>();
+                    assert_eq!(n_dim, 3);
+                    let point = vec![0.13, 0.20, 0.27];
                     let points = Array2::from_shape_vec((1, n_dim), point)?;
                     let result = evaluate_sample(
                         &mut loaded.state,
@@ -4870,12 +5219,20 @@ NAME,
                 value.re.is_finite()
                     && value.im.is_finite()
                     && evaluation.evaluation_metadata.is_some(),
-                "the freshly loaded and regenerated soft CFF did not evaluate normally: {value:?}"
+                "the freshly loaded soft CT did not evaluate normally (regenerate={regenerate}): {value:?}"
             );
+                    let metadata = evaluation.evaluation_metadata.as_ref().unwrap();
+                    assert_eq!(metadata.stability_results.last().unwrap().representation, representation);
+                    let accuracy = stability_relative_accuracy(metadata, f64::EPSILON)?;
+                    let scale = expected[0].hypot(expected[1]).max(value.re.hypot(value.im)).max(f64::MIN_POSITIVE);
+                    let delta = (expected[0] - value.re).hypot(expected[1] - value.im);
+                    assert!(delta <= INSPECT_DEPENDENCE_ACCURACY_FACTOR * accuracy * scale,
+                        "fresh-process {representation} soft CT changed (summed_function_map={summed_function_map}, regenerate={regenerate}): expected={expected:?}, actual={value:?}, relative delta={}", delta / scale);
+                    }
                 }
                 other => {
                     return Err(eyre::eyre!(
-                        "unknown {SOFT_CFF_PERSISTENCE_MODE} child mode {other:?}"
+                        "unknown {SOFT_CT_PERSISTENCE_MODE} child mode {other:?}"
                     ));
                 }
             }
@@ -4883,16 +5240,24 @@ NAME,
         })?;
     worker
         .join()
-        .map_err(|_| eyre::eyre!("soft-CFF persistence child worker panicked"))?
+        .map_err(|_| eyre::eyre!("soft-CT persistence child worker panicked"))?
 }
 
 #[test]
-fn soft_cff_state_survives_a_fresh_process_reload() -> Result<()> {
+fn soft_ct_state_survives_a_fresh_process_reload() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    for project_local_4d in [false, true] {
-        println!("project_local_4d={project_local_4d}");
+    for (project_local_4d, representation, summed_function_map) in [
+        (false, RepresentationMode::Cff, false),
+        (true, RepresentationMode::Cff, false),
+        (true, RepresentationMode::Ltd, false),
+        (true, RepresentationMode::Cff, true),
+        (true, RepresentationMode::Ltd, true),
+    ] {
+        println!(
+            "project_local_4d={project_local_4d}, representation={representation}, summed_function_map={summed_function_map}"
+        );
         let state_path = get_tests_workspace_path().join(format!(
-            "soft_cff_fresh_process_state_project_local_4d_{project_local_4d}"
+            "soft_ct_fresh_process_state_project_local_4d_{project_local_4d}_{representation}_{summed_function_map}"
         ));
         clean_test(&state_path);
         let outcome = (|| -> Result<()> {
@@ -4902,20 +5267,28 @@ fn soft_cff_state_survives_a_fresh_process_reload() -> Result<()> {
                     .current_dir(workspace_root())
                     .args([
                         "--exact",
-                        "soft_cff_state_round_trip_child",
+                        "soft_ct_state_round_trip_child",
                         "--ignored",
                         "--nocapture",
                     ])
-                    .env(SOFT_CFF_PERSISTENCE_MODE, mode)
-                    .env(SOFT_CFF_PERSISTENCE_STATE, &state_path)
+                    .env(SOFT_CT_PERSISTENCE_MODE, mode)
+                    .env(SOFT_CT_PERSISTENCE_STATE, &state_path)
                     .env(
-                        SOFT_CFF_PERSISTENCE_PROJECT_LOCAL_4D,
+                        SOFT_CT_PERSISTENCE_REPRESENTATION,
+                        representation.to_string(),
+                    )
+                    .env(
+                        SOFT_CT_PERSISTENCE_SUMMED_FUNCTION_MAP,
+                        summed_function_map.to_string(),
+                    )
+                    .env(
+                        SOFT_CT_PERSISTENCE_PROJECT_LOCAL_4D,
                         project_local_4d.to_string(),
                     )
                     .output()?;
                 if !output.status.success() {
                     return Err(eyre::eyre!(
-                        "fresh-process soft-CFF {mode} child failed with {}\nstdout:\n{}\nstderr:\n{}",
+                        "fresh-process soft-CT {mode} child failed with {}\nstdout:\n{}\nstderr:\n{}",
                         output.status,
                         String::from_utf8_lossy(&output.stdout),
                         String::from_utf8_lossy(&output.stderr),
@@ -4937,11 +5310,18 @@ const LOCAL_OS_NAME: &str = "local_os_top_self_energy";
 fn massive_top_self_energy_local_os_dispatch_is_deferred() {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let state_path = get_tests_workspace_path().join(format!(
-        "{LOCAL_OS_NAME}_explicit_false_project_local_4d_false"
+        "{LOCAL_OS_NAME}_cff_explicit_false_project_local_4d_false"
     ));
     clean_test(&state_path);
     let panic = catch_unwind(AssertUnwindSafe(|| {
-        let _ = local_ct_cli(LOCAL_OS_CARD, LOCAL_OS_NAME, false, false, false);
+        let _ = local_ct_cli(
+            LOCAL_OS_CARD,
+            LOCAL_OS_NAME,
+            false,
+            false,
+            false,
+            RepresentationMode::Cff,
+        );
     }))
     .expect_err("the local OS fixture must reach the intentional deferred-dispatch panic");
     clean_test(&state_path);
@@ -4962,8 +5342,8 @@ fn massive_top_self_energy_local_os_dispatch_is_deferred() {
 fn paper_appendix_b1_os_child_reaches_deferred_dispatch() {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy_os";
-    let state_path =
-        get_tests_workspace_path().join(format!("{NAME}_explicit_false_project_local_4d_false"));
+    let state_path = get_tests_workspace_path()
+        .join(format!("{NAME}_cff_explicit_false_project_local_4d_false"));
     clean_test(&state_path);
     let panic = catch_unwind(AssertUnwindSafe(|| {
         let _ = local_ct_cli(
@@ -4972,6 +5352,7 @@ fn paper_appendix_b1_os_child_reaches_deferred_dispatch() {
             false,
             false,
             false,
+            RepresentationMode::Cff,
         );
     }))
     .expect_err("the Appendix-B.1 OS fixture must reach the intentional deferred-dispatch panic");
@@ -4992,11 +5373,9 @@ fn paper_appendix_b1_os_child_reaches_deferred_dispatch() {
 #[test]
 fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    for (explicit_orientation_sum_only, project_local_4d) in
-        [(false, false), (true, false), (true, true)]
-    {
+    for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
         println!(
-            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
         );
         let test = std::thread::Builder::new()
         .name("local-ir-disconnected-replay".to_string())
@@ -5006,7 +5385,7 @@ fn local_ir_disconnected_completed_components_form_nonzero_union() -> Result<()>
 
             const NAME: &str = "local_ir_dod2_scalar_spectacles";
             let mut spectacles =
-                local_ct_cli("local_ir_dod2_scalar_spectacles.toml", NAME, false, project_local_4d, explicit_orientation_sum_only)?;
+                local_ct_cli("local_ir_dod2_scalar_spectacles.toml", NAME, false, project_local_4d, explicit_orientation_sum_only, representation)?;
             assert_generated_local_integrand(&spectacles, NAME, NAME, 6)?;
             let classified = classified_local_spinneys(&spectacles, NAME, NAME)?;
             let connected = classified
@@ -5096,7 +5475,7 @@ NAME,
             let mut bare = local_ct_cli(
                 "local_ir_dod2_scalar_spectacles.toml",
                 "local_ir_dod2_scalar_spectacles_bare",
-                true, project_local_4d, explicit_orientation_sum_only)?;
+                true, project_local_4d, explicit_orientation_sum_only, representation)?;
             let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
             let mut ordinary_uv = get_test_cli(
                 Some("local_ir_dod2_scalar_spectacles.toml".into()),
@@ -5105,6 +5484,7 @@ NAME,
                 true,
             )?;
             let generation = &mut ordinary_uv.cli_settings.global.generation;
+            generation.three_dimensional_representations = vec![representation];
             generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
             generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
             generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
@@ -5170,11 +5550,9 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
 #[test]
 fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-    for (explicit_orientation_sum_only, project_local_4d) in
-        [(false, false), (true, false), (true, true)]
-    {
+    for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
         println!(
-            "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+            "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
         );
         let test = std::thread::Builder::new()
         .name("consecutive-soft-components".to_string())
@@ -5185,7 +5563,7 @@ fn consecutive_soft_components_have_exact_forest_and_cli_profile() -> Result<()>
             const NAME: &str = "local_consecutive_soft_scalar_bubbles";
             const CARD: &str = "local_consecutive_soft_scalar_bubbles.toml";
 
-            let mut subtracted = local_ct_cli(CARD, NAME, false, project_local_4d, explicit_orientation_sum_only)?;
+            let mut subtracted = local_ct_cli(CARD, NAME, false, project_local_4d, explicit_orientation_sum_only, representation)?;
             assert_eq!(
                 subtracted.cli_settings.global.generation.uv.orchestrator,
                 UVOrchestrator::HedgePoset
@@ -5291,7 +5669,7 @@ subtracted_uv.total > 0 && subtracted_uv.resolved > 0 && subtracted_uv.failed ==
                 "consecutive soft components must pass a non-vacuous CLI UV profile: {subtracted_uv:?}"
             );
 
-            let mut bare = local_ct_cli(CARD, "local_consecutive_soft_scalar_bubbles_bare", true, project_local_4d, explicit_orientation_sum_only)?;
+            let mut bare = local_ct_cli(CARD, "local_consecutive_soft_scalar_bubbles_bare", true, project_local_4d, explicit_orientation_sum_only, representation)?;
             let bare_classified = classified_local_spinneys(&bare, NAME, NAME)?;
             assert!(
                 bare_classified.iter().all(|component| {
@@ -5375,14 +5753,11 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
                 parameters.len()
             );
             let mut markers = std::collections::HashSet::new();
-            for expression in std::iter::once(&amplitude_graph.derived_data.all_mighty_integrand)
-                .chain(
-                    amplitude_graph
-                        .derived_data
-                        .all_mighty_numerators
-                        .iter()
-                        .map(|entry| &entry.rhs),
-                )
+            for expression in amplitude_graph
+                .derived_data
+                .representations
+                .values()
+                .flat_map(|data| data.all_mighty_integrand.iter().map(|(_, atom)| atom))
             {
                 let _ = expression.replace_map(|view, _, _| {
                     if let AtomView::Fun(function) = view
@@ -5450,25 +5825,174 @@ fn sunrise_pole_part_matches_muv_inspect() -> Result<()> {
 mod slow {
     use super::*;
 
+    #[test]
+    fn soft_ir_4d_representations_layouts_and_forests_match() -> Result<()> {
+        let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+        use gammalooprs::integrands::process::evaluators::EvaluatorMethod;
+
+        // These fixtures have nonzero integrated addbacks and independent or
+        // nested completed soft components. Compare physical sums, never rows.
+        // The legacy DAG does not compute disconnected UV unions, including
+        // on main. Cover that composition with HedgePoset and both backends
+        // with the connected nested soft forest.
+        for (name, orchestrators) in [
+            (
+                "local_ir_dod2_scalar_spectacles",
+                &[UVOrchestrator::HedgePoset][..],
+            ),
+            (
+                "local_nested_soft_top_self_energy",
+                &[UVOrchestrator::HedgePoset, UVOrchestrator::LegacyDagForest][..],
+            ),
+        ] {
+            let mut reference: Option<Vec<InspectEvaluation>> = None;
+            for representation in [RepresentationMode::Cff, RepresentationMode::Ltd] {
+                for &orchestrator in orchestrators {
+                    for summed_function_map in [false, true] {
+                        let label = format!(
+                            "{name}_4d_{representation}_{orchestrator:?}_summed_function_map_{summed_function_map}"
+                        );
+                        let mut cli = get_test_cli(
+                            Some(format!("{name}.toml").into()),
+                            get_tests_workspace_path().join(&label),
+                            Some(label.clone()),
+                            true,
+                        )?;
+                        let generation = &mut cli.cli_settings.global.generation;
+                        generation.three_dimensional_representations = vec![representation];
+                        generation.explicit_orientation_sum_only = true;
+                        generation.orientation_pattern = Default::default();
+                        generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
+                        generation.uv.local_uv_cts_from_expanded_4d_integrands = true;
+                        generation.uv.generate_integrated = true;
+                        generation.uv.orchestrator = orchestrator;
+                        generation.evaluator.compile = false;
+                        generation.evaluator.summed = false;
+                        generation.evaluator.summed_function_map = summed_function_map;
+                        generation.evaluator.iterative_orientation_optimization = false;
+                        cli.default_runtime_settings.general.evaluator_method =
+                            if summed_function_map {
+                                EvaluatorMethod::SummedFunctionMap
+                            } else {
+                                EvaluatorMethod::SingleParametric
+                            };
+                        cli.run_command("run generate")?;
+                        assert_generated_local_integrand(&cli, name, name, 6)?;
+                        assert_eq!(
+                            selected_local_identifiers(&cli, name, name, ApproximationType::IR)?
+                                .len(),
+                            2,
+                            "{label} must retain both completed soft components"
+                        );
+                        let process_id =
+                            cli.state
+                                .resolve_process_ref(Some(&ProcessRef::Unqualified(
+                                    name.to_string(),
+                                )))?;
+                        let mut values = Vec::new();
+                        for point in [
+                            [0.11, -0.29, 0.37, 0.59, -0.43, 0.71],
+                            [0.23, 0.31, -0.17, 0.41, -0.29, 0.13],
+                            [-0.31, 0.19, 0.47, -0.61, 0.53, 0.29],
+                        ] {
+                            let points = Array2::from_shape_vec((1, 6), point.to_vec())?;
+                            let result = evaluate_sample(
+                                &mut cli.state,
+                                &EvaluateSamples {
+                                    process_id: Some(process_id),
+                                    integrand_name: Some(name.to_string()),
+                                    use_arb_prec: true,
+                                    minimal_output: false,
+                                    return_generated_events: Some(false),
+                                    momentum_space: true,
+                                    points: points.view(),
+                                    integrator_weights: None,
+                                    discrete_dims: None,
+                                    graph_names: None,
+                                    orientations: Some(vec![None]),
+                                },
+                            )?;
+                            let evaluation = result.sample.evaluation;
+                            let metadata =
+                                evaluation.evaluation_metadata.as_ref().ok_or_else(|| {
+                                    eyre::eyre!(
+                                        "{label} must report its accepted stability attempt"
+                                    )
+                                })?;
+                            assert_eq!(
+                                metadata.stability_results.last().unwrap().representation,
+                                representation
+                            );
+                            let value = evaluation.integrand_result.map(|entry| entry.0);
+                            assert!(
+                                value.re.is_finite()
+                                    && value.im.is_finite()
+                                    && value.re.hypot(value.im) > 0.0,
+                                "{label} must produce a nonzero finite physical sum at {point:?}: {value:?}"
+                            );
+                            values.push(InspectEvaluation {
+                                value,
+                                relative_accuracy: stability_relative_accuracy(
+                                    metadata,
+                                    f64::EPSILON,
+                                )?,
+                            });
+                        }
+                        if let Some(reference) = &reference {
+                            for (point_index, (expected, actual)) in
+                                reference.iter().zip(&values).enumerate()
+                            {
+                                let delta = (expected.value.re - actual.value.re)
+                                    .hypot(expected.value.im - actual.value.im);
+                                let scale = expected
+                                    .value
+                                    .re
+                                    .hypot(expected.value.im)
+                                    .max(actual.value.re.hypot(actual.value.im));
+                                let accuracy =
+                                    expected.relative_accuracy.max(actual.relative_accuracy);
+                                assert!(
+                                    INSPECT_DEPENDENCE_ACCURACY_FACTOR * accuracy < 1.0
+                                        && delta
+                                            <= INSPECT_DEPENDENCE_ACCURACY_FACTOR
+                                                * accuracy
+                                                * scale,
+                                    "{label} physical soft-CT sum differs at point {point_index}: expected={:?}, actual={:?}, relative delta={}, accuracy={accuracy}",
+                                    expected.value,
+                                    actual.value,
+                                    delta / scale
+                                );
+                            }
+                        } else {
+                            reference = Some(values);
+                        }
+                        clean_test(&cli.cli_settings.state.folder);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
     fn run_double_triangle_soft_ir_case(
         card: &str,
         name: &str,
         external_pdgs: &[isize],
         internal_pdgs: &[isize],
         soft_dod: i32,
-        project_local_4d: bool,
-        explicit_orientation_sum_only: bool,
+        route: (bool, bool, RepresentationMode),
     ) -> Result<()> {
         use gammalooprs::cff::orientations::GraphOrientation;
         use gammalooprs::graph::FeynmanGraph;
 
+        let (explicit_orientation_sum_only, project_local_4d, representation) = route;
+
         const POINT: [f64; 9] = [0.31, -0.27, 0.43, -0.22, 0.37, 0.19, 0.41, 0.16, -0.33];
         const EXPECTED_ORIENTATION: &str = "orientation_delta(0,0,-1,-1,-1,1,-1,-1,1,-1)";
 
-        // Enumerating the parent CFF is cheap compared with constructing every
-        // three-loop UV forest. Keep this probe ahead of local CT generation so
-        // that the fixture's generation-time orientation can be audited against
-        // the graph rather than copied from a generated evaluator.
+        // Audit the requested native map independently of UV generation. The
+        // LTD route must never construct CFF merely to establish its inventory;
+        // causal orientation assertions apply only to the CFF controls.
         let probe_name = format!(
             "{name}_orientation_probe_explicit_{explicit_orientation_sum_only}_project_local_4d_{project_local_4d}"
         );
@@ -5479,6 +6003,7 @@ mod slow {
             true,
         )?;
         let generation = &mut probe.cli_settings.global.generation;
+        generation.three_dimensional_representations = vec![representation];
         generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
         generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
         if explicit_orientation_sum_only {
@@ -5517,15 +6042,24 @@ mod slow {
             .iter_edges_of(&parent_graph.tree_edges)
             .filter_map(|(pair, edge, _)| pair.is_paired().then_some(edge))
             .collect::<Vec<_>>();
-        let options = parent_graph
-            .production_cff_3d_expression_options(&probe.cli_settings.global.generation)?;
-        let parent_cff = parent_graph.generate_3d_expression_for_integrand(
+        let options = parent_graph.production_3d_expression_options(
+            &probe.cli_settings.global.generation,
+            representation,
+        )?;
+        let parent_expression = parent_graph.generate_3d_expression_for_integrand(
             &parent_tree_edges,
             &parent_graph.get_esurface_canonization(&parent_graph.loop_momentum_basis),
             &options,
             None,
         )?;
-        let parent_orientations = parent_cff
+        let mut source_residue_keys = parent_expression
+            .expression
+            .orientations
+            .iter()
+            .map(|entry| entry.residue_map_key())
+            .collect::<Vec<_>>();
+        source_residue_keys.sort();
+        let parent_orientations = parent_expression
             .expression
             .orientations
             .iter()
@@ -5536,15 +6070,17 @@ mod slow {
             .filter(|orientation| !orientation.orientation_thetas().is_one())
             .map(|orientation| orientation.orientation_delta().to_string())
             .collect::<BTreeSet<_>>();
-        assert!(
-            orientation_signatures.len() > 1,
-            "{name} must have a nontrivial set of valid nonzero parent-CFF orientations: {orientation_signatures:#?}"
-        );
-        assert_eq!(
-            orientation_signatures.first().map(String::as_str),
-            Some(EXPECTED_ORIENTATION),
-            "the fixture must select the deterministic first nonzero parent-CFF orientation"
-        );
+        if representation == RepresentationMode::Cff {
+            assert!(
+                orientation_signatures.len() > 1,
+                "{name} must have a nontrivial set of valid nonzero parent-CFF orientations: {orientation_signatures:#?}"
+            );
+            assert_eq!(
+                orientation_signatures.first().map(String::as_str),
+                Some(EXPECTED_ORIENTATION),
+                "the fixture must select the deterministic first nonzero parent-CFF orientation"
+            );
+        }
         // Keep source-map multiplicities: equal direction signatures do not
         // identify maps with different numerator or mass sampling data.
         let mut source_orientations = parent_orientations
@@ -5582,6 +6118,7 @@ mod slow {
             false,
             project_local_4d,
             explicit_orientation_sum_only,
+            representation,
         )?;
         let expected_identifier = CTIdentifier::new(
             external_pdgs.iter().copied().collect(),
@@ -5634,6 +6171,7 @@ mod slow {
             true,
             project_local_4d,
             explicit_orientation_sum_only,
+            representation,
         )?;
         assert_matched_local_routes(&subtracted, &bare, name, name)?;
         for (label, cli) in [("subtracted", &subtracted), ("bare", &bare)] {
@@ -5649,49 +6187,82 @@ mod slow {
                     return Err(eyre::eyre!("{name} must be an amplitude"));
                 }
             };
-            let mut orientations = amplitude.graphs[0]
-                .derived_data
-                .cff_expression
-                .as_ref()
-                .expect("the generated amplitude must retain its CFF orientations")
+            let stored_entries = &amplitude.graphs[0].derived_data.representations[&representation]
                 .expression
-                .orientations
+                .expression
+                .orientations;
+            let mut residue_keys = stored_entries
+                .iter()
+                .map(|entry| entry.residue_map_key())
+                .collect::<Vec<_>>();
+            residue_keys.sort();
+            assert_eq!(
+                residue_keys, source_residue_keys,
+                "{name} {label} stored {representation} must retain the complete affine residue-map keys"
+            );
+            let mut orientations = stored_entries
                 .iter()
                 .map(|orientation| orientation.data.orientation.orientation_delta().to_string())
                 .collect::<Vec<_>>();
             orientations.sort();
             assert_eq!(
                 orientations, source_orientations,
-                "{name} {label} stored CFF must retain the full independently audited source inventory"
+                "{name} {label} stored {representation} must retain the full independently audited source inventory"
             );
-            // Generation filters the evaluator's channels, while its stored
-            // source CFF remains complete for local counterterm construction.
-            let info = cli.state.get_integrand_info(
-                Some(&ProcessRef::Unqualified(name.to_string())),
-                Some(&name.to_string()),
-            )?;
-            assert!(!info.graph_groups.is_empty());
-            for group in &info.graph_groups {
-                let mut orientations = group
-                    .orientations
-                    .iter()
-                    .map(|orientation| {
-                        format!(
-                            "orientation_delta({})",
-                            orientation
-                                .signature
-                                .iter()
-                                .map(ToString::to_string)
-                                .collect::<Vec<_>>()
-                                .join(",")
-                        )
-                    })
-                    .collect::<Vec<_>>();
-                orientations.sort();
-                assert_eq!(
-                    orientations, expected_orientations,
-                    "{name} {label} evaluator must retain exactly the audited orientation inventory"
-                );
+            if representation == RepresentationMode::Cff {
+                // The generated graph retains the selected native catalogue,
+                // while public info describes the runtime's execution slots.
+                let gammalooprs::integrands::process::ProcessIntegrand::Amplitude(generated) =
+                    amplitude.integrand.as_ref().unwrap()
+                else {
+                    return Err(eyre::eyre!("{name} must have an amplitude integrand"));
+                };
+                let info = cli.state.get_integrand_info(
+                    Some(&ProcessRef::Unqualified(name.to_string())),
+                    Some(&name.to_string()),
+                )?;
+                assert!(!info.graph_groups.is_empty());
+                for group in &info.graph_groups {
+                    assert_eq!(group.complete_residue_sum, explicit_orientation_sum_only);
+                    if explicit_orientation_sum_only {
+                        let master = group.graphs.iter().find(|graph| graph.is_master).unwrap();
+                        let mut selected_orientations = generated.data.graph_terms[master.graph_id]
+                            .orientations
+                            .iter()
+                            .map(|orientation| orientation.orientation_delta().to_string())
+                            .collect::<Vec<_>>();
+                        selected_orientations.sort();
+                        assert_eq!(
+                            selected_orientations, expected_orientations,
+                            "{name} {label} generated graph must retain exactly the audited orientation inventory"
+                        );
+                        assert_eq!(group.orientations.len(), 1);
+                        assert_eq!(group.orientations[0].orientation_id, 0);
+                        assert!(group.orientations[0].signature.is_empty());
+                        assert!(group.orientation_edge_ids.is_empty());
+                    } else {
+                        let mut orientations = group
+                            .orientations
+                            .iter()
+                            .map(|orientation| {
+                                format!(
+                                    "orientation_delta({})",
+                                    orientation
+                                        .signature
+                                        .iter()
+                                        .map(ToString::to_string)
+                                        .collect::<Vec<_>>()
+                                        .join(",")
+                                )
+                            })
+                            .collect::<Vec<_>>();
+                        orientations.sort();
+                        assert_eq!(
+                            orientations, expected_orientations,
+                            "{name} {label} evaluator must retain exactly the audited orientation inventory"
+                        );
+                    }
+                }
             }
         }
 
@@ -5793,11 +6364,9 @@ mod slow {
     #[test]
     fn paper_figure_b1_massless_bubble_uses_a_complete_soft_wood() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-        for (explicit_orientation_sum_only, project_local_4d) in
-            [(false, false), (true, false), (true, true)]
-        {
+        for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
             println!(
-                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+                "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
             );
             let test = std::thread::Builder::new()
                 .name("local-ir-double-triangle".to_string())
@@ -5809,8 +6378,11 @@ mod slow {
                         &[-21, 21],
                         &[1],
                         2,
-                        project_local_4d,
-                        explicit_orientation_sum_only,
+                        (
+                            explicit_orientation_sum_only,
+                            project_local_4d,
+                            representation,
+                        ),
                     )
                 })?;
             test.join()
@@ -5822,11 +6394,9 @@ mod slow {
     #[test]
     fn paper_figure_b1_double_triangle_is_a_non_vacuous_uv_fixture() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-        for (explicit_orientation_sum_only, project_local_4d) in
-            [(false, false), (true, false), (true, true)]
-        {
+        for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
             println!(
-                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+                "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
             );
             const NAME: &str = "paper_figure_b1_double_triangle";
             let card = "paper_figure_b1_double_triangle.toml";
@@ -5836,6 +6406,7 @@ mod slow {
                 false,
                 project_local_4d,
                 explicit_orientation_sum_only,
+                representation,
             )?;
             assert_generated_local_integrand(&subtracted, NAME, NAME, 6)?;
             assert!(
@@ -5862,6 +6433,7 @@ mod slow {
                 true,
                 project_local_4d,
                 explicit_orientation_sum_only,
+                representation,
             )?;
             let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, NAME)?;
             assert!(
@@ -5887,11 +6459,9 @@ mod slow {
     #[test]
     fn local_nested_soft_fixture_generates() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-        for (explicit_orientation_sum_only, project_local_4d) in
-            [(false, false), (true, false), (true, true)]
-        {
+        for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
             println!(
-                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+                "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
             );
             let test = std::thread::Builder::new()
             .name("local-nested-soft".to_string())
@@ -5900,7 +6470,7 @@ mod slow {
         let mut nested_soft = local_ct_cli(
             "local_nested_soft_top_self_energy.toml",
             "local_nested_soft_top_self_energy",
-            false, project_local_4d, explicit_orientation_sum_only)?;
+            false, project_local_4d, explicit_orientation_sum_only, representation)?;
         assert_eq!(
             nested_soft.cli_settings.global.generation.uv.orchestrator,
             UVOrchestrator::HedgePoset
@@ -5985,7 +6555,7 @@ subtracted_uv.total > 0 && subtracted_uv.resolved > 0 && subtracted_uv.failed ==
         let mut bare = local_ct_cli(
             "local_nested_soft_top_self_energy.toml",
             "local_nested_soft_top_self_energy_bare",
-            true, project_local_4d, explicit_orientation_sum_only)?;
+            true, project_local_4d, explicit_orientation_sum_only, representation)?;
         let bare_uv = cli_uv_profile_pass_fail(
             &mut bare,
             "local_nested_soft_top_self_energy",
@@ -6013,11 +6583,9 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
     #[test]
     fn paper_appendix_b1_ir_specialization_generates_and_profiles() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-        for (explicit_orientation_sum_only, project_local_4d) in
-            [(false, false), (true, false), (true, true)]
-        {
+        for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
             println!(
-                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+                "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
             );
             let test = std::thread::Builder::new()
             .name("paper-appendix-b1-soft-ir".to_string())
@@ -6025,7 +6593,7 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
             .spawn(move || -> Result<()> {
                 const NAME: &str = "paper_appendix_b1_nested_gluon_self_energy";
                 let card = "paper_appendix_b1_nested_gluon_self_energy_ir.toml";
-                let mut subtracted = local_ct_cli(card, NAME, false, project_local_4d, explicit_orientation_sum_only)?;
+                let mut subtracted = local_ct_cli(card, NAME, false, project_local_4d, explicit_orientation_sum_only, representation)?;
         assert_generated_local_integrand(&subtracted, NAME, "soft_ir", 6)?;
         let expected = CTIdentifier::new(
             [-21, 21].into_iter().collect(),
@@ -6073,6 +6641,7 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
                     true,
                 )?;
             let generation = &mut child_only.cli_settings.global.generation;
+            generation.three_dimensional_representations = vec![representation];
             generation.explicit_orientation_sum_only = explicit_orientation_sum_only;
             generation.uv.final_integrand = FinalIntegrandDimension::ThreeD;
             generation.uv.local_uv_cts_from_expanded_4d_integrands = project_local_4d;
@@ -6405,7 +6974,7 @@ subtracted_uv.total > 0 && subtracted_uv.resolved > 0 && subtracted_uv.failed ==
             "the complete and child-only Appendix-B.1 forests must profile the same UV LMBs, subsets, and orientations",
         );
 
-        let mut bare = local_ct_cli(card, "paper_appendix_b1_bare", true, project_local_4d, explicit_orientation_sum_only)?;
+        let mut bare = local_ct_cli(card, "paper_appendix_b1_bare", true, project_local_4d, explicit_orientation_sum_only, representation)?;
         let bare_uv = cli_uv_profile_pass_fail(&mut bare, NAME, "soft_ir")?;
         assert!(
 bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
@@ -6430,11 +6999,9 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
     #[test]
     fn gamma_star_ddbar_top_bubble_child_only_has_two_power_soft_improvement() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-        for (explicit_orientation_sum_only, project_local_4d) in
-            [(false, false), (true, false), (true, true)]
-        {
+        for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
             println!(
-                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+                "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
             );
             let test = std::thread::Builder::new()
             .name("gamma-star-ddbar-top-bubble-child-only".to_string())
@@ -6444,11 +7011,11 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
                 let mut child_uv = local_ct_cli(
                     "gamma_star_ddbar_top_bubble_child_uv_only.toml",
                     "gamma_star_ddbar_top_bubble_child_uv_only",
-                    false, project_local_4d, explicit_orientation_sum_only)?;
+                    false, project_local_4d, explicit_orientation_sum_only, representation)?;
                 let mut child_h = local_ct_cli(
                     "gamma_star_ddbar_top_bubble_child_soft_ir.toml",
                     "gamma_star_ddbar_top_bubble_child_soft_ir",
-                    false, project_local_4d, explicit_orientation_sum_only)?;
+                    false, project_local_4d, explicit_orientation_sum_only, representation)?;
                 let expected = CTIdentifier::new(
                     [-21, 21].into_iter().collect(),
                     Some([6].into_iter().collect()),
@@ -6565,11 +7132,9 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
     #[test]
     fn gamma_star_ddbar_top_bubble_has_two_power_soft_improvement() -> Result<()> {
         let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
-        for (explicit_orientation_sum_only, project_local_4d) in
-            [(false, false), (true, false), (true, true)]
-        {
+        for (explicit_orientation_sum_only, project_local_4d, representation) in SOFT_CT_ROUTES {
             println!(
-                "explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
+                "representation={representation}, explicit_orientation_sum_only={explicit_orientation_sum_only}, project_local_4d={project_local_4d}"
             );
             let test = std::thread::Builder::new()
             .name("gamma-star-ddbar-top-bubble".to_string())
@@ -6580,15 +7145,15 @@ bare_uv.total > 0 && bare_uv.resolved > 0 && bare_uv.dod_failures > 0
                 let mut bare = local_ct_cli(
                     "gamma_star_ddbar_top_bubble_bare.toml",
                     "gamma_star_ddbar_top_bubble_bare",
-                    false, project_local_4d, explicit_orientation_sum_only)?;
+                    false, project_local_4d, explicit_orientation_sum_only, representation)?;
                 let mut uv_only = local_ct_cli(
                     "gamma_star_ddbar_top_bubble_uv_only.toml",
                     "gamma_star_ddbar_top_bubble_uv_only",
-                    false, project_local_4d, explicit_orientation_sum_only)?;
+                    false, project_local_4d, explicit_orientation_sum_only, representation)?;
                 let mut soft_ir = local_ct_cli(
                     "gamma_star_ddbar_top_bubble_soft_ir.toml",
                     "gamma_star_ddbar_top_bubble_soft_ir",
-                    false, project_local_4d, explicit_orientation_sum_only)?;
+                    false, project_local_4d, explicit_orientation_sum_only, representation)?;
 
                 for (cli, integrand) in [
                     (&bare, "bare"),

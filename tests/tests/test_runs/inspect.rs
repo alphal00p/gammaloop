@@ -4,6 +4,8 @@ use std::fs;
 
 use gammaloop_api::commands::Commands;
 use gammalooprs::integrands::process::ProcessIntegrand;
+use gammalooprs::integrands::process::evaluators::EvaluatorMethod;
+use gammalooprs::settings::global::RepresentationMode;
 use gammalooprs::settings::runtime::{
     RotationSetting, StabilityLevelSetting, StabilityRecordingSettings,
 };
@@ -269,17 +271,34 @@ fn inverse_propagators_effectively_cancel_denominators() -> Result<()> {
 fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let routes = [
-        ("localized_local_3d", false, false),
-        ("explicit_local_3d", true, false),
-        ("projected_local_4d", true, true),
+        ("localized_local_3d", false, false, RepresentationMode::Cff),
+        ("explicit_local_3d", true, false, RepresentationMode::Cff),
+        ("projected_local_4d", true, true, RepresentationMode::Cff),
+        ("ltd_local_4d", false, true, RepresentationMode::Ltd),
     ];
     let points = [[0.11, 0.23, 0.37], [0.71, 0.43, 0.19]];
     let mut route_results = Vec::new();
 
-    for (mode, explicit_orientation_sum_only, project_local_4d) in routes {
+    for (mode, explicit_orientation_sum_only, project_local_4d, representation) in routes {
         let test_root =
             get_tests_workspace_path().join(format!("raised_cut_numerator_cancellation_{mode}"));
         let mut cli = get_test_cli(None, &test_root, Some(mode.to_string()), true)?;
+        cli.cli_settings
+            .global
+            .generation
+            .three_dimensional_representations = vec![representation];
+        cli.cli_settings
+            .global
+            .generation
+            .uv
+            .local_uv_cts_from_expanded_4d_integrands = project_local_4d;
+        if project_local_4d {
+            cli.cli_settings
+                .global
+                .generation
+                .evaluator
+                .summed_function_map = true;
+        }
         run_commands(
             &mut cli,
             &[
@@ -318,37 +337,57 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
             ],
         )?;
 
-        let mut results = Vec::new();
-        for point in points {
-            let powered =
-                inspect_xspace_process(&mut cli, "raised_cut_powered", "compare", &point)?;
-            let lower = inspect_xspace_process(&mut cli, "raised_cut_lower", "compare", &point)?;
-            let combined =
-                inspect_xspace_process(&mut cli, "raised_cut_cancellation", "compare", &point)?;
-            let scale = powered.re.hypot(powered.im).max(lower.re.hypot(lower.im));
-            let direct_difference = powered + lower;
+        let methods: &[&str] = if project_local_4d {
+            &["SingleParametric", "SummedFunctionMap"]
+        } else {
+            &["SingleParametric"]
+        };
+        for method in methods {
+            for process in [
+                "raised_cut_powered",
+                "raised_cut_lower",
+                "raised_cut_cancellation",
+            ] {
+                cli.run_command(&format!(
+                    "set process -p {process} -i compare kv general.evaluator_method={method}"
+                ))?;
+            }
+            let mut results = Vec::new();
+            for point in points {
+                let powered =
+                    inspect_xspace_process(&mut cli, "raised_cut_powered", "compare", &point)?;
+                let lower =
+                    inspect_xspace_process(&mut cli, "raised_cut_lower", "compare", &point)?;
+                let combined =
+                    inspect_xspace_process(&mut cli, "raised_cut_cancellation", "compare", &point)?;
+                let scale = powered.re.hypot(powered.im).max(lower.re.hypot(lower.im));
+                let direct_difference = powered + lower;
 
-            assert!(
-                scale > 0.0,
-                "the raised-cut cancellation oracle is trivial at {point:?} in {mode} mode"
-            );
-            assert!(
-                direct_difference.re.hypot(direct_difference.im) <= 1.0e-12 * scale,
-                "the q^2-m^2 numerator did not cancel one raised propagator at {point:?} in {mode} mode: powered={powered:e}, lower={lower:e}"
-            );
-            assert!(
-                combined.re.hypot(combined.im) <= 1.0e-12 * scale,
-                "the summed LU graph did not preserve the raised-propagator cancellation at {point:?} in {mode} mode: combined={combined:e}, scale={scale:e}"
-            );
-            results.push([powered, lower, combined]);
+                assert!(
+                    scale > 0.0,
+                    "the raised-cut cancellation oracle is trivial at {point:?} in {mode} mode"
+                );
+                assert!(
+                    direct_difference.re.hypot(direct_difference.im) <= 1.0e-12 * scale,
+                    "the q^2-m^2 numerator did not cancel one raised propagator at {point:?} in {mode} mode: powered={powered:e}, lower={lower:e}"
+                );
+                assert!(
+                    combined.re.hypot(combined.im) <= 1.0e-12 * scale,
+                    "the summed LU graph did not preserve the raised-propagator cancellation at {point:?} in {mode} mode: combined={combined:e}, scale={scale:e}"
+                );
+                results.push([powered, lower, combined]);
+            }
+
+            route_results.push((format!("{mode}/{method}"), results));
         }
-
-        route_results.push((mode, results));
         clean_test(test_root);
     }
 
     let explicit_reference = &route_results[1].1;
-    for (mode, results) in [&route_results[0], &route_results[2]] {
+    for (index, (mode, results)) in route_results.iter().enumerate() {
+        if index == 1 {
+            continue;
+        }
         for (point, (actual, expected)) in points
             .iter()
             .zip(results.iter().zip(explicit_reference.iter()))
@@ -386,20 +425,31 @@ fn raised_cut_numerator_cancels_one_propagator_in_both_orientation_modes() -> Re
 fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let routes = [
-        ("localized_local_3d", false, false),
-        ("explicit_local_3d", true, false),
-        ("projected_local_4d", true, true),
+        ("localized_local_3d", false, false, RepresentationMode::Cff),
+        ("explicit_local_3d", true, false, RepresentationMode::Cff),
+        ("projected_local_4d", true, true, RepresentationMode::Cff),
+        ("ltd_local_4d", false, true, RepresentationMode::Ltd),
     ];
     let points = [
         [0.11, 0.23, 0.37, 0.41, 0.29, 0.53],
         [0.71, 0.43, 0.19, 0.31, 0.47, 0.59],
     ];
     let mut route_results = Vec::new();
+    let mut route_events = Vec::new();
 
-    for (mode, explicit_orientation_sum_only, project_local_4d) in routes {
+    for (mode, explicit_orientation_sum_only, project_local_4d, representation) in routes {
         let test_root =
             get_tests_workspace_path().join(format!("raised_scalar_self_energy_uv_{mode}"));
         let mut cli = get_test_cli(None, &test_root, Some(mode.to_string()), true)?;
+        cli.cli_settings
+            .global
+            .generation
+            .three_dimensional_representations = vec![representation];
+        cli.cli_settings
+            .global
+            .generation
+            .uv
+            .local_uv_cts_from_expanded_4d_integrands = project_local_4d;
         run_commands(
             &mut cli,
             &[
@@ -414,6 +464,8 @@ fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
                     disable_flux_factor = true
                     m_uv = 20.0
                     mu_r = 3.0
+                    generate_events = true
+                    store_additional_weights_in_event = true
 
                     [kinematics.externals]
                     type = "constant"
@@ -436,12 +488,23 @@ fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
             ],
         )?;
 
-        let results = points
+        let events = points
             .iter()
             .map(|point| {
-                inspect_xspace_process(&mut cli, "raised_scalar_self_energy", "compare", point)
+                evaluate_xspace_process_with_events(
+                    &mut cli,
+                    "raised_scalar_self_energy",
+                    "compare",
+                    point,
+                    &[],
+                )
             })
             .collect::<Result<Vec<_>>>()?;
+        let results = events
+            .iter()
+            .map(|result| complex_ff64(&result.sample.evaluation.integrand_result))
+            .collect_vec();
+        route_events.push(events);
         assert!(
             results
                 .iter()
@@ -467,7 +530,7 @@ fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
     }
 
     let explicit_reference = &route_results[1].1;
-    for (mode, results, _) in [&route_results[0], &route_results[2]] {
+    for (mode, results, _) in [&route_results[0], &route_results[2], &route_results[3]] {
         for (point, (actual, expected)) in points.iter().zip(results.iter().zip(explicit_reference))
         {
             let scale = actual
@@ -479,6 +542,27 @@ fn raised_scalar_self_energy_uv_matches_across_local_uv_routes() -> Result<()> {
                 complex_distance(*actual, *expected) <= 1.0e-10 * scale,
                 "raised scalar self-energy differs between {mode} and explicit local-3D at {point:?}: actual={actual:e}, expected={expected:e}, relative delta={:e}",
                 complex_distance(*actual, *expected) / scale,
+            );
+        }
+    }
+    for route_index in [2, 3] {
+        for (sample_index, (actual, expected)) in route_events[route_index]
+            .iter()
+            .zip(&route_events[1])
+            .enumerate()
+        {
+            assert_evaluation_outputs_match(
+                &actual.sample.evaluation,
+                &expected.sample.evaluation,
+                &format!(
+                    "raised scalar self-energy {} sample {sample_index} cut parity",
+                    route_results[route_index].0
+                ),
+                if route_index == 3 {
+                    EventWeightComparison::PhysicalResidues
+                } else {
+                    EventWeightComparison::IndividualOrders
+                },
             );
         }
     }
@@ -1005,7 +1089,7 @@ fn inspect_momentum_space_reports_incomplete_triplet_cleanly() -> Result<()> {
 
 #[test]
 fn inspect_json_preserves_retained_events_and_additional_weights() -> Result<()> {
-    let mut cli = setup_gg_hhh_threshold_amplitude_cli("inspect_json_additional_weights")?;
+    let mut cli = setup_gg_hhh_threshold_amplitude_cli("inspect_json_additional_weights", None)?;
     let output_path = cli.cli_settings.state.folder.join("inspection.json");
     let mut reference_value = None;
     for store_weights in [false, true] {
@@ -1037,7 +1121,12 @@ fn inspect_json_preserves_retained_events_and_additional_weights() -> Result<()>
             event_groups: serde_json::from_value(evaluation["event_groups"].clone())?,
             evaluation_metadata: None,
         };
-        assert_evaluation_outputs_match(&actual, &expected.sample.evaluation, "inspect JSON");
+        assert_evaluation_outputs_match(
+            &actual,
+            &expected.sample.evaluation,
+            "inspect JSON",
+            EventWeightComparison::IndividualOrders,
+        );
         assert!(!actual.event_groups.is_empty());
         let has_counterterm = actual.event_groups.iter().flat_map(|group| group.iter()).any(|event| {
             event.additional_weights.weights.keys().any(|key| {
@@ -1202,7 +1291,7 @@ fn integrate_writes_numerical_stability_histograms_for_scalar_triangle() -> Resu
 fn inspect_x_space_reports_missing_discrete_dimensions_cleanly() -> Result<()> {
     let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
     let mut cli =
-        setup_gg_hhh_threshold_amplitude_cli("gg_hhh_inspect_missing_discrete_dimensions")?;
+        setup_gg_hhh_threshold_amplitude_cli("gg_hhh_inspect_missing_discrete_dimensions", None)?;
 
     let error = Inspect {
         process: Some(ProcessRef::Unqualified("gg_hhh".to_string())),
@@ -2197,13 +2286,16 @@ fn scalar_sunrise_inspect() -> Result<()> {
             parameters.len()
         );
         let mut markers = std::collections::HashSet::new();
-        for expression in std::iter::once(&amplitude_graph.derived_data.all_mighty_integrand).chain(
-            amplitude_graph
-                .derived_data
-                .all_mighty_numerators
-                .iter()
-                .map(|entry| &entry.rhs),
-        ) {
+        for expression in amplitude_graph
+            .derived_data
+            .representations
+            .values()
+            .flat_map(|data| {
+                data.all_mighty_integrand
+                    .iter()
+                    .map(|(_, expression)| expression)
+            })
+        {
             assert!(!expression.contains_symbol(GS.uv_integrate));
             let _ = expression.replace_map(|view, _, _| {
                 if let AtomView::Fun(function) = view
@@ -2434,4 +2526,439 @@ mod slow {
         assert_eq!(inspect, target);
         Ok(())
     }
+}
+
+#[test]
+fn mass_approach_threshold_cut_weights_match_cff_and_ltd() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    for (fixture, card) in [
+        (
+            "ordinary",
+            "generate_threshold_subtraction_mass_approach.toml",
+        ),
+        (
+            "reversed",
+            "generate_threshold_subtraction_mass_approach_rev.toml",
+        ),
+        (
+            "dotted",
+            "generate_threshold_subtraction_mass_approach_dotted.toml",
+        ),
+    ] {
+        let history = gammaloop_integration_tests::run_card(card)?;
+        let commands = history
+            .commands
+            .iter()
+            .map(|command| {
+                command
+                    .raw_string
+                    .as_deref()
+                    .expect("run-card fixture commands retain their source")
+            })
+            .collect_vec();
+        // Explicit default variants retain the detailed registry on these
+        // existing graphs. Autogenerated defaults intentionally omit it, which
+        // would leave the order-resolved component comparison unexercised.
+        let (cuts, thresholds, parent_lmb) = match fixture {
+            "ordinary" => (vec![vec![4, 6], vec![5, 6]], vec![vec![1, 2]], vec![1, 6]),
+            "reversed" => (vec![vec![1, 2]], vec![vec![4, 6], vec![5, 6]], vec![1, 6]),
+            "dotted" => (
+                vec![vec![5, 7], vec![6, 7]],
+                vec![vec![1, 3], vec![2, 3]],
+                vec![1, 5],
+            ),
+            _ => unreachable!(),
+        };
+        let mut directives = "schema_version = 1\n".to_owned();
+        for cut in cuts {
+            directives.push_str(&format!("\n[[cuts]]\nedges = {cut:?}\n"));
+            for threshold in &thresholds {
+                directives.push_str(&format!(
+                    "\n[[cuts.thresholds]]\nedges = {threshold:?}\n[[cuts.thresholds.counterterms]]\nname = \"default\"\nparent_lmb = {parent_lmb:?}\n"
+                ));
+            }
+        }
+        let source_path = commands
+            .iter()
+            .find_map(|command| command.strip_prefix("import graphs "))
+            .expect("threshold fixture imports its graph from a DOT file");
+        let dot = fs::read_to_string(source_path.trim())?
+            .lines()
+            .map(|line| {
+                if line.trim_start().starts_with("digraph ") {
+                    format!(
+                        "{line}\nthreshold_counterterms = \"{}\";\n",
+                        directives.replace('"', "\\\"")
+                    )
+                } else {
+                    format!("{line}\n")
+                }
+            })
+            .collect::<String>();
+        let mut route_results = Vec::new();
+        let mut saw_nonzero_threshold = false;
+        for local_4d in [false, true] {
+            let state_path = get_tests_workspace_path()
+                .join(format!("threshold_{fixture}_ltd_parity_4d_{local_4d}"));
+            let mut cli = get_test_cli(None, &state_path, None, true)?;
+            cli.cli_settings = history.cli_settings.clone();
+            cli.cli_settings.state.folder = state_path.clone();
+            cli.cli_settings
+                .global
+                .generation
+                .explicit_orientation_sum_only = true;
+            cli.cli_settings
+                .global
+                .generation
+                .three_dimensional_representations = if local_4d {
+                vec![RepresentationMode::Cff, RepresentationMode::Ltd]
+            } else {
+                vec![RepresentationMode::Cff]
+            };
+            cli.cli_settings
+                .global
+                .generation
+                .uv
+                .local_uv_cts_from_expanded_4d_integrands = local_4d;
+            if local_4d {
+                cli.cli_settings
+                    .global
+                    .generation
+                    .evaluator
+                    .summed_function_map = true;
+            }
+            cli.cli_settings.sync_settings()?;
+            cli.default_runtime_settings = history.default_runtime_settings.clone();
+            cli.run_command(r#"set default-runtime string '
+[general]
+generate_events = true
+store_additional_weights_in_event = true
+[stability]
+rotation_axis = []
+levels = [{ precision = "Quad", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_channels = "summed"
+'"#)?;
+            let dot_path = state_path.join("threshold_components.dot");
+            fs::write(&dot_path, &dot)?;
+            for command in &commands {
+                if command.starts_with("import graphs ") {
+                    cli.run_command(&format!("import graphs {}", dot_path.display()))?;
+                } else {
+                    cli.run_command(command)?;
+                }
+            }
+            let info = cli.state.get_integrand_info(None, None)?;
+            for representation in if local_4d {
+                vec!["cff", "ltd"]
+            } else {
+                vec!["cff"]
+            } {
+                cli.run_command(&format!(r#"set process string '
+[stability]
+levels = [{{ precision = "Quad", three_dimensional_representation = "{representation}", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }}]
+'"#))?;
+                let default_method = cli
+                    .state
+                    .process_list
+                    .get_integrand_mut(info.process_id, &info.integrand_name)?
+                    .get_settings()
+                    .general
+                    .evaluator_method
+                    .clone();
+                let methods = if local_4d {
+                    vec![
+                        EvaluatorMethod::SingleParametric,
+                        EvaluatorMethod::SummedFunctionMap,
+                    ]
+                } else {
+                    vec![default_method]
+                };
+                for method in methods {
+                    cli.state
+                        .process_list
+                        .get_integrand_mut(info.process_id, &info.integrand_name)?
+                        .get_mut_settings()
+                        .general
+                        .evaluator_method = method.clone();
+                    let mut results = Vec::new();
+                    for mass in [2.1, 2.01, 2.0001] {
+                        cli.run_command(&format!("set model mass_scalar_2={mass}"))?;
+                        for point in [
+                            [0.1, 0.2, 0.3, 0.3, 0.4, 0.5],
+                            [0.17, 0.29, 0.41, 0.37, 0.23, 0.61],
+                        ] {
+                            let result = evaluate_xspace_process_with_events(
+                                &mut cli,
+                                &info.process_name,
+                                &info.integrand_name,
+                                &point,
+                                &[],
+                            )?;
+                            assert!(
+                                !result.sample.evaluation.event_groups.is_empty(),
+                                "{fixture} parity requires physical cut events"
+                            );
+                            assert!(
+                                result
+                                    .sample
+                                    .evaluation
+                                    .event_groups
+                                    .iter()
+                                    .flat_map(|group| group.iter())
+                                    .any(|event| {
+                                        event
+                                            .additional_weights
+                                            .threshold_counterterms
+                                            .as_ref()
+                                            .is_some_and(|decomposition| {
+                                                !decomposition.components.is_empty()
+                                            })
+                                    }),
+                                "{fixture} parity requires detailed threshold components"
+                            );
+                            saw_nonzero_threshold |= result.sample.evaluation.event_groups.iter().flat_map(|group| group.iter()).any(|event| {
+                                event.additional_weights.weights.iter().any(|(key, value)| {
+                                    matches!(key, gammalooprs::observables::events::AdditionalWeightKey::ThresholdCounterterm { .. })
+                                        && (value.re.0 != 0.0 || value.im.0 != 0.0)
+                                })
+                            });
+                            results.push(result);
+                        }
+                    }
+                    route_results.push((local_4d, representation, method, results));
+                }
+            }
+            clean_test(&state_path);
+        }
+        assert!(
+            saw_nonzero_threshold,
+            "{fixture} parity must exercise threshold subtraction"
+        );
+        for (local_4d, representation, method, results) in &route_results[1..] {
+            for (sample, (actual, expected)) in results.iter().zip(&route_results[0].3).enumerate()
+            {
+                assert_evaluation_outputs_match(
+                    &actual.sample.evaluation,
+                    &expected.sample.evaluation,
+                    &format!(
+                        "{fixture} threshold {representation} local4d={local_4d} {method:?} sample {sample}"
+                    ),
+                    if *representation == "ltd" {
+                        EventWeightComparison::PhysicalResidues
+                    } else {
+                        EventWeightComparison::IndividualOrders
+                    },
+                );
+            }
+        }
+        for methods in route_results
+            .windows(2)
+            .filter(|pair| pair[0].0 == pair[1].0 && pair[0].1 == pair[1].1)
+        {
+            for (sample, (actual, expected)) in methods[1].3.iter().zip(&methods[0].3).enumerate() {
+                assert_evaluation_outputs_match(
+                    &actual.sample.evaluation,
+                    &expected.sample.evaluation,
+                    &format!(
+                        "{fixture} {} evaluator methods sample {sample}",
+                        methods[0].1
+                    ),
+                    EventWeightComparison::IndividualOrders,
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn raised_iterated_threshold_components_match_cff_and_ltd() -> Result<()> {
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    use gammalooprs::observables::ThresholdCountertermComponentOccurrence;
+
+    // Reuse the generated three-loop fixture from the raised cross-section
+    // round-trip test. Its middle cut has an order-two threshold on each side.
+    let mut directives = "schema_version = 1\n".to_owned();
+    for cut in [[4, 6], [5, 6]] {
+        directives.push_str(&format!("\n[[cuts]]\nedges = {cut:?}\n"));
+        for threshold in [[1, 3], [2, 3], [7, 9], [8, 9]] {
+            directives.push_str(&format!(
+                "\n[[cuts.thresholds]]\nedges = {threshold:?}\n\
+                 [[cuts.thresholds.counterterms]]\nname = \"raised_order_two\"\n\
+                 parent_lmb = [1, 4, 7]\n\
+                 [cuts.thresholds.counterterms.multiplier]\nexpression = \"2\"\n"
+            ));
+        }
+    }
+    let dot = fs::read_to_string(
+        gammaloop_integration_tests::workspace_root()
+            .join("tests/resources/graphs/ir_safe_thresholds/triple_dotted_bubble.dot"),
+    )?
+    .replacen(
+        "digraph triple_dotted_bubble {",
+        &format!(
+            "digraph triple_dotted_bubble {{\nthreshold_counterterms = \"{}\";\n",
+            directives.replace('"', "\\\"")
+        ),
+        1,
+    );
+    let mut route_results = Vec::new();
+    for (route, local_4d, representation) in [
+        ("cff3d", false, RepresentationMode::Cff),
+        ("cff4d", true, RepresentationMode::Cff),
+        ("ltd4d", true, RepresentationMode::Ltd),
+    ] {
+        let state_path = get_tests_workspace_path().join(format!("iterated_threshold_{route}"));
+        let mut cli = get_test_cli(None, &state_path, None, true)?;
+        cli.cli_settings
+            .global
+            .generation
+            .three_dimensional_representations = vec![representation];
+        cli.cli_settings
+            .global
+            .generation
+            .explicit_orientation_sum_only = true;
+        cli.cli_settings
+            .global
+            .generation
+            .uv
+            .local_uv_cts_from_expanded_4d_integrands = local_4d;
+        cli.cli_settings.sync_settings()?;
+        let dot_path = state_path.join("iterated_threshold.dot");
+        fs::write(&dot_path, &dot)?;
+        run_commands(
+            &mut cli,
+            &[
+                "import model assets/models/json/scalars/scalars_2p_3p.json",
+                "set model mass_scalar_1=1.0",
+                "set global kv global.generation.evaluator.compile=false global.generation.evaluator.store_atom=false global.generation.evaluator.summed=false global.generation.evaluator.summed_function_map=true global.generation.evaluator.iterative_orientation_optimization=false global.generation.uv.softct=false global.generation.uv.subtract_uv=false global.generation.threshold_subtraction.enable_thresholds=true global.generation.threshold_subtraction.check_esurface_at_generation=false global.generation.threshold_subtraction.skip_thresholds_that_are_cuts=false global.generation.threshold_subtraction.assume_positive_external_energies=false global.generation.tropical_subgraph_table.disable_tropical_generation=true",
+                r#"set default-runtime string '
+[general]
+evaluator_method = "SummedFunctionMap"
+enable_cache = false
+generate_events = true
+store_additional_weights_in_event = true
+[kinematics]
+e_cm = 5.0
+[kinematics.externals]
+type = "constant"
+[kinematics.externals.data]
+momenta = [[5.0, 0.0, 0.0, 0.0]]
+helicities = ["summed_averaged"]
+[stability]
+rotation_axis = []
+levels = [{ precision = "Quad", required_precision_for_re = 1e-12, required_precision_for_im = 1e-12, escalate_for_large_weight_threshold = -1.0 }]
+[sampling]
+graphs = "summed"
+orientations = "summed"
+lmb_channels = "summed"
+'"#,
+                &format!("import graphs {}", dot_path.display()),
+                "generate",
+            ],
+        )?;
+        let info = cli.state.get_integrand_info(None, None)?;
+        let methods: &[&str] = if local_4d {
+            &["SingleParametric", "SummedFunctionMap"]
+        } else {
+            &["SummedFunctionMap"]
+        };
+        for method in methods {
+            cli.run_command(&format!("set process kv general.evaluator_method={method}"))?;
+            let mut results = Vec::new();
+            for sample_index in 0..2 {
+                let point = (0..9)
+                    .map(|axis| 0.12 + ((axis * 7 + sample_index * 5) % 17) as f64 * 0.043)
+                    .collect_vec();
+                let result = evaluate_xspace_process_with_events(
+                    &mut cli,
+                    &info.process_name,
+                    &info.integrand_name,
+                    &point,
+                    &[],
+                )?;
+                let mut orders = std::collections::BTreeSet::new();
+                let mut nonzero_iterated = false;
+                for component in result
+                    .sample
+                    .evaluation
+                    .event_groups
+                    .iter()
+                    .flat_map(|group| group.iter())
+                    .filter_map(|event| event.additional_weights.threshold_counterterms.as_ref())
+                    .flat_map(|decomposition| &decomposition.components)
+                {
+                    if let ThresholdCountertermComponentOccurrence::LocalUnitarity {
+                        left_threshold_order: Some(left),
+                        right_threshold_order: Some(right),
+                        lu_cut_order: Some(lu),
+                        ..
+                    } = component.occurrence
+                    {
+                        orders.insert((left, right, lu));
+                        assert!(!component.evaluation_skipped);
+                        assert_eq!(component.effective_multiplier.0, 4.0);
+                        nonzero_iterated |=
+                            component.weighted.re.0 != 0.0 || component.weighted.im.0 != 0.0;
+                    }
+                }
+                if representation == RepresentationMode::Cff {
+                    assert_eq!(
+                        orders,
+                        (1..=2)
+                            .cartesian_product(1..=2)
+                            .cartesian_product(1..=2)
+                            .map(|((left, right), lu)| (left, right, lu))
+                            .collect::<std::collections::BTreeSet<(usize, usize, usize)>>()
+                    );
+                } else {
+                    assert!(
+                        !orders.is_empty(),
+                        "LTD must retain the iterated physical residue"
+                    );
+                }
+                assert!(
+                    nonzero_iterated,
+                    "{route} must exercise nonzero iterated subtraction"
+                );
+                results.push(result);
+            }
+            route_results.push((route, method, results));
+        }
+        clean_test(&state_path);
+    }
+    for (route, method, results) in &route_results[1..] {
+        for (sample, (actual, expected)) in results.iter().zip(&route_results[0].2).enumerate() {
+            assert_evaluation_outputs_match(
+                &actual.sample.evaluation,
+                &expected.sample.evaluation,
+                &format!("raised iterated thresholds {route} {method} sample {sample}"),
+                if *route == "ltd4d" {
+                    EventWeightComparison::PhysicalResidues
+                } else {
+                    EventWeightComparison::IndividualOrders
+                },
+            );
+        }
+    }
+    for methods in route_results
+        .windows(2)
+        .filter(|pair| pair[0].0 == pair[1].0)
+    {
+        for (sample, (actual, expected)) in methods[1].2.iter().zip(&methods[0].2).enumerate() {
+            assert_evaluation_outputs_match(
+                &actual.sample.evaluation,
+                &expected.sample.evaluation,
+                &format!(
+                    "iterated {} evaluator methods sample {sample}",
+                    methods[0].0
+                ),
+                EventWeightComparison::IndividualOrders,
+            );
+        }
+    }
+    Ok(())
 }

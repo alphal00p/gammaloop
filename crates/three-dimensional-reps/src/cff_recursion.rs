@@ -504,6 +504,8 @@ pub(crate) fn enumerate_cff_surface_chains(
     medium_mode: MediumMode,
     preferred_tadpole_poles: &BTreeMap<usize, i32>,
 ) -> Result<Vec<CffSurfaceChain>> {
+    #[cfg(feature = "generation-audit")]
+    crate::generation::audit::record_cff();
     let mut graph = build_base_graph_from_parsed(parsed);
     for (edge_id, sign) in edge_signs.iter().enumerate() {
         if *sign < 0 {
