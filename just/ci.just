@@ -27,7 +27,7 @@ coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
 # Run all CI checks locally (same as CI)
-ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix
+ci-checks: clippy-nix fmt-check-nix ci-graph-check development-tools-check-nix doctest-nix test-nix
     nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').alphal00p-docs
 
 # Check static inputs and upload compiled producers; leave runtime tests to NixCI.
@@ -79,6 +79,10 @@ ci-checks-and-upload:
 ci-graph-check:
     nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-guppy-workspace-graph
 
+# Check development command selection, snapshots, retention and the CLI launcher.
+development-tools-check-nix:
+    nix build .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-development-tools
+
 # Regenerate both committed CI definitions after changing workspace manifests or groups.
 ci-update:
     #!/usr/bin/env bash
@@ -98,6 +102,11 @@ ci-cache-base REVISION:
     sed -E "s@github:alphal00p/gammaloop/[0-9a-f]{40}@github:alphal00p/gammaloop/$revision@" flake.nix > flake.nix.tmp
     mv flake.nix.tmp flake.nix
     nix flake update ci-cache-base
+
+# Publish successful development state and write a reviewable CI seed manifest.
+[positional-arguments]
+ci-promote-development-state *args:
+    just dev prepare-ci "$@"
 
 # Collect paired NixCI and GitHub Actions measurements.
 ci-report MANIFEST OUTPUT_DIR:

@@ -1642,7 +1642,9 @@ anchor = "ci-checks-and-upload:"
 # No architecture impact 2026-10-10: remove recipes for absent audit/deny
 # checks and correct the dependency-profile comment; selected checks, uploads,
 # and runtime producer boundaries are unchanged.
-digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
+# Reviewed 2026-10-28: developer frontend checks join static validation;
+# promotion remains an explicit reviewed operation, with no automatic upload.
+digest = "8f766bb8e74749c637f1459aee4be00d996945a8"
 
 [[section.note]]
 id = "feynkit-merge-readiness"

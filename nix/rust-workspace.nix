@@ -11,6 +11,8 @@
   workspaceRoot,
   workspaceGraph ? builtins.fromJSON (builtins.readFile (workspaceRoot + "/nix/ci-workspace-graph.json")),
   incrementalBaselineRoot ? null,
+  developmentPreviousState ? {},
+  developmentPromotedState ? null,
 }: let
   inherit (pkgs) lib;
 
@@ -60,7 +62,7 @@
   ];
 
   cargoVendorDir = craneLib.vendorCargoDeps {
-    cargoLock = (workspaceRoot + "/Cargo.lock");
+    cargoLock = workspaceRoot + "/Cargo.lock";
     overrideVendorGitCheckout = packages: drv:
       if lib.any (package: package.name == "symbolica-typst-atom-payload") packages
       then
@@ -765,7 +767,7 @@
   in
     lib.fileset.toSource {
       root = workspaceRoot;
-      fileset = lib.fileset.unions (
+      fileset = lib.fileset.difference (lib.fileset.unions (
         workspaceDependencyManifestFiles
         ++ [localCargoPatchSources]
         ++ (workspacePackageBuildScriptsForSourcePackages sourcePackages)
@@ -778,7 +780,7 @@
         ++ (workspacePackageExtraFilesetsForSourcePackages "runtimeTest" runtimeTestSourcePackages)
         ++ (workspacePackageExtraFilesetsForSourcePackages "ownTest" testSourcePackages)
         ++ extraFilesets
-      );
+      )) (lib.fileset.maybeMissing (workspaceRoot + "/nix/development-seeds.json"));
     };
 
   workspacePackageSrcFor = package:
@@ -1357,15 +1359,15 @@
   src = workspaceBuildSrc;
 
   apiMeta = craneLib.crateNameFromCargoToml {
-    cargoToml = (workspaceRoot + "/crates/gammaloop-api/Cargo.toml");
+    cargoToml = workspaceRoot + "/crates/gammaloop-api/Cargo.toml";
   };
 
   linnestMeta = wasmCraneLib.crateNameFromCargoToml {
-    cargoToml = (workspaceRoot + "/crates/linnest/Cargo.toml");
+    cargoToml = workspaceRoot + "/crates/linnest/Cargo.toml";
   };
 
   clinnetMeta = craneLib.crateNameFromCargoToml {
-    cargoToml = (workspaceRoot + "/crates/clinnet/Cargo.toml");
+    cargoToml = workspaceRoot + "/crates/clinnet/Cargo.toml";
   };
 
   # Host Rust target triple, e.g. x86_64-unknown-linux-gnu
@@ -1499,7 +1501,8 @@
     fi
   '';
 
-  gammaloop-cli = pkgs.runCommand "gammaloop-api-${apiMeta.version}" {
+  gammaloopCliFor = artifacts:
+    pkgs.runCommand "gammaloop-api-${apiMeta.version}" {
     # Compressed artifacts hide native binary references until extraction.
     # Declare both the stdenv and forced GCC linker runtimes so Nix retains them.
     buildInputs = lib.unique (ciArgs.buildInputs ++ [pkgs.stdenv.cc.cc.lib pkgs.gcc.cc.lib]);
@@ -1511,7 +1514,7 @@
       craneLib.inheritCargoArtifactsHook
     ];
   } ''
-    inheritCargoArtifacts ${gammaloopApiPackageArtifacts} target
+    inheritCargoArtifacts ${artifacts} target
     target="target/${ciCargoProfile}"
     binary="$target/gammaloop"
 
@@ -1534,6 +1537,7 @@
     install -D -m 0755 "$binary" "$out/bin/gammaloop"
     install -D -m 0644 "$library" "$out/lib/$(basename "$library")"
   '';
+  gammaloop-cli = gammaloopCliFor gammaloopApiPackageArtifacts;
   gammaloop-python-lib = craneLib.buildPackage (ciArgs
     // {
       cargoArtifacts = cranePythonBuildArtifacts;
@@ -2087,10 +2091,147 @@
     ${lib.concatMapStringsSep "\n" stripPackageScript packagesToStrip}
   '';
 
+  # Query caches are reusable across source edits, but only within the same
+  # compiler, dependency graph and compilation context. This is intentionally
+  # independent of runtime Nextest configuration and filters.
+  developmentCompatibilityFor = kind: context: let
+    vector =
+      if builtins.isList context
+      then context
+      else context.resolvedFeatureVector or [];
+    embeddedPython = builtins.any (entry: builtins.elem "python-api-tests" entry.features) vector;
+  in
+    {
+      version = 1;
+      inherit kind system;
+      toolchain = toString ciToolchain;
+      dependencies = toString workspaceDependencySrc;
+      vendor = toString cargoVendorDir;
+      profile = ciCargoProfile;
+      target = nextestTargetTriple;
+      inherit (commonArgs) CC CXX RUSTFLAGS buildInputs nativeBuildInputs;
+      inherit (ciArgs) NO_SYMBOLICA_OEM_LICENSE PYO3_PYTHON CARGO_BUILD_INCREMENTAL;
+      inherit context;
+    }
+    // lib.optionalAttrs embeddedPython {
+      PYTHON = "${nextestPython}/bin/python3";
+      PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
+    };
+
+  developmentStateKeyFor = owner: compatibility: "${owner}-${builtins.hashString "sha256"
+    (builtins.unsafeDiscardStringContext (builtins.toJSON compatibility))}";
+
+  developmentStateEntryFor = owner: compatibility: artifact: {
+    name = developmentStateKeyFor owner compatibility;
+    value = {inherit owner compatibility artifact;};
+  };
+
+  developmentStateRecordFor = {
+    owner,
+    compatibility,
+    artifact,
+  }: {
+    inherit owner compatibility;
+    drvPath = let
+      path = builtins.unsafeDiscardStringContext artifact.drvPath;
+    in
+      builtins.appendContext path {${path} = {path = true;};};
+    unseededDrvPath =
+      builtins.unsafeDiscardStringContext
+      (artifact.unseededDrvPath or artifact.drvPath);
+    out = toString artifact;
+    incremental = toString artifact.incremental;
+    source = artifact.developmentSource;
+    seed = artifact.developmentSeed;
+  };
+
+  # Promotion is an explicit, reviewed source input. Local development never
+  # writes this file: publish the selected descriptor/producer/query closures
+  # first, then commit their descriptor here for CI to consume the same owners.
+  promotedDevelopmentState = let
+    manifest = workspaceRoot + "/nix/development-seeds.json";
+    state =
+      if developmentPromotedState != null
+      then developmentPromotedState
+      else if builtins.pathExists manifest
+      then builtins.fromJSON (builtins.readFile manifest)
+      else {};
+  in
+    assert lib.assertMsg (state
+      == {}
+      || (builtins.isAttrs state
+        && (state.version or null) == 1
+        && builtins.isAttrs (state.contexts or null)))
+    "nix/development-seeds.json must be a version 1 development state descriptor"; state;
+
+  developmentPreviousArtifactsFor = owner: compatibility: fallback: let
+    key = developmentStateKeyFor owner compatibility;
+    previous =
+      ((promotedDevelopmentState.contexts or {})
+        // (developmentPreviousState.contexts or {})).${
+        key
+      } or {
+      };
+    storePath = path:
+      builtins.isString path
+      && builtins.match "/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[A-Za-z0-9+._?=-]+" path != null;
+    compatible =
+      builtins.isAttrs previous
+      && (previous.owner or null) == owner
+      && previous ? compatibility
+      && previous.compatibility
+      == builtins.fromJSON
+      (builtins.unsafeDiscardStringContext (builtins.toJSON compatibility));
+    valid =
+      builtins.isAttrs previous
+      && storePath (previous.out or null)
+      && storePath (previous.incremental or null)
+      && storePath (previous.drvPath or null)
+      && lib.hasSuffix ".drv" previous.drvPath
+      && storePath (previous.unseededDrvPath or null)
+      && lib.hasSuffix ".drv" previous.unseededDrvPath
+      && storePath (previous.source or null)
+      && (let
+        seed = previous.seed or null;
+      in
+        seed
+        == null
+        || (builtins.isAttrs seed
+          && storePath (seed.drvPath or null)
+          && lib.hasSuffix ".drv" seed.drvPath
+          && storePath (seed.incremental or null)));
+    # Restore the actual producer's output context, including when its output
+    # needs substitution. Do not reconstruct a producer from a source revision.
+    reference = drvPath: path: output:
+      builtins.appendContext path {
+        ${drvPath} = {outputs = [output];};
+      };
+  in
+    if !compatible
+    then fallback
+    else if !valid
+    then throw "development: invalid immutable paths in previousState context ${key}"
+    else {
+      type = "derivation";
+      inherit (previous) drvPath unseededDrvPath;
+      developmentSource = previous.source;
+      developmentSeed =
+        if (previous.seed or null) == null
+        then null
+        else {
+          inherit (previous.seed) drvPath;
+          incremental = reference previous.seed.drvPath previous.seed.incremental "incremental";
+        };
+      outPath = reference previous.drvPath previous.out "out";
+      incremental = reference previous.drvPath previous.incremental "incremental";
+      CARGO_BUILD_INCREMENTAL = "true";
+    };
+
   # Crane's buildDepsOnly deliberately clears cargoArtifacts. Override it
   # after constructing the derivation to keep Crane's dummy-source behavior
   # and build per-crate dependency archives incrementally from earlier archives.
   buildDepsOnlyWithArtifacts = {
+    builder ? craneLib.buildDepsOnly,
     preBuildWorkspaceArtifactStripPackages ? [],
     preservedWorkspaceArtifactPackages ? [],
     keepIncrementalState ? false,
@@ -2098,117 +2239,158 @@
     ...
   } @ args: let
     cleanedArgs = builtins.removeAttrs args [
+      "builder"
       "keepIncrementalState"
       "previousArtifacts"
       "preBuildWorkspaceArtifactStripPackages"
       "preservedWorkspaceArtifactPackages"
       "stripWorkspaceArtifacts"
     ];
-    postBuildScriptText = (args.postBuild or "")
+    postBuildScriptText =
+      (args.postBuild or "")
       + lib.optionalString (args.stripWorkspaceArtifacts or false)
-        (stripSelectedWorkspaceCargoArtifactsScript {
-          cargoTargetDir = args.CARGO_TARGET_DIR or "target";
-          packagesToStrip = lib.subtractLists preservedWorkspaceArtifactPackages workspacePackages;
+      (stripSelectedWorkspaceCargoArtifactsScript {
+        cargoTargetDir = args.CARGO_TARGET_DIR or "target";
+        packagesToStrip = lib.subtractLists preservedWorkspaceArtifactPackages workspacePackages;
+      });
+    incrementalExportScriptText = lib.optionalString keepIncrementalState ''
+      # Keep query caches separate from compiled dependency archives. Rustc's
+      # new session paths can contain epoch-1 hardlinks, so export a full tree.
+      mkdir -p ci-incremental-target/${ciCargoProfile}
+      if [ -d target/${ciCargoProfile}/incremental ]; then
+        mv target/${ciCargoProfile}/incremental ci-incremental-target/${ciCargoProfile}/
+      fi
+      doCompressAndInstallFullArchive=1 compressAndInstallCargoArtifactsDir \
+        "$incremental" ci-incremental-target ""
+    '';
+    unseeded =
+      (builder (
+        cleanedArgs
+        // lib.optionalAttrs keepIncrementalState {
+          CARGO_BUILD_INCREMENTAL = "true";
+        }
+        // {
+          doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
+          doCheck = false;
+          checkPhaseCargoCommand = "";
+
+          # Registry dependencies call these patched crates during prebuilds.
+          # Crane must not replace their implementation with workspace placeholders.
+          extraDummyScript =
+            (args.extraDummyScript or "")
+            + lib.concatMapStringsSep "\n" (name: ''
+              rm -rf "$out/vendor/${name}"
+              mkdir -p "$out/vendor"
+              cp -R --no-preserve=ownership ${workspaceDependencySrc}/vendor/${name} "$out/vendor/${name}"
+              chmod -R u+w "$out/vendor/${name}"
+            '')
+            localCargoPatchDirs;
+
+          postPatch =
+            (args.postPatch or "")
+            + ''
+
+              ${normalizeWorkspaceHackBuildScriptTimestampScript}
+            '';
+
+          preBuild =
+            (args.preBuild or "")
+            + ''
+              # Compressed inheritance also needs Cargo's writable, fresh lock files.
+              mkdir -p target
+              find target -name '.cargo*lock' -delete
+            ''
+            + lib.optionalString (preBuildWorkspaceArtifactStripPackages != []) (stripSelectedWorkspaceCargoArtifactsScript {
+              cargoTargetDir = args.CARGO_TARGET_DIR or "target";
+              packagesToStrip = preBuildWorkspaceArtifactStripPackages;
+            });
+
+          postBuild =
+            postBuildScriptText
+            + incrementalExportScriptText;
+
+          # Publish the stripped target as a full archive so inherited dummy
+          # workspace artifacts cannot return through an incremental base link.
+          # Match Crane's artifact and Nix source timestamps so Cargo does not
+          # treat the compacted target as stale: its install hook uses epoch 1.
+          doCompressAndInstallFullArchive = args.stripWorkspaceArtifacts or false;
+
+          # Artifact outputs contain archives, not a lib directory. Embedding their
+          # own output paths in helper binaries retains obsolete ancestor archives.
+          NIX_NO_SELF_RPATH = 1;
+        }
+      )).overrideAttrs ({
+          cargoArtifacts = args.cargoArtifacts or null;
+        }
+        // lib.optionalAttrs keepIncrementalState {
+          outputs = ["out" "incremental"];
+          passthru =
+            (args.passthru or {})
+            // {
+              developmentSource = toString (args.dummySrc or args.src);
+              developmentSeed = null;
+            };
         });
-    unseeded = (craneLib.buildDepsOnly (
-      cleanedArgs
-      // lib.optionalAttrs keepIncrementalState {
-        CARGO_BUILD_INCREMENTAL = "true";
-      }
-      // {
-        doNotLinkInheritedArtifacts = args.doNotLinkInheritedArtifacts or true;
-        doCheck = false;
-        checkPhaseCargoCommand = "";
-
-        # Registry dependencies call these patched crates during prebuilds.
-        # Crane must not replace their implementation with workspace placeholders.
-        extraDummyScript = (args.extraDummyScript or "") + lib.concatMapStringsSep "\n" (name: ''
-          rm -rf "$out/vendor/${name}"
-          mkdir -p "$out/vendor"
-          cp -R --no-preserve=ownership ${workspaceDependencySrc}/vendor/${name} "$out/vendor/${name}"
-          chmod -R u+w "$out/vendor/${name}"
-        '') localCargoPatchDirs;
-
-        postPatch =
-          (args.postPatch or "")
-          + ''
-
-            ${normalizeWorkspaceHackBuildScriptTimestampScript}
-          '';
-
-        preBuild =
-          (args.preBuild or "")
-          + ''
-            # Compressed inheritance also needs Cargo's writable, fresh lock files.
-            mkdir -p target
-            find target -name '.cargo*lock' -delete
-          ''
-          + lib.optionalString (preBuildWorkspaceArtifactStripPackages != []) (stripSelectedWorkspaceCargoArtifactsScript {
-            cargoTargetDir = args.CARGO_TARGET_DIR or "target";
-            packagesToStrip = preBuildWorkspaceArtifactStripPackages;
-          });
-
+    seeded = seed:
+      unseeded.overrideAttrs (old: {
+        passthru =
+          (old.passthru or {})
+          // {
+            unseededDrvPath = unseeded.drvPath;
+            developmentSeed = {
+              drvPath = builtins.unsafeDiscardStringContext seed.drvPath;
+              incremental = toString seed.incremental;
+            };
+          };
         postBuild =
           postBuildScriptText
-          + lib.optionalString keepIncrementalState ''
-            # Consumers need compiled dependencies, not their rustc query caches.
-            # Keep compiler state in a separate output so the normal Crane delta
-            # archive and downstream merges never inherit ancestors' state.
-            mkdir -p ci-incremental-target/${ciCargoProfile}
-            if [ -d target/${ciCargoProfile}/incremental ]; then
-              mv target/${ciCargoProfile}/incremental ci-incremental-target/${ciCargoProfile}/
-            fi
-            # Rustc creates new session paths with inherited epoch-1 hardlinks.
-            # Crane's mtime-only deltas would omit these newly named files.
-            doCompressAndInstallFullArchive=1 compressAndInstallCargoArtifactsDir \
-              "$incremental" ci-incremental-target ""
+          + ''
+            # Rustc can restore newly named metadata files with epoch-1 timestamps.
+            # Include those files in Crane's delta without repacking inherited files.
+            comm -z -13 "$TMPDIR/ci-inherited-cargo-files" <(
+              find target -path '*/incremental' -prune -o -type f -printf '%P\0' | sort -z
+            ) | while IFS= read -r -d "" artifact; do
+              touch "target/$artifact"
+            done
+          ''
+          + incrementalExportScriptText;
+        preBuild =
+          ''
+            # Restore compiler state only. Cargo's current dependency artifacts and
+            # source fingerprints remain authoritative, including epoch-0 edits.
+            inheritCargoArtifacts ${lib.escapeShellArg (toString seed.incremental)} target
+            mkdir -p target/${ciCargoProfile}/incremental
+            chmod -R u+w target/${ciCargoProfile}/incremental
+            find target -name '.cargo*lock' -delete
+          ''
+          + (old.preBuild or "")
+          + ''
+            find target -path '*/incremental' -prune -o -type f -printf '%P\0' \
+              | sort -z > "$TMPDIR/ci-inherited-cargo-files"
           '';
-
-        # Publish the stripped target as a full archive so inherited dummy
-        # workspace artifacts cannot return through an incremental base link.
-        # Match Crane's artifact and Nix source timestamps so Cargo does not
-        # treat the compacted target as stale: its install hook uses epoch 1.
-        doCompressAndInstallFullArchive = args.stripWorkspaceArtifacts or false;
-
-        # Artifact outputs contain archives, not a lib directory. Embedding their
-        # own output paths in helper binaries retains obsolete ancestor archives.
-        NIX_NO_SELF_RPATH = 1;
-      }
-    )).overrideAttrs ({
-      cargoArtifacts = args.cargoArtifacts or null;
-    } // lib.optionalAttrs keepIncrementalState {
-      outputs = ["out" "incremental"];
-    });
+      });
+    sameSource =
+      previousArtifacts
+      != null
+      && unseeded.drvPath == (previousArtifacts.unseededDrvPath or null)
+      && unseeded.developmentSource == previousArtifacts.developmentSource;
+    expected =
+      if previousArtifacts.developmentSeed == null
+      then unseeded
+      else seeded previousArtifacts.developmentSeed;
   in
-    if previousArtifacts == null || unseeded.drvPath == previousArtifacts.drvPath
+    if previousArtifacts == null
     then unseeded
-    else unseeded.overrideAttrs (old: {
-      # Every edit starts from the pinned baseline. Exporting a new query cache
-      # here would do unused work; refreshing the pin prepares its seed once.
-      outputs = ["out"];
-      passthru = (old.passthru or {}) // { incrementalBase = previousArtifacts; };
-      postBuild = postBuildScriptText + ''
-        # Rustc can restore newly named metadata files with epoch-1 timestamps.
-        # Include those files in Crane's delta without repacking inherited files.
-        comm -z -13 "$TMPDIR/ci-inherited-cargo-files" <(
-          find target -path '*/incremental' -prune -o -type f -printf '%P\0' | sort -z
-        ) | while IFS= read -r -d "" artifact; do
-          touch "target/$artifact"
-        done
-        rm -rf target/${ciCargoProfile}/incremental
-      '';
-      preBuild = ''
-        # Restore compiler state only. Cargo's current dependency artifacts and
-        # source fingerprints remain authoritative, including epoch-0 edits.
-        inheritCargoArtifacts ${previousArtifacts.incremental} target
-        mkdir -p target/${ciCargoProfile}/incremental
-        chmod -R u+w target/${ciCargoProfile}/incremental
-        find target -name '.cargo*lock' -delete
-      '' + (old.preBuild or "") + ''
-        find target -path '*/incremental' -prune -o -type f -printf '%P\0' \
-          | sort -z > "$TMPDIR/ci-inherited-cargo-files"
-      '';
-    });
+    else if sameSource
+    then
+      assert lib.assertMsg (expected.drvPath
+        == previousArtifacts.drvPath
+        && toString expected == toString previousArtifacts
+        && toString expected.incremental == toString previousArtifacts.incremental)
+      "development: previousState producer addresses do not match the current source and recorded seed"; expected
+    else if unseeded.drvPath == previousArtifacts.drvPath
+    then unseeded
+    else seeded {inherit (previousArtifacts) drvPath incremental;};
 
   rootPackageDependencyArtifactsFor = package:
     lib.optional (
@@ -2317,25 +2499,48 @@
   # artifact is preserved for downstream package and test derivations.
   cranePackageDependencyArtifacts = cranePackageDependencyModeArtifacts;
 
+  cranePackageBuildArtifactFor = {
+    package,
+    keepIncrementalState ? false,
+  }:
+    if package == workspaceHackPackage
+    then workspaceHackBuildArtifacts
+    else let
+      args =
+        ciArgs
+        // {
+          cargoArtifacts =
+            if cranePackageDependencyArtifacts.${package} == null
+            then cargoArtifacts
+            else cranePackageDependencyArtifacts.${package};
+          pname = "gammaloop-crate-${package}";
+          src = workspacePackageSrcFor package;
+          cargoExtraArgs =
+            cargoPackageCiArgsFor package
+            + lib.optionalString (package == "gammaloop-api") " --lib --bins";
+          preBuild = lib.optionalString (package == "gammaloop-api") drawingTypstBundleAssets;
+          postPatch = workspaceMissingCargoTargetsScript;
+        };
+    in
+      if !keepIncrementalState
+      then craneLib.cargoBuild args
+      else
+        buildDepsOnlyWithArtifacts (args
+          // {
+            builder = craneLib.cargoBuild;
+            inherit keepIncrementalState;
+            previousArtifacts =
+              developmentPreviousArtifactsFor "build-${package}"
+              (developmentCompatibilityFor "build" {
+                inherit package;
+                cargoArgs = args.cargoExtraArgs;
+              })
+              null;
+          });
+
   cranePackageBuildArtifacts =
     lib.genAttrs workspacePackages (package:
-      if package == workspaceHackPackage
-      then workspaceHackBuildArtifacts
-      else
-        craneLib.cargoBuild (ciArgs
-          // {
-            cargoArtifacts =
-              if cranePackageDependencyArtifacts.${package} == null
-              then cargoArtifacts
-              else cranePackageDependencyArtifacts.${package};
-            pname = "gammaloop-crate-${package}";
-            src = workspacePackageSrcFor package;
-            cargoExtraArgs =
-              cargoPackageCiArgsFor package
-              + lib.optionalString (package == "gammaloop-api") " --lib --bins";
-            preBuild = lib.optionalString (package == "gammaloop-api") drawingTypstBundleAssets;
-            postPatch = workspaceMissingCargoTargetsScript;
-          }));
+      cranePackageBuildArtifactFor {inherit package;});
 
   gammaloopApiPackageArtifacts = cranePackageBuildArtifacts."gammaloop-api";
 
@@ -2464,9 +2669,13 @@
             pname = "gammaloop-crate-test-dependencies-${context.key}";
             keepIncrementalState = true;
             previousArtifacts =
-              if compatibleIncrementalBaseline
-              then incrementalBaseline.craneTestDependencyArtifacts.${context.key} or null
-              else null;
+              developmentPreviousArtifactsFor "test-dependencies-${context.key}"
+              (developmentCompatibilityFor "test-dependencies" context.resolvedFeatureVector)
+              (
+                if compatibleIncrementalBaseline
+                then incrementalBaseline.craneTestDependencyArtifacts.${context.key} or null
+                else null
+              );
             dummySrc = workspacePackageSrcForSourcePackages {
               inherit sourcePackages;
             };
@@ -2504,9 +2713,16 @@
         pname = "gammaloop-crate-test-binaries-${package}-${context.key}";
         keepIncrementalState = true;
         previousArtifacts =
-          if compatibleIncrementalBaseline
-          then incrementalBaseline.craneTestBinaryArtifactFor context package
-          else null;
+          developmentPreviousArtifactsFor "test-binaries-${package}-${context.key}"
+          (developmentCompatibilityFor "test-binaries" {
+            inherit package;
+            inherit (context) resolvedFeatureVector;
+          })
+          (
+            if compatibleIncrementalBaseline
+            then incrementalBaseline.craneTestBinaryArtifactFor context package
+            else null
+          );
         dummySrc = workspacePackageSrcForSourcePackages {
           sourcePackages = context.sourcePackages;
           packageSourcePackages = [package];
@@ -2545,42 +2761,72 @@
       postPatch = workspaceMissingCargoTargetsScript;
     });
 
-  workspaceChecks = lib.mapAttrs (name: command:
-    craneLib.mkCargoDerivation (ciArgs
-      // {
-        cargoArtifacts =
-          if name == "doctest"
-          then mergeCargoArtifacts "gammaloop-workspace-doctest-inputs" [
-            cargoCheckArtifacts
-            cranePackageDependencyArtifacts."gammaloop-api"
-          ]
-          else cargoCheckArtifacts;
-        pname = "gammaloop-workspace-${name}";
-        src = workspaceTestSrc;
-        postPatch = workspaceMissingCargoTargetsScript;
-        doNotLinkInheritedArtifacts = true;
-        doInstallCargoArtifacts = false;
-        buildPhaseCargoCommand = ''
-          mkdir -p "$out"
-          if [ -d target ]; then
-            chmod -R u+w target
-          fi
-          ${command}
-        '';
-        checkPhaseCargoCommand = "";
-        doCheck = false;
-        installPhaseCommand = "";
-      }
-      // lib.optionalAttrs (name == "doctest") {
-        preBuild = licensePreCheck;
-        SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-        SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
-      })) {
-    check = "cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets";
-    clippy = "cargoWithProfile clippy ${ciArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings";
-    doc = "cargoWithProfile doc ${ciArgs.cargoExtraArgs} --no-deps";
-    doctest = "cargoWithProfile test --doc ${ciArgs.cargoExtraArgs} --exclude alphal00p-docs-python-exporter";
-  };
+  workspaceChecksFor = {
+    artifacts ? cargoCheckArtifacts,
+    src ? workspaceTestSrc,
+    cargoArgs ? ciArgs.cargoExtraArgs,
+    postPatch ? workspaceMissingCargoTargetsScript,
+    context ? null,
+    keepIncrementalState ? false,
+  }:
+    lib.mapAttrs (name: command: let
+      build =
+        if keepIncrementalState
+        then buildDepsOnlyWithArtifacts
+        else craneLib.mkCargoDerivation;
+    in
+      build (ciArgs
+        // {
+          cargoArtifacts =
+            if name == "doctest"
+            then
+              mergeCargoArtifacts "gammaloop-workspace-doctest-inputs" [
+                artifacts
+                cranePackageDependencyArtifacts."gammaloop-api"
+              ]
+            else artifacts;
+          pname = "gammaloop-workspace-${name}";
+          inherit src postPatch;
+          doNotLinkInheritedArtifacts = true;
+          doInstallCargoArtifacts = false;
+          buildPhaseCargoCommand = ''
+            mkdir -p "$out"
+            if [ -d target ]; then
+              chmod -R u+w target
+            fi
+            ${command}
+          '';
+          checkPhaseCargoCommand = "";
+          doCheck = false;
+          installPhaseCommand = "";
+        }
+        // lib.optionalAttrs keepIncrementalState {
+          builder = craneLib.mkCargoDerivation;
+          inherit keepIncrementalState;
+          previousArtifacts =
+            developmentPreviousArtifactsFor "${name}-${context.key}"
+            (developmentCompatibilityFor name {
+              inherit cargoArgs;
+              inherit (context) resolvedFeatureVector;
+            })
+            null;
+        }
+        // lib.optionalAttrs (context != null && context.usesPythonModule) {
+          nativeBuildInputs = (ciArgs.nativeBuildInputs or []) ++ [nextestPython];
+          PYTHON = "${nextestPython}/bin/python3";
+          PYTHONPATH = "${nextestPython}/${pythonSitePackages}";
+        }
+        // lib.optionalAttrs (name == "doctest") {
+          preBuild = licensePreCheck;
+          SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+          SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
+        })) {
+      check = "cargoWithProfile check ${cargoArgs} --all-targets";
+      clippy = "cargoWithProfile clippy ${cargoArgs} --all-targets --no-deps -- --deny warnings";
+      doc = "cargoWithProfile doc ${cargoArgs} --no-deps";
+      doctest = "cargoWithProfile test --doc ${cargoArgs} --exclude alphal00p-docs-python-exporter";
+    };
+  workspaceChecks = workspaceChecksFor {};
 
   cranePythonDependencyArtifacts =
     craneTestDependencyArtifacts.${(workspaceTestContextFor {packages = ["gammaloop-api"];}).key};
@@ -2593,9 +2839,13 @@
       buildPhaseCargoCommand = "cargoWithProfile build ${cranePythonCargoArgs}";
       keepIncrementalState = true;
       previousArtifacts =
-        if compatibleIncrementalBaseline
-        then incrementalBaseline.cranePythonBuildArtifacts
-        else null;
+        developmentPreviousArtifactsFor "python-build"
+        (developmentCompatibilityFor "python-build" {cargoArgs = cranePythonCargoArgs;})
+        (
+          if compatibleIncrementalBaseline
+          then incrementalBaseline.cranePythonBuildArtifacts
+          else null
+        );
       postPatch = workspaceMissingCargoTargetsScript;
     });
 
@@ -2905,10 +3155,10 @@
   ciCompilerState = pkgs.linkFarm "gammaloop-ci-compiler-state" (
     lib.mapAttrsToList (name: artifact: {
       inherit name;
-      path = (artifact.incrementalBase or artifact).incremental;
+      path = artifact.incremental;
     }) (lib.filterAttrs (name: artifact:
       builtins.elem "packages.${system}.${name}" ci.configuration.onlyBuild
-      && (artifact ? incrementalBase || artifact ? incremental))
+      && artifact ? incremental)
       (lib.mapAttrs (_: value: value.artifact or value)
         (craneTestDependencyOutputs // craneTestBinaryPackageOutputs // nextestContextualTestOutputs
           // {gammaloop-python-module = cranePythonBuildArtifacts;})))
@@ -2924,147 +3174,210 @@
 
   nextestCheckFor = {
     target,
+    packages ? target.packages,
+    archives ? lib.genAttrs packages (nextestPackageArchiveFor target),
     profile ? nextestProfile,
     partition ? null,
+    filter ? null,
+    nextestArgs ? [],
+    noTests ? "pass",
+    runtimeEnv ? {},
+    collectLogs ? false,
+    memoryLimitGb ? null,
+    captureResult ? false,
+    rerun ? null,
     name ? "gammaloop-nextest-${target.name}",
   }: let
     junitPath = "target/nextest/${profile}/junit.xml";
+    filters = lib.filter (value: value != null) [(target.runFilter or null) filter];
+    runFilter = lib.concatMapStringsSep " and " (value: "(${value})") filters;
   in
     pkgs.runCommand name ({
-      nativeBuildInputs = [
-        ciToolchain
-        pkgs.cargo-nextest
-        pkgs.form
-        pkgs.gcc
-        nextestFailureSummary
-      ] ++ lib.optionals (nextestUsesPythonModule target) [nextestPython]
-      ++ lib.optionals (nextestUsesUfoSupport target) [nextestUfoPython]
-      ++ (target.runtimeTools or []);
-      CC = nixCc;
-      CXX = nixCxx;
-      "${cargoLinkerVar}" = nixCc;
-      LD_LIBRARY_PATH = runtimeLibPath;
-      DYLD_LIBRARY_PATH = runtimeLibPath;
-      NEXTEST_SHOW_PROGRESS = "counter";
-      RUST_BACKTRACE = "1";
-      RUST_LIB_BACKTRACE = "1";
-      SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-    } // lib.optionalAttrs (target.runtimeRenderData or false) {
-      SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
-    } // lib.optionalAttrs (target.runtimeBrowser or false) {
-      PYTHONPATH = "${browserPython}/${pythonSitePackages}";
-      LINNET_TEST_CHROMIUM = "${pkgs.chromium}/bin/chromium";
-      MATHML_CHROMIUM_EXECUTABLE = "${pkgs.chromium}/bin/chromium";
-      MATHML_CHROMIUM_VERSION = pkgs.chromium.version;
-      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
-      LINNET_MATHML_BROWSER_ENGINES = "chromium";
-      # Chromium still needs fallback fonts for empty MathML probes and static
-      # snapshots while the widget's bundled math font is unavailable.
-      FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
-    }) (''
-      if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
-        echo "Missing SYMBOLICA_LICENSE environment variable" >&2
-        exit 1
-      fi
+        nativeBuildInputs =
+          [
+            ciToolchain
+            pkgs.cargo-nextest
+            pkgs.form
+            pkgs.gcc
+            nextestFailureSummary
+          ]
+          ++ lib.optionals (nextestUsesPythonModule target) [nextestPython]
+          ++ lib.optionals (nextestUsesUfoSupport target) [nextestUfoPython]
+          ++ lib.optionals (memoryLimitGb != null) [pkgs.python313]
+          ++ lib.optionals (memoryLimitGb != null && pkgs.stdenv.hostPlatform.isLinux) [pkgs.procps]
+          ++ lib.optionals (memoryLimitGb != null && pkgs.stdenv.hostPlatform.isDarwin) [pkgs.darwin.ps]
+          ++ (target.runtimeTools or []);
+        CC = nixCc;
+        CXX = nixCxx;
+        "${cargoLinkerVar}" = nixCc;
+        LD_LIBRARY_PATH = runtimeLibPath;
+        DYLD_LIBRARY_PATH = runtimeLibPath;
+        NEXTEST_SHOW_PROGRESS = "counter";
+        RUST_BACKTRACE = "1";
+        RUST_LIB_BACKTRACE = "1";
+        SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+      }
+      // lib.optionalAttrs (target.runtimeRenderData or false) {
+        SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
+      }
+      // lib.optionalAttrs (target.runtimeBrowser or false) {
+        PYTHONPATH = "${browserPython}/${pythonSitePackages}";
+        LINNET_TEST_CHROMIUM = "${pkgs.chromium}/bin/chromium";
+        MATHML_CHROMIUM_EXECUTABLE = "${pkgs.chromium}/bin/chromium";
+        MATHML_CHROMIUM_VERSION = pkgs.chromium.version;
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
+        LINNET_MATHML_BROWSER_ENGINES = "chromium";
+        # Chromium still needs fallback fonts for empty MathML probes and static
+        # snapshots while the widget's bundled math font is unavailable.
+        FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
+      }
+      // runtimeEnv
+      // lib.optionalAttrs (rerun != null) {
+        GAMMALOOP_DEV_RERUN = rerun;
+      }) (''
+        if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
+          echo "Missing SYMBOLICA_LICENSE environment variable" >&2
+          exit 1
+        fi
 
-      mkdir -p /build/source
-      cp -R ${nextestRuntimeSrcFor target}/. /build/source/
-      chmod -R u+w /build/source
-      cd /build/source
-      # Workspace-root discovery checks these directories even for test
-      # targets that do not consume any files from them.
-      mkdir -p tests/resources examples/cli
-      ${workspaceMissingCargoTargetsScript}
-    '' + lib.optionalString (target.runtimeBrowser or false) ''
+          runtime_root="$TMPDIR/source"
+          mkdir -p "$runtime_root"
+          cp -R ${nextestRuntimeSrcFor (target // {inherit packages;})}/. "$runtime_root/"
+          chmod -R u+w "$runtime_root"
+          cd "$runtime_root"
+          # Workspace-root discovery checks these directories even for test
+        # targets that do not consume any files from them.
+        mkdir -p tests/resources examples/cli
+        ${workspaceMissingCargoTargetsScript}
+      ''
+      + lib.optionalString (target.runtimeBrowser or false) ''
       export XDG_CACHE_HOME="$TMPDIR/browser-cache"
       export XDG_CONFIG_HOME="$TMPDIR/browser-config"
       mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
       export SPENSO_MATHML_BROWSER_FIXTURES="$PWD/tensor-browser.json"
       export CFF_DISPLAY_TEST_OUTPUT="$PWD/cff-browser"
       export FEYNKIT_BROWSER_FIXTURES="$PWD/feynkit-browser"
-    '' + lib.optionalString (target.name == "docs") ''
-      # Tests such as trybuild invoke Cargo again at runtime. Point
-      # those nested invocations at the same vendored dependency
-      # graph used to compile the archived test binaries.
-      export CARGO_HOME="$PWD/.cargo-home"
-      mkdir -p "$CARGO_HOME"
-      cp ${cargoVendorDir}/config.toml "$CARGO_HOME/config.toml"
-      export CARGO_NET_OFFLINE=true
-      # The remapped Nix test source deliberately has no .git directory.
-      # Give generated test pages stable, explicitly non-publishing
-      # provenance rather than making the runner depend on repository
-      # metadata outside its declared source closure.
-      export ALPHAL00P_DOCS_GIT_COMMIT=0000000000000000000000000000000000000000
-      export ALPHAL00P_DOCS_GIT_TIMESTAMP=1
-      # Nix's TMPDIR is normally /build, which also contains the copied
-      # workspace. Isolate tempfile-based containment tests so /build is
-      # not mistaken for a general persistent-cache namespace.
-      export TMPDIR="$PWD/target/nix-ci-tmp"
-      mkdir -p "$TMPDIR"
-    '' + lib.optionalString (nextestUsesPythonModule target) ''
-      export PYO3_PYTHON=${nextestPython}/bin/python3
-      export PYTHON=${nextestPython}/bin/python3
-      export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
-    '' + lib.optionalString (nextestUsesUfoSupport target) ''
-      # Embedded Python uses the shared compile interpreter and imports its
-      # UFO dependencies from this separately packaged runtime environment.
-      export PYTHONPATH=${nextestUfoPython}/${pythonSitePackages}''${PYTHONPATH:+:$PYTHONPATH}
-    '' + ''
-      # Nextest runs with the workspace root as cwd, while some insta
-      # snapshots are stored under each crate src. Mirror those snapshot
-      # directories into the workspace-level src tree in the disposable
-      # Nix build directory so insta can find them.
-      if [ -d crates ]; then
-        while IFS= read -r snapshots; do
-          rel="''${snapshots#crates/*/src/}"
-          mkdir -p "src/$rel"
-          cp -R "$snapshots/." "src/$rel/"
-        done < <(find crates -type d -name snapshots | sort)
-      fi
+      ''
+      + lib.optionalString (target.name == "docs") ''
+        # Tests such as trybuild invoke Cargo again at runtime. Point
+        # those nested invocations at the same vendored dependency
+        # graph used to compile the archived test binaries.
+        export CARGO_HOME="$PWD/.cargo-home"
+        mkdir -p "$CARGO_HOME"
+        cp ${cargoVendorDir}/config.toml "$CARGO_HOME/config.toml"
+        export CARGO_NET_OFFLINE=true
+        # The remapped Nix test source deliberately has no .git directory.
+        # Give generated test pages stable, explicitly non-publishing
+        # provenance rather than making the runner depend on repository
+        # metadata outside its declared source closure.
+        export ALPHAL00P_DOCS_GIT_COMMIT=0000000000000000000000000000000000000000
+        export ALPHAL00P_DOCS_GIT_TIMESTAMP=1
+        # Nix's TMPDIR is normally /build, which also contains the copied
+        # workspace. Isolate tempfile-based containment tests so /build is
+        # not mistaken for a general persistent-cache namespace.
+        export TMPDIR="$PWD/target/nix-ci-tmp"
+        mkdir -p "$TMPDIR"
+      ''
+      + lib.optionalString (nextestUsesPythonModule target) ''
+        export PYO3_PYTHON=${nextestPython}/bin/python3
+        export PYTHON=${nextestPython}/bin/python3
+        export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
+      ''
+      + lib.optionalString (nextestUsesUfoSupport target) ''
+        # Embedded Python uses the shared compile interpreter and imports its
+        # UFO dependencies from this separately packaged runtime environment.
+        export PYTHONPATH=${nextestUfoPython}/${pythonSitePackages}''${PYTHONPATH:+:$PYTHONPATH}
+      ''
+      + ''
+        # Nextest runs with the workspace root as cwd, while some insta
+        # snapshots are stored under each crate src. Mirror those snapshot
+        # directories into the workspace-level src tree in the disposable
+        # Nix build directory so insta can find them.
+        if [ -d crates ]; then
+          while IFS= read -r snapshots; do
+            rel="''${snapshots#crates/*/src/}"
+            mkdir -p "src/$rel"
+            cp -R "$snapshots/." "src/$rel/"
+          done < <(find crates -type d -name snapshots | sort)
+        fi
 
-      # Respect the sandbox's CPU budget while retaining the CI profile's
-      # 16-process cap on large hosts. Test-internal worker reservations remain
-      # accounted for by nextest's existing threads-required settings.
-      nextest_threads=$(nproc)
-      if (( NIX_BUILD_CORES > 0 && NIX_BUILD_CORES < nextest_threads )); then
-        nextest_threads=$NIX_BUILD_CORES
-      fi
-      export NEXTEST_TEST_THREADS=$((nextest_threads < 16 ? nextest_threads : 16))
-      echo "Nextest worker budget: $NEXTEST_TEST_THREADS"
-    '' + lib.optionalString (profile == "ci_slow") ''
-      # These archive runners replace the separate soft-CT acceptance jobs.
-      # Preserve their stack allowance and retain failed generated states in
-      # the build tree, while keeping internal Rayon work within this budget.
-      export RUST_MIN_STACK=134217728
-      export RAYON_NUM_THREADS="$NEXTEST_TEST_THREADS"
-      export GAMMALOOP_TESTS_NO_CLEAN_STATE=1
-    '' + ''
-      mkdir -p target/nextest "$out"
-      set +e
-      status=0
-      ${lib.concatMapStringsSep "\n" (package: ''
-          rm -f ${lib.escapeShellArg junitPath}
-          cargo nextest run \
-            --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
-            --extract-to . \
-            --extract-overwrite \
-            --workspace-remap . \
-            --profile ${lib.escapeShellArg profile} \
-            ${lib.optionalString ((target.runFilter or null) != null) "-E ${lib.escapeShellArg target.runFilter}"} \
-            ${lib.optionalString (target.runtimeBrowser or false) "--run-ignored all"} \
-            --no-fail-fast --final-status-level fail --no-tests=pass \
-            ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"}
-          package_status=$?
-          nextest-failure-summary ${lib.escapeShellArg junitPath} || true
-          if [ -f ${lib.escapeShellArg junitPath} ]; then
-            cp ${lib.escapeShellArg junitPath} "$out/${package}.xml"
-          fi
-          if [ "$package_status" -ne 0 ] && [ "$status" -eq 0 ]; then
-            status="$package_status"
-          fi
-        '')
-        target.packages}
-    '' + lib.optionalString (target.runtimeBrowser or false) ''
+        # Respect the sandbox's CPU budget while retaining the CI profile's
+        # 16-process cap on large hosts. Test-internal worker reservations remain
+        # accounted for by nextest's existing threads-required settings.
+        nextest_threads=$(nproc)
+        if (( NIX_BUILD_CORES > 0 && NIX_BUILD_CORES < nextest_threads )); then
+          nextest_threads=$NIX_BUILD_CORES
+        fi
+        export NEXTEST_TEST_THREADS=$((nextest_threads < 16 ? nextest_threads : 16))
+        echo "Nextest worker budget: $NEXTEST_TEST_THREADS"
+      ''
+      + lib.optionalString (profile == "ci_slow") ''
+        # These archive runners replace the separate soft-CT acceptance jobs.
+        # Preserve their stack allowance and retain failed generated states in
+        # the build tree, while keeping internal Rayon work within this budget.
+        export RUST_MIN_STACK="''${RUST_MIN_STACK:-134217728}"
+        export RAYON_NUM_THREADS="''${RAYON_NUM_THREADS:-$NEXTEST_TEST_THREADS}"
+        export GAMMALOOP_TESTS_NO_CLEAN_STATE=1
+      ''
+      + ''
+        mkdir -p target/nextest "$out"
+      ''
+      + lib.optionalString collectLogs ''
+        export GL_TEST_LOG_DIR="$out/logs"
+        mkdir -p "$GL_TEST_LOG_DIR"
+      ''
+      + lib.optionalString (memoryLimitGb != null) ''
+        # The watchdog keeps a lock alongside its script. Use the writable build
+        # tree rather than attempting to create that lock in the Nix store.
+        cp ${(workspaceRoot + "/bin/ram_watchdog.py")} target/ram_watchdog.py
+      ''
+      + ''
+          set +e
+          status=0
+          setup_status=0
+          matched=0
+        ${lib.concatMapStringsSep "\n" (package: ''
+            rm -f ${lib.escapeShellArg junitPath} || exit $?
+              ${lib.optionalString (memoryLimitGb != null) ''python3 target/ram_watchdog.py --limit-gb ${lib.escapeShellArg (toString memoryLimitGb)} --log "$out/watchdog-${package}.jsonl" --''} cargo nextest run \
+                --archive-file ${archives.${package}}/${nextestArchiveNameFor target package} \
+              --extract-to . \
+              --extract-overwrite \
+              --workspace-remap . \
+              --profile ${lib.escapeShellArg profile} \
+              ${lib.optionalString (target.runtimeBrowser or false) "--run-ignored all"} \
+              ${lib.optionalString (filters != []) "-E ${lib.escapeShellArg runFilter}"} \
+              --no-fail-fast --final-status-level fail --no-tests=fail \
+              ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"} \
+                ${lib.escapeShellArgs nextestArgs}
+              package_status=$?
+              # Only test failures, empty selections and watchdog termination are
+              # captured. Invalid archives/configuration and setup failures remain
+              # failed Nix builds instead of materialized test verdicts.
+              case "$package_status" in
+                0|4|100|137) ;;
+                *) if [ "$setup_status" -eq 0 ]; then setup_status="$package_status"; fi ;;
+              esac
+              nextest-failure-summary ${lib.escapeShellArg junitPath} || true
+            if [ -f ${lib.escapeShellArg junitPath} ]; then
+              cp ${lib.escapeShellArg junitPath} "$out/${package}.xml" || exit $?
+              elif [ "$package_status" -eq 4 ]; then
+                printf '<testsuites tests="0"/>\n' > "$out/${package}.xml" || exit $?
+              fi
+              if [ "$package_status" -eq 0 ]; then
+                matched=1
+              elif [ "$package_status" -ne 4 ] && [ "$status" -eq 0 ]; then
+              status="$package_status"
+            fi
+          '')
+          packages}
+      ''
+      # Browser probes consume a complete fixture set. Narrow development
+      # requests still execute their selected Rust tests.
+      + lib.optionalString (
+        (target.runtimeBrowser or false)
+        && filter == null
+        && lib.sort builtins.lessThan packages == lib.sort builtins.lessThan target.packages
+      ) ''
       if [ "$status" -eq 0 ]; then
         python3 crates/spynso3/tests/browser_math_font.py \
           --fixtures tensor-browser.json --chromium "$LINNET_TEST_CHROMIUM" \
@@ -3076,12 +3389,476 @@
         python3 crates/feynkit-py/tests/energy_scoped_display_browser.py feynkit-browser/scoped "$LINNET_TEST_CHROMIUM" chromium || status=$?
         python3 crates/feynkit-py/tests/generalized_energy_display_browser.py feynkit-browser/generalized feynkit-browser/ltd "$LINNET_TEST_CHROMIUM" chromium || status=$?
         python3 ${./browser-check.py} \
-          ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target "linnet-render-py"} || status=$?
+          ${archives."linnet-render-py"}/${nextestArchiveNameFor target "linnet-render-py"} || status=$?
         cp -R .local/graph-mathml-labels/browser "$out/browser"
       fi
-    '' + ''
-      exit "$status"
-    '');
+      ''
+      + ''
+          # Nextest documents 4 as NO_TESTS_RUN. An empty archive is harmless if
+          # another selected package matched; setup and test failures take priority.
+          if [ "$status" -eq 0 ] && [ "$matched" -eq 0 ]; then
+            ${
+          if noTests == "fail"
+          then ''
+            echo "No tests matched the development request" >&2
+            status=4
+          ''
+          else if noTests == "warn"
+          then ''
+            echo "warning: no tests matched the request" >&2
+          ''
+          else ":"
+        }
+          fi
+          ${
+          if captureResult
+          then ''
+            if [ "$setup_status" -ne 0 ]; then exit "$setup_status"; fi
+            printf '%s\n' "$status" > "$out/exit-status"
+          ''
+          else ''exit "$status"''
+        }
+      '');
+
+  developmentResultFor = request: let
+    inherit (request) command packages;
+    isTest = command == "test";
+    isBuild = command == "build";
+    pythonBuild = isBuild && (request.variant or "native") == "python";
+    target =
+      lib.findFirst (target: target.name == (request.group or null))
+      (throw "development: unknown test group")
+      checkedNextestPackageGroups;
+    contexts = map (nextestPackageContextFor target) packages;
+    dependencyContexts = map (entry: entry.context) (builtins.genericClosure {
+      startSet =
+        map (context: {
+          key = context.key;
+          inherit context;
+        })
+        (
+          if isTest
+          then contexts
+          else
+            map (package:
+              workspaceTestContextFor {packages = [package];})
+            packages
+        );
+      operator = entry:
+        map (context: {
+          key = context.key;
+          inherit context;
+        })
+        (workspaceTestDependencyContextsFor entry.context);
+    });
+    staticContext = workspaceTestContextFor {inherit packages;};
+    staticCargoArgs = cargoPackagesArgsFor packages (package: staticContext.features.${package});
+    staticResult =
+      (workspaceChecksFor {
+        artifacts =
+          mergeCargoArtifacts "gammaloop-development-${command}-inputs"
+          (map (context: craneTestDependencyArtifacts.${context.key}) dependencyContexts);
+        src = workspacePackageSrcForSourcePackages {
+          sourcePackages = staticContext.sourcePackages;
+          packageSourcePackages = packages;
+          testSourcePackages = packages;
+        };
+        cargoArgs = staticCargoArgs;
+        context = staticContext;
+        keepIncrementalState = true;
+      }).${
+        command
+      };
+    buildArtifacts = lib.genAttrs packages (package:
+      cranePackageBuildArtifactFor {
+        inherit package;
+        keepIncrementalState = true;
+      });
+    selectedArchives = lib.genAttrs packages (nextestPackageArchiveFor target);
+    result =
+      if isTest
+      then
+        nextestCheckFor {
+          inherit target packages;
+          archives = selectedArchives;
+          inherit (request) profile filter nextestArgs noTests runtimeEnv collectLogs memoryLimitGb rerun;
+          captureResult = true;
+        }
+      else if isBuild
+      then
+        pkgs.linkFarm "gammaloop-development-build" (map (package: {
+            name = package;
+            path =
+              if pythonBuild
+              then gammaloop-python-module
+              else if package == "gammaloop-api"
+              then gammaloopCliFor buildArtifacts.${package}
+              else buildArtifacts.${package};
+          })
+          packages)
+      else staticResult;
+    entry = developmentStateEntryFor;
+    dependencyEntries = map (context:
+      entry "test-dependencies-${context.key}"
+      (developmentCompatibilityFor "test-dependencies" context.resolvedFeatureVector)
+      craneTestDependencyArtifacts.${context.key})
+    dependencyContexts;
+    pythonEntry =
+      entry "python-build"
+      (developmentCompatibilityFor "python-build" {cargoArgs = cranePythonCargoArgs;})
+      cranePythonBuildArtifacts;
+    entries =
+      (
+        if isTest
+        then
+          dependencyEntries
+          ++ lib.zipListsWith (package: context:
+            entry "test-binaries-${package}-${context.key}"
+            (developmentCompatibilityFor "test-binaries" {
+              inherit package;
+              inherit (context) resolvedFeatureVector;
+            }) (nextestPackageTestBinaryArtifactFor target package))
+          packages
+          contexts
+        else if pythonBuild
+        then dependencyEntries ++ [pythonEntry]
+        else if isBuild
+        then
+          map (package:
+            entry "build-${package}" (developmentCompatibilityFor "build" {
+              inherit package;
+              cargoArgs =
+                cargoPackageCiArgsFor package
+                + lib.optionalString (package == "gammaloop-api") " --lib --bins";
+            })
+            buildArtifacts.${package})
+          packages
+        else
+          dependencyEntries
+          ++ [
+            (entry "${command}-${staticContext.key}"
+              (developmentCompatibilityFor command {
+                cargoArgs = staticCargoArgs;
+                inherit (staticContext) resolvedFeatureVector;
+              })
+              staticResult)
+          ]
+      )
+      ++ lib.optionals (isTest && nextestUsesPythonModule target) [pythonEntry];
+    statefulEntries = lib.filter (entry: entry.value.artifact ? incremental) entries;
+    state = {
+      version = 1;
+      contexts = lib.listToAttrs (map (entry: {
+          inherit (entry) name;
+          value = developmentStateRecordFor entry.value;
+        })
+        statefulEntries);
+    };
+    stateFile = pkgs.writeText "development-state.json" (builtins.toJSON state);
+  in
+    pkgs.runCommand "gammaloop-development-${command}" {
+      passthru = {inherit result state stateFile;};
+    } ''
+      mkdir -p "$out"
+      ln -s ${result} "$out/result"
+      ln -s ${stateFile} "$out/development-state.json"
+      # The descriptor retains actual compiled, query and derivation paths.
+    '';
+
+  developmentCiProducers = let
+    contexts = map (entry: entry.context) (builtins.genericClosure {
+      startSet =
+        map (context: {
+          key = context.key;
+          inherit context;
+        })
+        nextestPackageTestContexts;
+      operator = entry:
+        map (context: {
+          key = context.key;
+          inherit context;
+        })
+        (workspaceTestDependencyContextsFor entry.context);
+    });
+  in
+    lib.listToAttrs (
+      map (context:
+        developmentStateEntryFor "test-dependencies-${context.key}"
+        (developmentCompatibilityFor "test-dependencies" context.resolvedFeatureVector)
+        craneTestDependencyArtifacts.${context.key})
+      contexts
+      ++ lib.concatMap (target:
+        map (package: let
+          context = nextestPackageContextFor target package;
+        in
+          developmentStateEntryFor "test-binaries-${package}-${context.key}"
+          (developmentCompatibilityFor "test-binaries" {
+            inherit package;
+            inherit (context) resolvedFeatureVector;
+          }) (nextestPackageTestBinaryArtifactFor target package))
+        target.packages)
+      checkedNextestPackageGroups
+      ++ [
+        (developmentStateEntryFor "python-build"
+          (developmentCompatibilityFor "python-build" {cargoArgs = cranePythonCargoArgs;})
+          cranePythonBuildArtifacts)
+      ]
+    );
+
+  development = {
+    catalog = {
+      packages = workspaceMemberPackages;
+      groups =
+        map (target: {
+          inherit (target) name packages;
+          default = !(builtins.elem target.name ["python-api" "browser"]);
+        })
+        checkedNextestPackageGroups;
+      cargoProfile = ciCargoProfile;
+    };
+    # Only test producers and the extension producer have identical selected
+    # NixCI consumers. Narrow native build/check/clippy contexts are omitted;
+    # they must not masquerade as the full-workspace static checks.
+    prepareCi = state: let
+      plain = value: builtins.fromJSON (builtins.unsafeDiscardStringContext (builtins.toJSON value));
+      names = builtins.attrNames state.contexts;
+      omitted = name: let
+        record = state.contexts.${name};
+      in
+        builtins.isAttrs record
+        && builtins.any (kind:
+          (record.compatibility.kind or null)
+          == kind
+          && lib.hasPrefix "${kind}-" (record.owner or "")) ["build" "check" "clippy"];
+      unknown = builtins.filter (name: !(developmentCiProducers ? ${name}) && !omitted name) names;
+      selected = lib.filterAttrs (name: _: developmentCiProducers ? ${name}) state.contexts;
+      ciWorkspace = import ./rust-workspace.nix {
+        inherit
+          self
+          pkgs
+          docsPkgs
+          craneLib
+          wasmCraneLib
+          ciToolchain
+          wasmTarget
+          system
+          nixCiArtifactBarrier
+          workspaceRoot
+          workspaceGraph
+          incrementalBaselineRoot
+          ;
+        developmentPromotedState = {
+          version = 1;
+          contexts = selected;
+        };
+      };
+      records = lib.mapAttrs (name: actual: let
+        expected = plain (developmentStateRecordFor ciWorkspace.developmentCiProducers.${name});
+      in
+        assert lib.assertMsg (expected == plain actual)
+        "development.prepareCi: stale source/context or invalid producer addresses for ${name}"; expected)
+      selected;
+    in
+      assert lib.assertMsg (builtins.isAttrs state
+        && (state.version or null) == 1
+        && builtins.isAttrs (state.contexts or null)) "development.prepareCi requires a version 1 state descriptor";
+      assert lib.assertMsg (unknown == [])
+      "development.prepareCi: no current CI consumer for ${lib.concatStringsSep ", " unknown}";
+        builtins.deepSeq records {
+          state = {
+            version = 1;
+            contexts = records;
+          };
+          paths = sortedUnique (lib.concatMap (record:
+            [record.drvPath record.out record.incremental record.source record.unseededDrvPath]
+            ++ lib.optionals (record.seed != null) [record.seed.drvPath record.seed.incremental])
+          (builtins.attrValues records));
+        };
+    run = request: let
+      fail = message: throw "development: ${message}";
+      allowed = [
+        "command"
+        "packages"
+        "group"
+        "profile"
+        "filter"
+        "nextestArgs"
+        "noTests"
+        "previousState"
+        "variant"
+        "runtimeEnv"
+        "collectLogs"
+        "memoryLimitGb"
+        "rerun"
+      ];
+      unknown = builtins.attrNames (builtins.removeAttrs request allowed);
+      command = request.command or null;
+      packages = request.packages or [];
+      isTest = command == "test";
+      group = request.group or null;
+      target = lib.findFirst (target: target.name == group) null checkedNextestPackageGroups;
+      nextestArgs = request.nextestArgs or [];
+      # After --, arguments belong to Nextest's emulated libtest parser.
+      runtimeOptions =
+        (builtins.foldl' (state: arg:
+            if state.stopped || arg == "--"
+            then state // {stopped = true;}
+            else state // {args = state.args ++ [arg];})
+          {
+            stopped = false;
+            args = [];
+          }
+          nextestArgs).args;
+      ownedLongOptions = [
+        "--package"
+        "--exclude"
+        "--workspace"
+        "--features"
+        "--all-features"
+        "--no-default-features"
+        "--cargo-profile"
+        "--release"
+        "--target"
+        "--target-dir"
+        "--manifest-path"
+        "--lib"
+        "--bin"
+        "--bins"
+        "--test"
+        "--tests"
+        "--bench"
+        "--benches"
+        "--all-targets"
+        "--profile"
+        "--partition"
+        "--no-tests"
+        "--filter-expr"
+        "--ignore-default-filter"
+        "--archive-file"
+        "--extract-to"
+        "--extract-overwrite"
+        "--workspace-remap"
+        "--config-file"
+        "--override-version-check"
+      ];
+      owned = arg:
+        builtins.any (option: arg == option || lib.hasPrefix "${option}=" arg) ownedLongOptions
+        || builtins.any (option: lib.hasPrefix option arg) ["-p" "-P" "-E" "-F"]
+        || arg == "-r";
+      previousState = request.previousState or {};
+      runtimeEnv = request.runtimeEnv or {};
+      runtimeEnvNames = [
+        "GL_DISPLAY_FILTER"
+        "GL_LOGFILE_FILTER"
+        "GL_ALL_LOG_FILTER"
+        "RUST_MIN_STACK"
+        "RAYON_NUM_THREADS"
+        "INSTA_UPDATE"
+      ];
+      validRuntimeEnvValue = name: value:
+        builtins.isString value
+        && (
+          if name == "INSTA_UPDATE"
+          then value == "no"
+          else if builtins.elem name ["RUST_MIN_STACK" "RAYON_NUM_THREADS"]
+          then builtins.match "[1-9][0-9]*" value != null
+          else true
+        );
+      memoryLimitGb = request.memoryLimitGb or null;
+      testOnlyFields =
+        builtins.filter (field: builtins.hasAttr field request)
+        ["group" "profile" "filter" "nextestArgs" "noTests" "runtimeEnv" "collectLogs" "memoryLimitGb" "rerun"];
+      normalized =
+        (builtins.removeAttrs request ["previousState"])
+        // {
+          packages = sortedUnique packages;
+        }
+        // lib.optionalAttrs isTest {
+          profile = request.profile or nextestProfile;
+          filter = request.filter or null;
+          inherit nextestArgs runtimeEnv memoryLimitGb;
+          collectLogs = request.collectLogs or false;
+          rerun = request.rerun or null;
+          noTests = request.noTests or "fail";
+        };
+    in
+      assert builtins.isAttrs request || fail "request must be an object";
+      assert unknown == [] || fail "unsupported request fields: ${lib.concatStringsSep ", " unknown}";
+      assert builtins.elem command ["test" "build" "check" "clippy"] || fail "unsupported command";
+      assert builtins.isList packages
+      && packages != []
+      && builtins.all builtins.isString packages
+      || fail "packages must be a nonempty list of exact Cargo names";
+      assert builtins.all (package: builtins.elem package workspaceMemberPackages) packages
+      || fail "unknown Cargo packages: ${lib.concatStringsSep ", " (lib.subtractLists workspaceMemberPackages packages)}";
+      assert isTest || testOnlyFields == [] || fail "test-only fields are unsupported for ${command}";
+      assert !isTest || (builtins.isString group && target != null) || fail "test requires an existing group";
+      assert !isTest
+      || builtins.all (package: builtins.elem package target.packages) packages
+      || fail "requested package does not belong to group ${group}";
+      assert !isTest
+      || builtins.elem normalized.profile ["ci_gammaloop" "ci_full" "ci_slow"]
+      || fail "unsupported runtime test profile";
+      assert !isTest
+      || normalized.filter == null
+      || (builtins.isString normalized.filter && normalized.filter != "")
+      || fail "filter must be null or a nonempty Nextest expression";
+      assert !isTest
+      || (builtins.isList nextestArgs && builtins.all builtins.isString nextestArgs)
+      || fail "nextestArgs must be an array of argv strings";
+      assert !isTest
+      || !builtins.any owned runtimeOptions
+      || fail "nextestArgs contains compilation or runner options owned by the structured API";
+      assert !isTest || builtins.elem normalized.noTests ["fail" "warn" "pass"] || fail "unsupported noTests policy";
+      assert !isTest
+      || (builtins.isAttrs runtimeEnv
+        && builtins.all (name: builtins.elem name runtimeEnvNames && validRuntimeEnvValue name runtimeEnv.${name})
+        (builtins.attrNames runtimeEnv))
+      || fail "unsupported runtimeEnv variable or value";
+      assert !isTest || builtins.isBool normalized.collectLogs || fail "collectLogs must be a boolean";
+      assert !isTest
+      || memoryLimitGb == null
+      || ((builtins.isInt memoryLimitGb || builtins.isFloat memoryLimitGb) && memoryLimitGb > 0)
+      || fail "memoryLimitGb must be null or a positive number";
+      assert !isTest
+      || normalized.rerun == null
+      || (builtins.isString normalized.rerun && builtins.match "[0-9a-f]{32}" normalized.rerun != null)
+      || fail "rerun must be null or a 32-digit hexadecimal nonce";
+      assert !(request ? variant) || command == "build" || fail "variant is only supported for build";
+      assert builtins.elem (request.variant or "native") ["native" "python"] || fail "unsupported build variant";
+      assert (request.variant or "native")
+      != "python"
+      || packages == ["gammaloop-api"]
+      || fail "variant=python requires packages=[gammaloop-api]";
+      assert builtins.isAttrs previousState
+      && (previousState
+        == {}
+        || ((previousState.version or null)
+          == 1
+          && builtins.isAttrs (previousState.contexts or null)))
+      || fail "previousState must be empty or a version 1 state descriptor";
+        if previousState == {}
+        then developmentResultFor normalized
+        else
+          (import ./rust-workspace.nix {
+            inherit
+              self
+              pkgs
+              docsPkgs
+              craneLib
+              wasmCraneLib
+              ciToolchain
+              wasmTarget
+              system
+              nixCiArtifactBarrier
+              workspaceRoot
+              workspaceGraph
+              incrementalBaselineRoot
+              ;
+            developmentPreviousState = previousState;
+          }).development.run
+          normalized;
+  };
 
   nextestRunChecks = lib.listToAttrs (map (target: {
       name = "gammaloop-nextest-${target.name}";
@@ -3192,6 +3969,32 @@
 
       gammaloop-guppy-workspace-graph = guppyWorkspaceGraphCheck;
 
+      gammaloop-development-tools = pkgs.runCommand "gammaloop-development-tools-check" {
+        nativeBuildInputs =
+          [pkgs.python313 pkgs.git pkgs.ruff]
+          ++ lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.fakeroot];
+        src = lib.fileset.toSource {
+          root = workspaceRoot;
+          fileset = lib.fileset.unions [
+            (workspaceRoot + "/scripts/dev.py")
+            (workspaceRoot + "/scripts/tests")
+            (workspaceRoot + "/gammaloop")
+          ];
+        };
+      } ''
+        cp -R "$src" source
+        chmod -R u+w source
+        cd source
+        patchShebangs gammaloop
+        ruff check scripts/dev.py scripts/tests
+        ruff format --check scripts/dev.py scripts/tests
+        bash -n gammaloop
+        # Linux Nix sandboxes block setgid chmod. Model the fixture modes here;
+        # actual shared-directory permissions still need host acceptance.
+        ${lib.optionalString pkgs.stdenv.hostPlatform.isLinux "fakeroot "}python3 -m unittest discover -s scripts/tests
+        mkdir -p "$out"
+      '';
+
       linnest-wasm = pkgs.runCommand "linnest-wasm-check" {
         nativeBuildInputs = [pkgs.wasm-tools];
       } ''
@@ -3259,6 +4062,8 @@ in {
   inherit (documentation) docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
     alphal00pDocsPages alphal00pDocsSnapshotFixture;
   inherit
+    development
+    developmentCiProducers
     workspaceDependencySrc
     craneTestDependencyArtifacts
     craneTestBinaryArtifactFor
