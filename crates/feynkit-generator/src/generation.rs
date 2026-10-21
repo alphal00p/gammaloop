@@ -12,8 +12,12 @@ use feynkit_graph::{
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
 use idenso::{
-    color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor,
-    tensor::SymbolicTensor,
+    CookMode, CookSettings,
+    color::CS,
+    dirac::AGS,
+    epsilon::EPSILON_SYMBOL,
+    representations::Bispinor,
+    tensor::{SymbolicTensor, composition::interface_in_atom_order, inference::InterfaceInference},
 };
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
@@ -26,12 +30,14 @@ use serde::{Deserialize, Serialize};
 use spenso::{
     network::library::symbolic::ETS,
     structure::{
-        partial::PartialStructure,
-        representation::{Minkowski, RepName},
+        abstract_index::AbstractIndex,
+        partial::{PartialIndex, PartialStructure, PartialStructureExt},
+        representation::{LibraryRep, Minkowski, RepName},
+        slot::{IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, UserData},
     graph::{GenerationSettings, Graph, HalfEdge},
     symbol,
 };
@@ -354,6 +360,64 @@ struct NumeratorInstantiation<'a> {
 }
 
 impl NumeratorInstantiation<'_> {
+    fn propagator_expression(
+        &self,
+        propagator: &Atom,
+        color: i64,
+    ) -> Result<Atom, GenerationError> {
+        let spin = self.instantiate(propagator, NumeratorSector::Spin)?;
+        Ok(match self.edge_color_identity(color)? {
+            None => spin,
+            Some(color) => spin * color,
+        })
+    }
+
+    /// Bind canonical template labels simultaneously. Momentum IDs may alias;
+    /// half-edge and dummy-owner labels retain their distinct identities.
+    fn bind_template(&self, expression: &Atom) -> Result<Atom, GenerationError> {
+        let mut error = None;
+        let expression = expression.replace_map_bottom_up(|term, _, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let head = function.get_symbol();
+            let mut arguments = function.iter();
+            let owner =
+                if head == feynkit_graph::symbols::hedge_index() || head == momentum_symbol() {
+                    let leg = usize::try_from(arguments.next().expect("template leg ID"))
+                        .expect("canonical template leg ID");
+                    if head == momentum_symbol() {
+                        self.legs[leg].edge
+                    } else {
+                        self.legs[leg].hedge
+                    }
+                } else if head == feynkit_graph::symbols::vertex_index()
+                    || head == feynkit_graph::symbols::edge_index()
+                {
+                    arguments.next();
+                    match self.owner {
+                        NumeratorOwner::Vertex(owner) | NumeratorOwner::Edge(owner) => owner,
+                    }
+                } else {
+                    return;
+                };
+            match i64::try_from(owner) {
+                Ok(owner) => {
+                    **out = FunctionBuilder::new(head)
+                        .add_arg(owner)
+                        .add_args(arguments)
+                        .finish();
+                }
+                Err(_) => {
+                    error = Some(GenerationError::ArithmeticOverflow(
+                        "a symbolic numerator owner",
+                    ));
+                }
+            }
+        });
+        error.map_or(Ok(expression), Err)
+    }
+
     // UFO `idx(shift, leg)` and `dummy(index)` values are local to one
     // propagator or interaction. Localize them before exposing the annotation
     // so equal endpoint indices contract and unrelated dummy indices cannot.
@@ -1325,6 +1389,255 @@ pub(crate) struct Generator {
 struct NumeratorCache {
     interactions: RwLock<HashMap<InteractionNumeratorKey, SymbolicTensor<PartialStructure>>>,
     propagators: RwLock<HashMap<PropagatorNumeratorKey, SymbolicTensor<PartialStructure>>>,
+    interaction_templates: RwLock<HashMap<InteractionNumeratorKey, Arc<NumeratorTemplate>>>,
+    propagator_templates: RwLock<HashMap<ParticleId, Arc<NumeratorTemplate>>>,
+}
+
+/// The same model-bound owner retains a rule's admission independently of the
+/// graph's owner IDs. Dynamic source notation must be lowered at its actual owner.
+enum NumeratorTemplate {
+    Dynamic,
+    Admitted {
+        tensor: Box<SymbolicTensor<PartialStructure>>,
+        labels: Vec<(AbstractIndex, Atom)>,
+    },
+}
+
+impl NumeratorTemplate {
+    fn supports(expression: &Atom) -> bool {
+        if !InterfaceInference::normalization_is_intrinsic(expression.as_view()) {
+            return false;
+        }
+        let mut supported = true;
+        let mut slots = SlotMatcher::default();
+        expression.visitor(&mut |node| {
+            // Admission may materialize these occurrences into fresh dummies,
+            // even when a surrounding power or chain has no public ports.
+            // Keep their allocation in the actual owner's construction.
+            supported &= slots.compact_representation(node).is_none();
+            if let AtomView::Fun(function) = node {
+                // The occurrence-order owner cannot enumerate ports hidden in
+                // bundles. Reject them before an additive term can move first
+                // under owner-dependent normalization.
+                supported &=
+                    function.get_symbol() != spenso::structure::abstract_index::AIND_SYMBOLS.aind;
+                // These labels must originate in localization. Literal graph
+                // IDs could capture a generated label in the canonical frame.
+                supported &= ![
+                    feynkit_graph::symbols::hedge_index(),
+                    feynkit_graph::symbols::vertex_index(),
+                    feynkit_graph::symbols::edge_index(),
+                    momentum_symbol(),
+                    spenso::structure::abstract_index::AIND_SYMBOLS.openind,
+                ]
+                .contains(&function.get_symbol());
+            }
+            if let SlotMatch::Explicit(slot) = slots.classify(node) {
+                supported &= InterfaceInference::normalization_is_intrinsic(slot.index());
+            }
+            if let AtomView::Var(variable) = node
+                && let UserData::Atom(payload) = variable.get_symbol().get_data()
+            {
+                supported &= Self::supports(payload);
+            }
+            supported
+        });
+        supported
+    }
+
+    fn admitted(tensor: SymbolicTensor<PartialStructure>) -> Result<Self, GenerationError> {
+        let tensor = tensor.finish_parts().map_err(DiagramError::from)?;
+        // Anonymous occurrences need the checked positional correspondence
+        // owner. Intrinsic explicit templates have a complete label bijection.
+        if !tensor.structure().open_positions().is_empty()
+            || !InterfaceInference::normalization_is_intrinsic(tensor.expression().as_view())
+            || interface_in_atom_order(tensor.expression(), tensor.structure()).is_err()
+        {
+            return Ok(Self::Dynamic);
+        }
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let mut indices = HashSet::new();
+        let mut slots = SlotMatcher::default();
+        let mut fixed_dimensions = true;
+        let mut collectable_indices = true;
+        tensor.expression().visitor(&mut |node| {
+            if let SlotMatch::Explicit(slot) = slots.classify(node) {
+                if !slot.is_concrete_index() {
+                    match AbstractIndex::try_from(slot.index()) {
+                        Ok(index) => {
+                            indices.insert(index);
+                        }
+                        // Slot-shaped opaque scalar metadata need not contain
+                        // an abstract index, even in an admitted expression.
+                        Err(_) => collectable_indices = false,
+                    }
+                }
+                fixed_dimensions &= Self::supports(&cooking.uncook(slot.dimension()));
+            }
+            collectable_indices
+        });
+        if !collectable_indices {
+            return Ok(Self::Dynamic);
+        }
+        for slot in tensor.structure().logical_slots() {
+            if let PartialIndex::Explicit(index) = slot.aind {
+                indices.insert(index);
+            }
+        }
+        let labels = indices
+            .into_iter()
+            .map(|index| (index, cooking.uncook(index.to_atom().as_view())))
+            .collect::<Vec<_>>();
+        let mut fixed_labels = true;
+        for (_, label) in &labels {
+            fixed_labels &= InterfaceInference::normalization_is_intrinsic(label.as_view());
+            label.visitor(&mut |node| {
+                // An opaque index depending on a momentum ID could itself
+                // alias when incident legs share an edge.
+                fixed_labels &= node.get_symbol() != Some(momentum_symbol());
+                fixed_labels
+            });
+        }
+        if !fixed_dimensions || !fixed_labels {
+            return Ok(Self::Dynamic);
+        }
+        let public_keys = tensor
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .filter_map(|slot| match slot.aind {
+                PartialIndex::Explicit(index) => {
+                    Some(slot.rep().base().slot::<AbstractIndex, _>(index))
+                }
+                PartialIndex::Open(_) => None,
+            })
+            .collect::<HashSet<_>>();
+        let representations = public_keys
+            .iter()
+            .map(|slot| slot.rep().rep.base())
+            .collect::<HashSet<_>>();
+        let mut scoped_alias = false;
+        tensor.expression().visitor(&mut |scope| {
+            if matches!(scope, AtomView::Add(_) | AtomView::Pow(_)) {
+                for &representation in &representations {
+                    let paired = InterfaceInference::has_explicit_index_pairs(
+                        scope,
+                        representation,
+                        |leaf| {
+                            let AtomView::Fun(function) = leaf else {
+                                return true;
+                            };
+                            !function.iter().any(|argument| {
+                                slots
+                                    .parse::<LibraryRep, AbstractIndex>(argument)
+                                    .is_ok_and(|slot| {
+                                        let key =
+                                            slot.rep().base().slot::<AbstractIndex, _>(slot.aind());
+                                        public_keys.contains(&key)
+                                    })
+                            })
+                        },
+                    );
+                    // A local bound pair must not be mistaken for a later
+                    // public occurrence by the source-order helper. Multi-port
+                    // leaves and detached chain scopes can be inconclusive;
+                    // retain actual-owner admission in those cases too.
+                    if !matches!(paired, Ok(false)) {
+                        scoped_alias = true;
+                        return false;
+                    }
+                }
+            }
+            !scoped_alias
+        });
+        if scoped_alias {
+            return Ok(Self::Dynamic);
+        }
+        let (expression, structure) = tensor.into_parts();
+        let tensor = SymbolicTensor::from_declared_parts(expression, structure)
+            .map_err(DiagramError::from)?;
+        Ok(Self::Admitted {
+            tensor: Box::new(tensor),
+            labels,
+        })
+    }
+
+    fn instantiate(
+        &self,
+        instantiation: &NumeratorInstantiation<'_>,
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
+        let Self::Admitted { tensor, labels } = self else {
+            unreachable!("dynamic rules are constructed at their actual owner")
+        };
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let invalid = |message: String| DiagramError::Invariant {
+            operation: "instantiating an admitted numerator template",
+            message,
+        };
+        let mut renaming = HashMap::with_capacity(labels.len());
+        let mut encoded = HashMap::new();
+        for (index, decoded) in labels {
+            let mut mapped = instantiation.bind_template(decoded)?;
+            let target = if mapped == decoded {
+                *index
+            } else {
+                let mut scopes = Vec::new();
+                while let Some(function) = mapped.as_fun_view()
+                    && function.get_symbol() == AbstractIndex::scope_symbol()
+                {
+                    let arguments = function.iter().collect::<Vec<_>>();
+                    let [AtomView::Var(scope), inner] = arguments.as_slice() else {
+                        unreachable!("admitted index scope")
+                    };
+                    scopes.push(scope.get_symbol());
+                    mapped = (*inner).to_owned();
+                }
+                if let Some(function) = mapped.as_fun_view() {
+                    mapped = cooking
+                        .cook_function(function)
+                        .map_err(|error| invalid(error.to_string()))?;
+                }
+                scopes.into_iter().rev().fold(
+                    AbstractIndex::try_from(mapped.as_view())
+                        .map_err(|error| invalid(error.to_string()))?,
+                    |index, scope| index.scoped(scope),
+                )
+            };
+            renaming.insert(*index, target);
+            // Reversible labels are opaque during the native-label pass. Map
+            // each complete index afterwards, including symbols inside scopes.
+            if decoded != &index.to_atom() {
+                encoded.insert(index.to_atom(), target.to_atom());
+            }
+        }
+        let logical = tensor
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .map(|mut slot| {
+                if let PartialIndex::Explicit(index) = slot.aind {
+                    slot.aind = PartialIndex::Explicit(renaming[&index]);
+                }
+                slot
+            });
+        let expression = instantiation.bind_template(tensor.expression())?;
+        let expression = if encoded.is_empty() {
+            expression
+        } else {
+            expression.replace_map(|node, _, output| {
+                if let Some(target) = encoded.get(&node.to_owned()) {
+                    **output = target.clone();
+                }
+            })
+        };
+        // Admission checked the raw rule and each momentum-alias variant. This
+        // final injective relabeling preserves scopes and the actual logical
+        // interface, including ports retained only by a zero. No callbacks run.
+        Ok(SymbolicTensor::from_validated_parts(
+            expression,
+            PartialStructure::from_logical_slots(logical),
+        ))
+    }
 }
 
 #[derive(PartialEq, Eq, Hash)]
@@ -3245,6 +3558,126 @@ impl Generator {
         if let Some(numerator) = self.numerators.interactions.read().unwrap().get(&key) {
             return Ok(numerator.clone());
         }
+        let legs = instantiation
+            .legs
+            .iter()
+            .enumerate()
+            .map(|(index, leg)| NumeratorHalfEdge {
+                edge: instantiation.legs[..index]
+                    .iter()
+                    .position(|previous| previous.edge == leg.edge)
+                    .unwrap_or(index),
+                hedge: index,
+                ..*leg
+            })
+            .collect::<Vec<_>>();
+        let template = self.interaction_template(rule_id, legs)?;
+        let numerator = match &*template {
+            NumeratorTemplate::Dynamic => NumeratorInterface::admit(
+                self.interaction_expression(rule_id, instantiation)?,
+                None,
+            )?,
+            NumeratorTemplate::Admitted { .. } => {
+                let numerator = template.instantiate(instantiation)?;
+                // Raw model rules have no declared axis order: retain the
+                // normalized occurrence order used by actual-owner admission.
+                let structure =
+                    interface_in_atom_order(numerator.expression(), numerator.structure())
+                        .expect("template admission established enumerable explicit ports");
+                let (expression, _) = numerator.into_parts();
+                SymbolicTensor::from_validated_parts(expression, structure)
+            }
+        };
+        self.numerators
+            .interactions
+            .write()
+            .unwrap()
+            .insert(key, numerator.clone());
+        Ok(numerator)
+    }
+
+    fn interaction_template(
+        &self,
+        rule_id: VertexRuleId,
+        legs: Vec<NumeratorHalfEdge>,
+    ) -> Result<Arc<NumeratorTemplate>, GenerationError> {
+        let key = InteractionNumeratorKey {
+            rule: rule_id,
+            owner: NumeratorOwner::Vertex(0),
+            legs,
+        };
+        if let Some(template) = self
+            .numerators
+            .interaction_templates
+            .read()
+            .unwrap()
+            .get(&key)
+        {
+            return Ok(template.clone());
+        }
+        let distinct = key
+            .legs
+            .iter()
+            .enumerate()
+            .map(|(index, leg)| NumeratorHalfEdge {
+                edge: index,
+                ..*leg
+            })
+            .collect::<Vec<_>>();
+        // Establish the unspecialized rule first. Aliasing momenta can cancel a
+        // tensor to zero, but must not hide malformed summands or erase its rank.
+        let base = if distinct != key.legs {
+            Some(self.interaction_template(rule_id, distinct)?)
+        } else {
+            None
+        };
+        let mut templates = self.numerators.interaction_templates.write().unwrap();
+        if let Some(template) = templates.get(&key) {
+            return Ok(template.clone());
+        }
+        let instantiation = NumeratorInstantiation {
+            owner: key.owner,
+            legs: &key.legs,
+        };
+        let template = if let Some(base) = base {
+            match &*base {
+                NumeratorTemplate::Dynamic => NumeratorTemplate::Dynamic,
+                NumeratorTemplate::Admitted { tensor, .. } => {
+                    let expression = instantiation.bind_template(tensor.expression())?;
+                    let specialized = tensor
+                        .with_checked_expression(expression)
+                        .map_err(DiagramError::from)?;
+                    NumeratorTemplate::admitted(specialized)?
+                }
+            }
+        } else {
+            let rule = self.model.vertex_rule_by_id(rule_id)?;
+            let mut supported = rule
+                .color_structures
+                .iter()
+                .all(NumeratorTemplate::supports);
+            for lorentz in &rule.lorentz_structures {
+                supported &= NumeratorTemplate::supports(
+                    &self.model.lorentz_structure_by_id(*lorentz)?.structure,
+                );
+            }
+            if supported {
+                let expression = self.interaction_expression(rule_id, &instantiation)?;
+                NumeratorTemplate::admitted(NumeratorInterface::admit(expression, None)?)?
+            } else {
+                NumeratorTemplate::Dynamic
+            }
+        };
+        let template = Arc::new(template);
+        templates.insert(key, template.clone());
+        Ok(template)
+    }
+
+    fn interaction_expression(
+        &self,
+        rule_id: VertexRuleId,
+        instantiation: &NumeratorInstantiation<'_>,
+    ) -> Result<Atom, GenerationError> {
         let rule = self.model.vertex_rule_by_id(rule_id)?;
         let mut terms = Vec::new();
         for (color_index, color) in rule.color_structures.iter().enumerate() {
@@ -3264,18 +3697,11 @@ impl Generator {
                 }
             }
         }
-        let numerator = if terms.is_empty() {
+        Ok(if terms.is_empty() {
             Atom::one()
         } else {
             Atom::add_many(terms)
-        };
-        let numerator = NumeratorInterface::admit(numerator, None)?;
-        self.numerators
-            .interactions
-            .write()
-            .unwrap()
-            .insert(key, numerator.clone());
-        Ok(numerator)
+        })
     }
 
     fn edge_numerator(
@@ -3310,12 +3736,59 @@ impl Generator {
             owner: NumeratorOwner::Edge(edge),
             legs: &legs,
         };
-        let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
-        let numerator = match instantiation.edge_color_identity(particle.color)? {
-            None => spin,
-            Some(color) => spin * color,
+        let cached = self
+            .numerators
+            .propagator_templates
+            .read()
+            .unwrap()
+            .get(&particle_id)
+            .cloned();
+        let template = if let Some(template) = cached {
+            template
+        } else {
+            let mut templates = self.numerators.propagator_templates.write().unwrap();
+            if let Some(template) = templates.get(&particle_id) {
+                template.clone()
+            } else {
+                let template = if NumeratorTemplate::supports(&propagator) {
+                    let canonical = legs
+                        .iter()
+                        .enumerate()
+                        .map(|(index, leg)| NumeratorHalfEdge {
+                            edge: 0,
+                            hedge: index,
+                            ..*leg
+                        })
+                        .collect::<Vec<_>>();
+                    let instantiation = NumeratorInstantiation {
+                        owner: NumeratorOwner::Edge(0),
+                        legs: &canonical,
+                    };
+                    let expression =
+                        instantiation.propagator_expression(&propagator, particle.color)?;
+                    NumeratorTemplate::admitted(NumeratorInterface::admit(expression, None)?)?
+                } else {
+                    NumeratorTemplate::Dynamic
+                };
+                let template = Arc::new(template);
+                templates.insert(particle_id, template.clone());
+                template
+            }
         };
-        let numerator = NumeratorInterface::admit(numerator, None)?;
+        let numerator = match &*template {
+            NumeratorTemplate::Dynamic => NumeratorInterface::admit(
+                instantiation.propagator_expression(&propagator, particle.color)?,
+                None,
+            )?,
+            NumeratorTemplate::Admitted { .. } => {
+                let numerator = template.instantiate(&instantiation)?;
+                let structure =
+                    interface_in_atom_order(numerator.expression(), numerator.structure())
+                        .expect("template admission established enumerable explicit ports");
+                let (expression, _) = numerator.into_parts();
+                SymbolicTensor::from_validated_parts(expression, structure)
+            }
+        };
         self.numerators
             .propagators
             .write()
@@ -7046,6 +7519,708 @@ mod tests {
                 .contains("tensor summands do not have compatible tensor interfaces")
         );
         assert!(generator.numerators.interactions.read().unwrap().is_empty());
+        assert!(
+            generator
+                .numerators
+                .interaction_templates
+                .read()
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn interaction_templates_reuse_admission_and_localize_shifted_bound_indices() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            serde_json::json!("Metric(idx(2,1),dummy(1))*P(dummy(1),2)");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let mut legs = tensor_test_legs()[..3].to_vec();
+        let mut previous = None;
+        for owner in [7, 12] {
+            for leg in &mut legs {
+                leg.edge += 13;
+                leg.hedge += 19;
+                leg.color = 1;
+            }
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(owner),
+                legs: &legs,
+            };
+            let actual = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            let expected = NumeratorInterface::admit(
+                generator
+                    .interaction_expression(rule, &instantiation)
+                    .unwrap(),
+                None,
+            )
+            .unwrap();
+            assert!(actual.same_value(&expected));
+            assert_eq!(actual.rank(), 1);
+            assert_eq!(
+                actual.structure().logical_slots()[0].aind,
+                PartialIndex::Explicit(AbstractIndex::Named(
+                    feynkit_graph::symbols::hedge_index().into(),
+                    legs[0].hedge,
+                    2,
+                ))
+            );
+            let templates = generator.numerators.interaction_templates.read().unwrap();
+            assert_eq!(templates.len(), 1);
+            let template = templates.values().next().unwrap().clone();
+            if let Some(previous) = previous {
+                assert!(Arc::ptr_eq(&previous, &template));
+            }
+            previous = Some(template);
+        }
+        assert_eq!(generator.numerators.interactions.read().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn interaction_templates_preserve_rank_when_incident_momenta_cancel() {
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            serde_json::json!("P(idx(2,1),1)+P(idx(2,1),2)");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let mut legs = tensor_test_legs()[..3].to_vec();
+        for leg in &mut legs {
+            leg.color = 1;
+        }
+        legs[1].edge = legs[0].edge;
+        for owner in [4, 9] {
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(owner),
+                legs: &legs,
+            };
+            let zero = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            assert!(zero.is_zero());
+            assert_eq!(zero.rank(), 1);
+            assert_eq!(
+                zero.structure().logical_slots()[0].aind,
+                PartialIndex::Explicit(AbstractIndex::Named(
+                    feynkit_graph::symbols::hedge_index().into(),
+                    legs[0].hedge,
+                    2,
+                ))
+            );
+            legs[0].edge += 6;
+            legs[1].edge = legs[0].edge;
+            for leg in &mut legs {
+                leg.hedge += 7;
+            }
+        }
+        assert_eq!(
+            generator
+                .numerators
+                .interaction_templates
+                .read()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn propagator_templates_reuse_reversed_spin_and_color_interfaces() {
+        let mut definition = serde_json::to_value(fermion_model()).unwrap();
+        for particle in definition["particles"].as_array_mut().unwrap() {
+            particle["color"] = serde_json::json!(match particle["name"].as_str() {
+                Some("f") => 3,
+                Some("f~") => -3,
+                _ => 1,
+            });
+        }
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let generator = Generator::new(model.clone());
+        for pdg in [1, -1] {
+            let particle_id = particle(&model, pdg);
+            let particle = model.particle_by_id(particle_id).unwrap();
+            let (propagator, reversed) = generator.propagator_numerator(particle).unwrap();
+            for (edge, hedges) in [(5, [11, 17]), (8, [27, 21])] {
+                let actual = generator.edge_numerator(particle_id, edge, hedges).unwrap();
+                let flows = if reversed {
+                    [Flow::Sink, Flow::Source]
+                } else {
+                    [Flow::Source, Flow::Sink]
+                };
+                let legs = flows.map(|flow| NumeratorHalfEdge {
+                    edge,
+                    hedge: hedges[usize::from(flow == Flow::Sink)],
+                    flow,
+                    spin: particle.spin,
+                    color: particle.color,
+                });
+                let instantiation = NumeratorInstantiation {
+                    owner: NumeratorOwner::Edge(edge),
+                    legs: &legs,
+                };
+                let expected = NumeratorInterface::admit(
+                    instantiation
+                        .propagator_expression(&propagator, particle.color)
+                        .unwrap(),
+                    None,
+                )
+                .unwrap();
+                assert_eq!(actual.expression(), expected.expression());
+                assert_eq!(
+                    actual.structure().logical_slots(),
+                    expected.structure().logical_slots(),
+                );
+            }
+        }
+        assert_eq!(
+            generator
+                .numerators
+                .propagator_templates
+                .read()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn interaction_template_order_matches_actual_owner_admission() {
+        for expression in [
+            "Metric(1,2)",
+            "P(idx(1,1),1)*P(idx(1,2),2)",
+            "Metric(1,2)*(P(3,1)-P(3,2))",
+        ] {
+            let mut definition = serde_json::to_value(scalar_model()).unwrap();
+            definition["lorentz_structures"][0]["structure"] = serde_json::json!(expression);
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let rule = model.vertex_rule_id("V1").unwrap();
+            let generator = Generator::new(model);
+            for (owner, permutation) in [[0, 1, 2], [1, 0, 2], [2, 0, 1], [2, 1, 0]]
+                .into_iter()
+                .enumerate()
+            {
+                let legs = permutation.map(|index| NumeratorHalfEdge {
+                    edge: [17, 3, 23][index],
+                    hedge: [41, 11, 29][index],
+                    flow: Flow::Sink,
+                    spin: 1,
+                    color: 1,
+                });
+                let instantiation = NumeratorInstantiation {
+                    owner: NumeratorOwner::Vertex(owner),
+                    legs: &legs,
+                };
+                let actual = generator
+                    .interaction_numerator(rule, &instantiation)
+                    .unwrap();
+                let expected = NumeratorInterface::admit(
+                    generator
+                        .interaction_expression(rule, &instantiation)
+                        .unwrap(),
+                    None,
+                )
+                .unwrap();
+                assert_eq!(
+                    actual.expression().as_view().get_data(),
+                    expected.expression().as_view().get_data(),
+                    "{expression}: {permutation:?}"
+                );
+                assert_eq!(
+                    actual.structure().logical_slots(),
+                    expected.structure().logical_slots(),
+                    "{expression}: {permutation:?}"
+                );
+            }
+            let templates = generator.numerators.interaction_templates.read().unwrap();
+            assert_eq!(templates.len(), 1);
+            assert!(matches!(
+                &**templates.values().next().unwrap(),
+                NumeratorTemplate::Admitted { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn propagator_template_order_matches_actual_owner_admission() {
+        for expression in ["Metric(1,2)", "P(idx(1,1))*P(idx(1,2))"] {
+            let mut definition = serde_json::to_value(scalar_model()).unwrap();
+            definition["propagators"][0]["numerator"] = serde_json::json!(expression);
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let particle_id = particle(&model, 25);
+            let generator = Generator::new(model);
+            let particle = generator.model.particle_by_id(particle_id).unwrap();
+            let (propagator, reversed) = generator.propagator_numerator(particle).unwrap();
+            assert!(!reversed);
+            for (edge, hedges) in [(5, [11, 17]), (8, [27, 21])] {
+                let actual = generator.edge_numerator(particle_id, edge, hedges).unwrap();
+                let legs = [Flow::Source, Flow::Sink].map(|flow| NumeratorHalfEdge {
+                    edge,
+                    hedge: hedges[usize::from(flow == Flow::Sink)],
+                    flow,
+                    spin: particle.spin,
+                    color: particle.color,
+                });
+                let instantiation = NumeratorInstantiation {
+                    owner: NumeratorOwner::Edge(edge),
+                    legs: &legs,
+                };
+                let expected = NumeratorInterface::admit(
+                    instantiation
+                        .propagator_expression(&propagator, particle.color)
+                        .unwrap(),
+                    None,
+                )
+                .unwrap();
+                assert_eq!(
+                    actual.expression().as_view().get_data(),
+                    expected.expression().as_view().get_data(),
+                    "{expression}: {hedges:?}"
+                );
+                assert_eq!(
+                    actual.structure().logical_slots(),
+                    expected.structure().logical_slots(),
+                    "{expression}: {hedges:?}"
+                );
+            }
+            let templates = generator.numerators.propagator_templates.read().unwrap();
+            assert_eq!(templates.len(), 1);
+            assert!(matches!(
+                &**templates.values().next().unwrap(),
+                NumeratorTemplate::Admitted { .. }
+            ));
+        }
+    }
+
+    #[test]
+    fn interaction_scoped_pairs_do_not_reorder_public_ports() {
+        let _ = spenso::tensor_symbol!("UFO::generation_scoped_order_tensor");
+        let _ = Minkowski {}.new_rep(4).to_symbolic([]);
+        for scalar in [
+            "(P(1,1)*P(1,2)+P(1,2)*P(1,3))",
+            "spenso::bracket(P(1,1),P(1,2))^2",
+        ] {
+            let expression = format!(
+                "{scalar}*generation_scoped_order_tensor(spenso::mink(4,idx(1,2)),spenso::mink(4,idx(1,1)))"
+            );
+            let mut definition = serde_json::to_value(scalar_model()).unwrap();
+            definition["lorentz_structures"][0]["structure"] = serde_json::json!(expression);
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let rule = model.vertex_rule_id("V1").unwrap();
+            let generator = Generator::new(model);
+            for hedges in [[0, 1, 2], [27, 11, 19]] {
+                let legs = std::array::from_fn::<_, 3, _>(|index| NumeratorHalfEdge {
+                    edge: index + 3,
+                    hedge: hedges[index],
+                    flow: Flow::Sink,
+                    spin: 1,
+                    color: 1,
+                });
+                let instantiation = NumeratorInstantiation {
+                    owner: NumeratorOwner::Vertex(7),
+                    legs: &legs,
+                };
+                let expected = NumeratorInterface::admit(
+                    generator
+                        .interaction_expression(rule, &instantiation)
+                        .unwrap(),
+                    None,
+                )
+                .unwrap();
+                let actual = generator
+                    .interaction_numerator(rule, &instantiation)
+                    .unwrap();
+                let expected_indices = expected
+                    .structure()
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| slot.aind)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    expected_indices,
+                    [hedges[1], hedges[0]].map(|hedge| {
+                        PartialIndex::Explicit(AbstractIndex::Named(
+                            feynkit_graph::symbols::hedge_index().into(),
+                            hedge,
+                            1,
+                        ))
+                    })
+                );
+                assert_eq!(
+                    actual.expression().as_view().get_data(),
+                    expected.expression().as_view().get_data(),
+                    "{scalar}"
+                );
+                assert_eq!(
+                    actual.structure().logical_slots(),
+                    expected.structure().logical_slots(),
+                    "{scalar}"
+                );
+            }
+            let templates = generator.numerators.interaction_templates.read().unwrap();
+            assert_eq!(templates.len(), 1);
+            assert!(matches!(
+                &**templates.values().next().unwrap(),
+                NumeratorTemplate::Dynamic
+            ));
+        }
+    }
+
+    #[test]
+    fn propagator_scoped_pairs_do_not_reorder_public_ports() {
+        let _ = spenso::tensor_symbol!("UFO::generation_scoped_prop_tensor");
+        let _ = Minkowski {}.new_rep(4).to_symbolic([]);
+        for scalar in ["(P(1,1)*P(1,2)+1)", "spenso::bracket(P(1,1),P(1,2))^2"] {
+            let expression = format!(
+                "{scalar}*generation_scoped_prop_tensor(spenso::mink(4,idx(1,2)),spenso::mink(4,idx(1,1)))"
+            );
+            let mut definition = serde_json::to_value(scalar_model()).unwrap();
+            definition["propagators"][0]["numerator"] = serde_json::json!(expression);
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let particle_id = particle(&model, 25);
+            let generator = Generator::new(model);
+            let particle = generator.model.particle_by_id(particle_id).unwrap();
+            let (propagator, reversed) = generator.propagator_numerator(particle).unwrap();
+            assert!(!reversed);
+            for (edge, hedges) in [(3, [0, 1]), (5, [27, 11])] {
+                let legs = [Flow::Source, Flow::Sink].map(|flow| NumeratorHalfEdge {
+                    edge,
+                    hedge: hedges[usize::from(flow == Flow::Sink)],
+                    flow,
+                    spin: particle.spin,
+                    color: particle.color,
+                });
+                let instantiation = NumeratorInstantiation {
+                    owner: NumeratorOwner::Edge(edge),
+                    legs: &legs,
+                };
+                let expected = NumeratorInterface::admit(
+                    instantiation
+                        .propagator_expression(&propagator, particle.color)
+                        .unwrap(),
+                    None,
+                )
+                .unwrap();
+                let actual = generator.edge_numerator(particle_id, edge, hedges).unwrap();
+                let expected_indices = expected
+                    .structure()
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| slot.aind)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    expected_indices,
+                    [hedges[1], hedges[0]].map(|hedge| {
+                        PartialIndex::Explicit(AbstractIndex::Named(
+                            feynkit_graph::symbols::hedge_index().into(),
+                            hedge,
+                            1,
+                        ))
+                    })
+                );
+                assert_eq!(
+                    actual.expression().as_view().get_data(),
+                    expected.expression().as_view().get_data(),
+                    "{scalar}"
+                );
+                assert_eq!(
+                    actual.structure().logical_slots(),
+                    expected.structure().logical_slots(),
+                    "{scalar}"
+                );
+            }
+            let templates = generator.numerators.propagator_templates.read().unwrap();
+            assert_eq!(templates.len(), 1);
+            assert!(matches!(
+                &**templates.values().next().unwrap(),
+                NumeratorTemplate::Dynamic
+            ));
+        }
+    }
+
+    #[test]
+    fn callback_rules_are_constructed_in_the_actual_owner_frame() {
+        let callback = symbol!(
+            "UFO::generation_owner_callback",
+            norm = |node, out| {
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(index)) = function.iter().next()
+                    && index.get_symbol() == feynkit_graph::symbols::hedge_index()
+                {
+                    **out = index.iter().next().expect("owner ID").to_owned();
+                }
+            }
+        );
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            serde_json::json!("generation_owner_callback(idx(1,1))");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let mut legs = tensor_test_legs()[..3].to_vec();
+        for owner in [3, 6] {
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(owner),
+                legs: &legs,
+            };
+            let actual = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            assert_eq!(
+                actual.expression(),
+                &(Atom::num(legs[0].hedge) * Atom::var(symbol!("UFO::GC1")))
+            );
+            assert_eq!(function_count(actual.expression(), callback), 0);
+            legs[0].hedge += 5;
+        }
+        assert!(
+            generator
+                .numerators
+                .interaction_templates
+                .read()
+                .unwrap()
+                .values()
+                .all(|template| matches!(&**template, NumeratorTemplate::Dynamic))
+        );
+    }
+
+    #[test]
+    fn compact_rule_powers_allocate_independent_dummies_for_each_owner() {
+        let _ = Minkowski {}.new_rep(4).to_symbolic([]);
+        let _ = spenso::tensor_symbol!("UFO::generation_template_auto_tensor");
+        for expression in [
+            "generation_template_auto_tensor(spenso::mink(4))^2",
+            "P(spenso::mink(4))^4",
+        ] {
+            let mut definition = serde_json::to_value(scalar_model()).unwrap();
+            definition["lorentz_structures"][0]["structure"] = serde_json::json!(expression);
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let rule = model.vertex_rule_id("V1").unwrap();
+            let generator = Generator::new(model);
+            let mut legs = tensor_test_legs()[..3].to_vec();
+            let mut numerators = Vec::new();
+            let mut owner_indices = Vec::new();
+            for owner in [7, 12] {
+                let instantiation = NumeratorInstantiation {
+                    owner: NumeratorOwner::Vertex(owner),
+                    legs: &legs,
+                };
+                let numerator = generator
+                    .interaction_numerator(rule, &instantiation)
+                    .unwrap();
+                assert_eq!(numerator.rank(), 0);
+                assert!(
+                    numerator.same_value(
+                        &generator
+                            .interaction_numerator(rule, &instantiation)
+                            .unwrap(),
+                    )
+                );
+                let mut slots = SlotMatcher::default();
+                let mut indices = HashSet::new();
+                numerator.expression().visitor(&mut |node| {
+                    if let SlotMatch::Explicit(slot) = slots.classify(node) {
+                        indices.insert(AbstractIndex::try_from(slot.index()).unwrap());
+                    }
+                    true
+                });
+                assert!(
+                    !indices.is_empty(),
+                    "{expression} must materialize a dummy pair"
+                );
+                owner_indices.push(indices);
+                numerators.push(numerator);
+                for leg in &mut legs {
+                    leg.edge += 13;
+                    leg.hedge += 19;
+                }
+            }
+            assert!(
+                owner_indices[0].is_disjoint(&owner_indices[1]),
+                "{expression}"
+            );
+            let product = numerators[0].multiply(&numerators[1]).unwrap();
+            assert_eq!(product.rank(), 0);
+            SymbolicTensor::validate_interface(product.expression(), product.structure()).unwrap();
+            assert!(
+                generator
+                    .numerators
+                    .interaction_templates
+                    .read()
+                    .unwrap()
+                    .values()
+                    .all(|template| matches!(&**template, NumeratorTemplate::Dynamic))
+            );
+        }
+    }
+
+    #[test]
+    fn template_eligibility_rejects_scoped_and_encoded_open_indices() {
+        let scope = symbol!("generation_template_open_scope");
+        let open = AbstractIndex::Open { owner: 3, axis: 0 };
+        let scoped = open.scoped(scope).to_atom();
+        let encoded = CookSettings::reversible()
+            .cook_function(scoped.as_fun_view().unwrap())
+            .unwrap();
+        let head = spenso::tensor_symbol!("generation_template_open_tensor");
+        for index in [open.to_atom(), scoped, encoded] {
+            let expression = FunctionBuilder::new(head)
+                .add_arg(Minkowski {}.new_rep(4).to_symbolic([index]))
+                .finish();
+            assert!(!NumeratorTemplate::supports(&expression));
+        }
+    }
+
+    #[test]
+    fn bundled_rule_ports_preserve_actual_owner_rejection() {
+        let head = spenso::tensor_symbol!("UFO::generation_template_bundle_tensor");
+        let slot = Minkowski {}.new_rep(4).to_symbolic([test_atom("idx(1,1)")]);
+        let expression = head.call((spenso::structure::abstract_index::AIND_SYMBOLS
+            .aind
+            .call((slot,)),));
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            serde_json::json!(expression.to_canonical_string());
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..3],
+        };
+        let expected = NumeratorInterface::admit(
+            generator
+                .interaction_expression(rule, &instantiation)
+                .unwrap(),
+            None,
+        )
+        .unwrap_err();
+        let actual = generator
+            .interaction_numerator(rule, &instantiation)
+            .unwrap_err();
+        // Spenso's structural parser can read bundles, but typed admission
+        // rejects the untagged aind head. Template selection must preserve
+        // that actual-owner rejection rather than publish a trusted carrier.
+        assert!(matches!(
+            &expected,
+            DiagramError::Tensor(idenso::tensor::inference::TensorInferenceError::Invalid(message))
+                if message.contains("carries structural ports but is not tagged as a tensor")
+        ));
+        let GenerationError::Diagram(actual) = actual else {
+            panic!("expected the existing typed-admission rejection");
+        };
+        assert_eq!(actual.to_string(), expected.to_string());
+        assert!(generator.numerators.interactions.read().unwrap().is_empty());
+        let templates = generator.numerators.interaction_templates.read().unwrap();
+        assert_eq!(templates.len(), 1);
+        assert!(
+            templates
+                .values()
+                .all(|template| matches!(&**template, NumeratorTemplate::Dynamic))
+        );
+    }
+
+    #[test]
+    fn opaque_scalar_metadata_with_nonindex_slot_payload_keeps_checked_construction() {
+        let _ = symbol!("UFO::generation_opaque_metadata"; Scalar);
+        let _ = Minkowski {}.new_rep(4).to_symbolic([]);
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            serde_json::json!("generation_opaque_metadata(spenso::mink(4,x+y))");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let legs = tensor_test_legs();
+        for owner in [3, 6] {
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(owner),
+                legs: &legs[..3],
+            };
+            let expected = NumeratorInterface::admit(
+                generator
+                    .interaction_expression(rule, &instantiation)
+                    .unwrap(),
+                None,
+            )
+            .unwrap();
+            let actual = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            assert!(actual.same_value(&expected));
+            assert_eq!(actual.rank(), 0);
+        }
+        assert!(
+            generator
+                .numerators
+                .interaction_templates
+                .read()
+                .unwrap()
+                .values()
+                .all(|template| matches!(&**template, NumeratorTemplate::Dynamic))
+        );
+    }
+
+    #[test]
+    fn template_transport_retains_declared_order_scoped_labels_and_zero_ports() {
+        use spenso::structure::representation::LibraryRep;
+
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let scope = symbol!("generation_template_scope");
+        let labels = |hedges: [usize; 2]| {
+            let plain =
+                AbstractIndex::Named(feynkit_graph::symbols::hedge_index().into(), hedges[0], 2);
+            let payload = symbol!("generation_template_label")
+                .call((feynkit_graph::symbols::hedge_index().call((hedges[1], 3)),));
+            let encoded = cooking
+                .cook_function(payload.as_fun_view().unwrap())
+                .unwrap();
+            let scoped = AbstractIndex::try_from(encoded.as_view())
+                .unwrap()
+                .scoped(scope);
+            [plain, scoped].map(|index| {
+                Minkowski {}
+                    .new_rep(4)
+                    .cast::<LibraryRep>()
+                    .slot::<PartialIndex<AbstractIndex>, _>(PartialIndex::Explicit(index))
+            })
+        };
+        let original = labels([0, 1]);
+        let head = spenso::tensor_symbol!("generation_template_order");
+        let expression = FunctionBuilder::new(head)
+            .add_args(original.map(|slot| match slot.aind {
+                PartialIndex::Explicit(index) => {
+                    slot.rep().slot::<AbstractIndex, _>(index).to_atom()
+                }
+                _ => unreachable!(),
+            }))
+            .finish();
+        let source = SymbolicTensor::from_declared_parts(
+            expression,
+            PartialStructure::from_logical_slots([original[1], original[0]]),
+        )
+        .unwrap();
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..2],
+        };
+        let target = labels([legs[0].hedge, legs[1].hedge]);
+        for source in [source, zero] {
+            let was_zero = source.is_zero();
+            let template = NumeratorTemplate::admitted(source).unwrap();
+            let mapped = template.instantiate(&instantiation).unwrap();
+            assert_eq!(
+                mapped.structure().logical_slots(),
+                vec![target[1], target[0]]
+            );
+            assert_eq!(mapped.is_zero(), was_zero);
+            SymbolicTensor::validate_interface(mapped.expression(), mapped.structure()).unwrap();
+        }
     }
 
     #[test]

@@ -115,7 +115,7 @@ fn chain_admission_skips_finished_open_tensor_coefficients() {
     setup();
     let reps = crate::test_support::test_initialize();
     let label = spenso::index_symbol!("fused_raw_routing::chain_channel_edge");
-    let [a, b] = [1, 2].map(|i| reps.mink4.to_symbolic([symbolica::function!(label, i)]));
+    let [a, b] = [1, 2].map(|i| reps.mink4.to_symbolic([symbolica::function!(label, i, 0)]));
     let coefficient = Atom::add_many((0..128).map(|i| {
         let x = Atom::var(symbolica::symbol!(&format!(
             "fused_raw_routing::channel_coefficient_{i}"
