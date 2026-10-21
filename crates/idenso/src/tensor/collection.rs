@@ -11,6 +11,7 @@ use linnet::tree::child_vec::ChildVecStore;
 use spenso::network::TensorNetworkError;
 use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
 use spenso::network::library::DummyLibrary;
+use spenso::network::library::function_lib::INBUILTS;
 use spenso::network::parsing::{ParseSettings, ParseState, ShorthandParsing};
 use spenso::network::store::{TensorScalarStore, TensorScalarStoreMapping};
 use spenso::network::tags::SPENSO_TAG;
@@ -692,12 +693,26 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     }
                     if matches!(network.graph.graph[base], NetworkNode::Leaf(_)) {
                         let base_value = self.emit(network, tree, base)?;
+                        let closed_conjugation = matches!(base_value.as_view(), AtomView::Fun(function)
+                            if function.get_symbol() == INBUILTS.conj && function.get_nargs() == 1)
+                            && interfaces[&base].canonical().is_scalar()
+                            && !base_value.get_all_symbols(true).iter().any(|symbol| {
+                                symbol.has_tag(&SPENSO_TAG.tensor_word)
+                            });
+                        if closed_conjugation && !self.scope_is_intrinsic(network, tree, base) {
+                            refused = true;
+                            return Ok(None);
+                        }
                         if matches!(base_value.as_view(), AtomView::Add(_) | AtomView::Mul(_))
                             || matches!(base_value.as_view(), AtomView::Fun(function)
                                 if function.get_symbol() == SPENSO_TAG.bracket)
+                            || closed_conjugation
                         {
                             // Open the selected power before copying: internal
                             // dummy pairs belong to each copy, not its opaque leaf.
+                            // A closed native conjugation can hide that pair at
+                            // shallow depth; its intrinsic graph supplies the same
+                            // copy witness without opening arbitrary functions.
                             let value = self.emit(network, tree, node)?;
                             let opened = self.open(value.as_view())?;
                             let tree = opened.graph.expr_tree().cast::<ChildVecStore<()>>();
@@ -1434,6 +1449,9 @@ impl SymbolicTensor<PartialStructure> {
         Ok(value)
     }
 }
+
+#[cfg(test)]
+mod conjugated_power_tests;
 
 #[cfg(test)]
 mod tests {
