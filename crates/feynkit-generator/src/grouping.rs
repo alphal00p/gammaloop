@@ -69,6 +69,7 @@ use rayon::prelude::*;
 
 use crate::{
     DiagramGroup, GenerationOptions, GraphGroupingOptions, GroupMember, NumeratorGrouping,
+    generation::FACTOR_HEADS,
 };
 
 #[derive(Debug, Error)]
@@ -1171,7 +1172,7 @@ fn collapse_groups(
                     GroupingError::SourceDiagramIndexOverflow(member.source_diagram)
                 })?;
                 factor += function!(
-                    symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+                    FACTOR_HEADS.numerator_dependent_grouping,
                     Atom::num(source_diagram),
                     member.ratio.clone(),
                     member.overall_factor.clone()

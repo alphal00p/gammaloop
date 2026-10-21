@@ -2,7 +2,7 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, LazyLock, Mutex, RwLock},
 };
 
 use feynkit_graph::{
@@ -31,7 +31,7 @@ use spenso::{
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     graph::{GenerationSettings, Graph, HalfEdge},
     symbol,
 };
@@ -2883,19 +2883,16 @@ impl Generator {
     ) -> Result<FeynmanDiagram, GenerationError> {
         // Symbolica's automorphism factor is a denominator in the overall
         // multiplier.
-        let mut factors = vec![
-            symbol!("feynkit_generator_factor::AutG")
-                .call(topology.symmetry)
-                .pow(-1),
-        ];
+        let mut factors = vec![FACTOR_HEADS.aut_g.call(topology.symmetry).pow(-1)];
         if topology.multiplicity != 1 {
             factors.push(
-                symbol!("feynkit_generator_factor::CouplingsMultiplicity")
+                FACTOR_HEADS
+                    .couplings_multiplicity
                     .call(topology.multiplicity),
             );
         }
         if fermion_signs.internal_loop_negative {
-            factors.push(symbol!("feynkit_generator_factor::InternalFermionLoopSign").call(-1));
+            factors.push(FACTOR_HEADS.internal_fermion_loop_sign.call(-1));
         }
         if fermion_signs.include_external_ordering {
             let sign = if fermion_signs.external_ordering_negative {
@@ -2903,8 +2900,7 @@ impl Generator {
             } else {
                 1
             };
-            factors
-                .push(symbol!("feynkit_generator_factor::ExternalFermionOrderingSign").call(sign));
+            factors.push(FACTOR_HEADS.external_fermion_ordering_sign.call(sign));
         }
         if fermion_signs.include_antifermion_spin_sum {
             let sign = if fermion_signs.antifermion_spin_sum_negative {
@@ -2912,7 +2908,7 @@ impl Generator {
             } else {
                 1
             };
-            factors.push(symbol!("feynkit_generator_factor::AntiFermionSpinSumSign").call(sign));
+            factors.push(FACTOR_HEADS.antifermion_spin_sum_sign.call(sign));
         }
         let overall_factor = Atom::mul_many(factors);
         let incoming_count = topology
@@ -3602,6 +3598,30 @@ struct FermionSigns {
     include_antifermion_spin_sum: bool,
     antifermion_spin_sum_negative: bool,
 }
+
+/// The bookkeeping heads of the overall factors, created together in this
+/// order on first use. Symbolica orders the factors of a product by symbol
+/// creation, so a head first created by whichever generation worker needs it
+/// first would make printed factors depend on the thread schedule.
+pub(crate) struct FactorHeads {
+    aut_g: Symbol,
+    couplings_multiplicity: Symbol,
+    internal_fermion_loop_sign: Symbol,
+    external_fermion_ordering_sign: Symbol,
+    antifermion_spin_sum_sign: Symbol,
+    pub(crate) numerator_dependent_grouping: Symbol,
+}
+
+pub(crate) static FACTOR_HEADS: LazyLock<FactorHeads> = LazyLock::new(|| FactorHeads {
+    aut_g: symbol!("feynkit_generator_factor::AutG"),
+    couplings_multiplicity: symbol!("feynkit_generator_factor::CouplingsMultiplicity"),
+    internal_fermion_loop_sign: symbol!("feynkit_generator_factor::InternalFermionLoopSign"),
+    external_fermion_ordering_sign: symbol!(
+        "feynkit_generator_factor::ExternalFermionOrderingSign"
+    ),
+    antifermion_spin_sum_sign: symbol!("feynkit_generator_factor::AntiFermionSpinSumSign"),
+    numerator_dependent_grouping: symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+});
 
 struct NormalizedFermionFlow {
     #[cfg_attr(not(test), allow(dead_code))]
@@ -6216,6 +6236,79 @@ mod tests {
             let observed = observed.lock().unwrap();
             assert!(!observed.is_empty());
             assert!(observed.iter().all(|&actual| actual == threads));
+        }
+    }
+
+    /// Symbolica orders the factors of a product by symbol creation, so the
+    /// printed numerators and overall factors must not depend on which diagram
+    /// first meets a coupling or a factor head. Each run is a fresh process of
+    /// this test binary: one loop at 1 and at 32 threads, and at 1 thread after
+    /// the Born diagrams, which meet the external-ordering sign and the tree
+    /// couplings before any loop diagram does.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn printed_numerators_and_overall_factors_do_not_depend_on_generation_order() {
+        const RUN: &str = "FEYNKIT_GENERATOR_PRINT_TEST_RUN";
+        if let Ok(run) = std::env::var(RUN) {
+            let generator = Generator::new(standard_model());
+            let generate = |loops, threads| {
+                generator
+                    .generate(
+                        &Process::new(["e-", "e+"], ["mu-", "mu+"]),
+                        &GenerationOptions::default()
+                            .with_loop_count(loops, loops)
+                            .unwrap()
+                            .threads(threads),
+                        GenerationType::Amplitude,
+                    )
+                    .unwrap()
+            };
+            let threads = match run.as_str() {
+                "after-born" => {
+                    generate(0, 1);
+                    1
+                }
+                threads => threads.parse().unwrap(),
+            };
+            for diagram in generate(1, threads).diagrams {
+                println!(
+                    "{RUN} {} {} {}",
+                    diagram.name(),
+                    NumeratorInterface::export(diagram.numerator()).0,
+                    diagram.overall_factor()
+                );
+            }
+            return;
+        }
+        let child = |run: &str| {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "generation::tests::printed_numerators_and_overall_factors_do_not_depend_on_generation_order",
+                    "--nocapture",
+                ])
+                .env(RUN, run)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{run}: {}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            String::from_utf8(output.stdout)
+                .unwrap()
+                .lines()
+                .filter_map(|line| line.split_once(RUN).map(|(_, record)| record.to_owned()))
+                .collect::<Vec<_>>()
+        };
+        let serial = child("1");
+        assert_eq!(serial.len(), 464);
+        for run in ["32", "after-born"] {
+            let printed = child(run);
+            assert_eq!(printed.len(), serial.len(), "{run}");
+            for (serial, printed) in serial.iter().zip(&printed) {
+                assert_eq!(printed, serial, "{run}");
+            }
         }
     }
 
