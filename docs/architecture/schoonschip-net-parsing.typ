@@ -41,8 +41,30 @@ budget-capped work without discarding the exact remaining expression.
 The contraction frontier chooses an incident factor, visits its alternatives,
 and carries index overrides to adjacent leaves. Equivalent remaining states
 merge before emitting an expression. A distinct relabeled tensor is constructed
-once; generated scalar sums remain factorized. Neither rule application
-nor contraction materializes the complete distributed numerator.
+once; generated scalar sums remain factorized. Independent numerator factors
+remain outside the selected component. Within a connected component of tensor
+sums, the frontier can expose the full product of alternatives. Chained
+four-gluon vertices can therefore grow as six alternatives per vertex; keeping
+their colour tensors opaque does not guarantee a smaller contracted result.
+
+Builtin permutation-symmetric heads written with explicit self-dual slots can
+enter this planner as spectators. Incidence and dummy checks still inspect their
+ports, but contracting a port would change a written argument and declines that
+component. User-defined symmetric heads and compact-vector arguments remain
+subject to the existing leaf-interface admission checks.
+
+The literal fallback's partner-sum copies, introduced by #151, use a deliberately
+narrow rule: a source metric or rank-one vector must bind a non-colour slot of
+an antisymmetric tensor in a partner term. This is rule (ii). It retains the
+bound-epsilon case while leaving other declined products factorized as before
+#151. Bound symmetric tensors, unbound user antisymmetric or bispinor tensors,
+compact-vector epsilon with an unbound slot, and vector sums with inexact
+coefficients can consequently retain explicit contractions and report
+`Deferred`. Colour-blocked products can retain Lorentz contractions even after
+the enabled colour algebra runs. These are algebraically valid partial results;
+callers that need further contraction can explicitly expand the selected
+product before contracting it. Expanding a whole graph numerator is not an
+implicit fallback or a diagnostic normalization policy.
 
 A powered scalar subexpression owns its internal dummy pairs. Contract that
 scope before applying its power; copies must not accidentally identify their

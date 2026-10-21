@@ -37,6 +37,39 @@ fn contract(source: &Atom) -> SymbolicTensor<PartialStructure> {
 }
 
 #[test]
+fn partner_sum_scope_retains_deferred_non_colour_contractions() {
+    use spenso::network::parsing::AtomStructureExt;
+    setup();
+    spenso::tensor_symbol!("fused_raw_routing::scope_symmetric"; Symmetric);
+    spenso::tensor_symbol!("fused_raw_routing::scope_antisymmetric"; Antisymmetric);
+    // Rule (ii) is narrower than #151's fallback. These products have no
+    // source binding a non-colour antisymmetric port, although their planner
+    // declines and expanding them exposes further literal contractions.
+    for source in [
+        "(x*p(1,spenso::mink(4,a))+y*p(2,spenso::mink(4,a)))*(scope_symmetric(spenso::mink(4,a),spenso::mink(4,b))+t(spenso::mink(4,a),spenso::mink(4,b)))",
+        "(p(1,spenso::mink(4,a))+p(2,spenso::mink(4,a)))*(u(spenso::mink(4,a))*scope_antisymmetric(spenso::mink(4,b),spenso::mink(4,c))+x*u(spenso::mink(4,a))*t(spenso::mink(4,b),spenso::mink(4,c)))",
+        "(x*p(1,spenso::mink(4,a))+y*p(2,spenso::mink(4,a)))*(p(3,spenso::mink(4,a))*spenso::epsilon(spenso::mink(4,b),p(4,spenso::mink(4)),p(5,spenso::mink(4)),p(6,spenso::mink(4)))+t(spenso::mink(4,a),spenso::mink(4,b)))",
+        "(p(1,spenso::mink(4,a))+p(2,spenso::mink(4,a)))*(u(spenso::mink(4,a))*spenso::charge_conjugation(spenso::bis(4,i),spenso::bis(4,j))+x*p(3,spenso::mink(4,a))*t(spenso::bis(4,i),spenso::bis(4,j)))",
+        "(0.1*p(1,spenso::mink(4,a))+p(2,spenso::mink(4,a)))*(p(3,spenso::mink(4,a))+p(4,spenso::mink(4,a)))",
+    ] {
+        let source = input(source);
+        let tensor = SymbolicTensor::<PartialStructure>::infer(source.clone()).unwrap();
+        let (result, status, _) = tensor.contract_domain(Default::default()).unwrap();
+        assert_eq!(status, ReductionStatus::Deferred, "{source}");
+        assert_eq!(result.expression, source, "{source}");
+        assert!(
+            result.expression.has_repeated_explicit_indices(),
+            "{source}"
+        );
+        let expanded = contract(&source.expand());
+        assert!(
+            !expanded.expression.has_repeated_explicit_indices(),
+            "{source}"
+        );
+    }
+}
+
+#[test]
 fn disabled_metric_elimination_preserves_supplied_vectors() {
     use crate::tensor::ContractSettings;
     setup();

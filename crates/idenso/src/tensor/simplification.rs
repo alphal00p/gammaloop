@@ -480,7 +480,7 @@ impl SymbolicTensor<PartialStructure> {
                             if let Some(region) = observed.region(value) { return region.identity_candidates() & operation != 0; }
                             match operation {
                                 GAMMA => spenso::shadowing::TensorCollectFilter::Reps([crate::representations::Bispinor {}.into()]).matches(value),
-                                COLOR => spenso::shadowing::TensorCollectFilter::Reps([crate::representations::ColorFundamental {}.into(), crate::representations::ColorAdjoint {}.into(), crate::representations::ColorSextet {}.into()]).matches(value),
+                                COLOR => spenso::shadowing::TensorCollectFilter::Reps(*crate::representations::COLOR_REPRESENTATIONS).matches(value),
                                 _ => matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
                             }
                         }, |representation| {

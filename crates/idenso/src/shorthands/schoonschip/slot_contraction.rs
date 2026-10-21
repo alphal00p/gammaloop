@@ -3,7 +3,7 @@
 mod components;
 pub(crate) use components::{FactorizedContraction, ReductionStatus};
 
-use crate::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use crate::representations::COLOR_REPRESENTATIONS;
 use spenso::{
     network::{
         library::symbolic::ETS,
@@ -21,16 +21,6 @@ use symbolica::atom::{
     Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol,
     representation::{FunView, MulView},
 };
-
-/// Representations owned by the colour algebra.
-static COLOR_REPRESENTATIONS: std::sync::LazyLock<[LibraryRep; 3]> =
-    std::sync::LazyLock::new(|| {
-        [
-            ColorFundamental {}.into(),
-            ColorAdjoint {}.into(),
-            ColorSextet {}.into(),
-        ]
-    });
 
 #[derive(Clone, Copy)]
 struct Endpoint<'a> {
@@ -493,10 +483,12 @@ impl SlotContraction {
         // exposing the slot in every term, as in
         // (p(a)+q(a))*(r(a)+epsilon(a,b,c,d)), whose antisymmetric tensor the
         // component planner declines. Each source term then substitutes into
-        // its own copy of that sum. Only that binding justifies the copies:
-        // sums the planner declines for other reasons, such as colour trace
-        // or chain notation or a colour metric binding a structure constant,
-        // stay factorized.
+        // its own copy of that sum. This deliberately bounded rule leaves
+        // other declined products factorized, as before #151: colour-blocked
+        // sums, bound symmetric tensors, unbound user or bispinor tensors,
+        // compact-vector epsilon with an unbound slot, and inexact vector
+        // coefficients. They may retain explicit contractions even after the
+        // enabled identity algebras run.
         for (source, factor) in factors.clone().enumerate() {
             if !matches!(factor, AtomView::Add(_)) {
                 continue;
@@ -578,11 +570,10 @@ impl SlotContraction {
         }
     }
 
-    /// The component planner keeps an antisymmetric tensor such as epsilon
-    /// verbatim, so it declines a product in which a metric or vector binds
-    /// one of its slots. Report whether a metric or vector of `source` binds
-    /// such a slot in a term of `partner`. Colour slots, such as those of the
-    /// structure constant f, are left to the colour algebra.
+    /// Whether a metric or vector of `source` binds a non-colour slot of an
+    /// antisymmetric tensor in a term of `partner` (rule ii). This covers the
+    /// bound-epsilon fallback of #151, not every reason the planner declines.
+    /// Colour slots, such as those of f, do not authorize partner-sum copies.
     fn binds_antisymmetric(
         &self,
         source: AtomView<'_>,

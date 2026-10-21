@@ -4,7 +4,7 @@
 use super::super::SymbolicTensor;
 use crate::{
     dirac::AGS,
-    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
+    representations::{Bispinor, COLOR_REPRESENTATIONS},
     shorthands::schoonschip::SimplificationCandidates,
 };
 use ahash::{AHashMap, AHashSet};
@@ -29,9 +29,9 @@ pub(crate) const HEAD_COUNT: usize = 24;
 pub(crate) static DOMAIN_HEADS: LazyLock<[Symbol; HEAD_COUNT]> = LazyLock::new(|| {
     [
         LibraryRep::from(Bispinor {}).symbol(),
-        LibraryRep::from(ColorFundamental {}).symbol(),
-        LibraryRep::from(ColorAdjoint {}).symbol(),
-        LibraryRep::from(ColorSextet {}).symbol(),
+        COLOR_REPRESENTATIONS[0].symbol(),
+        COLOR_REPRESENTATIONS[1].symbol(),
+        COLOR_REPRESENTATIONS[2].symbol(),
         *crate::epsilon::EPSILON_SYMBOL,
         SPENSO_TAG.chain,
         SPENSO_TAG.trace,
