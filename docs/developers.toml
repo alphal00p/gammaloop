@@ -904,7 +904,9 @@ anchor = "pub struct AlgebraSettings {"
 # completion rules while moving owned input at the existing ownership boundary.
 # Idenso and readiness notes distinguish removed payload copies from remaining
 # metadata and adapter copies; no runtime improvement is claimed without measurement.
-digest = "4969892c1c56ffb37acd8c45bc58165f39b1c12c"
+# Reviewed 2026-10-22: the Idenso note records complete color rows, enabled-seed
+# prerequisites, retained disabled components and unchanged spectator factorization.
+digest = "1ee03146481b9e0b79cf08ebd7055dd96e1a53bd"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -954,7 +956,30 @@ anchor = "    fn simplify_product("
 # Reviewed 2026-10-17: normalized f-squares share the guarded two-f owner;
 # numeric phases and spectator powers remain factors, with no sum distribution.
 # Reviewed 2026-10-19: the Idenso and readiness notes record guarded closed quartic Gram reduction, raw-adjoint signs and spectator factorization; independent exact SU(2) matrix controls check the coefficient for all representation pairs.
-digest = "c8b1cab3f51883ca896853b12ae37030407d8ae7"
+# Reviewed 2026-10-22: complete selected products receive whole-product dummy
+# canonicalization; the note covers selective collection and exact no-op retention.
+# Reviewed 2026-10-22: the Idenso note records exact color-row coefficient
+# completion before certification and spectator reattachment, with opaque factors.
+digest = "f6bbf05c152893aa1da1f809c5ab4c694174f31a"
+
+[[section.note.scope]]
+path = "crates/idenso/src/color/simplify/states.rs"
+symbol = "idenso::color::simplify::ColorAlgebraSimplifier::merging_row_numbers"
+anchor = "    pub(super) fn merging_row_numbers("
+# Reviewed 2026-10-22: the Idenso note covers selected-row provenance, exact
+# linear coefficient cancellation and temporary protection of unchanged factors.
+# Reviewed callback follow-up: nested row masks keep functions and powers
+# opaque; temporary symbols never enter function normalizers.
+digest = "2db88b512ef5d572125cda5576d229a25bcc7921"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/collection.rs"
+symbol = "idenso::tensor::SymbolicTensor::collect_with_map"
+anchor = "    pub(crate) fn collect_with_map("
+end_anchor = "    fn collection_observations("
+# Reviewed 2026-10-22: complete source contributions retain their rational
+# weights before grouping; callback timing, immutable spectators and gates remain.
+digest = "139e4d3c1f9f483c2cd3881b49772741ee6e44a5"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -1587,7 +1612,10 @@ anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
 # Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
 # Reviewed 2026-10-19: exact preparation collects existing numerical content and scalar factors before its single index canonicalization. The added chiral-cycle control is red before this reorder and green afterward, preserves dummy/order variants and rejects a distinct matrix; no graph expansion or reference change.
-digest = "fc33f3fc768c2d69937c7c65535713b2f90df5de"
+# No architecture impact 2026-10-22: only the index-label regression changes here;
+# production grouping retains its direct color-only simplify_algebra call.
+# The Idenso note records the repair at the existing color simplification owner.
+digest = "39d7284b3b43cb921e4a0085411bb630a35bc53c"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
