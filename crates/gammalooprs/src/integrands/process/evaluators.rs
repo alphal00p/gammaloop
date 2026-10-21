@@ -1840,6 +1840,7 @@ impl GenericEvaluatorFloat for ArbPrec {
 
 #[cfg(test)]
 mod tests {
+    use crate::graph::parse::IntoFinalizedRuntimeGraph;
     use idenso::color::CS;
     use symbolica::atom::Symbol;
 
@@ -1853,5 +1854,39 @@ mod tests {
             .build()
             .unwrap();
         // assert_eq!(evaluator.evaluate_single(&[1.0, 2.0]), 3.0);
+    }
+
+    #[test]
+    fn pi_constants_follow_runtime_precision() {
+        crate::initialisation::test_initialise().unwrap();
+        let model = crate::utils::load_generic_model("sm");
+        let graphs: Vec<Graph> = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/renormalization/ghost_lo.dot"
+        ))
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
+        let settings = EvaluatorSettings::default();
+        let mut evaluator = GenericEvaluator::new_from_raw_params(
+            [parse!("1/(16*pi^2)")],
+            &[],
+            &graphs[0].param_builder.fn_map,
+            vec![],
+            settings.optimization_settings(),
+            None,
+            &settings,
+        )
+        .unwrap();
+
+        fn check<T: FloatLike>(actual: Complex<F<T>>) {
+            let one = F::<T>::from(&Rational::from(1));
+            let pi = one.PI();
+            let expected = one.clone() / (one.from_usize(16) * pi.square());
+            let error = (actual.re - &expected).abs();
+            assert!(error <= expected.abs() * one.epsilon() * one.from_usize(32));
+            assert_eq!(actual.im, one.zero());
+        }
+        check(evaluator.f128.evaluate_single(&[]));
+        check(evaluator.arb.evaluate_single(&[]));
     }
 }

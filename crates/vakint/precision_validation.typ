@@ -97,6 +97,20 @@ comparisons verify mathematical equality. Updated expectations and a direct
 disabled-trace assertion pass the complete Nix Spenso group: 578 tests, with
 no production algebra change.
 
+GammaLoop's generated evaluators now use native pi constants at the active
+precision. Three internal f64 overrides previously disagreed with Vakint's
+high-precision pi coefficients. User-supplied f64 points and settings keep their
+existing interpretation. State layouts are unchanged; evaluator trees already
+saved in `gammaloop_state/` retain their embedded constants and must be regenerated
+to obtain the corrected Quad/Arb evaluation.
+The corrected scalar-bubble values are independently derived from its closed
+CFF expression using bounded rational Machin pi and 380-digit decimal sqrt/log
+arithmetic. Quad and Arb comparisons retain their original `1e-27` and `1e-60`
+limits. The final strict bubble test passes in 1.82 seconds. The GL20 snapshot
+retains its exact assertion, metadata and kinematics; 61 measured numerical
+leaves are refreshed after a separate 1,000-bit replay and independent audit.
+Its final strict test passes in 5.79 seconds.
+
 The package inventory contains cache-free 1L–3L runtime data. It contains no
 4L/5L pack, prepared cache or former artifacts directory. Ordinary engine
 construction remains offline; explicit external-data loading supersedes the

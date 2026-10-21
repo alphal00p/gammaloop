@@ -1246,10 +1246,8 @@ impl<T: FloatLike> ParamBuilder<T> {
             symbol!("x").to_atom(),
         )
         .unwrap();
-        let pi_rational = Rational::try_from(std::f64::consts::PI).unwrap();
-
         // new.fn_map.add_conditional(GS.orientation_if);
-        new.add_constant(GS.pi.into(), pi_rational.into());
+        // Leave pi to the native constant evaluator at the runtime precision.
         new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
         new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
