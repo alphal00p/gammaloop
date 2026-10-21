@@ -10,6 +10,11 @@ import 'just/ci.just'
 import 'just/tests.just'
 import 'just/drawing.just'
 
+# Capture current source and reuse the selected Nix development producers.
+[positional-arguments]
+dev *args:
+    python3 scripts/dev.py "$@"
+
 alias sync-draw-assets := sync-drawing-assets
 
 drawing_asset_sync := "none"
@@ -32,9 +37,15 @@ _sync-drawing-assets:
         ;;
     esac
 
-# Build gammaloop Python CLI with UFO support and dev-optim profile
+# Build the packaged CLI with the shared Nix ci-optim context.
 build-cli: _sync-drawing-assets
-    cargo build -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim
+    #!/usr/bin/env bash
+    set -euo pipefail
+    product=$(just dev build -p gammaloop-api)
+    mkdir -p target/nix-dev
+    nix-store --realise "$product" --add-root "$PWD/target/nix-dev/gammaloop" --indirect > /dev/null
+    touch target/nix-dev/gammaloop.built
+    printf '%s\n' "$product"
 
 # Build gammaloop CLI without Python (no pyo3)
 build-cli-no-pyo3: _sync-drawing-assets
@@ -52,9 +63,9 @@ build-cli-release: _sync-drawing-assets
 build-cli-release-abi: _sync-drawing-assets
     cargo build -p gammaloop-api --bin gammaloop --features ufo_support,python_abi --release
 
-# Build gammaloop Python API with UFO support and dev-optim profile
+# Build the Python module for Nix's pinned interpreter and print its result path.
 build-api: _sync-drawing-assets
-    maturin develop -m crates/gammaloop-api/Cargo.toml --no-default-features --features=python_api,pyo3-extension-module --profile=dev-optim
+    just dev build --python -p gammaloop-api
 
 # Build gammaloop Python API with UFO support and stable ABI (dev-optim profile)
 build-api-abi: _sync-drawing-assets
@@ -86,7 +97,7 @@ build-api-abi-release-wheel: _sync-drawing-assets
 
 # Build all workspace packages
 build-all:
-    cargo build --workspace
+    just dev build
 
 # Clean build artifacts
 clean:
@@ -142,7 +153,7 @@ check-spynso-wasm:
 
 # Check code without building
 check: check-symbolica-feature-isolation
-    cargo check --workspace --all-targets --locked
+    just dev check
 
 doc:
     cargo doc --workspace --no-deps --locked --profile {{ ci_cargo_profile }}
@@ -352,8 +363,9 @@ fmt *lint_args:
     cargo fmt --all {{ lint_args }}
 
 # Run clippy linter
+[positional-arguments]
 clippy *lint_args:
-    cargo clippy --workspace --all-targets --locked --profile {{ ci_cargo_profile }} {{ lint_args }}
+    just dev clippy "$@"
 
 # Build everything in release mode for maximum performance
 build-release-all:
@@ -363,5 +375,9 @@ build-release-all:
 dev-release: build-release-all
 
 # Run gammaloop
+[positional-arguments]
 run *ARGS:
-    cargo run -p gammaloop-api --bin gammaloop --features ufo_support --profile dev-optim -- {{ ARGS }}
+    #!/usr/bin/env bash
+    set -euo pipefail
+    product=$(just dev build -p gammaloop-api)
+    exec "$product/bin/gammaloop" "$@"

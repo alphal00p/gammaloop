@@ -36,6 +36,26 @@ select_binary() {
     local release_binary="$script_dir/target/release/gammaloop"
     local dev_optim_binary="$script_dir/target/dev-optim/gammaloop"
     local debug_binary="$script_dir/target/debug/gammaloop"
+    local nix_package="$script_dir/target/nix-dev/gammaloop"
+    local nix_built="$script_dir/target/nix-dev/gammaloop.built"
+
+    # Nix binaries carry normalized store timestamps. The local build stamp
+    # records when build-cli selected this rooted product, including cache hits.
+    if [ -L "$nix_package" ] || [ -e "$nix_package" ]; then
+        selected_profile="ci-optim"
+        binary="$nix_package/bin/gammaloop"
+        local profile candidate
+        for profile in release dev-optim debug; do
+            candidate="$script_dir/target/$profile/gammaloop"
+            if [ -x "$candidate" ] && [ -e "$nix_built" ] && [ "$candidate" -nt "$nix_built" ]; then
+                if [ "$selected_profile" = "ci-optim" ] || [ "$candidate" -nt "$binary" ]; then
+                    selected_profile="$profile"
+                    binary="$candidate"
+                fi
+            fi
+        done
+        return
+    fi
 
     if [ -x "$release_binary" ] && [ -x "$dev_optim_binary" ]; then
         if [ "$dev_optim_binary" -nt "$release_binary" ]; then
@@ -93,7 +113,8 @@ print_profile_banner() {
     left_padding="$(printf '%*s' "$left_padding_width" '')"
     right_padding="$(printf '%*s' "$right_padding_width" '')"
     local border
-    border="$(printf '%*s' "$inner_width" '' | tr ' ' '─')"
+    border="$(printf '%*s' "$inner_width" '')"
+    border="${border// /─}"
 
     {
         printf '┌%s┐\n' "$border"
@@ -108,6 +129,7 @@ if [ ! -x "$binary" ]; then
     cat >&2 <<EOF
 Could not find an executable gammaloop binary.
 Expected one of:
+  $script_dir/target/nix-dev/gammaloop/bin/gammaloop
   $script_dir/target/release/gammaloop
   $script_dir/target/dev-optim/gammaloop
   $script_dir/target/debug/gammaloop
