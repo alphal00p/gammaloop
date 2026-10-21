@@ -123,6 +123,18 @@ path = "junit.xml"
 # Resource reservations apply to every selected profile. Per-test overrides of
 # an inherited custom profile are not inherited by Nextest, so keep them here.
 
+# These cases pass within 240s alone but have timed out in concurrent CI runs.
+# Reserve the worker budget for their symbolic work and fixed-statistics sampling.
+[[profile.default.overrides]]
+filter = '''
+(package(gammalooprs) and (
+    (binary(=gammalooprs) and test(=integrands::process::amplitude::sampling_tests::generated_kite_sampling_uses_physical_six_dimensional_surfaces)) or
+    (binary(=test_renormalization) and (test(=finite_part_ghost_3loop_d35) or test(=finite_part_ghost_3loop_d54)))
+)) or
+(package(gammaloop-integration-tests) and binary(=uv) and test(=dod2_bubble_uv))
+'''
+threads-required = "num-test-threads"
+
 # Integration workers and evaluator-heavy fixtures retain their existing budgets.
 
 # Previously unmeasured slow generators may allocate large evaluators or share
