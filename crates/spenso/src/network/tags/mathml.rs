@@ -3,7 +3,7 @@
 //! These callbacks only replace bounded semantic leaves. Symbolica retains
 //! ownership of arithmetic, responsive layouts, paging, and unsupported calls.
 use super::*;
-use symbolica::printer::{AnsiHtmlFormatter, mathml::MathMlCursorCache};
+use symbolica::printer::{AnsiHtmlFormatter, PrintMode};
 
 const MAX_BYTES: usize = 4096;
 
@@ -38,19 +38,18 @@ fn source(atom: AtomView<'_>, options: &PrintOptions) -> Option<String> {
     } else {
         atom
     };
-    let page = atom.render_mathml_layout_cached(
-        options,
-        0,
-        500,
-        0,
-        &[],
-        &MathMlCursorCache::new(atom),
-        None,
-    );
-    if page.is_partial() || page.html.len() > MAX_BYTES {
+    let mut fragment = atom
+        .printer(PrintOptions {
+            mode: PrintMode::MathML,
+            max_terms: Some(500),
+            ..options.clone()
+        })
+        .to_string();
+    // The public formatter renders inactive omissions instead of page metadata.
+    // A label must be complete before embedding it as an atomic fragment.
+    if fragment.len() > MAX_BYTES || fragment.contains("<mtext>⋯</mtext>") {
         return None;
     }
-    let mut fragment = page.fragment().into_owned();
     // This complete label is atomic in its caller. Its standalone paths would
     // otherwise collide with the surrounding expression's expansion targets.
     const PATH_PREFIX: &str = "<mrow data-symbolica-path=\"";

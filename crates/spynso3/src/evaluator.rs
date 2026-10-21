@@ -89,6 +89,7 @@ impl Spensor {
             max_horner_scheme_variables,
             max_common_pair_cache_entries,
             max_common_pair_distance,
+            false, // Match upstream's default `horner_use_cpe` candidate scoring.
             py,
         )?;
         Ok(SpensoExpressionEvaluator {
