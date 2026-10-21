@@ -825,10 +825,12 @@ complete residue sum to the same generic evaluator constructor, with one executi
 slot. Requested `SingleParametric` and `SummedFunctionMap` programs are supported for
 LTD; either evaluates that complete sum. CFF numerator construction keeps its existing
 owner. The existing `inline_numerator_functions` setting controls both ordinary
-and hyperdual generated numerator calls: the default `true` inlines them; `false`
-retains shared bodies through differentiation. Symbolica PR 110 supplies the
+and hyperdual generated numerator calls: the default `false` retains shared bodies
+through differentiation; `true` explicitly requests inlining. Symbolica PR 110 supplies the
 shared-body part of PR 82 and fixes from PRs 83, 87 and 88. Generation and runtime
-costs differ, so retention remains an explicit choice.
+costs differ: retention favors generation, while explicit inlining can improve
+evaluation throughput. This generation-wide choice also applies to optional
+evaluator layouts built in the same run.
 
 Every evaluator receives the auxiliary numerator sampling scale `M` as an input, defaulting to one. Warm-up rejects a zero runtime scale for every amplitude or cross-section integrand, including evaluators that do not use `M`. No source-expression scan or serialized usage flag is needed. `M` is an auxiliary numerator-sampling coordinate, not an LMB energy; LTD arguments can additionally contain on-shell and external energies.
 

@@ -57,8 +57,9 @@ closes the root-only coverage gap observed in the September 26 projected-4D
 retry; the compact-energy validation record retains that memory-limited baseline.
 
 Generated scalar numerator components and coefficient functions use Symbolica's
-`InliningPolicy::Always` by default. Setting `inline_numerator_functions = false`
-uses `Never`: distinct argument tuples call one retained evaluator body.
+`InliningPolicy::Never` by default: distinct argument tuples call one retained
+evaluator body. Setting `inline_numerator_functions = true` explicitly uses
+`Always` to favor evaluation throughput over generation time.
 Symbolica revision `208fe85beaa7048ebf388511979677531bdd590f` also vectorizes
 retained bodies for hyperdual evaluation, preserving this choice and the structural
 zero derivative seeds. This revision combines shared-body differentiation from
