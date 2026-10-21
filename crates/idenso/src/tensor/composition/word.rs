@@ -4,6 +4,15 @@ use spenso::structure::slot::{DualSlotTo, ParseableAind};
 
 #[cfg(test)]
 mod adjoint_tests;
+#[cfg(test)]
+mod derivative_tests;
+
+/// Where the odd response is factored out of a directional variation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum WordDerivativeSide {
+    Left,
+    Right,
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum ProductAlgebra {
@@ -96,6 +105,162 @@ impl ProductPlan {
 }
 
 impl SymbolicTensor<PartialStructure> {
+    /// Differentiate an exterior word using an explicit odd-generator policy.
+    ///
+    /// Each summand has the grammar of [`Self::multiply_word`]: at most one
+    /// selected word and an even, commuting, word-free tensor coefficient.
+    /// Every word generator is odd by the caller's contract. The head must be
+    /// `Flat`, `Linear`, and `Antisymmetric`. No field registry, constraint or
+    /// derivative of the coefficient is inferred.
+    ///
+    /// `target` is the primal component interface of the differentiation
+    /// variable. It must have distinct explicit index labels, fresh against
+    /// every source index, including bound indices. Collisions are rejected;
+    /// the caller must rename its target explicitly. Unresolved source ports
+    /// are materialized using the native allocator with target labels reserved.
+    ///
+    /// For each generator, `differentiate_generator` returns `None` when it is
+    /// independent of the target, or an even, word-free native tangent map.
+    /// Its ordered interface must be the occurrence's logical ports followed
+    /// by the dual of `target`, with all labels unchanged. The caller chooses
+    /// field/jet identity and supplies representation identities or constrained
+    /// projectors; no metric or projector is guessed here. Callback errors and
+    /// unsupported word grammar are propagated.
+    ///
+    /// For generator position `i` in a word of length `n`, Left contributes
+    /// `(-1)^i` and Right contributes `(-1)^(n-1-i)`. Native word construction
+    /// handles normalization of the remaining generators. Native tensor
+    /// products retain the coefficient's contractions with the tangent map.
+    /// Output ports are the materialized source ports followed by dual target
+    /// ports, even for a no-match or ranked-zero result.
+    pub fn differentiate_word_with(
+        &self,
+        head: Symbol,
+        target: &PartialStructure,
+        side: WordDerivativeSide,
+        mut differentiate_generator: impl FnMut(&Self) -> Result<Option<Self>, TensorInferenceError>,
+    ) -> Result<Self, TensorInferenceError> {
+        let identity = Self::word(head, &[])?;
+        ProductPlan::Scalar.apply_word(head, &identity, self)?;
+        if !head.is_antisymmetric() {
+            return Err(TensorInferenceError::invalid(
+                "word differentiation requires an Antisymmetric exterior head",
+            ));
+        }
+        let target_slots = target.logical_slots();
+        let source_slots = self.structure.logical_slots();
+        let reserved = &self.reduction_observations().reserved_indices;
+        let mut target_indices = HashSet::new();
+        for slot in &target_slots {
+            let PartialIndex::Explicit(index) = slot.aind else {
+                return Err(TensorInferenceError::invalid(
+                    "word differentiation requires explicit fresh target indices",
+                ));
+            };
+            if !target_indices.insert(index)
+                || reserved.contains(&index)
+                || source_slots
+                    .iter()
+                    .any(|slot| slot.aind == PartialIndex::Explicit(index))
+            {
+                return Err(TensorInferenceError::invalid(
+                    "word differentiation target indices must be distinct and fresh against the source",
+                ));
+            }
+        }
+        let target_zero = Self::from_declared_parts(Atom::Zero, target.clone())?;
+        let dummies = Self::reserved_dummies([self, &target_zero]);
+        let source = self.reindex_interface_ports(
+            &self
+                .structure
+                .open_positions()
+                .into_iter()
+                .map(|position| (position, dummies.fresh_index()))
+                .collect(),
+        )?;
+        let dual_target = target_slots
+            .into_iter()
+            .map(|slot| slot.dual())
+            .collect::<Vec<_>>();
+        let interface = concatenate_interfaces(
+            source.structure.logical_slots(),
+            dual_target.iter().copied(),
+        );
+        let mut terms = Vec::new();
+        for term in source.expression.expand_in(Atom::var(head)).terms() {
+            let mut coefficient = Vec::new();
+            let mut generators = Vec::new();
+            Self::split_word_coefficient(
+                head,
+                term,
+                &mut coefficient,
+                &mut generators,
+                &mut false,
+            )?;
+            let coefficient = Self::infer(
+                coefficient
+                    .into_iter()
+                    .reduce(|left, right| Self::bracket_product(left.as_view(), right.as_view()))
+                    .unwrap_or_else(Atom::one),
+            )?;
+            let generators = generators
+                .into_iter()
+                .map(Self::infer)
+                .collect::<Result<Vec<_>, _>>()?;
+            for (position, generator) in generators.iter().enumerate() {
+                let Some(tangent) = differentiate_generator(generator)? else {
+                    continue;
+                };
+                tangent.ensure_validated()?;
+                let expected = generator
+                    .structure
+                    .logical_slots()
+                    .into_iter()
+                    .chain(dual_target.iter().copied())
+                    .collect::<Vec<_>>();
+                if tangent.structure.logical_slots() != expected {
+                    return Err(TensorInferenceError::invalid(
+                        "word-derivative generator policy must return occurrence ports followed by dual target ports",
+                    ));
+                }
+                let mut word_free = true;
+                tangent.expression.visitor(&mut |node| {
+                    if matches!(node, AtomView::Fun(function)
+                        if function.get_symbol().has_tag(&SPENSO_TAG.tensor_word))
+                    {
+                        word_free = false;
+                    }
+                    word_free
+                });
+                if !word_free {
+                    return Err(TensorInferenceError::invalid(
+                        "word-derivative generator policy must return a word-free tangent map",
+                    ));
+                }
+                let remaining = generators
+                    .iter()
+                    .enumerate()
+                    .filter(|(index, _)| *index != position)
+                    .map(|(_, generator)| generator.clone())
+                    .collect::<Vec<_>>();
+                let word = Self::word(head, &remaining)?;
+                let result = coefficient
+                    .multiply_word(head, &tangent)?
+                    .multiply_word(head, &word)?;
+                let crossings = match side {
+                    WordDerivativeSide::Left => position,
+                    WordDerivativeSide::Right => generators.len() - 1 - position,
+                };
+                terms.push(if crossings % 2 == 0 {
+                    result.expression
+                } else {
+                    -result.expression
+                });
+            }
+        }
+        Self::from_declared_parts(terms.into_iter().sum(), interface)
+    }
+
     /// Dirac adjoint in a tensor-word algebra with an explicit odd-generator map.
     ///
     /// Each term has the same grammar as [`Self::multiply_word`]: at most one
