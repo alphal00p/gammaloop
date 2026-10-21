@@ -91,9 +91,9 @@ third-party = [
     { name = "arrayvec", version = "0.7" },
     { name = "indenter", version = "0.3" },
     # Symbolica and Numerica feature anchors are maintained below.
-    # Match the workspace's scoped responsive-renderer API pin.
-    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica", rev = "f7b45fdfb3cbdf61772eb3f26f97419dc898cbb2" },
-    { name = "numerica", git = "https://github.com/symbolica-dev/symbolica", rev = "f7b45fdfb3cbdf61772eb3f26f97419dc898cbb2" },
+    # Match the workspace's upstream community kernel pin.
+    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica", rev = "ea20d66a13ec1fc6e0a37fa101c7fa7539e46cc4" },
+    { name = "numerica", git = "https://github.com/symbolica-dev/symbolica", rev = "ea20d66a13ec1fc6e0a37fa101c7fa7539e46cc4" },
     { name = "symbolica-typst-plugin", git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" },
     # Stub generation is opt-in and must not leak into ordinary abi3 builds.
     { name = "pyo3-stub-gen" },
