@@ -75,6 +75,8 @@ pub mod cook;
 pub mod dirac;
 pub mod epsilon;
 // pub mod parsing_ind;
+#[cfg(test)]
+mod component_conjugation_tests;
 #[cfg(any(test, feature = "reference-cases"))]
 pub mod reference_cases;
 pub mod rep_symbols;
@@ -358,6 +360,15 @@ pub enum AdjointError {
 }
 
 impl tensor::SymbolicTensor<PartialStructure> {
+    /// Component conjugation only; representation duality belongs to the
+    /// physical conjugation owner that calls this expression boundary.
+    fn component_conjugate_expression(value: AtomView<'_>) -> Atom {
+        value
+            .conj()
+            .replace(Atom::var(RS.a__).conj())
+            .with(INBUILTS.conj(RS.a__))
+    }
+
     /// Prepare one admitted positive-power scope through the collection owner.
     /// The caller's native index type and operation-wide fresh-index reservation
     /// survive reversible encoding into the existing typed collection engine.
@@ -684,6 +695,25 @@ impl IndexTooling for AtomView<'_> {
         };
         let native_error =
             |error| spenso::network::TensorNetworkError::Other(eyre::eyre!("{error}"));
+        // The added component normalization admits only intrinsic commuting
+        // syntax. Inspect the original input: emitted scalar aliases would hide
+        // private function bodies from this conservative eligibility check.
+        let mut allow_component_conjugation = InterfaceInference::normalization_is_intrinsic(*self)
+            && !self
+                .get_all_symbols(true)
+                .iter()
+                .any(|symbol| symbol.has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word));
+        if allow_component_conjugation {
+            self.visitor(&mut |part| {
+                if let AtomView::Fun(function) = part {
+                    let symbol = function.get_symbol();
+                    allow_component_conjugation &= !symbol.is_scalar()
+                        && (!symbol.has_tag(&spenso::network::tags::SPENSO_TAG.broadcast)
+                            || symbol == INBUILTS.conj);
+                }
+                allow_component_conjugation
+            });
+        }
         let tree = net.graph.expr_tree().cast::<ChildVecStore<()>>();
         let root = net.graph.graph.node_id(net.graph.head());
         let prepared = net
@@ -718,6 +748,31 @@ impl IndexTooling for AtomView<'_> {
                     ))),
                 },
                 &mut |_, operation, children| {
+                    if allow_component_conjugation
+                        && matches!(operation, NetworkOp::Function(symbol) if *symbol == INBUILTS.conj)
+                    {
+                        let [argument] = children else {
+                            unreachable!("native emitter checks unary arity before the operation callback")
+                        };
+                        // Some valid compact inputs have no available explicit
+                        // closure witness. Keep their existing operation intact.
+                        if argument
+                            .list_dangling::<Aind>()
+                            .is_ok_and(|dangling| dangling.is_empty())
+                        {
+                            let conjugate = tensor::SymbolicTensor::<PartialStructure>::component_conjugate_expression(argument.as_view());
+                            if !conjugate.list_dangling::<Aind>().map_err(|error| {
+                                native_error(CanonicalizationError::Prepare {
+                                    reason: error.to_string(),
+                                })
+                            })?.is_empty() {
+                                return Err(native_error(CanonicalizationError::Prepare {
+                                    reason: "component conjugation changed a closed native boundary".into(),
+                                }));
+                            }
+                            return Ok(Some(conjugate));
+                        }
+                    }
                     let NetworkOp::Power(power) = operation else {
                         return Ok(None);
                     };
@@ -905,10 +960,8 @@ impl IndexTooling for AtomView<'_> {
         Ok(scalar_definitions.map_root(|_| canonical).into_inner())
     }
     fn spenso_conj(&self) -> Atom {
-        let conjugate = self
-            .conj()
-            .replace(Atom::var(RS.a__).conj())
-            .with(INBUILTS.conj(RS.a__));
+        let conjugate =
+            tensor::SymbolicTensor::<PartialStructure>::component_conjugate_expression(*self);
         color_conj_impl(conjugate.as_view())
     }
 
