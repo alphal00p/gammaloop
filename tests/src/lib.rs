@@ -241,23 +241,19 @@ fn build_cli_for_run_history(
     }
     let mut state = new_cli_for_test(state_path, log_file_name);
 
-    if !run_history.commands.is_empty() {
-        let mut global_settings_for_running_cmds = run_history.cli_settings.clone();
-        global_settings_for_running_cmds.state.folder = state_path.to_path_buf();
-        global_settings_for_running_cmds.sync_settings()?;
-        let mut default_runtime_settings_for_running_cmds =
-            run_history.default_runtime_settings.clone();
-        _ = run_history.run(
-            &mut state,
-            &mut global_settings_for_running_cmds,
-            &mut default_runtime_settings_for_running_cmds,
-        )?;
-    }
-
     let mut global_settings = run_history.cli_settings.clone();
     global_settings.state.folder = state_path.to_path_buf();
     global_settings.sync_settings()?;
-    let default_runtime_settings = run_history.default_runtime_settings.clone();
+    let mut default_runtime_settings = run_history.default_runtime_settings.clone();
+    // As in the CLI, the card's commands act on the session's own settings, so its
+    // `set global` and `set default-runtime` commands reach the test's commands.
+    if !run_history.commands.is_empty() {
+        _ = run_history.run(
+            &mut state,
+            &mut global_settings,
+            &mut default_runtime_settings,
+        )?;
+    }
     SaveState {
         override_state: Some(true),
         ..Default::default()
@@ -408,4 +404,37 @@ pub fn default_momentum_space_point(cli: &CLIState) -> Result<Vec<f64>> {
     let n_dim = integrand.get_n_dim();
     let seed = [0.11, -0.07, 0.19, -0.13, 0.05, 0.29];
     Ok((0..n_dim).map(|index| seed[index % seed.len()]).collect())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run_card_set_commands_reach_the_test_session() -> Result<()> {
+        let mut run_history = RunHistory::default();
+        run_history.cli_settings.global.n_cores.feyngen = 10;
+        for raw in [
+            "set global kv global.n_cores.feyngen=1",
+            "set default-runtime kv subtraction.disable_threshold_subtraction=true",
+        ] {
+            run_history
+                .commands
+                .push(CommandHistory::from_raw_string(raw)?);
+        }
+        let state_path =
+            get_tests_workspace_path().join("run_card_set_commands_reach_the_test_session");
+
+        let cli = build_cli_for_run_history(run_history, &state_path, None, true)?;
+
+        // As when the CLI boots a card, its commands override its settings tables.
+        assert_eq!(cli.cli_settings.global.n_cores.feyngen, 1);
+        assert!(
+            cli.default_runtime_settings
+                .subtraction
+                .disable_threshold_subtraction
+        );
+        clean_test(&state_path);
+        Ok(())
+    }
 }
