@@ -37,17 +37,20 @@ impl SymbolicTensor<PartialStructure> {
     /// This does not expand a numerator or evaluate finite tensor components.
     pub fn undo_dots(&self) -> Result<Self, TensorInferenceError> {
         let expression = self.expression().undo_dots::<AbstractIndex>()?;
-        self.with_identity_result(expression, None)
+        // Opening notation allocates index identities. Establish those new
+        // identities at this materialization boundary rather than carrying a
+        // source mask which cannot name them.
+        self.with_materialized_expression(expression)
     }
 
     /// Expose chain factors with fresh compatible dummy indices and unchanged endpoints.
     pub fn undo_chain(&self) -> Result<Self, TensorInferenceError> {
-        self.with_identity_result(self.expression().undo_chain::<AbstractIndex>()?, None)
+        self.with_materialized_expression(self.expression().undo_chain::<AbstractIndex>()?)
     }
 
     /// Replace trace notation with a closed chain, without evaluating it.
     pub fn undo_trace(&self) -> Result<Self, TensorInferenceError> {
-        self.with_identity_result(self.expression().undo_trace::<AbstractIndex>()?, None)
+        self.with_materialized_expression(self.expression().undo_trace::<AbstractIndex>()?)
     }
 }
 
@@ -812,5 +815,45 @@ mod typed_dot_tests {
         let indexed = vector!(notation_explicit_p, mink!(4, 97081)).pow(2);
         let source = SymbolicTensor::infer(indexed.clone()).unwrap();
         assert_eq!(source.to_dots().unwrap().expression(), &indexed);
+    }
+
+    #[test]
+    fn opening_dot_notation_records_its_allocated_dummy_pair() {
+        use crate::tensor::composition::TensorCompositionError;
+        use spenso::structure::{
+            representation::LibraryRep,
+            slot::{IsAbstractSlot, SlotMatcher},
+        };
+
+        use symbolica::atom::FunctionBuilder;
+
+        crate::test_support::test_initialize();
+        let source = SymbolicTensor::infer(dot!(
+            vector!(allocated_dot_p, mink!(4)),
+            vector!(allocated_dot_q, mink!(4))
+        ))
+        .unwrap();
+        let opened = source.undo_dots().unwrap();
+        assert!(opened.is_scalar());
+        let mut slots = SlotMatcher::default();
+        let mut allocated = None;
+        opened.expression().visitor(&mut |node| {
+            if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(node) {
+                allocated.get_or_insert(slot);
+                return false;
+            }
+            true
+        });
+        let slot = allocated.expect("opening a dot allocates its contraction index");
+        let extra = SymbolicTensor::infer(
+            FunctionBuilder::new(spenso::tensor_symbol!("allocated_dot_third_use"))
+                .add_arg(slot.to_atom())
+                .finish(),
+        )
+        .unwrap();
+        assert!(matches!(opened.multiply(&extra),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { index, occurrences: 3 })
+                if index == slot.aind()
+        ));
     }
 }

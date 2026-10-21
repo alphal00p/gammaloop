@@ -425,10 +425,8 @@ impl bincode::Encode for IndexedTensor {
         &self,
         encoder: &mut E,
     ) -> std::result::Result<(), bincode::error::EncodeError> {
-        self.expression.encode(encoder)?;
-        self.structure.logical_slots().encode(encoder)?;
-        self.is_metric.encode(encoder)?;
-        self.is_composite.encode(encoder)
+        let structure = self.structure.clone().into_partial();
+        self.borrowed_parts(&structure).encode(encoder)
     }
 }
 
@@ -437,16 +435,9 @@ impl<C: symbolica::state::HasStateMap> bincode::Decode<C> for IndexedTensor {
     fn decode<D: bincode::de::Decoder<Context = C>>(
         decoder: &mut D,
     ) -> std::result::Result<Self, bincode::error::DecodeError> {
-        use spenso::structure::representation::LibrarySlot;
-        let expression = Atom::decode(decoder)?;
-        let slots = Vec::<LibrarySlot<AbstractIndex>>::decode(decoder)?;
-        let is_metric = bool::decode(decoder)?;
-        let is_composite = bool::decode(decoder)?;
-        let mut value = Self::from_indexed_parts(expression, slots.into_iter().collect())
-            .map_err(|error| bincode::error::DecodeError::OtherString(error.to_string()))?;
-        value.is_metric = is_metric;
-        value.is_composite = is_composite;
-        Ok(value)
+        PartialTensor::decode(decoder)?
+            .try_into_indexed()
+            .map_err(|error| bincode::error::DecodeError::OtherString(error.to_string()))
     }
 }
 
@@ -960,6 +951,9 @@ mod tests {
     #[cfg(feature = "bincode")]
     #[test]
     fn indexed_archive_keeps_zero_layout_and_rejects_unresolved_or_invalid_parts() {
+        use super::super::{
+            composition::ExplicitIndexOccurrences, persistence::TENSOR_ARCHIVE_VERSION,
+        };
         use symbolica::state::StateMap;
         crate::test_support::test_initialize();
         let rep = Euclidean {}.new_rep(2).to_lib();
@@ -999,8 +993,32 @@ mod tests {
             ),
             (Atom::Zero, vec![cooked_open]),
         ] {
+            let structure = slots
+                .iter()
+                .map(|slot| {
+                    slot.rep()
+                        .slot(spenso::structure::partial::PartialIndex::Explicit(
+                            slot.aind,
+                        ))
+                })
+                .collect::<Vec<_>>();
+            let metadata = if expression.is_zero() {
+                ExplicitIndexOccurrences::from_interface(&PartialStructure::from_logical_slots(
+                    structure.iter().copied(),
+                ))
+            } else {
+                ExplicitIndexOccurrences::default()
+            };
             let bytes = bincode::encode_to_vec(
-                (expression, slots, false, true),
+                (
+                    TENSOR_ARCHIVE_VERSION,
+                    expression,
+                    structure,
+                    false,
+                    true,
+                    None::<bool>,
+                    metadata,
+                ),
                 bincode::config::standard(),
             )
             .unwrap();
@@ -1013,6 +1031,74 @@ mod tests {
                 .is_err()
             );
         }
+    }
+
+    #[cfg(feature = "bincode")]
+    #[test]
+    fn indexed_archive_retains_cancelled_dummy_history_without_raw_readmission() {
+        use super::super::inference::tests::{
+            INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
+        };
+        use symbolica::state::StateMap;
+
+        crate::test_support::test_initialize();
+        let slot = Euclidean {}
+            .new_rep(3)
+            .to_lib()
+            .slot(AbstractIndex::Normal(97121));
+        let x = Atom::var(symbol!("indexed_archive_cancel_x"));
+        let polynomial = (&x + 1).pow(2) - &x * &x - Atom::num(2) * &x - 1;
+        let source = PartialTensor::infer(
+            function!(
+                spenso::tensor_symbol!("indexed_archive_cancel_pair"),
+                slot.to_atom(),
+                slot.to_atom()
+            ) * polynomial,
+        )
+        .unwrap()
+        .expanded(None, false)
+        .unwrap()
+        .try_into_indexed()
+        .unwrap();
+        assert!(source.is_zero());
+        let fresh =
+            IndexedTensor::from_indexed_parts(source.expression.clone(), source.structure.clone())
+                .unwrap();
+        assert!(fresh.proofs.occurrences.get().unwrap().is_empty());
+        let extra = IndexedTensor::infer_indexed(function!(
+            spenso::tensor_symbol!("indexed_archive_cancel_extra"),
+            slot.to_atom()
+        ))
+        .unwrap();
+        INFERENCE_CALLS.with(|count| count.set(0));
+        OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+        SCOPE_VALIDATIONS.with(|count| count.set(0));
+        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let (restored, used): (IndexedTensor, _) = bincode::decode_from_slice_with_context(
+            &bytes,
+            bincode::config::standard(),
+            StateMap::default(),
+        )
+        .unwrap();
+        assert_eq!(used, bytes.len());
+        assert!(restored.same_value(&source));
+        let cloned = restored.clone();
+        assert!(std::sync::Arc::ptr_eq(
+            restored.proofs.occurrences.get().unwrap(),
+            cloned.proofs.occurrences.get().unwrap(),
+        ));
+        let partial: PartialTensor = cloned.into();
+        let converted = partial.try_into_indexed().unwrap();
+        for value in [source, restored, converted] {
+            assert_eq!(value.proofs.occurrences.get().unwrap().count(slot), 2);
+            assert!(matches!(
+                value.multiply(extra.clone()),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+        }
+        assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+        assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+        assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
     }
 
     #[cfg(feature = "bincode")]

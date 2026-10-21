@@ -74,7 +74,7 @@ impl<S> FunctionLibrary<SymbolicTensor<S>, Atom> for Wrap {
         tensor: SymbolicTensor<S>,
     ) -> eyre::Result<SymbolicTensor<S>, FunctionLibraryError<Self::Key>> {
         Ok(SymbolicTensor {
-            proofs: Default::default(),
+            proofs: tensor.proofs.algebra_result(),
             structure: tensor.structure,
             is_composite: true,
             is_metric: false,
@@ -174,8 +174,11 @@ where
 /// A [`spenso::structure::partial::PartialStructure`] also retains logical port
 /// order and occurrence-local unresolved indices for positional composition.
 /// The structure is independent of the expression, so a zero can retain its rank.
-/// Checked construction and rewriting validate interfaces when callbacks can
-/// change them; structure mappings retain the symbolic payload.
+/// Tensor metadata is authoritative after admission. Algebra derives the
+/// result's ports and scoped index uses from its operands; simplification of
+/// the symbolic payload does not erase that construction history. Raw inputs
+/// and arbitrary replacements must use a checked admission boundary. A callback
+/// used by ordinary algebra must preserve the admitted tensor meaning.
 /// The payload defaults to `Atom`; borrowed views use the same tensor carrier.
 #[derive(Debug, Clone)]
 pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {
@@ -186,8 +189,9 @@ pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = A
     pub(crate) proofs: TensorProofs,
 }
 
-/// Facts about this immutable payload and interface. Mutation drops every fact;
-/// copying a tensor may copy established facts, but attaching new parts cannot.
+/// Authoritative tensor metadata and payload-specific derived facts. Raw
+/// mutation drops both; certified algebra retains metadata and drops caches
+/// whose contents describe the previous payload.
 #[derive(Clone, Default)]
 pub(crate) struct TensorProofs {
     pub(super) validated: OnceLock<bool>,
@@ -222,6 +226,20 @@ impl std::fmt::Debug for TensorProofs {
             .field("observed", &self.observations.get().is_some())
             .field("planned", &self.shallow_graph.get().is_some())
             .finish()
+    }
+}
+
+impl TensorProofs {
+    /// Retain construction metadata without reusing reduction state or a graph
+    /// built for another payload. Scalar algebra does not change these ports or
+    /// index identities, even when Symbolica cancels their visible factors.
+    pub(super) fn algebra_result(&self) -> Self {
+        Self {
+            validated: self.validated.clone(),
+            normalized_product: self.normalized_product.clone(),
+            occurrences: self.occurrences.clone(),
+            ..Self::default()
+        }
     }
 }
 
@@ -310,12 +328,14 @@ impl<S, E> SymbolicTensor<S, E> {
 
 impl<S, E: AtomCore + From<E::Output>> SymbolicTensor<S, E> {
     /// Protect an implicit scalar contraction when scalar arithmetic repeats it.
-    pub(super) fn scalar_power_expression(expression: E) -> E {
-        let mut indexed_product = false;
-        if matches!(
+    /// Admitted callers provide their index metadata. Only legacy raw network
+    /// storage without that metadata needs to discover its written scope.
+    pub(super) fn scalar_power_expression(expression: E, indexed: Option<bool>) -> E {
+        let indexed_product = matches!(
             expression.as_atom_view(),
             AtomView::Mul(_) | AtomView::Pow(_)
-        ) {
+        ) && indexed.unwrap_or_else(|| {
+            let mut indexed_product = false;
             expression.visitor(&mut |value| {
                 if let AtomView::Fun(fun) = value {
                     let symbol = fun.get_symbol();
@@ -327,7 +347,8 @@ impl<S, E: AtomCore + From<E::Output>> SymbolicTensor<S, E> {
                 }
                 !indexed_product
             });
-        }
+            indexed_product
+        });
         // Keep implicit index sums atomic when scalar arithmetic takes powers.
         if indexed_product {
             expression
@@ -591,7 +612,9 @@ impl<S: TensorStructure, E: AtomCore + From<E::Output>> HasStructure for Symboli
     }
 
     fn scalar_power_base(self) -> Option<Self::Scalar> {
-        self.scalar().map(Self::scalar_power_expression)
+        let indexed = self.proofs.occurrences.get().map(|usage| !usage.is_empty());
+        self.scalar()
+            .map(|expression| Self::scalar_power_expression(expression, indexed))
     }
 
     fn scalar_ref(&self) -> Option<&Self::Scalar> {
@@ -1007,7 +1030,7 @@ impl<S> std::ops::Neg for SymbolicTensor<S> {
 
     fn neg(self) -> Self::Output {
         Self {
-            proofs: Default::default(),
+            proofs: self.proofs.algebra_result(),
             expression: -self.expression,
             is_composite: true,
             is_metric: self.is_metric,
@@ -1040,8 +1063,8 @@ impl<Aind: AbsInd> AddAssign<&SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
     }
 }
 
-impl<S: Clone> ScalarMul<Atom> for SymbolicTensor<S> {
-    type Output = SymbolicTensor<S>;
+impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+    type Output = Self;
 
     fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
         Some(Self {
@@ -1051,6 +1074,30 @@ impl<S: Clone> ScalarMul<Atom> for SymbolicTensor<S> {
             is_metric: false,
             structure: self.structure.clone(),
         })
+    }
+}
+
+impl ScalarMul<Atom> for SymbolicTensor<spenso::structure::partial::PartialStructure> {
+    type Output = Self;
+
+    fn scalar_mul(&self, rhs: &Atom) -> Option<Self> {
+        let scalar = Self::infer(rhs.clone()).ok()?;
+        if !scalar.is_scalar() {
+            return None;
+        }
+        self.multiply(&scalar).ok()
+    }
+}
+
+impl ScalarMul<Atom> for SymbolicTensor<spenso::structure::IndexedStructure> {
+    type Output = Self;
+
+    fn scalar_mul(&self, rhs: &Atom) -> Option<Self> {
+        let scalar = Self::infer_indexed(rhs.clone()).ok()?;
+        if !scalar.is_scalar() {
+            return None;
+        }
+        self.clone().multiply(scalar).ok()
     }
 }
 

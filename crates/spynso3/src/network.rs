@@ -18,7 +18,11 @@ use spenso::{
     network::{
         ContractScalars, ExecutionResult, MinIntermediateCost, Network, Sequential,
         SingleSmallestDegree, Steps,
-        library::symbolic::{ExplicitKey, TensorLibrary},
+        library::{
+            FunctionLibrary,
+            function_lib::Wrap,
+            symbolic::{ExplicitKey, TensorLibrary},
+        },
         parsing::{ParseSettings, ShadowedStructure},
         store::{NetworkStore, TensorScalarStoreMapping},
         tags::SPENSO_TAG,
@@ -40,14 +44,13 @@ use symbolica::{
         ConvertibleToReplaceWith, PythonCondition, PythonExpression, PythonFormattedOutput,
         PythonPatternRestriction,
     },
-    atom::FunctionBuilder,
     id::{Condition, PatternRestriction},
     prelude::*,
 };
 
 use symbolica::api::python::ConvertibleToExpression;
 #[cfg(test)]
-use symbolica::domains::float::Complex as SymComplex;
+use symbolica::{atom::FunctionBuilder, domains::float::Complex as SymComplex};
 
 use crate::{display, expression::TensorExpression, library::SpensorFunctionLibrary};
 use idenso::tensor::{
@@ -664,22 +667,18 @@ impl SpensoNet {
             .map_err(composition_error)?;
         self = self.relabel_ports(&left_indices)?;
         right = right.relabel_ports(&right_indices)?;
-        let structure = SymbolicTensor::new(
-            if subtract {
-                self.structure.expression() - right.structure.expression()
-            } else {
-                self.structure.expression() + right.structure.expression()
-            },
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            if subtract {
-                self.materialized.expression() - right.materialized.expression()
-            } else {
-                self.materialized.expression() + right.materialized.expression()
-            },
-            self.materialized.structure().clone(),
-        );
+        let structure = if subtract {
+            self.structure.try_sub(&right.structure)
+        } else {
+            self.structure.try_add(&right.structure)
+        }
+        .map_err(TensorExpression::inference_error)?;
+        let materialized = if subtract {
+            self.materialized.try_sub(&right.materialized)
+        } else {
+            self.materialized.try_add(&right.materialized)
+        }
+        .map_err(TensorExpression::inference_error)?;
         let network = if subtract {
             self.network - right.network
         } else {
@@ -702,30 +701,27 @@ impl SpensoNet {
                 "a non-scalar tensor cannot be used as a denominator",
             ));
         }
-        let structure = SymbolicTensor::new(
-            Atom::num(1) / self.structure.expression(),
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            Atom::num(1) / self.materialized.expression(),
-            self.materialized.structure().clone(),
-        );
+        let exponent =
+            SymbolicTensor::checked_parts(Atom::num(-1), PartialStructure::from_logical_slots([]))
+                .map_err(TensorExpression::inference_error)?;
+        let structure = self
+            .structure
+            .pow(&exponent)
+            .map_err(TensorExpression::inference_error)?;
+        let materialized = self
+            .materialized
+            .pow(&exponent)
+            .map_err(TensorExpression::inference_error)?;
         Self::finish(self.network.pow(-1), structure, materialized)
     }
 
     pub(crate) fn broadcast_function(self, function: Symbol) -> PyResult<Self> {
-        let structure = SymbolicTensor::new(
-            FunctionBuilder::new(function)
-                .add_arg(self.structure.expression().clone())
-                .finish(),
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            FunctionBuilder::new(function)
-                .add_arg(self.materialized.expression().clone())
-                .finish(),
-            self.materialized.structure().clone(),
-        );
+        let structure = Wrap
+            .apply(&function, self.structure)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let materialized = Wrap
+            .apply(&function, self.materialized)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
         Self::finish(self.network.fun(function), structure, materialized)
     }
 
@@ -1793,10 +1789,9 @@ impl SpensoNet {
     /// >>> network.expression().rank
     /// 2
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_known_parts(
+        TensorExpression::from_shared(
             py,
-            self.structure.expression().clone(),
-            self.structure.structure().clone(),
+            Arc::new(self.structure.clone()),
             self.descriptor.as_ref().map(|(name, _)| *name),
             self.descriptor
                 .as_ref()
@@ -2125,14 +2120,8 @@ impl SpensoNet {
     /// >>> network = TensorNetwork(tensor)
     /// >>> negated = -network
     pub fn __neg__(&self) -> PyResult<Self> {
-        let structure = SymbolicTensor::new(
-            Atom::num(-1) * self.structure.expression(),
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            Atom::num(-1) * self.materialized.expression(),
-            self.materialized.structure().clone(),
-        );
+        let structure = -self.structure.clone();
+        let materialized = -self.materialized.clone();
         Self::finish(-self.network.clone(), structure, materialized)
     }
 
@@ -2664,7 +2653,10 @@ mod tests {
                     .map(composition::port_atom),
             )
             .finish();
-        (SymbolicTensor::new(atom, interface), name)
+        // Storage receives an admitted descriptor, as it does through Tensor.dense.
+        let descriptor = SymbolicTensor::from_declared_parts(atom, interface)
+            .expect("test tensor descriptor must match its declared interface");
+        (descriptor, name)
     }
 
     #[test]
@@ -3174,6 +3166,7 @@ mod tests {
     #[test]
     fn open_tensor_product_contracts_only_the_planned_pair() {
         initialize();
+        Python::initialize();
         let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
         let (left, left_name) = tensor_descriptor(
@@ -3250,6 +3243,7 @@ mod tests {
     #[test]
     fn tensor_product_aligns_each_unique_open_representation_pair() {
         initialize();
+        Python::initialize();
         let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
         let (left, left_name) = tensor_descriptor(
@@ -3342,6 +3336,7 @@ mod tests {
     #[test]
     fn open_outer_product_does_not_alias_explicit_dummy_symbol() {
         initialize();
+        Python::initialize();
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let explicit = AbstractIndex::Symbol(symbol!("d_0").into());
         let (left, left_name) = tensor_descriptor(
