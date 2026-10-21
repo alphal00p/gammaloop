@@ -43,6 +43,7 @@ mod chain;
 mod product;
 mod word;
 use word::ProductAlgebra;
+pub use word::WordDerivativeSide;
 
 #[cfg(test)]
 thread_local! {
