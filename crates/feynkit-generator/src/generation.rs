@@ -1553,8 +1553,10 @@ impl NumeratorTemplate {
         if scoped_alias {
             return Ok(Self::Dynamic);
         }
-        let (expression, structure) = tensor.into_parts();
-        let tensor = SymbolicTensor::from_declared_parts(expression, structure)
+        // Complete the source metadata before the retained template is cloned.
+        // The identity map keeps its established interface and collision history.
+        let tensor = tensor
+            .with_renamed_indices(tensor.expression().clone(), &HashMap::new())
             .map_err(DiagramError::from)?;
         Ok(Self::Admitted {
             tensor: Box::new(tensor),
@@ -1610,16 +1612,6 @@ impl NumeratorTemplate {
                 encoded.insert(index.to_atom(), target.to_atom());
             }
         }
-        let logical = tensor
-            .structure()
-            .logical_slots()
-            .into_iter()
-            .map(|mut slot| {
-                if let PartialIndex::Explicit(index) = slot.aind {
-                    slot.aind = PartialIndex::Explicit(renaming[&index]);
-                }
-                slot
-            });
         let expression = instantiation.bind_template(tensor.expression())?;
         let expression = if encoded.is_empty() {
             expression
@@ -1630,13 +1622,12 @@ impl NumeratorTemplate {
                 }
             })
         };
-        // Admission checked the raw rule and each momentum-alias variant. This
-        // final injective relabeling preserves scopes and the actual logical
-        // interface, including ports retained only by a zero. No callbacks run.
-        Ok(SymbolicTensor::from_validated_parts(
-            expression,
-            PartialStructure::from_logical_slots(logical),
-        ))
+        // Admission established the raw rule; scalar momentum aliases retain
+        // its metadata. This injective relabeling also transports identities
+        // retained only by a zero. No callbacks run.
+        Ok(tensor
+            .with_renamed_indices(expression, &renaming)
+            .map_err(DiagramError::from)?)
     }
 }
 
@@ -3584,8 +3575,18 @@ impl Generator {
                 let structure =
                     interface_in_atom_order(numerator.expression(), numerator.structure())
                         .expect("template admission established enumerable explicit ports");
-                let (expression, _) = numerator.into_parts();
-                SymbolicTensor::from_validated_parts(expression, structure)
+                let logical = numerator.structure().logical_slots();
+                let axes = structure
+                    .logical_slots()
+                    .iter()
+                    .map(|slot| {
+                        logical
+                            .iter()
+                            .position(|original| original == slot)
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>();
+                numerator.permuted(&axes).map_err(DiagramError::from)?
             }
         };
         self.numerators
@@ -3642,12 +3643,17 @@ impl Generator {
         let template = if let Some(base) = base {
             match &*base {
                 NumeratorTemplate::Dynamic => NumeratorTemplate::Dynamic,
-                NumeratorTemplate::Admitted { tensor, .. } => {
+                NumeratorTemplate::Admitted { tensor, labels } => {
                     let expression = instantiation.bind_template(tensor.expression())?;
                     let specialized = tensor
-                        .with_checked_expression(expression)
+                        .with_renamed_indices(expression, &HashMap::new())
                         .map_err(DiagramError::from)?;
-                    NumeratorTemplate::admitted(specialized)?
+                    // Momentum aliases can erase the payload. Keep the admitted
+                    // rule's complete label universe for its retained metadata.
+                    NumeratorTemplate::Admitted {
+                        tensor: Box::new(specialized),
+                        labels: labels.clone(),
+                    }
                 }
             }
         } else {
@@ -3785,8 +3791,18 @@ impl Generator {
                 let structure =
                     interface_in_atom_order(numerator.expression(), numerator.structure())
                         .expect("template admission established enumerable explicit ports");
-                let (expression, _) = numerator.into_parts();
-                SymbolicTensor::from_validated_parts(expression, structure)
+                let logical = numerator.structure().logical_slots();
+                let axes = structure
+                    .logical_slots()
+                    .iter()
+                    .map(|slot| {
+                        logical
+                            .iter()
+                            .position(|original| original == slot)
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>();
+                numerator.permuted(&axes).map_err(DiagramError::from)?
             }
         };
         self.numerators
@@ -7578,6 +7594,139 @@ mod tests {
             previous = Some(template);
         }
         assert_eq!(generator.numerators.interactions.read().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn interaction_template_cache_retains_dummy_metadata_across_owners() {
+        use idenso::tensor::composition::TensorCompositionError;
+
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            serde_json::json!("P(dummy(1),1)*P(dummy(1),2)");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let mut legs = tensor_test_legs()[..3].to_vec();
+        for leg in &mut legs {
+            leg.color = 1;
+        }
+        let head = spenso::tensor_symbol!("generation_template_cache_probe");
+        let mut numerators = Vec::new();
+        for owner in [7, 12] {
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(owner),
+                legs: &legs,
+            };
+            let numerator = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            let index =
+                AbstractIndex::Named(feynkit_graph::symbols::vertex_index().into(), owner, 1);
+            let probe = SymbolicTensor::infer(
+                FunctionBuilder::new(head)
+                    .add_arg(Minkowski {}.new_rep(4).to_symbolic([index.to_atom()]))
+                    .finish(),
+            )
+            .unwrap();
+            assert!(matches!(
+                numerator.multiply(&probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                    index: collision,
+                    occurrences: 3,
+                }) if collision == index
+            ));
+            // Consuming a returned clone must not establish metadata which the
+            // retained cache entry lacks and would have to rediscover later.
+            let cached = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            assert!(numerator.same_reduction_state(&cached));
+            assert!(matches!(
+                cached.multiply(&probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+            numerators.push(cached);
+        }
+        assert!(numerators[0].multiply(&numerators[1]).is_ok());
+        assert!(numerators[0].multiply(&numerators[0]).is_err());
+        assert_eq!(
+            generator
+                .numerators
+                .interaction_templates
+                .read()
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn cancelled_alias_templates_keep_hidden_dummy_labels_and_cached_metadata() {
+        use idenso::tensor::composition::TensorCompositionError;
+
+        let mut definition = serde_json::to_value(scalar_model()).unwrap();
+        definition["lorentz_structures"][0]["structure"] =
+            serde_json::json!("Metric(idx(2,3),dummy(1))*(P(dummy(1),1)+P(dummy(1),2))");
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let rule = model.vertex_rule_id("V1").unwrap();
+        let generator = Generator::new(model);
+        let mut legs = tensor_test_legs()[..3].to_vec();
+        for leg in &mut legs {
+            leg.color = 1;
+        }
+        legs[1].edge = legs[0].edge;
+        let head = spenso::tensor_symbol!("generation_cancelled_template_probe");
+        for owner in [4, 9] {
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(owner),
+                legs: &legs,
+            };
+            let zero = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            let cached = generator
+                .interaction_numerator(rule, &instantiation)
+                .unwrap();
+            assert!(zero.is_zero());
+            assert_eq!(zero.rank(), 1);
+            assert!(zero.same_reduction_state(&cached));
+            let index =
+                AbstractIndex::Named(feynkit_graph::symbols::vertex_index().into(), owner, 1);
+            let probe = |index: AbstractIndex| {
+                SymbolicTensor::infer(
+                    FunctionBuilder::new(head)
+                        .add_arg(Minkowski {}.new_rep(4).to_symbolic([index.to_atom()]))
+                        .finish(),
+                )
+                .unwrap()
+            };
+            for numerator in [zero, cached] {
+                assert!(matches!(
+                    numerator.multiply(&probe(index)),
+                    Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                        index: collision,
+                        occurrences: 3,
+                    }) if collision == index
+                ));
+                let other = AbstractIndex::Named(
+                    feynkit_graph::symbols::vertex_index().into(),
+                    owner + 1,
+                    1,
+                );
+                let product = numerator.multiply(&probe(other)).unwrap();
+                assert!(product.is_zero());
+                assert_eq!(product.rank(), 2);
+            }
+        }
+        let templates = generator.numerators.interaction_templates.read().unwrap();
+        assert_eq!(templates.len(), 2);
+        let dummy = AbstractIndex::Named(feynkit_graph::symbols::vertex_index().into(), 0, 1);
+        for template in templates.values() {
+            let NumeratorTemplate::Admitted { labels, .. } = &**template else {
+                panic!("explicit rule must retain its admitted template");
+            };
+            assert!(labels.iter().any(|(index, _)| *index == dummy));
+        }
     }
 
     #[test]

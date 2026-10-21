@@ -46,7 +46,9 @@ impl SymbolicTensor<PartialStructure> {
         let expression = self
             .expression
             .canonize::<AbstractIndex>(AbstractIndex::Dummy)?;
-        Ok(self.with_rewritten_expression(expression)?)
+        // Canonicalization chooses new dummy identities, so this is an index
+        // construction boundary rather than scalar algebra on the old names.
+        Ok(self.with_materialized_expression(expression)?)
     }
 }
 
@@ -976,7 +978,7 @@ mod typed_tests {
     }
 
     #[test]
-    fn typed_canonize_checks_callback_rank_loss() {
+    fn typed_canonize_retains_authoritative_ports_through_callbacks() {
         crate::test_support::test_initialize();
         let calls = Arc::new(AtomicUsize::new(0));
         let seen = Arc::clone(&calls);
@@ -1008,10 +1010,15 @@ mod typed_tests {
             * function!(spenso::vector_symbol!("typed_canonize_callback_p"), a);
         let source = SymbolicTensor::infer(expression).unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 0);
-        assert!(matches!(
-            source.canonize(),
-            Err(CanonicalizationError::Tensor(_))
-        ));
+        let canonical = source.canonize().unwrap();
+        assert_eq!(canonical.structure(), source.structure());
+        // Normalizers used by this ordinary identity must preserve its tensor
+        // meaning. Arbitrary raw replacement still checks physical ports.
+        assert!(
+            source
+                .with_checked_expression(canonical.expression().clone())
+                .is_err()
+        );
         assert!(calls.load(Ordering::SeqCst) > 0);
     }
 }

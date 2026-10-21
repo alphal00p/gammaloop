@@ -3199,8 +3199,10 @@ mod tests {
             tags = [SPENSO_TAG.index.clone(), "spenso::index-label:v".to_owned()]
         );
         let raw = indexed_test_tensor([function!(edge, 7, 0), function!(vertex, 7, 0)]);
+        // Exercise decoding explicitly: index-only cooking preserves these
+        // already valid native labels.
         let cooking =
-            idenso::CookSettings::indices().with_mode(idenso::CookMode::ReversibleEncoding);
+            idenso::CookSettings::reversible().with_input_tags([SPENSO_TAG.index.clone()]);
         let encoded = cooking.try_cook(raw.as_view()).unwrap();
         assert_ne!(encoded, raw);
         let value = SymbolicTensor::infer(encoded.clone()).unwrap();

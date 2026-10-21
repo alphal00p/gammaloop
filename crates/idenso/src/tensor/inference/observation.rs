@@ -81,7 +81,7 @@ impl InterfaceInference {
         .expect("index-only observation cannot reject a placeholder scope")
     }
 
-    pub(super) fn scoped_occurrences(
+    pub(in crate::tensor) fn scoped_occurrences(
         value: AtomView<'_>,
         slots: &mut SlotMatcher,
     ) -> InferenceResult<ExplicitIndexOccurrences> {
@@ -118,7 +118,7 @@ impl InterfaceInference {
         *slots = inference.slots;
         let interface = interface?;
         let boundary = interface.logical_slots();
-        occurrences.counts.retain(|slot, _| {
+        occurrences.retain(|slot| {
             boundary.iter().any(|port| {
                 port.rep().base() == slot.rep().base()
                     && port.aind == PartialIndex::Explicit(slot.aind())
@@ -173,7 +173,7 @@ impl InterfaceInference {
         let mut result = ExplicitIndexOccurrences::default();
         if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
             if scope.count_indices {
-                result.add(slot.rep().base().slot(slot.aind()), 1);
+                result.add(slot, 1);
             }
             // Admission owns the complete index identity. Names such as `in`
             // or `out` inside it are data, not chain wiring placeholders.
@@ -201,8 +201,8 @@ impl InterfaceInference {
                     // malformed local counts visible to the existing validator.
                     // Pair queries allow unlike branch interfaces: scope only
                     // proven interfaces there, without adding typed admission.
-                    if !branch.counts.is_empty()
-                        && branch.counts.values().all(|count| *count <= 2)
+                    if !branch.is_empty()
+                        && branch.validate().is_ok()
                         && let Err(error) =
                             Self::scope_explicit_occurrences(term, &mut branch, slots)
                         && scope.validate
@@ -210,11 +210,7 @@ impl InterfaceInference {
                     {
                         return Err(error);
                     }
-                    result.selected_pair |= branch.selected_pair;
-                    for (slot, count) in branch.counts {
-                        let maximum = result.counts.entry(slot).or_default();
-                        *maximum = (*maximum).max(count);
-                    }
+                    result.branch_max(branch);
                 }
             }
             AtomView::Mul(product) => {
@@ -237,10 +233,7 @@ impl InterfaceInference {
                 for (position, term) in [base, exponent].into_iter().enumerate() {
                     let mut branch =
                         Self::observe_indices(term, slots, cache, scope, exclude_tensor_leaf)?;
-                    if position == 0
-                        && !branch.counts.is_empty()
-                        && branch.counts.values().all(|count| *count <= 2)
-                    {
+                    if position == 0 && !branch.is_empty() && branch.validate().is_ok() {
                         result.selected_pair |= branch.selected_pair;
                         let interface =
                             match Self::scope_explicit_occurrences(base, &mut branch, slots) {
@@ -257,23 +250,17 @@ impl InterfaceInference {
                         if scope.validate
                             && let Some(interface) = &interface
                         {
-                            Self::power_interface(interface, exponent, &value.to_string())?;
+                            Self::power_interface(interface, exponent, || value.to_string())?;
                         }
                         if let Ok(exponent) = Rational::try_from(exponent)
                             && exponent.denominator() == 1
                         {
                             let repetitions = exponent.numerator().abs();
                             let repetitions = usize::try_from(repetitions).unwrap_or(3).min(3);
-                            for count in branch.counts.values_mut() {
-                                *count = count.saturating_mul(repetitions).min(3);
-                            }
+                            branch.repeat(repetitions);
                         }
                     }
-                    result.selected_pair |= branch.selected_pair;
-                    for (slot, count) in branch.counts {
-                        let maximum = result.counts.entry(slot).or_default();
-                        *maximum = (*maximum).max(count);
-                    }
+                    result.branch_max(branch);
                 }
             }
             AtomView::Fun(function) => {
@@ -338,10 +325,10 @@ impl InterfaceInference {
             _ => {}
         }
         if let Some(representation) = scope.pair_representation {
-            result.selected_pair |= result
-                .counts
-                .iter()
-                .any(|(slot, count)| slot.rep().base().rep == representation.base() && *count >= 2);
+            let selected = result
+                .entries()
+                .any(|(slot, count)| slot.rep().base().rep == representation.base() && count >= 2);
+            result.selected_pair |= selected;
         }
         Ok(result)
     }
@@ -371,7 +358,7 @@ mod tests {
                 &mut SlotMatcher::default(),
             )
             .unwrap();
-            assert_eq!(occurrences.counts[&a], expected);
+            assert_eq!(occurrences.count(a), expected);
             assert_eq!(occurrences.validate().is_ok(), expected <= 2);
         }
     }
@@ -450,7 +437,7 @@ mod tests {
                     &mut SlotMatcher::default(),
                 )
                 .unwrap();
-                assert_eq!(occurrences.counts, AHashMap::from([(slot, 1)]));
+                assert_eq!(occurrences.entries().collect::<Vec<_>>(), [(slot, 1)]);
                 let source = SymbolicTensor::infer(expression.clone()).unwrap();
                 assert_eq!(
                     source.structure.logical_slots(),
@@ -533,7 +520,6 @@ mod tests {
         assert!(
             InterfaceInference::scoped_occurrences(scalar.as_view(), &mut slots)
                 .unwrap()
-                .counts
                 .is_empty()
         );
     }
@@ -558,7 +544,7 @@ mod tests {
                 &mut SlotMatcher::default(),
             )
             .unwrap();
-            assert_eq!(occurrences.counts[&slot], 1);
+            assert_eq!(occurrences.count(slot), 1);
             occurrences.validate().unwrap();
         }
         let invalid = spenso::bracket!(&a * &b * &c).pow(-1);
@@ -600,7 +586,10 @@ mod tests {
                 &mut SlotMatcher::default(),
                 &mut Cache::default(),
             );
-            assert_eq!(counts.counts.values().copied().collect::<Vec<_>>(), vec![1]);
+            assert_eq!(
+                counts.entries().map(|(_, count)| count).collect::<Vec<_>>(),
+                vec![1]
+            );
             assert!(
                 InterfaceInference::has_explicit_index_pairs(
                     expression.as_view(),
