@@ -122,6 +122,8 @@ fn real_scalar_metadata_with_hidden_universal_conjugation_remains_opaque() {
         metadata_hook,
     ] {
         let metadata = function!(metadata_head, &hidden);
+        // Constructing this comparison fixture can itself invoke the hook.
+        let forbidden_metadata = function!(metadata_head, INBUILTS.conj(&private));
         // The first case is intrinsic, so callback refusal alone cannot protect
         // this Real+Scalar container from an unguarded global CONJ conversion.
         assert_eq!(metadata.conj(), metadata);
@@ -135,11 +137,7 @@ fn real_scalar_metadata_with_hidden_universal_conjugation_remains_opaque() {
         let canonical = source.canonize().unwrap();
         assert!(canonical.expression().contains(&metadata));
         assert!(canonical.expression().contains(&hidden));
-        assert!(
-            !canonical
-                .expression()
-                .contains(&function!(metadata_head, INBUILTS.conj(&private)))
-        );
+        assert!(!canonical.expression().contains(&forbidden_metadata));
         assert_eq!(
             canonical.structure().logical_slots(),
             source.structure().logical_slots()
