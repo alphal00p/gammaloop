@@ -1,0 +1,143 @@
+{
+  "schema": "vakint.external-data.producer-update.v1",
+  "provenance": {
+    "numerical_coverage": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/coverage-stages-v17.json",
+      "sha256": "f2992d7479b2a48c088c4e380f70c9fbf542a322bc20d32f5838af7e36508ccc"
+    },
+    "symbolic_coverage": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/coverage-v21.json",
+      "sha256": "6c6f242c565c44bc199794f0359f9bd4e8dea6258472dcdef552a8bfb610c8dc"
+    },
+    "symbolic_overlays": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/current-symbolic-overlays-v5.json",
+      "sha256": "1c02b431f51d3168e1532d44f2e92d122c6f1250e6e453a3836d7ea292479b1b"
+    },
+    "source_intake": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/external-data-PR4-v21-repository-update-source-v1/intake.json",
+      "sha256": "66d7687085aafbe4b39eb6202b685353354d3e94473ac392ec35858d3d2a9523"
+    },
+    "release_policy": "repository_only_no_tag_assets_or_latest_update",
+    "retained_supplemented_coefficients": 49,
+    "numerical_accuracy_evidence_not_interval_proof": true,
+    "previous_producer_update": {
+      "path": "provenance/producer-update-v0.1.1-PR4-v21-20261021-v1-before/provenance/producer-update.json",
+      "sha256": "71883b23d86aef06bd08724b304b2234fa169ea45ec276e4180361b134979308"
+    },
+    "actual_PR4_publication": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/publication-output-v1/publication.json",
+      "sha256": "611ada0bb6de92033e47eaeac543ef4ac37c022660fcf633fe05d842b96ee100"
+    },
+    "actual_PR4_publication_audit": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/peer-independent-actual-principal-publication-file-audit-pr4-v1.json",
+      "sha256": "d184addb0d6e0f8ee21e8b2547e55a9d5f38fcfdb08ac61f8cb7c40a43c734d2"
+    },
+    "Root_actual_PR4_publication_adoption": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/root-actual-principal-publication-adoption-v1.json",
+      "sha256": "a15b2d9aa7561d56c8c9f444bfb96385cb5a4025e709f82a66476425a7e2cd45"
+    },
+    "pending_native_period_evaluator": [
+      "vakint::K5Moment(k)",
+      "vakint::K5LogMoment(k)"
+    ],
+    "new_PR4_exact_cells": 24
+  },
+  "masters": {
+    "L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 20000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 20000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 20000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 20000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 20000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 4,
+          "numerical": true,
+          "significant_digits": 20000,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P1/numerical.json",
+          "sha256": "b54e96eaf3deed297169b16f34bcc28d9d32f6ea2344fd84457f27e21a32ea3d"
+        },
+        "symbolic.json": {
+          "path": "masters/P1/symbolic.json",
+          "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a"
+        },
+        "graph.dot": {
+          "path": "masters/P1/graph.dot",
+          "sha256": "f30255ed59d97daac1400f0d85bd50057be9bb40c8b7f12e4275c103ae710640"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1_computed.json",
+        "sha256": "b54e96eaf3deed297169b16f34bcc28d9d32f6ea2344fd84457f27e21a32ea3d"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1_symbolic.json",
+        "sha256": "dd594dcff7017cbe1794877e38a83b8cce6270b9fed680135888af42dd8d6f9a"
+      },
+      "source_stage_digits": 20000,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/artifacts/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1_validation.json",
+        "sha256": "1545c9389bef6e0aee799f8efb434d05033d8e70d8cc19707cdfa5e6047a4485"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/artifacts/pslq/one-loop-warmup-v1/acceptance.json",
+          "sha256": "dc486d6e3a47c3c3794dc4929588dbac52181482ab145d498bb4746d9156d487"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/artifacts/pslq/one-loop-warmup-v1/acceptance.json",
+          "sha256": "dc486d6e3a47c3c3794dc4929588dbac52181482ab145d498bb4746d9156d487"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/artifacts/pslq/one-loop-warmup-v1/acceptance.json",
+          "sha256": "dc486d6e3a47c3c3794dc4929588dbac52181482ab145d498bb4746d9156d487"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/artifacts/pslq/one-loop-warmup-v1/acceptance.json",
+          "sha256": "dc486d6e3a47c3c3794dc4929588dbac52181482ab145d498bb4746d9156d487"
+        },
+        "3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/artifacts/pslq/one-loop-warmup-v1/acceptance.json",
+          "sha256": "dc486d6e3a47c3c3794dc4929588dbac52181482ab145d498bb4746d9156d487"
+        },
+        "4": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/1L/L1_e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4_p1/artifacts/pslq/one-loop-warmup-v1/acceptance.json",
+          "sha256": "dc486d6e3a47c3c3794dc4929588dbac52181482ab145d498bb4746d9156d487"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    }
+  }
+}

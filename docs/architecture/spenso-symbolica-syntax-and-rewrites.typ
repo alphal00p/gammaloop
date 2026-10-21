@@ -1,7 +1,9 @@
 = Spenso Symbolica Syntax And Rewrite Idioms
 
 #quote(block: true)[
-#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-09-14
+#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-09-14.
+Test-only printer and cyclic-trace expectations were reviewed on 2026-10-21; the represented
+algebra and rewrite contracts are unchanged.
 
 The surface forms are owned by
 #link("../../crates/spenso/src/network/parsing/mod.rs")[Spenso parsing and materialization], while the

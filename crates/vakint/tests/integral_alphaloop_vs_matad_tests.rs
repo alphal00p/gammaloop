@@ -16,8 +16,6 @@ use vakint::{
     vakint_symbol,
 };
 
-use vakint::{externals_from_f64, params_from_f64};
-
 const N_DIGITS_ANLYTICAL_EVALUATION: u32 = 32;
 const COMPARISON_REL_THRESHOLD: f64 = 1.0e-25;
 // No error on anylic expressions
@@ -82,9 +80,9 @@ fn test_integrate_1l_no_numerator() {
                     prop(1,edge(1,1),k(1),muvsq,{})
                 )",pow).as_str()
             ).unwrap().as_view(),
-            params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+            test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION),
-            externals_from_f64(
+            test_utils::externals_at_reference_point(
             &(1..=2)
                 .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
                 //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -110,9 +108,9 @@ fn test_integrate_1l_no_numerator_squared_mass() {
                     prop(1,edge(1,1),k(1),user_space::muv^2,{})
                 )",pow).as_str()
             ).unwrap().as_view(),
-            params_from_f64(&[("user_space::muv".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+            test_utils::params_at_reference_point(&[("user_space::muv".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION),
-            externals_from_f64(
+            test_utils::externals_at_reference_point(
             &(1..=2)
                 .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
                 //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -138,9 +136,9 @@ fn test_integrate_2l_no_numerator() {
             * prop(3,edge(2,1),k(1)+k(2),muvsq,1)\
         )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
         N_DIGITS_ANLYTICAL_EVALUATION),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -175,9 +173,9 @@ fn test_integrate_3l_basketball_a_with_mode(mode: ThreeLoopPeerMode) {
                 prop(4, edge(1, 2), k(1) + k(2) - k(3), muvsq, 1)
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
         N_DIGITS_ANLYTICAL_EVALUATION),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -212,9 +210,9 @@ fn test_integrate_3l_basketball_b_with_mode(mode: ThreeLoopPeerMode) {
                 prop(4, edge(1, 2), k(1) + k(2) - k(3), muvsq, 1)
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
         N_DIGITS_ANLYTICAL_EVALUATION),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -252,9 +250,9 @@ fn test_integrate_3l_no_numerator_with_mode(mode: ThreeLoopPeerMode) {
                 *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
         N_DIGITS_ANLYTICAL_EVALUATION),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -296,9 +294,9 @@ fn test_integrate_3l_rank_4_with_mode(mode: ThreeLoopPeerMode) {
                 *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 2.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 2.0)].iter().cloned().collect(),
         N_DIGITS_ANLYTICAL_EVALUATION),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -340,9 +338,9 @@ fn test_integrate_3l_rank_4_different_scales_with_mode(mode: ThreeLoopPeerMode) 
                 *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 3.0), ("mursq".into(), 5.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 3.0), ("mursq".into(), 5.0)].iter().cloned().collect(),
         N_DIGITS_ANLYTICAL_EVALUATION),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             //.map(|i| (i, (17.0*((0) as f64), 4.0*((0) as f64), 3.0*((0) as f64), 12.0*((0) as f64))))
@@ -390,21 +388,13 @@ pub fn evaluate_expression_with_matad(
         .unwrap()
         .to_atom();
 
-    if direct_masters_substitution {
-        // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
-        integral = integral.expand();
-        integral = matad
-            .substitute_additional_constants(integral.as_view())
-            .unwrap();
-    } else {
+    if !direct_masters_substitution {
         integral = matad.substitute_masters(integral.as_view()).unwrap();
-        // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
-        integral = integral.expand();
-        integral = matad.substitute_hpls(integral.as_view()).unwrap();
-        integral = matad
-            .substitute_additional_constants(integral.as_view())
-            .unwrap();
     }
+    // Keep source identities and exact HPL definitions until the single final
+    // tracked evaluation below. Repeated public numerical substitutions would
+    // correctly round each intermediate and lose avoidable digits.
+    integral = integral.expand();
     let muv_sq_symbol = vakint_symbol!("muvsq");
     let log_muv_mu_sq = function!(
         Symbol::LOG,
@@ -424,7 +414,7 @@ pub fn evaluate_expression_with_matad(
         .replace(vakint_parse!("log_mu_sq").unwrap().to_pattern())
         .with((log_mu_sq).to_pattern());
 
-    let test_params = params_from_f64(
+    let test_params = test_utils::params_at_reference_point(
         &[("muvsq".into(), 1.0), ("mursq".into(), 1.0)]
             .iter()
             .cloned()
@@ -466,7 +456,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("-10.03527847976878917191470068515890023865".into(), "0.0".into()) ),
                 (  1, (" 41.87670208303157617433490267097099146643".into(), "0.0".into()) ),
                 (  2, ("-146.80128953959941603962375965123680914875".into(), "0.0".into()) ),
-                ], &vakint.settings),
+                ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -478,7 +468,7 @@ pub fn test_eval_matad_masters() {
                 (  1, ("-24.20892802120359267872133821957094892580".into(), "0.0".into()) ),
                 (  2, ("-38.71759974491583887231661364177794370942".into(), "0.0".into()) ),
                 (  3, ("-101.953991009597114422662478576975778730".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             6
         ),
         (
@@ -488,7 +478,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("-8.216859817508738062913398338601085824970".into(), "0.0".into()) ),
                 (  1, ("36.47368421155096825994471856976365848559".into(), "0.0".into()) ),
                 (  2, ("-122.5028439280736143862645277852881354128".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -500,7 +490,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("39.42929462910208211529996476007305636115".into(), "0.0".into()) ),
                 (  1, ("62.92709375535910070547798992048699891696".into(), "0.0".into()) ),
                 (  2, ("-126.3366653990120700722498217033370728331".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -511,7 +501,7 @@ pub fn test_eval_matad_masters() {
                 (  2, (" 0.8224670334241132182362075833230125946".into(), "0.0".into()) ),
                 (  3, ("-0.40068563438653142846657938717048333026".into(), "0.0".into()) ),
                 (  4, (" 0.60880681896251523272775207930440694543".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             7
         ),
         (
@@ -522,7 +512,7 @@ pub fn test_eval_matad_masters() {
                 (  2, ("-0.8224670334241132182362075833230125946".into(), "0.0".into()) ),
                 (  3, (" 0.40068563438653142846657938717048333026".into(), "0.0".into()) ),
                 (  4, (" 0.067645202106946136969750231033822993923423".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             7
         ),
         (
@@ -533,7 +523,7 @@ pub fn test_eval_matad_masters() {
                 (  2, (" 3.289868133696452872944830333292050378438".into(), "0.0".into()) ),
                 (  3, ("-3.205485075092251427732635097363866642040".into(), "0.0".into()) ),
                 (  4, (" 9.740909103400243723644033268870511124973".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             7
         ),
         (
@@ -544,7 +534,7 @@ pub fn test_eval_matad_masters() {
                 (  2, ("-3.289868133696452872944830333292050378438".into(), "0.0".into()) ),
                 (  3, (" 3.205485075092251427732635097363866642040".into(), "0.0".into()) ),
                 (  4, (" 1.082323233711138191516003696541167902775".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             7
         ),
         (
@@ -554,7 +544,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("-5.913204783884020530495717892535405026883".into(), "0.0".into()) ),
                 (  1, ("31.79387586520335091502703130598293231890".into(), "0.0".into()) ),
                 (  2, ("-95.53186858506048154153099646099149596351".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -564,7 +554,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("-3.027009493987652019786374701758957286151".into(), "0.0".into()) ),
                 (  1, ("28.73643511952363680901046995862299631519".into(), "0.0".into()) ),
                 (  2, ("-63.46100358831692185768876871928863693891".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -574,7 +564,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("-2.860862224139327350272784567773241917561".into(), "0.0".into()) ),
                 (  1, ("29.00667443783775908331902631581722417518".into(), "0.0".into()) ),
                 (  2, ("-62.36139634229625160648107039345983094078".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -584,7 +574,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("1.120248397039242082272516548224209526276".into(), "0.0".into()) ),
                 (  1, ("30.68103527534589055078588298235627556530".into(), "0.0".into()) ),
                 (  2, ("-13.30346064085824836188894234098890655258".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -596,7 +586,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("-55.65962246120633017136139508642412198254".into(), "0.0".into()) ),
                 (  1, ("-151.9352362017674553145984030189617080164".into(), "0.0".into()) ),
                 (  2, ("-574.6540576129672528661511219788586831297".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
         (
@@ -608,7 +598,7 @@ pub fn test_eval_matad_masters() {
                 (  0, ("21.76198850991296192361111230083506510406".into(), "0.0".into()) ),
                 (  1, ("7.851742836425531175775595591525685030810".into(), "0.0".into()) ),
                 (  2, ("-71.05207017591209503800257696579714623490".into(), "0.0".into()) ),
-            ], &vakint.settings),
+            ], &vakint.settings).unwrap(),
             5
         ),
     ];
@@ -667,7 +657,7 @@ pub fn test_eval_matad_one_master_combination() {
             ( -1, ("20.17312652385648488703674553970843989141".into(),  "0.0".into()) ),
             (  0, ("48.81971591461289153001703696320240598328".into(),  "0.0".into()) ),
             (  1, ("225.02689067182955254127148271373064571626".into(), "0.0".into()) ),
-        ], &vakint.settings),
+        ], &vakint.settings).unwrap(),
         None,
         0.1_f64.powi((vakint.settings.run_time_decimal_precision -2) as i32),
         0.,
@@ -686,7 +676,7 @@ pub fn test_eval_matad_one_master_combination() {
             ( -1, ("20.17312652385648488703674553970843989141".into(),  "0.0".into()) ),
             (  0, ("48.81971591461289153001703696320240598328".into(),  "0.0".into()) ),
             (  1, ("225.02689067182955254127148271373064571626".into(), "0.0".into()) ),
-        ], &vakint.settings),
+        ], &vakint.settings).unwrap(),
         None,
         0.1_f64.powi((vakint.settings.run_time_decimal_precision -2) as i32),
         0.,

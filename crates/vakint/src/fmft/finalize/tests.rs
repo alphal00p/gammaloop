@@ -31,6 +31,9 @@ fn native_pr_finite_value_uses_the_existing_table_without_form() {
             .unwrap();
         let source = vk_parse!(format!("{name}ep0").as_str()).unwrap();
         let expected = fmft.substitute_masters(source.as_view()).unwrap();
+        let expected = fmft
+            .substitute_additional_constants(expected.as_view())
+            .unwrap();
         assert_eq!(result, expected, "{name}");
     }
 }
@@ -147,6 +150,9 @@ fn native_pr_warns_and_preserves_requested_precision_and_legacy_values() {
     let expected = high
         .substitute_masters(vk_parse!("PR12ep0").unwrap().as_view())
         .unwrap();
+    let expected = high
+        .substitute_additional_constants(expected.as_view())
+        .unwrap();
     assert_eq!(native, expected);
     assert_eq!(high.settings.run_time_decimal_precision, 20_000);
 }
@@ -195,6 +201,9 @@ fn native_pr_preserves_mass_and_custom_epsilon_conventions() {
         .substitute_masters(vk_parse!("PR12ep0").unwrap().as_view())
         .unwrap()
         / mass.clone();
+    let expected_finite = fmft
+        .substitute_additional_constants(expected_finite.as_view())
+        .unwrap();
     assert_eq!(native, expected_finite);
     assert!(!native.contains_symbol(vk_symbol!("ep")));
     assert!(!native.contains_symbol(vk_symbol!("Oep")));

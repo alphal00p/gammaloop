@@ -4,7 +4,8 @@ use colored::Colorize;
 use log::{debug, info};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    domains::float::{Complex, Float},
+    domains::float::{Complex, Float, RoundingDirection},
+    domains::rational::Rational,
     printer::{AtomPrinter, PrintOptions},
     try_parse,
 };
@@ -18,6 +19,54 @@ use vakint::{
     TensorReductionMethod, Vakint, VakintError,
 };
 use vakint::{EvaluationOrder, Momentum, VakintSettings};
+
+#[path = "experimental_rustred_4l/legacy_master_oracle.rs"]
+mod legacy_master_oracle;
+
+#[cfg(all(unix, not(target_arch = "wasm32")))]
+#[path = "support/external_data.rs"]
+mod external_data_fixture;
+
+/// Exact scientific reference points retain the authored binary coordinates.
+/// These helpers deliberately differ from public f64 input constructors, which
+/// correctly retain their finite input uncertainty.
+#[allow(dead_code)]
+pub fn reference_point_float(value: f64, requested: u32) -> Float {
+    let exact = Rational::try_from(value).expect("finite reference coordinate");
+    let bits = VakintSettings {
+        run_time_decimal_precision: requested + 64,
+        ..Default::default()
+    }
+    .get_binary_precision();
+    let result = Float::from_rational_round(&exact, bits, RoundingDirection::Nearest);
+    assert_eq!(result.to_rational(), exact, "reference point changed");
+    result
+}
+
+#[allow(dead_code)]
+pub fn params_at_reference_point(
+    parameters: &HashMap<String, f64, ahash::RandomState>,
+    precision: u32,
+) -> HashMap<String, Float, ahash::RandomState> {
+    parameters
+        .iter()
+        .map(|(name, value)| (name.clone(), reference_point_float(*value, precision)))
+        .collect()
+}
+
+#[allow(dead_code)]
+pub fn externals_at_reference_point(
+    external: &HashMap<usize, (f64, f64, f64, f64), ahash::RandomState>,
+    precision: u32,
+) -> HashMap<usize, Momentum, ahash::RandomState> {
+    external
+        .iter()
+        .map(|(&index, &(a, b, c, d))| {
+            let [a, b, c, d] = [a, b, c, d].map(|value| reference_point_float(value, precision));
+            (index, Momentum::Real((a, b, c, d)))
+        })
+        .collect()
+}
 
 pub struct TestVakint {
     pub vakint: Vakint,
@@ -114,9 +163,9 @@ pub fn get_vakint(mut vakint_settings: VakintSettings) -> TestVakint {
             .retain(|method| !matches!(method, EvaluationMethod::PySecDec(_)));
     }
     static VAKINT_INSTANCE: OnceLock<Vakint> = OnceLock::new();
-    let vakint = if std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").is_some()
-        || EXTERNAL_DATASET.get().is_some()
-    {
+    // The fixture path selects a location when data is explicitly requested;
+    // it does not silently replace the master authority of an ordinary engine.
+    let vakint = if EXTERNAL_DATASET.get().is_some() {
         external_vakint()
     } else {
         VAKINT_INSTANCE
@@ -137,10 +186,18 @@ fn external_dataset() -> &'static (Vakint, PathBuf) {
     {
         EXTERNAL_DATASET.get_or_init(|| {
             let mut engine = Vakint::new().expect("Failed to initialize vakint");
+            let local_artifacts_path =
+                std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(PathBuf::from);
             let options = vakint::OfficialExternalDataOptions {
-                version: "latest".into(),
-                local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
-                    .map(PathBuf::from),
+                // Explicit development checkouts remain selectable. Automatic
+                // fixtures require the release matching the vendored metadata,
+                // even when the caller has an older cached `latest` marker.
+                version: if local_artifacts_path.is_some() {
+                    "latest".into()
+                } else {
+                    external_data_fixture::required_version()
+                },
+                local_artifacts_path,
                 refresh: false,
                 ..Default::default()
             };
@@ -722,7 +779,7 @@ fn compare_evaluations_impl(
     let (benchmark_order, (benchmark_central, benchmark_error)) = &results[0];
     for (tested_order, (tested_central, tested_error)) in &results[1..] {
         let combined_error = match (benchmark_error, tested_error) {
-            (Some(benchmark), Some(tested)) => Some(benchmark.aggregate_errors(tested)),
+            (Some(benchmark), Some(tested)) => Some(benchmark.aggregate_errors(tested).unwrap()),
             (Some(benchmark), None) => Some(benchmark.clone()),
             (None, Some(tested)) => Some(tested.clone()),
             (None, None) => None,
@@ -945,7 +1002,7 @@ pub fn compare_input_pair(
                 "scaleless/zero numerator-pinch fixture gives vacuous coverage"
             );
             let combined_error = match (&first_numerical.1, &second_numerical.1) {
-                (Some(first), Some(second)) => Some(first.aggregate_errors(second)),
+                (Some(first), Some(second)) => Some(first.aggregate_errors(second).unwrap()),
                 (Some(first), None) => Some(first.clone()),
                 (None, Some(second)) => Some(second.clone()),
                 (None, None) => None,
@@ -967,7 +1024,7 @@ pub fn compare_input_pair(
         let (benchmark_order, (benchmark_central, benchmark_error)) = &first_results[0];
         for (tested_order, (tested_central, tested_error)) in &first_results[1..] {
             let combined_error = match (benchmark_error, tested_error) {
-                (Some(first), Some(second)) => Some(first.aggregate_errors(second)),
+                (Some(first), Some(second)) => Some(first.aggregate_errors(second).unwrap()),
                 (Some(first), None) => Some(first.clone()),
                 (None, Some(second)) => Some(second.clone()),
                 (None, None) => None,
@@ -985,7 +1042,7 @@ pub fn compare_input_pair(
         }
         for (tested_order, (tested_central, tested_error)) in &second_results {
             let combined_error = match (benchmark_error, tested_error) {
-                (Some(first), Some(second)) => Some(first.aggregate_errors(second)),
+                (Some(first), Some(second)) => Some(first.aggregate_errors(second).unwrap()),
                 (Some(first), None) => Some(first.clone()),
                 (None, Some(second)) => Some(second.clone()),
                 (None, None) => None,
@@ -1102,7 +1159,7 @@ fn compare_vakint_evaluations_vs_reference_impl(
     );
 
     let binary_prec: u32 = ((prec.max(16) as f64) * LOG2_10).floor() as u32;
-    let reference = NumericalEvaluationResult(
+    let reference = NumericalEvaluationResult::from_values(
         expected_output
             .iter()
             .map(|(epsilon_power, (real, imaginary))| {
@@ -1115,9 +1172,30 @@ fn compare_vakint_evaluations_vs_reference_impl(
                 )
             })
             .collect(),
+        prec,
     );
 
     for lane in &lanes {
+        if matches!(lane.evaluation_order.0.as_slice(), [EvaluationMethod::FMFT(options)] if options.expand_masters && options.susbstitute_masters)
+            && lane.input == EvaluationTestInput::TensorReduced
+        {
+            // Fixed historical references define the original table centers;
+            // independently check the public backend's truthful error bounds.
+            let legacy_settings = VakintSettings {
+                evaluation_order: lane.evaluation_order.clone(),
+                form_exe_path: original_form_path.clone(),
+                ..vakint.settings.clone()
+            };
+            legacy_master_oracle::compare_scalar(
+                &legacy_settings,
+                &tensor_reduced,
+                &numerical_masses,
+                &numerical_external_momenta,
+                &expected_output,
+                max_pull,
+            );
+            continue;
+        }
         let evaluated = evaluate_lane(
             &mut vakint,
             lane,

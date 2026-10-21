@@ -1088,9 +1088,9 @@ fn vakint_expression_evaluate_integral() {}
 #[alphal00p_docs::ty(
     id = "NumericalEvaluationResult",
     title = "Numerical Laurent result",
-    summary = "Stores numerical Laurent coefficients by power of the dimensional regulator.",
+    summary = "Stores numerical Laurent coefficients with independent component precision, source warnings and checked expression conversion.",
     format = "rust-markdown",
-    source = "crates/vakint/src/lib.rs",
+    source = "crates/vakint/src/precision.rs",
     source_id = "vakint::NumericalEvaluationResult"
 )]
 fn vakint_numerical_evaluation_result() {}

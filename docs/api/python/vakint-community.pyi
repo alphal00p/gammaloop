@@ -6,8 +6,315 @@ import os
 import pathlib
 import symbolica
 import typing
+from symbolica import ComplexFloat, Float
 from symbolica.community.feynkit import FeynmanDiagram, IntegralFamily
 from symbolica.core import Expression
+
+@typing.final
+class AvailablePrecision:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    ArbitraryPrecision: AvailablePrecision
+    @property
+    def kind(self) -> builtins.str: ...
+    @property
+    def max_decimal_precision(self) -> typing.Optional[builtins.int]: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def __eq__(self, other: AvailablePrecision) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    @staticmethod
+    def FixedPrecision(max_decimal_precision: builtins.int) -> AvailablePrecision: ...
+
+@typing.final
+class CoefficientPrecision:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def real(self) -> ComponentPrecision: ...
+    @property
+    def imaginary(self) -> ComponentPrecision: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+
+@typing.final
+class ComponentPrecision:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def significant_digits(self) -> typing.Optional[builtins.int]:
+        r"""
+        Estimated significant decimal digits, or None when no relative accuracy is available.
+        """
+    @property
+    def significant_bits(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def absolute_error(self) -> Float:
+        r"""
+        Absolute error radius as a native arbitrary-precision Symbolica Float.
+        """
+    @property
+    def exact_zero(self) -> builtins.bool: ...
+    @property
+    def quality(self) -> ErrorQuality: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+
+@typing.final
+class ConstantSymbol:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def expression(self) -> Expression: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def __eq__(self, other: ConstantSymbol) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    def __new__(cls, symbol: symbolica.Expression | str) -> ConstantSymbol: ...
+
+@typing.final
+class DataProvenance:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def version(self) -> builtins.str: ...
+    @property
+    def source_sha256(self) -> builtins.str: ...
+    @property
+    def master_id(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def epsilon_power(self) -> typing.Optional[builtins.int]: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+
+@typing.final
+class ErrorQuality:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    Bounded: ErrorQuality
+    Estimated: ErrorQuality
+    @property
+    def name(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def __eq__(self, other: ErrorQuality) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+
+@typing.final
+class MasterCoefficient:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def requested_decimal_precision(self) -> builtins.int: ...
+    @property
+    def symbol(self) -> Expression: ...
+    @property
+    def epsilon_power(self) -> builtins.int: ...
+    @property
+    def available_precision(self) -> AvailablePrecision: ...
+    @property
+    def numerical_value(self) -> Float: ...
+    @property
+    def precision(self) -> CoefficientPrecision: ...
+    @property
+    def warnings(self) -> builtins.list[PrecisionWarning]: ...
+    @property
+    def provenance(self) -> DataProvenance: ...
+    @property
+    def symbolic_expression(self) -> MasterSymbolicExpression: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def to_expression(self) -> Expression:
+        r"""
+        Encode achieved precision in a native expression; rejects uncertain zeros.
+        """
+
+@typing.final
+class MasterSymbol:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def expression(self) -> Expression: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def __eq__(self, other: MasterSymbol) -> builtins.bool: ...
+    def __hash__(self) -> builtins.int: ...
+    def __new__(cls, symbol: symbolica.Expression | str) -> MasterSymbol: ...
+
+@typing.final
+class MasterSymbolicExpression:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def kind(self) -> builtins.str: ...
+    @property
+    def expression(self) -> typing.Optional[Expression]: ...
+    @property
+    def max_decimal_precision(self) -> typing.Optional[builtins.int]: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+
+@typing.final
+class NumericalCoefficient:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def numerical_value(self) -> ComplexFloat:
+        r"""
+        Raw central value. Inspect precision before interpreting its digits.
+        """
+    @property
+    def precision(self) -> CoefficientPrecision: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def to_expression(self) -> Expression:
+        r"""
+        Encode independently achieved component precision; rejects uncertain zeros.
+        """
+
+@typing.final
+class PrecisionSource:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def identity(self) -> builtins.str: ...
+    @property
+    def master_id(self) -> typing.Optional[builtins.str]: ...
+    @property
+    def epsilon_power(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def available_decimal_precision(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def source_sha256(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+
+@typing.final
+class PrecisionWarning:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def epsilon_power(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def requested_decimal_precision(self) -> builtins.int: ...
+    @property
+    def achieved_decimal_precision(self) -> typing.Optional[builtins.int]: ...
+    @property
+    def sources(self) -> builtins.list[PrecisionSource]: ...
+    @property
+    def data_version(self) -> builtins.str: ...
+    @property
+    def message(self) -> builtins.str: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
 
 @typing.final
 class Vakint:
@@ -193,6 +500,26 @@ class Vakint:
         master values are substituted. The ordinary native tensor prepass runs
         before scalar application, with the same settings as `evaluate`.
         """
+    def get_constant(self, symbol: ConstantSymbol, prec: builtins.int = 16) -> VakintConstant:
+        r"""
+        Inspect a registered RustRed constant in the active data snapshot.
+
+        Precision shortfalls are returned as structured warnings. No data is downloaded.
+        """
+    def get_master(self, symbol: MasterSymbol, prec: builtins.int = 16) -> VakintMaster:
+        r"""
+        Inspect every available Laurent coefficient and the authenticated master graph.
+
+        The returned object keeps its data snapshot even after this engine loads another release.
+        """
+    def constant_symbols(self) -> builtins.list[ConstantSymbol]:
+        r"""
+        Discover all registered constants in the loaded or vendored RustRed data.
+        """
+    def master_symbols(self) -> builtins.list[MasterSymbol]:
+        r"""
+        Discover qualified master identities, including declared uncomputed terminals.
+        """
     def numerical_result_from_expression(self, expr: Expression) -> VakintNumericalResult:
         r"""
         Interpret a Symbolica expression as a numerical Laurent series in epsilon.
@@ -215,7 +542,7 @@ class Vakint:
         expr : Expression
           A Symbolica expression representing a Laurent series in the dimensional regularisation parameter epsilon specified in the vakint engine.
         """
-    def numerical_evaluation(self, evaluated_integral: typing.Any, params: typing.Mapping[builtins.str, builtins.float], externals: typing.Optional[typing.Mapping[builtins.int, tuple[builtins.float, builtins.float, builtins.float, builtins.float]]] = None) -> tuple[VakintNumericalResult, typing.Optional[VakintNumericalResult]]:
+    def numerical_evaluation(self, evaluated_integral: Expression, params: typing.Mapping[str, symbolica.Float | symbolica.ComplexFloat | symbolica.Expression | int | float | complex], externals: typing.Mapping[int, typing.Sequence[symbolica.Float | symbolica.ComplexFloat | symbolica.Expression | int | float | complex]] | None = None) -> tuple[VakintNumericalResult, typing.Optional[VakintNumericalResult]]:
         r"""
         Substitute numerical parameters into an integral already evaluated parametrically by Vakint.
 
@@ -243,10 +570,12 @@ class Vakint:
 
         evaluated_integral : Expression
           A Symbolica expression representing an integral that has been evaluated parametrically by Vakint.
-        params : Dict[str, float]
-          A dictionary mapping parameter names to their numerical values.
-        externals : Optional[Dict[int, Tuple[float, float, float, float]]]
-          An optional dictionary mapping external momentum indices to their numerical 4-vector values.
+        params : Mapping[str, Float | ComplexFloat | Expression | int | float | complex]
+          Native floats retain precision; Python floats/complex values carry 53-bit input precision.
+          Integers and exact expressions are substituted symbolically; inexact expression leaves
+          retain named source errors instead of becoming exact values.
+        externals : Optional[Mapping[int, Sequence[Float | ComplexFloat | Expression | int | float | complex]]]
+          Four components in (time, x, y, z) order. Contractions use tracked arithmetic.
         """
     def numerical_result_to_expression(self, result: VakintNumericalResult) -> Expression:
         r"""
@@ -374,6 +703,40 @@ class Vakint:
 
         integral_expression : Expression
           A Symbolica expression representing a vakint integral.
+        """
+
+@typing.final
+class VakintConstant:
+    r"""
+    Read-only record from Vakint's precision-aware data snapshot.
+    """
+    @property
+    def requested_decimal_precision(self) -> builtins.int: ...
+    @property
+    def symbol(self) -> ConstantSymbol: ...
+    @property
+    def available_precision(self) -> AvailablePrecision: ...
+    @property
+    def numerical_value(self) -> Float: ...
+    @property
+    def precision(self) -> CoefficientPrecision: ...
+    @property
+    def warnings(self) -> builtins.list[PrecisionWarning]: ...
+    @property
+    def provenance(self) -> DataProvenance: ...
+    def __repr__(self) -> builtins.str:
+        r"""
+        Structured terminal representation; respects terminal color settings.
+        """
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render the stored record without numerical reevaluation.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+    def to_expression(self) -> Expression:
+        r"""
+        Encode achieved precision in a native expression; rejects uncertain zeros.
         """
 
 @typing.final
@@ -606,21 +969,69 @@ class VakintExpression:
         """
 
 @typing.final
+class VakintMaster:
+    r"""
+    All available coefficients and the authenticated graph of one declared master.
+    """
+    @property
+    def requested_decimal_precision(self) -> builtins.int: ...
+    @property
+    def symbol(self) -> MasterSymbol: ...
+    @property
+    def master_id(self) -> builtins.str: ...
+    @property
+    def family_sha256(self) -> builtins.str: ...
+    @property
+    def loop_count(self) -> builtins.int: ...
+    @property
+    def normalization(self) -> builtins.str: ...
+    @property
+    def provenance(self) -> DataProvenance: ...
+    @property
+    def graph(self) -> FeynmanDiagram: ...
+    @property
+    def coefficients(self) -> builtins.dict[builtins.int, MasterCoefficient]: ...
+    @property
+    def is_computed(self) -> builtins.bool: ...
+    def __repr__(self) -> builtins.str: ...
+    def __str__(self) -> builtins.str: ...
+    def to_html(self) -> builtins.str:
+        r"""
+        Render coefficients and the normal FeynKit graph without reevaluating them.
+        """
+    def _repr_html_(self) -> builtins.str: ...
+
+@typing.final
 class VakintNumericalResult:
     r"""
     Numerical Laurent series in the dimensional-regularization parameter epsilon.
     """
+    @property
+    def coefficients(self) -> builtins.dict[builtins.int, NumericalCoefficient]:
+        r"""
+        Read-only records keyed by epsilon power; absent orders are not fabricated.
+        """
+    @property
+    def requested_decimal_precision(self) -> builtins.int: ...
+    @property
+    def warnings(self) -> builtins.list[PrecisionWarning]: ...
     def to_expression(self, epsilon_symbol: typing.Optional[Expression] = None) -> Expression:
         r"""
-        Return a native Symbolica expression without rounding coefficients to Python floats.
+        Return a Symbolica expression with independently achieved component precision.
 
         The default variable is `vakint::ε`. Use `Vakint.numerical_result_to_expression`
         when the originating engine has a custom epsilon symbol.
+        Raises ValueError for uncertain zeros or components without reliably encodable digits.
+        """
+    def to_html(self) -> builtins.str:
+        r"""
+        Render raw central values, achieved component precision, and warnings.
         """
     def _repr_html_(self) -> builtins.str:
         r"""
-        Display through Symbolica's native rich expression printer.
+        Display remains available even when checked expression conversion fails.
         """
+    def __repr__(self) -> builtins.str: ...
     def formatted(self, **options: typing.Any) -> typing.Any:
         r"""
         Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
@@ -638,16 +1049,13 @@ class VakintNumericalResult:
         ...     (-1, (0.0, -178748.9838377694)),
         ...     (0, (0.0, 321554.1122184795)),
         ... ])
-        >>> str(result)
-        ε^-3 : (0+-11440.5314035461i)
-        ε^-2 : (0+57169.9552189803i)
-        ε^-1 : (0+-178748.983837769i)
-        ε^ 0 : (0+321554.112218480i)
+        >>> "Vakint numerical result" in str(result)
+        True
         ```
         """
     def to_list(self) -> builtins.list[tuple[builtins.int, tuple[builtins.float, builtins.float]]]:
         r"""
-        Convert the numerical result to a native Python list of (epsilon exponent, (real, imag)) tuples.
+        Lossy conversion to Python float tuples; use coefficients to retain precision metadata.
 
         ## Examples
         ```python
@@ -723,12 +1131,13 @@ class VakintNumericalResult:
            The maximum pull for comparison. Default is 3.0.
         """
 
-def integral_from_diagram(diagram: FeynmanDiagram, family: IntegralFamily, numerator: Expression, *, powers: typing.Sequence[int] | None = None, physical_slots: typing.Optional[typing.Sequence[builtins.int]] = None, parameter_substitutions: typing.Mapping[symbolica.Expression, symbolica.Expression] | None = None, external_momenta: typing.Sequence[symbolica.Expression] = Vec :: new()) -> VakintExpression:
+def integral_from_diagram(diagram: FeynmanDiagram, family: IntegralFamily, numerator: Expression, *, powers: typing.Sequence[int] | None = None, physical_slots: typing.Optional[typing.Sequence[builtins.int]] = None, parameter_substitutions: typing.Mapping[symbolica.Expression, symbolica.Expression] | None = None, external_momenta: typing.Sequence[Expression] = []) -> VakintExpression:
     r"""
     Build a native VakintExpression from a routed, uncut vacuum graph.
 
     The family must retain the graph's stored loop basis; `physical_slots` maps
     sorted graph edges to zero-based family indices and defaults to the prefix.
+    Physical powers default to the graph annotations; explicit `powers` override them.
     Nonpositive physical powers contract edges; auxiliary powers must be nonpositive. Numerators use native
     Kinematics.scalar_product notation. Spectator order defines numerical vector
     IDs. Parameter substitutions are simultaneous and must already be reflected

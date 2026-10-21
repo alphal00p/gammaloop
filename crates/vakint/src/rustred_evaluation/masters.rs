@@ -3,28 +3,21 @@
 //! Input masters are unit-mass integrals in the package's FMFT/MATAD convention.
 //! The caller restores target mass powers and measure normalization exactly once.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use symbolica::coefficient::CoefficientView;
-use symbolica::domains::float::{Complex, Float};
 use symbolica::domains::rational::Rational;
 use symbolica::id::Replacement;
 use symbolica::poly::series::SeriesDepth;
 
-use super::data::{LoopData, checked_bytes, failure};
+use super::data::{FileReference, LoopData, checked_bytes, failure};
 use super::{RustRedEvaluationError, RustRedMasterMode};
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{VakintError, VakintSettings, get_integer_from_atom};
-
-#[derive(Deserialize)]
-struct FileReference {
-    path: String,
-    sha256: String,
-}
 
 #[derive(Deserialize)]
 struct CoefficientMetadata {
@@ -32,6 +25,10 @@ struct CoefficientMetadata {
     symbolic: bool,
     numerical: bool,
     significant_digits: Option<u32>,
+    #[serde(default)]
+    absolute_error: Option<String>,
+    #[serde(default)]
+    error_quality: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -48,25 +45,30 @@ struct MasterMetadata {
 }
 
 #[derive(Debug)]
-struct Coefficient {
-    exact: Option<String>,
-    numerical: Option<String>,
-    significant_digits: Option<u32>,
+pub(crate) struct Coefficient {
+    pub(crate) exact: Option<String>,
+    pub(crate) numerical: Option<String>,
+    pub(crate) significant_digits: Option<u32>,
+    pub(crate) absolute_error: Option<String>,
+    pub(crate) error_is_bounded: bool,
 }
 
 #[derive(Debug)]
-struct Master {
-    identity: String,
-    loop_count: usize,
-    coefficients: BTreeMap<i64, Coefficient>,
+pub(crate) struct Master {
+    pub(crate) identity: String,
+    pub(crate) loop_count: usize,
+    pub(crate) coefficients: BTreeMap<i64, Coefficient>,
     graph: String,
+    pub(crate) metadata: serde_json::Value,
+    pub(crate) data: Option<Arc<LoopData>>,
 }
 
 #[derive(Debug)]
-pub(super) struct MasterCatalog {
-    version: String,
+pub(crate) struct MasterCatalog {
+    pub(crate) version: String,
     coefficient_tag: Atom,
-    masters: BTreeMap<Atom, Master>,
+    pub(crate) masters: BTreeMap<Atom, Master>,
+    pub(crate) constants: BTreeMap<Atom, crate::inspection::FiniteSource>,
     family_graphs: BTreeMap<Atom, String>,
     basis_aliases: BTreeMap<Atom, Atom>,
 }
@@ -93,14 +95,21 @@ pub(crate) fn combine_exact(expression: Atom) -> Atom {
 }
 
 impl MasterCatalog {
+    #[cfg(test)]
+    pub(crate) fn test_catalog(exact: Option<&str>, digits: u32) -> (Self, Atom) {
+        tests::catalog(exact, digits)
+    }
+
     pub(super) fn load(
         loops: &BTreeMap<usize, Arc<LoopData>>,
         version: &str,
     ) -> Result<Self, RustRedEvaluationError> {
+        crate::Vakint::initialize_vakint_symbols();
         let mut catalog = Self {
             version: version.into(),
             coefficient_tag: Atom::Zero,
             masters: BTreeMap::new(),
+            constants: BTreeMap::new(),
             family_graphs: BTreeMap::new(),
             basis_aliases: BTreeMap::new(),
         };
@@ -108,6 +117,7 @@ impl MasterCatalog {
         let mut identity = Sha256::new();
         identity.update(version.as_bytes());
         for (&count, data) in loops {
+            catalog.load_constants(data, &mut identity)?;
             let mut fingerprints = BTreeMap::new();
             for family in &data.manifest.families {
                 let fingerprint = family["fingerprint"]
@@ -154,6 +164,29 @@ impl MasterCatalog {
                     Self::read_coefficients(data, metadata.files.get("numerical.json"))?;
                 let mut coefficients = BTreeMap::new();
                 for entry in metadata.coefficients {
+                    let error_is_bounded = match entry.error_quality.as_deref() {
+                        None | Some("estimated") => false,
+                        Some("bounded") if entry.absolute_error.is_some() => true,
+                        Some("bounded") => {
+                            return Err(failure("bounded coefficient lacks an absolute error"));
+                        }
+                        Some(quality) => {
+                            return Err(failure(format!(
+                                "unknown coefficient error quality {quality}"
+                            )));
+                        }
+                    };
+                    if let Some(bound) = &entry.absolute_error {
+                        let bound = symbolica::domains::float::Float::parse(bound, Some(64))
+                            .map_err(failure)?;
+                        if !bound.as_raw().is_finite()
+                            || (bound.as_raw().is_sign_negative() && !bound.as_raw().is_zero())
+                        {
+                            return Err(failure(
+                                "coefficient absolute error must be finite and nonnegative",
+                            ));
+                        }
+                    }
                     let exact =
                         if entry.symbolic {
                             Some(symbolic.get(&entry.epsilon_power).cloned().ok_or_else(|| {
@@ -187,6 +220,8 @@ impl MasterCatalog {
                                 exact,
                                 numerical: number,
                                 significant_digits: entry.significant_digits,
+                                absolute_error: entry.absolute_error,
+                                error_is_bounded,
                             },
                         )
                         .is_some()
@@ -199,16 +234,124 @@ impl MasterCatalog {
                     loop_count: count,
                     coefficients,
                     graph: Self::graph_location(data, &metadata.parent_graph)?,
+                    metadata: value.clone(),
+                    data: Some(Arc::clone(data)),
                 };
                 if catalog.masters.insert(symbol, master).is_some() {
                     return Err(failure("duplicate family-qualified master identity"));
                 }
             }
         }
+        if basis_expressions
+            .iter()
+            .any(|(_, _, basis)| catalog.constants.contains_key(basis))
+        {
+            return Err(failure(
+                "a finite constant shadows a declared master basis identity",
+            ));
+        }
         let tag = format!("rustred_data_{:x}", identity.finalize());
         catalog.coefficient_tag = Atom::var(vk_symbol!(&tag));
         catalog.load_basis_aliases(basis_expressions);
         Ok(catalog)
+    }
+
+    fn load_constants(
+        &mut self,
+        data: &LoopData,
+        identity: &mut Sha256,
+    ) -> Result<(), RustRedEvaluationError> {
+        #[derive(Deserialize)]
+        struct Constant {
+            symbol: String,
+            value: String,
+            significant_digits: u32,
+            absolute_error: String,
+            error_quality: String,
+            definition: String,
+            provenance: serde_json::Value,
+        }
+        let Some(file) = &data.manifest.constant_bindings else {
+            return Ok(());
+        };
+        let bytes = data.read(&file.path)?;
+        checked_bytes(&bytes, &file.sha256)?;
+        identity.update(&bytes);
+        let entries: Vec<serde_json::Value> = serde_json::from_slice(&bytes).map_err(failure)?;
+        for entry in entries {
+            let constant: Constant = serde_json::from_value(entry.clone()).map_err(failure)?;
+            let symbol = vk_parse!(&constant.symbol).map_err(failure)?;
+            let reserved_head = symbol.get_symbol().is_some_and(|head| {
+                head.is_builtin()
+                    || head.get_namespace() == "symbolica"
+                    || head.get_evaluation_info().is_some()
+                    || crate::symbols::SYMBOL_REGISTRY.contains(&head)
+                    || head == vk_symbol!("NumericalSource")
+                    || (head.get_namespace() == crate::NAMESPACE
+                        && head.get_stripped_name().starts_with("RustRed"))
+            });
+            if !matches!(symbol.as_view(), AtomView::Var(_) | AtomView::Fun(_))
+                || Self::finite_precision(&symbol).is_some()
+                || reserved_head
+                || Self::is_recorded_period(symbol.as_view())
+                || crate::inspection::constants::builtin_definition(symbol.as_view())
+                    .map_err(failure)?
+                    .is_some()
+            {
+                return Err(failure(format!(
+                    "invalid finite constant identity {}",
+                    constant.symbol
+                )));
+            }
+            if constant.significant_digits == 0
+                || constant.definition.trim().is_empty()
+                || constant
+                    .provenance
+                    .as_object()
+                    .is_none_or(|value| value.is_empty())
+            {
+                return Err(failure(
+                    "finite constant lacks precision, definition or provenance",
+                ));
+            }
+            let value = symbolica::domains::float::Float::parse(&constant.value, Some(64))
+                .map_err(failure)?;
+            let bound = symbolica::domains::float::Float::parse(&constant.absolute_error, Some(64))
+                .map_err(failure)?;
+            if !value.as_raw().is_finite()
+                || !bound.as_raw().is_finite()
+                || (bound.as_raw().is_sign_negative() && !bound.as_raw().is_zero())
+            {
+                return Err(failure(
+                    "finite constant value/error must be finite and error nonnegative",
+                ));
+            }
+            let bounded = match constant.error_quality.as_str() {
+                "bounded" => true,
+                "estimated" => false,
+                _ => return Err(failure("unknown finite constant error quality")),
+            };
+            let source = crate::inspection::FiniteSource {
+                value: constant.value,
+                significant_digits: constant.significant_digits,
+                absolute_error: Some(constant.absolute_error),
+                error_is_bounded: bounded,
+                identity: symbol.to_canonical_string(),
+                master_id: None,
+                epsilon_power: None,
+                data_version: data.manifest.version.clone(),
+                source_sha256: format!(
+                    "{:x}",
+                    Sha256::digest(serde_json::to_vec(&entry).map_err(failure)?)
+                ),
+            };
+            if self.constants.insert(symbol, source).is_some() {
+                return Err(failure(
+                    "duplicate finite constant identity across loop packs",
+                ));
+            }
+        }
+        Ok(())
     }
 
     fn load_basis_aliases(&mut self, expressions: Vec<(usize, Atom, Atom)>) {
@@ -320,8 +463,12 @@ impl MasterCatalog {
         vk_symbol!("RustRedMaster").call(&arguments)
     }
 
-    fn coefficient_symbol(&self, master: &Atom, power: i64) -> Atom {
+    pub(crate) fn coefficient_symbol(&self, master: &Atom, power: i64) -> Atom {
         vk_symbol!("RustRedCoefficient").call((&self.coefficient_tag, master, power))
+    }
+
+    pub(crate) fn coefficient_snapshot_tag(&self) -> &Atom {
+        &self.coefficient_tag
     }
 
     fn referenced_masters(expression: &Atom) -> BTreeSet<Atom> {
@@ -377,6 +524,22 @@ impl MasterCatalog {
         loop_count: usize,
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
+        // User normalization factors can introduce finite literals after the
+        // frontend staged the original input. Bind those remaining literals
+        // before rational algebra; an exact zero prefactor must not launch an
+        // unbounded search for its first nonzero Laurent coefficient.
+        let raw = if mode == RustRedMasterMode::Numerical {
+            crate::precision::legacy::stage_table(
+                vk_symbol!("rustred_input")
+                    .call(loop_count as i64)
+                    .as_view(),
+                raw.as_view(),
+                vk_symbol!(&settings.epsilon_symbol),
+                "Input",
+            )?
+        } else {
+            raw
+        };
         let direct = self.finalize_independent(raw.clone(), settings, loop_count, mode);
         if matches!(&direct, Err(error) if !matches!(error,
             VakintError::RustRedEvaluation(RustRedEvaluationError::MasterCapability { .. })))
@@ -515,10 +678,11 @@ impl MasterCatalog {
                     // Keep finite embedded constants behind a named coefficient
                     // until their precision has been checked in numerical mode.
                     if Self::finite_precision(&exact).is_none() {
-                        exact_values.insert(
-                            placeholder.clone(),
-                            crate::hpl::normalize_constants(exact.as_view())?,
-                        );
+                        let exact = crate::hpl::normalize_constants(exact.as_view())?;
+                        // Numerical evaluation needs the original coefficient
+                        // identity for precision diagnostics. Exact zeros must
+                        // still disappear before epsilon availability checks.
+                        exact_values.insert(placeholder.clone(), exact);
                     }
                 }
                 expansion += placeholder * Atom::var(epsilon).pow(Atom::num(power));
@@ -527,8 +691,10 @@ impl MasterCatalog {
         }
         // Exact zero coefficients and exact relations must cancel before an
         // absent/high-order or low-precision coefficient can cause an error.
-        for (source, value) in exact_values {
-            known = known.replace(source.to_pattern()).with(value);
+        for (source, value) in &exact_values {
+            if mode == RustRedMasterMode::Symbolic || value.is_zero() {
+                known = known.replace(source.to_pattern()).with(value.clone());
+            }
         }
         let mut result = combine_exact(
             known
@@ -536,11 +702,35 @@ impl MasterCatalog {
                 .map_err(failure)?
                 .to_atom(),
         );
-        self.check_coefficients(&result, settings, mode == RustRedMasterMode::Numerical)?;
+        // Keeping exact coefficient identities improves diagnostics, but an
+        // unavailable order can multiply a provably zero combination of known
+        // lower orders. Resolve that algebraic question before rejecting it.
+        if mode == RustRedMasterMode::Numerical
+            && matches!(
+                self.check_coefficients(&result, false),
+                Err(VakintError::RustRedEvaluation(
+                    RustRedEvaluationError::MasterCapability { .. }
+                ))
+            )
+        {
+            let replacements = exact_values
+                .into_iter()
+                .map(|(source, value)| Replacement::new(source, value))
+                .collect::<Vec<_>>();
+            result = combine_exact(result.replace_multiple(&replacements));
+        }
+        self.check_coefficients(&result, mode == RustRedMasterMode::Numerical)?;
         if mode == RustRedMasterMode::Numerical {
             result = self.resolve_numerical(result, settings)?;
         }
-        Ok(result + retained)
+        let result = result + retained;
+        if mode == RustRedMasterMode::Symbolic {
+            // An exact formula can still depend on snapshot-local finite
+            // periods. Bind those leaves before returning a symbolic result,
+            // so loading another release cannot silently change its value.
+            return self.bind_period_references(result);
+        }
+        Ok(result)
     }
 
     fn master_multiplicities(
@@ -590,7 +780,7 @@ impl MasterCatalog {
         references
     }
 
-    fn coefficient(
+    pub(crate) fn coefficient(
         &self,
         symbol: &Atom,
     ) -> Result<(&Master, &Coefficient, i64), RustRedEvaluationError> {
@@ -615,7 +805,7 @@ impl MasterCatalog {
         Ok((master, coefficient, power))
     }
 
-    fn finite_precision(expression: &Atom) -> Option<u32> {
+    pub(crate) fn finite_precision(expression: &Atom) -> Option<u32> {
         let mut bits = None;
         expression.visitor(&mut |part| {
             if let AtomView::Num(number) = part
@@ -633,34 +823,31 @@ impl MasterCatalog {
         bits.map(|value| (f64::from(value) * std::f64::consts::LOG10_2).floor() as u32)
     }
 
-    fn check_coefficients(
-        &self,
-        expression: &Atom,
-        settings: &VakintSettings,
-        numerical: bool,
-    ) -> Result<(), VakintError> {
+    fn check_coefficients(&self, expression: &Atom, numerical: bool) -> Result<(), VakintError> {
         let mut issues = Vec::new();
         for symbol in Self::coefficient_references(expression) {
             match self.coefficient(&symbol) {
                 Err(RustRedEvaluationError::MasterCapability { detail }) => issues.push(detail),
                 Err(error) => return Err(error.into()),
                 Ok((master, coefficient, power)) if numerical => {
-                    let available = if let Some(exact) = &coefficient.exact {
-                        if let Some(embedded) =
-                            Self::finite_precision(&vk_parse!(exact).map_err(failure)?)
+                    if let Some(exact) = &coefficient.exact {
+                        if Self::finite_precision(&vk_parse!(exact).map_err(failure)?).is_some()
+                            && coefficient
+                                .significant_digits
+                                .is_none_or(|digits| digits == 0)
                         {
-                            let validated = coefficient.significant_digits.filter(|digits| *digits > 0).ok_or_else(|| failure(format!("master {} coefficient epsilon^{power} embeds a finite constant without validated significant digits; data {}", master.identity, self.version)))?;
-                            Some(embedded.min(validated))
-                        } else {
-                            None
+                            return Err(failure(format!("master {} coefficient epsilon^{power} embeds a finite constant without validated significant digits; data {}", master.identity, self.version)).into());
                         }
                     } else {
-                        coefficient.significant_digits
-                    };
-                    if available.is_some_and(|digits| settings.run_time_decimal_precision > digits)
-                    {
-                        issues.push(format!("master {} coefficient epsilon^{power}: requested {} significant decimal digits, available {}; data {}", master.identity, settings.run_time_decimal_precision, available.unwrap(), self.version));
+                        Self::validate_decimal(
+                            coefficient.numerical.as_deref().ok_or_else(|| {
+                                failure("coefficient has no numerical representation")
+                            })?,
+                            &master.identity,
+                            power,
+                        )?;
                     }
+                    // Source limits are reported only by tracked evaluation.
                 }
                 _ => {}
             }
@@ -675,12 +862,13 @@ impl MasterCatalog {
         }
     }
 
-    pub(super) fn resolve_numerical(
+    /// Validate numerical intent without rounding any source before final evaluation.
+    pub(crate) fn resolve_numerical(
         &self,
         expression: Atom,
-        settings: &VakintSettings,
+        _settings: &VakintSettings,
     ) -> Result<Atom, VakintError> {
-        let mut result = combine_exact(expression);
+        let result = combine_exact(expression);
         let unresolved = self.unresolved(&result);
         if !unresolved.is_empty() {
             return Err(failure(format!(
@@ -690,8 +878,6 @@ impl MasterCatalog {
             ))
             .into());
         }
-        // Retained declared masters require the caller's loop-count-specific
-        // Laurent expansion, not a hidden numerical evaluation convention.
         let retained = Self::referenced_masters(&result);
         if !retained.is_empty() {
             return Err(failure(format!(
@@ -704,56 +890,9 @@ impl MasterCatalog {
             ))
             .into());
         }
-        self.check_coefficients(&result, settings, true)?;
-        // Period formulas can contain large cancellations. Keep guard digits
-        // through materialization and subsequent symbolic coefficient sums;
-        // capability checks above deliberately use the requested precision.
-        let working_settings = VakintSettings {
-            run_time_decimal_precision: settings
-                .run_time_decimal_precision
-                .checked_add(32)
-                .ok_or_else(|| failure("numerical working precision overflow"))?,
-            ..settings.clone()
-        };
-        let working_precision = working_settings.get_binary_precision();
-        for symbol in Self::coefficient_references(&result) {
-            let (master, coefficient, power) = self.coefficient(&symbol)?;
-            let value = if let Some(exact) = &coefficient.exact {
-                crate::hpl::normalize_constants(vk_parse!(exact).map_err(failure)?.as_view())?
-            } else {
-                let number = Float::parse(
-                        coefficient.numerical.as_ref().ok_or_else(|| {
-                            failure("coefficient has no numerical representation")
-                        })?,
-                        Some(working_precision),
-                    )
-                    .map_err(|error| failure(format!("master {} coefficient epsilon^{power} has an invalid numerical value: {error}; data {}", master.identity, self.version)))?;
-                if !number.as_raw().is_finite() {
-                    return Err(failure(format!("master {} coefficient epsilon^{power} has a non-finite numerical value; data {}", master.identity, self.version)).into());
-                }
-                Atom::num(number)
-            };
-            result = result.replace(symbol.to_pattern()).with(value);
-        }
-        // Tagged evaluatable constants deliberately contain metadata that the
-        // generic `is_constant` predicate does not classify as numerical.
-        // The shared bridge evaluates the whole HPL and never its word tags.
-        result = crate::hpl::substitute_numerically(result.as_view(), &working_settings)?;
-        let map = HashMap::<Atom, Complex<Float>>::new();
-        let mut issue = None;
-        result = result.replace_map(|part, _context, output| {
-            // Keep numeric exponents and tensor indices exact. Evaluate whole
-            // constant subexpressions before entering their children.
-            if !matches!(part, AtomView::Num(_)) && part.is_constant() {
-                match part.evaluate_with_prec(&map, working_precision) {
-                    Ok(number) => **output = Atom::num(number),
-                    Err(error) => issue = Some(error.to_string()),
-                }
-            }
-        });
-        if let Some(issue) = issue {
-            return Err(failure(format!("master constant evaluation failed: {issue}")).into());
-        }
+        self.check_coefficients(&result, true)?;
+        // Values are resolved by prepare_evaluation into independently tracked
+        // leaves when the complete Laurent coefficient is evaluated.
         Ok(result)
     }
 }
@@ -765,13 +904,16 @@ mod acceptance_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use symbolica::domains::float::Real;
+    use std::collections::HashMap;
+    use symbolica::domains::float::{Complex, Float, Real};
 
-    fn catalog(exact: Option<&str>, digits: u32) -> (MasterCatalog, Atom) {
+    pub(super) fn catalog(exact: Option<&str>, digits: u32) -> (MasterCatalog, Atom) {
+        crate::Vakint::initialize_vakint_symbols();
         let mut catalog = MasterCatalog {
             version: "test-v1".into(),
             coefficient_tag: Atom::var(vk_symbol!("test_master_data")),
             masters: BTreeMap::new(),
+            constants: BTreeMap::new(),
             family_graphs: BTreeMap::new(),
             basis_aliases: BTreeMap::new(),
         };
@@ -782,6 +924,8 @@ mod tests {
                 identity: "test-master".into(),
                 loop_count: 1,
                 graph: "test-parent.dot".into(),
+                metadata: serde_json::Value::Null,
+                data: None,
                 coefficients: BTreeMap::from([
                     (
                         -1,
@@ -789,6 +933,8 @@ mod tests {
                             exact: Some("1".into()),
                             numerical: Some("1".into()),
                             significant_digits: Some(digits),
+                            absolute_error: None,
+                            error_is_bounded: false,
                         },
                     ),
                     (
@@ -797,6 +943,8 @@ mod tests {
                             exact: exact.map(str::to_owned),
                             numerical: Some("2.5".into()),
                             significant_digits: Some(digits),
+                            absolute_error: None,
+                            error_is_bounded: false,
                         },
                     ),
                 ]),
@@ -814,6 +962,21 @@ mod tests {
         }
     }
 
+    fn evaluate(
+        catalog: &MasterCatalog,
+        expression: Atom,
+        settings: &VakintSettings,
+    ) -> crate::precision::NumericalEvaluationResult {
+        crate::precision::evaluate_series(
+            expression.as_view(),
+            vk_symbol!("ep"),
+            &HashMap::new(),
+            settings,
+            Some(catalog),
+        )
+        .unwrap()
+    }
+
     #[test]
     fn finite_coefficients_are_checked_only_when_needed() {
         let (catalog, master) = catalog(None, 30);
@@ -825,12 +988,21 @@ mod tests {
                 RustRedMasterMode::Numerical,
             )
             .unwrap();
-        assert_eq!(pole, vk_parse!("ep^-1").unwrap());
-        let error = catalog
+        let prepared = catalog.prepare_evaluation(pole).unwrap();
+        assert_eq!(prepared.expression, vk_parse!("ep^-1").unwrap());
+        assert!(prepared.sources.is_empty());
+        let expression = catalog
             .finalize(master, &settings(31, 2), 1, RustRedMasterMode::Numerical)
-            .unwrap_err()
-            .to_string();
-        assert!(error.contains("requested 31") && error.contains("available 30"));
+            .unwrap();
+        let result = evaluate(&catalog, expression, &settings(31, 2));
+        assert!(result.warnings().iter().any(|warning| {
+            warning.requested_decimal_precision == 31
+                && warning.sources.iter().any(|source| {
+                    source.master_id.as_deref() == Some("test-master")
+                        && source.epsilon_power == Some(0)
+                        && source.available_decimal_precision == Some(30)
+                })
+        }));
     }
 
     #[test]
@@ -840,15 +1012,21 @@ mod tests {
             .finalize(master, &settings(200, 2), 1, RustRedMasterMode::Symbolic)
             .unwrap();
         assert!(symbolic.contains_symbol(vk_symbol!("RustRedCoefficient")));
-        assert!(
-            catalog
-                .resolve_numerical(symbolic.clone(), &settings(31, 2))
-                .is_err()
-        );
         let numerical = catalog
-            .resolve_numerical(symbolic, &settings(30, 2))
+            .resolve_numerical(symbolic, &settings(31, 2))
             .unwrap();
-        assert!(!numerical.contains_symbol(vk_symbol!("RustRedCoefficient")));
+        assert!(numerical.contains_symbol(vk_symbol!("RustRedCoefficient")));
+        let prepared = catalog.prepare_evaluation(numerical.clone()).unwrap();
+        assert_eq!(prepared.sources.len(), 1);
+        assert_eq!(
+            prepared.sources.values().next().unwrap().significant_digits,
+            30
+        );
+        assert!(
+            !evaluate(&catalog, numerical, &settings(31, 2))
+                .warnings()
+                .is_empty()
+        );
     }
 
     #[test]
@@ -919,6 +1097,18 @@ mod tests {
     }
 
     #[test]
+    fn exact_lower_orders_cancel_a_missing_coefficient_in_numerical_mode() {
+        let (catalog, master) = catalog(Some("5/2"), 80);
+        let input = master.clone().pow(2) - Atom::num(2) * master / vk_parse!("ep").unwrap();
+        let result = catalog
+            .finalize(input, &settings(80, 3), 2, RustRedMasterMode::Numerical)
+            .unwrap();
+        let prepared = catalog.prepare_evaluation(result).unwrap();
+        assert!(prepared.sources.is_empty());
+        assert!(combine_exact(prepared.expression - vk_parse!("-ep^-2+25/4").unwrap()).is_zero());
+    }
+
+    #[test]
     fn numerical_only_symbols_cannot_cross_data_snapshots() {
         let (mut catalog, master) = catalog(None, 30);
         let symbolic = catalog
@@ -933,12 +1123,54 @@ mod tests {
     }
 
     #[test]
+    fn symbolic_formulas_bind_finite_periods_to_their_data_snapshot() {
+        let (mut catalog, master) = catalog(Some("2*K5Moment(1)"), 30);
+        let period = vk_parse!("K5Moment(1)").unwrap();
+        catalog.constants.insert(
+            period.clone(),
+            crate::inspection::FiniteSource {
+                value: "1.25".into(),
+                significant_digits: 30,
+                absolute_error: Some("1e-31".into()),
+                error_is_bounded: true,
+                identity: period.to_canonical_string(),
+                master_id: None,
+                epsilon_power: None,
+                data_version: catalog.version.clone(),
+                source_sha256: "certified-test-moment".into(),
+            },
+        );
+        let symbolic = catalog
+            .finalize(master, &settings(20, 2), 1, RustRedMasterMode::Symbolic)
+            .unwrap();
+        assert!(symbolic.contains_symbol(vk_symbol!("RustRedConstant")));
+        let prepared = catalog.prepare_evaluation(symbolic.clone()).unwrap();
+        assert_eq!(prepared.sources.len(), 1);
+        assert_eq!(
+            evaluate(&catalog, symbolic.clone(), &settings(20, 2)).coefficients()[&0]
+                .value()
+                .re,
+            Float::parse("2.5", Some(100)).unwrap()
+        );
+        catalog.coefficient_tag = Atom::var(vk_symbol!("replacement_constant_data"));
+        let error = catalog
+            .prepare_evaluation(symbolic)
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("another data snapshot"));
+    }
+
+    #[test]
     fn numerical_mode_evaluates_tagged_hpl_constants() {
         let (catalog, master) = catalog(Some("HI(1,0,om1)"), 30);
         let numerical = catalog
             .finalize(master, &settings(80, 2), 1, RustRedMasterMode::Numerical)
             .unwrap();
-        assert!(!numerical.contains_symbol(vk_symbol!("symbolica::hpl_at_sixth_root")));
+        assert!(numerical.contains_symbol(vk_symbol!("RustRedCoefficient")));
+        let numerical = evaluate(&catalog, numerical, &settings(80, 2))
+            .to_atom(vk_symbol!("ep"))
+            .unwrap();
+        assert!(!numerical.contains_symbol(vk_symbol!("RustRedCoefficient")));
         let value = numerical
             .coefficient_list::<i32>(&[vk_parse!("ep").unwrap()])
             .into_iter()
@@ -978,15 +1210,26 @@ mod tests {
     #[test]
     fn embedded_float_annotations_do_not_override_validated_precision() {
         let (mut catalog, master) = catalog(Some("2.5`100"), 5);
-        let error = catalog
+        let expression = catalog
             .finalize(
                 master.clone(),
                 &settings(20, 2),
                 1,
                 RustRedMasterMode::Numerical,
             )
-            .unwrap_err();
-        assert!(error.to_string().contains("available 5"), "{error}");
+            .unwrap();
+        let prepared = catalog.prepare_evaluation(expression.clone()).unwrap();
+        assert_eq!(
+            prepared.available_precision(),
+            crate::precision::AvailablePrecision::FixedPrecision(5)
+        );
+        let result = evaluate(&catalog, expression, &settings(20, 2));
+        assert!(result.warnings().iter().any(|warning| {
+            warning
+                .sources
+                .iter()
+                .any(|source| source.available_decimal_precision == Some(5))
+        }));
         catalog
             .masters
             .get_mut(&master)
@@ -1013,6 +1256,9 @@ mod tests {
             let settings = settings(80, 2);
             let numerical = catalog
                 .finalize(master, &settings, 1, RustRedMasterMode::Numerical)
+                .unwrap();
+            let numerical = evaluate(&catalog, numerical, &settings)
+                .to_atom(vk_symbol!("ep"))
                 .unwrap();
             let coefficient = numerical
                 .coefficient_list::<i32>(&[vk_parse!("ep").unwrap()])
@@ -1061,8 +1307,15 @@ mod tests {
                 assert_eq!(power, Atom::num(1));
                 Float::with_val(256, 0.375)
             };
-            let actual = coefficient.evaluate_with_prec(&parameters, 256).unwrap();
-            assert!((actual.re - expected).norm() < tolerance);
+            let prepared = catalog.prepare_evaluation(coefficient).unwrap();
+            let (actual, _) = crate::precision::evaluate_coefficient(
+                prepared.expression.as_view(),
+                &prepared.sources,
+                &parameters,
+                &settings,
+            )
+            .unwrap();
+            assert!((actual.value().re.clone() - expected).norm() < tolerance);
         }
         let equivalent = catalog
             .finalize(
@@ -1094,6 +1347,8 @@ mod tests {
                 identity: "test-alias".into(),
                 loop_count: 1,
                 graph: "test-parent.dot".into(),
+                metadata: serde_json::Value::Null,
+                data: None,
                 coefficients: BTreeMap::from([
                     (
                         -1,
@@ -1101,6 +1356,8 @@ mod tests {
                             exact: Some("3".into()),
                             numerical: Some("3".into()),
                             significant_digits: Some(80),
+                            absolute_error: None,
+                            error_is_bounded: false,
                         },
                     ),
                     (
@@ -1109,6 +1366,8 @@ mod tests {
                             exact: Some("2".into()),
                             numerical: Some("2".into()),
                             significant_digits: Some(80),
+                            absolute_error: None,
+                            error_is_bounded: false,
                         },
                     ),
                 ]),
@@ -1142,6 +1401,8 @@ mod tests {
                     exact: Some("9".into()),
                     numerical: Some("9".into()),
                     significant_digits: Some(80),
+                    absolute_error: None,
+                    error_is_bounded: false,
                 },
             );
         let result = catalog
@@ -1274,6 +1535,195 @@ mod tests {
                 .finalize(raw, &settings(32, 2), 1, RustRedMasterMode::Numerical)
                 .unwrap()
                 .is_zero()
+        );
+    }
+    #[test]
+    fn finite_period_aliases_share_identity_and_best_authenticated_precision() {
+        let (mut catalog, first) = catalog(None, 5);
+        let (duplicate, _) = self::catalog(None, 50);
+        let second = catalog.symbol("test-family", &[2]);
+        let mut second_data = duplicate.masters.into_values().next().unwrap();
+        second_data.identity = "higher-precision-equivalent".into();
+        second_data.loop_count = 4;
+        second_data.metadata = serde_json::json!({"exact_basis_expression":"vakint::PR4"});
+        catalog.masters.insert(second.clone(), second_data);
+        let first_data = catalog.masters.get_mut(&first).unwrap();
+        first_data.loop_count = 4;
+        first_data.metadata = serde_json::json!({"exact_basis_expression":"vakint::PR4"});
+        let first_coefficient = catalog.coefficient_symbol(&first, 0);
+        let second_coefficient = catalog.coefficient_symbol(&second, 0);
+        let prepared = catalog
+            .prepare_evaluation(first_coefficient.clone())
+            .unwrap();
+        assert_eq!(
+            prepared.available_precision(),
+            crate::precision::AvailablePrecision::FixedPrecision(50)
+        );
+        assert_eq!(
+            prepared
+                .sources
+                .values()
+                .next()
+                .unwrap()
+                .master_id
+                .as_deref(),
+            Some("higher-precision-equivalent")
+        );
+        let zero = catalog
+            .prepare_evaluation(
+                first_coefficient + second_coefficient
+                    - Atom::num(2) * vk_parse!("PR4fin").unwrap(),
+            )
+            .unwrap();
+        assert!(zero.expression.is_zero());
+        assert!(zero.sources.is_empty());
+        assert!(zero.origins.is_empty());
+    }
+
+    #[test]
+    fn finite_formula_leaves_preserve_their_cap_without_metadata_recursion() {
+        let (catalog, master) = catalog(Some("2.5`100+symbolica::zeta(3)"), 5);
+        let prepared = catalog
+            .prepare_evaluation(catalog.coefficient_symbol(&master, 0))
+            .unwrap();
+        assert_eq!(
+            prepared.available_precision(),
+            crate::precision::AvailablePrecision::FixedPrecision(5)
+        );
+        assert_eq!(prepared.sources.len(), 1);
+        assert!(!matches!(prepared.expression.as_view(), AtomView::Num(_)));
+        assert!(
+            prepared
+                .origins
+                .iter()
+                .any(|origin| origin.master_id.as_deref() == Some("test-master")
+                    && origin.epsilon_power == Some(0)
+                    && origin.available_decimal_precision == Some(5))
+        );
+    }
+
+    #[test]
+    fn lookup_names_are_typed_and_family_ambiguity_is_explicit() {
+        use crate::inspection::{ConstantSymbol, InspectionError, MasterSymbol};
+        let (mut catalog, first) = catalog(Some("1"), 20);
+        catalog.masters.get_mut(&first).unwrap().metadata = serde_json::json!({"name":"P1"});
+        let (second_catalog, _) = self::catalog(Some("2"), 20);
+        let mut other = second_catalog.masters.into_values().next().unwrap();
+        other.metadata = serde_json::json!({"name":"P1"});
+        let second = catalog.symbol("another-family", &[1]);
+        catalog.masters.insert(second, other);
+        let catalog = Arc::new(catalog);
+        assert!(matches!(
+            catalog.get_constant("foreign::z3".parse::<ConstantSymbol>().unwrap(), 16),
+            Err(VakintError::Inspection(
+                InspectionError::UnknownConstant { .. }
+            ))
+        ));
+        assert!(matches!(
+            catalog.get_master("missing".parse::<MasterSymbol>().unwrap(), 16),
+            Err(VakintError::Inspection(
+                InspectionError::UnknownMaster { .. }
+            ))
+        ));
+        assert!(
+            matches!(catalog.get_master("P1".parse::<MasterSymbol>().unwrap(), 16), Err(VakintError::Inspection(InspectionError::AmbiguousMaster { candidates, .. })) if candidates.len() == 2)
+        );
+        assert!(
+            catalog
+                .master_symbols()
+                .iter()
+                .any(|symbol| symbol.as_atom() == &first)
+        );
+    }
+    #[test]
+    fn bounded_period_lookup_caps_storage_and_keeps_its_snapshot() {
+        let (mut catalog, symbol) = catalog(None, 30);
+        let master = catalog.masters.get_mut(&symbol).unwrap();
+        master.loop_count = 4;
+        master.metadata = serde_json::json!({"exact_basis_expression":"vakint::PR4"});
+        let coefficient = master.coefficients.get_mut(&0).unwrap();
+        coefficient.absolute_error = Some("1e-38".into());
+        coefficient.error_is_bounded = true;
+        let catalog = Arc::new(catalog);
+        let constant = catalog.get_constant("PR4fin".parse().unwrap(), 40).unwrap();
+        assert_eq!(
+            constant.available_precision(),
+            crate::precision::AvailablePrecision::FixedPrecision(30)
+        );
+        assert!(constant.numerical_value().prec() <= crate::precision::decimal_bits(30));
+        assert_eq!(
+            constant.precision().real().quality(),
+            crate::precision::ErrorQuality::Bounded
+        );
+        assert!(constant.warnings().iter().any(|warning| {
+            warning.requested_decimal_precision == 40
+                && warning
+                    .sources
+                    .iter()
+                    .any(|source| source.available_decimal_precision == Some(30))
+        }));
+        assert!(Arc::strong_count(&catalog) > 1);
+        drop(catalog);
+        assert_eq!(constant.numerical_value(), &Float::with_val(128, 2.5));
+    }
+    #[test]
+    fn an_uncertain_real_zero_remains_inspectable_but_cannot_be_an_atom() {
+        let (mut catalog, symbol) = catalog(None, 30);
+        let master = catalog.masters.get_mut(&symbol).unwrap();
+        master.loop_count = 4;
+        master.metadata = serde_json::json!({"exact_basis_expression":"vakint::PR4"});
+        let coefficient = master.coefficients.get_mut(&0).unwrap();
+        coefficient.numerical = Some("0".into());
+        coefficient.absolute_error = Some("1e-20".into());
+        coefficient.error_is_bounded = true;
+        let constant = Arc::new(catalog)
+            .get_constant("PR4fin".parse().unwrap(), 16)
+            .unwrap();
+        assert!(constant.numerical_value().as_raw().is_zero());
+        assert!(!constant.precision().real().exact_zero());
+        assert!(constant.precision().real().absolute_error() > &Float::with_val(64, 0));
+        assert!(!constant.warnings().is_empty());
+        assert!(constant.to_atom().is_err());
+    }
+    #[test]
+    fn instance_numerical_evaluation_reports_terminal_status_before_tag_evaluation() {
+        let (mut catalog, master) = catalog(Some("5/2"), 80);
+        let settings = settings(40, 2);
+        let evaluate = |catalog: &MasterCatalog, expression: &Atom| {
+            crate::precision::evaluate_series(
+                expression.as_view(),
+                vk_symbol!("ep"),
+                &HashMap::new(),
+                &settings,
+                Some(catalog),
+            )
+        };
+        let error = evaluate(&catalog, &master).unwrap_err().to_string();
+        assert!(error.contains("Retained masters require") && error.contains("RustRedMaster"));
+        let unknown = catalog.symbol("undeclared-family", &[2]);
+        let error = evaluate(&catalog, &unknown).unwrap_err().to_string();
+        assert!(
+            error.contains("undeclared residual master") && error.contains("parent graph"),
+            "{error}"
+        );
+        catalog
+            .masters
+            .get_mut(&master)
+            .unwrap()
+            .coefficients
+            .clear();
+        let error = evaluate(&catalog, &master).unwrap_err().to_string();
+        assert!(
+            error.contains("declared terminal has no computed coefficients")
+                && error.contains("test-parent.dot"),
+            "{error}"
+        );
+        assert!(
+            evaluate(
+                &catalog,
+                &(unknown.clone() - unknown + master.clone() - master)
+            )
+            .is_ok()
         );
     }
 }

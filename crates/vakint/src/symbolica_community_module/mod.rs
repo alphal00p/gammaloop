@@ -1,11 +1,14 @@
 use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 mod cache;
 mod diagram_integral;
+mod inspection;
+mod numerical;
+mod presentation;
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::env;
 
-use pyo3::types::{PyAnyMethods, PyDict, PyModule, PyModuleMethods, PyType};
+use pyo3::types::{PyAnyMethods, PyDict, PyMapping, PyModule, PyModuleMethods, PyType};
 use pyo3::{
     Bound, FromPyObject, PyAny, PyClass, PyErr, PyRef, Python, exceptions, pyclass, pymethods,
 };
@@ -14,11 +17,16 @@ use symbolica::api::python::PythonExpression;
 use symbolica::atom::{Atom, AtomView, Symbol};
 use symbolica::domains::float::{Complex, Float, RealLike};
 
+use crate::presentation::Present;
 use crate::symbols::S;
 use crate::{
     AlphaLoopOptions, EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor,
     MATADOptions, NumericalEvaluationResult, PySecDecOptions, RustRedEvaluationOptions,
     TensorReductionMethod, Vakint, VakintError, VakintExpression, VakintSettings, vakint_symbol,
+};
+use inspection::{
+    ConstantSymbolWrapper, MasterSymbolWrapper, NumericalCoefficientWrapper,
+    PrecisionWarningWrapper, VakintConstantWrapper, VakintMasterWrapper,
 };
 
 use pyo3::types::PyListMethods;
@@ -76,6 +84,20 @@ define_vakint_python_surface! {
     NumericalEvaluationResultWrapper,
     VakintExpressionWrapper,
     VakintEvaluationMethodWrapper,
+    inspection::AvailablePrecisionWrapper,
+    inspection::ErrorQualityWrapper,
+    inspection::ComponentPrecisionWrapper,
+    inspection::CoefficientPrecisionWrapper,
+    inspection::PrecisionSourceWrapper,
+    inspection::PrecisionWarningWrapper,
+    inspection::DataProvenanceWrapper,
+    inspection::NumericalCoefficientWrapper,
+    inspection::ConstantSymbolWrapper,
+    inspection::MasterSymbolWrapper,
+    inspection::MasterSymbolicExpressionWrapper,
+    inspection::VakintConstantWrapper,
+    inspection::MasterCoefficientWrapper,
+    inspection::VakintMasterWrapper,
 }
 
 fn vakint_to_python_error(vakint_error: VakintError) -> PyErr {
@@ -110,7 +132,8 @@ pub struct VakintWrapper {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "VakintNumericalResult",
-    module = "symbolica.community.hepkit.vakint"
+    module = "symbolica.community.hepkit.vakint",
+    frozen
 )]
 /// Numerical Laurent series in the dimensional-regularization parameter epsilon.
 pub struct NumericalEvaluationResultWrapper {
@@ -137,10 +160,11 @@ impl<'a, 'py> FromPyObject<'a, 'py> for NumericalEvaluationResultWrapper {
 #[spenso_macros::track_usage(record_usage)]
 #[pymethods]
 impl NumericalEvaluationResultWrapper {
-    /// Return a native Symbolica expression without rounding coefficients to Python floats.
+    /// Return a Symbolica expression with independently achieved component precision.
     ///
     /// The default variable is `vakint::ε`. Use `Vakint.numerical_result_to_expression`
     /// when the originating engine has a custom epsilon symbol.
+    /// Raises ValueError for uncertain zeros or components without reliably encodable digits.
     #[pyo3(signature = (epsilon_symbol = None))]
     pub fn to_expression(
         &self,
@@ -155,12 +179,49 @@ impl NumericalEvaluationResultWrapper {
                 ));
             }
         };
-        Ok(self.value.to_atom(epsilon).into())
+        self.value
+            .to_atom(epsilon)
+            .map(Into::into)
+            .map_err(vakint_to_python_error)
     }
 
-    /// Display through Symbolica's native rich expression printer.
-    pub fn _repr_html_(&self) -> PyResult<String> {
-        self.to_expression(None)?._repr_html_()
+    /// Render raw central values, achieved component precision, and warnings.
+    pub fn to_html(&self, py: Python<'_>) -> PyResult<String> {
+        presentation::render(py, &self.value.presentation(), None)
+    }
+
+    /// Display remains available even when checked expression conversion fails.
+    pub fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_html(py)
+    }
+
+    /// Read-only records keyed by epsilon power; absent orders are not fabricated.
+    #[getter]
+    pub fn coefficients(&self) -> BTreeMap<i64, NumericalCoefficientWrapper> {
+        self.value
+            .coefficients()
+            .iter()
+            .map(|(power, coefficient)| (*power, coefficient.clone().into()))
+            .collect()
+    }
+
+    #[getter]
+    pub fn requested_decimal_precision(&self) -> u32 {
+        self.value.requested_decimal_precision()
+    }
+
+    #[getter]
+    pub fn warnings(&self) -> Vec<PrecisionWarningWrapper> {
+        self.value
+            .warnings()
+            .iter()
+            .cloned()
+            .map(Into::into)
+            .collect()
+    }
+
+    pub fn __repr__(&self) -> String {
+        self.value.to_string()
     }
 
     /// Return Symbolica's `FormattedOutput`; keyword options are forwarded unchanged.
@@ -187,17 +248,14 @@ impl NumericalEvaluationResultWrapper {
     /// ...     (-1, (0.0, -178748.9838377694)),
     /// ...     (0, (0.0, 321554.1122184795)),
     /// ... ])
-    /// >>> str(result)
-    /// ε^-3 : (0+-11440.5314035461i)
-    /// ε^-2 : (0+57169.9552189803i)
-    /// ε^-1 : (0+-178748.983837769i)
-    /// ε^ 0 : (0+321554.112218480i)
+    /// >>> "Vakint numerical result" in str(result)
+    /// True
     /// ```
     pub fn __str__(&self) -> PyResult<String> {
         Ok(format!("{}", self.value))
     }
 
-    /// Convert the numerical result to a native Python list of (epsilon exponent, (real, imag)) tuples.
+    /// Lossy conversion to Python float tuples; use coefficients to retain precision metadata.
     ///
     /// ## Examples
     /// ```python
@@ -216,9 +274,9 @@ impl NumericalEvaluationResultWrapper {
     pub fn to_list(&self) -> PyResult<Vec<(i64, (f64, f64))>> {
         Ok(self
             .value
-            .0
+            .coefficients()
             .iter()
-            .map(|(exp, coeff)| (*exp, (coeff.re.to_f64(), coeff.im.to_f64())))
+            .map(|(exp, coeff)| (*exp, (coeff.value().re.to_f64(), coeff.value().im.to_f64())))
             .collect())
     }
     #[new]
@@ -244,7 +302,7 @@ impl NumericalEvaluationResultWrapper {
     ///    A list of tuples, each containing an integer exponent of epsilon and a tuple of two floats
     ///    representing the real and imaginary parts of the coefficient.
     pub fn __new__(values: Vec<(i64, (f64, f64))>) -> PyResult<NumericalEvaluationResultWrapper> {
-        let r = NumericalEvaluationResult(
+        let r = NumericalEvaluationResult::from_values(
             values
                 .iter()
                 .map(|(eps_pwr, (re, im))| {
@@ -254,6 +312,7 @@ impl NumericalEvaluationResultWrapper {
                     )
                 })
                 .collect::<Vec<_>>(),
+            16,
         );
         Ok(NumericalEvaluationResultWrapper { value: r })
     }
@@ -685,6 +744,7 @@ impl VakintEvaluationMethodWrapper {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[spenso_macros::track_usage(record_usage)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
 #[pymethods]
 impl VakintWrapper {
     /// Load a local external-data checkout without network access.
@@ -1304,6 +1364,52 @@ impl VakintWrapper {
         ))
     }
 
+    /// Inspect a registered RustRed constant in the active data snapshot.
+    ///
+    /// Precision shortfalls are returned as structured warnings. No data is downloaded.
+    #[pyo3(signature = (symbol, prec=16))]
+    pub fn get_constant(
+        &self,
+        symbol: &ConstantSymbolWrapper,
+        prec: u32,
+    ) -> PyResult<VakintConstantWrapper> {
+        self.vakint
+            .get_constant(&symbol.value, prec)
+            .map(Into::into)
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Inspect every available Laurent coefficient and the authenticated master graph.
+    ///
+    /// The returned object keeps its data snapshot even after this engine loads another release.
+    #[pyo3(signature = (symbol, prec=16))]
+    pub fn get_master(
+        &self,
+        symbol: &MasterSymbolWrapper,
+        prec: u32,
+    ) -> PyResult<VakintMasterWrapper> {
+        self.vakint
+            .get_master(&symbol.value, prec)
+            .map(Into::into)
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Discover all registered constants in the loaded or vendored RustRed data.
+    pub fn constant_symbols(&self) -> PyResult<Vec<ConstantSymbolWrapper>> {
+        self.vakint
+            .constant_symbols()
+            .map(|symbols| symbols.into_iter().map(Into::into).collect())
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Discover qualified master identities, including declared uncomputed terminals.
+    pub fn master_symbols(&self) -> PyResult<Vec<MasterSymbolWrapper>> {
+        self.vakint
+            .master_symbols()
+            .map(|symbols| symbols.into_iter().map(Into::into).collect())
+            .map_err(vakint_to_python_error)
+    }
+
     #[pyo3(signature = (expr))]
     /// Interpret a Symbolica expression as a numerical Laurent series in epsilon.
     ///
@@ -1364,40 +1470,36 @@ impl VakintWrapper {
     ///
     /// evaluated_integral : Expression
     ///   A Symbolica expression representing an integral that has been evaluated parametrically by Vakint.
-    /// params : Dict[str, float]
-    ///   A dictionary mapping parameter names to their numerical values.
-    /// externals : Optional[Dict[int, Tuple[float, float, float, float]]]
-    ///   An optional dictionary mapping external momentum indices to their numerical 4-vector values.
+    /// params : Mapping[str, Float | ComplexFloat | Expression | int | float | complex]
+    ///   Native floats retain precision; Python floats/complex values carry 53-bit input precision.
+    ///   Integers and exact expressions are substituted symbolically; inexact expression leaves
+    ///   retain named source errors instead of becoming exact values.
+    /// externals : Optional[Mapping[int, Sequence[Float | ComplexFloat | Expression | int | float | complex]]]
+    ///   Four components in (time, x, y, z) order. Contractions use tracked arithmetic.
     pub fn numerical_evaluation(
         &self,
-        evaluated_integral: Py<PyAny>,
-        params: HashMap<String, f64>,
-        externals: Option<HashMap<usize, (f64, f64, f64, f64)>>,
+        evaluated_integral: PythonExpression,
+        #[gen_stub(override_type(type_repr="typing.Mapping[str, symbolica.Float | symbolica.ComplexFloat | symbolica.Expression | int | float | complex]", imports=("typing", "symbolica")))]
+        params: &Bound<'_, PyMapping>,
+        #[gen_stub(override_type(type_repr="typing.Mapping[int, typing.Sequence[symbolica.Float | symbolica.ComplexFloat | symbolica.Expression | int | float | complex]] | None", imports=("typing", "symbolica")))]
+        externals: Option<&Bound<'_, PyMapping>>,
     ) -> PyResult<(
         NumericalEvaluationResultWrapper,
         Option<NumericalEvaluationResultWrapper>,
     )> {
-        Python::attach(|py| {
-            let evaluated_integral_atom = evaluated_integral.extract::<PythonExpression>(py)?;
-            let p = self.vakint.params_from_f64(&self.settings, &params);
-            let e = externals.map(|ext| self.vakint.externals_from_f64(&self.settings, &ext));
-            let (numerical_result, numerical_error) = self
-                .vakint
-                .numerical_evaluation(
-                    &self.settings,
-                    evaluated_integral_atom.expr.as_view(),
-                    &p,
-                    &HashMap::default(),
-                    e.as_ref(),
-                )
-                .map_err(vakint_to_python_error)?;
-            Ok((
-                NumericalEvaluationResultWrapper {
-                    value: numerical_result,
-                },
-                numerical_error.map(|e| NumericalEvaluationResultWrapper { value: e }),
-            ))
-        })
+        let (numerical_result, numerical_error) = numerical::evaluate(
+            &self.vakint,
+            &self.settings,
+            &evaluated_integral.expr,
+            params,
+            externals,
+        )?;
+        Ok((
+            NumericalEvaluationResultWrapper {
+                value: numerical_result,
+            },
+            numerical_error.map(|value| NumericalEvaluationResultWrapper { value }),
+        ))
     }
 
     #[pyo3(signature = (result))]
@@ -1421,7 +1523,8 @@ impl VakintWrapper {
     ) -> PyResult<PythonExpression> {
         let value = result
             .value
-            .to_atom(vakint_symbol!(self.settings.epsilon_symbol.clone()));
+            .to_atom(vakint_symbol!(self.settings.epsilon_symbol.clone()))
+            .map_err(vakint_to_python_error)?;
 
         Ok(value.into())
     }
@@ -1582,7 +1685,6 @@ fn record_usage() {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use symbolica::atom::AtomCore;
 
     #[test]
     fn modern_module_identity_preserves_default_backend_order() {
@@ -1609,18 +1711,25 @@ mod tests {
         // never by importing a second Symbolica kernel into this Rust binary.
         let value = Float::parse("1.2345678901234567890123456789012345", Some(160)).unwrap();
         let coefficient = Complex::new(value.clone(), Float::with_val(160, 0));
-        let result = NumericalEvaluationResult(vec![(-2, coefficient.clone())]);
+        let result = NumericalEvaluationResult::from_values(vec![(-2, coefficient.clone())], 32);
         let epsilon = vakint_symbol!("ε");
-        let expected = Atom::num(coefficient) * Atom::var(epsilon).pow(Atom::num(-2));
-        assert_eq!(result.to_atom(epsilon), expected);
-        let rounded = NumericalEvaluationResult(vec![(
-            -2,
-            Complex::new(
-                Float::with_val(160, value.to_f64()),
-                Float::with_val(160, 0),
-            ),
-        )]);
-        assert_ne!(result.to_atom(epsilon), rounded.to_atom(epsilon));
+        // Checked storage may round to the requested 32 digits, but must not
+        // pass through binary64 on the way to a Python numerical expression.
+        assert!(result.coefficients()[&-2].value().re.prec() >= 100);
+        let rounded = NumericalEvaluationResult::from_values(
+            vec![(
+                -2,
+                Complex::new(
+                    Float::with_val(160, value.to_f64()),
+                    Float::with_val(160, 0),
+                ),
+            )],
+            32,
+        );
+        assert_ne!(
+            result.to_atom(epsilon).unwrap(),
+            rounded.to_atom(epsilon).unwrap()
+        );
 
         let topology = symbolica::function!(
             S.topo,

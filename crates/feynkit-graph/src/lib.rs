@@ -10,6 +10,8 @@
 mod compact_dot;
 mod display;
 mod integrals;
+#[cfg(test)]
+mod saved_dot_tests;
 pub mod symbols;
 
 pub use integrals::{
@@ -30,8 +32,9 @@ use linnet::{
     half_edge::{
         HedgeGraph, NodeIndex,
         builder::HedgeGraphBuilder,
-        involution::{Flow, HedgePair, Orientation},
+        involution::{Flow, Hedge, HedgePair, Orientation},
         subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
+        swap::Swap,
         tree::SimpleTraversalTree,
     },
     parser::{DotGraph, set::DotGraphSet},
@@ -182,16 +185,24 @@ pub struct DiagramEdge {
     pub particle: ParticleId,
     pub directed: bool,
     pub numerator: Atom,
+    /// Positive power of this physical propagator. Numerator factors belong
+    /// in the diagram's numerator rather than as nonpositive graph edges.
+    pub propagator_power: i32,
     source_slot: VertexSlot,
     target_slot: VertexSlot,
 }
 
 impl DiagramEdge {
+    const fn unit_power() -> i32 {
+        1
+    }
+
     pub fn new(particle: ParticleId, directed: bool) -> Self {
         Self {
             particle,
             directed,
             numerator: Atom::one(),
+            propagator_power: 1,
             source_slot: VertexSlot(0),
             target_slot: VertexSlot(0),
         }
@@ -549,6 +560,10 @@ pub enum DiagramError {
     MissingLoopMomentumBasis,
     #[error("invalid loop-momentum basis: {0}")]
     InvalidLoopMomentumBasis(String),
+    #[error(
+        "physical edge {edge} has nonpositive propagator power {power}; contract absent edges and place numerator factors in the numerator"
+    )]
+    InvalidPropagatorPower { edge: usize, power: i32 },
     #[error("serialized diagram ID {serialized} does not match its content-derived ID {actual}")]
     DiagramIdMismatch {
         serialized: DiagramId,
@@ -576,6 +591,8 @@ struct DiagramSerde {
     numerator_prefactor: String,
     projector: String,
     loop_momentum_basis: LoopMomentumBasis,
+    #[serde(default)]
+    half_edge_order: Vec<DiagramHalfEdge>,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
 }
@@ -593,6 +610,8 @@ struct DiagramEdgeSerde {
     particle: ParticleId,
     directed: bool,
     numerator: String,
+    #[serde(default = "DiagramEdge::unit_power")]
+    propagator_power: i32,
     source_slot: VertexSlot,
     target_slot: VertexSlot,
 }
@@ -676,6 +695,65 @@ impl FeynmanDiagram {
         &self.loop_momentum_basis
     }
 
+    /// Stable edge endpoints in the graph's actual half-edge storage order.
+    ///
+    /// Symbolic numerator annotations may refer to these positions, so saved
+    /// diagrams retain this order independently of the edge-ID order.
+    pub fn half_edge_order(&self) -> Vec<DiagramHalfEdge> {
+        let mut order = vec![None; self.graph.n_hedges()];
+        for (pair, edge, data) in self.graph.iter_edges() {
+            if let HedgePair::Paired { source, sink } | HedgePair::Split { source, sink, .. } = pair
+            {
+                let (source, sink) = if data.orientation == Orientation::Reversed {
+                    (sink, source)
+                } else {
+                    (source, sink)
+                };
+                order[source.0] = Some(DiagramHalfEdge {
+                    edge: EdgeId(edge.0),
+                    endpoint: DiagramEndpoint::Source,
+                });
+                order[sink.0] = Some(DiagramHalfEdge {
+                    edge: EdgeId(edge.0),
+                    endpoint: DiagramEndpoint::Target,
+                });
+            }
+        }
+        order.into_iter().flatten().collect()
+    }
+
+    fn restore_half_edge_order(
+        &mut self,
+        requested: &[DiagramHalfEdge],
+    ) -> Result<(), DiagramError> {
+        let mut current = self.half_edge_order();
+        let mut positions = current
+            .iter()
+            .enumerate()
+            .map(|(position, half_edge)| (*half_edge, position))
+            .collect::<BTreeMap<_, _>>();
+        if requested.len() != current.len()
+            || requested.iter().copied().collect::<BTreeSet<_>>()
+                != positions.keys().copied().collect::<BTreeSet<_>>()
+        {
+            return Err(DiagramError::InvalidDotAttribute {
+                target: "graph".into(),
+                attribute: "half_edge_order",
+                value: "must contain each edge endpoint exactly once".into(),
+            });
+        }
+        for (destination, desired) in requested.iter().enumerate() {
+            let source = positions[desired];
+            if source != destination {
+                self.graph.swap(Hedge(source), Hedge(destination));
+                current.swap(source, destination);
+                positions.insert(current[source], source);
+                positions.insert(*desired, destination);
+            }
+        }
+        Ok(())
+    }
+
     /// Physical cut partitions retained by cross-section generation.
     pub fn cuts(&self) -> &[DiagramCut] {
         &self.cuts
@@ -714,13 +792,13 @@ impl FeynmanDiagram {
         V: FnMut(VertexId, &DiagramVertex) -> DiagramVertex,
         E: FnMut(EdgeId, EdgeEndpoints, &DiagramEdge) -> DiagramEdge,
     {
-        let loop_edges = self.loop_momentum_basis.loop_edges.clone();
         let mut builder = Self::builder(Arc::clone(&self.model), &self.name)
             .symmetry_factor(self.symmetry_factor)
             .overall_factor(self.overall_factor.clone())
             .numerator(self.numerator.clone())
             .numerator_prefactor(self.numerator_prefactor.clone())
             .projector(self.projector.clone())
+            .half_edge_order(self.half_edge_order())
             .cuts(self.cuts.clone())
             .topology_threshold_candidates(self.topology_threshold_candidates.clone());
         for (id, vertex) in self.vertices() {
@@ -736,12 +814,15 @@ impl FeynmanDiagram {
                 edge.target_slot,
             )?;
         }
-        let diagram = builder.build()?;
-        if diagram.loop_momentum_basis.loop_edges == loop_edges {
-            Ok(diagram)
-        } else {
-            diagram.with_loop_momentum_edges(&loop_edges)
-        }
+        // Metadata transformations can change external flow. Recompute routing
+        // in the same forest and loop-edge order rather than selecting a new
+        // forest or retaining signatures whose external signs are now stale.
+        let mut diagram = builder.build()?;
+        diagram.loop_momentum_basis = diagram
+            .topology()
+            .basis(self.loop_momentum_basis.tree_edges.clone())?
+            .with_loop_edge_order(&self.loop_momentum_basis.loop_edges)?;
+        Ok(diagram)
     }
 
     /// Build a deterministic key for the model-resolved colored topology.
@@ -961,12 +1042,17 @@ impl FeynmanDiagram {
                 reverse_half_edge(half_edge);
             }
         }
+        let mut half_edge_order = self.half_edge_order();
+        for half_edge in &mut half_edge_order {
+            reverse_half_edge(half_edge);
+        }
         let mut builder = Self::builder(Arc::clone(&self.model), &self.name)
             .symmetry_factor(self.symmetry_factor)
             .overall_factor(self.overall_factor.clone())
             .numerator(self.numerator.clone())
             .numerator_prefactor(self.numerator_prefactor.clone())
             .projector(self.projector.clone())
+            .half_edge_order(half_edge_order)
             .cuts(cuts)
             .topology_threshold_candidates(topology_threshold_candidates);
         for (_, vertex) in self.vertices() {
@@ -993,9 +1079,11 @@ impl FeynmanDiagram {
                 )?;
             }
         }
-        let reversed = builder
-            .build()?
-            .with_loop_momentum_edges(&self.loop_momentum_basis.loop_edges)?;
+        let mut reversed = builder.build()?;
+        reversed.loop_momentum_basis = reversed
+            .topology()
+            .basis(self.loop_momentum_basis.tree_edges.clone())?
+            .with_loop_edge_order(&self.loop_momentum_basis.loop_edges)?;
         reversed.validate()?;
         Ok(reversed)
     }
@@ -1531,6 +1619,12 @@ impl FeynmanDiagram {
         let mut vertex_slots = vec![BTreeSet::new(); self.graph.n_nodes()];
         let mut vertex_half_edges = vec![Vec::new(); self.graph.n_nodes()];
         for (edge_id, endpoints, edge) in self.edges() {
+            if edge.propagator_power <= 0 {
+                return Err(DiagramError::InvalidPropagatorPower {
+                    edge: edge_id.0,
+                    power: edge.propagator_power,
+                });
+            }
             self.resolve_particle(edge_id, edge)?;
             degrees[endpoints.source.0] += 1;
             degrees[endpoints.target.0] += 1;
@@ -1781,10 +1875,12 @@ impl FeynmanDiagram {
         let cuts = serde_json::to_string(&self.cuts)?;
         let topology_threshold_candidates =
             serde_json::to_string(&self.topology_threshold_candidates)?;
+        let loop_momentum_basis = serde_json::to_string(&self.loop_momentum_basis)?;
+        let half_edge_order = serde_json::to_string(&self.half_edge_order())?;
         writeln!(output, "digraph feynkit {{")?;
         writeln!(
             output,
-            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, cuts={}, topology_threshold_candidates={}];",
+            "  graph [feynkit_name={}, model_fingerprint={}, symmetry_factor={}, overall_factor={}, numerator={}, numerator_prefactor={}, projector={}, loop_momentum_edges={}, loop_momentum_basis={}, half_edge_order={}, cuts={}, topology_threshold_candidates={}];",
             Self::dot_string(&self.name)?,
             Self::dot_string(&self.model.fingerprint().to_string())?,
             self.symmetry_factor,
@@ -1793,6 +1889,8 @@ impl FeynmanDiagram {
             Self::dot_string(&self.numerator_prefactor.to_canonical_string())?,
             Self::dot_string(&self.projector.to_canonical_string())?,
             Self::dot_string(&loop_momentum_edges)?,
+            Self::dot_string(&loop_momentum_basis)?,
+            Self::dot_string(&half_edge_order)?,
             Self::dot_string(&cuts)?,
             Self::dot_string(&topology_threshold_candidates)?,
         )?;
@@ -1835,7 +1933,7 @@ impl FeynmanDiagram {
             let particle = self.model.particle_by_id(edge.particle)?;
             write!(
                 output,
-                "  v{} -> v{} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}",
+                "  v{} -> v{} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}, power={}",
                 endpoints.source.0,
                 endpoints.target.0,
                 id.0,
@@ -1845,7 +1943,16 @@ impl FeynmanDiagram {
                 edge.directed,
                 edge.source_slot.0,
                 edge.target_slot.0,
+                edge.propagator_power,
             )?;
+            if let Some(slot) = self
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .position(|edge| *edge == id)
+            {
+                write!(output, ", lmb_id={slot}")?;
+            }
             if !edge.directed {
                 write!(output, ", dir=none")?;
             }
@@ -1943,6 +2050,41 @@ impl FeynmanDiagram {
                     .collect::<Result<Vec<_>, _>>()
             })
             .transpose()?;
+        let loop_momentum_basis = parsed
+            .global_data
+            .statements
+            .get("loop_momentum_basis")
+            .map(|value| {
+                serde_json::from_str::<LoopMomentumBasis>(value).map_err(|_| {
+                    DiagramError::InvalidDotAttribute {
+                        target: "graph".into(),
+                        attribute: "loop_momentum_basis",
+                        value: value.clone(),
+                    }
+                })
+            })
+            .transpose()?;
+        if let (Some(edges), Some(basis)) = (&loop_momentum_edges, &loop_momentum_basis)
+            && edges != &basis.loop_edges
+        {
+            return Err(DiagramError::InvalidLoopMomentumBasis(
+                "loop_momentum_edges disagrees with the serialized basis".into(),
+            ));
+        }
+        let half_edge_order = parsed
+            .global_data
+            .statements
+            .get("half_edge_order")
+            .map(|value| {
+                serde_json::from_str::<Vec<DiagramHalfEdge>>(value).map_err(|_| {
+                    DiagramError::InvalidDotAttribute {
+                        target: "graph".into(),
+                        attribute: "half_edge_order",
+                        value: value.clone(),
+                    }
+                })
+            })
+            .transpose()?;
         let cuts = parsed
             .global_data
             .statements
@@ -1990,6 +2132,12 @@ impl FeynmanDiagram {
             .projector(Self::parse_expression("projector", projector)?)
             .cuts(cuts)
             .topology_threshold_candidates(topology_threshold_candidates);
+        if let Some(basis) = &loop_momentum_basis {
+            builder = builder.loop_momentum_basis(basis.clone());
+        }
+        if let Some(order) = half_edge_order {
+            builder = builder.half_edge_order(order);
+        }
         let mut node_map = BTreeMap::new();
         for (node, _, data) in parsed.iter_nodes() {
             let target = format!("vertex {}", node.0);
@@ -2077,8 +2225,35 @@ impl FeynmanDiagram {
                     .ok_or(DiagramError::DotExternalIndexOverflow(external.index))?,
             );
         }
+        let mut declared_loop_edges = BTreeMap::new();
         for (pair, edge_id, data) in parsed.iter_edges() {
             let target = format!("edge {}", edge_id.0);
+            if let Some(id) = data.data.statements.get("id")
+                && id.parse::<usize>().ok() != Some(builder.edges.len())
+            {
+                return Err(DiagramError::InvalidDotAttribute {
+                    target: target.clone(),
+                    attribute: "id",
+                    value: id.clone(),
+                });
+            }
+            if let Some(slot) = data.data.statements.get("lmb_id") {
+                let slot =
+                    slot.parse::<usize>()
+                        .map_err(|_| DiagramError::InvalidDotAttribute {
+                            target: target.clone(),
+                            attribute: "lmb_id",
+                            value: slot.clone(),
+                        })?;
+                if declared_loop_edges
+                    .insert(slot, EdgeId(builder.edges.len()))
+                    .is_some()
+                {
+                    return Err(DiagramError::InvalidLoopMomentumBasis(
+                        "duplicate lmb_id".into(),
+                    ));
+                }
+            }
             let _pdg: i64 = data
                 .data
                 .statements
@@ -2127,6 +2302,21 @@ impl FeynmanDiagram {
                         .cloned()
                         .unwrap_or_else(|| "1".to_owned()),
                 )?,
+                propagator_power: data
+                    .data
+                    .statements
+                    .get("power")
+                    .map(|value| {
+                        value
+                            .parse()
+                            .map_err(|_| DiagramError::InvalidDotAttribute {
+                                target: target.clone(),
+                                attribute: "power",
+                                value: value.clone(),
+                            })
+                    })
+                    .transpose()?
+                    .unwrap_or(1),
                 source_slot: VertexSlot(0),
                 target_slot: VertexSlot(0),
             };
@@ -2233,10 +2423,18 @@ impl FeynmanDiagram {
             }
         }
         let diagram = builder.build()?;
-        let diagram = match loop_momentum_edges {
+        let diagram = match loop_momentum_edges.filter(|_| loop_momentum_basis.is_none()) {
             Some(edges) => diagram.with_loop_momentum_edges(&edges),
             None => Ok(diagram),
         }?;
+        for (slot, edge) in declared_loop_edges {
+            if diagram.loop_momentum_basis.loop_edges.get(slot) != Some(&edge) {
+                return Err(DiagramError::InvalidLoopMomentumBasis(format!(
+                    "lmb_id {slot} on edge {} disagrees with the stored basis",
+                    edge.0,
+                )));
+            }
+        }
         diagram.validate()?;
         Ok(diagram)
     }
@@ -2353,6 +2551,7 @@ impl FeynmanDiagram {
                             particle: edge.particle,
                             directed: edge.directed,
                             numerator: edge.numerator.to_canonical_string(),
+                            propagator_power: edge.propagator_power,
                             source_slot: edge.source_slot,
                             target_slot: edge.target_slot,
                         },
@@ -2365,6 +2564,7 @@ impl FeynmanDiagram {
             numerator_prefactor: self.numerator_prefactor.to_canonical_string(),
             projector: self.projector.to_canonical_string(),
             loop_momentum_basis: self.loop_momentum_basis.clone(),
+            half_edge_order: self.half_edge_order(),
             cuts: self.cuts.clone(),
             topology_threshold_candidates: self.topology_threshold_candidates.clone(),
         }
@@ -2394,6 +2594,9 @@ impl FeynmanDiagram {
             .loop_momentum_basis(data.loop_momentum_basis)
             .cuts(data.cuts)
             .topology_threshold_candidates(data.topology_threshold_candidates);
+        if !data.half_edge_order.is_empty() {
+            builder = builder.half_edge_order(data.half_edge_order);
+        }
         for vertex in data.vertices {
             builder.add_vertex(DiagramVertex {
                 name: vertex.name,
@@ -2410,6 +2613,7 @@ impl FeynmanDiagram {
                     particle: edge.particle,
                     directed: edge.directed,
                     numerator: Self::parse_expression("edge numerator", edge.numerator)?,
+                    propagator_power: edge.propagator_power,
                     source_slot: edge.source_slot,
                     target_slot: edge.target_slot,
                 },
@@ -2502,6 +2706,7 @@ pub struct FeynmanDiagramBuilder {
     numerator_prefactor: Atom,
     projector: Atom,
     loop_momentum_basis: Option<LoopMomentumBasis>,
+    half_edge_order: Option<Vec<DiagramHalfEdge>>,
     cuts: Vec<DiagramCut>,
     topology_threshold_candidates: Vec<DiagramThresholdCandidate>,
 }
@@ -2519,6 +2724,7 @@ impl FeynmanDiagramBuilder {
             numerator_prefactor: Atom::one(),
             projector: Atom::one(),
             loop_momentum_basis: None,
+            half_edge_order: None,
             cuts: Vec::new(),
             topology_threshold_candidates: Vec::new(),
         }
@@ -2554,6 +2760,12 @@ impl FeynmanDiagramBuilder {
 
     pub fn loop_momentum_basis(mut self, basis: LoopMomentumBasis) -> Self {
         self.loop_momentum_basis = Some(basis);
+        self
+    }
+
+    /// Restore storage positions used by half-edge-indexed numerator symbols.
+    pub fn half_edge_order(mut self, order: Vec<DiagramHalfEdge>) -> Self {
+        self.half_edge_order = Some(order);
         self
     }
 
@@ -2680,6 +2892,7 @@ impl FeynmanDiagramBuilder {
                 edge.directed,
             );
         }
+        let explicit_basis = self.loop_momentum_basis.is_some();
         let mut diagram = FeynmanDiagram {
             model: self.model,
             id: DiagramId(0),
@@ -2700,7 +2913,10 @@ impl FeynmanDiagramBuilder {
             cuts: self.cuts,
             topology_threshold_candidates: self.topology_threshold_candidates,
         };
-        if diagram.loop_momentum_basis.edge_signatures.is_empty() && diagram.graph.n_edges() != 0 {
+        if let Some(order) = self.half_edge_order {
+            diagram.restore_half_edge_order(&order)?;
+        }
+        if !explicit_basis && diagram.graph.n_edges() != 0 {
             diagram.loop_momentum_basis = diagram
                 .loop_momentum_bases_with_limit(1)?
                 .into_iter()
@@ -3774,6 +3990,37 @@ mod tests {
             diagram.reverse_edge(EdgeId(1)),
             Err(DiagramError::UnknownEdge { edge: 1, edges: 1 })
         ));
+    }
+
+    #[test]
+    fn reversing_flow_preserves_half_edge_storage_positions() {
+        let mut diagram = directed_fermion_line();
+        let mut order = diagram.half_edge_order();
+        order.rotate_left(1);
+        diagram.restore_half_edge_order(&order).unwrap();
+        let selected = diagram
+            .edges()
+            .find(|(_, _, edge)| edge.directed)
+            .unwrap()
+            .0;
+        let reversed = diagram.reverse_edge(selected).unwrap();
+        let expected = order
+            .into_iter()
+            .map(|mut half_edge| {
+                if half_edge.edge == selected {
+                    half_edge.endpoint = match half_edge.endpoint {
+                        DiagramEndpoint::Source => DiagramEndpoint::Target,
+                        DiagramEndpoint::Target => DiagramEndpoint::Source,
+                    };
+                }
+                half_edge
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(reversed.half_edge_order(), expected);
+        assert_eq!(
+            reversed.reverse_edge(selected).unwrap().to_json().unwrap(),
+            diagram.to_json().unwrap()
+        );
     }
 
     #[test]

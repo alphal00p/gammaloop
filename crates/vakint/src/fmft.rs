@@ -9,7 +9,7 @@ mod routing_tests;
 use crate::fmft_numerics::{MASTERS_EXPANSION, MASTERS_NUMERIC_SUBSTITUTIONS};
 use crate::utils::get_full_name;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
-use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbols};
+use crate::utils::{self, undress_vakint_symbols};
 use colored::Colorize;
 use log::debug;
 use regex::Regex;
@@ -112,23 +112,34 @@ impl FMFT {
         Ok(Vakint::normalize_gamma_functions(r.as_view()))
     }
 
+    /// Substitute numerical master data while retaining each finite source's identity.
+    /// Laurent expansion and normalization precede tracked numerical evaluation.
     pub fn substitute_masters(&self, result: AtomView) -> Result<Atom, VakintError> {
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
         let processed_constants = MASTERS_NUMERIC_SUBSTITUTIONS
             .iter()
+            // These names have exact definitions backed by arbitrary-precision
+            // evaluators. Numerical tables are historical validation data.
+            .filter(|(source, _)| {
+                !["D6", "T1ep", "T1ep2"]
+                    .iter()
+                    .any(|name| **source == Atom::var(vk_symbol!(*name)))
+            })
             .map(|(src, (trgt, condition))| {
-                (
+                Ok((
                     src,
                     (
-                        set_precision_in_polynomial_atom(
+                        crate::precision::legacy::stage_table(
+                            src.as_view(),
                             trgt.as_view(),
                             vk_symbol!("ep"),
-                            &self.settings,
-                        ),
+                            "FMFT",
+                        )?,
                         condition.clone(),
                     ),
-                )
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, VakintError>>()?;
         // for (a, (b, _c)) in processed_constants.clone() {
         //     println!("{} -> {}", a, b);
         // }
@@ -149,7 +160,7 @@ impl FMFT {
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
-        crate::hpl::substitute_numerically(result, &self.settings)
+        crate::precision::materialize(result, &self.settings, &HashMap::new(), None)
     }
 }
 
@@ -161,6 +172,38 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &FMFTOptions,
     ) -> Result<Atom, VakintError> {
+        let staged = self.fmft_reduce(settings, input_numerator, integral_specs, options)?;
+        if options.expand_masters && options.susbstitute_masters {
+            let catalog = self.rustred_data()?;
+            crate::precision::materialize(
+                staged.as_view(),
+                settings,
+                &HashMap::new(),
+                Some(&catalog.masters),
+            )
+        } else {
+            Ok(staged)
+        }
+    }
+
+    pub(crate) fn fmft_reduce(
+        &self,
+        settings: &VakintSettings,
+        input_numerator: AtomView,
+        integral_specs: &ReplacementRules,
+        options: &FMFTOptions,
+    ) -> Result<Atom, VakintError> {
+        let staged_input = if options.expand_masters && options.susbstitute_masters {
+            Some(crate::precision::legacy::stage_table(
+                function!(vk_symbol!("input_coefficient"), 0).as_view(),
+                input_numerator,
+                vk_symbol!(&settings.epsilon_symbol),
+                "Input",
+            )?)
+        } else {
+            None
+        };
+        let input_numerator = staged_input.as_ref().map_or(input_numerator, Atom::as_view);
         let integral = integral_specs.canonical_topology.get_integral();
 
         debug!(
@@ -418,7 +461,7 @@ impl Vakint {
         )
         .unwrap();
 
-        fmft.finalize_master_expression(
+        fmft.stage_master_expression(
             evaluated_integral,
             integral.n_loops as i64,
             &muv_sq_atom,

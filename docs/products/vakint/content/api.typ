@@ -48,8 +48,10 @@ Installed releases are reused offline; explicit refresh checks for updates.
 `RustRedMasterMode` chooses `Retain`, `Symbolic`, or `Numerical` (default). Python
 selects the same behavior with `new_rustred_method(master_mode="symbolic")`.
 Symbolic mode leaves numerical-only Laurent coefficients as named symbols, which
-the same engine can resolve later. Numerical mode rejects insufficient precision,
-missing epsilon coefficients, and unresolved masters with their exact identities.
+the same engine can resolve later. Numerical mode reports finite-source precision limits,
+and rejects missing epsilon coefficients or unresolved masters with their exact identities.
+All three RustRed modes preserve inexact input coefficients for later tracked evaluation.
+Passing retained uncertainty sources to pySecDec returns an explicit error before input generation.
 Use #source-link("crates/vakint/external_data.typ", label: "the external-data guide")
 for campaign coverage, cache bindings, and release conventions.
 
@@ -72,10 +74,10 @@ Install and verify the published assembly with
 #link("https://github.com/symbolica-dev/symbolica-community")[symbolica-community] assembly, enable the
 `symbolica_community_module` feature, and register `VakintWrapper` while building the extension.
 
-The structured #link("reference/python/")[Python reference] covers the four exported classes:
-`Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
-`VakintNumericalResult`. This example constructs a matching-only engine without probing external
-backends:
+The structured #link("reference/python/")[Python reference] covers the engine, expression,
+evaluation-method and numerical-result classes, plus typed constant/master identities,
+inspection records, precision metadata and warnings. This example constructs a matching-only
+engine without probing external backends:
 
 ```python
 from symbolica import E
@@ -92,8 +94,62 @@ assert "I1L" in str(canonical)
 
 `Vakint` exposes canonicalization, tensor reduction, integral evaluation, complete evaluation,
 and numerical conversion. `VakintEvaluationMethod` constructs configured backend choices.
-`VakintNumericalResult` converts Laurent coefficients to Python tuples and compares results with
-thresholds and optional errors.
+`VakintNumericalResult.coefficients` maps epsilon powers to read-only `NumericalCoefficient`
+objects. Their `numerical_value` is a native Symbolica `ComplexFloat`, and `precision.real`
+and `precision.imaginary` expose achieved significant digits, absolute error, exact-zero status
+and error quality. Absolute errors and real constant/master-coefficient values use Symbolica's
+existing arbitrary-precision `Float` class. `requested_decimal_precision` and `warnings` belong
+to the complete result.
+`numerical_evaluation` continues to return `(central_result, optional_statistical_error)`.
+
+Parameter values and external four-vector components accept native `Float` and `ComplexFloat`
+objects without changing their precision. Python `float` and `complex` inputs carry their
+binary64 precision, even when more working digits are requested. Python integers and numerical
+Symbolica expressions are substituted symbolically before tracked evaluation, so exact rational
+masses and exact cancellations in momentum contractions are preserved. Supply high-precision
+data as, for example, `Float("1.234567890123456789", decimal_digits=200)`, rather than first
+converting it to a Python float.
+Floating coefficients embedded in an `Expression` retain separate source identities for
+different parameters. Equal central values therefore do not turn independent uncertain inputs
+into a certified exact cancellation.
+Parameter mappings cannot override registered constants or reserved data-source identities;
+qualified ordinary parameter names remain supported.
+
+`to_expression()` preserves independently achieved component precision and raises an error for
+uncertain zeros or values without reliably encodable digits. `to_list()` intentionally rounds
+to Python floats and drops accuracy metadata. `compare_to()` retains its relative threshold
+and optional statistical-error arguments.
+
+```python
+from symbolica.community.hepkit.vakint import Vakint, ConstantSymbol
+
+engine = Vakint(evaluation_order=[])
+constant = engine.get_constant(ConstantSymbol("z3"), prec=40)
+print(constant.available_precision.kind)
+print(constant.precision.real.significant_digits)
+
+master = engine.get_master(engine.master_symbols()[0], prec=32)
+for power, coefficient in master.coefficients.items():
+    print(power, coefficient.numerical_value, coefficient.symbolic_expression.kind)
+```
+
+`get_constant` and `get_master` query loaded or vendored RustRed data without downloading packs.
+Both accept typed identifiers and default to 16 decimal digits. Discovery returns qualified
+identifiers; ambiguous friendly names report the matching alternatives. `VakintConstant`,
+`VakintMaster`, `MasterCoefficient`, and the shared precision/provenance records have structured
+terminal representations and `to_html()` / `_repr_html_()` notebook views. Native Symbolica
+rendering preserves long formulas and numbers behind expandable sections, and visible warnings
+explain precision shortfalls.
+Loaded finite constants such as `K5Moment(1)` report their validated source cap.
+Master formulas retain their original snapshot internally; notebook and terminal views show the
+mathematical names, while the expression getter preserves the binding needed for evaluation.
+Symbolic reductions preserve the same finite-period bindings when their formulas are evaluated
+later; loading another data snapshot does not silently replace those sources.
+
+`master.graph` is the normal FeynKit `FeynmanDiagram`, with its existing DOT, SVG and HTML
+interfaces. In Marimo, display the master directly or use `mo.Html(master.to_html())`.
+Graph previews require FeynKit's optional `typst-py` renderer; metadata and coefficient displays
+remain available without it. Rendering does not reevaluate numbers or change the data snapshot.
 
 Construct one engine and reuse it. When enabling pySecDec, provide numerical masses and external
 momenta where the topology requires them. Reuse existing pySecDec output only while debugging,

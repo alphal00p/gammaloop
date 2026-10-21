@@ -11,8 +11,6 @@
   "parameters": [
     {
       "name": "ZERO",
-      "texname": "0",
-      "typstname": "0",
       "lhablock": null,
       "lhacode": null,
       "nature": "internal",
@@ -25,8 +23,6 @@
     },
     {
       "name": "mUV",
-      "texname": "m",
-      "typstname": "m",
       "lhablock": "SCALAR",
       "lhacode": [
         1
@@ -41,8 +37,6 @@
     },
     {
       "name": "g",
-      "texname": "g",
-      "typstname": "g",
       "lhablock": "SCALAR",
       "lhacode": [
         2
@@ -57,8 +51,6 @@
     },
     {
       "name": "lam",
-      "texname": "\\lambda",
-      "typstname": "lambda",
       "lhablock": "SCALAR",
       "lhacode": [
         3
@@ -83,13 +75,10 @@
       "width": "ZERO",
       "texname": "\\phi",
       "antitexname": "\\phi",
-      "typstname": "phi",
-      "antitypstname": "phi",
-      "charge": "0",
+      "charge": 0.0,
       "ghost_number": 0,
       "lepton_number": 0,
-      "y_charge": null,
-      "y_charge_right": null,
+      "y_charge": 0,
       "propagating": true,
       "goldstoneboson": false,
       "propagator": "phi_prop"

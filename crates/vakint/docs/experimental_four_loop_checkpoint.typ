@@ -1,12 +1,16 @@
-# Experimental four-loop RustRed checkpoint
+#set page(paper: "a4", flipped: true, margin: 15mm)
+#set text(size: 9pt)
+#set par(justify: true)
 
-This checkpoint records finite-target development evidence. It is **not** a
+= Experimental four-loop RustRed checkpoint
+
+This checkpoint records finite-target development evidence. It is *not* a
 four-loop production artifact, a proof that the candidate rules close the full
 family, or a production `EvaluationMethod::RustRed` four-loop backend. The
 experimental adapter remains feature-gated and absent from the normal method
 registry.
 
-## Numerical status
+== Numerical status
 
 The unchanged comparative harness has passed parent, dotted-parent and pinch
 inputs for four supplied families:
@@ -32,7 +36,7 @@ approximate finalizer correction. Those fifteen legacy passes are not RustRed
 candidate-mode passes. No four-loop artifact or numerical terminal catalog is
 currently shipped.
 
-## Frozen timing run
+== Frozen timing run
 
 On 2026-09-17 the already-built test driver
 `dd4e435825c6baa182d311068ce99d2cbe93b7ebad1f529577ade51fb009e528`
@@ -56,14 +60,22 @@ state, Vakint objects, OS page caches, or the already prepared offline catalog.
 Every timed result was compared numerically with FMFT outside the timer and
 passed. Times are medians of three wall-clock samples.
 
-| Family and target | Boundary | FMFT | RustRed cold | Cold/FMFT | RustRed warm | Cold rule applications |
-| --- | --- | ---: | ---: | ---: | ---: | ---: |
-| H dotted | scalar | 3.168 s | 38.271 s | 12.08× | 0.0336 s | 26,956 |
-| H dotted | full FeynKit | 1.934 s | 37.749 s | 19.51× | 0.0349 s | 26,956 |
-| FG dotted | scalar | 0.968 s | 1.873 s | 1.93× | 0.0406 s | 3,362 |
-| FG dotted | full FeynKit | 0.969 s | 1.868 s | 1.93× | 0.294 s | 3,362 |
-| BMW power-three dotted | scalar | 2.628 s | 16.481 s | 6.27× | 0.0586 s | 16,113 |
-| BMW power-three dotted | full FeynKit | 0.701 s | 4.477 s | 6.39× | 0.0612 s | 16,113 |
+#block[
+  #set text(size: 7.5pt)
+  #table(
+    columns: (1fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr),
+    align: (left, left, right, right, right, right, right),
+    inset: 4pt,
+    stroke: 0.4pt + luma(180),
+    table.header([Family and target], [Boundary], [FMFT], [RustRed cold], [Cold/FMFT], [RustRed warm], [Cold rule applications]),
+    [H dotted], [scalar], [3.168 s], [38.271 s], [12.08×], [0.0336 s], [26,956],
+    [H dotted], [full FeynKit], [1.934 s], [37.749 s], [19.51×], [0.0349 s], [26,956],
+    [FG dotted], [scalar], [0.968 s], [1.873 s], [1.93×], [0.0406 s], [3,362],
+    [FG dotted], [full FeynKit], [0.969 s], [1.868 s], [1.93×], [0.294 s], [3,362],
+    [BMW power-three dotted], [scalar], [2.628 s], [16.481 s], [6.27×], [0.0586 s], [16,113],
+    [BMW power-three dotted], [full FeynKit], [0.701 s], [4.477 s], [6.39×], [0.0612 s], [16,113],
+  )
+]
 
 The H, FG and BMW parent and pinch targets are declared residuals and therefore
 show zero rule applications. Their fast native timings are terminal/catalog
@@ -78,7 +90,7 @@ during the timing phases were approximately 935,000 KiB for H, 307,000 KiB for
 FG and 592,000–596,000 KiB for BMW. These are snapshots, not phase peaks and
 not FORM-child memory.
 
-## Interpretation
+== Interpretation
 
 The frozen scalar applier does not yet meet the requested “within 75% of FMFT”
 objective on a genuine recurrence. FG is the closest at about 1.93× FMFT,

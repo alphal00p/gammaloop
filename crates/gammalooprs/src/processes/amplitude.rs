@@ -1186,8 +1186,8 @@ impl AmplitudeGraph {
 
             // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
 
-            let numerical_evaluation_atom =
-                numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()));
+            let numerical_evaluation_atom = numerical_evaluation
+                .to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()))?;
 
             Ok(numerical_evaluation_atom)
         }

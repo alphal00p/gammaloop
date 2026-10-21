@@ -33,7 +33,7 @@ fn compare_numerical_evaluation(
     )?;
     // println!("Numerical evaluation result:\n{}", num_eval);
 
-    let target_eval = NumericalEvaluationResult::from_vec(target.into(), &vakint_settings);
+    let target_eval = NumericalEvaluationResult::from_vec(target.into(), &vakint_settings)?;
 
     let (matches, match_msg) = target_eval.does_approx_match(
         &num_eval,

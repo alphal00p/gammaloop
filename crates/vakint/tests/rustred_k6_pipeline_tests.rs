@@ -11,10 +11,7 @@ use test_utils::{
     EvaluationTestLane, RustRedParityPolicy, TensorPrepass, alphaloop_matad_lanes,
     alphaloop_matad_rustred_lanes, compare_evaluations,
 };
-use vakint::{
-    TensorReductionMethod, Vakint, VakintSettings, externals_from_f64, params_from_f64,
-    vakint_parse,
-};
+use vakint::{TensorReductionMethod, Vakint, VakintSettings, vakint_parse};
 
 // These are input fixtures, not engine dispatch. Every input goes through
 // Vakint's existing matcher, including its routing of the contracted graphs.
@@ -85,13 +82,13 @@ fn feynkit_three_loop_class_scalar_oracles_agree() {
             &alphaloop_matad_lanes(),
             TensorPrepass::FeynKit,
             input.as_view(),
-            params_from_f64(
+            test_utils::params_at_reference_point(
                 &[("muvsq".into(), 1.3), ("mursq".into(), 0.7)]
                     .into_iter()
                     .collect(),
                 32,
             ),
-            externals_from_f64(
+            test_utils::externals_at_reference_point(
                 &[(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))]
                     .into_iter()
                     .collect(),
@@ -118,13 +115,13 @@ fn feynkit_rustred_three_loop_class_numerical_peers() {
             &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
             TensorPrepass::FeynKit,
             input.as_view(),
-            params_from_f64(
+            test_utils::params_at_reference_point(
                 &[("muvsq".into(), 1.3), ("mursq".into(), 0.7)]
                     .into_iter()
                     .collect(),
                 32,
             ),
-            externals_from_f64(
+            test_utils::externals_at_reference_point(
                 &[(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))]
                     .into_iter()
                     .collect(),
@@ -159,13 +156,13 @@ fn compare_pinch_1_6_numerator(lanes: [EvaluationTestLane; 2], mass_squared: f64
         &lanes,
         TensorPrepass::FeynKit,
         input.as_view(),
-        params_from_f64(
+        test_utils::params_at_reference_point(
             &[("muvsq".into(), mass_squared), ("mursq".into(), 0.7)]
                 .into_iter()
                 .collect(),
             32,
         ),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
             &[(1, (0.17, 0.4, 0.3, 0.12)), (2, (0.31, 0.2, 0.7, 0.43))]
                 .into_iter()
                 .collect(),

@@ -1,0 +1,3865 @@
+{
+  "schema": "vakint.external-data.producer-update.v1",
+  "provenance": {
+    "numerical_coverage": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/coverage-stages-v17.json",
+      "sha256": "f2992d7479b2a48c088c4e380f70c9fbf542a322bc20d32f5838af7e36508ccc"
+    },
+    "symbolic_coverage": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/coverage-v21.json",
+      "sha256": "6c6f242c565c44bc199794f0359f9bd4e8dea6258472dcdef552a8bfb610c8dc"
+    },
+    "symbolic_overlays": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/current-symbolic-overlays-v5.json",
+      "sha256": "1c02b431f51d3168e1532d44f2e92d122c6f1250e6e453a3836d7ea292479b1b"
+    },
+    "source_intake": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/external-data-PR4-v21-repository-update-source-v1/intake.json",
+      "sha256": "66d7687085aafbe4b39eb6202b685353354d3e94473ac392ec35858d3d2a9523"
+    },
+    "release_policy": "repository_only_no_tag_assets_or_latest_update",
+    "retained_supplemented_coefficients": 49,
+    "numerical_accuracy_evidence_not_interval_proof": true,
+    "previous_producer_update": {
+      "path": "provenance/producer-update-v0.1.1-PR4-v21-20261021-v1-before/provenance/producer-update.json",
+      "sha256": "71883b23d86aef06bd08724b304b2234fa169ea45ec276e4180361b134979308"
+    },
+    "actual_PR4_publication": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/publication-output-v1/publication.json",
+      "sha256": "611ada0bb6de92033e47eaeac543ef4ac37c022660fcf633fe05d842b96ee100"
+    },
+    "actual_PR4_publication_audit": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/peer-independent-actual-principal-publication-file-audit-pr4-v1.json",
+      "sha256": "d184addb0d6e0f8ee21e8b2547e55a9d5f38fcfdb08ac61f8cb7c40a43c734d2"
+    },
+    "Root_actual_PR4_publication_adoption": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/root-actual-principal-publication-adoption-v1.json",
+      "sha256": "a15b2d9aa7561d56c8c9f444bfb96385cb5a4025e709f82a66476425a7e2cd45"
+    },
+    "pending_native_period_evaluator": [
+      "vakint::K5Moment(k)",
+      "vakint::K5LogMoment(k)"
+    ],
+    "new_PR4_exact_cells": 24
+  },
+  "masters": {
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P1/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P1/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P1/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1_d200_validation.json",
+        "sha256": "c903c9a06ac1354fb42d95f5b8ab556c37e94142f105f9f7dcb99f9e83de5d9d"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "b3efec82c41289e17a395681ff730e28084473fc38f0fc5e742fded63dbd1bcb"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "b3efec82c41289e17a395681ff730e28084473fc38f0fc5e742fded63dbd1bcb"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "b3efec82c41289e17a395681ff730e28084473fc38f0fc5e742fded63dbd1bcb"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "b3efec82c41289e17a395681ff730e28084473fc38f0fc5e742fded63dbd1bcb"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "b3efec82c41289e17a395681ff730e28084473fc38f0fc5e742fded63dbd1bcb"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "b3efec82c41289e17a395681ff730e28084473fc38f0fc5e742fded63dbd1bcb"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P2/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P2/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P2/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1_d200_validation.json",
+        "sha256": "9c5478b6a5a172f84b261c6b3b8f8c9f28fe30e360a124f7cd799367ddea06cc"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "13e0c6f2f548ece4497126bbf1564ca78dcbad443f3867d6ec40d74b0dd97f10"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "13e0c6f2f548ece4497126bbf1564ca78dcbad443f3867d6ec40d74b0dd97f10"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "13e0c6f2f548ece4497126bbf1564ca78dcbad443f3867d6ec40d74b0dd97f10"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "13e0c6f2f548ece4497126bbf1564ca78dcbad443f3867d6ec40d74b0dd97f10"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "13e0c6f2f548ece4497126bbf1564ca78dcbad443f3867d6ec40d74b0dd97f10"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "13e0c6f2f548ece4497126bbf1564ca78dcbad443f3867d6ec40d74b0dd97f10"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P3/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P3/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P3/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0_d200_validation.json",
+        "sha256": "76ce75e114b817f90966abe3f643cc6a5fe8d31e68d5cf666e763cba557295dc"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6ac600c490e6e5ea9bcd5ce47a5cabc587cab30889dcc21278f718b5002f465c"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6ac600c490e6e5ea9bcd5ce47a5cabc587cab30889dcc21278f718b5002f465c"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6ac600c490e6e5ea9bcd5ce47a5cabc587cab30889dcc21278f718b5002f465c"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6ac600c490e6e5ea9bcd5ce47a5cabc587cab30889dcc21278f718b5002f465c"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6ac600c490e6e5ea9bcd5ce47a5cabc587cab30889dcc21278f718b5002f465c"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6ac600c490e6e5ea9bcd5ce47a5cabc587cab30889dcc21278f718b5002f465c"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P4/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P4/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P4/graph.dot",
+          "sha256": "901cd734a0c33c52bf9c00b1abb62060c93d10133a733e8a6b29de1f00730acb"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1_d200_validation.json",
+        "sha256": "8a87572f07cdd53b1840bc78c8548a496c336d429fbaba78e33586df6ba48cc3"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "9ee67593023b123862c8ec5c178c71876da88eb6610e05f69b00560ca3655e08"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "9ee67593023b123862c8ec5c178c71876da88eb6610e05f69b00560ca3655e08"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "9ee67593023b123862c8ec5c178c71876da88eb6610e05f69b00560ca3655e08"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "9ee67593023b123862c8ec5c178c71876da88eb6610e05f69b00560ca3655e08"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "9ee67593023b123862c8ec5c178c71876da88eb6610e05f69b00560ca3655e08"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p0_p1_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "9ee67593023b123862c8ec5c178c71876da88eb6610e05f69b00560ca3655e08"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P5/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P5/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P5/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1_d200_validation.json",
+        "sha256": "c99e9c8a4a82911d41241f62968d02af7a69074011f2b643de3185bdcf6b92e0"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a1370dc5bd067f156fdc3d9083e0a3e5efd137bde487ec074e38e604bc2d9175"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a1370dc5bd067f156fdc3d9083e0a3e5efd137bde487ec074e38e604bc2d9175"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a1370dc5bd067f156fdc3d9083e0a3e5efd137bde487ec074e38e604bc2d9175"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a1370dc5bd067f156fdc3d9083e0a3e5efd137bde487ec074e38e604bc2d9175"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a1370dc5bd067f156fdc3d9083e0a3e5efd137bde487ec074e38e604bc2d9175"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a1370dc5bd067f156fdc3d9083e0a3e5efd137bde487ec074e38e604bc2d9175"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P6/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P6/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P6/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1_d200_validation.json",
+        "sha256": "b41dac0c1c450f856868c09e8e1f775229b268eef562cf3dee34b7c017bf381b"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "57ce41e26d962cc6a452d15d32d807590ee91ad8725befa90c8dc489fb4185d3"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "57ce41e26d962cc6a452d15d32d807590ee91ad8725befa90c8dc489fb4185d3"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "57ce41e26d962cc6a452d15d32d807590ee91ad8725befa90c8dc489fb4185d3"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "57ce41e26d962cc6a452d15d32d807590ee91ad8725befa90c8dc489fb4185d3"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "57ce41e26d962cc6a452d15d32d807590ee91ad8725befa90c8dc489fb4185d3"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "57ce41e26d962cc6a452d15d32d807590ee91ad8725befa90c8dc489fb4185d3"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P7/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P7/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P7/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0_d200_validation.json",
+        "sha256": "0d11737a5613d8404c0d7ac8abc504fca12d414cddc24fdf6340a20a8b6fbdd7"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "21adf33d47b6da6465fc84feecfed5037039603aaa7803478043a9f42a01a460"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "21adf33d47b6da6465fc84feecfed5037039603aaa7803478043a9f42a01a460"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "21adf33d47b6da6465fc84feecfed5037039603aaa7803478043a9f42a01a460"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "21adf33d47b6da6465fc84feecfed5037039603aaa7803478043a9f42a01a460"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "21adf33d47b6da6465fc84feecfed5037039603aaa7803478043a9f42a01a460"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "21adf33d47b6da6465fc84feecfed5037039603aaa7803478043a9f42a01a460"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P8/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P8/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P8/graph.dot",
+          "sha256": "901cd734a0c33c52bf9c00b1abb62060c93d10133a733e8a6b29de1f00730acb"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1_d200_validation.json",
+        "sha256": "c413933e670e1d36435791f1eac418d1abc7b3e9c5a53c83537780800e12ddf5"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d639c0f08c89535a6d811e36fbf6b3f1d592bd49b391879aca7a9a5eb33bfaea"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d639c0f08c89535a6d811e36fbf6b3f1d592bd49b391879aca7a9a5eb33bfaea"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d639c0f08c89535a6d811e36fbf6b3f1d592bd49b391879aca7a9a5eb33bfaea"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d639c0f08c89535a6d811e36fbf6b3f1d592bd49b391879aca7a9a5eb33bfaea"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d639c0f08c89535a6d811e36fbf6b3f1d592bd49b391879aca7a9a5eb33bfaea"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d639c0f08c89535a6d811e36fbf6b3f1d592bd49b391879aca7a9a5eb33bfaea"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P9/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P9/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P9/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0_d200_validation.json",
+        "sha256": "afa2db3637283a05632de41c3cded2ed911f98ab98c7874d816022e5ce7b5443"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "68f89f94b044ac2439083da77262cc7e83f18eb8316b575c61de439bb39e96a8"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "68f89f94b044ac2439083da77262cc7e83f18eb8316b575c61de439bb39e96a8"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "68f89f94b044ac2439083da77262cc7e83f18eb8316b575c61de439bb39e96a8"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "68f89f94b044ac2439083da77262cc7e83f18eb8316b575c61de439bb39e96a8"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "68f89f94b044ac2439083da77262cc7e83f18eb8316b575c61de439bb39e96a8"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "68f89f94b044ac2439083da77262cc7e83f18eb8316b575c61de439bb39e96a8"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P10/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P10/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P10/graph.dot",
+          "sha256": "f43fae0a42b808d2918cde44dd0efafa14c8da50b953bcbfc9ed14f295e8ae5f"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1_d200_validation.json",
+        "sha256": "5b89db7cc37800b940beb1de29c36dc74d319ad8336f425c51b34e06c76bc481"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a8e941e0fe4274813422d21799ae6ac663ce9b13b83edaa2d69bb4a85d1f86aa"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a8e941e0fe4274813422d21799ae6ac663ce9b13b83edaa2d69bb4a85d1f86aa"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a8e941e0fe4274813422d21799ae6ac663ce9b13b83edaa2d69bb4a85d1f86aa"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a8e941e0fe4274813422d21799ae6ac663ce9b13b83edaa2d69bb4a85d1f86aa"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a8e941e0fe4274813422d21799ae6ac663ce9b13b83edaa2d69bb4a85d1f86aa"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "a8e941e0fe4274813422d21799ae6ac663ce9b13b83edaa2d69bb4a85d1f86aa"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P11/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P11/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P11/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0_d200_validation.json",
+        "sha256": "0b4e034958a7acbe045a650c3354bad9dee926c4127461f4ad18c158cef1e4fc"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "31d606a08a968ba725abf31efea24843a4756a90740994f65083b25876142515"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "31d606a08a968ba725abf31efea24843a4756a90740994f65083b25876142515"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "31d606a08a968ba725abf31efea24843a4756a90740994f65083b25876142515"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "31d606a08a968ba725abf31efea24843a4756a90740994f65083b25876142515"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "31d606a08a968ba725abf31efea24843a4756a90740994f65083b25876142515"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "31d606a08a968ba725abf31efea24843a4756a90740994f65083b25876142515"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P12/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P12/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P12/graph.dot",
+          "sha256": "f43fae0a42b808d2918cde44dd0efafa14c8da50b953bcbfc9ed14f295e8ae5f"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1_d200_validation.json",
+        "sha256": "3ced4bcae07e29f8dfd670de4b44f2375c595867ef10241dfe41d74f76817c20"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "80b3d176aa0fe3da989edc10b16b312be97f292b94dcae8fd832baf3c19eba40"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "80b3d176aa0fe3da989edc10b16b312be97f292b94dcae8fd832baf3c19eba40"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "80b3d176aa0fe3da989edc10b16b312be97f292b94dcae8fd832baf3c19eba40"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "80b3d176aa0fe3da989edc10b16b312be97f292b94dcae8fd832baf3c19eba40"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "80b3d176aa0fe3da989edc10b16b312be97f292b94dcae8fd832baf3c19eba40"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "80b3d176aa0fe3da989edc10b16b312be97f292b94dcae8fd832baf3c19eba40"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P13/numerical.json",
+          "sha256": "22cec8ec1ac3768334266d369e34b8b904f4a17ecdf6b3c81eab3d41b272329a"
+        },
+        "symbolic.json": {
+          "path": "masters/P13/symbolic.json",
+          "sha256": "8ea9b45152d86e95a29c1b3593ef5427b8d8c29dd1c2b0a4b66b1a4e34648bfc"
+        },
+        "graph.dot": {
+          "path": "masters/P13/graph.dot",
+          "sha256": "d925d57de3049373a497ff7a5943e70926894a1e8bd0a49fbec9e55bd2a3ce6b"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0_d200_computed.json",
+        "sha256": "f0971f1173211c243e4425f03cf97346cc90247092dc7e3ea889e43e79f2a070"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0_d200_symbolic.json",
+        "sha256": "15f755b326f95f33bdb6cdaa558d2da5d3a005b2cf8afba97e6be5bfde0c1a24"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0_d200_validation.json",
+        "sha256": "8ba1f08f3988f5ae80ed79c958f3e1ba755884d7023fa3b4b945ef790338cdb8"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "47524b7246ebf8b50c4dc98eae50704488ece2c3e0ed33ec3da6b2da651f1832"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "47524b7246ebf8b50c4dc98eae50704488ece2c3e0ed33ec3da6b2da651f1832"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "47524b7246ebf8b50c4dc98eae50704488ece2c3e0ed33ec3da6b2da651f1832"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "47524b7246ebf8b50c4dc98eae50704488ece2c3e0ed33ec3da6b2da651f1832"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "a1e2d59769760aa33d4bc5b070375efd72f186a5d3e0fe653d77787219ba7b36"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p0/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "a1e2d59769760aa33d4bc5b070375efd72f186a5d3e0fe653d77787219ba7b36"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 4,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P14/numerical.json",
+          "sha256": "7fed26d22b87a9d077a5e1d7a9680d8632821a5315e410a4ce931c760904e7dd"
+        },
+        "symbolic.json": {
+          "path": "masters/P14/symbolic.json",
+          "sha256": "b730ddd13db1aee0d620ecf46d89a384f7ab34c296579022d97df21791d9ce64"
+        },
+        "graph.dot": {
+          "path": "masters/P14/graph.dot",
+          "sha256": "816c444a7751ce799dd1a406671922800616b66a4d872ffae85646b5987f29ad"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1_d200_computed.json",
+        "sha256": "b3f3f46efc83f71bd11e4602c1d5b521cc08ed803581299d5c0bdbbb5fa6e88f"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1_d200_symbolic.json",
+        "sha256": "d91be2f8b49a621e61d61f4fe14693bdcad2da05c3df944215af88c52cc3f20b"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1_d200_validation.json",
+        "sha256": "9b4d3489f7314feeabe8c4a9ad0f58c5364f4b670d280d51d1e7445176df3967"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "53e8b7393c21168f8e6da21036d121725605b547fbd7be0caee18fc873a80117"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "53e8b7393c21168f8e6da21036d121725605b547fbd7be0caee18fc873a80117"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "53e8b7393c21168f8e6da21036d121725605b547fbd7be0caee18fc873a80117"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "9e178d0a19265536c285b5b1217a1b76be1cb292de8a9d5ee73244244d559376"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "9e178d0a19265536c285b5b1217a1b76be1cb292de8a9d5ee73244244d559376"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p0_p1_p1_p1_p1_p1/artifacts/pslq/Broadhurst14-epsilon2-v1/acceptance.json",
+          "sha256": "75ccc0547d6b3d1e540bcab328e4c59d977183aa85d4128ee999cddb6ee1304a"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P15/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P15/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P15/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1_d200_validation.json",
+        "sha256": "1b867852c572df1548b646ff94a9281f791df8c8fc87cf520cb41ffda9609ab3"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "4706ffb5017cbb83ffe9029e4e28502dfe19c432a98748ec6091111f6f1a3c1e"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "4706ffb5017cbb83ffe9029e4e28502dfe19c432a98748ec6091111f6f1a3c1e"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "4706ffb5017cbb83ffe9029e4e28502dfe19c432a98748ec6091111f6f1a3c1e"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "4706ffb5017cbb83ffe9029e4e28502dfe19c432a98748ec6091111f6f1a3c1e"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "4706ffb5017cbb83ffe9029e4e28502dfe19c432a98748ec6091111f6f1a3c1e"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "4706ffb5017cbb83ffe9029e4e28502dfe19c432a98748ec6091111f6f1a3c1e"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P16/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P16/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P16/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1_d200_validation.json",
+        "sha256": "58948d8d4d71927482371a0c74ff1ba7084e4e05a10ed350672eaadff00c3825"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "52f7d91ccd8b56d375154200cb53567bb13f0d2808c6d125012746b669f4eaf2"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "52f7d91ccd8b56d375154200cb53567bb13f0d2808c6d125012746b669f4eaf2"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "52f7d91ccd8b56d375154200cb53567bb13f0d2808c6d125012746b669f4eaf2"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "52f7d91ccd8b56d375154200cb53567bb13f0d2808c6d125012746b669f4eaf2"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "52f7d91ccd8b56d375154200cb53567bb13f0d2808c6d125012746b669f4eaf2"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "52f7d91ccd8b56d375154200cb53567bb13f0d2808c6d125012746b669f4eaf2"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P17/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P17/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P17/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0_d200_validation.json",
+        "sha256": "f686f0e708606b4411ee4dd27ef4fe879559ad3a269a620506af9106c23e56a8"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6b722b5daa24cd647b41de8d88bb33894d3b0cf048ed4a4991d612e72312818d"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6b722b5daa24cd647b41de8d88bb33894d3b0cf048ed4a4991d612e72312818d"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6b722b5daa24cd647b41de8d88bb33894d3b0cf048ed4a4991d612e72312818d"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6b722b5daa24cd647b41de8d88bb33894d3b0cf048ed4a4991d612e72312818d"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6b722b5daa24cd647b41de8d88bb33894d3b0cf048ed4a4991d612e72312818d"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6b722b5daa24cd647b41de8d88bb33894d3b0cf048ed4a4991d612e72312818d"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P18/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P18/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P18/graph.dot",
+          "sha256": "901cd734a0c33c52bf9c00b1abb62060c93d10133a733e8a6b29de1f00730acb"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1_d200_validation.json",
+        "sha256": "1fc834cfd0b23797aaa246519408b656b321779fef2bda3808242b4eb0ef383e"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "5c2a77c012c2438775a88826c4692ec4f43db7f640e8b831c36ebccc6a525744"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "5c2a77c012c2438775a88826c4692ec4f43db7f640e8b831c36ebccc6a525744"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "5c2a77c012c2438775a88826c4692ec4f43db7f640e8b831c36ebccc6a525744"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "5c2a77c012c2438775a88826c4692ec4f43db7f640e8b831c36ebccc6a525744"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "5c2a77c012c2438775a88826c4692ec4f43db7f640e8b831c36ebccc6a525744"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p0_p1_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "5c2a77c012c2438775a88826c4692ec4f43db7f640e8b831c36ebccc6a525744"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P19/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P19/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P19/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1_d200_validation.json",
+        "sha256": "0e42a86c8cf1463fa2905853e5e27c3e80f4c9bc339ff518578e362ece52d39d"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3d783a599682fc2edf5ad063729a4b9867b97c3392d1e1a1ee57717a85195ba9"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3d783a599682fc2edf5ad063729a4b9867b97c3392d1e1a1ee57717a85195ba9"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3d783a599682fc2edf5ad063729a4b9867b97c3392d1e1a1ee57717a85195ba9"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3d783a599682fc2edf5ad063729a4b9867b97c3392d1e1a1ee57717a85195ba9"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3d783a599682fc2edf5ad063729a4b9867b97c3392d1e1a1ee57717a85195ba9"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3d783a599682fc2edf5ad063729a4b9867b97c3392d1e1a1ee57717a85195ba9"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P20/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P20/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P20/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0_d200_validation.json",
+        "sha256": "c752e69895ff15afbaeced3788da44dbf006d481b86556452a129b4051932086"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "8ff01be67988e8e684d2aabd53284b59c973fdd1f7ec37e85bd66c55f043a341"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "8ff01be67988e8e684d2aabd53284b59c973fdd1f7ec37e85bd66c55f043a341"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "8ff01be67988e8e684d2aabd53284b59c973fdd1f7ec37e85bd66c55f043a341"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "8ff01be67988e8e684d2aabd53284b59c973fdd1f7ec37e85bd66c55f043a341"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "8ff01be67988e8e684d2aabd53284b59c973fdd1f7ec37e85bd66c55f043a341"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "8ff01be67988e8e684d2aabd53284b59c973fdd1f7ec37e85bd66c55f043a341"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P21/numerical.json",
+          "sha256": "22cec8ec1ac3768334266d369e34b8b904f4a17ecdf6b3c81eab3d41b272329a"
+        },
+        "symbolic.json": {
+          "path": "masters/P21/symbolic.json",
+          "sha256": "8ea9b45152d86e95a29c1b3593ef5427b8d8c29dd1c2b0a4b66b1a4e34648bfc"
+        },
+        "graph.dot": {
+          "path": "masters/P21/graph.dot",
+          "sha256": "2d95988fac4a9dc9d204043903f7428d3b9a8c352d67c1b47b490624f06f1a0b"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1_d200_computed.json",
+        "sha256": "f0971f1173211c243e4425f03cf97346cc90247092dc7e3ea889e43e79f2a070"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1_d200_symbolic.json",
+        "sha256": "15f755b326f95f33bdb6cdaa558d2da5d3a005b2cf8afba97e6be5bfde0c1a24"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1_d200_validation.json",
+        "sha256": "4affc84a80e72ec2576bae4fc7544b8cd890ad5e7ba7ea8b016929b2bd387440"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "298e383305d3fb34ea9fdd2b68da3780077e2ae55149b13c32d7291ada3d7ea4"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "298e383305d3fb34ea9fdd2b68da3780077e2ae55149b13c32d7291ada3d7ea4"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "298e383305d3fb34ea9fdd2b68da3780077e2ae55149b13c32d7291ada3d7ea4"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "298e383305d3fb34ea9fdd2b68da3780077e2ae55149b13c32d7291ada3d7ea4"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "b8d3ea24ecb9b8959690d287331259dc424fae687fa860bbdcb73b37e64af9bf"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p0_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "b8d3ea24ecb9b8959690d287331259dc424fae687fa860bbdcb73b37e64af9bf"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 4,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P22/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P22/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P22/graph.dot",
+          "sha256": "7a4ede089bf1bd1b2df824c89840f97ead3c4ef4419a4b9974dcec82b70c3c3e"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1_d200_validation.json",
+        "sha256": "4d8ffe255965c9b4e4e08494073ac460ef65a77348154bf783d491e1dd28b281"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "170a7affc2636bc32839d9af4855b66fff08c0027c990bd1608555804c025844"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "170a7affc2636bc32839d9af4855b66fff08c0027c990bd1608555804c025844"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "170a7affc2636bc32839d9af4855b66fff08c0027c990bd1608555804c025844"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "170a7affc2636bc32839d9af4855b66fff08c0027c990bd1608555804c025844"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "170a7affc2636bc32839d9af4855b66fff08c0027c990bd1608555804c025844"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "170a7affc2636bc32839d9af4855b66fff08c0027c990bd1608555804c025844"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P23/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P23/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P23/graph.dot",
+          "sha256": "7a4ede089bf1bd1b2df824c89840f97ead3c4ef4419a4b9974dcec82b70c3c3e"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0_d200_validation.json",
+        "sha256": "c7671aa6c4a6d1299bb30a98a6242e3e81d00bf85e1944b6fe784ef47145b33f"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d737a34beb1778fd16168872dbcbbdb1717f31afab54922c2bc9240fb4c364b0"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d737a34beb1778fd16168872dbcbbdb1717f31afab54922c2bc9240fb4c364b0"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d737a34beb1778fd16168872dbcbbdb1717f31afab54922c2bc9240fb4c364b0"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d737a34beb1778fd16168872dbcbbdb1717f31afab54922c2bc9240fb4c364b0"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d737a34beb1778fd16168872dbcbbdb1717f31afab54922c2bc9240fb4c364b0"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "d737a34beb1778fd16168872dbcbbdb1717f31afab54922c2bc9240fb4c364b0"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P24/numerical.json",
+          "sha256": "7fed26d22b87a9d077a5e1d7a9680d8632821a5315e410a4ce931c760904e7dd"
+        },
+        "symbolic.json": {
+          "path": "masters/P24/symbolic.json",
+          "sha256": "b730ddd13db1aee0d620ecf46d89a384f7ab34c296579022d97df21791d9ce64"
+        },
+        "graph.dot": {
+          "path": "masters/P24/graph.dot",
+          "sha256": "3afa0b653738d6921c31aa6118ac308b97c29440a7bd4e055fddc6051667b7db"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1_d200_computed.json",
+        "sha256": "b3f3f46efc83f71bd11e4602c1d5b521cc08ed803581299d5c0bdbbb5fa6e88f"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1_d200_symbolic.json",
+        "sha256": "d91be2f8b49a621e61d61f4fe14693bdcad2da05c3df944215af88c52cc3f20b"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1_d200_validation.json",
+        "sha256": "701996f84410c242dcd444a07a7cd8a2159d2a81a4545c37b10b80a40e902267"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "f731ed179726c5acc6d13779fe5c6718a08f7bae6e162d0a3930d65cffbe833e"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "f731ed179726c5acc6d13779fe5c6718a08f7bae6e162d0a3930d65cffbe833e"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "f731ed179726c5acc6d13779fe5c6718a08f7bae6e162d0a3930d65cffbe833e"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "9157fe24d406e598db9f43b0f9088354da4c0783c9f969638fa4901feb483ceb"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "9157fe24d406e598db9f43b0f9088354da4c0783c9f969638fa4901feb483ceb"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p0_p1_p1_p1_p1/artifacts/pslq/Broadhurst14-epsilon2-v1/acceptance.json",
+          "sha256": "3a81d58632f77bdd072c20d16b9a9aa34685c859039b7a7fc6cc3be2edfe7752"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P25/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P25/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P25/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1_d200_validation.json",
+        "sha256": "8e29c496271e2caa4ca182ff672b78b00fd8d894b6107b21f6834b1ed850db83"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "101a9e73941958e37c55a220c60e69503b6e8a103695d5b2b260f6a08eb347ab"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "101a9e73941958e37c55a220c60e69503b6e8a103695d5b2b260f6a08eb347ab"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "101a9e73941958e37c55a220c60e69503b6e8a103695d5b2b260f6a08eb347ab"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "101a9e73941958e37c55a220c60e69503b6e8a103695d5b2b260f6a08eb347ab"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "101a9e73941958e37c55a220c60e69503b6e8a103695d5b2b260f6a08eb347ab"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "101a9e73941958e37c55a220c60e69503b6e8a103695d5b2b260f6a08eb347ab"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P26/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P26/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P26/graph.dot",
+          "sha256": "4276d3293e9fcb54bc98a7bee8bb9d50fb1513defb156622f90a6e7e7c8bab4c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1_d200_validation.json",
+        "sha256": "c53194b0695f0b15943aab746fe1d4770deb67e8b47f205e1e6199a5732e25fd"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "bd1c78710fc2ca682e5d7e2a03d4f5420c1d73b845892f0d05f545299622c9f8"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "bd1c78710fc2ca682e5d7e2a03d4f5420c1d73b845892f0d05f545299622c9f8"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "bd1c78710fc2ca682e5d7e2a03d4f5420c1d73b845892f0d05f545299622c9f8"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "bd1c78710fc2ca682e5d7e2a03d4f5420c1d73b845892f0d05f545299622c9f8"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "bd1c78710fc2ca682e5d7e2a03d4f5420c1d73b845892f0d05f545299622c9f8"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p0_p1_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "bd1c78710fc2ca682e5d7e2a03d4f5420c1d73b845892f0d05f545299622c9f8"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P27/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P27/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P27/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0_d200_validation.json",
+        "sha256": "0e2a8d071582dc8de0a372c8c354996d6c8bdbe407911aa39f1d2bba9bbc028b"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6175ce30194ddf324733d699166e4ae991f39e0dcde60ccb3100460b7d5b8bfb"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6175ce30194ddf324733d699166e4ae991f39e0dcde60ccb3100460b7d5b8bfb"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6175ce30194ddf324733d699166e4ae991f39e0dcde60ccb3100460b7d5b8bfb"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6175ce30194ddf324733d699166e4ae991f39e0dcde60ccb3100460b7d5b8bfb"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6175ce30194ddf324733d699166e4ae991f39e0dcde60ccb3100460b7d5b8bfb"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "6175ce30194ddf324733d699166e4ae991f39e0dcde60ccb3100460b7d5b8bfb"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P28/numerical.json",
+          "sha256": "22cec8ec1ac3768334266d369e34b8b904f4a17ecdf6b3c81eab3d41b272329a"
+        },
+        "symbolic.json": {
+          "path": "masters/P28/symbolic.json",
+          "sha256": "8ea9b45152d86e95a29c1b3593ef5427b8d8c29dd1c2b0a4b66b1a4e34648bfc"
+        },
+        "graph.dot": {
+          "path": "masters/P28/graph.dot",
+          "sha256": "34e5102ac06188cf1f888e5fc5cef63c7336fd97ff643a0f9f445c60d7ddf5d9"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1_d200_computed.json",
+        "sha256": "f0971f1173211c243e4425f03cf97346cc90247092dc7e3ea889e43e79f2a070"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1_d200_symbolic.json",
+        "sha256": "15f755b326f95f33bdb6cdaa558d2da5d3a005b2cf8afba97e6be5bfde0c1a24"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1_d200_validation.json",
+        "sha256": "5b577781f0ac4c43e592bcfa985019d4a2b463b4b5dcd47c311d68d6d2127245"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "9f8219dc0c049de35b93a309b1f1c74f3bc3a94ed28abd81dccabc94184664f8"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "9f8219dc0c049de35b93a309b1f1c74f3bc3a94ed28abd81dccabc94184664f8"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "9f8219dc0c049de35b93a309b1f1c74f3bc3a94ed28abd81dccabc94184664f8"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "9f8219dc0c049de35b93a309b1f1c74f3bc3a94ed28abd81dccabc94184664f8"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "5922af9030a1749f430ae08da14e6de5272d8463a66679c5b264b4535a7abef9"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p0_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "5922af9030a1749f430ae08da14e6de5272d8463a66679c5b264b4535a7abef9"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 4,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P29/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P29/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P29/graph.dot",
+          "sha256": "fe8bfea88473fb2683b77916f1e7eb7293bc72864baf5b7b84f77d40bb8cf871"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0_d200_validation.json",
+        "sha256": "13ecd67f6e9548f8bb820184b36c4c3c7cc64d0f1be08a72d16d6ab4337cbb29"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "ec584ae859949330a37ec101db8d21f6c1744c8ae5bc00610d4cea92cee55169"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "ec584ae859949330a37ec101db8d21f6c1744c8ae5bc00610d4cea92cee55169"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "ec584ae859949330a37ec101db8d21f6c1744c8ae5bc00610d4cea92cee55169"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "ec584ae859949330a37ec101db8d21f6c1744c8ae5bc00610d4cea92cee55169"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "ec584ae859949330a37ec101db8d21f6c1744c8ae5bc00610d4cea92cee55169"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "ec584ae859949330a37ec101db8d21f6c1744c8ae5bc00610d4cea92cee55169"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P30/numerical.json",
+          "sha256": "7fed26d22b87a9d077a5e1d7a9680d8632821a5315e410a4ce931c760904e7dd"
+        },
+        "symbolic.json": {
+          "path": "masters/P30/symbolic.json",
+          "sha256": "b730ddd13db1aee0d620ecf46d89a384f7ab34c296579022d97df21791d9ce64"
+        },
+        "graph.dot": {
+          "path": "masters/P30/graph.dot",
+          "sha256": "373133aa7238d4ce21316dda357b8de36560e7fe66a04cb8d12e15b303b66b9a"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1_d200_computed.json",
+        "sha256": "b3f3f46efc83f71bd11e4602c1d5b521cc08ed803581299d5c0bdbbb5fa6e88f"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1_d200_symbolic.json",
+        "sha256": "d91be2f8b49a621e61d61f4fe14693bdcad2da05c3df944215af88c52cc3f20b"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1_d200_validation.json",
+        "sha256": "b9bf6925dae4fd08831cc4f7ce7ac33d7b2c5457bc736c499fe95d84d5c19178"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "712d17be6447f240217d1a75a9a55415ae07b57902e02bc2152f89be34f372aa"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "712d17be6447f240217d1a75a9a55415ae07b57902e02bc2152f89be34f372aa"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "712d17be6447f240217d1a75a9a55415ae07b57902e02bc2152f89be34f372aa"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "f2e331cf3b7cef58e570bd1cc408fa5498cfc48c8ca0ed33916115b9346e5e34"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "f2e331cf3b7cef58e570bd1cc408fa5498cfc48c8ca0ed33916115b9346e5e34"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p0_p1_p1_p1/artifacts/pslq/Broadhurst14-epsilon2-v1/acceptance.json",
+          "sha256": "cb9d06ab84bf5db2dad5e84d0b8605d2fd831927fe02e9a9bd812ae84d26b4cd"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P31/numerical.json",
+          "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+        },
+        "symbolic.json": {
+          "path": "masters/P31/symbolic.json",
+          "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+        },
+        "graph.dot": {
+          "path": "masters/P31/graph.dot",
+          "sha256": "607823e3aef05940a379b0fb277907cfbd1e4e6e4cefa17f181e0af34b3beb7c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0_d200_computed.json",
+        "sha256": "5f47198718d4a1c3d0e1295b8a66fa200229223b2c2a2cd9c128e908d093b432"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0_d200_symbolic.json",
+        "sha256": "b52b77be22f2367a948e371e2f27e15456593c5b895168392f4b211dbc936856"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0_d200_validation.json",
+        "sha256": "231e571682a8e0fa469defd2c527c9060791adf97e0c68ebd336b2863f5bb58c"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "78b22ad9f9fd2fd353aa22ad345c5d5f457572bf4457cfe4ece364faf325a286"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "78b22ad9f9fd2fd353aa22ad345c5d5f457572bf4457cfe4ece364faf325a286"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "78b22ad9f9fd2fd353aa22ad345c5d5f457572bf4457cfe4ece364faf325a286"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "78b22ad9f9fd2fd353aa22ad345c5d5f457572bf4457cfe4ece364faf325a286"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "78b22ad9f9fd2fd353aa22ad345c5d5f457572bf4457cfe4ece364faf325a286"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "78b22ad9f9fd2fd353aa22ad345c5d5f457572bf4457cfe4ece364faf325a286"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P32/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P32/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P32/graph.dot",
+          "sha256": "7ee98972f8b2028802fdac6e66b9448d72f72f162d66c352711be184f670b818"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1_d200_validation.json",
+        "sha256": "52f1e6900892e8cf02908cf14a0af7c0826baa2c9ee08f2687cd26ff8fa2d299"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3093a7b330a78a6f2b7eb989c29358195bf2c48c9f20ebcb5a7d03f79c450b24"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3093a7b330a78a6f2b7eb989c29358195bf2c48c9f20ebcb5a7d03f79c450b24"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3093a7b330a78a6f2b7eb989c29358195bf2c48c9f20ebcb5a7d03f79c450b24"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3093a7b330a78a6f2b7eb989c29358195bf2c48c9f20ebcb5a7d03f79c450b24"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3093a7b330a78a6f2b7eb989c29358195bf2c48c9f20ebcb5a7d03f79c450b24"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p0_p1/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "3093a7b330a78a6f2b7eb989c29358195bf2c48c9f20ebcb5a7d03f79c450b24"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P33/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P33/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P33/graph.dot",
+          "sha256": "fe8bfea88473fb2683b77916f1e7eb7293bc72864baf5b7b84f77d40bb8cf871"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0_d200_validation.json",
+        "sha256": "5bd1dfdb7fbec1b014b1ad9aa20039ba7dccb273ee94ac88d6485b1da33c043b"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "171a4e36a755e334d80b5b31a36d1a0584657517d4b07f5955d50d985584a790"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "171a4e36a755e334d80b5b31a36d1a0584657517d4b07f5955d50d985584a790"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "171a4e36a755e334d80b5b31a36d1a0584657517d4b07f5955d50d985584a790"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "171a4e36a755e334d80b5b31a36d1a0584657517d4b07f5955d50d985584a790"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "171a4e36a755e334d80b5b31a36d1a0584657517d4b07f5955d50d985584a790"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "171a4e36a755e334d80b5b31a36d1a0584657517d4b07f5955d50d985584a790"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P34/numerical.json",
+          "sha256": "7fed26d22b87a9d077a5e1d7a9680d8632821a5315e410a4ce931c760904e7dd"
+        },
+        "symbolic.json": {
+          "path": "masters/P34/symbolic.json",
+          "sha256": "b730ddd13db1aee0d620ecf46d89a384f7ab34c296579022d97df21791d9ce64"
+        },
+        "graph.dot": {
+          "path": "masters/P34/graph.dot",
+          "sha256": "6002786deeb523485a9ffe79929d0e784adee3fc475e2efb3a079bafe716948d"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1_d200_computed.json",
+        "sha256": "b3f3f46efc83f71bd11e4602c1d5b521cc08ed803581299d5c0bdbbb5fa6e88f"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1_d200_symbolic.json",
+        "sha256": "d91be2f8b49a621e61d61f4fe14693bdcad2da05c3df944215af88c52cc3f20b"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1_d200_validation.json",
+        "sha256": "6307e9660067e23662fe830fbe504070279e9659ac443b0300fc2f91d07f4a9c"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "1756b879eee0838703caa0578608f07d8b24698dbc941ae284c52c74c5b41a17"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "1756b879eee0838703caa0578608f07d8b24698dbc941ae284c52c74c5b41a17"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "1756b879eee0838703caa0578608f07d8b24698dbc941ae284c52c74c5b41a17"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "5942540a0f18ba3d2f15e394dcaf186896f4df671f7f7b44530c223b60bdfea3"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "5942540a0f18ba3d2f15e394dcaf186896f4df671f7f7b44530c223b60bdfea3"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p0_p1_p1/artifacts/pslq/Broadhurst14-epsilon2-v1/acceptance.json",
+          "sha256": "39b9f28eb5f01789252cf92307e7926d1c7f321ba9cf6fc22d7a235767f6bfd1"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P35/numerical.json",
+          "sha256": "037b34172757af299866d2031a87586154cb636497cce711277dbbd34a1bb8cb"
+        },
+        "symbolic.json": {
+          "path": "masters/P35/symbolic.json",
+          "sha256": "602be2f4abe38838b6cbfcb74878d540888c6ac0489833812d5c301fd157527e"
+        },
+        "graph.dot": {
+          "path": "masters/P35/graph.dot",
+          "sha256": "4a3e731897f4ffa78215aaa73d6a425a2d9aae2f091145a36c54e0b9b74268d4"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0_d200_computed.json",
+        "sha256": "b298a0c80c000ae1a92daa467c6c8917c486fb6080dd0060041b7d8ac919a9dd"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0_d200_symbolic.json",
+        "sha256": "367179352edaca34d2a8594c466565149ab998aa217d3225e84333381e9f1612"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0_d200_validation.json",
+        "sha256": "b1a0a44ad441324d8d7b74769f8c0110933d7059081af17e5d6715caed50cc86"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "968c4459e33e510abf33833d13a1d0bcc1b7ff632619edebff4a6f4516cb1948"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "968c4459e33e510abf33833d13a1d0bcc1b7ff632619edebff4a6f4516cb1948"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "968c4459e33e510abf33833d13a1d0bcc1b7ff632619edebff4a6f4516cb1948"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "968c4459e33e510abf33833d13a1d0bcc1b7ff632619edebff4a6f4516cb1948"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "968c4459e33e510abf33833d13a1d0bcc1b7ff632619edebff4a6f4516cb1948"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p0/artifacts/pslq/exact-lower-loop-products-v1/acceptance.json",
+          "sha256": "968c4459e33e510abf33833d13a1d0bcc1b7ff632619edebff4a6f4516cb1948"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P36/numerical.json",
+          "sha256": "7fed26d22b87a9d077a5e1d7a9680d8632821a5315e410a4ce931c760904e7dd"
+        },
+        "symbolic.json": {
+          "path": "masters/P36/symbolic.json",
+          "sha256": "b730ddd13db1aee0d620ecf46d89a384f7ab34c296579022d97df21791d9ce64"
+        },
+        "graph.dot": {
+          "path": "masters/P36/graph.dot",
+          "sha256": "f3f6f31a88c7b70ae38336d2c597875349ce1c445f4926896031fdfc187d9e2c"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1_d200_computed.json",
+        "sha256": "b3f3f46efc83f71bd11e4602c1d5b521cc08ed803581299d5c0bdbbb5fa6e88f"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1_d200_symbolic.json",
+        "sha256": "d91be2f8b49a621e61d61f4fe14693bdcad2da05c3df944215af88c52cc3f20b"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1_d200_validation.json",
+        "sha256": "9b3d82f5200fcaa7baf904f4353f15136fbbd4ad70cc907c78ec615ffa01099b"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "934ed8edc38f1cdf9d300672a45f3715fff32187ca7f8cf88396ae3ffcbb668b"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "934ed8edc38f1cdf9d300672a45f3715fff32187ca7f8cf88396ae3ffcbb668b"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "934ed8edc38f1cdf9d300672a45f3715fff32187ca7f8cf88396ae3ffcbb668b"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "8adf386bc1f4d9350b0ec660d263bd04af5446c39367529c6524213686d8c90f"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "8adf386bc1f4d9350b0ec660d263bd04af5446c39367529c6524213686d8c90f"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p0_p1/artifacts/pslq/Broadhurst14-epsilon2-v1/acceptance.json",
+          "sha256": "a673d21e97c5993adc09ecda3792f978431002a900dd79438f8c605a8470956e"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P37/numerical.json",
+          "sha256": "7fed26d22b87a9d077a5e1d7a9680d8632821a5315e410a4ce931c760904e7dd"
+        },
+        "symbolic.json": {
+          "path": "masters/P37/symbolic.json",
+          "sha256": "b730ddd13db1aee0d620ecf46d89a384f7ab34c296579022d97df21791d9ce64"
+        },
+        "graph.dot": {
+          "path": "masters/P37/graph.dot",
+          "sha256": "c03a22ccb740ad6e3d97e96fba81ec70fef1c1c24f37663f38e186a6f3bfdf06"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0_d200_computed.json",
+        "sha256": "b3f3f46efc83f71bd11e4602c1d5b521cc08ed803581299d5c0bdbbb5fa6e88f"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0_d200_symbolic.json",
+        "sha256": "d91be2f8b49a621e61d61f4fe14693bdcad2da05c3df944215af88c52cc3f20b"
+      },
+      "source_stage_digits": 200,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0_d200_validation.json",
+        "sha256": "e405416451ba8fb093e5988140f463660dca1acf900363f5c6768bf5416681b1"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "e3ed3cb0f7fae782dd6b5c6e7e7df89f948c0a978bc1708d8fc5542a66b05b46"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "e3ed3cb0f7fae782dd6b5c6e7e7df89f948c0a978bc1708d8fc5542a66b05b46"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "e3ed3cb0f7fae782dd6b5c6e7e7df89f948c0a978bc1708d8fc5542a66b05b46"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "8808e1d8d5ae99090b1e6294ab0de031d63b9ec66613bc0c89ae2948cb738cd0"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "8808e1d8d5ae99090b1e6294ab0de031d63b9ec66613bc0c89ae2948cb738cd0"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p0/artifacts/pslq/Broadhurst14-epsilon2-v1/acceptance.json",
+          "sha256": "251d6da4bfeac4695b1412c557e53bb9de2178c3e9e69897aed5f82e63ce7e23"
+        }
+      },
+      "before_payload_archives": {},
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": [
+        {
+          "epsilon_power": 3,
+          "numerical": true,
+          "significant_digits": 200,
+          "symbolic": true
+        }
+      ]
+    },
+    "L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1": {
+      "coefficients": [
+        {
+          "epsilon_power": -3,
+          "numerical": true,
+          "significant_digits": 2000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -2,
+          "numerical": true,
+          "significant_digits": 2000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": -1,
+          "numerical": true,
+          "significant_digits": 2000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 0,
+          "numerical": true,
+          "significant_digits": 2000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 1,
+          "numerical": true,
+          "significant_digits": 2000,
+          "symbolic": true
+        },
+        {
+          "epsilon_power": 2,
+          "numerical": true,
+          "significant_digits": 2000,
+          "symbolic": true
+        }
+      ],
+      "files": {
+        "numerical.json": {
+          "path": "masters/P38/numerical.json",
+          "sha256": "431b57c83c531f71b2ef36a2ecf18bd0596eeb48a137e4ddbb8e45589f29ad90"
+        },
+        "symbolic.json": {
+          "path": "masters/P38/symbolic.json",
+          "sha256": "54254d33ee69402517934b192cfa3bea904909d254296e8d37c95eb985aeba9e"
+        },
+        "graph.dot": {
+          "path": "masters/P38/graph.dot",
+          "sha256": "3e55c23a0492368c8aa3860a1bf4781c5662f0b676fd1e7402b5dc120ac18103"
+        }
+      },
+      "source_numerical": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1_computed.json",
+        "sha256": "431b57c83c531f71b2ef36a2ecf18bd0596eeb48a137e4ddbb8e45589f29ad90"
+      },
+      "source_symbolic": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1_symbolic.json",
+        "sha256": "54254d33ee69402517934b192cfa3bea904909d254296e8d37c95eb985aeba9e"
+      },
+      "source_stage_digits": 2000,
+      "source_validation": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/artifacts/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1_d2000_validation.json",
+        "sha256": "ccf636f6cb1ab80712ee9538203572af5bb92b19fa4b928acbcc63b85c8e4b35"
+      },
+      "symbolic_acceptance": {
+        "-1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/artifacts/pslq/direct-physical-coefficients-v1/acceptance.json",
+          "sha256": "1bd3701e7571861963a27625747b556de617825ea0bfa1a481f6d51442450221"
+        },
+        "-2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/artifacts/pslq/inherited-exact-zeros-v1/acceptance.json",
+          "sha256": "46d0d3e40badea0c022b059980bbcaf2f45866d2aa3f134487e45d4951defc58"
+        },
+        "-3": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/artifacts/pslq/inherited-exact-zeros-v1/acceptance.json",
+          "sha256": "46d0d3e40badea0c022b059980bbcaf2f45866d2aa3f134487e45d4951defc58"
+        },
+        "0": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/artifacts/pslq/corrected-signed-pure-inverse-v1/acceptance.json",
+          "sha256": "9418715f1084448b588d823b8bdb12b65301fd19658e2053e47ad1e6cf1ff331"
+        },
+        "1": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/artifacts/pslq/HSS18-epsilon1-v1/acceptance.json",
+          "sha256": "6075b2574b7dd9ac796365dee64a0af124bcadfa8029102960f53e4abadc7507"
+        },
+        "2": {
+          "path": "/shared/codex-2/vacuum_masters/MASTERS/3L/L3_56d4ac620f0309e551e825ce435d23ee4b58e887f2ee639e1bf14006bc9e9f93_p1_p1_p1_p1_p1_p1/artifacts/pslq/D6-epsilon2-stage2000-v1/acceptance.json",
+          "sha256": "12ace7f2b7b6a585ff072001a8a0e68ffc58901b90e00c5bf3b34a3497a3f800"
+        }
+      },
+      "before_payload_archives": {
+        "numerical.json": {
+          "path": "provenance/producer-update-v0.1.1-20261021-v1-before/3L/masters/P38/numerical.json",
+          "sha256": "a5c87af8f4d53069a0d4b56e637f181e233bfd523b7b5883f26d0ca52852d62f"
+        }
+      },
+      "rowwise_window_merge_not_whole_file_equivalence": true,
+      "retained_extra_coefficients": []
+    }
+  }
+}

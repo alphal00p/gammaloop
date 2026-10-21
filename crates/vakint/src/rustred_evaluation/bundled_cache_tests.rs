@@ -22,6 +22,8 @@ fn bundled_prepared_caches_match_uncached_reductions() {
     for loops in 1..=4 {
         let cached = super::cache_tests::external_engine();
         let ordinary = super::cache_tests::external_engine();
+        assert!(!cached.cache_statistics(loops).unwrap().attached);
+        assert!(!ordinary.cache_statistics(loops).unwrap().attached);
         let path = super::cache_tests::external_path().join(format!("{loops}L/cache"));
         cached
             .load_cache(loops, &path, &Default::default())
@@ -83,7 +85,7 @@ fn bundled_prepared_caches_match_uncached_reductions() {
 #[test]
 fn bundled_five_loop_application_loads_from_its_portable_directory() {
     use sha2::{Digest, Sha256};
-    let directory = super::cache_tests::external_path().join("5L/ibps");
+    let directory = super::cache_tests::external_path_through(5).join("5L/ibps");
     let bytes = std::fs::read(directory.join("application.json")).unwrap();
     assert_eq!(
         format!("{:x}", Sha256::digest(&bytes)),

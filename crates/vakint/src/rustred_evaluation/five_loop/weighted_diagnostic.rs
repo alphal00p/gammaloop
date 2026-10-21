@@ -9,6 +9,7 @@ use std::{cell::RefCell, sync::Arc, thread::ThreadId, time::Instant};
 const MAX_RECORDS: usize = 100_000;
 const MAX_PAYLOAD_BYTES: usize = 2 * 1024 * 1024 * 1024;
 type Key = Vec<(IntegralKey, Atom)>;
+type Measurement<T> = (T, Arc<Vec<Record>>, Counts, usize, usize, usize, f64, usize);
 
 #[derive(Clone)]
 enum Record {
@@ -18,7 +19,7 @@ enum Record {
     },
     Candidate {
         search: bool,
-        witness: ReplacementRules,
+        witness: Box<ReplacementRules>,
         numerator: Atom,
         target: IntegralKey,
         mass: Atom,
@@ -29,7 +30,7 @@ enum Record {
         key: Option<Key>,
     },
     End {
-        selected: Option<ReplacementRules>,
+        selected: Option<Box<ReplacementRules>>,
     },
 }
 fn same_witness(a: &ReplacementRules, b: &ReplacementRules) -> bool {
@@ -63,7 +64,7 @@ impl Record {
                 },
             ) => a == c && b == d,
             (Self::End { selected: a }, Self::End { selected: b }) => {
-                same_optional_witness(a.as_ref(), b.as_ref())
+                same_optional_witness(a.as_deref(), b.as_deref())
             }
             (
                 Self::Candidate {
@@ -220,15 +221,14 @@ pub(super) fn begin_search(
     })
 }
 pub(super) fn assert_thread(expected: Option<ThreadId>) -> Result<(), VakintError> {
-    if let Some(expected) = expected {
-        if expected != std::thread::current().id()
+    if let Some(expected) = expected
+        && (expected != std::thread::current().id()
             || lowering_diagnostics::current().is_none()
-            || !STATE.with(|state| state.borrow().is_some())
-        {
-            return Err(error(
-                "weighted witness candidate crossed diagnostic threads",
-            ));
-        }
+            || !STATE.with(|state| state.borrow().is_some()))
+    {
+        return Err(error(
+            "weighted witness candidate crossed diagnostic threads",
+        ));
     }
     Ok(())
 }
@@ -343,6 +343,7 @@ pub(super) fn candidate(
         state.charge(
             bytes
                 .checked_mul(2)
+                .and_then(|bytes| bytes.checked_add(std::mem::size_of::<ReplacementRules>()))
                 .ok_or_else(|| error("candidate retained payload overflow"))?,
         )?;
         if state.in_search {
@@ -355,7 +356,7 @@ pub(super) fn candidate(
         }
         state.record(Record::Candidate {
             search: state.in_search,
-            witness: witness.clone(),
+            witness: Box::new(witness.clone()),
             numerator: input.numerator.clone(),
             target: input.target.clone(),
             mass: input.mass_squared.clone(),
@@ -382,12 +383,14 @@ pub(super) fn end_search(selected: Option<&ReplacementRules>) -> Result<(), Vaki
         state.charge(
             selected
                 .map_or(Some(0), |witness| {
-                    super::witness_cache::witness_atom_bytes(witness, 0)
+                    super::witness_cache::witness_atom_bytes(witness, 0).and_then(|bytes| {
+                        bytes.checked_add(std::mem::size_of::<ReplacementRules>())
+                    })
                 })
                 .ok_or_else(|| error("selected witness byte overflow"))?,
         )?;
         state.record(Record::End {
-            selected: selected.cloned(),
+            selected: selected.cloned().map(Box::new),
         })?;
         state.in_search = false;
         state.best = None;
@@ -400,7 +403,7 @@ fn measured<T>(
     generic: bool,
     reference: Option<Arc<Vec<Record>>>,
     run: impl FnOnce() -> Result<T, VakintError>,
-) -> Result<(T, Arc<Vec<Record>>, Counts, usize, usize, usize, f64, usize), VakintError> {
+) -> Result<Measurement<T>, VakintError> {
     struct Clear;
     impl Drop for Clear {
         fn drop(&mut self) {
@@ -594,7 +597,7 @@ mod protocol_tests {
     #[test]
     fn diagnostic_scope_restores_after_panic_and_refuses_thread_handoff() {
         let panic = std::panic::catch_unwind(|| {
-            let _: Result<((), _, _, _, _, _, _, _), _> =
+            let _: Result<Measurement<()>, _> =
                 measured(true, None, || panic!("intentional scoped probe panic"));
         });
         assert!(panic.is_err());

@@ -169,6 +169,7 @@
     "vakint": [
       "feynkit-graph",
       "feynkit-kinematics",
+      "feynkit-model",
       "feynkit-py",
       "feynkit-tensor",
       "spenso",
@@ -452,6 +453,7 @@
     "vakint": {
       "feynkit-graph": [],
       "feynkit-kinematics": [],
+      "feynkit-model": [],
       "feynkit-py": [],
       "feynkit-tensor": [],
       "spenso": [],

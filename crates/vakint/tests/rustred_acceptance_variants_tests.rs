@@ -1,5 +1,5 @@
 //! Native peers for remaining legacy settings/input variants; see
-//! `RUSTRED_ACCEPTANCE.md` for the complete mapping and workload aliases.
+//! `RUSTRED_ACCEPTANCE.typ` for the complete mapping and workload aliases.
 //! Existing tests are unchanged. Every three-loop peer remains explicitly
 //! pending until a certified reusable K6 artifact is installed.
 
@@ -9,10 +9,7 @@ use test_utils::{
     RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
     analytic_matad_rustred_lanes, compare_evaluations,
 };
-use vakint::{
-    LoopNormalizationFactor, Vakint, VakintSettings, externals_from_f64, params_from_f64,
-    vakint_parse,
-};
+use vakint::{LoopNormalizationFactor, Vakint, VakintSettings, vakint_parse};
 
 // Literal legacy input data shared only within this acceptance module.
 const MERCEDES: &str = "topo(
@@ -60,7 +57,7 @@ fn rustred_decorated_one_loop_five_terms() {
         &analytic_matad_rustred_lanes(RustRedParityPolicy::ExactMatadBasis),
         TensorPrepass::FeynKit,
         input.as_view(),
-        params_from_f64(
+        test_utils::params_at_reference_point(
             &[
                 ("user_space::{scalar,real}::AAmuvsq".into(), 1.0),
                 ("some_space::{real,scalar}::AAmursq".into(), 1.0),
@@ -71,7 +68,10 @@ fn rustred_decorated_one_loop_five_terms() {
             .collect(),
             32,
         ),
-        externals_from_f64(&SMALL_EXTERNALS[..1].iter().copied().collect(), 32),
+        test_utils::externals_at_reference_point(
+            &SMALL_EXTERNALS[..1].iter().copied().collect(),
+            32,
+        ),
         1.0e-25,
         0.0,
         true,
@@ -90,13 +90,13 @@ fn rustred_three_loop_scalar_nonunit_scale() {
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::Skip,
         input.as_view(),
-        params_from_f64(
+        test_utils::params_at_reference_point(
             &[("muvsq".into(), 1.0), ("mursq".into(), 2.0)]
                 .into_iter()
                 .collect(),
             32,
         ),
-        externals_from_f64(&LARGE_EXTERNALS.into_iter().collect(), 32),
+        test_utils::externals_at_reference_point(&LARGE_EXTERNALS.into_iter().collect(), 32),
         1.0e-25,
         0.0,
         true,
@@ -115,13 +115,13 @@ fn rustred_three_loop_rank_four_large_external_vectors() {
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
         input.as_view(),
-        params_from_f64(
+        test_utils::params_at_reference_point(
             &[("muvsq".into(), 1.0), ("mursq".into(), 2.0)]
                 .into_iter()
                 .collect(),
             32,
         ),
-        externals_from_f64(&LARGE_EXTERNALS.into_iter().collect(), 32),
+        test_utils::externals_at_reference_point(&LARGE_EXTERNALS.into_iter().collect(), 32),
         1.0e-25,
         0.0,
         true,
@@ -141,13 +141,13 @@ fn rustred_three_loop_rank_four_five_terms() {
         &analytic_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
         input.as_view(),
-        params_from_f64(
+        test_utils::params_at_reference_point(
             &[("muvsq".into(), 1.0), ("mursq".into(), 2.0)]
                 .into_iter()
                 .collect(),
             32,
         ),
-        externals_from_f64(&SMALL_EXTERNALS.into_iter().collect(), 32),
+        test_utils::externals_at_reference_point(&SMALL_EXTERNALS.into_iter().collect(), 32),
         1.0e-25,
         0.0,
         true,
@@ -167,13 +167,13 @@ fn rustred_basketball_a_finite_part() {
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
         input.as_view(),
-        params_from_f64(
+        test_utils::params_at_reference_point(
             &[("muvsq".into(), 1.0), ("mursq".into(), 1.0)]
                 .into_iter()
                 .collect(),
             32,
         ),
-        externals_from_f64(&SMALL_EXTERNALS.into_iter().collect(), 32),
+        test_utils::externals_at_reference_point(&SMALL_EXTERNALS.into_iter().collect(), 32),
         1.0e-25,
         0.0,
         true,
@@ -192,13 +192,13 @@ fn rustred_basketball_b_finite_part() {
         &alphaloop_matad_rustred_lanes(RustRedParityPolicy::NumericalOnly),
         TensorPrepass::FeynKit,
         input.as_view(),
-        params_from_f64(
+        test_utils::params_at_reference_point(
             &[("muvsq".into(), 1.0), ("mursq".into(), 1.0)]
                 .into_iter()
                 .collect(),
             32,
         ),
-        externals_from_f64(&SMALL_EXTERNALS.into_iter().collect(), 32),
+        test_utils::externals_at_reference_point(&SMALL_EXTERNALS.into_iter().collect(), 32),
         1.0e-25,
         0.0,
         true,

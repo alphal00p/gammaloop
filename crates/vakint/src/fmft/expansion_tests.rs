@@ -44,7 +44,11 @@ fn pr6_finite_and_linear_terms_match_independent_tadpole_times_five_line_results
     let expanded = fmft
         .expand_masters(vk_parse!("PR6").unwrap().as_view())
         .unwrap();
-    let numeric = fmft.substitute_masters(expanded.as_view()).unwrap();
+    let staged = fmft.substitute_masters(expanded.as_view()).unwrap();
+    let staged_series = staged.series(vk_symbol!("ep"), 0, 1).unwrap();
+    let numeric = fmft
+        .substitute_additional_constants(staged.as_view())
+        .unwrap();
     let fmft_series = numeric.series(vk_symbol!("ep"), 0, 1).unwrap();
 
     // Independent lower-topology FORM reduction, in unit-mass FMFT/MATAD
@@ -97,7 +101,36 @@ fn pr6_finite_and_linear_terms_match_independent_tadpole_times_five_line_results
             .unwrap();
         let independent = Float::parse(independent, Some(bits)).unwrap();
         assert!(actual.im.as_raw().is_zero() && lower.im.as_raw().is_zero());
-        assert!((actual.re.clone() - &independent).norm() < independent.norm() * &tolerance);
-        assert!((actual.re - &lower.re).norm() < lower.re.norm() * &tolerance);
+        // Keep the independent 50-digit checks on the original stored data
+        // and exact lower-topology formula. A public Float now deliberately
+        // rounds to its measured accuracy, which includes source uncertainty.
+        let stored =
+            &MASTERS_NUMERIC_SUBSTITUTIONS[&vk_parse!(format!("PR6ep{power}").as_str()).unwrap()].0;
+        let stored = stored
+            .evaluate_with_prec(&HashMap::<Atom, Complex<Float>>::new(), bits)
+            .unwrap();
+        assert!((stored.re.clone() - &independent).norm() < independent.norm() * &tolerance);
+        assert!((stored.re - &lower.re).norm() < lower.re.norm() * &tolerance);
+        let coefficient = staged_series.coefficient(power.into()).unwrap();
+        let sources = crate::precision::legacy::collect_sources(coefficient.as_view()).unwrap();
+        let (measured, warnings) = crate::precision::evaluate_coefficient(
+            coefficient.as_view(),
+            &sources,
+            &HashMap::new(),
+            &fmft.settings,
+        )
+        .unwrap();
+        assert_eq!(&actual.re, &measured.value().re);
+        let oracle_error = independent.norm() * &tolerance;
+        assert!(
+            (actual.re - &independent).norm()
+                <= measured.precision().real().absolute_error().clone() + oracle_error
+        );
+        assert!(warnings.iter().any(|warning| {
+            warning
+                .sources
+                .iter()
+                .any(|source| source.identity.contains("PR6ep"))
+        }));
     }
 }

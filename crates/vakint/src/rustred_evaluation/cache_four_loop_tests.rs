@@ -166,7 +166,7 @@ fn numerical_parity(
         .unwrap();
     assert!(!cached_numeric.0.get_epsilon_coefficients().is_empty());
     let errors = match (&cached_numeric.1, &ordinary_numeric.1) {
-        (Some(left), Some(right)) => Some(left.aggregate_errors(right)),
+        (Some(left), Some(right)) => Some(left.aggregate_errors(right).unwrap()),
         (Some(value), None) | (None, Some(value)) => Some(value.clone()),
         (None, None) => None,
     };

@@ -78,7 +78,9 @@ fn main() {
         )
         .unwrap();
     println!("Numerical evaluation:\n{}\n", eval);
-    let eval_atom = eval.to_atom(vakint_symbol!(settings.epsilon_symbol.clone()));
+    let eval_atom = eval
+        .to_atom(vakint_symbol!(settings.epsilon_symbol.clone()))
+        .unwrap();
     println!("Numerical evaluation as atom:\n{}\n", eval_atom);
     #[rustfmt::skip]
     let target_eval =  NumericalEvaluationResult::from_vec(
@@ -88,7 +90,7 @@ fn main() {
             (-1, ( "0.0".into(),  "-188670.2193437045050954664088623".into()),),
             ( 0, ( "0.0".into(),  "148095.4883501202267659938351786".into()),),
         ],
-        &settings);
+        &settings).unwrap();
     let (matches, match_msg) = target_eval.does_approx_match(
         &eval,
         error.as_ref(),

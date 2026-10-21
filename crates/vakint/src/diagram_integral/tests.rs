@@ -25,6 +25,45 @@ fn sunset() -> (FeynmanDiagram, IntegralFamily) {
 }
 
 #[test]
+fn graph_propagator_powers_supply_defaults_and_explicit_powers_override_them() {
+    let (diagram, family) = sunset();
+    let dotted = diagram
+        .map_data(
+            |_, vertex| vertex.clone(),
+            |id, _, edge| {
+                let mut edge = edge.clone();
+                if id.0 == 0 {
+                    edge.propagator_power = 2;
+                }
+                edge
+            },
+        )
+        .unwrap();
+    let convert = |graph: &FeynmanDiagram, powers: Option<Vec<Integer>>| {
+        Atom::from(
+            VakintExpression::from_diagram(
+                graph,
+                &family,
+                &Atom::one(),
+                &DiagramIntegralOptions {
+                    powers,
+                    ..Default::default()
+                },
+            )
+            .unwrap(),
+        )
+    };
+    assert_eq!(
+        convert(&dotted, None),
+        convert(&diagram, Some(vec![2.into(), 1.into(), 1.into()]))
+    );
+    assert_eq!(
+        convert(&dotted, Some(vec![1.into(); 3])),
+        convert(&diagram, None)
+    );
+}
+
+#[test]
 fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
     let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
         "digraph repeated { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> a [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();

@@ -123,14 +123,67 @@ Rustdoc before changing normalization or backend order.
 Backend evaluation returns a symbolic Laurent series. Numerical substitution is a separate
 boundary: supply every remaining real/complex parameter and, when the numerator contains
 external scalar products, the external four-momenta. `params_from_f64` and
-`externals_from_f64` convert ordinary inputs to the configured decimal precision before the
-series is evaluated.
+`externals_from_f64` convert ordinary inputs while retaining at most their original binary64
+precision. Increasing the evaluation precision does not add source digits to these inputs.
 
-`NumericalEvaluationResult` stores sorted `(epsilon power, complex coefficient)` pairs. Negative
-powers are poles, power zero is the finite term, and positive powers are higher orders. The
-optional second result carries a backend-reported uncertainty series when the evaluated
-expression contains one. Compare corresponding powers; do not collapse the series to one complex
-number or silently discard the uncertainty.
+`NumericalEvaluationResult` stores an ordered map from epsilon powers to named
+`NumericalCoefficient` records. Negative powers are poles, power zero is the finite term, and
+positive powers are higher orders. Each record has a complex central value and separate real
+and imaginary precision information: achieved significant decimal digits, an arbitrary-precision
+absolute error, exact-zero status, and whether the error is bounded or estimated. Requested
+precision and source availability are distinct from achieved accuracy.
+
+For native Rust callers, `MATAD::substitute_masters_directly` and
+`FMFT::substitute_masters` prepare finite-source identities and exact Gamma expressions.
+Expand and normalize the complete Laurent expression before passing it to numerical evaluation.
+The complete Vakint evaluation entry points already perform these steps in order.
+
+Evaluation makes one pass at the requested precision plus the fixed guard allowance. It does
+not retry after cancellation. Structured warnings identify limiting constants or master
+coefficients, epsilon orders, requested and achieved precision, and the data version. Increase
+the requested precision explicitly when cancellation leaves too few useful digits; a finite
+source limit still cannot be overcome by adding working precision.
+
+The optional second result remains the backend-reported statistical uncertainty series. It is
+separate from numerical rounding and source-data uncertainty. Compare corresponding powers;
+do not collapse the series to one complex number or silently discard either uncertainty.
+
+Rust `to_atom` and Python `to_expression` are checked conversions. They round each nonzero
+component to its achieved precision, preserve exact zeros, and reject uncertain zeros or
+components without reliably encodable digits. The raw central values and precision records
+remain inspectable, including in notebook displays, when conversion fails. Python `to_list()`
+is an explicitly lossy conversion to ordinary Python floats; use named coefficient records
+to retain precision information.
+
+The #source-link("crates/vakint/precision_validation.typ", label: "precision validation report")
+records numerical, graph and interface checks separately from pending scientific and release gates.
+
+== Inspecting registered constants and masters
+
+`get_constant(symbol, prec)` and `get_master(symbol, prec)` inspect the active RustRed registry;
+they do not inspect FORM's private tables or trigger downloads. Rust takes an explicit decimal
+precision, while Python defaults to 16. Discover qualified identities with `constant_symbols()`
+and `master_symbols()`. Friendly names must be unambiguous within the snapshot.
+
+Constant records expose `AvailablePrecision::ArbitraryPrecision` or
+`AvailablePrecision::FixedPrecision(maximum_digits)`, a numerical value, achieved precision,
+warnings, and provenance. An exact expression depending on a finite period inherits that
+period's limit. Master records contain every available Laurent order in their recorded
+unit-mass normalization, independent of the engine's usual expansion depth. Each coefficient
+has its own availability and either `MasterSymbolicExpression::Expression` or
+`MasterSymbolicExpression::NumericalOnly`. Declared uncomputed terminals have empty coefficient
+maps; missing orders are never supplied as zeros.
+
+The four-loop pack supplies finite `K5Moment(1)`, `K5Moment(3)`,
+`K5LogMoment(1)` and `K5LogMoment(3)` values with certified source precision.
+Exact PR4-family formulas using these symbols inherit their finite limits;
+the function names alone do not imply arbitrary-precision evaluation.
+
+Lookups cap numerical values at source availability and report the limitation. Returned records
+retain the original immutable snapshot after another release is loaded. Their FeynKit graphs
+preserve the authenticated master topology, powers, numerator and momentum routing. Structured
+terminal and notebook representations use only these stored records; displaying an object
+does not download data or reevaluate it.
 
 Use `partial_numerical_evaluation` when you intentionally want to substitute known constants and
 retain unresolved symbolic factors for inspection. Use `numerical_evaluation` for the final

@@ -13,6 +13,7 @@ use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 ///
 /// The family must retain the graph's stored loop basis; `physical_slots` maps
 /// sorted graph edges to zero-based family indices and defaults to the prefix.
+/// Physical powers default to the graph annotations; explicit `powers` override them.
 /// Nonpositive physical powers contract edges; auxiliary powers must be nonpositive. Numerators use native
 /// Kinematics.scalar_product notation. Spectator order defines numerical vector
 /// IDs. Parameter substitutions are simultaneous and must already be reflected
@@ -33,7 +34,6 @@ pub(crate) fn integral_from_diagram(
     physical_slots: Option<Vec<usize>>,
     #[gen_stub(override_type(type_repr="typing.Mapping[symbolica.Expression, symbolica.Expression] | None", imports=("typing", "symbolica")))]
     parameter_substitutions: Option<&Bound<'_, PyMapping>>,
-    #[gen_stub(override_type(type_repr="typing.Sequence[symbolica.Expression]", imports=("typing", "symbolica")))]
     external_momenta: Vec<PythonExpression>,
 ) -> PyResult<VakintExpressionWrapper> {
     super::record_usage();

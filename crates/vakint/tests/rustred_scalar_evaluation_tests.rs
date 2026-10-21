@@ -8,8 +8,8 @@ use test_utils::{
     analytic_matad_rustred_lanes, compare_evaluations,
 };
 use vakint::{
-    EvaluationMethod, EvaluationOrder, MATADOptions, RustRedEvaluationOptions,
-    TensorReductionMethod, Vakint, VakintSettings, params_from_f64, vakint_parse,
+    EvaluationMethod, EvaluationOrder, MATADOptions, NumericalEvaluationResult,
+    RustRedEvaluationOptions, TensorReductionMethod, Vakint, VakintSettings, vakint_parse,
 };
 
 fn rustred_settings(substitute_masters: bool) -> VakintSettings {
@@ -278,8 +278,20 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
         ..matad.clone()
     };
     let parameter_values = HashMap::from([("muvsq".to_owned(), 1.0), ("mursq".to_owned(), 1.0)]);
-    let rustred_parameters = vakint.params_from_f64(&rustred, &parameter_values);
-    let matad_parameters = vakint.params_from_f64(&matad, &parameter_values);
+    let rustred_parameters = test_utils::params_at_reference_point(
+        &parameter_values
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect(),
+        rustred.run_time_decimal_precision,
+    );
+    let matad_parameters = test_utils::params_at_reference_point(
+        &parameter_values
+            .iter()
+            .map(|(k, v)| (k.clone(), *v))
+            .collect(),
+        matad.run_time_decimal_precision,
+    );
     let inputs = [
         vakint_parse!("topo(I1L(muvsq,4))").unwrap(),
         vakint_parse!("topo(I2L(muvsq,2,2,1))").unwrap(),
@@ -289,7 +301,7 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
     for input in inputs {
         let rustred_result = vakint.evaluate_integral(&rustred, input.as_view()).unwrap();
         let matad_result = vakint.evaluate_integral(&matad, input.as_view()).unwrap();
-        let (mut rustred_numerical, _) = Vakint::full_numerical_evaluation(
+        let (rustred_numerical, _) = Vakint::full_numerical_evaluation(
             &rustred,
             rustred_result.as_view(),
             &rustred_parameters,
@@ -297,7 +309,7 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
             None,
         )
         .unwrap();
-        let (mut matad_numerical, _) = Vakint::full_numerical_evaluation(
+        let (matad_numerical, _) = Vakint::full_numerical_evaluation(
             &matad,
             matad_result.as_view(),
             &matad_parameters,
@@ -313,7 +325,7 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
             exact_oracle.coefficient_list::<i32>(std::slice::from_ref(&epsilon));
         let absolute_threshold = Float::with_val(matad.get_binary_precision(), 1.0e-25);
         let mut proved_zero_poles = BTreeSet::new();
-        for (power, _) in &matad_numerical.0 {
+        for power in matad_numerical.coefficients().keys() {
             if *power >= 0 {
                 continue;
             }
@@ -338,14 +350,25 @@ fn scalar_rustred_matches_substituted_matad_through_two_loops() {
                 proved_zero_poles.insert(*power);
             }
         }
-        rustred_numerical
-            .0
-            .retain(|(power, _)| !proved_zero_poles.contains(power));
-        matad_numerical
-            .0
-            .retain(|(power, _)| !proved_zero_poles.contains(power));
-        let (matches, detail) =
-            rustred_numerical.does_approx_match(&matad_numerical, None, 1.0e-25, 0.0);
+        // Compare central values away from the poles proven identically zero
+        // by the separate symbolic MATAD expression above. Their absolute
+        // residual bounds were checked on the unmodified numerical results.
+        let compared_coefficients = |result: &NumericalEvaluationResult| {
+            NumericalEvaluationResult::from_values(
+                result
+                    .get_epsilon_coefficients()
+                    .into_iter()
+                    .filter(|(power, _)| !proved_zero_poles.contains(power))
+                    .collect(),
+                result.requested_decimal_precision(),
+            )
+        };
+        let (matches, detail) = compared_coefficients(&rustred_numerical).does_approx_match(
+            &compared_coefficients(&matad_numerical),
+            None,
+            1.0e-25,
+            0.0,
+        );
         assert!(matches, "{input}: {detail}");
     }
 }
@@ -797,7 +820,7 @@ fn rustred_covers_applicable_pysecdec_peer_inputs_through_two_loops() {
         ),
     ];
     for (legacy_test, input, mass_squared, renormalization_scale, tensor_prepass) in cases {
-        let numerical_masses = params_from_f64(
+        let numerical_masses = test_utils::params_at_reference_point(
             &[
                 ("muvsq".to_owned(), mass_squared),
                 ("mursq".to_owned(), renormalization_scale),
@@ -806,7 +829,7 @@ fn rustred_covers_applicable_pysecdec_peer_inputs_through_two_loops() {
             .collect(),
             32,
         );
-        let numerical_external_momenta = vakint::externals_from_f64(
+        let numerical_external_momenta = test_utils::externals_at_reference_point(
             &(1..=2)
                 .map(|index| {
                     (
@@ -1078,7 +1101,7 @@ fn run_k6_numerical_parity(matcher_class: K6MatcherClass) {
     let raw_masses = [("muvsq".to_owned(), 1.0), ("mursq".to_owned(), 1.0)]
         .into_iter()
         .collect::<ahash::HashMap<_, _>>();
-    let numerical_masses = params_from_f64(&raw_masses, 32);
+    let numerical_masses = test_utils::params_at_reference_point(&raw_masses, 32);
     compare_evaluations(
         VakintSettings {
             number_of_terms_in_epsilon_expansion: 4,

@@ -14,7 +14,6 @@ use crate::test_utils::{
     RustRedParityPolicy, TensorPrepass, alphaloop_matad_rustred_lanes,
     compare_vakint_evaluation_vs_reference, compare_vakint_evaluations_vs_reference,
 };
-use vakint::{externals_from_f64, params_from_f64};
 
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
 
@@ -36,7 +35,7 @@ fn test_integrate_1l_decorated_indices_alphaloop() {
             ")
         .unwrap()
         .as_view(),
-        params_from_f64(&[
+        test_utils::params_at_reference_point(&[
             ("user_space::{real}::DDMUVsq".into(), 1.0), ("some_space::{positive,scalar}::DDmursq".into(), 1.0),
             ("vakint::g(user_space::mink4(4,22),user_space::mink4(4,11))".into(), 1.0),
             ("vakint::p(1,user_space::mink4(4,11))".into(), 1.0),
@@ -46,7 +45,7 @@ fn test_integrate_1l_decorated_indices_alphaloop() {
             ("user_space::{symmetric,real}::DDsigma3(user_space::some_args)".into(), 0.5),
             ].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -74,7 +73,7 @@ fn test_integrate_1l_decorated_indices_matad() {
             ")
         .unwrap()
         .as_view(),
-        params_from_f64(&[
+        test_utils::params_at_reference_point(&[
             ("user_space::MUVsq".into(), 1.0), ("vakint::mursq".into(), 1.0),
             ("vakint::g(user_space::mink4(4,22),user_space::mink4(4,11))".into(), 1.0),
             ("vakint::p(1,user_space::mink4(4,11))".into(), 1.0),
@@ -84,7 +83,7 @@ fn test_integrate_1l_decorated_indices_matad() {
             ("user_space::{real,symmetric}::CCsigma3(user_space::some_args)".into(), 0.0),
             ].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -117,7 +116,7 @@ fn test_integrate_1l_decorated_indices_fmft() {
             ")
         .unwrap()
         .as_view(),
-        params_from_f64(&[
+        test_utils::params_at_reference_point(&[
             ("user_space::{real}::BBMUVsq".into(), 1.0), ("some_space::{real,scalar}::BBmursq".into(), 1.0),
             ("vakint::g(user_space::mink4(4,22),user_space::mink4(4,11))".into(), 1.0),
             ("vakint::p(1,user_space::mink4(4,11))".into(), 1.0),
@@ -127,7 +126,7 @@ fn test_integrate_1l_decorated_indices_fmft() {
             ("user_space::{integer}::BBparam".into(), 0.0),
             ].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -159,14 +158,14 @@ fn test_integrate_1l_decorated_indices_pysecdec() {
         .unwrap()
         .as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[
+        test_utils::params_at_reference_point(&[
             ("user_space::{scalar,real}::AAmuvsq".into(), 1.0),
             ("some_space::{real,scalar}::AAmursq".into(), 1.0),
             ("user_space::AAsigma".into(), 0.5),
             ("user_space::{scalar,real}::AAsigma2".into(), 0.5)
             ].iter().cloned().collect(),
             N_DIGITS_PYSECDEC_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),

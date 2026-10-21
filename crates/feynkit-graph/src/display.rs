@@ -1,9 +1,18 @@
 use std::{collections::BTreeMap, fmt::Write};
 
 use crate::{DiagramVertex, ExternalState, FeynmanDiagram, VertexId};
-use symbolica::atom::AtomCore;
+use symbolica::{atom::AtomCore, printer::PrintOptions};
 
 const EXTERNAL_Y_SCALE: f64 = 10.0;
+
+fn bounded_preview(value: &str, maximum: usize) -> String {
+    let mut characters = value.chars();
+    let mut preview = characters.by_ref().take(maximum).collect::<String>();
+    if characters.next().is_some() {
+        preview.push('…');
+    }
+    preview
+}
 
 fn typst_string(value: &str) -> String {
     let mut output = String::with_capacity(value.len() + 2);
@@ -150,16 +159,31 @@ impl FeynmanDiagram {
                     } else {
                         "undirected"
                     };
+                    let mut label = particle.name.clone();
+                    if edge.propagator_power != 1 {
+                        write!(label, "^{}", edge.propagator_power)
+                            .expect("writing to a string cannot fail");
+                    }
+                    let lmb_id = self
+                        .loop_momentum_basis()
+                        .loop_edges
+                        .iter()
+                        .position(|candidate| *candidate == id);
+                    if let Some(slot) = lmb_id {
+                        write!(label, " · k{slot}").expect("writing to a string cannot fail");
+                    }
                     writeln!(
                         output,
-                        "    edge(source(<v{source}>), <e{}>, sink(<v{target}>), id: {}, orientation: {orientation:?}, label: text({}), particle: {}, pdg: {}, directed: {}, numerator: {}, feynkit-source: {}, feynkit-target: {})",
+                        "    edge(source(<v{source}>), <e{}>, sink(<v{target}>), id: {}, orientation: {orientation:?}, label: text({}), particle: {}, pdg: {}, directed: {}, numerator: {}, propagator-power: {}, lmb-id: {}, feynkit-source: {}, feynkit-target: {})",
                         id.0,
                         id.0,
-                        typst_string(&particle.name),
+                        typst_string(&label),
                         typst_string(&particle.name),
                         particle.pdg_code,
                         edge.directed,
                         typst_string(&edge.numerator.to_canonical_string()),
+                        edge.propagator_power,
+                        lmb_id.map(|slot| slot.to_string()).unwrap_or_else(|| "none".into()),
                         endpoints.source.0,
                         endpoints.target.0,
                     )
@@ -245,6 +269,7 @@ impl FeynmanDiagram {
             self.loop_count(),
         )
         .expect("writing to a string cannot fail");
+        let title = typst_string(&bounded_preview(self.name(), 48));
         write!(
             output,
             r##"
@@ -294,7 +319,7 @@ impl FeynmanDiagram {
   draw(
     positioned,
     unit: 1.5,
-    title: auto,
+    title: text({title}),
     node-label: none,
     node-radius: 0.10,
     node-fill: black,
@@ -309,6 +334,20 @@ impl FeynmanDiagram {
 "##,
         )
         .expect("writing to a string cannot fail");
+        if self.numerator() != &symbolica::atom::Atom::one() {
+            let expression = self
+                .numerator()
+                .printer(PrintOptions::file_no_namespace())
+                .to_string()
+                .replace(',', ", ");
+            let preview = bounded_preview(&expression, 140);
+            writeln!(
+                output,
+                "#block(width: 85mm, above: 2mm)[#text(size: 8pt, fill: rgb(\"#315b8a\"), {})]",
+                typst_string(&format!("Numerator: {preview}"))
+            )
+            .expect("writing to a string cannot fail");
+        }
         output
     }
 }
@@ -387,6 +426,39 @@ mod tests {
         assert!(source.contains("label-layout: \"dangling-tangent\""));
         assert!(source.contains("mark-orientation: \"edge\""));
         assert!(source.ends_with("}\n"));
+    }
+
+    #[test]
+    fn shows_integral_powers_loop_basis_and_numerator_annotations() {
+        let name = "qualified_master_".repeat(10);
+        let diagram = one_loop()
+            .with_name(name.clone())
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |id, _, edge| {
+                    let mut edge = edge.clone();
+                    if id.0 == 1 {
+                        edge.propagator_power = 2;
+                    }
+                    edge
+                },
+            )
+            .unwrap()
+            .with_numerator(symbolica::atom::Atom::num(7))
+            .unwrap();
+        let source = diagram.to_linnest();
+        assert!(source.contains("phi^2"));
+        assert!(source.contains("propagator-power: 2"));
+        assert!(source.contains("lmb-id: 0"));
+        assert!(source.contains(" · k0"));
+        assert!(source.contains("Numerator: 7"));
+        assert!(source.contains("#text(size: 8pt, fill: rgb(\"#315b8a\"), \"Numerator: 7\")"));
+        assert!(source.contains(&format!("name: \"{name}\"")));
+        assert!(source.lines().any(|line| {
+            line.trim_start().starts_with("title: text(")
+                && line.contains('…')
+                && line.chars().count() < 80
+        }));
     }
 
     #[test]

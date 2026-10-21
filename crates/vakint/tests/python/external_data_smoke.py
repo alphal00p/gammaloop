@@ -4,6 +4,7 @@ Set VAKINT_TEST_EXTERNAL_DATA to a validated external-data checkout. These
 tests never download or write into that checkout.
 """
 
+import json
 import os
 import unittest
 from pathlib import Path
@@ -12,6 +13,7 @@ from symbolica import E
 from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
 
 DATA = Path(os.environ["VAKINT_TEST_EXTERNAL_DATA"])
+DATA_VERSION = json.loads((DATA / "manifest.json").read_text())["version"]
 
 
 def engine(mode="symbolic"):
@@ -27,7 +29,7 @@ class ExternalDataSmoke(unittest.TestCase):
     def test_local_checkout_load_is_cumulative_and_read_only(self):
         instance = engine()
         report = instance.load_official_external_data(2, local_artifacts_path=DATA)
-        self.assertEqual(report["version"], "v0.1.0")
+        self.assertEqual(report["version"], DATA_VERSION)
         self.assertEqual([p["loop_count"] for p in report["loops"]], [1, 2])
         self.assertTrue(all(p["source"] == "local" for p in report["loops"]))
         self.assertTrue(all(p["cache_available"] for p in report["loops"]))

@@ -5,6 +5,7 @@
 //! particular a pinched or disconnected input is not replaced by its parent.
 
 use symbolica::atom::Atom;
+use symbolica::domains::float::Float;
 use vakint::{LoopNormalizationFactor, Vakint, VakintSettings, vakint_parse};
 
 pub type ExternalMomentum = (usize, (f64, f64, f64, f64));
@@ -41,6 +42,32 @@ pub struct AcceptanceInput {
 }
 
 impl AcceptanceInput {
+    pub fn parameters_at_reference_point(&self, requested: u32) -> ahash::HashMap<String, Float> {
+        self.parameters
+            .iter()
+            .map(|(name, value)| {
+                (
+                    (*name).to_owned(),
+                    super::test_utils::reference_point_float(*value, requested),
+                )
+            })
+            .collect()
+    }
+
+    pub fn externals_at_reference_point(
+        &self,
+        requested: u32,
+    ) -> ahash::HashMap<usize, vakint::Momentum> {
+        self.external_momenta
+            .iter()
+            .map(|(index, (a, b, c, d))| {
+                let [a, b, c, d] = [*a, *b, *c, *d]
+                    .map(|value| super::test_utils::reference_point_float(value, requested));
+                (*index, vakint::Momentum::Real((a, b, c, d)))
+            })
+            .collect()
+    }
+
     fn new(
         name: &'static str,
         parent: ParentDescriptor,

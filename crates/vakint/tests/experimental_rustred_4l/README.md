@@ -3,9 +3,11 @@
 The public `EvaluationMethod::RustRed` uses four-loop candidate programs and
 terminal catalogs from the explicitly loaded
 [external-data repository](https://github.com/alphal00p/vakint-external-data/tree/main/4L/ibps).
-Vakint vendors only 1L–3L data. Set `VAKINT_TEST_EXTERNAL_DATA` to a validated
-external-data checkout or installed release root for the tests in this document;
-their engine fixture calls `load_external_data(path, 4)`. Ordinary
+Vakint vendors only 1L–3L data. These tests call
+`load_official_external_data(4, latest)` and install missing packs under the
+test process's current working directory, reusing validated local packs on
+subsequent runs. Optionally set `VAKINT_TEST_EXTERNAL_DATA` to an existing
+external-data checkout. Ordinary
 evaluation does not regenerate parametric IBPs or invoke FORM. The programs
 retain candidate status: loading and pointwise rule checks do not establish
 arbitrary-index closure or constitute a sealed completeness certificate.
@@ -36,9 +38,20 @@ spectator symbols, normalization, five Laurent terms, 32-digit arithmetic,
 relative reference tolerance `1e-30`, and maximum pull `1.0`. The fixture-only
 tests separately check inventory and literal-input agreement with the originals.
 
+The reference point is the exact binary-rational value of each original input
+coordinate; guarded evaluation preserves those bits. The historical FORM
+reference gate evaluates the stored table centers as exact test points and
+keeps its `1e-30` assertion. A separate check requires the actual public FORM
+result's component error bounds to contain those evaluated centers. The current
+scientific-data gate compares RustRed with an independent retained FORM reduction
+using the authenticated external coefficients and shared tracked HPL/K5
+evaluation, also at `1e-30`. This preserves the historical reference while
+checking the finite accuracy of the legacy tables explicitly.
+
 ```sh
 export SYMBOLICA_LICENSE="<your current Symbolica license>"
-export VAKINT_TEST_EXTERNAL_DATA=/absolute/path/to/vakint-external-data
+# Optional local checkout:
+# export VAKINT_TEST_EXTERNAL_DATA=/absolute/path/to/vakint-external-data
 export VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH=/absolute/path/to/form
 cargo test -p vakint --release --locked \
   --test rustred_four_loop_tests \
@@ -148,7 +161,7 @@ does not exercise loading through the public method; use the public suites
 above and below for that acceptance boundary.
 
 The external repository supplies finite catalogs for the four checked-in parent
-descriptors under `4L/ibps/`; these are loaded from the explicit fixture root
+descriptors under `4L/ibps/`; these are loaded from the validated official fixture
 and are bound to each RustRed family fingerprint and arity.
 Set `VAKINT_4L_CANDIDATE_CATALOG_DIR` to override that bundle and persist a
 fresh exact offline value set. The harness writes `h.rrcat.bin`, `fg.rrcat.bin`,
@@ -322,7 +335,8 @@ Run the numerical matrix explicitly:
 
 ```sh
 export SYMBOLICA_LICENSE="<your current Symbolica license>"
-export VAKINT_TEST_EXTERNAL_DATA=/absolute/path/to/vakint-external-data
+# Optional local checkout:
+# export VAKINT_TEST_EXTERNAL_DATA=/absolute/path/to/vakint-external-data
 export VAKINT_4L_CANDIDATE_ORACLE_FORM_PATH=/absolute/path/to/form
 cargo test -p vakint --release --locked \
   --test rustred_four_loop_tests \

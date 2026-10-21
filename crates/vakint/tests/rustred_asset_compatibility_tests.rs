@@ -1,4 +1,6 @@
 //! Native codec/replay regression only: no rule generation or numerical oracle.
+mod test_utils;
+
 use std::{collections::BTreeSet, fs, io::Read, path::PathBuf};
 
 use rustred::foundry::artifact::ClosedArtifact;
@@ -11,9 +13,7 @@ fn asset(name: &str) -> PathBuf {
     {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("data")
     } else {
-        std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
-            .map(PathBuf::from)
-            .expect("set VAKINT_TEST_EXTERNAL_DATA for external native asset replay")
+        test_utils::external_data_path()
     };
     directory.join(name)
 }

@@ -64,10 +64,13 @@ fn scalar_timings(loops: i64, inputs: [(&'static str, &'static str); 2]) {
                     None,
                 )
                 .unwrap();
-                assert!(!result.0.is_empty(), "{name}: empty numerical output");
+                assert!(
+                    !result.coefficients().is_empty(),
+                    "{name}: empty numerical output"
+                );
                 assert!(
                     result
-                        .0
+                        .get_epsilon_coefficients()
                         .iter()
                         .all(|(_, value)| value.re.is_finite() && value.im.is_finite()),
                     "{name}: non-finite numerical output"

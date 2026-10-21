@@ -9,8 +9,6 @@ use symbolica::atom::{Atom, AtomCore, Symbol};
 use symbolica::domains::rational::Rational;
 use symbolica::function;
 
-use crate::fmft_numerics::MASTERS_NUMERIC_SUBSTITUTIONS;
-use crate::master_precision::MasterPrecisionWarnings;
 use crate::symbols::S;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
 use crate::{FMFTOptions, Vakint, VakintError};
@@ -20,12 +18,10 @@ use super::FMFT;
 impl FMFT {
     /// Finalize native scalar output in the existing Minkowski FMFT PR basis.
     ///
-    /// Native and historical FORM callers share a warning-only check of finite
-    /// source precision. Requested working precision is preserved, but resizing
-    /// stored constants cannot create additional accurate digits. This check is
-    /// not an error bound on cancellation in the final result.
+    /// Native and historical FORM callers share exact normalization and Laurent
+    /// expansion, then the checked precision-tracking numerical boundary.
     /// No four-loop artifact is registered by exposing this internal boundary.
-    #[allow(dead_code)] // Activated when genuine four-loop artifacts are shipped.
+    #[allow(dead_code)] // Used by the optional experimental reduction bridge.
     pub(crate) fn finalize_native_reduced_masters(
         &self,
         evaluated_integral: Atom,
@@ -42,12 +38,34 @@ impl FMFT {
 
     pub(super) fn finalize_master_expression(
         &self,
+        evaluated_integral: Atom,
+        loop_count: i64,
+        muv_sq_atom: &Atom,
+        options: &FMFTOptions,
+    ) -> Result<Atom, VakintError> {
+        let staged =
+            self.stage_master_expression(evaluated_integral, loop_count, muv_sq_atom, options)?;
+        if options.expand_masters && options.susbstitute_masters {
+            crate::precision::materialize(
+                staged.as_view(),
+                &self.settings,
+                &std::collections::HashMap::new(),
+                None,
+            )
+        } else {
+            Ok(staged)
+        }
+    }
+
+    pub(super) fn stage_master_expression(
+        &self,
         mut evaluated_integral: Atom,
         loop_count: i64,
         muv_sq_atom: &Atom,
         options: &FMFTOptions,
     ) -> Result<Atom, VakintError> {
         let settings = &self.settings;
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Fmft);
         let normalization = vk_parse!(
             format!(
                 "((𝑖*(𝜋^((4-2*{eps})/2)))\
@@ -62,7 +80,7 @@ impl FMFT {
         // Adjust normalization factor.
         let complete_normalization = (normalization
             * settings
-                .get_integral_normalization_factor_atom()?
+                .get_staged_integral_normalization_factor_atom()?
                 .replace(S.n_loops.to_pattern())
                 .with(Atom::num(loop_count).to_pattern()))
         .replace(Atom::var(vk_symbol!(settings.epsilon_symbol.as_str())).to_pattern())
@@ -96,15 +114,13 @@ impl FMFT {
                 // exact cancellation can become a tiny floating pole. This
                 // is algebraic normalization, not a numerical zero threshold.
                 evaluated_integral = evaluated_integral.expand();
-                self.warn_constant_precision(&evaluated_integral);
                 debug!(
                     "{}: Substituting master coefficients and period constants...",
                     "FMFT".green()
                 );
                 evaluated_integral = self.substitute_masters(evaluated_integral.as_view())?;
                 evaluated_integral = evaluated_integral.expand();
-                evaluated_integral =
-                    self.substitute_additional_constants(evaluated_integral.as_view())?;
+                evaluated_integral = crate::hpl::normalize_constants(evaluated_integral.as_view())?;
                 // Sanity check, including tails inside the numerical tables.
                 Self::reject_unknown_orders(&evaluated_integral)?;
             }
@@ -149,17 +165,6 @@ impl FMFT {
             )));
         }
         Ok(())
-    }
-
-    /// Check only constants actually needed after exact Laurent truncation,
-    /// following the existing substitution tables to a fixed point. Precision
-    /// is read from Symbolica's coefficients before any runtime resizing.
-    fn warn_constant_precision(&self, expression: &Atom) {
-        let substitutions = MASTERS_NUMERIC_SUBSTITUTIONS
-            .iter()
-            .map(|(source, (target, condition))| (source, target, Some(condition)));
-        MasterPrecisionWarnings::new(&self.settings)
-            .check_substitutions(expression.as_view(), substitutions);
     }
 }
 

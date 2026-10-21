@@ -1,4 +1,8 @@
-# RustRed acceptance coverage through three loops
+#set page(paper: "a4", flipped: true, margin: 15mm)
+#set text(size: 9pt)
+#set par(justify: true)
+
+= RustRed acceptance coverage through three loops
 
 This is a source-level inventory and audited frozen-process test report.
 The legacy input inventory has passing native peers; the two supplemental
@@ -10,7 +14,7 @@ prepass, followed by RustRed scalar reduction and master substitution. The
 shared harness gives both native stages an invalid FORM path; FORM is available
 only to the explicitly separate AlphaLoop/MATAD oracle lanes.
 
-## Typed four-loop routing preparation (2026-09-16)
+== Typed four-loop routing preparation (2026-09-16)
 
 The existing K6 signed parent-slot and simultaneous momentum-transport checks
 now live in one crate-private validator reusable by future parent-artifact
@@ -23,7 +27,7 @@ witnesses, altered coordinates, incorrect surviving momentum, changed
 pinched-out parent slots and sign-flipped descriptors. Every four-loop class
 still rejects RustRed admission: routing evidence alone is not a closed artifact.
 
-The fresh scoped gate passes **39 tests**: 23 native library tests, with one
+The fresh scoped gate passes *39 tests*: 23 native library tests, with one
 unchanged offline MATAD-catalog test ignored, plus all 16 K6 pipeline tests.
 The native process and strict native pipeline settings use invalid FORM paths;
 separate oracle lanes use FORM5. Formatting, `cargo check --locked -p vakint
@@ -35,10 +39,10 @@ This is not a rerun of the complete 83-test selection below and does not
 establish four-loop scalar reduction or numerical parity. It replaces the
 earlier diagnostic-only matcher inspection with durable typed regression tests.
 
-## Symbolica 3 / current-artifact migration rerun (2026-09-16)
+== Symbolica 3 / current-artifact migration rerun (2026-09-16)
 
-The same complete **83-test selection passes again: 83 passed, 0 failed,
-0 ignored**, after the atomic dependency/artifact migration:
+The same complete *83-test selection passes again: 83 passed, 0 failed,
+0 ignored*, after the atomic dependency/artifact migration:
 
 - RustRed `09cef8e3cf7487dded7803edc26df5d51bb9f500`;
 - Symbolica, Graphica and Numerica
@@ -70,7 +74,7 @@ The table below remains the exact test inventory. New evidence is in
 `cargo check --locked -p vakint --no-default-features --lib --tests`, frozen
 binary hashes, the unchanged `selected.tsv`, and `acceptance/results.tsv` with
 all nine passing batches. The debug correctness batches total 146.64 seconds
-on one pinned core; this is **not** a release performance comparison. The
+on one pinned core; this is *not* a release performance comparison. The
 1m56s check and 6m24s test compilation are excluded from that runtime total.
 
 The full actual workspace passes `cargo check --locked --workspace --lib` and
@@ -80,8 +84,8 @@ continuous samples through a narrowly reviewed point-domain adapter. Symbolica
 3 uses runtime signed-license/environment activation; the removed compiled OEM
 scheme is not emulated (see the root contributor guide).
 
-The fresh focused runtime gate also passes: **28 GammaLoop tests**, **4 Spenso
-native-solver forwarding tests**, and **52 FeynKit tensor tests**. FeynKit's
+The fresh focused runtime gate also passes: *28 GammaLoop tests*, *4 Spenso
+native-solver forwarding tests*, and *52 FeynKit tensor tests*. FeynKit's
 pre-existing ignored explicit rank-ten, 893,025-pair cross-check remains
 ignored. The GammaLoop selection covers six point-domain tests, runtime-license
 initialization, exact high-precision conversion, complete/free/guarded momentum
@@ -96,26 +100,34 @@ not a whole-workspace lint claim.
 These selected checks do not certify every GammaLoop runtime workflow, and do
 not provide four-loop RustRed closure.
 
-## Previous complete selected-matrix rerun (2026-09-16)
+== Previous complete selected-matrix rerun (2026-09-16)
 
-The complete recorded **83-test selection now passes: 83 passed, 0 failed,
-0 ignored** on revision `433e42d3`. This rerun follows the signed MATAD routing
+The complete recorded *83-test selection now passes: 83 passed, 0 failed,
+0 ignored* on revision `433e42d3`. This rerun follows the signed MATAD routing
 correction described below. It uses freshly built, hash-frozen binaries and
 the exact union of the earlier native/catalog, three-loop-peer,
 legacy-complement and offline-catalog manifests; no failing entry was dropped.
 
-| Binary | Selected / passed |
-| --- | ---: |
-| Vakint library (native catalog/defaults and offline MATAD catalog) | 16 |
-| Tensor reduction modes | 1 |
-| Freeform evaluations | 2 |
-| RustRed scalar evaluations | 18 |
-| Analytic references | 19 |
-| RustRed acceptance variants | 6 |
-| Input matching | 5 |
-| AlphaLoop/MATAD comparisons | 13 |
-| Supplemental K6 all-class pipelines | 3 |
-| **Total** | **83** |
+#block[
+  #set text(size: 7.5pt)
+  #table(
+    columns: (1fr, 1fr),
+    align: (left, right),
+    inset: 4pt,
+    stroke: 0.4pt + luma(180),
+    table.header([Binary], [Selected / passed]),
+    [Vakint library (native catalog/defaults and offline MATAD catalog)], [16],
+    [Tensor reduction modes], [1],
+    [Freeform evaluations], [2],
+    [RustRed scalar evaluations], [18],
+    [Analytic references], [19],
+    [RustRed acceptance variants], [6],
+    [Input matching], [5],
+    [AlphaLoop/MATAD comparisons], [13],
+    [Supplemental K6 all-class pipelines], [3],
+    [*Total*], [*83*],
+  )
+]
 
 Each binary is invoked once with all of its exact selected test names,
 `--include-ignored --test-threads=1 --nocapture`; the runner checks the selected
@@ -140,7 +152,7 @@ available Nix Clippy executable. These are correctness gates, not release
 performance measurements. Four-loop RustRed artifacts and four-loop numerical
 acceptance remain unfinished.
 
-## Routing correction and targeted rerun (2026-09-16)
+== Routing correction and targeted rerun (2026-09-16)
 
 The contracted basketball basis contains reversed parent edges. MATAD's
 defining identities require Vakint parent slots to map as
@@ -154,11 +166,19 @@ The correction includes edge orientation in the existing numerator
 Wick-rotation sign. Denominator numbering, one/two-loop maps, defaults, APIs,
 RustRed artifacts, numerical tolerances and existing assertions are unchanged.
 
-| Fresh selection | Passed | Failed | Ignored | Debug process seconds |
-| --- | ---: | ---: | ---: | ---: |
-| New `matad::routing_tests` | 3 | 0 | 0 | 0.49 |
-| Entire `rustred_k6_pipeline_tests` | 16 | 0 | 0 | 56.13 |
-| Entire `integral_alphaloop_vs_matad_tests` | 15 | 0 | 0 | 39.50 |
+#block[
+  #set text(size: 7.5pt)
+  #table(
+    columns: (1fr, 1fr, 1fr, 1fr, 1fr),
+    align: (left, right, right, right, right),
+    inset: 4pt,
+    stroke: 0.4pt + luma(180),
+    table.header([Fresh selection], [Passed], [Failed], [Ignored], [Debug process seconds]),
+    [New `matad::routing_tests`], [3], [0], [0], [0.49],
+    [Entire `rustred_k6_pipeline_tests`], [16], [0], [0], [56.13],
+    [Entire `integral_alphaloop_vs_matad_tests`], [15], [0], [0], [39.50],
+  )
+]
 
 Both original all-class comparisons now reach all five three-loop classes.
 The pipeline includes unit/nonunit mass, individual mixed scalar products,
@@ -183,9 +203,9 @@ not itself rerun all 83 obligations. The subsequent complete selected-matrix
 run above now supplies that missing evidence. Four-loop RustRed artifacts and
 end-to-end four-loop acceptance remain unfinished.
 
-## Historical inventory and audit
+== Historical inventory and audit
 
-The five legacy files contain **40 test entries / 46 input executions**. These
+The five legacy files contain *40 test entries / 46 input executions*. These
 are not 46 distinct integrals: power loops expand two entries, and several
 backend-specific tests share workloads. Originally, 21 entries / 27 executions
 had explicit enabled native peers and 11 three-loop entries had pending peers.
@@ -198,7 +218,7 @@ and 15 entries / 15 executions mapped to pending K6 peers. Genuine K6 bytes are
 now shipped and the existing loader/routing adapter and all peer entrypoints
 are enabled. All 40 entries / 46 executions have active native mappings.
 Enabled means configured to run. The original report at revision `98550cc0`
-counted **76 PASS records**, but its three-loop selection manifest contained
+counted *76 PASS records*, but its three-loop selection manifest contained
 24 tests and its result table stopped after 17. The next test had a failing
 stdout/stderr log without a corresponding result row. Those 76 records were
 therefore not evidence that the complete selected matrix passed.
@@ -206,15 +226,23 @@ therefore not evidence that the complete selected matrix passed.
 An independent rerun of the seven missing result entries used the same frozen
 executables and FORM oracle, unchanged assertions, one CPU and one thread per
 compute pool. Five passed and two failed. Joining those results with the
-original completed rows gives **83 distinct selected tests: 81 passed,
-2 failed, 0 ignored**:
+original completed rows gives *83 distinct selected tests: 81 passed,
+2 failed, 0 ignored*:
 
-| Group | Passed | Failed |
-| --- | ---: | ---: |
-| Native catalog/default | 15 | 0 |
-| Three-loop peers and supplemental class checks | 22 | 2 |
-| Legacy-complement checks | 43 | 0 |
-| Offline 38-terminal MATAD catalog oracle | 1 | 0 |
+#block[
+  #set text(size: 7.5pt)
+  #table(
+    columns: (1fr, 1fr, 1fr),
+    align: (left, right, right),
+    inset: 4pt,
+    stroke: 0.4pt + luma(180),
+    table.header([Group], [Passed], [Failed]),
+    [Native catalog/default], [15], [0],
+    [Three-loop peers and supplemental class checks], [22], [2],
+    [Legacy-complement checks], [43], [0],
+    [Offline 38-terminal MATAD catalog oracle], [1], [0],
+  )
+]
 
 The three previously unrecorded legacy-setting variants and both basketball
 finite-part companions now have fresh passing evidence. The two failures are
@@ -234,17 +262,17 @@ RustRed lanes retain their invalid FORM paths. FORM remains available only
 to separate comparison-oracle lanes and the offline catalog oracle. These
 counts complement, rather than replace, the 40-entry / 46-input inventory.
 
-## Complete mapping
+== Complete mapping
 
 File abbreviations below are relative to this directory:
 
-- **AM**: `integral_alphaloop_vs_matad_tests.rs`
-- **AR**: `integral_evaluation_analytic_tests.rs`
-- **FF**: `integral_evaluation_freeform_tests.rs`
-- **PC**: `integral_comparison_vs_pysecdec_tests.rs`
-- **PR**: `integral_evaluation_pysecdec_tests.rs`
-- **RS**: `rustred_scalar_evaluation_tests.rs`
-- **RV**: `rustred_acceptance_variants_tests.rs`
+- *AM*: `integral_alphaloop_vs_matad_tests.rs`
+- *AR*: `integral_evaluation_analytic_tests.rs`
+- *FF*: `integral_evaluation_freeform_tests.rs`
+- *PC*: `integral_comparison_vs_pysecdec_tests.rs`
+- *PR*: `integral_evaluation_pysecdec_tests.rs`
+- *RS*: `rustred_scalar_evaluation_tests.rs`
+- *RV*: `rustred_acceptance_variants_tests.rs`
 
 “Same entry” already invokes the common multi-lane harness. `RS::pysecdec peers`
 means `rustred_covers_applicable_pysecdec_peer_inputs_through_two_loops`, which
@@ -252,48 +280,56 @@ uses native oracles independently of PySecDec availability. Pending peers
 were explicitly ignored, not silently skipped successful tests. Those K6
 attributes are now removed; all numerical comparison bodies remain unchanged.
 
-| Legacy entry | Executions | Native mapping | State |
-|---|---:|---|---|
-| AM::test_integrate_1l_no_numerator | 6 | Same entry; powers 1–6 | Enabled |
-| AM::test_integrate_1l_no_numerator_squared_mass | 2 | Same entry; powers 1–2 | Enabled |
-| AM::test_integrate_2l_no_numerator | 1 | Same entry | Enabled |
-| AM::test_integrate_3l_basketball_a | 1 | AM::rustred_numerical_parity_3l_basketball_a | Passed |
-| AM::test_integrate_3l_basketball_b | 1 | AM::rustred_numerical_parity_3l_basketball_b | Passed |
-| AM::test_integrate_3l_no_numerator | 1 | AM::rustred_numerical_parity_3l_no_numerator | Passed |
-| AM::test_integrate_3l_rank_4 | 1 | AM::rustred_numerical_parity_3l_rank_4 | Passed |
-| AM::test_integrate_3l_rank_4_different_scales | 1 | AM::rustred_numerical_parity_3l_rank_4_different_scales | Passed |
-| AR::test_integrate_1l_a | 1 | Same entry | Enabled |
-| AR::test_integrate_1l_simple | 1 | Same entry | Enabled |
-| AR::test_integrate_1l_simple_squared_mass | 1 | Same entry | Enabled |
-| AR::test_integrate_1l_cross_product | 1 | Same entry | Enabled |
-| AR::test_integrate_1l_cross_product_with_additional_symbols_numerator | 1 | Same entry | Enabled |
-| AR::test_integrate_1l_dot_product_external | 1 | Same entry | Enabled |
-| AR::test_integrate_2l | 1 | Same entry | Enabled |
-| AR::test_integrate_3l | 1 | AR::rustred_numerical_parity_3l | Passed |
-| AR::test_integrate_3l_rank_4 | 1 | AR::rustred_numerical_parity_3l_rank_4 | Passed |
-| AR::test_integrate_3l_rank_4_additional_symbols_numerator | 1 | AR::rustred_numerical_parity_3l_rank_4_additional_symbols_numerator | Passed |
-| AR::test_integrate_3l_rank_4_matad | 1 | AR::rustred_numerical_parity_3l_rank_4_matad | Passed |
-| AR::test_integrate_3l_rank_4_matad_additional_symbols_numerator | 1 | AR::rustred_numerical_parity_3l_rank_4_matad_additional_symbols_numerator | Passed |
-| AR::test_integrate_3l_matad | 1 | AR::rustred_numerical_parity_3l_matad | Passed |
-| FF::test_integrate_1l_decorated_indices_alphaloop | 1 | Same entry | Enabled |
-| FF::test_integrate_1l_decorated_indices_matad | 1 | Same entry | Enabled |
-| FF::test_integrate_1l_decorated_indices_pysecdec | 1 | RV::rustred_decorated_one_loop_five_terms | Passed |
-| PC::test_integrate_1l_pysecdec | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_1l_pysecdec_non_unit_mass | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_1l_pysecdec_non_unit_scale | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_1l_pysecdec_num_rank_two | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_1l_pysecdec_dot_product_external | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_2l_pysecdec | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_2l_pysecdec_pinched | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_2l_pysecdec_pinched_other_lmb | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_2l_pysecdec_rank_four_num | 1 | RS::pysecdec peers | Enabled |
-| PC::test_integrate_3l_pysecdec | 1 | RV::rustred_three_loop_scalar_nonunit_scale | Passed |
-| PC::test_integrate_3l_rank_4 | 1 | RV::rustred_three_loop_rank_four_large_external_vectors | Passed |
-| PC::test_integrate_3l_rank_4_matad | 1 | RV::rustred_three_loop_rank_four_five_terms | Passed |
-| PR::test_integrate_1l_simple | 1 | Alias of AR::test_integrate_1l_simple | Enabled alias |
-| PR::test_integrate_1l_cross_product | 1 | Alias of AR::test_integrate_1l_cross_product | Enabled alias |
-| PR::test_integrate_1l_cross_product_with_additional_symbols_numerator | 1 | Alias of AR::test_integrate_1l_cross_product_with_additional_symbols_numerator | Enabled alias |
-| PR::test_integrate_3l_o_eps | 1 | Alias of AR::test_integrate_3l_matad and its peer | Passed alias |
+#block[
+  #set text(size: 7.5pt)
+  #table(
+    columns: (4fr, 1fr, 4fr, 1fr),
+    align: (left, right, left, left),
+    inset: 4pt,
+    stroke: 0.4pt + luma(180),
+    table.header([Legacy entry], [Executions], [Native mapping], [State]),
+    [AM::test\_integrate\_1l\_no\_numerator], [6], [Same entry; powers 1–6], [Enabled],
+    [AM::test\_integrate\_1l\_no\_numerator\_squared\_mass], [2], [Same entry; powers 1–2], [Enabled],
+    [AM::test\_integrate\_2l\_no\_numerator], [1], [Same entry], [Enabled],
+    [AM::test\_integrate\_3l\_basketball\_a], [1], [AM::rustred\_numerical\_parity\_3l\_basketball\_a], [Passed],
+    [AM::test\_integrate\_3l\_basketball\_b], [1], [AM::rustred\_numerical\_parity\_3l\_basketball\_b], [Passed],
+    [AM::test\_integrate\_3l\_no\_numerator], [1], [AM::rustred\_numerical\_parity\_3l\_no\_numerator], [Passed],
+    [AM::test\_integrate\_3l\_rank\_4], [1], [AM::rustred\_numerical\_parity\_3l\_rank\_4], [Passed],
+    [AM::test\_integrate\_3l\_rank\_4\_different\_scales], [1], [AM::rustred\_numerical\_parity\_3l\_rank\_4\_different\_scales], [Passed],
+    [AR::test\_integrate\_1l\_a], [1], [Same entry], [Enabled],
+    [AR::test\_integrate\_1l\_simple], [1], [Same entry], [Enabled],
+    [AR::test\_integrate\_1l\_simple\_squared\_mass], [1], [Same entry], [Enabled],
+    [AR::test\_integrate\_1l\_cross\_product], [1], [Same entry], [Enabled],
+    [AR::test\_integrate\_1l\_cross\_product\_with\_additional\_symbols\_numerator], [1], [Same entry], [Enabled],
+    [AR::test\_integrate\_1l\_dot\_product\_external], [1], [Same entry], [Enabled],
+    [AR::test\_integrate\_2l], [1], [Same entry], [Enabled],
+    [AR::test\_integrate\_3l], [1], [AR::rustred\_numerical\_parity\_3l], [Passed],
+    [AR::test\_integrate\_3l\_rank\_4], [1], [AR::rustred\_numerical\_parity\_3l\_rank\_4], [Passed],
+    [AR::test\_integrate\_3l\_rank\_4\_additional\_symbols\_numerator], [1], [AR::rustred\_numerical\_parity\_3l\_rank\_4\_additional\_symbols\_numerator], [Passed],
+    [AR::test\_integrate\_3l\_rank\_4\_matad], [1], [AR::rustred\_numerical\_parity\_3l\_rank\_4\_matad], [Passed],
+    [AR::test\_integrate\_3l\_rank\_4\_matad\_additional\_symbols\_numerator], [1], [AR::rustred\_numerical\_parity\_3l\_rank\_4\_matad\_additional\_symbols\_numerator], [Passed],
+    [AR::test\_integrate\_3l\_matad], [1], [AR::rustred\_numerical\_parity\_3l\_matad], [Passed],
+    [FF::test\_integrate\_1l\_decorated\_indices\_alphaloop], [1], [Same entry], [Enabled],
+    [FF::test\_integrate\_1l\_decorated\_indices\_matad], [1], [Same entry], [Enabled],
+    [FF::test\_integrate\_1l\_decorated\_indices\_pysecdec], [1], [RV::rustred\_decorated\_one\_loop\_five\_terms], [Passed],
+    [PC::test\_integrate\_1l\_pysecdec], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_1l\_pysecdec\_non\_unit\_mass], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_1l\_pysecdec\_non\_unit\_scale], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_1l\_pysecdec\_num\_rank\_two], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_1l\_pysecdec\_dot\_product\_external], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_2l\_pysecdec], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_2l\_pysecdec\_pinched], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_2l\_pysecdec\_pinched\_other\_lmb], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_2l\_pysecdec\_rank\_four\_num], [1], [RS::pysecdec peers], [Enabled],
+    [PC::test\_integrate\_3l\_pysecdec], [1], [RV::rustred\_three\_loop\_scalar\_nonunit\_scale], [Passed],
+    [PC::test\_integrate\_3l\_rank\_4], [1], [RV::rustred\_three\_loop\_rank\_four\_large\_external\_vectors], [Passed],
+    [PC::test\_integrate\_3l\_rank\_4\_matad], [1], [RV::rustred\_three\_loop\_rank\_four\_five\_terms], [Passed],
+    [PR::test\_integrate\_1l\_simple], [1], [Alias of AR::test\_integrate\_1l\_simple], [Enabled alias],
+    [PR::test\_integrate\_1l\_cross\_product], [1], [Alias of AR::test\_integrate\_1l\_cross\_product], [Enabled alias],
+    [PR::test\_integrate\_1l\_cross\_product\_with\_additional\_symbols\_numerator], [1], [Alias of AR::test\_integrate\_1l\_cross\_product\_with\_additional\_symbols\_numerator], [Enabled alias],
+    [PR::test\_integrate\_3l\_o\_eps], [1], [Alias of AR::test\_integrate\_3l\_matad and its peer], [Passed alias],
+  )
+]
 
 The aliases preserve the same integral, mass/scale substitutions, external
 vectors, normalization and epsilon depth. Their original optional numerical
@@ -301,7 +337,7 @@ references use lower precision; native peers use the corresponding existing
 32-digit analytic references, not the rounded PySecDec numbers. Alias entries
 are counted as legacy obligations, not additional independently executed tests.
 
-## Four previously missing variants
+== Four previously missing variants
 
 The new RV peers reuse existing comparison helpers; they introduce no backend,
 tensor algorithm, reusable helper API or fallback. The one-loop case retains
@@ -314,7 +350,7 @@ transferred to RustRed acceptance. Five-term cases use the existing analytic/
 MATAD lanes, which can select an eligible method rather than forcing AlphaLoop
 beyond its supported epsilon depth. PySecDec itself remains supplemental.
 
-## Finite parts, topology coverage and exclusions
+== Finite parts, topology coverage and exclusions
 
 Both original basketball comparisons request three epsilon terms at three
 loops: they stop at epsilon^-1. They are preserved verbatim. Separate
@@ -350,7 +386,7 @@ three independent symbolic masses; equal numerical substitutions do not turn
 that input into a common-mass family without changing it. Defaults and all
 historical FORM-backed methods remain unchanged.
 
-## Historical native dependency and K6 routing preparation
+== Historical native dependency and K6 routing preparation
 
 The following preparation checkpoints predate the completed migration and
 acceptance gates at the top of this document. Their recorded intermediate
@@ -435,7 +471,7 @@ recursive applier or graph match is introduced.
 Exact offline MATAD-basis terminal projections are preferred over unnecessary
 20,000-digit literal tables.
 
-### Earlier K6 asset and exact terminal manifest, catalog runtime gate passed
+=== Earlier K6 asset and exact terminal manifest, catalog runtime gate passed
 
 The earlier canonical RustRed producer generated byte-identical one/six-worker artifacts:
 8,911,462 bytes, 623 rules, 5,639 cells, 38 typed corner terminals and 26 zero

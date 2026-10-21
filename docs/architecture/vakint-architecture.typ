@@ -2,7 +2,7 @@
 
 #quote(block: true)[
 #strong[Status:] Current implementation architecture, audited against the Vakint source on
-2026-10-19.
+2026-10-21.
 
 This note describes the Rust engine and its optional Symbolica community-module wrapper. Backend
 availability and numerical coverage depend on the selected topology, epsilon depth, and installed
@@ -22,6 +22,8 @@ Rust crate owns these boundaries:
   dependency, and backend-selection policy;
 - FORM and pySecDec adapters: template rendering, subprocess execution, and result decoding;
 - RustRed's immutable data registry, reduction programs, master capabilities, and strict caches;
+- `precision` and `inspection`: tracked Laurent coefficients and snapshot-owned constant/master
+  records, using Symbolica/Numerica's shared numerical error propagation;
 - the optional Symbolica community Vakint module: Python classes that own a Rust engine and
   settings while exchanging Symbolica expressions.
 
@@ -77,7 +79,16 @@ default. Symbolic mode expands exact coefficients and retains labeled numerical-
 the originating engine can resolve those symbols later. After exact combination, evaluation checks
 only the required Laurent powers and numerical ingredients. Exact formulas have no finite source
 cap unless they contain finite constants; numerical-only data carries validated significant-digit
-limits. Missing coefficients and insufficient precision are explicit errors.
+limits. Missing coefficients are explicit errors. Finite data remains capped at its validated
+precision; numerical evaluation reports precision shortfalls without inventing source digits.
+Authenticated pack-level constant bindings carry finite values, significant digits and certified
+absolute errors. Names such as `K5Moment(1)` and `K5LogMoment(3)` are finite sources, not exact
+arbitrary-precision functions. Their payload and metadata contribute to the snapshot identity;
+retained formulas use `RustRedConstant(snapshot, identity)` so another registry cannot silently
+rebind the same name to different data.
+Symbolic reduction binds these finite leaves after exact combination, using the same period
+registry without choosing a numerical fallback. Loading rejects declarations that shadow native
+evaluators, reserved Vakint symbols, existing period aliases or master basis identities.
 
 Campaign certification is advisory outside its recorded predicates. Safe partial reductions retain
 family-qualified unknown integrals and warn with parent-topology graph references. Numerical
@@ -87,6 +98,19 @@ strict completed reductions, including valid captured descendants, and never sto
 Both FORM-backed and RustRed evaluation use the same tagged sixth-root HPL evaluator. FORM
 reduction scripts and hard-coded master formulas remain intact. Opaque finite master data does
 not become an arbitrary-precision constant through a symbolic name.
+At endpoint one, the shared GPL adapter accepts words through weight six over zero and the sixth
+roots of unity: `0`, `1`, `-1`, and `(±1 ± i√3)/2`. For a nonempty word, the first letter must
+differ from one and the last must differ from zero. These use the ordinary `G` kernels
+`dt/(t-a)` along the real path from zero to one. Exact algebraic expansion recognizes equivalent
+letter spellings before constructing Symbolica's checked tags. The real and imaginary projection
+wrappers preserve this restricted endpoint interface; general arguments, analytic continuation
+and trailing-zero regularization are outside its contract. Constant discovery exposes concrete
+real projections and loaded finite identities, while ordinary expression operators retain their
+normal evaluation rules.
+Before tracked evaluation, exact complex constant denominators use an unfactorized rational
+polynomial over `Q(i)` so conjugate products cancel algebraically. This normalization preserves
+finite source identities and skips raw floating coefficients; it does not discard uncertain
+imaginary components or relax checked conversion to a real value.
 
 == Main control flow
 
@@ -129,9 +153,54 @@ checks actual coefficient availability after reduction. Failure to find a method
 explicit `NoEvaluationMethodFound` error, not an implicit fallback.
 
 Numerical evaluation is a later boundary. Parametric backend output remains a Symbolica
-expression. Numerical parameters and optional external momenta are converted to the configured
-binary precision, and `NumericalEvaluationResult` represents the result and optional error as
-Laurent coefficients `(epsilon power, complex value)`.
+expression. `precision` prepares native numerical sources and contracts external momenta before
+delegating to Symbolica/Numerica's tracked evaluator. Each `NumericalCoefficient` owns its complex
+central value and independent real/imaginary accuracy: significant digits, absolute error,
+exact-zero status and bounded/estimated quality. `NumericalEvaluationResult` owns the ordered
+coefficient map, requested decimal precision and structured source warnings. The optional second
+result remains the backend's statistical uncertainty series, separate from arithmetic and
+source-data uncertainty.
+
+Public MATAD/FMFT numerical master-substitution helpers prepare the same finite-source identities
+and exact Gamma expressions used by the complete engine. Laurent expansion and normalization
+precede tracked materialization; this preserves exact cancellations involving Gamma factors.
+MATAD's existing exact master definitions can establish rational negative-order coefficients.
+A numerical table entry is replaced by that exact value only when it matches nearest rounding
+of the proved rational at its own stored precision. Nonrational poles, mismatches and nonpole
+entries retain their finite-source identities. Rounded numerical agreement establishes no new
+exact definition or source precision.
+
+Evaluation uses one working-precision pass with the fixed guard allowance; it does not retry
+after cancellation. Native `Float` and `ComplexFloat` inputs retain their stored precision, and
+ordinary Python floats retain binary64 source limits. Exact integers and expression parameters
+are substituted symbolically. Inexact expression leaves first receive immutable source identities,
+so independent inputs with equal central values cannot cancel into certified exact zeros.
+Authenticated runtime input tags retain their exact binary centers and original bit precision,
+including one-to-four-bit cancellation residues with no complete decimal digits. They enter the
+tracked binary-input path; decimal source caps for archived tables and external data are unchanged.
+External components use private scalar identities after the common contraction boundary.
+RustRed preserves finite input sources in all master modes. Input lifting happens before
+topology collection and distribution: a shared factor keeps its identity, while independent
+occurrences and evaluation requests have distinct identities. The same request counter serves
+the lower public entry points, and already retained sources are left intact. Partial numerical
+materialization also lifts raw finite literals before its first algebraic combination.
+When a complete coefficient resolves to an exact real or Gaussian rational, partial materialization
+retains that rational across later algebraic operations. Finite Float midpoints cannot enter this
+shortcut, and final numerical-result export still uses checked precision-bearing Floats.
+Laurent collection validates intermediate integer degrees before expansion and uses the configured
+epsilon symbol throughout the Rust and Python entry points. Oversized degrees and unsupported
+fractional or symbolic regulator powers produce descriptive errors instead of collector panics.
+Parameters cannot shadow registered constants. Checked `to_atom` / `to_expression` conversions
+encode each component's achieved precision and reject uncertain zeros or components without
+reliably encodable digits; raw values and metadata remain inspectable.
+
+`get_constant` and `get_master` inspect only the loaded or vendored RustRed registry. Typed
+identities and discovery share its qualified names; unknown or ambiguous names return explicit
+errors. Records own the original `Arc` snapshot and remain coherent after a release switch.
+Master records expose every available epsilon coefficient, per-coefficient symbolic availability,
+validated source precision and a native FeynKit diagram with authenticated powers, numerator and
+loop-momentum routing. Declared uncomputed terminals remain inspectable with empty coefficient
+maps. Inspection does not download data or use FORM's private tables.
 
 == External tools and feature boundaries
 
@@ -156,17 +225,27 @@ The Cargo build script has one platform-specific boundary: on macOS, setting
 that library exists. This affects native linking only; it does not select an evaluation backend.
 
 The core Rust API has no feature requirement. `symbolica_community_module` enables the PyO3
-wrapper and registers `Vakint`, `VakintExpression`, `VakintEvaluationMethod`, and
-`VakintNumericalResult` on the community module. `python_stubgen` adds stub metadata and
+wrapper and registers the engine, expression, evaluation-method and numerical-result classes,
+plus frozen inspection and precision records on the community module. `python_stubgen` adds stub metadata and
 also enables Symbolica's Python export. The wrapper delegates transformations to the Rust engine
 and converts `VakintError` into Python `ValueError`; it does not implement a second evaluation
-pipeline.
+pipeline. Its numerical input adapter preserves native precision and delegates contractions and
+tracked evaluation to the same Rust core. One shared presentation model supplies structured
+terminal and notebook views. Terminal output respects color settings; HTML reuses Symbolica's
+formula rendering and FeynKit's existing diagram rendering. Display reads stored values only;
+missing optional graph-rendering dependencies do not prevent metadata inspection.
+Presentation hides transport tags when a formula belongs to one data snapshot, showing the
+mathematical constant names while leaving the stored expression and provenance untouched.
+Formulas containing several snapshots retain explicit tags to avoid apparent false cancellation.
+The pySecDec adapter rejects retained uncertainty sources before generating input, because that
+backend cannot propagate their source errors; ordinary numeric pySecDec inputs keep their existing
+route.
 
 == Persistence and reproducibility
 
 Vakint does not serialize its topology library or settings. Known topologies are regenerated by
 `Vakint::new`, which is why one engine should be reused for multiple operations. Durable values
-cross the API as Symbolica expressions or Laurent-coefficient lists. Temporary FORM/pySecDec
+cross the API as checked Symbolica expressions or precision-bearing Laurent records. Temporary FORM/pySecDec
 workspaces are implementation artifacts unless cleanup is disabled or a reuse directory is
 explicitly supplied. RustRed's external packs and native prepared caches are explicit durable
 data, validated against their schemas and authenticated program bindings before attachment.
@@ -190,8 +269,8 @@ workspace was reused. For RustRed, also record the resolved data version and loa
   but execution errors from the selected method are returned.
 - Loop normalization may reference only the documented symbols and is expanded to the requested
   epsilon order before backend results are normalized.
-- Runtime numerical precision is converted to a binary precision of at least the equivalent of
-  17 decimal digits; Python convenience inputs are converted at that boundary.
+- Requested working precision never increases the declared accuracy of an input or finite source.
+  Exact cancellation and a numerically unresolved zero have distinct metadata and conversion rules.
 
 == Verification and related documentation
 
@@ -200,7 +279,10 @@ evaluation, free-form evaluation, backend comparisons, and direct pySecDec evalu
 cross-checks compare AlphaLoop with MATAD, while numerical suites compare supported analytic
 results with pySecDec. Tests that need pySecDec detect or explicitly skip that dependency; FORM
 and backend-enabled coverage still requires the corresponding external tools. The crate also has
-focused unit tests for expression encoding and numerical-result behavior.
+focused unit tests for expression encoding, source limits, component accuracy, cancellation and
+checked conversion. The Python precision/inspection suite verifies native high-precision inputs,
+exact and inexact external kinematics, frozen records, typed lookup failures and native graph/HTML
+rendering against one coherent Symbolica extension.
 
 For supported workflows, see the
 #link("../../../products/vakint/latest/tutorial/")[matching tutorial],

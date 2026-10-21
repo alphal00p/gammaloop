@@ -31,6 +31,10 @@ fn fixture() -> tempfile::TempDir {
     directory
 }
 
+fn fixture_manifest(root: &Path) -> ReleaseManifest {
+    serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap()
+}
+
 #[test]
 fn incomplete_checkouts_fail_without_network_or_local_mutation() {
     let directory = fixture();
@@ -226,8 +230,7 @@ fn authenticated_pack_with_wrong_cache_binding_preserves_active_data_and_cache()
 }
 
 fn release_assets(root: &Path) -> BTreeMap<String, Vec<u8>> {
-    let mut manifest: ReleaseManifest =
-        serde_json::from_slice(&fs::read(root.join("manifest.json")).unwrap()).unwrap();
+    let mut manifest = fixture_manifest(root);
     let mut assets = BTreeMap::new();
     for pack in &mut manifest.loop_packs {
         let gz = flate2::write::GzEncoder::new(Vec::new(), flate2::Compression::fast());
@@ -307,6 +310,7 @@ impl Drop for Server {
 #[test]
 fn unrelated_manifest_and_empty_loop_directory_allow_managed_installation() {
     let source = fixture();
+    let version = fixture_manifest(source.path()).version;
     let server = Server::start(release_assets(source.path()));
     let destination = tempfile::tempdir().unwrap();
     let unrelated =
@@ -326,9 +330,13 @@ fn unrelated_manifest_and_empty_loop_directory_allow_managed_installation() {
         )
         .unwrap();
     assert_eq!(report.loops[0].source, "downloaded");
+    assert_eq!(report.version, version);
     assert_eq!(
         report.path,
-        destination.path().join(".vakint-external-data/v0.1.0")
+        destination
+            .path()
+            .join(".vakint-external-data")
+            .join(&version)
     );
     assert_eq!(
         fs::read(destination.path().join("manifest.json")).unwrap(),
@@ -385,6 +393,49 @@ fn official_download_follows_redirect_then_reuses_offline_without_extraction() {
 }
 
 #[test]
+fn fixture_release_bypasses_stale_latest_and_reuses_immutable_data_offline() {
+    let source = fixture();
+    let required = super::super::cache_tests::external_data_fixture::required_version();
+    assert_eq!(fixture_manifest(source.path()).version, required);
+    let server = Server::start(release_assets(source.path()));
+    let destination = tempfile::tempdir().unwrap();
+    let cache = destination.path().join(".vakint-external-data");
+    fs::create_dir_all(&cache).unwrap();
+    let stale = b"v0.1.0";
+    assert_ne!(required.as_bytes(), stale);
+    fs::write(cache.join("latest"), stale).unwrap();
+    let options = OfficialExternalDataOptions {
+        version: required.clone(),
+        local_artifacts_path: Some(destination.path().to_owned()),
+        timeout: Duration::from_secs(3),
+        ..Default::default()
+    };
+    let mut engine = Vakint::new().unwrap();
+    let first = engine
+        .load_official_external_data_from(1, &options, &server.url)
+        .unwrap();
+    assert_eq!(first.version, required);
+    assert_eq!(first.path, cache.join(&required));
+    assert_eq!(first.loops[0].source, "downloaded");
+    assert_eq!(fs::read(cache.join("latest")).unwrap(), stale);
+    let program = first.path.join("1L/ibps/rules.rrbin");
+    let modified = fs::metadata(&program).unwrap().modified().unwrap();
+    drop(server);
+
+    let reused = engine
+        .load_official_external_data_from(1, &options, "http://127.0.0.1:1")
+        .unwrap();
+    assert_eq!(reused.path, first.path);
+    assert_eq!(reused.version, required);
+    assert_eq!(reused.loops[0].source, "reused");
+    assert_eq!(
+        fs::metadata(&program).unwrap().modified().unwrap(),
+        modified
+    );
+    assert_eq!(fs::read(cache.join("latest")).unwrap(), stale);
+}
+
+#[test]
 fn extraction_refuses_links_wrong_loop_and_resource_overflow() {
     for (path, kind, max_bytes) in [
         ("1L/link", tar::EntryType::Symlink, 100),
@@ -436,6 +487,7 @@ fn versions_and_package_paths_cannot_escape_the_installation() {
 #[test]
 fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() {
     let source = fixture();
+    let version = fixture_manifest(source.path()).version;
     let complete_assets = release_assets(source.path());
     let mut interrupted_assets = complete_assets.clone();
     let second_pack = interrupted_assets
@@ -460,8 +512,9 @@ fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() 
     );
     assert!(Arc::ptr_eq(&active, &engine.rustred_data().unwrap()));
     let installations = destination.path().join(".vakint-external-data");
-    assert!(installations.join("v0.1.0/1L").is_dir());
-    assert!(!installations.join("v0.1.0/2L").exists());
+    let version_root = installations.join(&version);
+    assert!(version_root.join("1L").is_dir());
+    assert!(!version_root.join("2L").exists());
     assert!(!installations.join("latest").exists());
     assert!(fs::read_dir(&installations).unwrap().all(|entry| {
         !entry
@@ -475,6 +528,7 @@ fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() 
     let report = engine
         .load_official_external_data_from(2, &options, &complete.url)
         .unwrap();
+    assert_eq!(report.version, version);
     assert_eq!(report.loops[0].source, "reused");
     assert_eq!(report.loops[1].source, "downloaded");
 }
@@ -482,6 +536,9 @@ fn interrupted_pack_installation_is_transactional_and_resumes_completed_packs() 
 #[test]
 fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installation() {
     let source = fixture();
+    let mut manifest = fixture_manifest(source.path());
+    let original_version = manifest.version.clone();
+    let refreshed_version = format!("{original_version}-refresh");
     let first = Server::start(release_assets(source.path()));
     let destination = tempfile::tempdir().unwrap();
     let options = OfficialExternalDataOptions {
@@ -493,9 +550,8 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
     let old = engine
         .load_official_external_data_from(2, &options, &first.url)
         .unwrap();
-    let mut manifest: ReleaseManifest =
-        serde_json::from_slice(&fs::read(source.path().join("manifest.json")).unwrap()).unwrap();
-    manifest.version = "v0.2.0".into();
+    assert_eq!(old.version, original_version);
+    manifest.version = refreshed_version.clone();
     for pack in &mut manifest.loop_packs {
         let path = source.path().join(&pack.manifest);
         let mut payload: serde_json::Value =
@@ -503,7 +559,10 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
         payload["version"] = serde_json::json!(manifest.version);
         let bytes = serde_json::to_vec(&payload).unwrap();
         pack.manifest_sha256 = format!("{:x}", Sha256::digest(&bytes));
-        pack.archive = pack.archive.replace("v0.1.0", "v0.2.0");
+        pack.archive = format!(
+            "vakint-external-data-{}-{}L.tar.gz",
+            manifest.version, pack.loop_count
+        );
         fs::write(path, bytes).unwrap();
     }
     fs::write(
@@ -515,7 +574,8 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
     let unchanged = engine
         .load_official_external_data_from(2, &options, &newer.url)
         .unwrap();
-    assert_eq!(unchanged.version, "v0.1.0");
+    assert_eq!(unchanged.version, original_version);
+    assert_eq!(unchanged.path, old.path);
     let refreshed = engine
         .load_official_external_data_from(
             3,
@@ -526,7 +586,7 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
             &newer.url,
         )
         .unwrap();
-    assert_eq!(refreshed.version, "v0.2.0");
+    assert_eq!(refreshed.version, refreshed_version);
     assert_eq!(refreshed.loops.len(), 3);
     assert!(
         refreshed
@@ -540,20 +600,21 @@ fn refresh_switches_all_requested_loops_together_and_preserves_the_old_installat
             .unwrap()
             .loops
             .values()
-            .all(|pack| pack.manifest.version == "v0.2.0")
+            .all(|pack| pack.manifest.version == refreshed_version)
     );
     assert!(old.path.join("1L/ibps/rules.rrbin").is_file());
     let pinned = engine
         .load_official_external_data_from(
             2,
             &OfficialExternalDataOptions {
-                version: "v0.1.0".into(),
+                version: original_version.clone(),
                 ..options
             },
             "http://127.0.0.1:1",
         )
         .unwrap();
-    assert_eq!(pinned.version, "v0.1.0");
+    assert_eq!(pinned.version, original_version);
+    assert_eq!(pinned.path, old.path);
     assert!(pinned.loops.iter().all(|pack| pack.source == "reused"));
 }
 

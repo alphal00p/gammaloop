@@ -1,15 +1,15 @@
 //! Independently reduce with FORM and evaluate using the official coefficient
 //! dataset. Its precision can exceed the historical hard-coded FORM constants.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::OnceLock;
 
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
-use symbolica::domains::float::{Complex, Float};
+use symbolica::domains::float::Float;
 use symbolica::domains::rational::Rational;
 use symbolica::id::Replacement;
 use vakint::{
-    EvaluationOrder, FMFTOptions, TensorReductionMethod, Vakint, VakintSettings, vakint_parse,
+    EvaluationOrder, FMFTOptions, TensorReductionMethod, VakintSettings, vakint_parse,
     vakint_symbol,
 };
 
@@ -18,7 +18,6 @@ use super::{acceptance_inputs, test_utils};
 struct ReferenceData {
     substitutions: Vec<(Atom, Atom)>,
     tails: Vec<Symbol>,
-    hpls: BTreeMap<String, Float>,
 }
 
 fn reference_data() -> &'static ReferenceData {
@@ -30,7 +29,6 @@ fn reference_data() -> &'static ReferenceData {
         let mut primitives = BTreeSet::new();
         let mut substitutions = Vec::new();
         let mut tails = Vec::new();
-        let mut hpls = BTreeMap::new();
         let epsilon = vakint_parse!("ep").unwrap();
         let bits = VakintSettings {
             run_time_decimal_precision: 80,
@@ -63,35 +61,6 @@ fn reference_data() -> &'static ReferenceData {
                     assert!(metadata["significant_digits"].as_u64().unwrap() >= 32);
                     Atom::num(Float::parse(&numerical[&power], Some(bits)).unwrap())
                 };
-                value.visitor(&mut |part| {
-                    let AtomView::Fun(function) = part else {
-                        return true;
-                    };
-                    let imaginary = function.get_symbol() == vakint_symbol!("HI");
-                    if !imaginary && function.get_symbol() != vakint_symbol!("HR") {
-                        return true;
-                    }
-                    let arguments: Vec<_> = function.iter().collect();
-                    let (point, indices) = arguments.split_last().unwrap();
-                    let omega = vakint_parse!("(1+3^(1/2)*𝑖)/2").unwrap();
-                    assert!(
-                        *point == vakint_parse!("om1").unwrap().as_view()
-                            || (point.to_owned() - omega).expand().is_zero()
-                    );
-                    let word: Vec<_> = indices
-                        .iter()
-                        .map(|index| index.to_canonical_string().parse::<i8>().unwrap())
-                        .collect();
-                    let value = symbolica::transcendental::sixth_root_hpl(&word, 1)
-                        .unwrap()
-                        .evaluate_with_prec(&HashMap::<Atom, Complex<Float>>::new(), bits)
-                        .unwrap();
-                    hpls.insert(
-                        part.to_canonical_string(),
-                        if imaginary { value.im } else { value.re },
-                    );
-                    false
-                });
                 polynomial += value * epsilon.pow(Atom::num(power));
                 last = last.max(power);
             }
@@ -106,7 +75,6 @@ fn reference_data() -> &'static ReferenceData {
         ReferenceData {
             substitutions,
             tails,
-            hpls,
         }
     })
 }
@@ -171,30 +139,23 @@ pub(super) fn compare(case: &acceptance_inputs::AcceptanceInput, form: &str) {
             case.name
         );
     }
-    let parameters: ahash::HashMap<_, _> = case
-        .parameters
-        .iter()
-        .map(|(name, value)| ((*name).to_owned(), *value))
-        .collect();
-    let external: ahash::HashMap<_, _> = case.external_momenta.iter().copied().collect();
     let working = VakintSettings {
         run_time_decimal_precision: 80,
         ..settings.clone()
     };
-    let mut reference_parameters = vakint::params_from_f64(&parameters, 80);
-    reference_parameters.extend(
-        data.hpls
-            .iter()
-            .map(|(name, value)| (name.clone(), value.clone())),
-    );
-    let (reference, _) = Vakint::full_numerical_evaluation(
-        &working,
-        reference.as_view(),
-        &reference_parameters,
-        &Default::default(),
-        Some(&vakint::externals_from_f64(&external, 80)),
-    )
-    .unwrap();
+    // The reduction above is independently performed by FORM. Its exact
+    // coefficient formulas use the same authenticated scientific inputs and
+    // tracked HPL/K5 boundary as the native reduction, never parameter overrides
+    // of registered mathematical constants.
+    let (reference, _) = engine
+        .numerical_evaluation(
+            &working,
+            reference.as_view(),
+            &case.parameters_at_reference_point(80),
+            &Default::default(),
+            Some(&case.externals_at_reference_point(80)),
+        )
+        .unwrap();
     let native_settings = VakintSettings {
         form_exe_path: "/external-master-oracle-must-not-use-form".into(),
         evaluation_order: EvaluationOrder::rustred_only(),
@@ -203,14 +164,15 @@ pub(super) fn compare(case: &acceptance_inputs::AcceptanceInput, form: &str) {
     let actual = engine
         .evaluate_integral(&native_settings, scalar.as_view())
         .unwrap();
-    let (actual, _) = Vakint::full_numerical_evaluation(
-        &native_settings,
-        actual.as_view(),
-        &vakint::params_from_f64(&parameters, 32),
-        &Default::default(),
-        Some(&vakint::externals_from_f64(&external, 32)),
-    )
-    .unwrap();
+    let (actual, _) = engine
+        .numerical_evaluation(
+            &native_settings,
+            actual.as_view(),
+            &case.parameters_at_reference_point(32),
+            &Default::default(),
+            Some(&case.externals_at_reference_point(32)),
+        )
+        .unwrap();
     let (matches, detail) = actual.does_approx_match(&reference, None, 1e-30, 0.0);
     assert!(
         matches,

@@ -258,9 +258,9 @@ pub fn set_precision_in_float_atom(input: AtomView, settings: &VakintSettings) -
         match fl_view.get_coeff_view() {
             CoefficientView::Float(fl_re, fl_im) => {
                 let mut truncated_float_re = fl_re.to_float();
-                truncated_float_re.set_prec(binary_prec);
+                truncated_float_re.set_prec(binary_prec.min(truncated_float_re.prec()));
                 let mut truncated_float_im = fl_im.to_float();
-                truncated_float_im.set_prec(binary_prec);
+                truncated_float_im.set_prec(binary_prec.min(truncated_float_im.prec()));
                 Atom::num(Complex::new(truncated_float_re, truncated_float_im))
             }
             _ => input.to_owned(),

@@ -16,7 +16,8 @@ mod constant_factors;
 
 /// Explicit scalar substitutions and spectator routing for a graph integral.
 ///
-/// Physical propagators default to power one and auxiliary slots to zero.
+/// Physical propagators default to their graph annotations and auxiliary slots
+/// to zero. Explicit powers override those annotations.
 /// Substitutions are simultaneous and the family must already contain the
 /// substituted physical denominators. No graph symmetry factor or interaction
 /// numerator is inserted: the supplied numerator is the complete requested one.
@@ -174,9 +175,13 @@ impl VakintExpression {
         let powers = match options.powers.as_deref() {
             Some(powers) => powers,
             None => {
-                default_powers = (0..denominators.len())
-                    .map(|index| Integer::from(i64::from(physical_set.contains(&index))))
-                    .collect::<Vec<_>>();
+                default_powers = {
+                    let mut values = vec![Integer::from(0); denominators.len()];
+                    for ((_, _, edge), slot) in edges.iter().zip(physical_slots) {
+                        values[*slot] = Integer::from(edge.propagator_power);
+                    }
+                    values
+                };
                 &default_powers
             }
         };

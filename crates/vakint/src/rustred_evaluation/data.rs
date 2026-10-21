@@ -41,13 +41,19 @@ pub(super) struct LoopPack {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub(super) struct FileDigest {
+pub(crate) struct FileDigest {
     pub sha256: String,
     pub bytes: u64,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct LoopManifest {
+pub(crate) struct FileReference {
+    pub path: String,
+    pub sha256: String,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub(crate) struct LoopManifest {
     pub schema: String,
     pub version: String,
     pub loop_count: usize,
@@ -55,13 +61,15 @@ pub(super) struct LoopManifest {
     pub dimension: String,
     pub families: Vec<serde_json::Value>,
     pub masters: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub constant_bindings: Option<FileReference>,
     pub cache: CacheManifest,
     pub coverage: String,
     pub files: BTreeMap<String, FileDigest>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
-pub(super) struct CacheManifest {
+pub(crate) struct CacheManifest {
     pub available: bool,
     pub path: Option<String>,
 }
@@ -78,7 +86,7 @@ enum Source {
 }
 
 #[derive(Clone, Debug)]
-pub(super) struct LoopData {
+pub(crate) struct LoopData {
     pub manifest: LoopManifest,
     source: Source,
 }
@@ -200,7 +208,7 @@ impl LoopData {
         Ok(data)
     }
 
-    pub(super) fn read(&self, path: &str) -> Result<Vec<u8>, RustRedEvaluationError> {
+    pub(crate) fn read(&self, path: &str) -> Result<Vec<u8>, RustRedEvaluationError> {
         relative_path(path)?;
         let digest = self.manifest.files.get(path).ok_or_else(|| {
             failure(format!(
@@ -221,7 +229,7 @@ impl LoopData {
         Ok(bytes)
     }
 
-    pub(super) fn path(&self, relative: &str) -> Result<Option<PathBuf>, RustRedEvaluationError> {
+    pub(crate) fn path(&self, relative: &str) -> Result<Option<PathBuf>, RustRedEvaluationError> {
         let relative = relative_path(relative)?;
         Ok(match &self.source {
             Source::Vendored => None,
@@ -240,7 +248,7 @@ pub(crate) struct RustRedData {
     pub(super) loops: BTreeMap<usize, Arc<LoopData>>,
     lower: BTreeMap<usize, ArtifactSnapshot>,
     pub(super) four_loop: Option<Arc<super::four_loop::FourLoopPrograms>>,
-    pub(super) masters: Arc<super::masters::MasterCatalog>,
+    pub(crate) masters: Arc<super::masters::MasterCatalog>,
 }
 
 impl std::fmt::Debug for RustRedData {
@@ -356,9 +364,13 @@ impl Vakint {
         expression: symbolica::atom::Atom,
         settings: &crate::VakintSettings,
     ) -> Result<symbolica::atom::Atom, VakintError> {
-        self.rustred_data()?
-            .masters
-            .resolve_numerical(expression, settings)
+        let data = self.rustred_data()?;
+        crate::precision::materialize(
+            expression.as_view(),
+            settings,
+            &std::collections::HashMap::new(),
+            Some(&data.masters),
+        )
     }
 
     pub(crate) fn has_rustred_loop(&self, count: usize) -> bool {
@@ -474,6 +486,183 @@ impl Vakint {
 mod tests {
     use super::*;
     use crate::{RustRedMasterMode, VakintSettings, vakint_parse};
+
+    #[test]
+    fn finite_constant_payloads_are_validated_and_participate_in_snapshot_identity() {
+        use symbolica::atom::AtomCore;
+        let original = RustRedData::vendored().unwrap();
+        let valid = serde_json::json!({
+            "symbol": "vakint::K5Moment(1)", "value": "1.25",
+            "significant_digits": 30, "absolute_error": "1e-31", "error_quality": "bounded",
+            "definition": "certified test moment", "provenance": {"certificate": "test-proof"}
+        });
+        let load = |rows: Vec<serde_json::Value>, tamper: bool| {
+            let bytes = serde_json::to_vec(&rows).unwrap();
+            let digest = format!("{:x}", Sha256::digest(&bytes));
+            let mut pack = (*original.loops[&1]).clone();
+            pack.manifest.constant_bindings = Some(FileReference {
+                path: "constants.json".into(),
+                sha256: if tamper {
+                    "0".repeat(64)
+                } else {
+                    digest.clone()
+                },
+            });
+            pack.manifest.files.insert(
+                "constants.json".into(),
+                FileDigest {
+                    sha256: digest,
+                    bytes: bytes.len() as u64,
+                },
+            );
+            pack.source = Source::Override {
+                original: Arc::new(pack.source),
+                path: "1L/constants.json".into(),
+                bytes: bytes.into(),
+            };
+            super::super::masters::MasterCatalog::load(
+                &BTreeMap::from([(1, Arc::new(pack))]),
+                "test-constants",
+            )
+        };
+        let first = load(vec![valid.clone()], false).unwrap();
+        let symbol = vakint_parse!("K5Moment(1)").unwrap();
+        assert_eq!(first.constants[&symbol].significant_digits, 30);
+        let mut changed = valid.clone();
+        changed["value"] = "1.5".into();
+        let second = load(vec![changed], false).unwrap();
+        assert_ne!(
+            first.coefficient_snapshot_tag(),
+            second.coefficient_snapshot_tag()
+        );
+        let retained = first.prepare_evaluation(symbol).unwrap().expression;
+        assert!(retained.contains_symbol(crate::vakint_symbol!("RustRedConstant")));
+        assert!(
+            second
+                .prepare_evaluation(retained)
+                .unwrap_err()
+                .to_string()
+                .contains("another data snapshot")
+        );
+        assert!(load(vec![valid.clone()], true).is_err());
+        assert!(load(vec![valid.clone(), valid.clone()], false).is_err());
+        for (field, value) in [
+            ("significant_digits", serde_json::json!(0)),
+            ("absolute_error", serde_json::json!("-1")),
+            ("value", serde_json::json!("NaN")),
+            ("definition", serde_json::json!("")),
+            ("provenance", serde_json::json!({})),
+            ("symbol", serde_json::json!("z3")),
+            ("symbol", serde_json::json!("PR4fin")),
+            ("symbol", serde_json::json!("ep")),
+            ("symbol", serde_json::json!("p(1)")),
+            ("symbol", serde_json::json!("NumericalSource()")),
+            ("symbol", serde_json::json!("symbolica::log(2)")),
+        ] {
+            let mut invalid = valid.clone();
+            invalid[field] = value;
+            assert!(load(vec![invalid], false).is_err(), "{field}");
+        }
+    }
+
+    #[test]
+    fn vendored_master_inspection_returns_native_graph_and_all_orders() {
+        let engine = Vakint::new().unwrap();
+        let data = engine.rustred_data().unwrap();
+        let metadata = &data.loops[&1].manifest.masters[0];
+        let symbol = metadata["master_id"].as_str().unwrap().parse().unwrap();
+        let master = engine.get_master(&symbol, 20).unwrap();
+        assert_eq!(master.loop_count(), 1);
+        assert_eq!(
+            master.coefficients().keys().copied().collect::<Vec<_>>(),
+            vec![-1, 0, 1, 2, 3, 4]
+        );
+        assert_eq!(master.requested_decimal_precision(), 20);
+        master.graph().validate().unwrap();
+        let dot = master.graph().to_dot().unwrap();
+        assert!(dot.contains("lmb_id=0"));
+        let restored =
+            feynkit_graph::FeynmanDiagram::from_dot(master.graph().model_arc(), &dot).unwrap();
+        assert_eq!(restored.to_dot().unwrap(), dot);
+        assert!(master.coefficients().values().all(|coefficient| matches!(
+            coefficient.symbolic_expression(),
+            crate::inspection::MasterSymbolicExpression::Expression(_)
+        )));
+    }
+
+    #[test]
+    fn external_inspection_preserves_dots_and_uncomputed_numerators() {
+        Vakint::initialize_vakint_symbols();
+        let source = Source::Directory(super::super::cache_tests::external_path_through(5));
+        let release: ReleaseManifest =
+            serde_json::from_slice(&source.read("manifest.json").unwrap()).unwrap();
+        // Graph lookup does not need to construct a reduction application or
+        // attach its caches. Authenticate the same pack boundary directly.
+        for (loop_count, name) in [(4, "P9"), (5, "P1")] {
+            let pack = release
+                .loop_packs
+                .iter()
+                .find(|pack| pack.loop_count == loop_count)
+                .unwrap();
+            let data = Arc::new(LoopData::load(source.clone(), pack, &release.version).unwrap());
+            let metadata = data
+                .manifest
+                .masters
+                .iter()
+                .find(|master| master["name"] == name)
+                .unwrap();
+            let symbol = metadata["master_id"].as_str().unwrap().parse().unwrap();
+            let catalog = Arc::new(
+                super::super::masters::MasterCatalog::load(
+                    &BTreeMap::from([(loop_count, Arc::clone(&data))]),
+                    &release.version,
+                )
+                .unwrap(),
+            );
+            let master = catalog.get_master(symbol, 16).unwrap();
+            master.graph().validate().unwrap();
+            let dot = master.graph().to_dot().unwrap();
+            let restored =
+                feynkit_graph::FeynmanDiagram::from_dot(master.graph().model_arc(), &dot).unwrap();
+            assert_eq!(restored.to_dot().unwrap(), dot);
+            if loop_count == 4 {
+                assert!(
+                    master
+                        .graph()
+                        .edges()
+                        .any(|(_, _, edge)| edge.propagator_power == 2)
+                );
+                assert!(master.is_computed());
+            } else {
+                assert!(!master.graph().numerator().is_one());
+                assert!(!master.is_computed());
+                assert!(master.coefficients().is_empty());
+                #[cfg(feature = "feynkit-ingress")]
+                {
+                    use symbolica::atom::AtomCore;
+
+                    let dimension = symbolica::atom::Atom::var(feynkit_graph::symbols::dimension());
+                    let kinematics =
+                        feynkit_kinematics::Kinematics::in_dimension(&dimension).unwrap();
+                    let family = master.graph().integral_family(&kinematics, &[]).unwrap();
+                    let integral = crate::VakintExpression::from_diagram(
+                        master.graph(),
+                        &family,
+                        master.graph().numerator(),
+                        &crate::diagram_integral::DiagramIntegralOptions::default(),
+                    )
+                    .unwrap();
+                    let integral = symbolica::atom::Atom::from(integral);
+                    assert!(!integral.is_zero());
+                    assert!(integral.get_all_symbols(true).iter().all(|symbol| {
+                        !symbol.get_name().starts_with("spenso::")
+                            && symbol != &feynkit_graph::symbols::loop_momentum()
+                            && symbol != &feynkit_graph::symbols::external_momentum()
+                    }));
+                }
+            }
+        }
+    }
 
     #[test]
     #[ignore = "requires the authenticated v0.1.0 5L data pack; no IBP application is loaded"]

@@ -270,6 +270,17 @@ pub struct PyDiagramEdge {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[pymethods]
 impl PyDiagramEdge {
+    /// Positive denominator power carried by this physical graph edge.
+    ///
+    /// Examples
+    /// --------
+    /// >>> powers = {edge.id: edge.propagator_power for edge in diagram.internal_edges}
+    /// >>> assert all(power > 0 for power in powers.values())
+    #[getter]
+    fn propagator_power(&self) -> i32 {
+        self.inner.propagator_power
+    }
+
     /// Return the particle name associated with this propagator edge.
     #[getter]
     fn particle_name(&self) -> PyResult<String> {
@@ -1034,6 +1045,7 @@ impl PyFeynmanDiagram {
     /// Unlike a saved diagram, compact DOT names particles rather than storing
     /// model fingerprints and tensor annotations. Model references and topology
     /// are validated by the native importer; no Feynman rules are inferred.
+    /// Edge ``power`` annotations must be positive and default to one.
     /// Use ``from_dot`` to restore the exact serialized diagram dialect.
     ///
     /// Examples

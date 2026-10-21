@@ -249,8 +249,14 @@ impl TryFrom<&FeynmanDiagram> for CffGraph {
         let mut edges = Vec::new();
         let mut external_connections =
             BTreeMap::<usize, Vec<(EdgeId, VertexId, ExternalState)>>::new();
-        for (diagram_edge, endpoints, _) in diagram.edges() {
+        for (diagram_edge, endpoints, data) in diagram.edges() {
             let edge = EdgeId::new(diagram_edge.0);
+            if data.propagator_power != 1 {
+                return Err(CffError::UnsupportedPropagatorPower {
+                    edge,
+                    power: data.propagator_power,
+                });
+            }
             match (
                 internal_vertices.get(&endpoints.source),
                 internal_vertices.get(&endpoints.target),
@@ -417,6 +423,29 @@ mod tests {
                 CffEdge::internal(EdgeId::new(2), VertexId::new(0), VertexId::new(1)),
                 CffEdge::external(EdgeId::new(3), VertexId::new(1), EdgeFlow::Outgoing),
             ]
+        );
+    }
+
+    #[test]
+    fn dotted_propagators_are_not_silently_treated_as_simple_poles() {
+        let diagram = bubble_diagram()
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |id, _, edge| {
+                    let mut edge = edge.clone();
+                    if id.0 == 1 {
+                        edge.propagator_power = 2;
+                    }
+                    edge
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            CffGraph::try_from(&diagram),
+            Err(CffError::UnsupportedPropagatorPower {
+                edge: EdgeId::new(1),
+                power: 2,
+            })
         );
     }
 

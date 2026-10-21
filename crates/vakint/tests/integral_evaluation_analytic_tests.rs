@@ -20,7 +20,7 @@ use crate::test_utils::{
     compare_vakint_evaluation_vs_reference, compare_vakint_evaluations_vs_reference,
     run_multi_lane_acceptance,
 };
-use vakint::{externals_from_f64, params_from_f64, vakint_parse};
+use vakint::vakint_parse;
 
 const N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS: u32 = 32;
 
@@ -156,7 +156,8 @@ fn test_integrate_1l_a_body() {
         &params,
         &HashMap::default(),
         None,
-    );
+    )
+    .unwrap();
     // numerical_partial_eval = numerical_partial_eval.expand();
 
     // This test is too unstable as the printout at fixed precision is not accurate enough
@@ -264,7 +265,7 @@ fn test_integrate_1l_simple() {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
         HashMap::default(),
         vec![
@@ -289,7 +290,7 @@ fn test_integrate_1l_simple_squared_mass() {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("user_space::muv".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("user_space::muv".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
         HashMap::default(),
         vec![
@@ -314,9 +315,9 @@ fn test_integrate_1l_cross_product() {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -346,9 +347,9 @@ fn test_integrate_1l_cross_product_with_additional_symbols_numerator() {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0), ("user_space::A".into(), 3.0), ("user_space::B".into(), 4.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0), ("user_space::A".into(), 3.0), ("user_space::B".into(), 4.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -378,9 +379,9 @@ fn test_integrate_1l_dot_product_external() {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -411,9 +412,9 @@ fn test_integrate_2l() {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -458,9 +459,9 @@ fn test_integrate_3l_with_mode(mode: ThreeLoopReferenceMode) {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -506,9 +507,9 @@ fn test_integrate_3l_rank_4_with_mode(mode: ThreeLoopReferenceMode) {
                 *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 2.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 2.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -558,12 +559,12 @@ fn test_integrate_3l_rank_4_additional_symbols_numerator_with_mode(mode: ThreeLo
                 *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[
+        test_utils::params_at_reference_point(&[
             ("muvsq".into(), 1.0), ("mursq".into(), 2.0),
             ("user_space::A".into(), 5.0), ("user_space::B".into(), 7.0), ("user_space::C".into(), 11.0)
             ].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -614,9 +615,9 @@ fn test_integrate_3l_rank_4_matad_with_mode(mode: ThreeLoopReferenceMode) {
                 *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 2.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 2.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -672,12 +673,12 @@ fn test_integrate_3l_rank_4_matad_additional_symbols_numerator_with_mode(
                 *prop(6,edge(3,4),k(2)-k(3),muvsq,1)\
             )"
         ).unwrap().as_view(),
-        params_from_f64(&[
+        test_utils::params_at_reference_point(&[
             ("muvsq".into(), 1.0), ("mursq".into(), 2.0),
             ("user_space::A".into(), 5.0), ("user_space::B".into(), 7.0), ("user_space::C".into(), 11.0)
             ].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -723,9 +724,9 @@ fn test_integrate_3l_matad_with_mode(mode: ThreeLoopReferenceMode) {
         )
         .unwrap()
         .as_view(),
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -759,9 +760,9 @@ fn test_integrate_4l_h() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -794,9 +795,9 @@ fn test_integrate_4l_h_squared_mass() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("user_space::muv".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("user_space::muv".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=1)
             .map(|i| (i, (17.0*((i+1) as f64), 4.0*((i+2) as f64), 3.0*((i+3) as f64), 12.0*((i+4) as f64))))
             .collect(),
@@ -833,9 +834,9 @@ fn test_integrate_4l_h_rank_4() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 3.0), ("mursq".into(), 5.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 3.0), ("mursq".into(), 5.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -875,9 +876,9 @@ fn test_integrate_4l_h_rank_4_additional_symbols_numerator() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 3.0), ("mursq".into(), 5.0), ("user_space::A".into(), 5.0), ("user_space::B".into(), 7.0), ("user_space::C".into(), 11.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 3.0), ("mursq".into(), 5.0), ("user_space::A".into(), 5.0), ("user_space::B".into(), 7.0), ("user_space::C".into(), 11.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -915,9 +916,9 @@ fn test_integrate_4l_PR9d_from_H() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -955,9 +956,9 @@ fn test_integrate_4l_PR9d_from_X() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -993,9 +994,9 @@ fn test_integrate_4l_PR9d_from_H_pinch() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -1032,9 +1033,9 @@ fn test_integrate_4l_PR9d_from_FG() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -1070,9 +1071,9 @@ fn test_integrate_4l_PR9d_from_FG_pinch() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -1108,9 +1109,9 @@ fn test_integrate_4l_PR11d() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -1140,9 +1141,9 @@ fn test_integrate_4l_clover() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 1.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -1174,9 +1175,9 @@ fn test_integrate_4l_clover_with_non_unit_scales() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 3.0), ("mursq".into(), 7.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 3.0), ("mursq".into(), 7.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -1208,9 +1209,9 @@ fn test_integrate_4l_dotted_clover() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 3.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 3.0), ("mursq".into(), 1.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),
@@ -1250,9 +1251,9 @@ fn test_integrate_4l_clover_with_numerator() {
             )"
         ).unwrap().as_view(),
         // Masses chosen equal on purpose here so as to have a reliable target analytical result
-        params_from_f64(&[("muvsq".into(), 0.3), ("mursq".into(), 0.7), ("user_space::A".into(), 3.0), ("user_space::B".into(), 4.0), ("user_space::C".into(), 5.0)].iter().cloned().collect(),
+        test_utils::params_at_reference_point(&[("muvsq".into(), 0.3), ("mursq".into(), 0.7), ("user_space::A".into(), 3.0), ("user_space::B".into(), 4.0), ("user_space::C".into(), 5.0)].iter().cloned().collect(),
             N_DIGITS_ANLYTICAL_EVALUATION_FOR_TESTS),
-        externals_from_f64(
+        test_utils::externals_at_reference_point(
         &(1..=2)
             .map(|i| (i, (0.17*((i+1) as f64), 0.4*((i+2) as f64), 0.3*((i+3) as f64), 0.12*((i+4) as f64))))
             .collect(),

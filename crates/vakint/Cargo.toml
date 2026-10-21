@@ -21,6 +21,7 @@ colored = { workspace = true }
 eyre = { workspace = true }
 feynkit-graph = { workspace = true }
 feynkit-kinematics = { workspace = true }
+feynkit-model = { workspace = true }
 feynkit-py = { workspace = true, optional = true }
 feynkit-tensor = { workspace = true }
 flate2 = "1.1.9"
@@ -56,7 +57,6 @@ features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 [dev-dependencies]
 idenso = { workspace = true, default-features = false }
 feynkit-generator = { workspace = true }
-feynkit-model = { workspace = true }
 test-log = "0.2.19"
 
 [features]

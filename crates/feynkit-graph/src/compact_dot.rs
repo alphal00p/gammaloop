@@ -11,6 +11,8 @@ impl FeynmanDiagram {
     /// factors; interaction numerators are never inserted. Unique matching UFO
     /// interactions supply vertex-slot order, while unmatched structural vertices
     /// remain untyped. Ambiguous or explicit interactions must match `int_id`.
+    /// Physical edge `power` defaults to one and must be positive; contract
+    /// absent edges and express negative powers as numerator factors.
     /// Saved diagrams must use [`Self::from_dot`], which verifies their model
     /// fingerprint and serialized state. Cut sewing is not inferred here.
     pub fn from_topology_dot(
@@ -165,6 +167,15 @@ impl FeynmanDiagram {
                 ));
             }
             let mut edge = DiagramEdge::new(particle, directed);
+            edge.propagator_power = attributes
+                .get("power")
+                .map(|value| {
+                    value
+                        .parse()
+                        .map_err(|_| invalid(target.clone(), "power", value))
+                })
+                .transpose()?
+                .unwrap_or(1);
             edge.numerator = Self::parse_expression(
                 "edge numerator",
                 attributes.get("num").cloned().unwrap_or_else(|| "1".into()),

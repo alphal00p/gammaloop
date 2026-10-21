@@ -3,7 +3,8 @@
 
 use super::super::data::RustRedData;
 use super::*;
-use symbolica::domains::float::Real;
+use std::collections::HashMap;
+use symbolica::domains::float::{Complex, Float, Real};
 
 fn check_added_coefficient(data: &RustRedData, loops: usize, name: &str, power: i64) {
     crate::Vakint::initialize_vakint_symbols();
@@ -51,10 +52,23 @@ fn check_added_coefficient(data: &RustRedData, loops: usize, name: &str, power: 
         )
         .unwrap();
     assert_eq!(
-        catalog.resolve_numerical(symbolic, &settings).unwrap(),
-        numerical,
+        catalog.prepare_evaluation(symbolic).unwrap().expression,
+        catalog
+            .prepare_evaluation(numerical.clone())
+            .unwrap()
+            .expression,
         "symbolic-first and direct numerical modes must use the same exact coefficients"
     );
+    let numerical = crate::precision::evaluate_series(
+        numerical.as_view(),
+        vk_symbol!("ep"),
+        &HashMap::new(),
+        &settings,
+        Some(catalog),
+    )
+    .unwrap()
+    .to_atom(vk_symbol!("ep"))
+    .unwrap();
     let epsilon = vk_parse!("ep").unwrap();
     let coefficient = numerical
         .coefficient_list::<i32>(std::slice::from_ref(&epsilon))

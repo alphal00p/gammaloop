@@ -60,12 +60,16 @@ path interface remain available. No ordinary evaluation initiates a download.
 
 == Four-loop acceptance tests
 
-The four-loop numerical acceptance gates call the official loader with maximum
-loop count four, version `latest` and `refresh=false`. On first use it downloads
+The four-loop numerical acceptance gates and native asset tests call the official
+loader with maximum loop count four, the compatible immutable release declared
+by the vendored manifest, and `refresh=false`. This avoids a stale cached `latest`
+marker while preserving offline reuse.
+Tests that inspect the five-loop application or graphs explicitly request five.
+On first use it downloads
 missing packs into the test process's current directory; subsequent processes
 reuse the validated installation without network access. Cargo normally runs a
 test binary from its package directory. Set `VAKINT_TEST_EXTERNAL_DATA` to an
-existing checkout or a different installation base to override that location.
+existing checkout to override that location.
 Managed `.vakint-external-data` directories are ignored by Git.
 
 The scientific gates retain their explicit execution flags and FORM requirements.

@@ -1,16 +1,17 @@
 use std::collections::{BTreeMap, HashSet};
 use std::{collections::HashMap, sync::LazyLock};
 
-use crate::master_precision::MasterPrecisionWarnings;
 use crate::matad_numerics::DIRECT_SUBSTITUTIONS;
 use crate::utils::get_full_name;
 use crate::utils::vakint_macros::{vk_parse, vk_symbol};
-use crate::utils::{self, set_precision_in_polynomial_atom, undress_vakint_symbols};
+use crate::utils::{self, undress_vakint_symbols};
 use colored::Colorize;
 use log::debug;
 use regex::Regex;
 use string_template_plus::{Render, RenderOptions, Template};
 use symbolica::atom::Symbol;
+use symbolica::coefficient::CoefficientView;
+use symbolica::domains::float::{Float, RoundingDirection};
 use symbolica::id::Replacement;
 use symbolica::printer::{AtomPrinter, PrintOptions};
 use symbolica::{
@@ -93,6 +94,10 @@ pub struct MATAD {
 #[path = "matad/routing_tests.rs"]
 mod routing_tests;
 
+#[cfg(test)]
+#[path = "matad/precision_tests.rs"]
+mod precision_tests;
+
 impl MATAD {
     /// MATAD edge number and momentum orientation for each Vakint parent slot.
     /// Denominators use only the edge number; numerators also need its sign.
@@ -154,29 +159,77 @@ impl MATAD {
         res
     }
 
+    /// Recover rational poles from the existing exact master definition.
+    /// A matching rounded table value only verifies the convention; it is
+    /// never used to infer rationality or promote a finite Laurent coefficient.
+    fn preserve_exact_rational_poles(
+        &self,
+        source: &Atom,
+        target: &Atom,
+    ) -> Result<Atom, VakintError> {
+        if !MASTERS_EXPANSION.contains_key(source) {
+            return Ok(target.clone());
+        }
+        let epsilon = vk_symbol!("ep");
+        let exact = self
+            .expand_matad_masters(source.as_view())?
+            .series(epsilon, Atom::Zero.as_view(), Rational::from(-1))
+            .map_err(|error| VakintError::SymbolicaError(error.to_string()))?;
+        let mut result = Atom::Zero;
+        for (monomial, mut coefficient) in target.coefficient_list::<i32>(&[Atom::var(epsilon)]) {
+            let order = crate::precision::legacy::coefficient_power(monomial.as_view(), epsilon)?;
+            if order < 0
+                && let Some(known) = exact
+                    .coefficient(Rational::from(order))
+                    .map(crate::rustred_evaluation::masters::combine_exact)
+                && let AtomView::Num(known_number) = known.as_view()
+                && matches!(
+                    known_number.get_coeff_view(),
+                    CoefficientView::Natural(..) | CoefficientView::Large(..)
+                )
+                && let Ok(rational) = Rational::try_from(known.as_view())
+                && let AtomView::Num(number) = coefficient.as_view()
+                && let CoefficientView::Float(real, imaginary) = number.get_coeff_view()
+            {
+                let real = real.to_float();
+                if imaginary.to_float().as_raw().is_zero()
+                    && Float::from_rational_round(
+                        &rational,
+                        real.prec(),
+                        RoundingDirection::Nearest,
+                    ) == real
+                {
+                    coefficient = known;
+                }
+            }
+            result += coefficient * monomial;
+        }
+        Ok(result)
+    }
+
+    /// Substitute numerical master data while retaining each finite source's identity.
+    /// Evaluate after Laurent expansion and normalization, through Vakint's
+    /// tracked numerical evaluator; this preparation step does not round coefficients.
     pub fn substitute_masters_directly(&self, result: AtomView) -> Result<Atom, VakintError> {
-        MasterPrecisionWarnings::new(&self.settings).check_substitutions(
-            result,
-            DIRECT_SUBSTITUTIONS
-                .iter()
-                .map(|(source, (target, condition))| (source, target, Some(condition))),
-        );
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
         let processed_constants = DIRECT_SUBSTITUTIONS
             .iter()
             .map(|(src, (trgt, condition))| {
-                (
+                let target = self.preserve_exact_rational_poles(src, trgt)?;
+                Ok((
                     src,
                     (
-                        set_precision_in_polynomial_atom(
-                            trgt.as_view(),
+                        crate::precision::legacy::stage_table(
+                            src.as_view(),
+                            target.as_view(),
                             vk_symbol!("ep"),
-                            &self.settings,
-                        ),
+                            "MATAD",
+                        )?,
                         condition.clone(),
                     ),
-                )
+                ))
             })
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, VakintError>>()?;
         // for (a, (b, _c)) in processed_constants.clone() {
         //     println!("{} -> {}", a, b);
         // }
@@ -228,12 +281,12 @@ impl MATAD {
     }
 
     pub fn substitute_hpls(&self, result: AtomView) -> Result<Atom, VakintError> {
-        crate::hpl::substitute_numerically(result, &self.settings)
+        crate::precision::materialize(result, &self.settings, &HashMap::new(), None)
     }
 
     pub fn substitute_additional_constants(&self, result: AtomView) -> Result<Atom, VakintError> {
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
-        crate::hpl::substitute_numerically(result, &self.settings)
+        crate::precision::materialize(result, &self.settings, &HashMap::new(), None)
     }
 
     /// Materialize an exact expression already reduced to MATAD's master basis.
@@ -247,6 +300,31 @@ impl MATAD {
     /// and passes `None`.
     pub(crate) fn finalize_reduced_masters(
         &self,
+        evaluated_integral: Atom,
+        loop_count: i64,
+        euclidean_sign_power: Option<i64>,
+        muv_sq_atom: &Atom,
+        options: &MATADOptions,
+    ) -> Result<Atom, VakintError> {
+        let staged = self.stage_reduced_masters(
+            evaluated_integral,
+            loop_count,
+            euclidean_sign_power,
+            muv_sq_atom,
+            options,
+        )?;
+        if options.expand_masters
+            && (options.direct_numerical_substition
+                || (options.susbstitute_masters && options.substitute_hpls))
+        {
+            crate::precision::materialize(staged.as_view(), &self.settings, &HashMap::new(), None)
+        } else {
+            Ok(staged)
+        }
+    }
+
+    fn stage_reduced_masters(
+        &self,
         mut evaluated_integral: Atom,
         loop_count: i64,
         euclidean_sign_power: Option<i64>,
@@ -254,6 +332,7 @@ impl MATAD {
         options: &MATADOptions,
     ) -> Result<Atom, VakintError> {
         let settings = &self.settings;
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
         let mut normalization = vk_parse!(
             format!(
                 "(
@@ -276,7 +355,7 @@ impl MATAD {
         // Adjust normalization factor.
         let mut complete_normalization = normalization
             * settings
-                .get_integral_normalization_factor_atom()?
+                .get_staged_integral_normalization_factor_atom()?
                 .replace(S.n_loops.to_pattern())
                 .with(Atom::num(loop_count).to_pattern());
         complete_normalization = complete_normalization
@@ -344,8 +423,7 @@ impl MATAD {
             if options.direct_numerical_substition {
                 debug!("{}: Substituting period constants...", "MATAD".green());
                 evaluated_integral = evaluated_integral.expand();
-                evaluated_integral =
-                    self.substitute_additional_constants(evaluated_integral.as_view())?;
+                evaluated_integral = crate::hpl::normalize_constants(evaluated_integral.as_view())?;
             } else if options.susbstitute_masters {
                 debug!("{}: Substituting masters with HPLs ...", "MATAD".green());
                 evaluated_integral = self.substitute_masters(evaluated_integral.as_view())?;
@@ -353,9 +431,8 @@ impl MATAD {
                     // Expanding here is important to improve efficiency and avoid symbolica bugs with floating point coefficients
                     evaluated_integral = evaluated_integral.expand();
                     debug!("{}: Substituting HPLs with numerics ...", "MATAD".green());
-                    evaluated_integral = self.substitute_hpls(evaluated_integral.as_view())?;
                     evaluated_integral =
-                        self.substitute_additional_constants(evaluated_integral.as_view())?;
+                        crate::hpl::normalize_constants(evaluated_integral.as_view())?;
                 }
             }
             // Sanity check.
@@ -407,6 +484,44 @@ impl Vakint {
         integral_specs: &ReplacementRules,
         options: &MATADOptions,
     ) -> Result<Atom, VakintError> {
+        let staged = self.matad_reduce(settings, input_numerator, integral_specs, options)?;
+        if options.expand_masters
+            && (options.direct_numerical_substition
+                || (options.susbstitute_masters && options.substitute_hpls))
+        {
+            let catalog = self.rustred_data()?;
+            crate::precision::materialize(
+                staged.as_view(),
+                settings,
+                &HashMap::new(),
+                Some(&catalog.masters),
+            )
+        } else {
+            Ok(staged)
+        }
+    }
+
+    pub(crate) fn matad_reduce(
+        &self,
+        settings: &VakintSettings,
+        input_numerator: AtomView,
+        integral_specs: &ReplacementRules,
+        options: &MATADOptions,
+    ) -> Result<Atom, VakintError> {
+        let staged_input = if options.expand_masters
+            && (options.direct_numerical_substition
+                || (options.susbstitute_masters && options.substitute_hpls))
+        {
+            Some(crate::precision::legacy::stage_table(
+                function!(vk_symbol!("input_coefficient"), 0).as_view(),
+                input_numerator,
+                vk_symbol!(&settings.epsilon_symbol),
+                "Input",
+            )?)
+        } else {
+            None
+        };
+        let input_numerator = staged_input.as_ref().map_or(input_numerator, Atom::as_view);
         let integral = integral_specs.canonical_topology.get_integral();
 
         debug!(
@@ -694,7 +809,7 @@ impl Vakint {
                     .unwrap()
                     .to_pattern(),
             );
-        matad.finalize_reduced_masters(
+        matad.stage_reduced_masters(
             evaluated_integral,
             integral.n_loops as i64,
             Some(powers.iter().sum()),

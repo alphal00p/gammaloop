@@ -18,11 +18,34 @@ use idenso::{
     shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
 };
 use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
+use std::collections::{BTreeMap, BTreeSet};
 use symbolica::{
-    atom::{Atom, AtomCore, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol},
+    coefficient::Coefficient,
     parse, parse_lit,
 };
 use symbolica_utils::AtomPrintExt;
+use vakint::NumericalCoefficient;
+
+// These frozen references assert exact physics, independently of changes to
+// Symbolica's printer. A separate namespace preserves the literal tensor
+// argument order without depending on the runtime symbol registration order.
+macro_rules! assert_rqft_pole_reference {
+    ($actual:expr, @$reference:literal $(,)?) => {{
+        let actual = parse!($actual, default_namespace = "rqft_pole_reference");
+        let expected = parse!($reference, default_namespace = "rqft_pole_reference");
+        actual.visitor(&mut |part| {
+            if let AtomView::Num(number) = part {
+                assert!(
+                    !matches!(number.get_coeff_view().to_owned(), Coefficient::Float(_)),
+                    "an exact RQFT pole reference must not contain approximate coefficients"
+                );
+            }
+            true
+        });
+        assert_eq!((actual - expected).expand(), Atom::Zero);
+    }};
+}
 
 fn pole_part_uv_settings() -> UVgenerationSettings {
     let undoing_normalization = parse!(
@@ -43,6 +66,17 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
         },
         vakint: VakintSettings {
             normalization: undoing_normalization.to_plain_string(),
+            // These RQFT snapshots and forest identities are exact pole
+            // statements. Keep constants symbolic until the pole projection;
+            // the default numerical path is checked independently below.
+            alphaloop: AlphaLoopSettings {
+                susbstitute_masters: false,
+            },
+            matad: MATADSettings {
+                substitute_hpls: false,
+                direct_numerical_substition: false,
+                ..Default::default()
+            },
             ..Default::default()
         },
         ..Default::default()
@@ -102,7 +136,7 @@ fn finite_part_quark_lo() {
     // F0 (direct) / H = +ep^-1.
     // Sum / H = +ep^-1; native GammaLoop / RQFT = +1. The one-loop Vakint sign
     // and the two quark-gluon vertex phase differences cancel.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
         align_to_rqft(&a,&model)
         .to_bare_ordered_string(),@"cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
@@ -182,7 +216,7 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> 132 -> 0) / H = -3/16*ep^-2.
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = +1.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
@@ -196,7 +230,7 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> 132 -> 0) / H = -1/16*ep^-2.
     // F3 (140 -> GS -> 0, not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/16*ep^-2 + 1/32*ep^-1; native GammaLoop / RQFT = -1.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/32*ε+𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], &model, a, &new_settings);
@@ -211,7 +245,7 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> FU -> 0) / H = -1/4*ep^-2 + 1/12*ep^-1.
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/8*ep^-2 + 1/16*ep^-1; native GammaLoop / RQFT = -1.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/16*ε+𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], &model, a, &new_settings);
@@ -225,7 +259,7 @@ fn finite_part_ghost_2loop() {
     // F1 (140 -> zw -> 0) / H = +1/2*ep^-2 + 1/3*ep^-1.
     // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = -1
     // after preserving the antisymmetric color orientation.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], &model, a, &new_settings);
@@ -241,7 +275,7 @@ fn finite_part_ghost_2loop() {
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -5/8*ep^-2 + 35/48*ep^-1; native GammaLoop / RQFT = -1.
     // RQFT already includes the graph's 1/2 symmetry factor.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/48*ε+5𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], &model, a, &new_settings);
@@ -256,7 +290,7 @@ fn finite_part_ghost_2loop() {
     // F2 (140 -> zw -> 0) / H = -1/6*ep^-1.
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = +1/24*ep^-1; native GammaLoop / RQFT = -1.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
        align_to_rqft(&a,&model).to_bare_ordered_string(),@"(cas(2,coad(8)))^2*-𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], &model, a, &new_settings);
@@ -284,10 +318,133 @@ fn finit_part_ghlo() {
     // F0 (direct) / H = +1/2*ep^-1.
     // Sum / H = +1/2*ep^-1; native GammaLoop / RQFT = -1 after preserving
     // the antisymmetric color orientation.
-    insta::assert_snapshot!(
+    assert_rqft_pole_reference!(
         align_to_rqft(&a,&model)
         .to_bare_ordered_string(),@"-1/2*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
+}
+
+#[test]
+fn numerical_pole_parts_contain_exact_rqft_coefficients() {
+    test_initialise().unwrap();
+    let model = load_generic_model("sm");
+    let symbolic_settings = UVgenerationSettings {
+        orchestrator: UVOrchestrator::LegacyDagForest,
+        ..pole_part_uv_settings()
+    };
+    let numerical_settings = UVgenerationSettings {
+        vakint: VakintSettings {
+            normalization: symbolic_settings.vakint.normalization.clone(),
+            ..Default::default()
+        },
+        ..symbolic_settings.clone()
+    };
+
+    for (fixture, input) in [
+        (
+            "quark_lo",
+            include_str!("fixtures/renormalization/quark_lo.dot"),
+        ),
+        (
+            "ghost_lo",
+            include_str!("fixtures/renormalization/ghost_lo.dot"),
+        ),
+        (
+            "ghost_2loop",
+            include_str!("fixtures/renormalization/ghost_2loop.dot"),
+        ),
+    ] {
+        let graphs: Vec<Graph> = input.into_finalized_runtime_graph(&model).unwrap();
+        let mut amplitude = Amplitude::from_graph_list(fixture, graphs).unwrap();
+        for graph in &mut amplitude.graphs {
+            let exact = graph
+                .renormalization_part(&model, &symbolic_settings)
+                .unwrap();
+            let numerical = graph
+                .renormalization_part(&model, &numerical_settings)
+                .unwrap_or_else(|error| {
+                    panic!(
+                        "{fixture}/{} numerical evaluation: {error:?}",
+                        graph.graph.name
+                    )
+                });
+            assert_eq!(
+                numerical.stats.forest_node_count,
+                exact.stats.forest_node_count
+            );
+            let exact = align_to_rqft(&exact, &model);
+            let numerical = align_to_rqft(&numerical, &model);
+            let indeterminates: Vec<_> = exact
+                .get_all_indeterminates(false)
+                .into_iter()
+                .chain(numerical.get_all_indeterminates(false))
+                .map(|part| part.to_owned())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let exact: BTreeMap<_, _> = exact
+                .coefficient_list::<i16>(&indeterminates)
+                .into_iter()
+                .collect();
+            let numerical: BTreeMap<_, _> = numerical
+                .coefficient_list::<i16>(&indeterminates)
+                .into_iter()
+                .collect();
+            assert_eq!(
+                exact.keys().collect::<Vec<_>>(),
+                numerical.keys().collect::<Vec<_>>()
+            );
+            for (monomial, expected) in exact {
+                let AtomView::Num(expected) = expected.as_view() else {
+                    panic!("RQFT pole coefficient must be rational: {expected}");
+                };
+                let Coefficient::Complex(expected) = expected.get_coeff_view().to_owned() else {
+                    panic!("RQFT pole coefficient must be exact: {expected:?}");
+                };
+                let actual = &numerical[&monomial];
+                let AtomView::Num(number) = actual.as_view() else {
+                    panic!("numerical pole coefficient is not a number: {actual}");
+                };
+                let value = match number.get_coeff_view().to_owned() {
+                    Coefficient::Complex(value) => {
+                        assert_eq!(value, expected);
+                        continue;
+                    }
+                    Coefficient::Float(value) => value,
+                    other => panic!("unsupported numerical pole coefficient: {other:?}"),
+                };
+                // Import the accuracy actually present in each returned Float.
+                // The exact RQFT oracle is never reconstructed from its center,
+                // including non-dyadic coefficients such as 5/24 and 35/48.
+                let actual = NumericalCoefficient::from_value(
+                    value,
+                    numerical_settings.vakint.run_time_decimal_precision as u32,
+                );
+                for (component, center, precision, expected) in [
+                    (
+                        "real",
+                        &actual.value().re,
+                        actual.precision().real(),
+                        &expected.re,
+                    ),
+                    (
+                        "imaginary",
+                        &actual.value().im,
+                        actual.precision().imaginary(),
+                        &expected.im,
+                    ),
+                ] {
+                    let difference = (center.to_rational() - expected).abs();
+                    let bound = precision.absolute_error().to_rational();
+                    assert!(
+                        difference <= bound,
+                        "{fixture}/{}: {monomial} {component} differs from the exact RQFT coefficient beyond its declared Float accuracy",
+                        graph.graph.name,
+                    );
+                }
+            }
+        }
+    }
 }
 
 mod failing {

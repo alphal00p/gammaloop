@@ -291,11 +291,11 @@ title = "Spenso Symbolica Syntax And Rewrite Idioms"
 summary = "Implemented Spenso surface forms, tag-aware builders and patterns, and the Idenso pass boundaries used for static and dynamic algebraic rewrites."
 source = "docs/architecture/spenso-symbolica-syntax-and-rewrites.typ"
 kind = "Symbolic algebra implementation reference"
-status = "Implemented reference · reviewed 2026-09-14"
+status = "Implemented reference · reviewed 2026-10-21"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-09-14"
-review_ref = "ab00e4917295883add11f9855734aaee1d56926f"
+reviewed_at = "2026-10-21"
+review_ref = "68f2263bf54d5da00fec74f66c9aa430643ed78e"
 products = ["spenso", "idenso"]
 topics = ["symbolica", "tensor syntax", "rewriting"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/spenso/src/shadowing/**", "crates/idenso/src/lib.rs", "crates/idenso/src/epsilon.rs", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**"]
@@ -306,6 +306,10 @@ symbol = "idenso::IndexTooling"
 anchor = "pub trait IndexTooling {"
 # Reviewed 2026-09-14: tagged builders and dualizable dot syntax match the note,
 # which now records the shared chain/trace placeholder scope.
+# No-impact attestation 2026-10-21: only Idenso test expectations changed.
+# Seventeen old/new printer lines are equal as exact native Atoms; the disabled
+# gamma-trace check now asserts the documented cyclic Atom directly. Production
+# parsing/rewrite contracts and this source digest are unchanged. Nix Spenso gate:578 passed.
 digest = "270e4b9fcf762a8570acc1f2dc318e758a18b1f6"
 
 [[section.note]]
@@ -509,16 +513,16 @@ digest = "ad1cf0bfc2cdffcff10c69ccc87c0495c025eecc"
 [[section.note]]
 id = "vakint-architecture"
 title = "Vakint implementation architecture"
-summary = "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests."
+summary = "Topology and reduction flow, tracked numerical precision, snapshot-owned inspection, external-process ownership, persistence boundaries, invariants, and tests."
 source = "docs/architecture/vakint-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-10-20"
+status = "Implemented · reviewed 2026-10-21"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-20"
-review_ref = "35bb428a81a6d0aad6d079b16e41e8196defb212"
+reviewed_at = "2026-10-21"
+review_ref = "68f2263bf54d5da00fec74f66c9aa430643ed78e"
 products = ["vakint"]
-topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
+topics = ["topologies", "canonicalization", "tensor reduction", "precision", "inspection", "FORM", "pySecDec"]
 review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
 
 [[section.note.scope]]
@@ -543,7 +547,16 @@ anchor = "pub struct Vakint {"
 # Reviewed 2026-10-20: saved FORM indices return in the caller's epsilon
 # convention, and literal indices reuse exact registered representation data.
 # Vector mappings stay consistent; conflicting declarations are still errors.
-digest = "d304d889c7dbdac94cdd2333cfce046ae8e2232c"
+# Reviewed 2026-10-21: numerical outputs stage finite input and normalization
+# sources before backend algebra, then use the shared tracked materializer.
+# Named result records, explicit inspection and native input precision are documented.
+# Reviewed 2026-10-21 final correction: all RustRed modes lift finite input
+# occurrences before collection, preserving shared factors and separating requests
+# through one checked counter. PySecDec rejects retained source leaves before generation.
+# Reviewed 2026-10-21 Laurent boundary correction: all four public numerical
+# entry points pass their configured epsilon symbol to the shared input preflight
+# before dot-notation expansion; backend and normalization ownership are unchanged.
+digest = "db52e1e52118c5e813604bec26149607b40d1bd5"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lorentz.rs"
@@ -584,7 +597,19 @@ anchor = "pub struct VakintWrapper {"
 # Reviewed 2026-10-20: stub metadata now declares the existing diagram-ingress
 # function and follows the tested hepkit.vakint module. Numerical and reduction
 # method bodies are unchanged; generated signatures match the registered surface.
-digest = "ecf80468ac9003745ac6e3fba0b352a795c3376e"
+# Reviewed 2026-10-21: frozen precision/inspection records and native Float inputs
+# use the Rust registry and evaluator. Shared terminal/HTML rendering reads stored
+# values; checked expression conversion preserves achieved component precision.
+digest = "56a0c793ece03dbb87bf7ec27f0b5056cb443bd5"
+
+[[section.note.scope]]
+path = "crates/vakint/src/symbolica_community_module/numerical.rs"
+symbol = "vakint::symbolica_community_module::numerical::evaluate"
+anchor = "pub(super) fn evaluate("
+# Reviewed 2026-10-21: Python exact/native floating inputs retain source identity
+# and use the shared contractions/evaluator. The configured epsilon symbol reaches
+# the same pre-expansion Laurent guard as Rust; no independent numerical path exists.
+digest = "44c467ef80d68f9e288bb533bddeeb46e6cae6ae"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/data.rs"
@@ -595,15 +620,185 @@ anchor = "pub(crate) struct RustRedData {"
 # Reviewed 2026-10-20: appended cfg(test) acceptance authenticates the real 5L
 # uncomputed terminals, numerical errors, and exact cancellation. Production
 # snapshot ownership and APIs are unchanged.
-digest = "d8d2fc4123b648414e3bcd42bc88dcdccd1b27ab"
+# Reviewed 2026-10-21: inspection shares authenticated immutable pack data;
+# numerical materialization delegates to the common precision owner. Graph tests
+# cover dots, momentum routing and declared uncomputed numerator terminals.
+# No-impact attestation 2026-10-21: the graph inspection test now requests
+# the cumulative five-loop fixture explicitly and imports its feature-gated AtomCore trait.
+# Production snapshot ownership and activation are unchanged.
+# Reviewed 2026-10-21: optional authenticated constant-binding payloads enter
+# the same loop-pack validation/activation boundary; corruption and invalid
+# constant metadata fail transactionally before replacing the active registry.
+# Reviewed 2026-10-21 final API audit: payload regressions now reject finite
+# constants that collide with native evaluators, reserved Vakint symbols, period
+# aliases or master identities; transactional activation ownership is unchanged.
+digest = "67899134af041840143995fbb32bccce6487564c"
 
 [[section.note.scope]]
 path = "crates/vakint/src/rustred_evaluation/masters.rs"
 symbol = "vakint::rustred_evaluation::masters::MasterCatalog"
-anchor = "pub(super) struct MasterCatalog {"
+anchor = "pub(crate) struct MasterCatalog {"
 # Reviewed 2026-10-19: snapshot ownership and coefficient-level capabilities
 # are documented in the RustRed data and numerical-capability architecture.
-digest = "259dff58e529ba4331dab95555ae732edb4d6e70"
+# Reviewed 2026-10-21: coefficient capabilities include source-error metadata;
+# exact combination precedes required-order checks, while finite-source identities
+# survive normalization for tracked evaluation and snapshot-owned inspection.
+# Reviewed 2026-10-21: finite pack constants validate identity, cap, certified
+# error and provenance; payload bytes contribute to the snapshot tag. Duplicate
+# and builtin-shadowing declarations are rejected before catalogue activation.
+# Reviewed 2026-10-21 final API audit: admission reuses the native symbol
+# registry. Symbolic finalization binds finite period references after exact
+# combination, preserving the originating snapshot without numerical fallback.
+digest = "02d8a1676ba590b5b0dd3866b63cfd42fd43e2af"
+
+[[section.note.scope]]
+path = "crates/vakint/src/precision.rs"
+symbol = "vakint::precision::NumericalEvaluationResult"
+anchor = "pub struct NumericalEvaluationResult {"
+# Reviewed 2026-10-21: one-pass tracked evaluation, independent component error
+# metadata, exact/uncertain zero distinction, constructor arithmetic and checked
+# Atom conversion have one owner shared by Rust and Python.
+# Reviewed 2026-10-21 final correction: direct coefficient evaluation and
+# external-input preparation lift raw finite literals before normalization or
+# dot-product expansion, preserving independent error sources at every entry point.
+# Reviewed 2026-10-21: the shared snapshot-reference classifier now covers
+# finite named constants as well as master/coefficient references, keeping static
+# numerical helpers explicit about their missing registry context.
+# Reviewed 2026-10-21 binary-input correction: authenticated runtime Floats
+# use their original binary center and precision, including sub-decimal accuracy.
+# Decimal table/source caps and checked final conversion remain unchanged.
+# Reviewed 2026-10-21 Laurent boundary correction: checked intermediate
+# degree budgets precede expansion and i32 collection. Noninteger regulator
+# powers fail explicitly; opaque source/function identity arguments are preserved.
+digest = "5c8955e8eeb79a64507c7e617e0d4bc56d8d356c"
+
+[[section.note.scope]]
+path = "crates/vakint/src/inspection.rs"
+symbol = "vakint::inspection::VakintMaster"
+anchor = "pub struct VakintMaster {"
+# Reviewed 2026-10-21: typed identities, reserved-parameter validation and
+# snapshot-owned constant/master records expose stored capabilities and native
+# graphs without initiating downloads or changing the reduction registry.
+# Reviewed 2026-10-21: parameter validation reuses the complete snapshot
+# reference classifier and propagates finite-constant lookup errors. Loaded
+# moments remain finite sources with their authenticated source cap.
+digest = "70c727d6ad416c08d7f3f2b78b474454ad669b55"
+
+[[section.note.scope]]
+path = "crates/vakint/src/precision/materialize.rs"
+symbol = "vakint::precision::materialize"
+anchor = "pub(crate) fn materialize("
+# Reviewed 2026-10-21: structural numerical classification and checked partial
+# materialization stage finite literal sources before the first algebraic combine;
+# spectators remain symbolic, and unresolved snapshot references fail explicitly.
+# Reviewed 2026-10-21: snapshot-bound finite constants are numeric leaves
+# only in their owning registry. Standalone materialization reports unresolved
+# references instead of descending into private snapshot/identity arguments.
+# Reviewed 2026-10-21 final API audit: loaded finite function calls are
+# classified through the active registry before argument traversal; their
+# symbolic identity arguments are not mistaken for numerical dependencies.
+# Reviewed 2026-10-21 partial-rational correction: fully resolved exact
+# real/Gaussian rationals survive intermediate algebra. Finite literals are staged
+# first and cannot enter that shortcut; final numerical records still use Floats.
+digest = "6090378003d2702780f3cda40b2b93e810a8d373"
+
+[[section.note.scope]]
+path = "crates/vakint/src/precision/legacy.rs"
+symbol = "vakint::precision::legacy::stage_table"
+anchor = "pub(crate) fn stage_table("
+# Reviewed 2026-10-21: self-contained finite sources retain exact centers, stored
+# precision, occurrence identity and backend provenance; already staged sources
+# remain intact, without a mutable global numerical-value registry.
+# Reviewed 2026-10-21 final preparation audit: the existing Laurent-order
+# parser is reused by MATAD exact-pole validation. Finite-source staging and
+# decoding remain the shared owners; helper tests follow the public staging contract.
+# Reviewed 2026-10-21 binary-input correction: decoding validates nonzero
+# exactly representable centers at their original bit precision. ASCII-hex
+# validation precedes byte slicing, so malformed Unicode metadata fails gracefully.
+digest = "350a68bab888916a2e7e9a0adaee8656b4177257"
+
+[[section.note.scope]]
+path = "crates/vakint/src/inspection/registry.rs"
+symbol = "vakint::rustred_evaluation::masters::MasterCatalog::constant_source"
+anchor = "    fn constant_source("
+# Reviewed 2026-10-21: qualified finite constants are rebound only to their
+# authenticated snapshot; inspection owns that snapshot, caps derived formulas,
+# and reports source identities without reevaluation during presentation.
+# Reviewed 2026-10-21 final API audit: the bind-only traversal delegates to
+# existing period_binding, keeps already bound/source nodes opaque, and preserves
+# exact formulas. Native/loaded discovery and lookup share the same registry.
+digest = "9ed7801b753717d18f14f1ab3567b6c3e7ea3488"
+
+[[section.note.scope]]
+path = "crates/vakint/src/presentation.rs"
+symbol = "vakint::presentation::Content"
+anchor = "pub(crate) enum Content {"
+# Reviewed 2026-10-21: terminal and HTML records share a stored-value view.
+# Display-only projection hides one snapshot transport tag but preserves the
+# original Atom and keeps mixed-snapshot formulas explicit.
+digest = "48e4e5b61c2f44f522025660523bdff303b2472e"
+
+[[section.note.scope]]
+path = "crates/vakint/src/symbolica_community_module/presentation.rs"
+symbol = "vakint::symbolica_community_module::presentation::render"
+anchor = "pub(super) fn render("
+# Reviewed 2026-10-21: native Symbolica formula and FeynKit graph rendering
+# consume the shared presentation view. K5 cards retain caps and provenance,
+# and optional graph-renderer absence leaves numerical metadata available.
+digest = "c6a982e0d5a1a5004321b370c64415a8c353398c"
+
+[[section.note.scope]]
+path = "crates/vakint/src/hpl.rs"
+symbol = "vakint::hpl::projection_kernel"
+anchor = "pub(crate) fn projection_kernel("
+# Reviewed 2026-10-21 full inspection sweep: the endpoint GPL adapter uses
+# exact algebraic expansion to recognize supported letters across equivalent
+# factorizations. Tagged kernels, supported domains and precision policy are unchanged.
+# Reviewed 2026-10-21 unit-alphabet extension: exact algebraic letters map
+# to Symbolica 9a3abbea endpoint-one tags over zero and sixth roots of unity.
+# Weight<=6, first!=1 and last!=0 restrictions remain checked by the native
+# constructor; nine PR14 projection-export cases cover the new adapter calls.
+# Reviewed 2026-10-21 exact realness correction: unfactorized Q(i)
+# denominator normalization preserves Float and opaque source identities; its
+# trigger stops at function boundaries. The 115-master/739-coefficient and
+# 393-constant public sweep passes, including both PR14 coefficients at 240 digits.
+digest = "a58d907024d730182f23098937ecfd508efcf4c6"
+
+[[section.note.scope]]
+path = "crates/vakint/src/inspection/constants.rs"
+symbol = "vakint::inspection::constants::builtin_symbols"
+anchor = "pub(crate) fn builtin_symbols()"
+# Reviewed 2026-10-21 full inspection sweep: native real constant definitions
+# and advertised projections share lookup validation. The public regression
+# checks every advertised endpoint GPL; the complete380-constant API sweep passes.
+digest = "de8c958c91fdfffd075de0c26473b9d4ff9c3b88"
+
+[[section.note.scope]]
+path = "crates/vakint/src/matad.rs"
+symbol = "vakint::matad::MATAD::substitute_masters_directly"
+anchor = "    pub fn substitute_masters_directly("
+# Reviewed 2026-10-21: public substitution prepares finite source identities
+# and exact Gamma expressions for the shared final evaluator. Rational poles
+# require the existing exact master definition and bit-exact table-rounding agreement.
+digest = "95bbcc8441d0dbb0c8fa104c9de5b8615af94286"
+
+[[section.note.scope]]
+path = "crates/vakint/src/fmft.rs"
+symbol = "vakint::fmft::FMFT::substitute_masters"
+anchor = "    pub fn substitute_masters("
+# Reviewed 2026-10-21: public numerical table substitution is the shared
+# preparation path and preserves source metadata and exact Gamma normalization.
+# Numerical evaluation follows complete Laurent expansion and normalization.
+digest = "ed40946b24f3986d816984e38a4d02ccf351bce3"
+
+[[section.note.scope]]
+path = "crates/vakint/src/fmft/finalize.rs"
+symbol = "vakint::fmft::FMFT::stage_master_expression"
+anchor = "    pub(super) fn stage_master_expression("
+# Reviewed 2026-10-21: native and FORM callers share exact mass/measure
+# normalization, Laurent expansion and the public table preparation helper.
+# Complete coefficients reach the existing checked tracked materializer once.
+digest = "3f4b681fbfb20fa85681438055eda4e538a6c012"
 
 [[section]]
 id = "proposals"

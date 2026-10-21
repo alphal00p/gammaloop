@@ -11,7 +11,9 @@ use symbolica::evaluate::{
     CompileOptions, CompiledCode, CompiledNumber, ExportNumber, ExportSettings, ExportedCode,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol},
+    atom::{
+        Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol, ZeroTestSettings,
+    },
     coefficient::ConvertToRing,
     domains::{
         EuclideanDomain, InternalOrdering,
@@ -371,8 +373,12 @@ where
         iterations: usize,
         tolerance: f64,
     ) -> Self::ContainerData<symbolica::id::ConditionResult> {
+        let settings = ZeroTestSettings::default()
+            .finite_field_samples(iterations)
+            .numerical_samples(iterations)
+            .exact_fallback(iterations != 0);
         self.map_ref(
-            |a| a.zero_test(iterations, tolerance),
+            |a| a.check_zero_with(&settings),
             |a| a.zero_test(iterations, tolerance),
         )
     }

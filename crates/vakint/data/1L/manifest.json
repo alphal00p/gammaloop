@@ -1,6 +1,6 @@
 {
   "schema": "vakint.external-data.loop.v1",
-  "version": "v0.1.0",
+  "version": "v0.1.1",
   "loop_count": 1,
   "dimension": "4-2*epsilon",
   "normalization": "FMFTandMATAD",
@@ -125,7 +125,7 @@
         },
         "graph.dot": {
           "path": "masters/P1/graph.dot",
-          "sha256": "f30255ed59d97daac1400f0d85bd50057be9bb40c8b7f12e4275c103ae710640"
+          "sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae"
         }
       },
       "acceptance_sha256": {
@@ -143,6 +143,7 @@
         3,
         4
       ],
+      "producer_update": "producer-update.json",
       "coefficients": [
         {
           "epsilon_power": -1,
@@ -204,17 +205,21 @@
       "sha256": "6213f86d053f6b7f409ba6e8855e416f3f5394ba913fd297ce08c3dd88470b70",
       "bytes": 524
     },
+    "graph-migration.json": {
+      "sha256": "6d78f4842231d80fcd2f4cdc1f0761834a013227ee689f67349c70028a5c21dd",
+      "bytes": 2738
+    },
     "graphs/e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4.dot": {
-      "sha256": "f30255ed59d97daac1400f0d85bd50057be9bb40c8b7f12e4275c103ae710640",
-      "bytes": 839
+      "sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae",
+      "bytes": 815
     },
     "ibps/rules.rrbin": {
       "sha256": "f8a740e9707e4560b9c0ffdf7f2adba5220d3e21054c11ac0f0a4aab3031dc88",
       "bytes": 2790
     },
     "masters/P1/graph.dot": {
-      "sha256": "f30255ed59d97daac1400f0d85bd50057be9bb40c8b7f12e4275c103ae710640",
-      "bytes": 839
+      "sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae",
+      "bytes": 815
     },
     "masters/P1/numerical.json": {
       "sha256": "b54e96eaf3deed297169b16f34bcc28d9d32f6ea2344fd84457f27e21a32ea3d",
@@ -225,8 +230,13 @@
       "bytes": 350
     },
     "model.json": {
-      "sha256": "8f85b6684e358122cdd568f9ea0624e3e88db9f6e1e08987d46318a8c126ecc6",
-      "bytes": 3761
+      "sha256": "d7e113a7e3fb019045e4c1436e03eeb3b49da85de1234f7ed1e110416079215e",
+      "bytes": 3477
+    },
+    "producer-update.json": {
+      "sha256": "de7db29c80edc577be61503f62500d0e727d94fffa6ed04cd42ec48b480bd483",
+      "bytes": 6954
     }
-  }
+  },
+  "producer_update": "producer-update.json"
 }

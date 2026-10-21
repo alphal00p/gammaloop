@@ -282,6 +282,7 @@ fn representative_laurent_fixture(
             .collect(),
         settings,
     )
+    .unwrap()
 }
 
 #[test]

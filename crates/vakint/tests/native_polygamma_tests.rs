@@ -36,9 +36,9 @@ fn evaluate(expression: &Atom, settings: &VakintSettings) -> Complex<Float> {
         None,
     )
     .unwrap();
-    assert_eq!(result.0.len(), 1);
-    assert_eq!(result.0[0].0, 0);
-    let value = result.0[0].1.clone();
+    assert_eq!(result.coefficients().len(), 1);
+    assert!(result.coefficients().contains_key(&0));
+    let value = result.get_epsilon_coefficient(0);
     assert!(value.re.as_raw().is_finite());
     assert!(value.im.as_raw().is_zero());
     value
@@ -66,7 +66,7 @@ fn gamma_expansions_use_native_constants_without_an_artificial_tail() {
         "𝜋^4/160",
         "symbolica::polygamma(2,1)*𝜋^2/72+symbolica::polygamma(4,1)/120",
     ];
-    for expanded in gamma_expansions(&input, &settings) {
+    for (branch, expanded) in gamma_expansions(&input, &settings).into_iter().enumerate() {
         assert!(
             !expanded
                 .get_all_symbols(true)
@@ -85,9 +85,10 @@ fn gamma_expansions_use_native_constants_without_an_artificial_tail() {
         for (power, expected) in expected.iter().enumerate() {
             let coefficient = series.coefficient(Rational::from(power)).unwrap();
             assert!(
-                (coefficient - vakint_parse!(*expected).unwrap())
+                (coefficient.clone() - vakint_parse!(*expected).unwrap())
                     .expand()
-                    .is_zero()
+                    .is_zero(),
+                "branch {branch}, epsilon^{power}: {coefficient}; expanded {expanded}"
             );
         }
         assert!(series.coefficient(series.absolute_order()).is_none());
@@ -97,7 +98,10 @@ fn gamma_expansions_use_native_constants_without_an_artificial_tail() {
 #[test]
 fn native_gamma_series_include_orders_needed_by_surrounding_poles() {
     let settings = VakintSettings::default();
-    for expanded in gamma_expansions(&vakint_parse!("Gam(1,1)/ep^6").unwrap(), &settings) {
+    for (branch, expanded) in gamma_expansions(&vakint_parse!("Gam(1,1)/ep^6").unwrap(), &settings)
+        .into_iter()
+        .enumerate()
+    {
         let series = expanded
             .series(
                 vakint_symbol!("ep"),
@@ -107,7 +111,10 @@ fn native_gamma_series_include_orders_needed_by_surrounding_poles() {
             .unwrap();
         let finite = series.coefficient(Rational::from(0)).unwrap();
         let expected = vakint_parse!("61*𝜋^6/120960+symbolica::zeta(3)^2/18").unwrap();
-        assert!((finite - expected).expand().is_zero());
+        assert!(
+            (finite.clone() - expected).expand().is_zero(),
+            "branch {branch}: {finite}; expanded {expanded}"
+        );
         assert!(!series.to_atom().contains_symbol(vakint_symbol!("Oep")));
         assert!(series.coefficient(series.absolute_order()).is_none());
     }

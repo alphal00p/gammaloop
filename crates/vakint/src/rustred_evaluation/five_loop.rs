@@ -909,7 +909,7 @@ impl SavedApplication {
             value += contribution * spectator * input.mass_squared.clone().pow(mass_power);
         }
         let normalization = settings
-            .get_integral_normalization_factor_atom()?
+            .get_staged_integral_normalization_factor_atom()?
             .replace(S.n_loops.to_pattern())
             .with(Atom::num(loop_count).to_pattern())
             .replace(Atom::var(vk_symbol!("log_mu_sq")).to_pattern())

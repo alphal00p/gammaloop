@@ -1,0 +1,19 @@
+{
+  "schema": "vakint.external-data.graph-migration.v1",
+  "graphs": [
+    {
+      "path": "graphs/e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4.dot",
+      "original": "provenance/native-graphs/original/1L/graphs/e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4.dot",
+      "original_sha256": "f30255ed59d97daac1400f0d85bd50057be9bb40c8b7f12e4275c103ae710640",
+      "canonical_sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae",
+      "original_dot": "digraph feynkit {\n  graph [feynkit_name=\"tadpole\", model_fingerprint=\"5d203858c037b0d68a9835edfb9db5a9b2e3a2a717f8cb7b24c8ba1ed8dcb401\", symmetry_factor=1, overall_factor=\"1\", numerator=\"1\", numerator_prefactor=\"1\", projector=\"1\", loop_momentum_edges=\"0\", loop_momentum_basis=\"{\\\"tree_edges\\\":[],\\\"loop_edges\\\":[0],\\\"external_edges\\\":[],\\\"dependent_externals\\\":[],\\\"edge_signatures\\\":{\\\"0\\\":{\\\"loops\\\":[1],\\\"external\\\":[]}}}\", half_edge_order=\"[{\\\"edge\\\":0,\\\"endpoint\\\":\\\"source\\\"},{\\\"edge\\\":0,\\\"endpoint\\\":\\\"target\\\"}]\", cuts=\"[]\", topology_threshold_candidates=\"[]\"];\n  v0 [id=0, feynkit_name=\"v0\", interaction_id=2, interaction=\"V_SCALAR2\", numerator=\"1\"];\n  v0 -> v0 [id=0, lmb_id=0, particle_id=0, pdg=9000001, particle=\"phi\", directed=false, source_slot=0, target_slot=1, dir=none, external=\"null\", is_dummy=false, numerator=\"1\"];\n}\n"
+    },
+    {
+      "path": "masters/P1/graph.dot",
+      "original": "provenance/native-graphs/original/1L/masters/P1/graph.dot",
+      "original_sha256": "f30255ed59d97daac1400f0d85bd50057be9bb40c8b7f12e4275c103ae710640",
+      "canonical_sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae",
+      "original_dot": "digraph feynkit {\n  graph [feynkit_name=\"tadpole\", model_fingerprint=\"5d203858c037b0d68a9835edfb9db5a9b2e3a2a717f8cb7b24c8ba1ed8dcb401\", symmetry_factor=1, overall_factor=\"1\", numerator=\"1\", numerator_prefactor=\"1\", projector=\"1\", loop_momentum_edges=\"0\", loop_momentum_basis=\"{\\\"tree_edges\\\":[],\\\"loop_edges\\\":[0],\\\"external_edges\\\":[],\\\"dependent_externals\\\":[],\\\"edge_signatures\\\":{\\\"0\\\":{\\\"loops\\\":[1],\\\"external\\\":[]}}}\", half_edge_order=\"[{\\\"edge\\\":0,\\\"endpoint\\\":\\\"source\\\"},{\\\"edge\\\":0,\\\"endpoint\\\":\\\"target\\\"}]\", cuts=\"[]\", topology_threshold_candidates=\"[]\"];\n  v0 [id=0, feynkit_name=\"v0\", interaction_id=2, interaction=\"V_SCALAR2\", numerator=\"1\"];\n  v0 -> v0 [id=0, lmb_id=0, particle_id=0, pdg=9000001, particle=\"phi\", directed=false, source_slot=0, target_slot=1, dir=none, external=\"null\", is_dummy=false, numerator=\"1\"];\n}\n"
+    }
+  ]
+}

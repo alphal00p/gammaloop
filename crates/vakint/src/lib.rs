@@ -7,23 +7,34 @@ pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
 mod hpl;
+pub mod inspection;
 mod lorentz;
+#[cfg(test)]
 mod master_precision;
 pub mod matad;
 pub mod matad_numerics;
+pub mod precision;
+mod presentation;
 pub mod rustred_evaluation;
 pub mod symbols;
 pub mod topologies;
 pub mod utils;
 
-use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
 use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
 use graph::Graph;
+pub use inspection::{
+    ConstantSymbol, DataProvenance, MasterCoefficient, MasterSymbol, MasterSymbolicExpression,
+    VakintConstant, VakintMaster,
+};
 #[allow(unused)]
 use log::{debug, info, warn};
+pub use precision::{
+    AvailablePrecision, CoefficientPrecision, ComponentPrecision, ErrorQuality,
+    NumericalCoefficient, NumericalEvaluationResult, PrecisionSource, PrecisionWarning,
+};
 pub use rustred::scalar_numerator::ScalarNumeratorLimits as RustRedScalarNumeratorLimits;
 pub use rustred::solver::{
     CandidateRoutedCachePolicy as RustRedCachePolicy,
@@ -57,7 +68,6 @@ use std::{
     fmt,
     fs::{self, File},
     io::{BufRead, BufReader, Write},
-    ops::Div,
     path::PathBuf,
     process::{Command, ExitStatus, Stdio},
     sync::{
@@ -335,6 +345,10 @@ pub enum VakintError {
     InvalidTensorReductionMethod(String),
     #[error(transparent)]
     RustRedEvaluation(#[from] RustRedEvaluationError),
+    #[error(transparent)]
+    Inspection(#[from] inspection::InspectionError),
+    #[error("numerical precision: {0}")]
+    NumericalPrecision(String),
     #[error("unknown vakint error")]
     Unknown,
 }
@@ -343,7 +357,7 @@ pub fn params_from_f64(
     params: &HashMap<String, f64, ahash::RandomState>,
     decimal_prec: u32,
 ) -> HashMap<String, Float, ahash::RandomState> {
-    let binary_prec: u32 = ((decimal_prec as f64) * LOG2_10).floor() as u32;
+    let binary_prec: u32 = (((decimal_prec as f64) * LOG2_10).floor() as u32).min(53);
     params
         .iter()
         .map(|(k, v)| (k.clone(), Float::with_val(binary_prec, v)))
@@ -354,7 +368,7 @@ pub fn params_from_complex_f64(
     params: &HashMap<String, Complex<f64>, ahash::RandomState>,
     decimal_prec: u32,
 ) -> HashMap<String, Complex<Float>, ahash::RandomState> {
-    let binary_prec: u32 = ((decimal_prec as f64) * LOG2_10).floor() as u32;
+    let binary_prec: u32 = (((decimal_prec as f64) * LOG2_10).floor() as u32).min(53);
     params
         .iter()
         .map(|(k, v)| {
@@ -373,7 +387,7 @@ pub fn externals_from_f64(
     externals: &HashMap<usize, (f64, f64, f64, f64), ahash::RandomState>,
     decimal_prec: u32,
 ) -> HashMap<usize, Momentum, ahash::RandomState> {
-    let binary_prec: u32 = ((decimal_prec as f64) * LOG2_10).floor() as u32;
+    let binary_prec: u32 = (((decimal_prec as f64) * LOG2_10).floor() as u32).min(53);
     externals
         .iter()
         .map(|(&k, v)| {
@@ -399,7 +413,7 @@ pub fn externals_from_complex_f64(
     >,
     decimal_prec: u32,
 ) -> HashMap<usize, Momentum, ahash::RandomState> {
-    let binary_prec: u32 = ((decimal_prec as f64) * LOG2_10).floor() as u32;
+    let binary_prec: u32 = (((decimal_prec as f64) * LOG2_10).floor() as u32).min(53);
     externals
         .iter()
         .map(|(&k, v)| {
@@ -1746,6 +1760,24 @@ impl fmt::Display for EvaluationMethod {
 }
 
 impl EvaluationMethod {
+    fn numerical_output(&self) -> bool {
+        match self {
+            Self::AlphaLoop(options) => options.susbstitute_masters,
+            Self::MATAD(options) => {
+                options.expand_masters
+                    && (options.direct_numerical_substition
+                        || (options.susbstitute_masters && options.substitute_hpls))
+            }
+            Self::FMFT(options) => options.expand_masters && options.susbstitute_masters,
+            Self::PySecDec(_) => true,
+            Self::RustRed(options) => options.master_mode == RustRedMasterMode::Numerical,
+        }
+    }
+
+    fn stages_input_coefficients(&self) -> bool {
+        matches!(self, Self::RustRed(_))
+            || (self.numerical_output() && !matches!(self, Self::PySecDec(_)))
+    }
     pub fn supports(&self, settings: &VakintSettings, topology: &Topology) -> bool {
         match self {
             EvaluationMethod::AlphaLoop(_) => {
@@ -1867,18 +1899,40 @@ impl EvaluationMethod {
         numerator: AtomView,
         integral_specs: &ReplacementRules,
     ) -> Result<Atom, VakintError> {
+        let result = self.reduce_integral(vakint, settings, numerator, integral_specs, 0)?;
+        if self.numerical_output() {
+            vakint.resolve_rustred_numerical(result, settings)
+        } else {
+            Ok(result)
+        }
+    }
+
+    fn reduce_integral(
+        &self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        integral_specs: &ReplacementRules,
+        source_id: usize,
+    ) -> Result<Atom, VakintError> {
+        let staged = if self.stages_input_coefficients() {
+            Vakint::stage_input_coefficients(settings, numerator)?
+        } else {
+            numerator.to_owned()
+        };
+        let numerator = staged.as_view();
         let result = match self {
             EvaluationMethod::AlphaLoop(opts) => {
                 vakint.alphaloop_evaluate(settings, numerator, integral_specs, opts)
             }
             EvaluationMethod::MATAD(opts) => {
-                vakint.matad_evaluate(settings, numerator, integral_specs, opts)
+                vakint.matad_reduce(settings, numerator, integral_specs, opts)
             }
             EvaluationMethod::FMFT(opts) => {
-                vakint.fmft_evaluate(settings, numerator, integral_specs, opts)
+                vakint.fmft_reduce(settings, numerator, integral_specs, opts)
             }
             EvaluationMethod::PySecDec(opts) => {
-                vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts)
+                vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts, source_id)
             }
             EvaluationMethod::RustRed(opts) => {
                 vakint.rustred_evaluate(settings, numerator, integral_specs, opts)
@@ -2103,6 +2157,16 @@ pub struct VakintSettings {
 impl VakintSettings {
     pub fn get_integral_normalization_factor_atom(&self) -> Result<Atom, VakintError> {
         self.integral_normalization_factor.to_atom(self)
+    }
+
+    /// Retain finite normalization inputs before backend algebra mixes orders.
+    fn get_staged_integral_normalization_factor_atom(&self) -> Result<Atom, VakintError> {
+        precision::legacy::stage_table(
+            Atom::var(vk_symbol!("normalization_input")).as_view(),
+            self.get_integral_normalization_factor_atom()?.as_view(),
+            vk_symbol!(&self.epsilon_symbol),
+            "Input",
+        )
     }
 
     pub fn get_binary_precision(&self) -> u32 {
@@ -2374,7 +2438,9 @@ impl fmt::Display for VakintTerm {
 }
 
 enum IntegralEvaluation {
-    Complete,
+    Complete {
+        numerical: bool,
+    },
     RustRed {
         loop_count: usize,
         mode: RustRedMasterMode,
@@ -2382,16 +2448,69 @@ enum IntegralEvaluation {
 }
 
 impl VakintTerm {
+    fn tracks_input_coefficients(
+        &self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+    ) -> Result<bool, VakintError> {
+        let Some(mut matched) =
+            vakint.match_topologies_for_settings(settings, self.integral.as_view())?
+        else {
+            return Ok(false);
+        };
+        // Admission checks inspect concrete powers and masses, just as they do
+        // at reduction. The unmatched template still contains pow(n) slots.
+        matched.apply_replacement_rules()?;
+        Ok(settings
+            .evaluation_order
+            .0
+            .iter()
+            .find(|method| method.supports(settings, &matched.canonical_topology))
+            .is_some_and(EvaluationMethod::stages_input_coefficients))
+    }
+
+    fn stage_numerical_inputs(
+        &mut self,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+    ) -> Result<(), VakintError> {
+        let mut has_float = false;
+        self.numerator.visitor(&mut |part| {
+            if matches!(part, AtomView::Num(number) if matches!(number.get_coeff_view(), CoefficientView::Float(_, _))) {
+                has_float = true;
+            }
+            !has_float
+        });
+        if !has_float
+            || !settings
+                .evaluation_order
+                .0
+                .iter()
+                .any(EvaluationMethod::stages_input_coefficients)
+        {
+            return Ok(());
+        }
+        if self.tracks_input_coefficients(vakint, settings)? {
+            self.numerator = Vakint::stage_input_coefficients(settings, self.numerator.as_view())?;
+        }
+        Ok(())
+    }
+
     pub fn evaluate_integral(
         &mut self,
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        if let IntegralEvaluation::RustRed { loop_count, mode } =
-            self.reduce_integral(vakint, settings)?
-        {
-            self.numerator =
-                vakint.finalize_rustred(self.numerator.clone(), settings, loop_count, mode)?;
+        let numerical = match self.reduce_integral(vakint, settings, 0)? {
+            IntegralEvaluation::RustRed { loop_count, mode } => {
+                self.numerator =
+                    vakint.finalize_rustred(self.numerator.clone(), settings, loop_count, mode)?;
+                mode == RustRedMasterMode::Numerical
+            }
+            IntegralEvaluation::Complete { numerical } => numerical,
+        };
+        if numerical {
+            self.numerator = vakint.resolve_rustred_numerical(self.numerator.clone(), settings)?;
         }
         Ok(())
     }
@@ -2400,7 +2519,9 @@ impl VakintTerm {
         &mut self,
         vakint: &Vakint,
         settings: &VakintSettings,
+        source_id: usize,
     ) -> Result<IntegralEvaluation, VakintError> {
+        self.stage_numerical_inputs(vakint, settings)?;
         let mut integral_specs = if let Some(replacement_rules) =
             vakint.match_topologies_for_settings(settings, self.integral.as_view())?
         {
@@ -2449,13 +2570,16 @@ impl VakintTerm {
                         },
                     ),
                     _ => (
-                        evaluation_approach.evaluate_integral(
+                        evaluation_approach.reduce_integral(
                             vakint,
                             settings,
                             self.numerator.as_view(),
                             &integral_specs,
+                            source_id,
                         )?,
-                        IntegralEvaluation::Complete,
+                        IntegralEvaluation::Complete {
+                            numerical: evaluation_approach.numerical_output(),
+                        },
                     ),
                 };
                 self.numerator = simplify_real(evaluated_integral.as_view());
@@ -2814,6 +2938,7 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
+        self.stage_numerical_inputs(vakint, settings)?;
         let compact = (settings.rustred_artifact_path.is_some() || vakint.has_rustred_loop(5))
             && matches!(
                 settings.tensor_reduction_method,
@@ -3918,6 +4043,82 @@ impl fmt::Display for VakintExpression {
 }
 
 impl VakintExpression {
+    fn prepare_evaluation(
+        input: AtomView,
+        vakint: &Vakint,
+        settings: &VakintSettings,
+    ) -> Result<Self, VakintError> {
+        let mut has_float = false;
+        input.visitor(&mut |part| {
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("topo"))
+                || precision::legacy::is_source(part)
+            {
+                return false;
+            }
+            has_float |= matches!(part, AtomView::Num(number) if matches!(number.get_coeff_view(), CoefficientView::Float(_, _)));
+            !has_float
+        });
+        if !has_float {
+            return Self::try_from(input);
+        }
+        let request_id = Vakint::next_input_request_id()?;
+
+        // Collection already combines coefficients of equal topologies. Lift
+        // each finite occurrence before that algebra, then select its backend
+        // using the concrete matched topology. PySecDec receives its original
+        // numeric input, never these placeholders or private source leaves.
+        let placeholder = (0..)
+            .map(|index| vk_symbol!(format!("input_coefficient_placeholder_{index}")))
+            .find(|symbol| !input.contains_symbol(*symbol))
+            .unwrap();
+        let mut literals = Vec::new();
+        let lifted = input.replace_map(|part, _context, out| {
+            if matches!(part, AtomView::Fun(function) if function.get_symbol() == vk_symbol!("topo"))
+                || precision::legacy::is_source(part)
+            {
+                **out = part.to_owned();
+            } else if matches!(part, AtomView::Num(number) if matches!(number.get_coeff_view(), CoefficientView::Float(_, _))) {
+                let key = placeholder.call(literals.len() as i64);
+                literals.push((key.clone(), part.to_owned()));
+                **out = key;
+            }
+        });
+        let mut expression = Self::try_from(lifted)?;
+        for term in &mut expression.0 {
+            let track = term.tracks_input_coefficients(vakint, settings)?;
+            let mut replacements = Vec::new();
+            for (literal_id, (key, value)) in literals.iter().enumerate() {
+                if term
+                    .numerator
+                    .pattern_match(&key.to_pattern(), None, None)
+                    .next()
+                    .is_none()
+                {
+                    continue;
+                }
+                let value = if track {
+                    precision::legacy::stage_table(
+                        function!(
+                            vk_symbol!("input_coefficient"),
+                            request_id,
+                            literal_id as i64
+                        )
+                        .as_view(),
+                        value.as_view(),
+                        vk_symbol!(&settings.epsilon_symbol),
+                        "Input",
+                    )?
+                } else {
+                    value.clone()
+                };
+                replacements.push(Replacement::new(key.clone(), value));
+            }
+            term.numerator = term.numerator.replace_multiple(&replacements);
+        }
+        expression.0.retain(|term| !term.numerator.is_zero());
+        Ok(expression)
+    }
+
     pub fn split_integrals(input: AtomView) -> Result<Vec<VakintTerm>, VakintError> {
         let mut res = vec![];
 
@@ -3997,10 +4198,16 @@ impl VakintExpression {
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
         let mut complete = Vec::new();
+        let mut numerical = Atom::Zero;
+        let mut numerical_vectors = std::collections::BTreeSet::new();
         let mut reductions = BTreeMap::new();
-        for term in &mut self.0 {
-            match term.reduce_integral(vakint, settings)? {
-                IntegralEvaluation::Complete => complete.push(term.clone()),
+        for (source_id, term) in self.0.iter_mut().enumerate() {
+            match term.reduce_integral(vakint, settings, source_id)? {
+                IntegralEvaluation::Complete { numerical: true } => {
+                    numerical += &term.numerator;
+                    numerical_vectors.extend(term.vectors.iter().cloned());
+                }
+                IntegralEvaluation::Complete { numerical: false } => complete.push(term.clone()),
                 IntegralEvaluation::RustRed { loop_count, mode } => {
                     // Preserve the existing loop-count-specific epsilon target,
                     // but combine every matching contribution before checking
@@ -4020,13 +4227,26 @@ impl VakintExpression {
                 loop_count,
                 mode,
             )?;
-            if !numerator.is_zero() {
+            if mode == RustRedMasterMode::Numerical {
+                numerical += numerator;
+                numerical_vectors.extend(vectors);
+            } else if !numerator.is_zero() {
                 complete.push(VakintTerm {
                     integral: Atom::num(1),
                     numerator,
                     vectors: vectors.into_iter().collect(),
                 });
             }
+        }
+        if !numerical.is_zero() {
+            complete.push(VakintTerm {
+                integral: Atom::one(),
+                numerator: vakint.resolve_rustred_numerical(
+                    rustred_evaluation::combine_exact(numerical),
+                    settings,
+                )?,
+                vectors: numerical_vectors.into_iter().collect(),
+            });
         }
         self.0 = complete;
         Ok(())
@@ -4104,257 +4324,39 @@ impl From<VakintExpression> for Atom {
     }
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct NumericalEvaluationResult(
-    /// Laurent coefficients stored as `(epsilon power, complex coefficient)` pairs.
-    pub Vec<(i64, Complex<Float>)>,
-);
-
-impl fmt::Display for NumericalEvaluationResult {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.0.is_empty() {
-            write!(f, "{}", "Empty result".green())
-        } else {
-            write!(
-                f,
-                "{}",
-                self.0
-                    .iter()
-                    .map(|(power, float_eval)| format!(
-                        "{} : {}",
-                        format!(
-                            "ε^{}{}",
-                            match *power {
-                                power if power > 0 => "+",
-                                0 => " ",
-                                power if power < 0 => "",
-                                _ => unreachable!(),
-                            },
-                            power
-                        )
-                        .green(),
-                        format!("{}", float_eval).blue()
-                    ))
-                    .collect::<Vec<_>>()
-                    .join("\n")
-            )
-        }
-    }
-}
-
-impl NumericalEvaluationResult {
-    pub fn to_atom(&self, epsilon_symbol: Symbol) -> Atom {
-        let mut res = Atom::Zero;
-        for (exp, coeff) in self.get_epsilon_coefficients() {
-            // res += (Atom::num(coeff.re) + Atom::var(S.cmplx_i) * Atom::num(coeff.im))
-            //     * Atom::var(epsilon_symbol).pow(Atom::num(exp))
-            res += Atom::num(coeff) * Atom::var(epsilon_symbol).pow(Atom::num(exp))
-        }
-        res
-    }
-
-    pub fn from_atom(
-        input: AtomView,
-        epsilon_symbol: Symbol,
-        settings: &VakintSettings,
-    ) -> Result<Self, VakintError> {
-        let epsilon_coeffs = input.coefficient_list::<i8>(&[Atom::var(epsilon_symbol)]);
-
-        let epsilon_coeffs_vec = epsilon_coeffs
-            .iter()
-            .map(|(eps_atom, coeff)| {
-                if let Some(m) = eps_atom
-                    .pattern_match(
-                        &vk_parse!(format!("{}^n_", epsilon_symbol).as_str())
-                            .unwrap()
-                            .to_pattern(),
-                        Some(&Condition::from((vk_symbol!("n_"), number_condition()))),
-                        None,
-                    )
-                    .next()
-                {
-                    (
-                        get_integer_from_atom(m.get(&vk_symbol!("n_")).unwrap().as_view()).unwrap(),
-                        coeff,
-                    )
-                } else if *eps_atom == Atom::var(epsilon_symbol) {
-                    (1, coeff)
-                } else if *eps_atom == Atom::num(1) {
-                    (0, coeff)
-                } else {
-                    panic!("Epsilon atom should be of the form {}^n_", epsilon_symbol)
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let binary_prec = settings.get_binary_precision();
-        let empty_map: HashMap<Atom, Complex<Float>, RandomState> = HashMap::default();
-        let mut epsilon_coeffs_vec_floats = vec![];
-        for (i64, coeff) in epsilon_coeffs_vec.iter() {
-            epsilon_coeffs_vec_floats.push((
-                *i64,
-                match coeff.evaluate_with_prec(&empty_map, binary_prec) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        return Err(VakintError::EvaluationError(format!(
-                            "Coefficients of the Laurent series are not numbers. Expression: '{}' | Error: '{}'",
-                            coeff.to_canonical_string(),
-                            e
-                        )));
-                    }
-                },
-            ));
-        }
-
-        epsilon_coeffs_vec_floats.sort_by_key(|(i1, _)| *i1);
-        Ok(NumericalEvaluationResult(epsilon_coeffs_vec_floats))
-    }
-
-    pub fn from_vec(input: Vec<(i64, (String, String))>, settings: &VakintSettings) -> Self {
-        let binary_prec = settings.get_binary_precision();
-        NumericalEvaluationResult(
-            input
-                .iter()
-                .map(|(eps_pwr, (re, im))| {
-                    (
-                        *eps_pwr,
-                        Complex::new(
-                            Float::parse(re.as_str(), Some(binary_prec)).unwrap(),
-                            Float::parse(im.as_str(), Some(binary_prec)).unwrap(),
-                        ),
-                    )
-                })
-                .collect::<Vec<_>>(),
-        )
-    }
-
-    pub fn get_epsilon_coefficients(&self) -> Vec<(i64, Complex<Float>)> {
-        self.0.clone()
-    }
-    pub fn get_epsilon_coefficient(&self, power: i64) -> Complex<Float> {
-        match self.0.iter().find(|(i, _f)| *i == power) {
-            Some((_, f)) => f.clone(),
-            None => {
-                if self.0.is_empty() {
-                    Complex::new(Float::with_val(53, 0.), Float::with_val(53, 0.))
-                } else {
-                    Complex::new(self.0[0].1.re.zero(), self.0[0].1.re.zero())
-                }
-            }
-        }
-    }
-
-    pub fn is_zero(&self) -> bool {
-        self.0.iter().all(|(_, f)| f.is_zero())
-    }
-
-    pub fn aggregate_errors(&self, other: &NumericalEvaluationResult) -> NumericalEvaluationResult {
-        let mut res = NumericalEvaluationResult::default();
-        let mut orders = vec![];
-        for (o, _val) in self.0.iter() {
-            orders.push(*o);
-        }
-        for (o, _val) in other.0.iter() {
-            orders.push(*o);
-        }
-        orders.sort();
-        for o in orders {
-            let (a, b) = (
-                &self.get_epsilon_coefficient(o),
-                &other.get_epsilon_coefficient(o),
-            );
-
-            res.0.push((0, (a * a + b * b).sqrt()));
-        }
-        res
-    }
-
-    pub fn does_approx_match(
-        &self,
-        other: &NumericalEvaluationResult,
-        error: Option<&NumericalEvaluationResult>,
-        threshold: f64,
-        max_pull: f64,
-    ) -> (bool, String) {
-        let mut powers = HashSet::new();
-        for (power, _) in self.0.iter() {
-            powers.insert(*power);
-        }
-        for (power, _) in other.0.iter() {
-            powers.insert(*power);
-        }
-        let mut power_vec = powers.iter().cloned().collect::<Vec<_>>();
-        power_vec.sort();
-
-        for power in power_vec {
-            let (self_val, other_val) = (
-                self.get_epsilon_coefficient(power),
-                other.get_epsilon_coefficient(power),
-            );
-            let comparisons = [
-                (
-                    "real",
-                    self_val.re.clone(),
-                    other_val.re.clone(),
-                    error.map(|e| e.get_epsilon_coefficient(power).re.clone()),
-                ),
-                (
-                    "imaginary",
-                    self_val.im.clone(),
-                    other_val.im.clone(),
-                    error.map(|e| e.get_epsilon_coefficient(power).im.clone()),
-                ),
-            ];
-            for (part, r, o, e) in comparisons.iter() {
-                let f_max_pull = Float::with_val(r.prec(), max_pull);
-                let f_threshold = Float::with_val(r.prec(), threshold);
-                let delta = (r.clone() - o).norm();
-                if let Some(err) = e
-                    && !err.norm().is_zero()
-                    && delta > f_max_pull * err.norm()
-                {
-                    return (
-                        false,
-                        format!(
-                            "{} part of ε^{} coefficient does not match within max pull: {} != {} (pull = {})",
-                            part,
-                            power,
-                            r,
-                            o,
-                            delta / err.norm()
-                        ),
-                    );
-                }
-                let scale = (r.norm() + o.norm()) / Float::with_val(r.prec(), 2.0);
-                if scale.is_zero() {
-                    if delta > f_threshold {
-                        return (
-                            false,
-                            format!(
-                                "{} part of ε^{} coefficient does not match within abs. error required: {} != {} (abs. error = {})",
-                                part, power, r, o, delta
-                            ),
-                        );
-                    }
-                } else {
-                    let rel_error = delta.div(scale);
-                    if rel_error > f_threshold {
-                        return (
-                            false,
-                            format!(
-                                "{} part of ε^{} coefficient does not match within rel. error required: {} != {} (rel. error = {})",
-                                part, power, r, o, rel_error
-                            ),
-                        );
-                    }
-                }
-            }
-        }
-        (true, "matches!".into())
-    }
-}
-
 impl Vakint {
+    /// Inspect a registered RustRed constant in this engine's active data snapshot.
+    pub fn get_constant(
+        &self,
+        symbol: &ConstantSymbol,
+        prec: u32,
+    ) -> Result<VakintConstant, VakintError> {
+        self.rustred_data()?
+            .masters
+            .get_constant(symbol.clone(), prec)
+    }
+
+    /// Inspect every available Laurent coefficient and the native master graph.
+    pub fn get_master(
+        &self,
+        symbol: &MasterSymbol,
+        prec: u32,
+    ) -> Result<VakintMaster, VakintError> {
+        self.rustred_data()?
+            .masters
+            .get_master(symbol.clone(), prec)
+    }
+
+    /// Registered constants used by the built-in or explicitly loaded RustRed data.
+    pub fn constant_symbols(&self) -> Result<Vec<ConstantSymbol>, VakintError> {
+        self.rustred_data()?.masters.constant_symbols()
+    }
+
+    /// Family-qualified identities, including declared but uncomputed terminals.
+    pub fn master_symbols(&self) -> Result<Vec<MasterSymbol>, VakintError> {
+        Ok(self.rustred_data()?.masters.master_symbols())
+    }
+
     /// Normalize FORM's Gamma and EulerGamma spellings before the complete
     /// expression is expanded. Native Laurent series then compute every order
     /// needed by surrounding poles, without introducing an artificial Gamma tail.
@@ -4574,13 +4576,19 @@ Evaluated (n_loops=1, mu_r=1) :
         params_complex: &HashMap<String, Complex<Float>, ahash::RandomState>,
         externals: Option<&HashMap<usize, Momentum, ahash::RandomState>>,
     ) -> Result<(NumericalEvaluationResult, Option<NumericalEvaluationResult>), VakintError> {
-        let expression = self.resolve_rustred_numerical(expression.to_owned(), settings)?;
-        Vakint::full_numerical_evaluation(
-            settings,
-            expression.as_view(),
+        let data = self.rustred_data()?;
+        let (expression, parameters) = precision::evaluation_inputs(
+            expression,
+            vk_symbol!(&settings.epsilon_symbol),
             params_real,
             params_complex,
             externals,
+        )?;
+        precision::evaluate_with_errors(
+            expression.as_view(),
+            &parameters,
+            settings,
+            Some(&data.masters),
         )
     }
 
@@ -4691,23 +4699,15 @@ Evaluated (n_loops=1, mu_r=1) :
         params_real: &HashMap<String, Float, ahash::RandomState>,
         params_complex: &HashMap<String, Complex<Float>, ahash::RandomState>,
         externals: Option<&HashMap<usize, Momentum, ahash::RandomState>>,
-    ) -> Atom {
-        let (const_map_real, const_map_complex) =
-            Vakint::get_constants_map(settings, params_real, params_complex, externals).unwrap();
-
-        let mut res = Vakint::convert_to_dot_notation(integral);
-        for (src, trgt) in const_map_real.iter() {
-            res = res.replace(src.to_pattern()).with(Atom::num(trgt.clone()));
-        }
-        for (src, trgt) in const_map_complex.iter() {
-            // res = res.replace(src.to_pattern()).with(
-            //     (Atom::num(trgt.re.clone()) + Atom::var(S.cmplx_i) * Atom::num(trgt.im.clone()))
-            //         .to_pattern(),
-            // );
-            res = res.replace(src.to_pattern()).with(Atom::num(trgt.clone()));
-        }
-
-        res
+    ) -> Result<Atom, VakintError> {
+        let (expression, parameters) = precision::evaluation_inputs(
+            integral,
+            vk_symbol!(&settings.epsilon_symbol),
+            params_real,
+            params_complex,
+            externals,
+        )?;
+        precision::materialize(expression.as_view(), settings, &parameters, None)
     }
 
     pub fn full_numerical_evaluation(
@@ -4717,54 +4717,14 @@ Evaluated (n_loops=1, mu_r=1) :
         params_complex: &HashMap<String, Complex<Float>, ahash::RandomState>,
         externals: Option<&HashMap<usize, Momentum, ahash::RandomState>>,
     ) -> Result<(NumericalEvaluationResult, Option<NumericalEvaluationResult>), VakintError> {
-        if integral
-            .pattern_match(&S.error_flag.to_pattern(), None, None)
-            .next()
-            .is_none()
-        {
-            return Ok((
-                Vakint::full_numerical_evaluation_without_error(
-                    settings,
-                    integral,
-                    params_real,
-                    params_complex,
-                    externals,
-                )?,
-                None,
-            ));
-        }
-        let (error_atom, integral_atom) =
-            utils::split_linear_atom(integral, Atom::var(S.error_flag_symbol).as_view());
-        let mut central = Vakint::full_numerical_evaluation_without_error(
-            settings,
-            integral_atom.as_view(),
+        let (expression, parameters) = precision::evaluation_inputs(
+            integral,
+            vk_symbol!(&settings.epsilon_symbol),
             params_real,
             params_complex,
             externals,
         )?;
-        let mut error = Vakint::full_numerical_evaluation_without_error(
-            settings,
-            error_atom.as_view(),
-            params_real,
-            params_complex,
-            externals,
-        )?;
-
-        for (i, eval) in central.0.iter() {
-            if !error.0.iter().any(|(j, _)| i == j) {
-                error
-                    .0
-                    .push((*i, Complex::new(eval.re.zero(), eval.re.zero())));
-            }
-        }
-        for (i, eval) in error.0.iter() {
-            if !central.0.iter().any(|(j, _)| i == j) {
-                central
-                    .0
-                    .push((*i, Complex::new(eval.re.zero(), eval.re.zero())));
-            }
-        }
-        Ok((central, Some(error)))
+        precision::evaluate_with_errors(expression.as_view(), &parameters, settings, None)
     }
 
     pub fn full_numerical_evaluation_without_error(
@@ -4774,90 +4734,20 @@ Evaluated (n_loops=1, mu_r=1) :
         params_complex: &HashMap<String, Complex<Float>, ahash::RandomState>,
         externals: Option<&HashMap<usize, Momentum, ahash::RandomState>>,
     ) -> Result<NumericalEvaluationResult, VakintError> {
-        let mut unresolved = std::collections::BTreeSet::new();
-        integral.visitor(&mut |part| {
-            if let AtomView::Fun(fun) = part
-                && (fun.get_symbol() == vk_symbol!("RustRedMaster")
-                    || fun.get_symbol() == vk_symbol!("RustRedCoefficient"))
-            {
-                unresolved.insert(part.to_canonical_string());
-                return false;
-            }
-            true
-        });
-        if !unresolved.is_empty() {
-            return Err(VakintError::EvaluationError(format!(
-                "Cannot numerically evaluate unresolved RustRed masters or coefficients: {}. Use the Vakint instance with the corresponding external data; parent topology graphs are in each loop pack's graphs directory.",
-                unresolved.into_iter().collect::<Vec<_>>().join(", ")
-            )));
-        }
-        let epsilon_coeffs =
-            integral.coefficient_list::<i8>(&[Atom::var(vk_symbol!(&settings.epsilon_symbol))]);
-        let epsilon_coeffs_vec = epsilon_coeffs
-            .iter()
-            .map(|(eps_atom, coeff)| {
-                if let Some(m) = eps_atom
-                    .pattern_match(
-                        &vk_parse!(format!("{}^n_", settings.epsilon_symbol))
-                            .unwrap()
-                            .to_pattern(),
-                        Some(&Condition::from((vk_symbol!("n_"), number_condition()))),
-                        None,
-                    )
-                    .next()
-                {
-                    (
-                        get_integer_from_atom(m.get(&vk_symbol!("n_")).unwrap().as_view()).unwrap(),
-                        coeff,
-                    )
-                } else if *eps_atom == vk_parse!(&settings.epsilon_symbol).unwrap() {
-                    (1, coeff)
-                } else if *eps_atom == Atom::num(1) {
-                    (0, coeff)
-                } else {
-                    panic!("Epsilon atom should be of the form ε^n_")
-                }
-            })
-            .collect::<Vec<_>>();
-
-        let binary_prec = settings.get_binary_precision();
-
-        let (map_real, map_complex) =
-            Vakint::get_constants_map(settings, params_real, params_complex, externals).unwrap();
-        let mut map_view: HashMap<AtomView<'_>, Complex<Float>, RandomState> = map_complex
-            .iter()
-            .map(|(k, v)| (k.as_view(), v.clone()))
-            .collect();
-        for (k, v) in map_real.iter() {
-            map_view.insert(
-                k.as_view(),
-                Complex::new(v.clone(), Float::with_val(binary_prec, 0.)),
-            );
-        }
-        let mut epsilon_coeffs_vec_floats = vec![];
-        for (i64, coeff) in epsilon_coeffs_vec.iter() {
-            let coeff_processed = Vakint::convert_to_dot_notation(coeff.as_view());
-            // for (k, v) in map_view.iter() {
-            //     println!("{} -> {}", k, v);
-            // }
-            // println!("coeff_processed={}", coeff_processed);
-            epsilon_coeffs_vec_floats.push((
-                *i64,
-                match coeff_processed.evaluate_with_prec(&map_view, binary_prec) {
-                    Ok(x) => x,
-                    Err(e) => {
-                        return Err(VakintError::EvaluationError(format!(
-                            "Is some tensor structure left? | Expression: '{}' | Error: '{}'",
-                            coeff.to_canonical_string(),
-                            e
-                        )));
-                    }
-                },
-            ));
-        }
-
-        epsilon_coeffs_vec_floats.sort_by_key(|(i1, _)| *i1);
-        Ok(NumericalEvaluationResult(epsilon_coeffs_vec_floats))
+        let (expression, parameters) = precision::evaluation_inputs(
+            integral,
+            vk_symbol!(&settings.epsilon_symbol),
+            params_real,
+            params_complex,
+            externals,
+        )?;
+        precision::evaluate_series(
+            expression.as_view(),
+            vk_symbol!(&settings.epsilon_symbol),
+            &parameters,
+            settings,
+            None,
+        )
     }
 
     fn pysecdec_evaluate(
@@ -4866,7 +4756,18 @@ Evaluated (n_loops=1, mu_r=1) :
         input_numerator: AtomView,
         integral_specs: &ReplacementRules,
         options: &PySecDecOptions,
+        source_id: usize,
     ) -> Result<Atom, VakintError> {
+        let mut has_retained_source = false;
+        input_numerator.visitor(&mut |part| {
+            has_retained_source |= precision::legacy::is_source(part);
+            !has_retained_source
+        });
+        if has_retained_source {
+            return Err(VakintError::InvalidNumerator(
+                "PySecDec cannot propagate the uncertainty of retained NumericalSource coefficients; use a FORM or RustRed evaluation backend for this input".into(),
+            ));
+        }
         let integral = integral_specs.canonical_topology.get_integral();
 
         let pysecdec_inputs = if options.reuse_existing_output.is_some()
@@ -5484,6 +5385,28 @@ Evaluated (n_loops=1, mu_r=1) :
             String::from("ep^(-1)*(7.9539672483176226e-17+(0.0000000000000000e+00)*I)+ep^(0)*(5.9466474629934134e-17+(0.0000000000000000e+00)*I)+ep^(1)*(1.1644579020645423e-16+(0.0000000000000000e+00)*I)+ep^(2)*(8.0813279157421749e-17+(0.0000000000000000e+00)*I)")
         ];
         */
+        Self::process_pysecdec_output(
+            settings,
+            integral.n_loops as i64,
+            source_id,
+            &pysecdec_output,
+        )
+    }
+
+    /// Preserve the independent finite coefficients before normalization mixes
+    /// epsilon orders. The numerical integrator itself never sees private leaves.
+    fn process_pysecdec_output(
+        settings: &VakintSettings,
+        n_loops: i64,
+        source_id: usize,
+        output: &[String],
+    ) -> Result<Atom, VakintError> {
+        if output.len() != 2 {
+            return Err(VakintError::EvaluationError(format!(
+                "PySecDec returned {} streams; expected central values and statistical errors",
+                output.len(),
+            )));
+        }
         let log_mu_sq = function!(
             Symbol::LOG,
             vk_parse!(settings.mu_r_sq_symbol.as_str()).unwrap()
@@ -5494,49 +5417,61 @@ Evaluated (n_loops=1, mu_r=1) :
                 "(  𝑖*(𝜋^((4-2*{eps})/2))\
                 )^{n_loops}",
                 eps = settings.epsilon_symbol,
-                n_loops = integral.n_loops
+                n_loops = n_loops
             )
             .as_str()
         )
         .unwrap();
 
-        let evaluated_integral = pysecdec_output
+        let evaluated_integral = output
             .iter()
-            .map(|out| match vk_parse!(out.replace("I", "𝑖").as_str()) {
-                Ok(mut processed) => {
-                    processed = processed
-                        .replace(vk_parse!("ep").unwrap().to_pattern())
-                        .with(vk_parse!(&settings.epsilon_symbol).unwrap().to_pattern());
-                    processed = processed
-                        * pysecdec_normalization_correction.to_owned()
-                        * settings
-                            .get_integral_normalization_factor_atom()?
-                            .replace(S.n_loops.to_pattern())
-                            .with(Atom::num(integral.n_loops as i64).to_pattern());
+            .enumerate()
+            .map(
+                |(stream, out)| match vk_parse!(out.replace("I", "𝑖").as_str()) {
+                    Ok(mut processed) => {
+                        processed = processed
+                            .replace(vk_parse!("ep").unwrap().to_pattern())
+                            .with(vk_parse!(&settings.epsilon_symbol).unwrap().to_pattern());
+                        processed = precision::legacy::stage_table(
+                            function!(
+                                vk_symbol!("pysecdec_result"),
+                                source_id as i64,
+                                stream as i64
+                            )
+                            .as_view(),
+                            processed.as_view(),
+                            vk_symbol!(&settings.epsilon_symbol),
+                            "PySecDec",
+                        )?;
+                        processed = processed
+                            * pysecdec_normalization_correction.to_owned()
+                            * settings
+                                .get_staged_integral_normalization_factor_atom()?
+                                .replace(S.n_loops.to_pattern())
+                                .with(Atom::num(n_loops).to_pattern());
 
-                    let expanded_evaluation = match processed.series(
-                        vk_symbol!(settings.epsilon_symbol.as_str()),
-                        Atom::Zero.as_atom_view(),
-                        Rational::from(
-                            settings.number_of_terms_in_epsilon_expansion
-                                - (integral.n_loops as i64)
-                                - 1,
-                        ),
-                    ) {
-                        Ok(a) => a,
-                        Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
-                    };
+                        let expanded_evaluation = match processed.series(
+                            vk_symbol!(settings.epsilon_symbol.as_str()),
+                            Atom::Zero.as_atom_view(),
+                            Rational::from(
+                                settings.number_of_terms_in_epsilon_expansion - n_loops - 1,
+                            ),
+                        ) {
+                            Ok(a) => a,
+                            Err(e) => return Err(VakintError::SymbolicaError(e.to_string())),
+                        };
 
-                    let mut evaluated_i = expanded_evaluation.to_atom();
+                        let mut evaluated_i = expanded_evaluation.to_atom();
 
-                    evaluated_i = evaluated_i
-                        .replace(vk_parse!("log_mu_sq").unwrap().to_pattern())
-                        .with(log_mu_sq.to_pattern());
+                        evaluated_i = evaluated_i
+                            .replace(vk_parse!("log_mu_sq").unwrap().to_pattern())
+                            .with(log_mu_sq.to_pattern());
 
-                    Ok(evaluated_i)
-                }
-                Err(err) => Err(VakintError::PySecDecOutputParsingError(out.clone(), err)),
-            })
+                        Ok(evaluated_i)
+                    }
+                    Err(err) => Err(VakintError::PySecDecOutputParsingError(out.clone(), err)),
+                },
+            )
             .collect::<Result<Vec<_>, VakintError>>()?;
 
         Ok(evaluated_integral[0].to_owned()
@@ -5794,28 +5729,23 @@ Evaluated (n_loops=1, mu_r=1) :
             Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str()))
         );
         if opts.susbstitute_masters {
-            master_precision::MasterPrecisionWarnings::new(settings).check_substitutions(
-                evaluated_integral.as_view(),
-                DIRECT_SUBSTITUTIONS
-                    .iter()
-                    .map(|(source, (target, condition))| (source, target, Some(condition))),
-            );
             let processed_constants = DIRECT_SUBSTITUTIONS
                 .iter()
                 .map(|(src, (trgt, condition))| {
-                    (
-                        src,
-                        (
-                            set_precision_in_polynomial_atom(
+                    let target =
+                        if inspection::constants::builtin_definition(src.as_view())?.is_some() {
+                            src.clone()
+                        } else {
+                            precision::legacy::stage_table(
+                                src.as_view(),
                                 trgt.as_view(),
                                 vk_symbol!("ep"),
-                                settings,
-                            ),
-                            condition.clone(),
-                        ),
-                    )
+                                "AlphaLoop",
+                            )?
+                        };
+                    Ok((src, (target, condition.clone())))
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, VakintError>>()?;
             // for (a, (b, _c)) in processed_constants.clone() {
             //     println!("{} -> {}", a, b);
             // }
@@ -5831,7 +5761,7 @@ Evaluated (n_loops=1, mu_r=1) :
                 }
                 res
             }));
-            evaluated_integral = crate::hpl::substitute_numerically(r.as_view(), settings)?;
+            evaluated_integral = crate::hpl::normalize_constants(r.as_view())?;
         }
 
         //*((2*𝜋)^(2*{eps}))\
@@ -5860,7 +5790,7 @@ Evaluated (n_loops=1, mu_r=1) :
         evaluated_integral = evaluated_integral
             * alphaloop_normalization_correction
             * settings
-                .get_integral_normalization_factor_atom()?
+                .get_staged_integral_normalization_factor_atom()?
                 .as_view()
                 .replace(S.n_loops.to_pattern())
                 .with(Atom::num(integral.n_loops as i64).to_pattern());
@@ -6098,8 +6028,9 @@ Evaluated (n_loops=1, mu_r=1) :
                 Match::FunctionName(symbol) => *symbol,
                 _ => return false,
             };
-            symbol.get_namespace() != "symbolica"
-                || !symbolica::state::State::is_builtin(symbol.get_stripped_name())
+            !crate::hpl::is_projection_symbol(symbol)
+                && (symbol.get_namespace() != "symbolica"
+                    || !symbolica::state::State::is_builtin(symbol.get_stripped_name()))
         }));
 
         loop {
@@ -6281,8 +6212,8 @@ Evaluated (n_loops=1, mu_r=1) :
                 match settings.precision_for_input_float_rationalization {
                     InputFloatRationalizationPrecision::FullPrecision => {}
                     InputFloatRationalizationPrecision::TargetPrecision => {
-                        re.set_prec(binary_prec);
-                        im.set_prec(binary_prec);
+                        re.set_prec(binary_prec.min(re.prec()));
+                        im.set_prec(binary_prec.min(im.prec()));
                     }
                 };
                 **out = function!(
@@ -6833,17 +6764,53 @@ Evaluated (n_loops=1, mu_r=1) :
         Ok(result)
     }
 
+    fn next_input_request_id() -> Result<u64, VakintError> {
+        static NEXT_INPUT_REQUEST: AtomicU64 = AtomicU64::new(0);
+        NEXT_INPUT_REQUEST
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |next| {
+                next.checked_add(1)
+            })
+            .map_err(|_| {
+                VakintError::NumericalPrecision("input source identity space exhausted".into())
+            })
+    }
+
+    fn stage_input_coefficients(
+        settings: &VakintSettings,
+        input: AtomView,
+    ) -> Result<Atom, VakintError> {
+        let mut has_float = false;
+        input.visitor(&mut |part| {
+            if precision::legacy::is_source(part) { return false; }
+            has_float |= matches!(part, AtomView::Num(number) if matches!(number.get_coeff_view(), CoefficientView::Float(_, _)));
+            !has_float
+        });
+        if !has_float {
+            return Ok(input.to_owned());
+        }
+        precision::legacy::stage_table(
+            function!(
+                vk_symbol!("input_coefficient"),
+                Self::next_input_request_id()?
+            )
+            .as_view(),
+            input,
+            vk_symbol!(&settings.epsilon_symbol),
+            "Input",
+        )
+    }
+
     pub fn evaluate(
         &self,
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
         self.validate_settings(settings)?;
-        let mut vakint_expr = VakintExpression::try_from(input)?;
+        let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
         vakint_expr.canonicalize_with(settings, false, |input| {
             self.match_topologies_for_settings(settings, input)
         })?;
-        for term in vakint_expr.0.iter_mut() {
+        for term in &mut vakint_expr.0 {
             term.tensor_reduce_for_evaluation(self, settings)?;
         }
         vakint_expr.evaluate_integral(self, settings)?;
@@ -6879,7 +6846,7 @@ Evaluated (n_loops=1, mu_r=1) :
         input: AtomView,
     ) -> Result<Atom, VakintError> {
         self.validate_settings(settings)?;
-        let mut vakint_expr = VakintExpression::try_from(input)?;
+        let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
         vakint_expr.evaluate_integral(self, settings)?;
         Ok(vakint_expr.into())
     }
@@ -6890,6 +6857,193 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn evaluation_input_tracking_precedes_topology_collection() {
+        Vakint::initialize_vakint_symbols();
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Symbolic,
+                },
+            )]),
+            run_time_decimal_precision: 40,
+            ..Default::default()
+        };
+        let input = vk_parse!("(1.25+x)*topo(I1L(muvsq,1))+(-1.25-x)*topo(I1L(muvsq,1))").unwrap();
+        let prepared =
+            VakintExpression::prepare_evaluation(input.as_view(), &engine, &settings).unwrap();
+        assert_eq!(prepared.0.len(), 1);
+        let numerator = &prepared.0[0].numerator;
+        let sources = precision::legacy::collect_sources(numerator.as_view()).unwrap();
+        assert_eq!(sources.len(), 2);
+        let (value, _) = precision::evaluate_coefficient(
+            numerator.as_view(),
+            &BTreeMap::new(),
+            &std::collections::HashMap::new(),
+            &settings,
+        )
+        .unwrap();
+        assert!(value.value().re.is_zero());
+        assert!(!value.precision().real().exact_zero());
+        assert!(value.to_atom().is_err());
+    }
+
+    #[test]
+    fn input_source_identity_survives_distribution_but_separates_occurrences_and_requests() {
+        Vakint::initialize_vakint_symbols();
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                RustRedEvaluationOptions {
+                    master_mode: RustRedMasterMode::Symbolic,
+                },
+            )]),
+            ..Default::default()
+        };
+        let shared = vk_parse!("1.25*(topo(I1L(muvsq,1))+topo(I1L(muvsq,2)))").unwrap();
+        let prepared =
+            VakintExpression::prepare_evaluation(shared.as_view(), &engine, &settings).unwrap();
+        assert_eq!(prepared.0.len(), 2);
+        let identities = |expression: &VakintExpression| {
+            expression
+                .0
+                .iter()
+                .map(|term| {
+                    let sources =
+                        precision::legacy::collect_sources(term.numerator.as_view()).unwrap();
+                    assert_eq!(sources.len(), 1);
+                    sources.into_keys().next().unwrap()
+                })
+                .collect::<Vec<_>>()
+        };
+        let shared_ids = identities(&prepared);
+        assert_eq!(shared_ids[0], shared_ids[1]);
+        assert!((&prepared.0[0].numerator - &prepared.0[1].numerator).is_zero());
+
+        let retained = Atom::from(prepared.clone());
+        let cloned =
+            VakintExpression::prepare_evaluation(retained.as_view(), &engine, &settings).unwrap();
+        assert_eq!(identities(&cloned), shared_ids);
+        let independent_request =
+            VakintExpression::prepare_evaluation(shared.as_view(), &engine, &settings).unwrap();
+        assert_ne!(identities(&independent_request)[0], shared_ids[0]);
+
+        let independent = vk_parse!("1.25*topo(I1L(muvsq,1))+1.25*topo(I1L(muvsq,2))").unwrap();
+        let prepared =
+            VakintExpression::prepare_evaluation(independent.as_view(), &engine, &settings)
+                .unwrap();
+        let separate_ids = identities(&prepared);
+        assert_ne!(separate_ids[0], separate_ids[1]);
+    }
+
+    #[test]
+    fn lower_public_evaluation_calls_keep_independent_input_identities() {
+        Vakint::initialize_vakint_symbols();
+        let engine = Vakint::new().unwrap();
+        let method = EvaluationMethod::RustRed(RustRedEvaluationOptions {
+            master_mode: RustRedMasterMode::Retain,
+        });
+        let settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![method.clone()]),
+            integral_normalization_factor: LoopNormalizationFactor::FMFTandMATAD,
+            ..Default::default()
+        };
+        let topology = vk_parse!("topo(I1L(muvsq,1))").unwrap();
+        let mut matched = engine
+            .match_topologies_for_settings(&settings, topology.as_view())
+            .unwrap()
+            .unwrap();
+        matched.apply_replacement_rules().unwrap();
+        let source = |value: &Atom| {
+            let sources = precision::legacy::collect_sources(value.as_view()).unwrap();
+            assert_eq!(sources.len(), 1);
+            sources.into_keys().next().unwrap()
+        };
+        for route in ["method", "term", "expression"] {
+            let evaluate = |numerator: Atom| {
+                if route == "method" {
+                    return method
+                        .evaluate_integral(&engine, &settings, numerator.as_view(), &matched)
+                        .unwrap();
+                }
+                let mut term = VakintTerm {
+                    integral: topology.clone(),
+                    numerator,
+                    vectors: Vec::new(),
+                };
+                if route == "term" {
+                    term.evaluate_integral(&engine, &settings).unwrap();
+                    term.numerator
+                } else {
+                    let mut expression = VakintExpression(vec![term]);
+                    expression.evaluate_integral(&engine, &settings).unwrap();
+                    Atom::from(expression)
+                }
+            };
+            let first = evaluate(vk_parse!("1.25`30").unwrap());
+            let second = evaluate(vk_parse!("1.25`30").unwrap());
+            let first_source = source(&first);
+            assert_ne!(first_source, source(&second), "{route}");
+            assert!(!(first.clone() - second).is_zero(), "{route}");
+            assert_eq!(
+                source(&evaluate(first_source.clone())),
+                first_source,
+                "{route}"
+            );
+            assert!((first.clone() - first).is_zero(), "{route}");
+        }
+    }
+
+    #[test]
+    fn pysecdec_rejects_retained_sources_before_any_backend_work() {
+        Vakint::initialize_vakint_symbols();
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings::default();
+        let numerator =
+            Vakint::stage_input_coefficients(&settings, vk_parse!("1.25`30").unwrap().as_view())
+                .unwrap();
+        let error = engine
+            .pysecdec_evaluate(
+                &settings,
+                numerator.as_view(),
+                &ReplacementRules::default(),
+                &PySecDecOptions::default(),
+                0,
+            )
+            .unwrap_err();
+        assert!(matches!(error, VakintError::InvalidNumerator(_)));
+        assert!(error.to_string().contains("retained NumericalSource"));
+    }
+
+    #[test]
+    fn pysecdec_input_preparation_restores_floats_and_preserves_user_symbols() {
+        Vakint::initialize_vakint_symbols();
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            evaluation_order: EvaluationOrder(vec![EvaluationMethod::PySecDec(
+                PySecDecOptions::default(),
+            )]),
+            ..Default::default()
+        };
+        let numerator = vk_parse!("1.25+input_coefficient_placeholder_0(0)").unwrap();
+        let input = &numerator * vk_parse!("topo(I1L(muvsq,1))").unwrap();
+        let prepared =
+            VakintExpression::prepare_evaluation(input.as_view(), &engine, &settings).unwrap();
+        assert_eq!(prepared.0.len(), 1);
+        assert_eq!(prepared.0[0].numerator, numerator);
+        assert!(
+            !prepared.0[0]
+                .numerator
+                .contains_symbol(vk_symbol!("NumericalSource"))
+        );
+        assert!(
+            !prepared.0[0]
+                .numerator
+                .contains_symbol(vk_symbol!("input_coefficient_placeholder_1"))
+        );
+    }
 
     #[test]
     fn closed_scalar_coefficients_restore_collision_safe_aliases() {

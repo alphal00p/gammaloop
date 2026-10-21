@@ -7,6 +7,7 @@ use pyo3::{
     prelude::*,
     types::{PyBytes, PyDict, PyModule},
 };
+use symbolica::{api::python::PythonExpression, atom::Atom};
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
 const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
@@ -95,11 +96,22 @@ pub(crate) fn render_diagram_svg(py: Python<'_>, diagram: &FeynmanDiagram) -> Py
 
 pub(crate) fn render_diagram_html(py: Python<'_>, diagram: &FeynmanDiagram) -> PyResult<String> {
     let svg = render_diagram_svg(py, diagram)?;
+    let numerator = if diagram.numerator() == &Atom::one() {
+        String::new()
+    } else {
+        let expression = PythonExpression {
+            expr: diagram.numerator().clone(),
+        }
+        ._repr_html_()?;
+        format!(
+            "<details style=\"margin-top:.5rem;max-width:100%\"><summary style=\"color:#315b8a;cursor:pointer\">Numerator</summary><div style=\"overflow-x:auto;padding:.5rem;font-family:'STIX Two Math','Cambria Math','DejaVu Math TeX Gyre','Noto Sans Math',serif\">{expression}</div></details>"
+        )
+    };
     Ok(format!(
         "<figure class=\"feynkit-diagram\" style=\"max-width:100%;margin:.5rem 0\">\
          <div style=\"max-width:100%;overflow-x:auto\">{svg}</div>\
          <figcaption style=\"font-size:.85em;opacity:.75;text-align:center\">Feynman diagram {} \
-         ({} loop{})</figcaption></figure>",
+         ({} loop{})</figcaption>{numerator}</figure>",
         escape_html(diagram.name()),
         diagram.loop_count(),
         if diagram.loop_count() == 1 { "" } else { "s" },
