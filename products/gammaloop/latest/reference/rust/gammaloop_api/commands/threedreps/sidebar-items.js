@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"enum":["CliNumeratorSamplesNormalization","CliRepresentationMode","ThreeDRep"],"struct":["Build","GraphSelectorArgs","Validate"]};
+window.SIDEBAR_ITEMS = {"enum":["CliNumeratorSamplesNormalization","ThreeDRep"],"struct":["Build","GraphSelectorArgs","Validate"]};

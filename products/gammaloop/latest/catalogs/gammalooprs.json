@@ -626,7 +626,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::SingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 599,
+              "line": 600,
               "column": 1
             }
           },
@@ -692,7 +692,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::BatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 825,
+              "line": 826,
               "column": 1
             }
           },
@@ -747,7 +747,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseSingleSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 843,
+              "line": 844,
               "column": 1
             }
           },
@@ -802,7 +802,7 @@
             "source": {
               "identifier": "gammalooprs::integrands::evaluation::PreciseBatchSampleEvaluationResult",
               "file": "crates/gammalooprs/src/integrands/evaluation.rs",
-              "line": 851,
+              "line": 852,
               "column": 1
             }
           },

@@ -832,7 +832,7 @@
             "source": {
               "identifier": "gammaloop_api::state::State::get_integrand_info",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 2304,
+              "line": 2307,
               "column": 1
             }
           },
@@ -906,6 +906,17 @@
                 "members": []
               },
               {
+                "name": "generated_representations",
+                "kind": "field",
+                "docs": {
+                  "format": "rust-markdown",
+                  "body": "Representations stored in the generated payload, in generation order."
+                },
+                "signature": "Vec < RepresentationMode >",
+                "default": null,
+                "members": []
+              },
+              {
                 "name": "generation_compilation",
                 "kind": "field",
                 "docs": {
@@ -975,7 +986,7 @@
             "source": {
               "identifier": "gammaloop_api::integrand_info::IntegrandInfo",
               "file": "crates/gammaloop-api/src/integrand_info.rs",
-              "line": 359,
+              "line": 365,
               "column": 1
             }
           },
@@ -1213,7 +1224,7 @@
             "source": {
               "identifier": "gammaloop_api::commands::generate::Generate::run",
               "file": "crates/gammaloop-api/src/commands/generate.rs",
-              "line": 706,
+              "line": 681,
               "column": 1
             }
           },
@@ -2243,7 +2254,7 @@
             "source": {
               "identifier": "gammaloop_api::state::StateFolderKind",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1732,
+              "line": 1735,
               "column": 1
             }
           },
@@ -2286,7 +2297,7 @@
             "source": {
               "identifier": "gammaloop_api::state::classify_state_folder",
               "file": "crates/gammaloop-api/src/state.rs",
-              "line": 1750,
+              "line": 1753,
               "column": 1
             }
           },
