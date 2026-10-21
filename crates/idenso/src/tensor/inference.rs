@@ -2918,27 +2918,40 @@ impl InterfaceInference {
     }
 
     pub fn additive_interfaces_match(left: &PartialStructure, right: &PartialStructure) -> bool {
-        // Unresolved ports remain positional; only explicit indices identify ports across terms.
+        // Anonymous occurrences retain their syntax order. Explicit identities
+        // can move across them without changing that ordered correspondence.
         let left_slots = left.logical_slots();
         let mut right_slots = right.logical_slots();
         if left_slots == right_slots {
             return true;
         }
-        if left_slots.len() != right_slots.len()
-            || left_slots
-                .iter()
-                .chain(&right_slots)
-                .any(|slot| matches!(slot.aind, PartialIndex::Open(_)))
-        {
+        if left_slots.len() != right_slots.len() {
             return false;
         }
-        if left.canonical() == right.canonical() {
+        let anonymous = |slot: &&PartialSlot| matches!(slot.aind, PartialIndex::Open(_));
+        let has_anonymous = left_slots
+            .iter()
+            .chain(&right_slots)
+            .any(|slot| matches!(slot.aind, PartialIndex::Open(_)));
+        if has_anonymous {
+            if !left_slots
+                .iter()
+                .filter(anonymous)
+                .eq(right_slots.iter().filter(anonymous))
+            {
+                return false;
+            }
+            right_slots.retain(|slot| !matches!(slot.aind, PartialIndex::Open(_)));
+        } else if left.canonical() == right.canonical() {
             return true;
         }
         // Symbolic dimensions need not have a total canonical ordering. Compare
         // complete explicit ports by equality, retaining multiplicity and the
         // caller's logical order instead of trusting their storage permutation.
         for slot in left_slots {
+            if matches!(slot.aind, PartialIndex::Open(_)) {
+                continue;
+            }
             let Some(position) = right_slots.iter().position(|candidate| *candidate == slot) else {
                 return false;
             };
@@ -5465,7 +5478,9 @@ pub(crate) mod tests {
             spin.slot(PartialIndex::open(1)),
             mink.slot(PartialIndex::Explicit(mu)),
         ]);
-        assert!(!InterfaceInference::additive_interfaces_match(
+        // Explicit labels may interleave around the same ordered anonymous
+        // endpoints. Their encoded owner/axis identities above still cannot change.
+        assert!(InterfaceInference::additive_interfaces_match(
             &source.structure,
             &reordered
         ));
@@ -5480,10 +5495,13 @@ pub(crate) mod tests {
                 spin.slot(PartialIndex::open(0)),
             ]),
         );
-        assert!(
-            anonymous
-                .with_rewritten_expression(Atom::num(2) * &anonymous.expression)
-                .is_err()
+        let scaled = anonymous
+            .with_rewritten_expression(Atom::num(2) * &anonymous.expression)
+            .unwrap();
+        assert_eq!(scaled.expression, Atom::num(2) * &anonymous.expression);
+        assert_eq!(
+            scaled.structure.logical_slots(),
+            anonymous.structure.logical_slots()
         );
     }
 
