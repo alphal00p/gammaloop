@@ -75,6 +75,7 @@ pub mod network;
 pub mod pattern;
 pub mod projectors;
 mod simplification;
+pub use simplification::PyReductionStatus;
 pub mod structure;
 pub mod tensor_rule;
 
