@@ -1,6 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     hash::{Hash, Hasher},
+    ops::Mul,
 };
 
 use ahash::AHashMap;
@@ -2397,6 +2398,9 @@ impl SymbolicTensor<PartialStructure> {
         }
     }
 
+    /// Select scalar, outer, contraction, or matrix composition from the stored ports.
+    /// Ambiguous pairings return an error. The fallible `*` operator delegates here:
+    /// `let product = (&left * &right)?;`.
     pub fn multiply(
         &self,
         right: &SymbolicTensor<PartialStructure>,
@@ -2536,6 +2540,42 @@ impl SymbolicTensor<PartialStructure> {
             .matrix_channel()
             .ok_or(TensorCompositionError::NoMatrixChannel)?;
         self.trace_ports(channel)
+    }
+}
+
+impl Mul<SymbolicTensor<PartialStructure>> for SymbolicTensor<PartialStructure> {
+    type Output = Result<SymbolicTensor<PartialStructure>, TensorCompositionError>;
+
+    #[inline]
+    fn mul(self, rhs: SymbolicTensor<PartialStructure>) -> Self::Output {
+        self.multiply(&rhs)
+    }
+}
+
+impl Mul<&SymbolicTensor<PartialStructure>> for SymbolicTensor<PartialStructure> {
+    type Output = Result<SymbolicTensor<PartialStructure>, TensorCompositionError>;
+
+    #[inline]
+    fn mul(self, rhs: &SymbolicTensor<PartialStructure>) -> Self::Output {
+        self.multiply(rhs)
+    }
+}
+
+impl Mul<SymbolicTensor<PartialStructure>> for &SymbolicTensor<PartialStructure> {
+    type Output = Result<SymbolicTensor<PartialStructure>, TensorCompositionError>;
+
+    #[inline]
+    fn mul(self, rhs: SymbolicTensor<PartialStructure>) -> Self::Output {
+        self.multiply(&rhs)
+    }
+}
+
+impl Mul<&SymbolicTensor<PartialStructure>> for &SymbolicTensor<PartialStructure> {
+    type Output = Result<SymbolicTensor<PartialStructure>, TensorCompositionError>;
+
+    #[inline]
+    fn mul(self, rhs: &SymbolicTensor<PartialStructure>) -> Self::Output {
+        self.multiply(rhs)
     }
 }
 
@@ -2813,7 +2853,7 @@ mod tests {
             &[port],
             &[port],
         );
-        for result in [scalar.multiply(&extra), scalar.outer(&extra)] {
+        for result in [&scalar * &extra, scalar.outer(&extra)] {
             assert!(matches!(
                 result,
                 Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
@@ -3052,7 +3092,7 @@ mod tests {
             PartialStructure::from_logical_slots([]),
         );
         calls.store(0, Ordering::Relaxed);
-        let result = scalar.multiply(&tensor).unwrap();
+        let result = (&scalar * &tensor).unwrap();
         assert_eq!(result.structure, tensor.structure);
         assert!(!result.expression.as_view().is_zero());
         assert_eq!(calls.load(Ordering::Relaxed), 0);
@@ -3776,7 +3816,7 @@ mod tests {
         ];
         let left = tensor("unique_open_left", &reps);
         let right = tensor("unique_open_right", &[reps[2], reps[0], reps[1]]);
-        let result = left.multiply(&right).unwrap();
+        let result = (left * &right).unwrap();
         assert!(result.is_scalar());
         assert!(
             result
@@ -3807,7 +3847,7 @@ mod tests {
             &ports,
         );
         assert!(
-            matches!(left.multiply(&right), Err(TensorCompositionError::Ambiguous(pairs)) if pairs.len() == 4)
+            matches!(&left * right, Err(TensorCompositionError::Ambiguous(pairs)) if pairs.len() == 4)
         );
     }
 
@@ -3816,7 +3856,7 @@ mod tests {
         let reps = [rep(), rep(), Minkowski {}.new_rep(4).cast()];
         let left = tensor("open_spectator_matrix_left", &reps);
         let right = tensor("open_spectator_matrix_right", &reps);
-        let result = left.multiply(&right).unwrap();
+        let result = (left * right).unwrap();
         assert_eq!(result.rank(), 4);
         assert!(
             matches!(result.expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == SPENSO_TAG.chain)
