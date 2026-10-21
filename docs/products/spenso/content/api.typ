@@ -50,9 +50,15 @@ materialization before symmetry acts; equal written antisymmetric indices vanish
 Typed tensor construction must retain the declared interface of such a zero.
 One immutable head can accept arbitrary trailing derivative spectators: a leading
 scalar derivative-count argument with selected positions `[1, 2]` keeps the same
-Lorentz pair at every order. Component-shadow realization currently requires an
-explicit policy and returns a diagnostic; use symbolic tensor operations for
-these heads.
+Lorentz pair at every order. Direct component-shadow inference returns a
+diagnostic. A supplied `TensorLibrary` can instead resolve registered component
+data or a registered factory for the original head's complete signature. Its
+scalar metadata and ordered representations remain part of that signature, and
+the supplied data must satisfy the declared symmetries. Missing signatures do
+not generate shadows. Custom libraries opt in explicitly through
+`Library::key_for_selected_slot_structure`; ordinary key lookup alone does not
+grant a selected-slot realization policy. Tensor words remain unsupported by
+this component path. Symbolic tensor operations retain these heads directly.
 
 The complete group declaration is serialized in the symbol tags. Symbolica does
 not serialize Rust normalization callbacks. Before importing atoms in a fresh

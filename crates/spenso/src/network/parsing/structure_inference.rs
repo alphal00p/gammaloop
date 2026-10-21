@@ -90,6 +90,16 @@ pub trait StructureFromAtom: Sized {
         Self::structure_from_atom(state.current_view(), &mut state.matcher.borrow_mut())
     }
 
+    /// Observe an ordinary selected-slot leaf for explicit component-library
+    /// resolution. This is not permission to create a component shadow: the
+    /// parser may use it only when the library's selected-slot policy resolves
+    /// the complete signature. Direct inference retains its own restrictions.
+    fn selected_slot_structure_from_parser<Aind>(
+        _state: &ParseState<Aind, AtomView<'_>>,
+    ) -> Result<Option<Canonicalized<Self>>, StructureError> {
+        Ok(None)
+    }
+
     /// Infer structure with operation-local recognition state.
     fn parse(value: AtomView<'_>) -> Result<Canonicalized<Self>, StructureError> {
         Self::structure_from_atom(value, &mut SlotMatcher::default())
@@ -856,6 +866,37 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
         } else {
             Self::structure_from_atom(state.current_view(), &mut matcher)
         }
+    }
+
+    fn selected_slot_structure_from_parser<Index>(
+        state: &ParseState<Index, AtomView<'_>>,
+    ) -> Result<Option<Canonicalized<Self>>, StructureError> {
+        let AtomView::Fun(function) = state.current_view() else {
+            return Ok(None);
+        };
+        let symbol = function.get_symbol();
+        let mut matcher = state.matcher.borrow_mut();
+        if symbol.has_tag(&matcher.tags().tensor_word)
+            || symbol == matcher.tags().chain
+            || symbol == matcher.tags().trace
+            || symbol == matcher.tags().dot
+            || matcher
+                .compact_inner_product_parts::<Aind>(function)
+                .is_some()
+        {
+            return Ok(None);
+        }
+        drop(matcher);
+        if crate::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(symbol)
+            .map_err(StructureError::ParsingError)?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        crate::network::tensor_symmetry::TensorSlotSymmetry::validate_function(function)
+            .map_err(StructureError::ParsingError)?;
+        OrderedStructure::<LibraryRep, Aind>::structure_from_parser(state)
+            .map(|structure| Some(Self::from_ordered_atom(function.as_view(), structure)))
     }
 }
 
