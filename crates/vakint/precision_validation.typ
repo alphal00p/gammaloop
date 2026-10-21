@@ -113,6 +113,13 @@ retries (27.83 s, 33.34 s and 90.24 s respectively). The underlying 9,969
 IBP/cache/control files are unchanged; the complete cache workloads contain
 5, 77, 2,320 and 164,352 roots through four loops.
 
+The refreshed reduction benchmark uses optimization level three and fat LTO,
+48 fresh-process samples, exact rational parity and verified cache hits. Cached
+RustRed is 5.81–16.60 times faster than FORM/FMFT for the four prepared base
+cases and 1.42–3.92 times faster for the held-out cases. Engine/data loading
+and cache attachment are outside the timer. The canonical one-page benchmark,
+Typst source and raw JSON record the measured source, data and environment.
+
 == Interfaces and presentation
 
 Rust and Python expose typed constant/master identities, available source
@@ -206,8 +213,6 @@ user tests, runtime and portable verifier.
 
 - Finish the repository-wide selected CI checks; publish only after native
   and numerical compatibility pass.
-- Refresh the measured reduction benchmark JSON, Typst source and PDF against
-  the final source/data snapshots.
 - Publish the complete immutable external-data release before updating
   `data-latest`, then exercise actual downloads and offline reuse.
 - Push the coordinated Vakint changes directly to `vakint_rustred` after the
