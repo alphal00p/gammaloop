@@ -182,6 +182,29 @@ def compile_leaf(payload):
     math = ET.fromstring(match.group())
     if sum(1 for _ in math.iter()) > MAX_ELEMENTS:
         return None
+    pending = [(math, "default")]
+    while pending:
+        node, space = pending.pop()
+        space = node.get("{http://www.w3.org/XML/1998/namespace}space", space)
+        # Indentation is not notation. Keep token content and inherited
+        # xml:space, and interpret child tails in their parent's context.
+        if node.tag.rsplit("}", 1)[-1] in (
+            "mi",
+            "mo",
+            "mn",
+            "mtext",
+            "ms",
+            "annotation",
+            "annotation-xml",
+        ):
+            continue
+        if space != "preserve":
+            if node.text and not node.text.strip(" \t\r\n"):
+                node.text = None
+            for child in node:
+                if child.tail and not child.tail.strip(" \t\r\n"):
+                    child.tail = None
+        pending.extend((child, space) for child in node)
     # Symbolica owns outer MathML, arithmetic rows, paths and omissions.
     fragment = "".join(ET.tostring(child, encoding="unicode") for child in math)
     return fragment if len(fragment.encode()) <= 4096 else None

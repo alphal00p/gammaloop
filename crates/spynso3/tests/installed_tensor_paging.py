@@ -17,6 +17,146 @@ from symbolica.community.tensor import (
 )
 
 
+@unittest.skipIf(sys.platform in ("emscripten", "wasi"), "native compiler mock")
+class LeafCompilationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        bootstrap = TensorName("leaf_compilation::bootstrap")(
+            Representation.mink(4)("mu")
+        ).paged()
+        try:
+            bootstrap._page()
+        finally:
+            bootstrap.close()
+        import _spenso_paging
+
+        cls.paging = _spenso_paging
+
+    def setUp(self):
+        self.document = ""
+        self.payload = {
+            "tree": b"",
+            "notation": "",
+            "settings": "(:)",
+            "power_base": False,
+        }
+
+        def compile_native(root, timeout):
+            (root / "out.html").write_text(self.document)
+
+        self.compiler = self.enterContext(
+            patch.object(self.paging, "_compile_native", side_effect=compile_native)
+        )
+
+    def test_indented_leaf_matches_compact_math_with_phantoms_and_alignment(self):
+        compact = (
+            "<mrow><msubsup><mphantom><mi>A</mi></mphantom>"
+            '<mrow><maligngroup groupalign="left"/><mi>μ</mi>'
+            '<malignmark edge="left"/></mrow><mspace width="0.5em"/>'
+            "</msubsup></mrow>"
+        )
+        expected = ET.tostring(ET.fromstring(compact), encoding="unicode")
+        for indented in (False, True):
+            with self.subTest(indented=indented):
+                root = ET.fromstring(f"<math>{compact}</math>")
+                if indented:
+                    ET.indent(root)
+                self.document = ET.tostring(root, encoding="unicode")
+                self.assertEqual(self.paging.compile_leaf(self.payload), expected)
+
+    def test_token_text_and_non_xml_spaces_are_preserved(self):
+        for namespace in ("", ' xmlns="http://www.w3.org/1998/Math/MathML"'):
+            for text in (" \t\n ", "  a b \t ", "\u00a0", "\u2003"):
+                with self.subTest(namespace=namespace, text=text):
+                    self.document = (
+                        f"<math{namespace}>\n <mrow>\n"
+                        + "".join(
+                            f"<{tag}>{text}<malignmark/>{text}</{tag}>\n"
+                            for tag in ("mi", "mo", "mn", "mtext", "ms")
+                        )
+                        + '<annotation encoding="text/plain"> \t </annotation>\n'
+                        + "<mrow>\u00a0<mspace width='1em'/>\u2003</mrow>\n"
+                        + "</mrow>\n</math>"
+                    )
+                    fragment = self.paging.compile_leaf(self.payload)
+                    row = ET.fromstring(fragment)
+                    self.assertIsNone(row.text)
+                    self.assertIsNone(row.tail)
+                    for token in row[:5]:
+                        self.assertEqual(token.text, text)
+                        self.assertEqual(token[0].tail, text)
+                        self.assertIsNone(token.tail)
+                    self.assertEqual(row[5].text, " \t ")
+                    self.assertEqual(row[6].text, "\u00a0")
+                    self.assertEqual(row[6][0].tail, "\u2003")
+
+    def test_xml_space_inheritance_resets_and_parent_owned_tails(self):
+        self.document = (
+            "<math>\n<mrow>\n"
+            '<mrow xml:space="preserve">  <mrow> \t<mi>x</mi> \n</mrow> \t'
+            '<mrow xml:space="default"> \n<mi>y</mi> \t</mrow>  </mrow>\n'
+            '<mrow xml:space="preserve"> \n<mi>z</mi> \t</mrow>\n'
+            "</mrow>\n</math>"
+        )
+        row = ET.fromstring(self.paging.compile_leaf(self.payload))
+        self.assertIsNone(row.text)
+        self.assertIsNone(row.tail)
+        preserved, sibling = row
+        self.assertEqual(preserved.text, "  ")
+        self.assertIsNone(preserved.tail)
+        inherited, reset = preserved
+        self.assertEqual(inherited.text, " \t")
+        self.assertEqual(inherited[0].tail, " \n")
+        self.assertEqual(inherited.tail, " \t")
+        self.assertIsNone(reset.text)
+        self.assertIsNone(reset[0].tail)
+        self.assertEqual(reset.tail, "  ")
+        self.assertEqual(sibling.text, " \n")
+        self.assertEqual(sibling[0].tail, " \t")
+        self.assertIsNone(sibling.tail)
+        space = "{http://www.w3.org/XML/1998/namespace}space"
+        self.assertEqual(preserved.get(space), "preserve")
+        self.assertEqual(reset.get(space), "default")
+        self.document = (
+            '<math xml:space="preserve"><mrow> \n<mi>x</mi> \t</mrow> \n'
+            '<mrow xml:space="default"> \t<mi>y</mi> \n</mrow> \t</math>'
+        )
+        root = ET.fromstring(f"<math>{self.paging.compile_leaf(self.payload)}</math>")
+        self.assertEqual(root[0].text, " \n")
+        self.assertEqual(root[0][0].tail, " \t")
+        self.assertEqual(root[0].tail, " \n")
+        self.assertIsNone(root[1].text)
+        self.assertIsNone(root[1][0].tail)
+        self.assertEqual(root[1].tail, " \t")
+
+    def test_annotation_xml_content_is_preserved(self):
+        content = (
+            '<annotation-xml encoding="application/xhtml+xml"> \t'
+            '<div xmlns="http://www.w3.org/1999/xhtml"> \n<span/> \t</div> \n'
+            "</annotation-xml>"
+        )
+        self.document = f"<math>\n<mrow>\n<mi>x</mi>\n{content}\n</mrow>\n</math>"
+        row = ET.fromstring(self.paging.compile_leaf(self.payload))
+        self.assertIsNone(row.text)
+        self.assertIsNone(row[0].tail)
+        self.assertIsNone(row[1].tail)
+        self.assertEqual(
+            ET.tostring(row[1], encoding="unicode"),
+            ET.tostring(ET.fromstring(content), encoding="unicode"),
+        )
+
+    def test_fragment_budget_is_applied_after_compaction_in_utf8_bytes(self):
+        for size in (4095, 4096, 4097):
+            with self.subTest(bytes=size):
+                # μ occupies two bytes; significant token text must survive.
+                text = "μ" * 1000 + "x" * (size - 2028)
+                compact = f"<mrow><mtext>{text}</mtext></mrow>"
+                self.assertEqual(len(compact.encode()), size)
+                self.document = f"<math>\n{' ' * 5000}<mrow>\n  <mtext>{text}</mtext>\n</mrow>\n</math>"
+                fragment = self.paging.compile_leaf(self.payload)
+                self.assertEqual(fragment, compact if size <= 4096 else None)
+
+
 class BrowserPagingTests(unittest.TestCase):
     def setUp(self):
         self.value = TensorExpression(
