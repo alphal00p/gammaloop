@@ -2,6 +2,9 @@ use super::*;
 use crate::tensor::inference::TensorInferenceError;
 use spenso::structure::slot::ParseableAind;
 
+#[cfg(test)]
+mod generator_map_tests;
+
 #[derive(Clone, Copy)]
 pub(super) enum ProductAlgebra {
     Commuting,
@@ -93,6 +96,148 @@ impl ProductPlan {
 }
 
 impl SymbolicTensor<PartialStructure> {
+    /// Map original exterior generators to explicitly marked odd word values.
+    ///
+    /// The source has the grammar of [`Self::multiply_word`]. Its commuting
+    /// coefficients remain unchanged; each original generator is passed once
+    /// to `map`, in native word order. Return a value marked by [`Self::word`]
+    /// (possibly with an even, word-free tensor coefficient outside it), or a
+    /// typed zero. Every nonzero summand must contain one same-head word with
+    /// an odd number of generators. This is a grammar check under the caller's
+    /// even-coefficient/odd-generator contract, not a field-parity inference.
+    /// An identity callback returns `Self::word(head, &[generator.clone()])`.
+    /// Returned values are never passed back to `map`.
+    ///
+    /// Each value must retain the original generator's complete ordered logical
+    /// slots, including labels bound elsewhere in the source. Native scoping
+    /// freshens only its internal bindings, reserving the complete source and
+    /// every raw callback value before allocating. Existing word multiplication
+    /// owns distribution, coefficient extraction, ordering and Grassmann signs.
+    /// No conjugation, physical family or variance policy is inferred.
+    ///
+    /// The output retains the source's original logical interface. A ranked
+    /// zero returns unchanged without generator callbacks. Nonzero unresolved
+    /// source ports are currently unsupported; this method does not claim an
+    /// inverse materialization policy for those ports.
+    pub fn map_word_generators(
+        &self,
+        head: Symbol,
+        mut map: impl FnMut(&Self) -> Result<Self, TensorInferenceError>,
+    ) -> Result<Self, TensorInferenceError> {
+        let identity = Self::word(head, &[])?;
+        if !head.is_flat() || !head.is_linear() || !head.is_antisymmetric() {
+            return Err(TensorInferenceError::invalid(
+                "generator mapping requires a Flat, Linear, Antisymmetric exterior head",
+            ));
+        }
+        let composition_error =
+            |error: TensorCompositionError| TensorInferenceError::invalid(error.to_string());
+        ProductPlan::Scalar
+            .apply_word(head, &identity, self)
+            .map_err(composition_error)?;
+        if self.is_zero() {
+            return Ok(self.clone());
+        }
+        if !self.structure.open_positions().is_empty() {
+            return Err(TensorInferenceError::invalid(
+                "generator mapping cannot yet preserve unresolved source port identities",
+            ));
+        }
+        let mut changed = false;
+        let mut terms = Vec::new();
+        for term in self.expression.expand_in(Atom::var(head)).terms() {
+            let mut coefficient = Vec::new();
+            let mut generators = Vec::new();
+            Self::split_word_coefficient(head, term, &mut coefficient, &mut generators, &mut false)
+                .map_err(composition_error)?;
+            let mut values = Vec::with_capacity(generators.len());
+            for generator in generators {
+                let interface = InterfaceInference::replacement_interface(generator.as_view())?;
+                let generator = Self::from_declared_parts(generator, interface)?;
+                let original = Self::word(head, std::slice::from_ref(&generator))?;
+                let value = map(&generator)?;
+                value.ensure_validated()?;
+                if value.structure.logical_slots() != generator.structure.logical_slots() {
+                    return Err(TensorInferenceError::invalid(
+                        "a mapped generator must preserve its complete ordered slots and labels",
+                    ));
+                }
+                for term in value.expression.expand_in(Atom::var(head)).terms() {
+                    if term.is_zero() {
+                        continue;
+                    }
+                    let mut coefficient = Vec::new();
+                    let mut generators = Vec::new();
+                    let mut found = false;
+                    Self::split_word_coefficient(
+                        head,
+                        term,
+                        &mut coefficient,
+                        &mut generators,
+                        &mut found,
+                    )
+                    .map_err(composition_error)?;
+                    if !found || generators.len().is_multiple_of(2) {
+                        return Err(TensorInferenceError::invalid(
+                            "a mapped generator must be a same-head odd word value or typed zero",
+                        ));
+                    }
+                }
+                let value_changed = !value.same_value(&original);
+                changed |= value_changed;
+                values.push((value, value_changed));
+            }
+            let coefficient = coefficient
+                .into_iter()
+                .reduce(|left, right| Self::bracket_product(left.as_view(), right.as_view()))
+                .unwrap_or_else(Atom::one);
+            terms.push((coefficient, values));
+        }
+        if !changed {
+            return Ok(self.clone());
+        }
+        let dummies = Self::reserved_dummies(
+            std::iter::once(self).chain(
+                terms
+                    .iter()
+                    .flat_map(|(_, values)| values.iter().map(|(value, _)| value)),
+            ),
+        );
+        let mut used = self.expression.get_all_symbols(true);
+        for (_, values) in &terms {
+            for (value, _) in values {
+                used.extend(value.expression.get_all_symbols(true));
+            }
+        }
+        let mut result = Vec::with_capacity(terms.len());
+        for (coefficient, values) in terms {
+            let interface = InterfaceInference::replacement_interface(coefficient.as_view())?;
+            let mut term = Self::from_declared_parts(coefficient, interface)?;
+            for (value, changed) in values {
+                let value = if changed {
+                    let scope = loop {
+                        let scope = dummies
+                            .fresh_index()
+                            .to_atom()
+                            .get_symbol()
+                            .expect("native dummy indices are symbols");
+                        if used.insert(scope) {
+                            break scope;
+                        }
+                    };
+                    value.wrap_indices(scope, true)?
+                } else {
+                    value
+                };
+                term = term
+                    .multiply_word(head, &value)
+                    .map_err(composition_error)?;
+            }
+            result.push(term.expression);
+        }
+        Self::from_declared_parts(Atom::add_many(result), self.structure.clone())
+    }
+
     /// Multiply marked tensor words using the ordinary automatic port plan.
     ///
     /// For a chosen endpoint contraction, use [`ProductPlan::apply_word`].
@@ -298,8 +443,14 @@ impl SymbolicTensor<PartialStructure> {
                     .open_positions()
                     .into_iter()
                     .map(|position| (position, dummies.fresh_index()))
-                    .collect();
-                operand.reindex_interface_ports(&replacements)
+                    .collect::<HashMap<_, _>>();
+                if replacements.is_empty() {
+                    // Already-explicit, validated operands need no port rewrite.
+                    // An empty rewrite still replays custom normalizers.
+                    Ok(operand.clone())
+                } else {
+                    operand.reindex_interface_ports(&replacements)
+                }
             })
             .collect::<Result<Vec<_>, _>>()?;
         let interface = InterfaceInference::merge_explicit_interface_sequence(
