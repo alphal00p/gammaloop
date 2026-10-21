@@ -29,6 +29,7 @@ use super::SymbolicTensor;
 use super::inference::InterfaceInference;
 
 mod chain;
+mod word;
 
 #[cfg(test)]
 thread_local! {
@@ -50,7 +51,8 @@ impl SymbolicTensor<PartialStructure> {
     pub fn from_normalized_parts(atom: Atom, interface: PartialStructure) -> Self {
         let is_metric =
             matches!(atom.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-        let is_composite = !matches!(atom.as_view(), AtomView::Fun(_));
+        let is_composite = !matches!(atom.as_view(), AtomView::Fun(function)
+            if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
         Self {
             proofs: Default::default(),
             expression: atom,
@@ -629,6 +631,7 @@ impl super::TensorProofs {
 
 pub(super) fn is_composite_head(symbol: Symbol, tags: &SpensoTags) -> bool {
     symbol == tags.bracket
+        || symbol.has_tag(&tags.tensor_word)
         || symbol == tags.chain
         || symbol == tags.trace
         || symbol.has_tag(&tags.broadcast)
