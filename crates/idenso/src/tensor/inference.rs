@@ -106,6 +106,10 @@ impl BorrowedTensorParts<'_> {
             )?,
         };
         occurrences.validate()?;
+        let _ = self
+            .proofs
+            .occurrences
+            .set(std::sync::Arc::new(occurrences));
         let _ = self.proofs.validated.set(true);
         Ok(())
     }
@@ -115,6 +119,21 @@ impl BorrowedTensorParts<'_> {
             !self.expression.as_view().needs_normalization()
                 && InterfaceInference::normalization_is_intrinsic(self.expression.as_view())
         })
+    }
+
+    pub(super) fn product_is_normalized(&self) -> bool {
+        self.proofs.validated.get() == Some(&true)
+            && self.structure.open_positions().is_empty()
+            && self.normalization_is_intrinsic()
+            && *self.proofs.normalized_product.get_or_init(|| {
+                !SymbolicTensor::<PartialStructure>::has_unresolved_ports(self.expression.as_view())
+                    && matches!(
+                        SymbolicTensor::<PartialStructure>::normalize_products(
+                            self.expression.as_view()
+                        ),
+                        AtomOrView::View(_)
+                    )
+            })
     }
 
     pub(super) fn established_interface_is_valid(&self) -> bool {
@@ -145,10 +164,15 @@ impl BorrowedTensorParts<'_> {
                     let interface =
                         InterfaceInference::merge_explicit_interface_sequence(&[interface])?;
                     occurrences.validate()?;
-                    Ok(InterfaceInference::additive_interfaces_match(
-                        self.structure,
-                        &interface,
-                    ))
+                    let valid =
+                        InterfaceInference::additive_interfaces_match(self.structure, &interface);
+                    if valid {
+                        let _ = self
+                            .proofs
+                            .occurrences
+                            .set(std::sync::Arc::new(occurrences));
+                    }
+                    Ok(valid)
                 };
                 return checked().unwrap_or(false);
             }
@@ -167,7 +191,14 @@ impl BorrowedTensorParts<'_> {
                 },
                 Err(_) => return false,
             };
-            occurrences.validate().is_ok()
+            if occurrences.validate().is_err() {
+                return false;
+            }
+            let _ = self
+                .proofs
+                .occurrences
+                .set(std::sync::Arc::new(occurrences));
+            true
         })
     }
 
@@ -355,6 +386,10 @@ impl BorrowedTensorParts<'_> {
             expression,
             self.structure.clone(),
         );
+        let _ = value
+            .proofs
+            .occurrences
+            .set(std::sync::Arc::new(occurrences));
         let _ = value.proofs.validated.set(true);
         value.finish_parts()
     }
@@ -473,10 +508,14 @@ impl SymbolicTensor<PartialStructure> {
         self.borrowed_parts().ensure_validated()
     }
 
-    /// Construct parts whose algebra owner has established their interface.
+    /// Construct parts whose producer has established their complete tensor interface.
     /// This performs no inference, validation, or normalization. Callers must
-    /// account for callbacks before publishing a derived tensor through it.
-    pub(crate) fn from_validated_parts(expression: Atom, structure: PartialStructure) -> Self {
+    /// establish compatible ports in every summand, valid tensor signatures,
+    /// placeholder scopes and index multiplicities, and account for callback
+    /// effects. Preserve the chosen logical order, including the rank of zero.
+    /// Raw external expressions belong at `from_declared_parts` instead.
+    /// Derived occurrence and product-normalization facts remain unknown.
+    pub fn from_validated_parts(expression: Atom, structure: PartialStructure) -> Self {
         let value = Self::from_normalized_parts(expression, structure);
         let _ = value.proofs.validated.set(true);
         value
@@ -585,7 +624,7 @@ impl SymbolicTensor<PartialStructure> {
         let atom = crate::shorthands::schoonschip::DotNormalizer::nested_vectors(atom.as_view());
         let atom = InterfaceInference::lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
         let mut inference = InterfaceInference::default();
-        let (structure, _) = inference.infer_observed(atom.as_view())?;
+        let (structure, occurrences) = inference.infer_observed(atom.as_view())?;
         let raw_rank = structure.canonical().order();
         let structure = InterfaceInference::merge_explicit_interface_sequence(&[structure])?
             .canonicalize_open_ports();
@@ -604,8 +643,16 @@ impl SymbolicTensor<PartialStructure> {
             && !value.expression.as_view().needs_normalization()
             && inference.normalization_is_intrinsic_cached(value.expression.as_view())
         {
+            let _ = value
+                .proofs
+                .occurrences
+                .set(std::sync::Arc::new(occurrences));
             let _ = value.proofs.validated.set(true);
             let _ = value.proofs.intrinsic.set(true);
+            let _ = value
+                .proofs
+                .normalized_product
+                .set(!Self::has_unresolved_ports(value.expression.as_view()));
             if value.structure.open_positions().is_empty()
                 && inference
                     .algebra_preserves_leaf_interfaces_impl(value.expression.as_view(), true)
@@ -718,6 +765,7 @@ impl SymbolicTensor<PartialStructure> {
                 "expression does not match its declared tensor interface",
             ));
         }
+        value.borrowed_parts().product_is_normalized();
         Ok(value)
     }
 

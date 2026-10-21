@@ -827,7 +827,7 @@ pub mod test {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let native = cooking.try_cook(raw.as_view()).unwrap();
-        assert_ne!(native, raw);
+        assert_eq!(native, raw, "valid native index labels are preserved");
         let inferred = SymbolicTensor::infer(native).unwrap();
         let mut slots = inferred.structure().logical_slots();
         slots.reverse();

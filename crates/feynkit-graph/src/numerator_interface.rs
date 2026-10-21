@@ -273,8 +273,10 @@ impl NumeratorInterface {
             expression,
             PartialStructure::from_logical_slots(logical),
         )?;
-        SymbolicTensor::validate_interface(mapped.expression(), mapped.structure())?;
-        Ok(mapped)
+        // Retain the correspondence check on the completed carrier, so later
+        // composition can reuse its admission instead of observing it again.
+        let (expression, structure) = mapped.into_parts();
+        Ok(SymbolicTensor::from_declared_parts(expression, structure)?)
     }
 }
 

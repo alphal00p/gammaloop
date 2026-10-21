@@ -192,6 +192,11 @@ pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = A
 pub(crate) struct TensorProofs {
     pub(super) validated: OnceLock<bool>,
     pub(super) intrinsic: OnceLock<bool>,
+    /// Tensor product finishing is inert and there are no unresolved factor
+    /// occurrences which ordinary multiplication could reorder or coalesce.
+    pub(super) normalized_product: OnceLock<bool>,
+    pub(in crate::tensor) occurrences:
+        OnceLock<std::sync::Arc<composition::ExplicitIndexOccurrences>>,
     pub(super) algebra: OnceLock<bool>,
     pub(super) rewrite: OnceLock<bool>,
     pub(super) contracted: bool,
@@ -209,6 +214,7 @@ impl std::fmt::Debug for TensorProofs {
             .debug_struct("TensorProofs")
             .field("validated", &self.validated)
             .field("intrinsic", &self.intrinsic)
+            .field("normalized_product", &self.normalized_product)
             .field("algebra", &self.algebra)
             .field("rewrite", &self.rewrite)
             .field("contracted", &self.contracted)
@@ -266,6 +272,9 @@ impl<S, E> SymbolicTensor<S, E> {
     pub fn same_reduction_state(&self, other: &Self) -> bool {
         self.proofs.validated.get() == other.proofs.validated.get()
             && self.proofs.intrinsic.get() == other.proofs.intrinsic.get()
+            && self.proofs.normalized_product.get() == other.proofs.normalized_product.get()
+            && self.proofs.occurrences.get().map(std::sync::Arc::as_ptr)
+                == other.proofs.occurrences.get().map(std::sync::Arc::as_ptr)
             && self.proofs.algebra.get() == other.proofs.algebra.get()
             && self.proofs.rewrite.get() == other.proofs.rewrite.get()
             && self.proofs.contracted == other.proofs.contracted
