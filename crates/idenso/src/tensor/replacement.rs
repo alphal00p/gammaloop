@@ -247,7 +247,8 @@ impl SymbolicTensor<PartialStructure> {
     /// sums/products: tensor arguments, metadata, words, brackets and source
     /// powers are not opened. This is an even/commuting-value operation by the
     /// caller's contract, not a physical parity or whole-action certificate.
-    /// Use [`Self::map_word_generators`] for explicitly marked odd values.
+    /// For explicitly marked odd values, see the native word-generator mapper in
+    /// [PR194](https://github.com/alphal00p/gammaloop/pull/194).
     ///
     /// The source must have a checked interface, explicit ports and intrinsic
     /// normalization; non-self-dual representations are supported. Each changed
