@@ -25,6 +25,8 @@ fn discover_toml_cards(root: &Path, cards: &mut Vec<PathBuf>) -> Result<()> {
                 discover_toml_cards(&path, cards)?;
             }
         } else if !is_ignored_old_card(&path)
+            // Drawing examples also contain Typst package manifests.
+            && path.file_name().and_then(|name| name.to_str()) != Some("typst.toml")
             && path.extension().and_then(|extension| extension.to_str()) == Some("toml")
         {
             cards.push(path);
@@ -95,7 +97,8 @@ fn test_scalar_bubble_example_cli() -> Result<()> {
         "No processes were generated"
     );
     assert_eq!(
-        cli.state.model.name, "scalars",
+        cli.state.model.name(),
+        "scalars",
         "Expected scalars model to be loaded"
     );
     assert!(
@@ -163,7 +166,11 @@ fn test_epem_a_tth_nlo_example_cli() -> Result<()> {
         true,
     )?;
 
-    assert_eq!(cli.state.model.name, "sm", "Expected SM model to be loaded");
+    assert_eq!(
+        cli.state.model.name(),
+        "sm",
+        "Expected SM model to be loaded"
+    );
     assert!(
         !cli.state.process_list.processes.is_empty(),
         "No processes were generated"

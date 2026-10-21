@@ -1,13 +1,11 @@
+use crate::model::{ModelGammaLoopExt, ParticleIdGammaLoopExt, PropagatorIdGammaLoopExt};
 use std::{borrow::Borrow, ops::Deref};
 
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NodeIndex,
     involution::{EdgeData, EdgeIndex, EdgeVec, Flow, HedgePair},
-    subgraph::{
-        HedgeNode, InternalSubGraph, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike,
-        SubSetLike, SubSetOps,
-    },
+    subgraph::{InternalSubGraph, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
 };
 
 use spenso::{
@@ -29,7 +27,7 @@ use typed_index_collections::TiVec;
 use crate::{
     cff::{generation::ShiftRewrite, surface::HsurfaceID},
     integrands::process::param_builder::{FnMapEntry, ParamBuilderGraph, SplitPolarizations},
-    model::{ArcParticle, Model, UFOSymbol},
+    model::{Model, ParticleId, UFOSymbol, VertexRuleIdGammaLoopExt},
     momentum::sample::{ExternalFourMomenta, ExternalIndex, LoopMomenta},
     momentum::signature::{ExternalSignature, SignatureLike},
     momentum::{PolDef, SignOrZero},
@@ -76,7 +74,7 @@ pub trait FeynmanGraph {
     fn get_esurface_canonization(&self, lmb: &LoopMomentumBasis) -> Option<ShiftRewrite>;
     fn external_in_or_out_signature(&self) -> ExternalSignature;
 
-    fn get_external_partcles(&self) -> Vec<ArcParticle>;
+    fn get_external_partcles(&self) -> Vec<ParticleId>;
     fn get_external_signature(&self) -> SignatureLike<ExternalIndex>;
     fn get_energy_atoms(&self) -> Vec<Atom>;
     // fn get_external_energy_atoms(&self) -> Vec<Atom>;
@@ -85,12 +83,6 @@ pub trait FeynmanGraph {
     fn expected_scale(&self, e_cm: F<f64>, model: &Model) -> F<f64>;
     fn dummy_list(&self) -> Vec<EdgeIndex>;
     fn no_dummy(&self) -> SuBitGraph;
-    fn all_st_cuts_for_cs(
-        &self,
-        source_nodes: HedgeNode,
-        target_nodes: HedgeNode,
-        initial_state_tree: &SuBitGraph,
-    ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)>;
 }
 
 impl Graph {
@@ -136,6 +128,7 @@ impl Graph {
                             .expand()
                     } else {
                         self.explicit_thermal_distribution_atom(
+                            &self.model,
                             edge,
                             derivative_order,
                             Atom::var(thermal_sign),
@@ -200,6 +193,7 @@ impl Graph {
         inverse_temperature: f64,
     ) -> eyre::Result<()> {
         let parameters = &self.param_builder;
+        let graph_model = &self.model;
         let mode = parameters.medium_mode;
         if mode == MediumMode::Vacuum {
             return Ok(());
@@ -216,7 +210,7 @@ impl Graph {
             if edge.data.is_dummy {
                 continue;
             }
-            let chemical_potential = edge.data.chemical_potential_atom();
+            let chemical_potential = edge.data.chemical_potential_atom(graph_model);
             let mu_value = |potential: Option<&Atom>| -> eyre::Result<Complex<F<f64>>> {
                 let mu = match potential {
                     Some(atom) => parameters
@@ -246,7 +240,9 @@ impl Graph {
             // Reversing an edge conjugates its label and flips its orientation.
             // The occupation's E - sigma * mu must describe the same state.
             if let Some(particle) = edge.data.particle() {
-                if particle.is_self_antiparticle() {
+                let is_self_antiparticle = particle.is_self_antiparticle(graph_model);
+                let particle = particle.resolve(graph_model);
+                if is_self_antiparticle {
                     if !mu.re.is_zero() {
                         return Err(eyre::eyre!(
                             "Thermal graph '{}' requires zero chemical potential for self-conjugate particle '{}' on edge {edge_id}; got {mu}",
@@ -255,15 +251,15 @@ impl Graph {
                         ));
                     }
                 } else {
-                    let antiparticle =
-                        PossibleParticle::from(model.try_get_particle(&particle.antiname)?);
-                    let anti_mu = mu_value(antiparticle.chemical_potential_atom().as_ref())?;
+                    let antiparticle = PossibleParticle::from(particle.antiparticle);
+                    let anti_mu =
+                        mu_value(antiparticle.chemical_potential_atom(graph_model).as_ref())?;
                     if anti_mu.re != -mu.re {
                         return Err(eyre::eyre!(
                             "Thermal graph '{}' requires opposite chemical potentials for particle '{}' and antiparticle '{}' on edge {edge_id}; got {mu} and {anti_mu}",
                             self.name,
                             particle.name,
-                            particle.antiname
+                            graph_model.particle_by_id(particle.antiparticle)?.name
                         ));
                     }
                 }
@@ -271,21 +267,21 @@ impl Graph {
             // Finite-temperature occupations and zero-temperature fermion steps,
             // including any Fermi surface they localize, need a real shell energy.
             let needs_real_mass = mode.is_finite_temperature() || chemical_potential.is_some();
-            if edge.data.is_fermion() && !needs_real_mass {
+            if edge.data.is_fermion(graph_model) && !needs_real_mass {
                 continue;
             }
             let mass = match edge.data.mass_value::<f64>(model, parameters) {
                 Some(mass) => mass,
-                None if edge.data.mass_atom().is_zero() => Complex::new_re(F(0.0)),
+                None if edge.data.mass_atom(graph_model).is_zero() => Complex::new_re(F(0.0)),
                 None => {
                     return Err(eyre::eyre!(
                         "Thermal graph '{}' has no value for mass '{}' on edge {edge_id}",
                         self.name,
-                        edge.data.mass_atom()
+                        edge.data.mass_atom(graph_model)
                     ));
                 }
             };
-            if edge.data.is_fermion() {
+            if edge.data.is_fermion(graph_model) {
                 if !mass.im.is_zero() || !mass.re.0.is_finite() {
                     return Err(eyre::eyre!(
                         "Thermal graph '{}' requires a finite real fermion mass for thermal occupations on edge {edge_id}; got {mass}",
@@ -327,7 +323,11 @@ impl Graph {
     ) -> eyre::Result<()> {
         let masses = self.new_edgevec(|edge, _, _| {
             edge.mass_value::<f64>(model, &self.param_builder)
-                .or_else(|| edge.mass_atom().is_zero().then(|| Complex::new_re(F(0.0))))
+                .or_else(|| {
+                    edge.mass_atom(model)
+                        .is_zero()
+                        .then(|| Complex::new_re(F(0.0)))
+                })
         });
         for &id in denominators {
             let surface = &self.surface_cache.hsurface_cache[id];
@@ -339,8 +339,8 @@ impl Graph {
                 .iter()
                 .chain(&surface.negative_energies)
                 .map(|&edge| match masses[edge] {
-                    Some(mass) => format!("{edge}: {} = {mass}", self[edge].mass_atom()),
-                    None => format!("{edge}: {}", self[edge].mass_atom()),
+                    Some(mass) => format!("{edge}: {} = {mass}", self[edge].mass_atom(model)),
+                    None => format!("{edge}: {}", self[edge].mass_atom(model)),
                 })
                 .join(", ");
             return Err(eyre::eyre!(
@@ -366,7 +366,7 @@ impl Graph {
                 return Err(eyre::eyre!(
                     "Cross-section graph '{}' has unsupported complex mass '{}' = {} on edge {}. LU requires real masses; the complex-mass scheme and finite-width propagators are not supported.",
                     self.name,
-                    edge.data.mass_atom(),
+                    edge.data.mass_atom(model),
                     mass,
                     edge_id
                 ));
@@ -374,9 +374,10 @@ impl Graph {
             if matches!(pair, HedgePair::Paired { .. })
                 && let Some(particle) = edge.data.particle()
             {
-                let propagator = model.get_propagator_for_particle(&particle.name);
+                let propagator = model.get_propagator_for_particle(particle).resolve(model);
                 let momentum = function!(UFO.momentum, 1);
-                let expected = momentum.pow(2) - Atom::var(particle.mass.0.0).pow(2);
+                let expected =
+                    momentum.pow(2) - particle.resolve(model).symbolic_mass(model).pow(2);
                 // Normalize only the model denominator, never the graph numerator.
                 // DOT mass overrides replace the declared pole after this compatibility check.
                 let difference = (propagator
@@ -391,7 +392,7 @@ impl Graph {
                         "Cross-section graph '{}' has unsupported propagator denominator '{}' for particle '{}' on edge {}. LU reconstructs the standard real pole '{}'; custom denominators, including explicit finite-width terms, are not supported.",
                         self.name,
                         propagator.denominator,
-                        particle.name,
+                        particle.resolve(model).name,
                         edge_id,
                         expected
                     ));
@@ -436,16 +437,17 @@ where
         self.1.get_external_energy_atoms()
     }
 
-    fn get_ose_replacements(&self) -> Vec<Replacement> {
-        self.1.get_ose_replacements()
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement> {
+        self.1.get_ose_replacements(model)
     }
 
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
-        self.1.explicit_ose_atom(edge)
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom {
+        self.1.explicit_ose_atom(edge, model)
     }
 
     fn explicit_thermal_distribution_atom(
         &self,
+        model: &Model,
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
@@ -453,6 +455,7 @@ where
         limit: MediumMode,
     ) -> eyre::Result<Atom> {
         self.1.explicit_thermal_distribution_atom(
+            model,
             edge,
             derivative_order,
             thermal_sign,
@@ -496,8 +499,8 @@ where
             .collect()
     }
 
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
-        let mass = self[edge].mass_atom();
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom {
+        let mass = self[edge].mass_atom(model);
         let mass2 = &mass * &mass;
 
         // println!("{}", mass2);
@@ -514,6 +517,7 @@ where
 
     fn explicit_thermal_distribution_atom(
         &self,
+        model: &Model,
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
@@ -526,7 +530,7 @@ where
                 thermal_sign,
             ));
         }
-        let chemical_potential = self[edge].chemical_potential_atom();
+        let chemical_potential = self[edge].chemical_potential_atom(model);
         let shifted_ose = match &chemical_potential {
             Some(mu) => ose_atom_from_index(edge) - &orientation_sign * mu,
             None => ose_atom_from_index(edge),
@@ -535,7 +539,7 @@ where
             MediumMode::ThermodynamicEquilibrium => {
                 let beta = Atom::var(GS.inverse_temperature);
                 let arg = beta.clone() * shifted_ose / Atom::num(2);
-                match (self[edge].is_fermion(), derivative_order) {
+                match (self[edge].is_fermion(model), derivative_order) {
                     (is_fermion, 0) => {
                         // Order zero is (1 + s)/2 - n_F or (1 + s)/2 + n_B. Factoring
                         // exp(-(a + |a|)) out of n_F = 1/(exp(2a) + 1) and
@@ -565,6 +569,7 @@ where
                     (_, _) => {
                         let energy = Indeterminate::try_from(ose_atom_from_index(edge)).unwrap();
                         let mut body = self.explicit_thermal_distribution_atom(
+                            model,
                             edge,
                             2,
                             thermal_sign,
@@ -631,12 +636,12 @@ where
             .collect()
     }
 
-    fn get_ose_replacements(&self) -> Vec<Replacement> {
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement> {
         self.iter_edges()
             .filter(|(pair, _, _)| matches!(pair, HedgePair::Paired { .. }))
             .map(|(_, edge_id, _)| {
                 let ose_atom = ose_atom_from_index(edge_id);
-                let explicit = self.explicit_ose_atom(edge_id);
+                let explicit = self.explicit_ose_atom(edge_id, model);
                 Replacement::new(ose_atom.to_pattern(), explicit.to_pattern())
             })
             .collect()
@@ -659,9 +664,9 @@ impl ParamBuilderGraph for Graph {
             .collect()
     }
 
-    fn get_ose_replacements(&self) -> Vec<Replacement> {
+    fn get_ose_replacements(&self, model: &Model) -> Vec<Replacement> {
         if self.initial_state_cut.nedges(&self.underlying) == 0 {
-            self.underlying.get_ose_replacements()
+            self.underlying.get_ose_replacements(model)
         } else {
             let underlying_without_is_cut = self
                 .underlying
@@ -673,19 +678,20 @@ impl ParamBuilderGraph for Graph {
                 .iter_edges_of(&underlying_without_is_cut)
                 .map(|(_, edge_id, _)| {
                     let ose_atom = ose_atom_from_index(edge_id);
-                    let explicit = self.underlying.explicit_ose_atom(edge_id);
+                    let explicit = self.underlying.explicit_ose_atom(edge_id, model);
                     Replacement::new(ose_atom.to_pattern(), explicit.to_pattern())
                 })
                 .collect()
         }
     }
 
-    fn explicit_ose_atom(&self, edge: EdgeIndex) -> Atom {
-        self.underlying.explicit_ose_atom(edge)
+    fn explicit_ose_atom(&self, edge: EdgeIndex, model: &Model) -> Atom {
+        self.underlying.explicit_ose_atom(edge, model)
     }
 
     fn explicit_thermal_distribution_atom(
         &self,
+        model: &Model,
         edge: EdgeIndex,
         derivative_order: usize,
         thermal_sign: Atom,
@@ -693,6 +699,7 @@ impl ParamBuilderGraph for Graph {
         limit: MediumMode,
     ) -> eyre::Result<Atom> {
         self.underlying.explicit_thermal_distribution_atom(
+            model,
             edge,
             derivative_order,
             thermal_sign,
@@ -789,7 +796,7 @@ impl ParamBuilderGraph for Graph {
 //     //     self.underlying.get_external_energy_atoms()
 //     // }
 
-//     fn get_external_partcles(&self) -> Vec<ArcParticle> {
+//     fn get_external_partcles(&self) -> Vec<ParticleId> {
 //         self.underlying.get_external_partcles()
 //     }
 
@@ -919,7 +926,7 @@ impl FeynmanGraph for Graph {
             } else {
                 panic!(
                     "Complex masses not yet supported in gammaLoop for {}:{}",
-                    edge.mass_atom(),
+                    edge.mass_atom(model),
                     c
                 )
             }
@@ -948,7 +955,7 @@ impl FeynmanGraph for Graph {
                 } else {
                     panic!(
                         "Complex masses not yet supported in gammaLoop for {}:{}",
-                        edge.data.mass_atom(),
+                        edge.data.mass_atom(model),
                         c
                     )
                 }
@@ -1078,7 +1085,7 @@ impl FeynmanGraph for Graph {
             .collect()
     }
 
-    fn get_external_partcles(&self) -> Vec<ArcParticle> {
+    fn get_external_partcles(&self) -> Vec<ParticleId> {
         let external_filter: SuBitGraph = self.external_filter();
 
         self.iter_edges_of(&external_filter)
@@ -1127,16 +1134,16 @@ impl FeynmanGraph for Graph {
             // include the values of all couplings
             let coupling_value = vertex
                 .vertex_rule
-                .as_ref()
-                .map(|r| {
-                    r.couplings
+                .map(|rule| {
+                    let rule = rule.resolve(model);
+                    rule.couplings
                         .iter()
                         .flat_map(|couplings| {
                             couplings.iter().map(|coupling| {
                                 coupling
                                     .as_ref()
                                     .map(|coupling| {
-                                        model.couplings[coupling]
+                                        model.couplings()[coupling.index()]
                                             .value
                                             .map(|x| Complex::new(F(x.re), F(x.im)))
                                             .unwrap_or(Complex::new_re(F(1.0)))
@@ -1183,37 +1190,13 @@ impl FeynmanGraph for Graph {
             })
             .collect()
     }
-
-    fn all_st_cuts_for_cs(
-        &self,
-        source_nodes: HedgeNode,
-        target_nodes: HedgeNode,
-        initial_state_tree: &SuBitGraph,
-    ) -> Vec<(SuBitGraph, OrientedCut, SuBitGraph)> {
-        self.underlying
-            .all_cuts(source_nodes, target_nodes)
-            .into_iter()
-            .map(|(mut l, mut c, mut r)| {
-                // remove initial state cut edges from cut
-                c.left.subtract_with(&self.initial_state_cut.left);
-                c.right.subtract_with(&self.initial_state_cut.left);
-                c.left.subtract_with(&self.initial_state_cut.right);
-                c.right.subtract_with(&self.initial_state_cut.right);
-                l.subtract_with(initial_state_tree);
-                r.subtract_with(initial_state_tree);
-
-                (l, c, r)
-            })
-            .collect_vec()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::utils::test_utils::ModelFixtureExt;
     use crate::{
-        dot,
-        graph::parse::from_dot::IntoGraph,
         initialisation::test_initialise,
         utils::{ArbPrec, load_generic_model},
     };
@@ -1226,18 +1209,26 @@ mod tests {
     fn thermal_parameter_validation_tracks_modes_and_runtime_values() -> eyre::Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("sm");
-        let mut graph: Graph = r#"
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            r#"
             digraph thermal_domain {
                 node [num=1]; edge [num=1];
                 A -> A [id=0 particle="G+" mass=2];
                 A -> A [id=1 particle="d" mass=0];
                 A -> A [id=2 particle="a"];
             }
-        "#
-        .into_graph(&model)?;
+        "#,
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         // Dense fermions and massless zero-mu bosons are both supported.
-        model.get_parameter_mut("mud")?.value = Some(Complex::new_re(F(3.0)));
-        model.get_parameter_mut("minus_mud")?.value = Some(Complex::new_re(F(-3.0)));
+        model.set_fixture_values([
+            ("mud", Complex::new_re(F(3.0))),
+            ("minus_mud", Complex::new_re(F(-3.0))),
+        ])?;
         for mode in [
             MediumMode::Vacuum,
             MediumMode::ThermodynamicEquilibrium,
@@ -1253,8 +1244,10 @@ mod tests {
                 }
             }
             for mu in [0.0, 1.0, -1.0, 2.0, -2.0, 3.0, f64::NAN, f64::INFINITY] {
-                model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(mu)));
-                model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(-mu)));
+                model.set_fixture_values([
+                    ("muG", Complex::new_re(F(mu))),
+                    ("minus_muG", Complex::new_re(F(-mu))),
+                ])?;
                 graph.param_builder.update_model_values(&model)?;
                 let result = graph.validate_medium_parameters(&model, 1.0);
                 assert_eq!(result.is_ok(), mode == MediumMode::Vacuum || mu.abs() < 2.0);
@@ -1262,8 +1255,10 @@ mod tests {
                     assert!(error.to_string().contains("thermal_domain"));
                 }
             }
-            model.get_parameter_mut("muG")?.value = Some(Complex::new_re(F(0.0)));
-            model.get_parameter_mut("minus_muG")?.value = Some(Complex::new_re(F(0.0)));
+            model.set_fixture_values([
+                ("muG", Complex::new_re(F(0.0))),
+                ("minus_muG", Complex::new_re(F(0.0))),
+            ])?;
         }
         Ok(())
     }
@@ -1273,14 +1268,21 @@ mod tests {
     -> eyre::Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("sm");
-        let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
-        let mut graph: Graph = format!(
-            r#"digraph thermal_mass {{
+        let mass_parameter = Atom::var(UFOSymbol::from(model.get_parameter("MT").name.as_str()).0)
+            .to_canonical_string();
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            &(format!(
+                r#"digraph thermal_mass {{
                 node [num=1]; edge [num=1];
                 A -> A [particle="G+" mass="{mass_parameter}+1"];
             }}"#
+            )),
+            &model,
         )
-        .into_graph(&model)?;
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         graph.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
         for (mass, mu, valid) in [
             (Complex::new_re(F(2.0)), Complex::new_re(F(2.0)), true),
@@ -1291,9 +1293,7 @@ mod tests {
             (Complex::new(F(2.0), F(1.0)), Complex::new_re(F(0.0)), false),
             (Complex::new_re(F(2.0)), Complex::new(F(0.0), F(1.0)), false),
         ] {
-            model.get_parameter_mut("MT")?.value = Some(mass);
-            model.get_parameter_mut("muG")?.value = Some(mu);
-            model.get_parameter_mut("minus_muG")?.value = Some(-mu);
+            model.set_fixture_values([("MT", mass), ("muG", mu), ("minus_muG", -mu)])?;
             graph.param_builder.update_model_values(&model)?;
             assert_eq!(
                 graph.validate_medium_parameters(&model, 1.0).is_ok(),
@@ -1307,7 +1307,8 @@ mod tests {
     #[test]
     fn thermal_chemical_potentials_validate_conjugation_at_runtime() -> eyre::Result<()> {
         test_initialise()?;
-        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+        let serialized =
+            serde_json::from_str::<serde_json::Value>(&load_generic_model("sm").to_json()?)?;
         for anti_parameter in [Some("muB"), Some("muQ"), None, Some("ZERO")] {
             let mut input = serialized.clone();
             for particle in input["particles"].as_array_mut().unwrap() {
@@ -1319,16 +1320,22 @@ mod tests {
             }
             // Import remains independent of the medium. Distinct external parameters
             // are valid when their current values are opposite, without a symbolic tie.
-            let mut model = Model::from_str(serde_json::to_string(&input)?, "json")?;
+            let mut model = Model::from_json(&input.to_string())?;
             let mut graphs = ["G+", "G-"]
                 .map(|particle| {
-                    format!(
-                        r#"digraph conjugate_mu {{
+                    crate::graph::Graph::unit_numerator_fixtures(
+                        &(format!(
+                            r#"digraph conjugate_mu {{
                             node [num=1]; edge [num=1];
                             A -> A [particle="{particle}" mass=4];
                         }}"#
+                        )),
+                        &model,
                     )
-                    .into_graph(&model)
+                    .map(|mut graphs| {
+                        assert_eq!(graphs.len(), 1);
+                        graphs.remove(0)
+                    })
                 })
                 .into_iter()
                 .collect::<eyre::Result<Vec<Graph>>>()?;
@@ -1374,7 +1381,7 @@ mod tests {
             }
             if anti_parameter == Some("muB") {
                 // The unused antiparticle label must still have a finite real value.
-                model.get_parameter_mut("muB")?.value = Some(Complex::new(F(0.0), F(0.5)));
+                model.set_fixture_values([("muB", Complex::new(F(0.0), F(0.5)))])?;
                 graphs[0].param_builder.update_model_values(&model)?;
                 let error = graphs[0]
                     .validate_medium_parameters(&model, 1.0)
@@ -1391,7 +1398,8 @@ mod tests {
     #[test]
     fn thermal_self_conjugate_particles_require_zero_chemical_potential() -> eyre::Result<()> {
         test_initialise()?;
-        let serialized = serde_json::to_value(load_generic_model("sm").to_serializable())?;
+        let serialized =
+            serde_json::from_str::<serde_json::Value>(&load_generic_model("sm").to_json()?)?;
         for parameter in [None, Some("ZERO"), Some("muQ")] {
             let mut input = serialized.clone();
             let particle = input["particles"]
@@ -1401,12 +1409,18 @@ mod tests {
                 .find(|particle| particle["name"] == "H")
                 .unwrap();
             particle["chemical_potential"] = serde_json::json!(parameter);
-            let mut model = Model::from_str(serde_json::to_string(&input)?, "json")?;
-            let mut graph: Graph = r#"digraph self_conjugate_mu {
+            let mut model = Model::from_json(&input.to_string())?;
+            let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+                r#"digraph self_conjugate_mu {
                 node [num=1]; edge [num=1];
                 A -> A [particle="H" mass=4];
-            }"#
-            .into_graph(&model)?;
+            }"#,
+                &model,
+            )
+            .map(|mut graphs| {
+                assert_eq!(graphs.len(), 1);
+                graphs.remove(0)
+            })?;
             for mu in [0.0, 1.0, -1.0] {
                 let mut card = model.default_param_card();
                 card.insert("muQ".into(), Complex::new_re(F(mu)));
@@ -1445,8 +1459,10 @@ mod tests {
 
         test_initialise()?;
         let mut model = load_generic_model("sm");
-        let [top, w] = ["MT", "MW"]
-            .map(|name| Atom::var(model.get_parameter(name).name.0).to_canonical_string());
+        let [top, w] = ["MT", "MW"].map(|name| {
+            Atom::var(UFOSymbol::from(model.get_parameter(name).name.as_str()).0)
+                .to_canonical_string()
+        });
         let thermal_denominators = |graph: &mut Graph| -> eyre::Result<Vec<HsurfaceID>> {
             let mut options = graph.denominator_only_cff_3d_expression_options();
             options.medium_mode = MediumMode::ThermodynamicEquilibrium;
@@ -1469,7 +1485,7 @@ mod tests {
         };
         let set_masses = |model: &mut Model, graph: &mut Graph, masses: [f64; 2]| {
             for (name, mass) in ["MT", "MW"].into_iter().zip(masses) {
-                model.get_parameter_mut(name)?.value = Some(Complex::new_re(F(mass)));
+                model.set_fixture_values([(name, Complex::new_re(F(mass)))])?;
             }
             graph.param_builder.update_model_values(model)
         };
@@ -1484,14 +1500,20 @@ mod tests {
         // equal and opposite fermion masses with identical on-shell energies.
         let no_externals = ExternalFourMomenta::default();
         for (particle, coincident_mass) in [("G+", 2.0), ("t", -2.0)] {
-            let mut cycle: Graph = format!(
-                r#"digraph thermal_cycle {{
+            let mut cycle: Graph = crate::graph::Graph::unit_numerator_fixtures(
+                &(format!(
+                    r#"digraph thermal_cycle {{
                     node [num=1]; edge [num=1];
                     A -> B [particle="{particle}" mass="{top}"];
                     B -> A [particle="{particle}" mass="{w}"];
                 }}"#
+                )),
+                &model,
             )
-            .into_graph(&model)?;
+            .map(|mut graphs| {
+                assert_eq!(graphs.len(), 1);
+                graphs.remove(0)
+            })?;
             cycle.set_medium_mode(MediumMode::ThermodynamicEquilibrium)?;
             let denominators = thermal_denominators(&mut cycle)?;
             set_masses(&mut model, &mut cycle, [2.0, 3.0])?;
@@ -1506,8 +1528,9 @@ mod tests {
         }
 
         // A shared mass parameter on k and k + p degenerates only at p = 0.
-        let mut bubble: Graph = format!(
-            r#"digraph thermal_bubble {{
+        let mut bubble: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            &(format!(
+                r#"digraph thermal_bubble {{
                 node [num=1]; edge [num=1];
                 incoming [style=invis]; outgoing [style=invis];
                 incoming -> A [particle="H"];
@@ -1515,8 +1538,13 @@ mod tests {
                 A -> B [particle="G+" mass="{top}"];
                 B -> A [particle="G+" mass="{top}"];
             }}"#
+            )),
+            &model,
         )
-        .into_graph(&model)?;
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         let denominators = thermal_denominators(&mut bubble)?;
         set_masses(&mut model, &mut bubble, [2.0, 3.0])?;
         let externals = |energy: f64, pz: f64| -> ExternalFourMomenta<F<f64>> {
@@ -1538,26 +1566,42 @@ mod tests {
     fn thermal_fermion_distributions_require_real_masses() -> eyre::Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("sm");
-        let mass_parameter = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
-        let mut graph: Graph = format!(
-            r#"digraph thermal_fermion {{
+        let mass_parameter = Atom::var(UFOSymbol::from(model.get_parameter("MT").name.as_str()).0)
+            .to_canonical_string();
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            &(format!(
+                r#"digraph thermal_fermion {{
                 node [num=1]; edge [num=1];
                 A -> A [particle="d" mass="{mass_parameter}"];
             }}"#
+            )),
+            &model,
         )
-        .into_graph(&model)?;
-        let named_mu = graph[EdgeIndex(0)].particle().unwrap().chemical_potential;
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
+        let particle = graph[EdgeIndex(0)]
+            .particle()
+            .unwrap()
+            .resolve(&graph.model);
+        let particle_name = particle.name.clone();
+        let named_mu = particle
+            .chemical_potential
+            .map(|id| graph.model.parameter_by_id(id).unwrap().name.clone());
+        let definition: serde_json::Value = serde_json::from_str(&graph.model.to_json()?)?;
         for (chemical_potential, has_mu) in [
             (None, false),
-            (Some(crate::model::ParameterName(UFOSymbol::zero())), false),
+            (Some("ZERO".to_owned()), false),
             (named_mu, true),
         ] {
-            let crate::graph::edge::PossibleParticle::MassOverriddenParticle { particle, .. } =
-                &mut graph.underlying[EdgeIndex(0)].particle
-            else {
-                unreachable!("the fixture has a DOT mass override")
-            };
-            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
+            let mut input = definition.clone();
+            for particle in input["particles"].as_array_mut().unwrap() {
+                if particle["name"] == particle_name {
+                    particle["chemical_potential"] = serde_json::json!(chemical_potential);
+                }
+            }
+            graph.model = std::sync::Arc::new(Model::from_json(&input.to_string())?);
             for (mass, valid) in [
                 (Complex::new_re(F(-2.0)), true),
                 (Complex::new_re(F(0.0)), true),
@@ -1566,7 +1610,7 @@ mod tests {
                 (Complex::new_re(F(f64::NAN)), false),
                 (Complex::new_re(F(f64::INFINITY)), false),
             ] {
-                model.get_parameter_mut("MT")?.value = Some(mass);
+                model.set_fixture_values([("MT", mass)])?;
                 for mode in [
                     MediumMode::Vacuum,
                     MediumMode::ThermodynamicEquilibrium,
@@ -1598,7 +1642,8 @@ mod tests {
         test_initialise()?;
         let model = load_generic_model("sm");
         assert!(!model.get_parameter("WT").value.unwrap().re.is_zero());
-        let graph: Graph = r#"
+        let graph: Graph = Graph::unit_numerator_fixtures(
+            r#"
             digraph real_masses {
                 node [num=1];
                 edge [num=1];
@@ -1606,8 +1651,13 @@ mod tests {
                 A -> B [id=1 mass=2];
                 A -> B [id=2 particle="t"];
             }
-        "#
-        .into_graph(&model)?;
+        "#,
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         graph.validate_real_masses(&model)
     }
 
@@ -1616,26 +1666,36 @@ mod tests {
         test_initialise()?;
         let mut model = load_generic_model("sm");
         for name in ["g", "t"] {
-            let position = model
-                .propagators
-                .iter()
-                .position(|propagator| propagator.particle.name == name)
-                .unwrap();
-            let mass = Atom::var(model.get_particle(name).mass.0.0);
+            let mass = model.particle(name)?.symbolic_mass(&model);
             for momentum in [
                 function!(UFO.momentum, 1),
                 function!(UFO.momentum, function!(UFO.idx, 1, 1)),
             ] {
                 // The factored form certifies denominator-only normalization.
-                std::sync::Arc::make_mut(&mut model.propagators[position]).denominator =
-                    (&momentum - &mass) * (&momentum + &mass);
-                let graph: Graph = format!(
-                    r#"digraph standard_denominator {{
+                let mut definition = serde_json::to_value(&model)?;
+                let propagator = definition["propagators"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .find(|propagator| propagator["particle"] == name)
+                    .unwrap();
+                propagator["denominator"] = serde_json::to_value(
+                    ((&momentum - &mass) * (&momentum + &mass)).to_canonical_string(),
+                )?;
+                model = serde_json::from_value(definition)?;
+                let graph: Graph = Graph::unit_numerator_fixtures(
+                    &(format!(
+                        r#"digraph standard_denominator {{
                         node [num=1]; edge [num=1];
                         A -> B [particle="{name}"];
                     }}"#
+                    )),
+                    &model,
                 )
-                .into_graph(&model)?;
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })?;
                 graph.validate_real_masses(&model)?;
             }
         }
@@ -1646,33 +1706,62 @@ mod tests {
     fn cross_section_custom_denominators_reject_used_lines_only() -> eyre::Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("sm");
-        let position = model
-            .propagators
-            .iter()
-            .position(|propagator| propagator.particle.name == "H")
+        let mut definition = serde_json::to_value(&model)?;
+        let propagator = definition["propagators"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|propagator| propagator["particle"] == "H")
             .unwrap();
         let width_term = Atom::i()
-            * Atom::var(model.get_parameter("MH").name.0)
-            * Atom::var(model.get_parameter("WH").name.0);
-        std::sync::Arc::make_mut(&mut model.propagators[position]).denominator += width_term;
-        let unused: Graph = r#"digraph unused_width {
+            * Atom::from(crate::model::UFOSymbol::from("MH"))
+            * Atom::from(crate::model::UFOSymbol::from("WH"));
+        propagator["denominator"] = serde_json::to_value(
+            (model
+                .get_propagator_for_particle(model.get_particle("H"))
+                .resolve(&model)
+                .denominator
+                .clone()
+                + width_term)
+                .to_canonical_string(),
+        )?;
+        model = serde_json::from_value(definition)?;
+        let unused: Graph = Graph::unit_numerator_fixtures(
+            r#"digraph unused_width {
             node [num=1]; edge [num=1];
             A -> B [particle="g"];
-        }"#
-        .into_graph(&model)?;
+        }"#,
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         unused.validate_real_masses(&model)?;
-        let amputated: Graph = r#"digraph amputated_width {
+        let amputated: Graph = Graph::unit_numerator_fixtures(
+            r#"digraph amputated_width {
             ext [style=invis]; vertex [num=1]; edge [num=1];
             ext -> vertex [particle="H"];
-        }"#
-        .into_graph(&model)?;
+        }"#,
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         assert!(amputated.iter_edges().all(|(pair, _, _)| !pair.is_paired()));
         amputated.validate_real_masses(&model)?;
-        let used: Graph = r#"digraph explicit_width {
+        let used: Graph = Graph::unit_numerator_fixtures(
+            r#"digraph explicit_width {
             node [num=1]; edge [num=1];
             A -> B [particle="H"];
-        }"#
-        .into_graph(&model)?;
+        }"#,
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         let error = used.validate_real_masses(&model).unwrap_err().to_string();
         assert!(error.contains("explicit_width"));
         assert!(error.contains("unsupported propagator denominator"));
@@ -1684,23 +1773,40 @@ mod tests {
     fn cross_section_denominator_validation_uses_the_current_model() -> eyre::Result<()> {
         test_initialise()?;
         let mut model = load_generic_model("sm");
-        let mass = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
-        let graph: Graph = format!(
-            r#"digraph updated_denominator {{
+        let mass = Atom::from(crate::model::UFOSymbol::from("MT")).to_canonical_string();
+        let graph: Graph = Graph::unit_numerator_fixtures(
+            &(format!(
+                r#"digraph updated_denominator {{
                 node [num=1]; edge [num=1];
                 A -> B [particle="t" mass="{mass}+1"];
             }}"#
+            )),
+            &model,
         )
-        .into_graph(&model)?;
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         graph.validate_real_masses(&model)?;
-        let position = model
-            .propagators
-            .iter()
-            .position(|propagator| propagator.particle.name == "t")
+        let mut definition = serde_json::to_value(&model)?;
+        let propagator = definition["propagators"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|propagator| propagator["particle"] == "t")
             .unwrap();
         // A loaded graph must not keep validating its old propagator declaration.
         // The same owner runs again at direct integrand warm-up.
-        std::sync::Arc::make_mut(&mut model.propagators[position]).denominator += Atom::one();
+        propagator["denominator"] = serde_json::to_value(
+            (model
+                .get_propagator_for_particle(model.get_particle("t"))
+                .resolve(&model)
+                .denominator
+                .clone()
+                + Atom::one())
+            .to_canonical_string(),
+        )?;
+        model = serde_json::from_value(definition)?;
         let error = graph.validate_real_masses(&model).unwrap_err().to_string();
         assert!(error.contains("updated_denominator"));
         assert!(error.contains("unsupported propagator denominator"));
@@ -1711,15 +1817,21 @@ mod tests {
     fn cross_section_complex_mass_is_rejected_at_generation() -> eyre::Result<()> {
         test_initialise()?;
         let model = load_generic_model("sm");
-        let graph: Graph = r#"
+        let graph: Graph = Graph::unit_numerator_fixtures(
+            r#"
             digraph complex_mass {
                 node [num=1];
                 edge [num=1];
                 A -> B [id=0 mass="1+1𝑖"];
                 A -> B [id=1 mass=0];
             }
-        "#
-        .into_graph(&model)?;
+        "#,
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         let error = graph.validate_real_masses(&model).unwrap_err().to_string();
         assert!(error.contains("complex_mass"));
         assert!(error.contains("unsupported complex mass"));
@@ -1733,26 +1845,32 @@ mod tests {
         test_initialise()?;
         for offset in ["", "+1"] {
             let mut model = load_generic_model("sm");
-            let mass = Atom::var(model.get_parameter("MT").name.0).to_canonical_string();
-            let graph: Graph = format!(
-                r#"digraph runtime_mass {{
+            let mass = Atom::from(crate::model::UFOSymbol::from("MT")).to_canonical_string();
+            let graph: Graph = Graph::unit_numerator_fixtures(
+                &(format!(
+                    r#"digraph runtime_mass {{
                     node [num=1];
                     edge [num=1];
                     A -> B [id=0 mass="{mass}{offset}"];
                     A -> B [id=1 mass=0];
                 }}"#
+                )),
+                &model,
             )
-            .into_graph(&model)?;
+            .map(|mut graphs| {
+                assert_eq!(graphs.len(), 1);
+                graphs.remove(0)
+            })?;
             graph.validate_real_masses(&model)?;
 
-            model.get_parameter_mut("MT")?.value = Some(Complex::new(F(2.0), F(0.5)));
+            model.set_fixture_values([("MT", Complex::new(F(2.0), F(0.5)))])?;
             // The DOT evaluator may still hold the old real value until its
             // slots refresh; validation must use the current model value.
             let error = graph.validate_real_masses(&model).unwrap_err().to_string();
             assert!(error.contains("runtime_mass"));
             assert!(error.contains("unsupported complex mass"));
 
-            model.get_parameter_mut("MT")?.value = Some(Complex::new_re(F(3.0)));
+            model.set_fixture_values([("MT", Complex::new_re(F(3.0)))])?;
             graph.validate_real_masses(&model)?;
         }
         Ok(())
@@ -1761,25 +1879,47 @@ mod tests {
     #[test]
     fn zero_temperature_treats_literal_zero_chemical_potential_as_absent() {
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(digraph thermal {
-            node [num=1]; edge [num=1 particle="d"];
-            A -> B; B -> A;
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph thermal {
+                node [num=1]; edge [num=1 particle="d"];
+                A -> B; B -> A;
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })
         .unwrap();
         let edge = EdgeIndex(0);
-        let mut particle = graph[edge].particle().unwrap();
+        let particle = graph[edge].particle().unwrap().resolve(&graph.model);
+        let particle_name = particle.name.clone();
+        let named_mu = particle
+            .chemical_potential
+            .map(|id| graph.model.parameter_by_id(id).unwrap().name.clone());
+        let definition: serde_json::Value =
+            serde_json::from_str(&graph.model.to_json().unwrap()).unwrap();
         for (chemical_potential, has_mu) in [
             (None, false),
-            (Some(crate::model::ParameterName(UFOSymbol::zero())), false),
-            (particle.chemical_potential, true),
+            (Some("ZERO".to_owned()), false),
+            (named_mu, true),
         ] {
-            std::sync::Arc::make_mut(&mut particle.0).chemical_potential = chemical_potential;
-            graph.underlying[edge].particle = particle.clone().into();
-            assert_eq!(graph[edge].chemical_potential_atom().is_some(), has_mu);
+            let mut input = definition.clone();
+            for particle in input["particles"].as_array_mut().unwrap() {
+                if particle["name"] == particle_name {
+                    particle["chemical_potential"] = serde_json::json!(chemical_potential);
+                }
+            }
+            graph.model = std::sync::Arc::new(Model::from_json(&input.to_string()).unwrap());
+            assert_eq!(
+                graph[edge].chemical_potential_atom(&graph.model).is_some(),
+                has_mu
+            );
             for thermal_sign in [-1, 0, 1] {
                 for order in 0..=3 {
                     let vacuum = graph
                         .explicit_thermal_distribution_atom(
+                            &graph.model,
                             edge,
                             order,
                             Atom::num(thermal_sign),
@@ -1796,6 +1936,7 @@ mod tests {
                         }
                     );
                     let zero_temperature = graph.explicit_thermal_distribution_atom(
+                        &graph.model,
                         edge,
                         order,
                         Atom::num(thermal_sign),
@@ -1824,15 +1965,22 @@ mod tests {
     #[test]
     fn symmetric_thermal_distributions_keep_the_chemical_potential_orientation() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph symmetric_thermal {
-            node [num=1]
-            edge [num=1]
-            A -> A [particle="d"]
-            A -> A [particle="G+"]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph symmetric_thermal {
+                node [num=1]
+                edge [num=1]
+                A -> A [particle="d"]
+                A -> A [particle="G+"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })
         .unwrap();
         for edge in graph.iter_edge_ids() {
-            let mu = graph[edge].chemical_potential_atom().unwrap();
+            let mu = graph[edge].chemical_potential_atom(&graph.model).unwrap();
             assert!(!mu.is_zero());
             for orientation in [-1, 1] {
                 let energy = Atom::num(orientation) * &mu + symbol!("shifted_thermal_energy");
@@ -1843,6 +1991,7 @@ mod tests {
                     let bodies = [-1, 0, 1].map(|contour| {
                         graph
                             .explicit_thermal_distribution_atom(
+                                &graph.model,
                                 edge,
                                 0,
                                 Atom::num(contour),
@@ -1865,6 +2014,7 @@ mod tests {
                         let derivatives = [-1, 0, 1].map(|contour| {
                             graph
                                 .explicit_thermal_distribution_atom(
+                                    &graph.model,
                                     edge,
                                     order,
                                     Atom::num(contour),
@@ -1885,12 +2035,19 @@ mod tests {
     #[test]
     fn thermal_distribution_bodies_are_energy_derivatives() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph thermal {
-            node [num=1]
-            edge [num=1]
-            A -> B [particle="d"]
-            B -> A [particle="d"]
-            A -> B [particle="g"]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph thermal {
+                node [num=1]
+                edge [num=1]
+                A -> B [particle="d"]
+                B -> A [particle="d"]
+                A -> B [particle="g"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })
         .unwrap();
         let energy = symbol!("thermal_derivative_energy");
@@ -1898,11 +2055,12 @@ mod tests {
         for fermion in [true, false] {
             let edge = graph
                 .iter_edge_ids()
-                .find(|&edge| graph[edge].is_fermion() == fermion)
+                .find(|&edge| graph[edge].is_fermion(&graph.model) == fermion)
                 .unwrap();
             let mut bodies = [0, 1, 2, 3, 4, 5, 6].map(|order| {
                 graph
                     .explicit_thermal_distribution_atom(
+                        &graph.model,
                         edge,
                         order,
                         thermal_sign.clone(),
@@ -1916,7 +2074,7 @@ mod tests {
             // Order zero selects its decaying exponential through |E - sigma*mu|, which
             // has no symbolic derivative. Start from its hyperbolic form instead;
             // native_thermal_distributions checks that the two agree numerically.
-            let shifted_energy = match graph[edge].chemical_potential_atom() {
+            let shifted_energy = match graph[edge].chemical_potential_atom(&graph.model) {
                 Some(mu) => Atom::var(energy) - GS.sign(edge) * mu,
                 None => Atom::var(energy),
             };
@@ -1936,12 +2094,19 @@ mod tests {
     #[test]
     fn native_thermal_distributions() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph thermal {
-            node [num=1]
-            edge [num=1]
-            A -> B [particle="d"]
-            B -> A [particle="d"]
-            A -> B [particle="g"]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph thermal {
+                node [num=1]
+                edge [num=1]
+                A -> B [particle="d"]
+                B -> A [particle="d"]
+                A -> B [particle="g"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })
         .unwrap();
         let directory =
@@ -1954,14 +2119,15 @@ mod tests {
         for fermion in [true, false] {
             let edge = graph
                 .iter_edge_ids()
-                .find(|&edge| graph[edge].is_fermion() == fermion)
+                .find(|&edge| graph[edge].is_fermion(&graph.model) == fermion)
                 .unwrap();
-            let chemical_potential = graph[edge].chemical_potential_atom();
+            let chemical_potential = graph[edge].chemical_potential_atom(&graph.model);
             let has_mu = chemical_potential.is_some();
             assert_eq!(has_mu, fermion);
             for order in 0..=4 {
                 let mut expression = graph
                     .explicit_thermal_distribution_atom(
+                        &graph.model,
                         edge,
                         order,
                         thermal_sign.clone(),
@@ -2112,18 +2278,25 @@ mod tests {
         use symbolica::domains::float::Complex as SymComplex;
 
         test_initialise().unwrap();
-        let mut graph: Graph = dot!(digraph zero_temperature_step {
-            node [num=1]
-            edge [num=1]
-            A -> B [particle="d"]
-            B -> A [particle="d"]
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph zero_temperature_step {
+                node [num=1]
+                edge [num=1]
+                A -> B [particle="d"]
+                B -> A [particle="d"]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })
         .unwrap();
         graph
             .set_medium_mode(MediumMode::ZeroTemperatureEquilibrium)
             .unwrap();
         let edge = EdgeIndex(0);
-        let chemical_potential = graph[edge].chemical_potential_atom().unwrap();
+        let chemical_potential = graph[edge].chemical_potential_atom(&graph.model).unwrap();
         let energy = symbol!("zero_temperature_test_energy").to_atom();
         let mu = symbol!("zero_temperature_test_mu").to_atom();
         let mu_value = 0.5;
@@ -2142,6 +2315,7 @@ mod tests {
             for thermal_sign in [-1, 0, 1] {
                 let expression = graph
                     .explicit_thermal_distribution_atom(
+                        &graph.model,
                         edge,
                         0,
                         Atom::num(thermal_sign),

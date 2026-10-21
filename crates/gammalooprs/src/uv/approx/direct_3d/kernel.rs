@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use color_eyre::Result;
 use eyre::eyre;
-use idenso::color::{ColorSimplifier, ColorSimplifySettings};
+use idenso::color::ColorSimplifySettings;
 use itertools::Itertools;
 use linnet::half_edge::subgraph::{Inclusion, InternalSubGraph, SuBitGraph, SubSetLike, SubSetOps};
 use symbolica::{
@@ -348,15 +348,13 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         .as_ref()
         .map(|active| active.intersection(current.subgraph()));
     let reduced = current.reduced_subgraph(given);
-    let mut numerator = ctx
-        .graph
-        .numerator(&reduced, given.subgraph())
-        .get_single_atom()
-        .expect("graph numerator should be available")
-        .simplify_color_with(ColorSimplifySettings {
-            simplify_non_color: false,
+    let numerator = ctx.graph.numerator(&reduced, given.subgraph())?.state.expr;
+    let mut numerator = numerator.simplify_algebra(&idenso::tensor::AlgebraSettings {
+        color: Some(ColorSimplifySettings {
             ..Default::default()
-        });
+        }),
+        ..Default::default()
+    })?;
     let lmb_id = lmb
         .loop_edges
         .first()
@@ -368,7 +366,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
         if !pair.is_paired() {
             continue;
         }
-        let mass = edge.data.mass_atom();
+        let mass = edge.data.mass_atom(ctx.model);
         if !mass.is_zero() && !physical_masses.contains(&mass) {
             physical_masses.push(mass);
         }
@@ -377,7 +375,18 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     // same model mass in the accumulated CFF atom would also tag a disjoint
     // sibling that happens to use the same particle species.
     for mass in physical_masses {
-        numerator = numerator.replace(mass.clone()).with(mass * &mass_scope);
+        let tagged = numerator
+            .expression()
+            .replace(mass.clone())
+            .with(&mass * &mass_scope);
+        debug_tags!(#uv, #local, #trace;
+            stage = "direct_3d_numerator_mass_scope",
+            mass = %mass,
+            file.source = %numerator.expression().to_plain_string(),
+            file.tagged = %tagged.to_plain_string(),
+            "Scoped a physical numerator mass before its Taylor operation"
+        );
+        numerator = numerator.with_checked_expression(tagged)?;
     }
     // Every local UV kernel starts from the vacuum-explicit reduced graph, including
     // thermal runs; the medium dependence lives in the unreduced observable.
@@ -389,6 +398,7 @@ pub(super) fn apply_taylor<S: ForestNodeLike>(
     } else {
         vacuum_integrands = integrands.map_expressions(|atom| {
             ctx.graph.make_thermal_distributions_explicit(
+                ctx.model,
                 atom,
                 MediumMode::Vacuum,
                 ctx.graph.iter_edges_of(&reduced).map(|(_, edge, _)| edge),
@@ -494,7 +504,7 @@ fn start<S: ForestNodeLike>(
         if !pair.is_paired() {
             continue;
         }
-        let mass = edge.data.mass_atom();
+        let mass = edge.data.mass_atom(ctx.model);
         if !mass.is_zero() && !physical_masses.contains(&mass) {
             physical_masses.push(mass);
         }
@@ -521,7 +531,7 @@ fn start<S: ForestNodeLike>(
             // set energies from inner_t on-shell
             atomarg = atomarg.replace(function!(GS.energy, eid)).with(GS.ose(ei));
 
-            let e_mass = e.data.mass_atom() * &mass_scope;
+            let e_mass = e.data.mass_atom(ctx.model) * &mass_scope;
             atomarg = atomarg
                 .replace(GS.ose(ei))
                 .with(GS.ose_full(ei, lmb_id, e_mass, None));
@@ -538,7 +548,7 @@ fn start<S: ForestNodeLike>(
     let mut reps = Vec::new();
     for (p, eid, e) in graph.iter_edges_of(rescaled_subgraph) {
         if p.is_paired() {
-            let e_mass = e.data.mass_atom() * &mass_scope;
+            let e_mass = e.data.mass_atom(ctx.model) * &mass_scope;
             let rep = GS.split_mom_pattern(eid, lmb_id, e_mass);
             debug_tags!(#uv, #local, #momentum, #trace;
                 stage = "local_3d_start_split_mom_pattern",
@@ -884,16 +894,17 @@ impl Direct3dApproximation<'_> {
                 )
             })?
             .map_numerators(|entry| {
-                Self::t_rescale(
+                let rescaled = Self::t_rescale(
                     deformation,
                     ctx,
                     current,
                     given,
-                    &entry.rhs,
+                    entry.rhs.expression(),
                     active_subgraph,
                     lmb,
                     false,
-                )
+                )?;
+                Ok(entry.rhs.with_checked_expression(rescaled)?)
             })?;
         let endpoint = match deformation {
             Local3DDeformation::Ordinary => 0,

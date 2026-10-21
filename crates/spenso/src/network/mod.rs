@@ -26,21 +26,21 @@ use library::{Library, LibraryError};
 
 use crate::algebra::{ScalarMul, algebraic_traits::RefOne};
 use crate::contraction::{Contract, Trace};
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::iterators::IteratableTensor;
 use crate::network::library::{DummyKey, FunctionLibrary, FunctionLibraryError, LibraryTensor};
 use crate::structure::abstract_index::AbstractIndex;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::structure::concrete_index::{ConcreteIndex, FlatIndex};
 use crate::structure::permuted::ApplyPendingIndexPermutation;
 // use crate::shadowing::Concretize;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::structure::StructureContract;
 use crate::structure::representation::LibrarySlot;
 use crate::structure::slot::{AbsInd, IsAbstractSlot};
 use crate::structure::{Canonicalized, HasName, StructureError, TensorShell};
 use std::borrow::Cow;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, Mul, MulAssign, Neg, Sub, SubAssign};
@@ -51,9 +51,9 @@ use store::{
 use thiserror::Error;
 // use log::trace;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::algebra::complex::RealOrComplexRef;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use crate::tensors::parametric::{
     AtomViewOrConcrete, ConcreteOrParam, ParamOrConcrete, ParamTensor,
 };
@@ -67,14 +67,14 @@ use crate::{
 };
 use eyre::eyre;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::atom::{Atom, AtomCore, AtomView};
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use symbolica::id::AliasedAtom;
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub mod tags;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 use tags::{SPENSO_TAG, scalar_store_alias, scalar_store_alias_index};
 // use eyre::Result;
 
@@ -82,9 +82,9 @@ use std::{convert::Infallible, fmt::Debug};
 
 const LARGE_SUM_PROFILE_THRESHOLD: usize = 32;
 const MIN_LAZY_TENSOR_SUM_TERMS: usize = 2;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub const MAX_EAGER_TENSOR_SUM_BYTES: usize = 16 * 1024 * 1024;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 const MIN_LAZY_FUSED_NUMERIC_CONTRACT_TERMS: usize = 8;
 
 pub struct FastTensorSumContractTerm<T, Sc> {
@@ -99,7 +99,7 @@ pub enum FastTensorSumContract<T, Sc> {
 }
 
 impl<T, Sc> FastTensorSumContract<T, Sc> {
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn map<U>(self, mut f: impl FnMut(T) -> U) -> FastTensorSumContract<U, Sc> {
         match self {
             FastTensorSumContract::Materialized(tensor) => {
@@ -180,7 +180,7 @@ impl TensorContractionProfile {
         }
     }
 
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     fn from_param_tensor<S>(tensor: &ParamTensor<S>) -> Self
     where
         S: TensorStructure + Clone,
@@ -294,7 +294,7 @@ pub trait FastTensorSumContractible<Sc>: Sized {
     fn contraction_pair_estimate(
         &self,
         _other: &Self,
-        _left_match_permutation: &Permutation,
+        _right_to_left_match_permutation: &Permutation,
         _left_matches: &[bool],
         _right_matches: &[bool],
         left_profile: TensorContractionProfile,
@@ -328,7 +328,7 @@ impl<S> FastTensorSum for TensorShell<S> {}
 impl<S, Sc> FastTensorSumContractible<Sc> for TensorShell<S> {}
 impl<S, Sc> TensorCommonFactor<Sc> for TensorShell<S> {}
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<S> FastTensorSum for ParamTensor<S>
 where
     S: TensorStructure + Clone + Sync,
@@ -448,7 +448,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 #[derive(Default)]
 struct FastTensorSumWorkload {
     shape: AtomSumShapeStats,
@@ -456,7 +456,7 @@ struct FastTensorSumWorkload {
     max_group_bytes: usize,
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl FastTensorSumWorkload {
     // These conservative floors select only shapes that showed a clear win in
     // the fast sparse-sum benchmark. In particular, a large number of trivial
@@ -509,7 +509,7 @@ impl FastTensorSumWorkload {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<S> FastTensorSumContractible<Atom> for ParamTensor<S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -522,7 +522,7 @@ where
     fn contraction_pair_estimate(
         &self,
         other: &Self,
-        left_match_permutation: &Permutation,
+        right_to_left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
         left_profile: TensorContractionProfile,
@@ -533,7 +533,7 @@ where
         sparse_atom_pair_estimate(
             self,
             other,
-            left_match_permutation,
+            right_to_left_match_permutation,
             left_matches,
             right_matches,
             left_profile,
@@ -552,7 +552,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<S> TensorCommonFactor<Atom> for ParamTensor<S>
 where
     S: TensorStructure + Clone,
@@ -595,12 +595,12 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 #[allow(clippy::too_many_arguments)]
 fn sparse_atom_pair_estimate<S>(
     left: &ParamTensor<S>,
     right: &ParamTensor<S>,
-    left_match_permutation: &Permutation,
+    right_to_left_match_permutation: &Permutation,
     left_matches: &[bool],
     right_matches: &[bool],
     left_profile: TensorContractionProfile,
@@ -627,9 +627,13 @@ where
         return fallback;
     }
 
-    let left_groups =
-        sparse_free_keys_by_match(left_sparse, left_matches, Some(left_match_permutation));
-    let right_groups = sparse_free_keys_by_match(right_sparse, right_matches, None);
+    // match_indices sorts the right matched coordinates into the left order.
+    let left_groups = sparse_free_keys_by_match(left_sparse, left_matches, None);
+    let right_groups = sparse_free_keys_by_match(
+        right_sparse,
+        right_matches,
+        Some(right_to_left_match_permutation),
+    );
     if left_groups.is_empty() || right_groups.is_empty() {
         return TensorContractionPairEstimate {
             estimated_products: 0,
@@ -718,7 +722,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn sparse_free_keys_by_match<S>(
     sparse: &SparseTensor<Atom, S>,
     matches: &[bool],
@@ -749,7 +753,7 @@ where
     groups
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<C, S> FastTensorSum for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Sync,
@@ -768,7 +772,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<C, S> FastTensorSumContractible<Atom> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -784,7 +788,7 @@ where
     fn contraction_pair_estimate(
         &self,
         other: &Self,
-        left_match_permutation: &Permutation,
+        right_to_left_match_permutation: &Permutation,
         left_matches: &[bool],
         right_matches: &[bool],
         left_profile: TensorContractionProfile,
@@ -797,7 +801,7 @@ where
                 sparse_atom_pair_estimate(
                     left,
                     right,
-                    left_match_permutation,
+                    right_to_left_match_permutation,
                     left_matches,
                     right_matches,
                     left_profile,
@@ -839,7 +843,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<C, S, CSc> FastTensorSumContractible<ConcreteOrParam<CSc>> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -895,7 +899,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<C, S> TensorCommonFactor<Atom> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone,
@@ -910,7 +914,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<C, S, CSc> TensorCommonFactor<ConcreteOrParam<CSc>> for ParamOrConcrete<C, S>
 where
     S: TensorStructure + Clone,
@@ -928,7 +932,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 struct NumericContractEntry {
     index: Vec<ConcreteIndex>,
     coefficient: Atom,
@@ -936,7 +940,7 @@ struct NumericContractEntry {
     left_metric_negative: bool,
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 struct FusedNumericContractPlan<S>
 where
     S: TensorStructure,
@@ -954,7 +958,7 @@ where
     right_match_flags: Vec<bool>,
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn fused_numeric_tensor_sum_contract<S>(
     terms: &[&ParamTensor<S>],
     numeric: &ParamTensor<S>,
@@ -1059,7 +1063,7 @@ where
     })())
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn fused_numeric_tensor_sum_contract_impl<S>(
     terms: &[&ParamTensor<S>],
     plan: FusedNumericContractPlan<S>,
@@ -1090,7 +1094,7 @@ where
     plan.finish_groups(groups)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<S> FusedNumericContractPlan<S>
 where
     S: TensorStructure + Clone + Send + Sync + StructureContract,
@@ -1453,7 +1457,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn common_sparse_atom_factors<S>(sum_sparse: &SparseTensor<Atom, S>) -> Vec<Atom>
 where
     S: TensorStructure,
@@ -1480,7 +1484,7 @@ where
     common
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn atom_factors(atom: AtomView<'_>) -> Vec<Atom> {
     match atom {
         AtomView::Mul(mul) => mul
@@ -1491,7 +1495,7 @@ fn atom_factors(atom: AtomView<'_>) -> Vec<Atom> {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn atom_contains_factor(atom: AtomView<'_>, factor: &Atom) -> bool {
     match atom {
         AtomView::Mul(mul) => mul
@@ -1501,7 +1505,7 @@ fn atom_contains_factor(atom: AtomView<'_>, factor: &Atom) -> bool {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn atom_without_factors(atom: AtomView<'_>, factors: &[Atom]) -> Atom {
     match atom {
         AtomView::Mul(mul) => {
@@ -1529,14 +1533,14 @@ fn atom_without_factors(atom: AtomView<'_>, factors: &[Atom]) -> Atom {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn atom_product(factors: impl IntoIterator<Item = Atom>) -> Atom {
     factors
         .into_iter()
         .fold(Atom::num(1), |product, factor| product * factor)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn collect_numeric_contract_entries<S>(
     numeric: &SparseTensor<Atom, S>,
     numeric_match_axes: &[usize],
@@ -1571,12 +1575,12 @@ where
     Ok(entries)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn component_key(index: &[ConcreteIndex], axes: &[usize]) -> Vec<ConcreteIndex> {
     axes.iter().map(|axis| index[*axis]).collect()
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn match_flags(order: usize, axes: &[usize]) -> Vec<bool> {
     let mut flags = vec![false; order];
     for axis in axes {
@@ -1585,7 +1589,7 @@ fn match_flags(order: usize, axes: &[usize]) -> Vec<bool> {
     flags
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn metric_negative<S>(
     structure: &S,
     matched_axes: &[usize],
@@ -1612,7 +1616,7 @@ where
     Ok(negative)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn contract_result_index<S>(
     result_structure: &S,
     left_slots: &[S::Slot],
@@ -1659,7 +1663,7 @@ where
         .map_err(ContractionError::from)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom {
     if coefficient == &Atom::num(1) {
         atom
@@ -1681,7 +1685,7 @@ fn multiply_atom_by_numeric_coefficient(atom: Atom, coefficient: &Atom) -> Atom 
     Eq,
 )]
 #[cfg_attr(
-    feature = "symbolica",
+    feature = "shadowing",
     trait_decode(trait = symbolica::state::HasStateMap),
 )]
 /// An owned tensor-expression graph together with the values referenced by it.
@@ -1772,7 +1776,7 @@ pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {
     pub state: NetworkState,
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 #[derive(Debug, Clone)]
 pub struct ScalarAliases {
     aliased_originals: Vec<bool>,
@@ -1782,7 +1786,7 @@ pub struct ScalarAliases {
     max_aliased_bytes: usize,
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl ScalarAliases {
     fn new(scalars: usize) -> Self {
         Self {
@@ -1881,7 +1885,7 @@ impl ScalarAliases {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T, K: Debug, FK: Debug, Aind: AbsInd> Network<NetworkStore<T, Atom>, K, FK, Aind> {
     pub fn alias_scalar_refs(
         &mut self,
@@ -2015,7 +2019,8 @@ impl AddAssign for NetworkState {
         // println!("{self:?} *={rhs:?}");
         *self = match (*self, rhs) {
             (NetworkState::PureScalar, NetworkState::PureScalar) => NetworkState::PureScalar,
-            (NetworkState::PureScalar, NetworkState::Scalar) => NetworkState::Scalar,
+            (NetworkState::PureScalar, NetworkState::Scalar)
+            | (NetworkState::Scalar, NetworkState::PureScalar) => NetworkState::Scalar,
             (a, b) => {
                 assert_eq!(a, b, "Cannot add incompatible network states:{a:?} + {b:?}");
                 a
@@ -2189,6 +2194,220 @@ impl<S: TensorScalarStoreMapping, K: Clone, FK: Clone, Aind: AbsInd> TensorScala
     }
 }
 
+impl<T, Sc, K: Clone + Display + Debug, FK: Clone + Display + Debug, Aind: AbsInd>
+    Network<NetworkStore<T, Sc>, K, FK, Aind>
+{
+    /// Map stored occurrences against the graph's current storage ports.
+    /// Untouched aliases reuse one mapped value. A mapper may canonicalize axes;
+    /// its exact surviving slot multiset is checked and the graph records that
+    /// storage permutation without changing its logical-position witness.
+    /// The final callback argument lists source storage positions in logical
+    /// order, or is unavailable after generic component execution.
+    #[allow(clippy::type_complexity, clippy::result_large_err)]
+    pub fn map_occurrences<U, V>(
+        &self,
+        scalar_map: impl FnMut(&Sc) -> Result<U, TensorNetworkError<K, FK>>,
+        mut tensor_map: impl FnMut(
+            &T,
+            &[(usize, LibrarySlot<Aind>, Option<&Sc>)],
+            Option<&[usize]>,
+        ) -> Result<V, TensorNetworkError<K, FK>>,
+    ) -> Result<Network<NetworkStore<V, U>, K, FK, Aind>, TensorNetworkError<K, FK>>
+    where
+        T: HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>,
+        V: HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>,
+    {
+        let mut nodes = Vec::new();
+        for (node, mut crown, data) in self.graph.graph.iter_nodes() {
+            if !matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(_)))
+                && crown.any(|hedge| {
+                    matches!(self.graph.graph[[&hedge]], NetworkEdge::BoundPort { .. })
+                })
+            {
+                return Err(TensorNetworkError::Other(eyre!(
+                    "bound ports require a local tensor occurrence before materialization"
+                )));
+            }
+            if matches!(data, NetworkNode::Leaf(_)) {
+                nodes.push(node);
+            }
+        }
+        let mut mapped = self.map_ref(|scalar| scalar, |tensor| tensor);
+        let mut tensors: Vec<V> = Vec::new();
+        let mut untouched: Vec<Option<(Option<Vec<usize>>, usize)>> =
+            vec![None; self.store.tensors.len()];
+        let mut map_tensor = |index: usize,
+                              ports: &[(usize, LibrarySlot<Aind>, Option<&Sc>)],
+                              logical: Option<&[usize]>| {
+            let source = &self.store.tensors[index];
+            let source_slots = source.structure().external_structure();
+            // Storage ordinals retain endpoint representation even when sewing
+            // has merged a dual pair into one shared edge payload.
+            let ports = ports
+                .iter()
+                .map(|(position, slot, bound)| {
+                    let original = source_slots.get(*position).ok_or_else(|| {
+                        TensorNetworkError::Other(eyre!(
+                            "occurrence port is outside its stored tensor"
+                        ))
+                    })?;
+                    if original.rep() != slot.rep() && !original.rep().matches(&slot.rep()) {
+                        return Err(TensorNetworkError::Other(eyre!(
+                            "occurrence changed a port representation"
+                        )));
+                    }
+                    Ok((*position, original.rep().slot(slot.aind()), *bound))
+                })
+                .collect::<Result<Vec<_>, TensorNetworkError<K, FK>>>()?;
+            let expected = ports
+                .iter()
+                .filter_map(|(_, slot, bound)| bound.is_none().then_some(*slot))
+                .collect::<Vec<_>>();
+            let reusable = ports.iter().all(|(_, _, value)| value.is_none())
+                && source
+                    .structure()
+                    .external_structure_iter()
+                    .eq(ports.iter().map(|(_, slot, _)| *slot));
+            if reusable
+                && let Some((previous, mapped)) = &untouched[index]
+                && previous.as_deref() == logical
+            {
+                return Ok((
+                    *mapped,
+                    tensors[*mapped].structure().external_structure(),
+                    expected,
+                ));
+            }
+            let value = tensor_map(source, &ports, logical)?;
+            let slots = value.structure().external_structure();
+            let mut sorted_expected = expected.clone();
+            let mut actual = slots.clone();
+            actual.sort();
+            sorted_expected.sort();
+            if actual != sorted_expected {
+                return Err(TensorNetworkError::Other(eyre!(
+                    "occurrence materialization changed the surviving ports"
+                )));
+            }
+            let mapped = tensors.len();
+            tensors.push(value);
+            if reusable {
+                untouched[index] = Some((logical.map(<[usize]>::to_vec), mapped));
+            }
+            Ok::<_, TensorNetworkError<K, FK>>((mapped, slots, expected))
+        };
+        for node in nodes {
+            let NetworkNode::Leaf(mut leaf) = self.graph.graph[node].clone() else {
+                unreachable!()
+            };
+            let ports = self
+                .graph
+                .port_bindings(node)
+                .into_iter()
+                .map(|(port, slot, value)| {
+                    (
+                        port,
+                        slot,
+                        value.map(|value| self.store.get_scalar_ref(value)),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let logical = self.graph.logical_port_order(node).ok();
+            let mut references = Vec::new();
+            leaf.map_tensor_refs(|index| {
+                references.push(index);
+                index
+            });
+            let mut remapped = Vec::with_capacity(references.len());
+            let mut storage_order = None;
+            let mut source_order = None;
+            for index in references {
+                let (index, slots, source) = map_tensor(index, &ports, logical.as_deref())?;
+                if let Some(expected) = &storage_order
+                    && expected != &slots
+                {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "sum occurrences produced different storage orders"
+                    )));
+                }
+                if let Some(expected) = &source_order
+                    && expected != &source
+                {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "sum occurrences have different source storage orders"
+                    )));
+                }
+                source_order = Some(source);
+                storage_order = Some(slots);
+                remapped.push(index);
+            }
+            let mut remapped = remapped.into_iter();
+            leaf.map_tensor_refs(|_| remapped.next().unwrap());
+            if let Some(slots) = storage_order {
+                mapped
+                    .graph
+                    .set_tensor_slot_order(node, &source_order.unwrap(), &slots)?;
+            }
+            mapped.graph.graph[node] = NetworkNode::Leaf(leaf);
+        }
+        if mapped.graph.has_bound_ports() {
+            mapped.graph.clear_bound_ports();
+        }
+        let store = mapped.store.map_result(scalar_map, Ok)?;
+        Ok(Network {
+            state: mapped.graph.state(),
+            graph: mapped.graph,
+            store: NetworkStore {
+                tensors,
+                scalar: store.scalar,
+                scalar_aliases: store.scalar_aliases,
+            },
+        })
+    }
+
+    /// Apply one simultaneous external-port assignment to graph incidence and
+    /// stored component axes. Repeated references to a changed tensor are mapped
+    /// by occurrence; unrelated contractions with equal labels remain untouched.
+    #[allow(clippy::result_large_err)]
+    pub fn reindex_ports(
+        mut self,
+        replacements: &[(LibrarySlot<Aind>, LibrarySlot<Aind>)],
+    ) -> Result<Self, TensorNetworkError<K, FK>>
+    where
+        Sc: Clone,
+        T: Clone
+            + HasStructure<Structure: TensorStructure<Slot = LibrarySlot<Aind>>>
+            + TensorStructure<Slot = LibrarySlot<Aind>, Indexed = T>
+            + ApplyPendingIndexPermutation<Output = T>,
+    {
+        if replacements.iter().all(|(from, to)| from == to) {
+            return Ok(self);
+        }
+        self.graph.relabel_dangling_slots(replacements)?;
+        self.map_occurrences(
+            |scalar| Ok(scalar.clone()),
+            |tensor, ports, _logical| {
+                if ports.iter().any(|(_, _, bound)| bound.is_some()) {
+                    return Err(TensorNetworkError::Other(eyre!(
+                        "materialize bound component ports before reindexing"
+                    )));
+                }
+                if tensor
+                    .external_structure_iter()
+                    .eq(ports.iter().map(|(_, slot, _)| *slot))
+                {
+                    return Ok(tensor.clone());
+                }
+                let indices = ports
+                    .iter()
+                    .map(|(_, slot, _)| slot.aind())
+                    .collect::<Vec<_>>();
+                Ok(tensor.clone().reindex_storage(&indices)?.apply())
+            },
+        )
+    }
+}
+
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Default for Network<S, K, FK, Aind> {
     fn default() -> Self {
         Self::one()
@@ -2240,9 +2459,13 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Mul for Network<S,
         other.graph.shift_tensors(store.n_tensors());
         store.extend(other.store);
         self.state *= other.state;
+        let graph = self.graph * other.graph;
+        if self.state.is_tensor() {
+            self.state = graph.state();
+        }
 
         Network {
-            graph: self.graph * other.graph,
+            graph,
             store,
             state: self.state,
         }
@@ -2258,6 +2481,9 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> MulAssign
         self.store.extend(rhs.store);
         self.state *= rhs.state;
         self.graph *= rhs.graph;
+        if self.state.is_tensor() {
+            self.state = self.graph.state();
+        }
     }
 }
 
@@ -2278,25 +2504,15 @@ where
 {
     type Output = Self;
     fn mul(self, other: T) -> Self::Output {
-        let mut store = self.store;
-
-        let mut other = Network::from_tensor(other);
-
-        other.graph.shift_scalars(store.n_scalars());
-        other.graph.shift_tensors(store.n_tensors());
-        store.extend(other.store);
-
-        Network {
-            graph: self.graph * other.graph,
-            store,
-            state: self.state,
-        }
+        self * Network::from_tensor(other)
     }
 }
 
 impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Add for Network<S, K, FK, Aind> {
     type Output = Self;
     fn add(self, mut other: Self) -> Self::Output {
+        let mut state = self.state;
+        state += other.state;
         let mut store = self.store;
 
         other.graph.shift_scalars(store.n_scalars());
@@ -2306,7 +2522,7 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> Add for Network<S,
         Network {
             graph: self.graph + other.graph,
             store,
-            state: self.state,
+            state,
         }
     }
 }
@@ -2315,6 +2531,7 @@ impl<S: TensorScalarStore, FK: Debug, K: Debug, Aind: AbsInd> AddAssign
     for Network<S, K, FK, Aind>
 {
     fn add_assign(&mut self, mut rhs: Self) {
+        self.state += rhs.state;
         rhs.graph.shift_scalars(self.store.n_scalars());
         rhs.graph.shift_tensors(self.store.n_tensors());
         self.store.extend(rhs.store);
@@ -2422,6 +2639,7 @@ impl<S: TensorScalarStore, K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> Su
     for Network<S, K, FK, Aind>
 {
     fn sub_assign(&mut self, mut rhs: Self) {
+        self.state += rhs.state;
         rhs.graph.shift_scalars(self.store.n_scalars());
         rhs.graph.shift_tensors(self.store.n_tensors());
         self.store.extend(rhs.store);
@@ -2587,7 +2805,7 @@ pub enum TensorNetworkError<K: Display, FK: Display> {
     #[error("library tensor graph has {actual} indices, expected {expected}")]
     LibraryIndexRankMismatch { expected: usize, actual: usize },
     /// A chain expression had invalid nesting.
-    #[cfg(feature = "symbolica")]
+    #[cfg(feature = "shadowing")]
     #[error(transparent)]
     ChainNesting(#[from] parsing::ChainNestingError),
     /// Applying a registered tensor function failed.
@@ -2946,7 +3164,7 @@ where
         S: Clone + Into<T::Scalar>,
         K: Display + Debug,
         FK: Display + Debug + Clone,
-        LT: TensorStructure<Indexed = T> + Clone + LibraryTensor<WithIndices = T>,
+        LT: Clone + LibraryTensor<WithIndices = T>,
         T: ApplyPendingIndexPermutation<Output = T>,
         <<LT::WithIndices as HasStructure>::Structure as TensorStructure>::Slot:
             IsAbstractSlot<Aind = Aind>,
@@ -3195,7 +3413,7 @@ impl<T, S, FK: Debug, K: Debug, Aind: AbsInd> Network<NetworkStore<T, S>, K, FK,
 }
 
 // use log::trace;
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 pub mod parsing;
 // use log::trace;
 pub mod contract;
@@ -3367,7 +3585,7 @@ fn log_sum_add(
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 #[derive(Clone, Copy, Debug, Default)]
 struct AtomSumShapeStats {
     logical_entries: usize,
@@ -3380,7 +3598,7 @@ struct AtomSumShapeStats {
     max_bytes: usize,
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl AtomSumShapeStats {
     fn observe_atom(&mut self, atom: AtomView<'_>, include_bytes: bool) -> (usize, usize) {
         let terms = atom.nterms();
@@ -3412,19 +3630,19 @@ impl AtomSumShapeStats {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 trait AtomEntryShape {
     fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool);
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl AtomEntryShape for AtomView<'_> {
     fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool) {
         stats.observe_atom(self, include_bytes);
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T> AtomEntryShape for AtomViewOrConcrete<'_, T> {
     fn observe_atom_shape(self, stats: &mut AtomSumShapeStats, include_bytes: bool) {
         if let AtomViewOrConcrete::Atom(atom) = self {
@@ -3433,28 +3651,28 @@ impl<T> AtomEntryShape for AtomViewOrConcrete<'_, T> {
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T> AtomEntryShape for &T {
     fn observe_atom_shape(self, _stats: &mut AtomSumShapeStats, _include_bytes: bool) {}
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T> AtomEntryShape for RealOrComplexRef<'_, T> {
     fn observe_atom_shape(self, _stats: &mut AtomSumShapeStats, _include_bytes: bool) {}
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 trait AtomSumShapeDiagnostics {
     fn atom_sum_shape_stats(&self, include_bytes: bool) -> AtomSumShapeStats;
 }
 
-#[cfg(not(feature = "symbolica"))]
+#[cfg(not(feature = "shadowing"))]
 trait AtomSumShapeDiagnostics {}
 
-#[cfg(not(feature = "symbolica"))]
+#[cfg(not(feature = "shadowing"))]
 impl<T> AtomSumShapeDiagnostics for T {}
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 impl<T> AtomSumShapeDiagnostics for T
 where
     T: HasStructure + IteratableTensor,
@@ -3472,7 +3690,7 @@ where
     }
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn scalar_atom_sum_shape_stats<S: 'static>(
     scalar: &S,
     include_bytes: bool,
@@ -3486,7 +3704,7 @@ fn scalar_atom_sum_shape_stats<S: 'static>(
     Some(stats)
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn log_sum_leaf_atom_shapes<K, FK, Aind, Store, LT, L>(
     store: &Store,
     graph: &NetworkGraph<K, FK, Aind>,
@@ -3812,7 +4030,7 @@ where
     let keep_lazy = !all_scalar_terms
         && terms.len() >= MIN_LAZY_TENSOR_SUM_TERMS
         && (profile::lazy_tensor_sums() || {
-            #[cfg(feature = "symbolica")]
+            #[cfg(feature = "shadowing")]
             {
                 // Broadcasting a scalar coefficient into every component can
                 // make a small factored sum enormous before external tensors
@@ -3838,7 +4056,7 @@ where
                     estimated_bytes >= MAX_EAGER_TENSOR_SUM_BYTES
                 })
             }
-            #[cfg(not(feature = "symbolica"))]
+            #[cfg(not(feature = "shadowing"))]
             false
         });
 
@@ -3939,7 +4157,7 @@ where
     NetworkLeaf::LocalTensor(store.push_tensor(result))
 }
 
-#[cfg(feature = "symbolica")]
+#[cfg(feature = "shadowing")]
 fn try_atom_scalar_sum<K, Aind, Store>(
     store: &mut Store,
     targets: &[(NodeIndex, &NetworkLeaf<K, Aind>)],
@@ -4607,7 +4825,7 @@ impl Parallel {
         FK: Clone + Debug + Display + Send + Sync,
         Aind: AbsInd + Send + Sync,
     {
-        #[cfg(feature = "symbolica")]
+        #[cfg(feature = "shadowing")]
         if !crate::symbolic_parallelism::symbolica_rayon_enabled() {
             return <Sequential as ExecutionStrategy<
                 NetworkStore<T, Sc>,
@@ -4820,6 +5038,11 @@ where
             + for<'a> AddAssign<<T as Ref>::Ref<'a>>,
         Sc: Clone,
     {
+        if self.graph.has_bound_ports() {
+            return Err(
+                eyre::eyre!("materialize bound tensor ports before component execution").into(),
+            );
+        }
         {
             let _span = profile::span(Timer::MergeOps);
             profile::bump(Counter::MergeOps, 1);
@@ -4846,6 +5069,7 @@ where
             };
             if let Some(leaf) = materialized {
                 self.graph.graph[root] = NetworkNode::Leaf(leaf);
+                self.graph.invalidate_logical_layout(root);
             }
         }
         self.store.retain_graph_tensors(&mut self.graph);
@@ -5074,6 +5298,11 @@ where
         Sc: Clone + Send + Sync,
         Aind: Send + Sync,
     {
+        if self.graph.has_bound_ports() {
+            return Err(
+                eyre::eyre!("materialize bound tensor ports before component execution").into(),
+            );
+        }
         {
             let _span = profile::span(Timer::MergeOps);
             profile::bump(Counter::MergeOps, 1);
@@ -5100,6 +5329,7 @@ where
             };
             if let Some(leaf) = materialized {
                 self.graph.graph[root] = NetworkNode::Leaf(leaf);
+                self.graph.invalidate_logical_layout(root);
             }
         }
         self.store.retain_graph_tensors(&mut self.graph);
@@ -5112,7 +5342,7 @@ impl<LT, L, K, FK, FL, Aind, Store> ExecuteOp<FL, L, K, FK, Aind> for Store
 where
     LT: LibraryTensor + Clone,
     Store: NetworkStoreAccess,
-    Store::Tensor: HasStructure
+    Store::Tensor: ScalarTensor
         + TensorStructure
         + Neg<Output = Store::Tensor>
         + Clone
@@ -5133,6 +5363,7 @@ where
         + Clone
         + for<'a> AddAssign<<Store::Tensor as HasStructure>::ScalarRef<'a>>
         + From<<Store::Tensor as HasStructure>::Scalar>
+        + Into<<Store::Tensor as HasStructure>::Scalar>
         + Ref
         + for<'a> MulAssign<<Store::Scalar as Ref>::Ref<'a>>
         + 'static,
@@ -5318,7 +5549,7 @@ where
                         target_start.elapsed().as_secs_f64() * 1000.0,
                     );
                 }
-                #[cfg(feature = "symbolica")]
+                #[cfg(feature = "shadowing")]
                 if profile_sum {
                     log_sum_leaf_atom_shapes::<K, FK, Aind, Self, LT, L>(
                         self, graph, &targets, lib,
@@ -5327,7 +5558,7 @@ where
 
                 let (nf, first) = &targets[0];
 
-                #[cfg(feature = "symbolica")]
+                #[cfg(feature = "shadowing")]
                 if let Some(new_node) = try_atom_scalar_sum(self, &targets) {
                     if let Some(sum_start) = sum_start {
                         eprintln!(
@@ -5719,304 +5950,115 @@ where
                         graph.dot()
                     )));
                 }
-                let n = pow.abs();
+                let n = pow.unsigned_abs();
                 let child_id = operation.children()[0];
-                if let NetworkNode::Leaf(leaf) = &graph.graph[child_id] {
-                    let new_node = match leaf {
-                        NetworkLeaf::Scalar(si) => {
-                            if n == 0 {
-                                NetworkLeaf::Scalar(*si)
+                let NetworkNode::Leaf(leaf) = &graph.graph[child_id] else {
+                    return Err(TensorNetworkError::ChildlessNeg);
+                };
+                if let NetworkLeaf::Scalar(si) = leaf {
+                    if pow == 1 {
+                        return Ok(leaf.clone());
+                    }
+                    let tensor = Store::Tensor::new_scalar(self.scalar_ref(*si).clone().into());
+                    let base = Store::Scalar::from(tensor.scalar_power_base().unwrap());
+                    let mut s = base.ref_one();
+                    for _ in 0..n {
+                        s *= base.refer();
+                    }
+                    if pow < 0 {
+                        s = s.ref_one() / s;
+                    }
+                    let pos = self.push_scalar(s);
+                    return Ok(NetworkLeaf::Scalar(pos.into()));
+                }
+
+                let (mut t, original) = match leaf {
+                    NetworkLeaf::LibraryKey { key, .. } => {
+                        let inds = graph.get_lib_data(lib, child_id)?;
+                        (
+                            Store::Tensor::from(inds),
+                            NetworkLeaf::library_key(key.clone()),
+                        )
+                    }
+                    NetworkLeaf::LocalTensor(ti) => {
+                        (self.tensor(*ti).clone(), NetworkLeaf::LocalTensor(*ti))
+                    }
+                    NetworkLeaf::TensorSum(indices) => {
+                        let materialized =
+                            materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
+                        let NetworkLeaf::LocalTensor(ti) = materialized else {
+                            unreachable!("materialized tensor sum is a local tensor")
+                        };
+                        (self.tensor(ti).clone(), materialized)
+                    }
+                    NetworkLeaf::ScaledTensor(term) => {
+                        let materialized = materialize_scaled_tensors::<K, Aind, Self>(
+                            self,
+                            std::slice::from_ref(term),
+                            None,
+                        );
+                        let NetworkLeaf::LocalTensor(ti) = materialized else {
+                            unreachable!("materialized tensor term is a local tensor")
+                        };
+                        (self.tensor(ti).clone(), materialized)
+                    }
+                    NetworkLeaf::ScaledTensorSum(terms) => {
+                        let materialized =
+                            materialize_scaled_tensors::<K, Aind, Self>(self, terms, None);
+                        let NetworkLeaf::LocalTensor(ti) = materialized else {
+                            unreachable!("materialized tensor terms are a local tensor")
+                        };
+                        (self.tensor(ti).clone(), materialized)
+                    }
+                    NetworkLeaf::Scalar(_) => unreachable!("scalar power handled above"),
+                };
+                match pow {
+                    0 => {
+                        let one = self.scalar(0).ref_one();
+                        let pos = self.push_scalar(one);
+                        Ok(NetworkLeaf::Scalar(pos.into()))
+                    }
+                    1 => Ok(original),
+                    _ => {
+                        let (mut s, exponent) = if t.is_scalar() {
+                            // Preserve the scalar boundary before repeating a contraction.
+                            (Store::Scalar::from(t.scalar_power_base().unwrap()), n)
+                        } else {
+                            let squares = n / 2;
+                            let square = t.contract(&t)?;
+                            if n % 2 == 1 {
+                                for _ in 0..squares {
+                                    t = square.contract(&t)?;
+                                }
+                                if pow >= 0 {
+                                    let pos = self.push_tensor(t);
+                                    return Ok(NetworkLeaf::LocalTensor(pos));
+                                }
+                                if !t.is_scalar() {
+                                    return Err(TensorNetworkError::NegativeExponentNonScalar(
+                                        "".to_string(),
+                                    ));
+                                }
+                                (Store::Scalar::from(t.scalar_power_base().unwrap()), 1)
                             } else {
-                                let mut s = self.scalar_ref(*si).clone();
-
-                                for _ in 1..n {
-                                    s *= self.scalar_ref(*si).refer();
-                                }
-
-                                if pow < 0 {
-                                    s = s.ref_one() / s;
-                                }
-
-                                let pos = self.push_scalar(s);
-
-                                NetworkLeaf::Scalar(pos.into())
+                                let scalar = if pow < 0 || squares > 1 {
+                                    square.scalar_power_base()
+                                } else {
+                                    square.scalar()
+                                };
+                                (Store::Scalar::from(scalar.unwrap()), squares)
                             }
+                        };
+                        let base = s.clone();
+                        for _ in 1..exponent {
+                            s *= base.refer();
                         }
-                        NetworkLeaf::LibraryKey { key, .. } => {
-                            let inds = graph.get_lib_data(lib, child_id)?;
-                            let mut t = Store::Tensor::from(inds);
-
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::library_key(key.clone()),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
+                        if pow < 0 {
+                            s = s.ref_one() / s;
                         }
-                        NetworkLeaf::LocalTensor(ti) => {
-                            let mut t = self.tensor(*ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(*ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::TensorSum(indices) => {
-                            let materialized =
-                                materialize_tensor_sum::<K, Aind, Self>(self, indices, None);
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor sum is a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::ScaledTensor(term) => {
-                            let materialized = materialize_scaled_tensors::<K, Aind, Self>(
-                                self,
-                                std::slice::from_ref(term),
-                                None,
-                            );
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor term is a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                        NetworkLeaf::ScaledTensorSum(terms) => {
-                            let materialized =
-                                materialize_scaled_tensors::<K, Aind, Self>(self, terms, None);
-                            let NetworkLeaf::LocalTensor(ti) = materialized else {
-                                unreachable!("materialized tensor terms are a local tensor")
-                            };
-                            let mut t = self.tensor(ti).clone();
-                            match pow {
-                                0 => {
-                                    let one = self.scalar(0).ref_one();
-                                    let pos = self.push_scalar(one);
-                                    NetworkLeaf::Scalar(pos.into())
-                                }
-                                1 => NetworkLeaf::LocalTensor(ti),
-                                _ => {
-                                    let squares = n / 2;
-                                    let square = t.contract(&t)?;
-
-                                    if n % 2 == 1 {
-                                        for _ in 0..squares {
-                                            t = square.contract(&t)?;
-                                        }
-                                        if pow < 0 {
-                                            if !t.is_scalar() {
-                                                return Err(
-                                                    TensorNetworkError::NegativeExponentNonScalar(
-                                                        "".to_string(),
-                                                    ),
-                                                );
-                                            } else {
-                                                let mut s =
-                                                    Store::Scalar::from(t.scalar().unwrap());
-                                                s = s.ref_one() / s;
-                                                let pos = self.push_scalar(s);
-                                                NetworkLeaf::Scalar(pos.into())
-                                            }
-                                        } else {
-                                            let pos = self.push_tensor(t);
-                                            NetworkLeaf::LocalTensor(pos)
-                                        }
-                                    } else {
-                                        let mut s = Store::Scalar::from(square.scalar().unwrap());
-                                        let sc = s.clone();
-                                        for _ in 1..squares {
-                                            s *= sc.refer();
-                                        }
-                                        if pow < 0 {
-                                            s = s.ref_one() / s;
-                                        }
-                                        let pos = self.push_scalar(s);
-                                        NetworkLeaf::Scalar(pos.into())
-                                    }
-                                }
-                            }
-                        }
-                    };
-                    Ok(new_node)
-                } else {
-                    Err(TensorNetworkError::ChildlessNeg)
+                        let pos = self.push_scalar(s);
+                        Ok(NetworkLeaf::Scalar(pos.into()))
+                    }
                 }
             }
         }
@@ -6041,9 +6083,8 @@ impl Ref for f64 {
     }
 }
 
-// #[cfg(feature = "symbolica")]
-// pub mod levels;
-#[cfg(feature = "symbolica")]
+// #[cfg(feature = "shadowing")]
+#[cfg(feature = "shadowing")]
 pub mod symbolica_interop;
 
 #[cfg(test)]

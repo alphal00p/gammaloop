@@ -1,14 +1,14 @@
-digraph scalar_mirrored_cubic_exact_uv_rewrite {
+digraph scalar_mirrored_cubic_exact_uv_rewrite { graph [projector=1]
     node [num = "1"]
     edge [particle = scalar_1 num = "1" dod = -100]
 
     incoming [style = invis]
     outgoing [style = invis]
 
-    incoming -> v5 [id = 0]
-    v0 -> v2 [id = 1 lmb_id = 0]
-    v3 -> v0 [id = 2]
-    v0 -> v5 [id = 3]
+    incoming -> v5 [id = 0 sink="{ufo_order:0}"]
+    v0 -> v2 [id = 1 lmb_id = 0 source="{ufo_order:0}" sink="{ufo_order:0}"]
+    v3 -> v0 [id = 2 sink="{ufo_order:2}" source="{ufo_order:1}"]
+    v0 -> v5 [id = 3 source="{ufo_order:1}" sink="{ufo_order:1}"]
 
     // Reversing edge 5 and choosing edge 4 as the LMB carrier mirrors the
     // exact UV source below to Q, -Q, -Q. Its two edge-local factors retain
@@ -18,13 +18,13 @@ digraph scalar_mirrored_cubic_exact_uv_rewrite {
         lmb_id = 1
         dod = -1
         num = "Q(4,spenso::cind(0))+UFO::mass_scalar_1"
-    ]
+     sink="{ufo_order:1}" source="{ufo_order:1}"]
     v3 -> v1 [
         id = 5
         dod = -1
         num = "Q(5,spenso::cind(0))-2*UFO::mass_scalar_1"
-    ]
-    v1 -> v4 [id = 6]
-    v2 -> v3 [id = 7 dod = -2]
-    v4 -> outgoing [id = 8]
+     sink="{ufo_order:2}" source="{ufo_order:2}"]
+    v1 -> v4 [id = 6 source="{ufo_order:0}" sink="{ufo_order:0}"]
+    v2 -> v3 [id = 7 dod = -2 source="{ufo_order:2}" sink="{ufo_order:0}"]
+    v4 -> outgoing [id = 8 source="{ufo_order:1}"]
 }

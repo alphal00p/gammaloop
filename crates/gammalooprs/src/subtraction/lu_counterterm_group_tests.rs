@@ -1,8 +1,7 @@
 use super::*;
 use crate::{
     cff::{VertexSet, esurface::RaisedEsurfaceGroup},
-    dot,
-    graph::{lmb::LMBext, parse::from_dot::IntoGraph},
+    graph::lmb::LMBext,
     initialisation::test_initialise,
     momentum::{FourMomentum, RotationMethod, sample::BareMomentumSample},
     processes::{
@@ -17,15 +16,16 @@ use symbolica::atom::Atom;
 #[test]
 fn shared_group_weights_preserve_foreign_cut_data_and_radial_derivatives() {
     test_initialise().unwrap();
-    let graph: Graph = dot!(digraph shared_weights {
+    let graph: Graph = crate::finalized_runtime_dot!(digraph shared_weights {
+            graph [projector=1]
         ext [style=invis]
         edge [num=1 mass=0]
         node [num=1]
-        ext->a:0 [id=0]
-        a->b [id=1]
-        b->a [id=2]
-        a->b [id=3]
-        ext->b:1 [id=4]
+        ext->a:0 [id=0 sink="{ufo_order:0}"]
+        a->b [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+        b->a [id=2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+        a->b [id=3 source="{ufo_order:3}" sink="{ufo_order:2}" lmb_id=1]
+        ext->b:1 [id=4 sink="{ufo_order:3}"]
     })
     .unwrap();
     let mut alternate = graph.loop_momentum_basis.clone();

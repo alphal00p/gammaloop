@@ -3,24 +3,19 @@ use color_eyre::Result;
 use colored::Colorize;
 use eyre::{eyre, Context};
 use gammalooprs::utils::F;
+#[cfg(feature = "ufo_support")]
+use pyo3::prelude::*;
 
-#[cfg(feature = "ufo-import")]
-use pyo3::sync::PyOnceLock;
 use std::path::{Path, PathBuf};
 #[cfg(any(feature = "cli", test))]
 use std::{collections::BTreeMap, sync::OnceLock};
 
+use gammalooprs::model::{InputParamCard, Model, ModelGammaLoopExt};
+use include_dir::{include_dir, Dir, File};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use smartstring::{LazyCompact, SmartString};
-
-use gammalooprs::model::{InputParamCard, Model};
-use include_dir::{include_dir, Dir, File};
 use std::{env, fs};
 use tracing::info;
-
-#[cfg(feature = "ufo-import")]
-use pyo3::prelude::*;
 
 use crate::state::State;
 
@@ -44,113 +39,55 @@ pub struct ImportModel {
     pub simplify_model: bool,
 }
 
-#[cfg(not(feature = "ufo-import"))]
+#[cfg(not(feature = "ufo_support"))]
 pub(crate) fn load_ufo_model(
     _path: &Path,
     _restriction_name: Option<String>,
     _simplify_model: bool,
 ) -> Result<(Model, InputParamCard<F<f64>>)> {
     Err(eyre!(
-        "UFO support not enabled in gammaloop. Please recompile with the `ufo-import` feature."
+        "UFO support not enabled in gammaloop. Please recompile with the `ufo_support` feature."
     ))
 }
 
-#[cfg(feature = "ufo-import")]
-#[pyclass]
-struct PyLogStream;
-
-#[cfg(feature = "ufo-import")]
-#[pymethods]
-impl PyLogStream {
-    #[new]
-    fn new() -> Self {
-        Self
-    }
-    fn write(&self, s: &str) {
-        for line in s.lines() {
-            info!("{}", line);
-        }
-    }
-    fn flush(&self) {}
-}
-
-#[cfg(feature = "ufo-import")]
-static PY_LOG_BRIDGE_INIT: PyOnceLock<()> = PyOnceLock::new();
-
-#[cfg(feature = "ufo-import")]
-fn ensure_py_log_bridge(py: Python<'_>) -> PyResult<()> {
-    PY_LOG_BRIDGE_INIT.get_or_try_init(py, || -> PyResult<()> {
-        bridge_py_logging(py)?;
-        Ok(())
-    })?;
-    Ok(())
-}
-
-#[cfg(feature = "ufo-import")]
-fn bridge_py_logging(py: Python<'_>) -> PyResult<()> {
-    let logging = py.import("logging")?;
-    let stream = Py::new(py, PyLogStream {})?;
-
-    // Handler that sends logging records to Rust
-    let handler = logging
-        .getattr("StreamHandler")?
-        .call1((stream.clone_ref(py),))?;
-    handler.call_method1("setLevel", ("DEBUG",))?;
-    // handler.call_method1(
-    //     "setFormatter",
-    //     (logging
-    //         .getattr("Formatter")?
-    //         .call1(("%(levelname)s %(name)s: %(message)s",))?,),
-    // )?;
-
-    let root = logging.call_method0("getLogger")?;
-    root.call_method1("addHandler", (handler,))?;
-    root.call_method1("setLevel", ("DEBUG",))?;
-
-    // Also capture plain prints
-    let sys = py.import("sys")?;
-    sys.setattr("stdout", stream.clone_ref(py))?;
-    sys.setattr("stderr", stream)?;
-    Ok(())
-}
-
-/// Releases before 1.0.0 silently discard particle chemical potentials.
-#[cfg(feature = "ufo-import")]
-fn require_chemical_potential_loader(version: &str, python: &str) -> eyre::Result<()> {
-    if version
+/// The shared metadata adapter requires the isolated import API added in 1.0.1.
+#[cfg(feature = "ufo_support")]
+fn require_ufo_loader_version(version: &str, python: &str) -> eyre::Result<()> {
+    let release = version
         .split('.')
-        .next()
-        .and_then(|major| major.parse::<u64>().ok())
-        .is_none_or(|major| major < 1)
-    {
+        .take(3)
+        .map(str::parse::<u64>)
+        .collect::<std::result::Result<Vec<_>, _>>();
+    if !release.is_ok_and(|parts| parts.as_slice() >= [1, 0, 1].as_slice()) {
         return Err(eyre!(
-            "UFO import requires ufo-model-loader>=1.0.0; found {version}. Upgrade the loader in Python environment {python}."
+            "UFO import requires ufo-model-loader>=1.0.1; found {version}. Upgrade the loader in Python environment {python}."
         ));
     }
     Ok(())
 }
 
-#[cfg(feature = "ufo-import")]
+#[cfg(feature = "ufo_support")]
 pub(crate) fn load_ufo_model(
     path: &std::path::Path,
     restriction_name: Option<String>,
     simplify_model: bool,
 ) -> eyre::Result<(Model, InputParamCard<F<f64>>)> {
-    use pyo3::{prelude::*, types::PyDict};
-    Python::initialize(); // safe if auto-init is also on
+    use feynkit_ufo::UfoLoader;
+
+    // Interpreter initialization belongs to GammaLoop's application boundary;
+    // the reusable UFO adapter only attaches to an interpreter supplied by its caller.
+    Python::initialize();
 
     Python::attach(|py| {
-        // helpful diag if import fails
         let sys = py.import("sys")?;
         let exe: String = sys.getattr("prefix")?.extract()?;
-        let ver: String = sys.getattr("version")?.extract()?;
 
         let metadata = py.import("importlib.metadata")?;
         let loader_version: String = match metadata.call_method1("version", ("ufo-model-loader",)) {
             Ok(version) => version.extract()?,
             Err(e) if e.is_instance(py, &metadata.getattr("PackageNotFoundError")?) => {
                 return Err(eyre!(
-                    "UFO import requires ufo-model-loader>=1.0.0, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
+                    "UFO import requires ufo-model-loader>=1.0.1, but Python environment {exe} has no installed ufo-model-loader metadata. A source checkout on PYTHONPATH cannot be version-checked; install it, for example with `pip install -e <checkout>`."
                 ));
             }
             Err(e) => {
@@ -159,66 +96,18 @@ pub(crate) fn load_ufo_model(
                 ));
             }
         };
-        require_chemical_potential_loader(&loader_version, &exe)?;
+        require_ufo_loader_version(&loader_version, &exe)?;
 
-        ensure_py_log_bridge(py)
-            .map_err(|e| eyre::eyre!("Failed to bridge python logging to rust. Error: {}", e))?;
+        // Resolution has already selected any default card; an explicit full
+        // import must not let the Python loader select its default again.
+        let loader = UfoLoader::new()
+            .simplify_model(simplify_model)
+            .restriction_name(restriction_name.as_deref().unwrap_or("full"));
+        let loaded = loader
+            .load(py, path)
+            .wrap_err_with(|| format!("Failed to load UFO model from {}", path.display()))?;
 
-        let commands = py.import("ufo_model_loader.commands").map_err(|e| {
-            eyre::eyre!("Failed to import ufo_model_loader: {e}\nPython: {exe}\nVersion: {ver}")
-        })?;
-
-        let load_model = commands.getattr("load_model")?;
-
-        // kwargs: input_model_path, restriction_name, simplify_model
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("input_model_path", path.to_string_lossy().as_ref())?;
-        // Resolution has already selected any default card. Python None would
-        // apply that default again when the user explicitly requested -full.
-        kwargs.set_item(
-            "restriction_name",
-            restriction_name.as_deref().unwrap_or("full"),
-        )?;
-        kwargs.set_item("simplify_model", simplify_model)?;
-        kwargs.set_item("wrap_indices_in_lorentz_structures", true)?;
-
-        // call loader.load(...)
-        let out = load_model
-            .call((), Some(&kwargs))
-            .map_err(|e| eyre::eyre!("ufo_model_loader.load failed: {e}"))?;
-
-        // expect a 2-tuple: (model, input_param_card)
-        let (py_model, py_card): (Py<PyAny>, Py<PyAny>) = out.extract()?;
-
-        // to_json() -> String
-        let mut model_json: String = py_model.call_method0(py, "to_json")?.extract(py)?;
-        let card_json: String = py_card.call_method0(py, "to_json")?.extract(py)?;
-
-        // The loader imports this module but does not serialize GammaLoop's
-        // explicit BRST cut-state declaration. Preserve it at the UFO boundary,
-        // rather than reconstructing physical partners from mass degeneracies.
-        let module_name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .ok_or_else(|| eyre::eyre!("Invalid UFO module path: {}", path.display()))?;
-        let module = sys.getattr("modules")?.get_item(module_name)?;
-        if module.hasattr("covariant_cut_multiplets")? {
-            let declaration: String = py
-                .import("json")?
-                .call_method1("dumps", (module.getattr("covariant_cut_multiplets")?,))?
-                .extract()?;
-            let mut serialized: serde_json::Value = serde_json::from_str(&model_json)?;
-            serialized["covariant_cut_multiplets"] = serde_json::from_str(&declaration)?;
-            model_json = serde_json::to_string(&serialized)?;
-        }
-
-        // deserialize into your Rust types
-        let model: Model = Model::from_str(model_json, "json")
-            .map_err(|e| eyre::eyre!("Failed to deserialize JSON Model: {e}"))?;
-        let card: InputParamCard<F<f64>> = InputParamCard::<F<f64>>::from_str(card_json, "json")
-            .map_err(|e| eyre::eyre!("Failed to deserialize InputParamCard: {e}"))?;
-
-        Ok((model, card))
+        Ok((loaded.model, loaded.parameters.into()))
     })
 }
 
@@ -270,10 +159,8 @@ impl ImportModel {
                         format!("{model_name}-full").green(),
                     );
                 }
-                state.model = Model::from_str(json_model, "json")?;
-                state.model.restriction = restriction_name
-                    .as_ref()
-                    .map(SmartString::<LazyCompact>::from);
+                state.model = Model::from_json(&json_model)?;
+                state.model = state.model.with_restriction(restriction_name.clone())?;
                 state.model_parameters = if let Some(json_restriction) = json_restriction {
                     let mut param_card = InputParamCard::from_str(json_restriction, "json")?;
                     if self.simplify_model {
@@ -283,7 +170,7 @@ impl ImportModel {
                     }
                     param_card
                 } else {
-                    InputParamCard::default_from_model(&state.model)
+                    state.model.default_param_card()
                 };
             }
             ModelSpecification::UFOModelSpecification {
@@ -310,9 +197,7 @@ impl ImportModel {
                 }
                 (state.model, state.model_parameters) =
                     load_ufo_model(&ufo_path, restriction_name.clone(), self.simplify_model)?;
-                state.model.restriction = restriction_name
-                    .as_ref()
-                    .map(SmartString::<LazyCompact>::from);
+                state.model = state.model.with_restriction(restriction_name.clone())?;
             }
         }
 
@@ -755,16 +640,17 @@ mod tests {
     use super::*;
     use gammalooprs::model::{ParameterNature, UFOSymbol};
     use spenso::algebra::complex::Complex;
-    #[cfg(feature = "ufo-import")]
+    #[cfg(feature = "ufo_support")]
     use symbolica::atom::AtomCore;
-    #[cfg(feature = "ufo-import")]
+    use symbolica::domains::float::Complex as NativeComplex;
+    #[cfg(feature = "ufo_support")]
     use symbolica::domains::rational::Rational;
     use symbolica::{atom::Atom, parse};
 
     #[test]
     fn json_restrictions_canonicalize_only_fixed_zero_masses() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
-        let full = Model::from_str(file_to_string(&ensure_builtin_model("sm")?)?, "json")?;
+        let full = Model::from_json(&file_to_string(&ensure_builtin_model("sm")?)?)?;
         let restrictions = builtin_json_model_restriction_names("sm").unwrap();
         assert_eq!(restrictions.len(), 12);
         // These explicit massless Dirac propagators remain an independent oracle
@@ -813,7 +699,7 @@ mod tests {
                         );
                         assert_eq!(
                             state.model.get_parameter(parameter).value,
-                            Some(Complex::new_re(F(expected_value))),
+                            Some(NativeComplex::new(expected_value, 0.0)),
                             "{restriction}: {parameter}, simplify={simplify_model}"
                         );
                     }
@@ -821,16 +707,34 @@ mod tests {
                         (quark.to_string(), &zero_numerator),
                         (format!("{quark}~"), &zero_antiparticle_numerator),
                     ] {
-                        let particle = state.model.get_particle(&name);
-                        assert_eq!(particle.mass.0, expected_mass, "{restriction}: {name}");
+                        let particle_id = state.model.get_particle(&name);
+                        let particle = state.model.particle_by_id(particle_id)?;
                         assert_eq!(
-                            state.model.unresolved_particles["QCD"].contains(&particle),
+                            UFOSymbol::from(
+                                state.model.parameter_by_id(particle.mass)?.name.as_str()
+                            ),
+                            expected_mass,
+                            "{restriction}: {name}"
+                        );
+                        assert_eq!(
+                            state.model.unresolved_particles()["QCD"].contains(&particle_id),
                             massless,
                             "{restriction}: {name}, simplify={simplify_model}"
                         );
-                        let propagator = state.model.get_propagator(format!("{name}_propFeynman"));
-                        let reference = full.get_propagator(format!("{name}_propFeynman"));
-                        assert_eq!(propagator.particle.mass.0, expected_mass);
+                        let propagator = state.model.propagator(&format!("{name}_propFeynman"))?;
+                        let reference = full.propagator(&format!("{name}_propFeynman"))?;
+                        assert_eq!(
+                            UFOSymbol::from(
+                                state
+                                    .model
+                                    .parameter_by_id(
+                                        state.model.particle_by_id(propagator.particle)?.mass
+                                    )?
+                                    .name
+                                    .as_str()
+                            ),
+                            expected_mass
+                        );
                         assert_eq!(
                             &propagator.numerator,
                             if massless {
@@ -851,11 +755,13 @@ mod tests {
                     let antiquark = format!("{quark}~");
                     for scalar in ["H", "G0"] {
                         assert_eq!(
-                            state.model.vertex_rules.iter().any(|vertex| {
+                            state.model.vertex_rules().iter().any(|vertex| {
                                 vertex
                                     .particles
                                     .iter()
-                                    .map(|particle| particle.name.as_str())
+                                    .map(|particle| {
+                                        state.model.particle_by_id(*particle).unwrap().name.as_str()
+                                    })
                                     .eq([antiquark.as_str(), quark, scalar])
                             }),
                             !massless,
@@ -865,13 +771,15 @@ mod tests {
                     if !massless {
                         let higgs = state
                             .model
-                            .vertex_rules
+                            .vertex_rules()
                             .iter()
                             .find(|vertex| {
                                 vertex
                                     .particles
                                     .iter()
-                                    .map(|particle| particle.name.as_str())
+                                    .map(|particle| {
+                                        state.model.particle_by_id(*particle).unwrap().name.as_str()
+                                    })
                                     .eq([antiquark.as_str(), quark, "H"])
                             })
                             .unwrap();
@@ -886,22 +794,28 @@ mod tests {
                                 .model_parameters
                                 .insert(yukawa_input.into(), Complex::new_re(F(yukawa_mass)));
                             state.model.apply_param_card(&state.model_parameters)?;
-                            let ve = state.model.get_parameter("vev").value.unwrap().re.0;
+                            let ve = state.model.get_parameter("vev").value.unwrap().re;
                             assert_eq!(
                                 state.model.get_parameter(mass).value,
-                                Some(Complex::new_re(F(pole_mass)))
+                                Some(NativeComplex::new(pole_mass, 0.0))
                             );
                             assert_eq!(
-                                state.model.get_particle(quark).mass.0,
+                                UFOSymbol::from(
+                                    state
+                                        .model
+                                        .parameter_by_id(state.model.particle(quark)?.mass)?
+                                        .name
+                                        .as_str()
+                                ),
                                 UFOSymbol::from(mass)
                             );
                             let y = state.model.get_parameter(yukawa).value.unwrap();
                             assert!(
-                                (y.re.0 - std::f64::consts::SQRT_2 * yukawa_mass / ve).abs()
+                                (y.re - std::f64::consts::SQRT_2 * yukawa_mass / ve).abs()
                                     < 1.0e-15
                             );
-                            assert_eq!(y.im, F(0.0));
-                            let value = state.model.couplings[&coupling].value.unwrap();
+                            assert_eq!(y.im, 0.0);
+                            let value = state.model.coupling_by_id(coupling)?.value.unwrap();
                             assert!(value.re.abs() < 1.0e-15);
                             assert!((value.im + yukawa_mass / ve).abs() < 1.0e-15);
                         }
@@ -915,8 +829,8 @@ mod tests {
                 }
                 if restriction == "light_quarks_massless" {
                     if simplify_model {
-                        assert_eq!(state.model.vertex_rules.len(), 153);
-                        assert_eq!(state.model.couplings.len(), 108);
+                        assert_eq!(state.model.vertex_rules().len(), 153);
+                        assert_eq!(state.model.couplings().len(), 108);
                     }
                     // This fixture removes only light-quark masses and Yukawas;
                     // heavy flavors, leptons, and CKM mixing remain adjustable.
@@ -941,7 +855,11 @@ mod tests {
                     for (name, default) in retained {
                         let parameter = state.model.get_parameter(name);
                         assert_eq!(parameter.nature, ParameterNature::External, "{name}");
-                        assert_eq!(parameter.value, Some(Complex::new_re(F(default))), "{name}");
+                        assert_eq!(
+                            parameter.value,
+                            Some(NativeComplex::new(default, 0.0)),
+                            "{name}"
+                        );
                         state
                             .model_parameters
                             .insert(name.into(), Complex::new_re(F(default * 1.25)));
@@ -950,7 +868,7 @@ mod tests {
                     for (name, default) in retained {
                         assert_eq!(
                             state.model.get_parameter(name).value,
-                            Some(Complex::new_re(F(default * 1.25))),
+                            Some(NativeComplex::new(default * 1.25, 0.0)),
                             "{name} remains adjustable"
                         );
                     }
@@ -960,22 +878,22 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "ufo-import")]
+    #[cfg(feature = "ufo_support")]
     #[test]
     fn ufo_import_rejects_loader_without_chemical_potential_support() {
-        for version in ["0.1.8", "dev"] {
-            let error = require_chemical_potential_loader(version, "python")
+        for version in ["0.1.8", "1.0.0", "dev"] {
+            let error = require_ufo_loader_version(version, "python")
                 .unwrap_err()
                 .to_string();
-            assert!(error.contains("ufo-model-loader>=1.0.0"), "{error}");
+            assert!(error.contains("ufo-model-loader>=1.0.1"), "{error}");
             assert!(error.contains(version), "{error}");
         }
-        for version in ["1.0.0", "12.3"] {
-            require_chemical_potential_loader(version, "python").unwrap();
+        for version in ["1.0.1", "1.1.0", "2.0.0", "12.3"] {
+            require_ufo_loader_version(version, "python").unwrap();
         }
     }
 
-    #[cfg(feature = "ufo-import")]
+    #[cfg(feature = "ufo_support")]
     #[test]
     fn ufo_and_json_restrictions_preserve_model_content() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
@@ -999,7 +917,7 @@ mod tests {
             .run(&mut state)?;
             let mut json = state.model;
             let mut json_card = state.model_parameters;
-            let restored = Model::from_str(serde_json::to_string(&ufo.to_serializable())?, "json")?;
+            let restored = Model::from_json(&ufo.to_json()?)?;
             for name in ["muB", "muQ", "muLe", "muLmu", "muLtau"] {
                 assert_eq!(
                     ufo.get_parameter(name).nature,
@@ -1010,17 +928,33 @@ mod tests {
                     json.get_parameter(name).value
                 );
             }
-            assert_eq!(ufo.particles.len(), json.particles.len());
-            for fresh in &ufo.particles {
+            assert_eq!(ufo.particles().len(), json.particles().len());
+            for fresh in ufo.particles() {
                 let name = fresh.name.as_str();
-                let saved = json.get_particle(name);
+                let saved = json.particle(name)?;
                 assert_eq!(fresh.charge, saved.charge, "{name}");
                 assert_eq!(fresh.y_charge, saved.y_charge, "{name}");
                 assert_eq!(fresh.y_charge_right, saved.y_charge_right, "{name}");
-                assert_eq!(fresh.chemical_potential, saved.chemical_potential, "{name}");
-                assert_eq!(fresh.mass, saved.mass, "{restriction}: {name} pole mass");
-                let roundtrip = restored.get_particle(name);
-                assert_eq!(fresh.mass, roundtrip.mass, "{name} pole mass roundtrip");
+                assert_eq!(
+                    fresh
+                        .chemical_potential
+                        .map(|id| &ufo.parameter_by_id(id).unwrap().name),
+                    saved
+                        .chemical_potential
+                        .map(|id| &json.parameter_by_id(id).unwrap().name),
+                    "{name}"
+                );
+                assert_eq!(
+                    ufo.parameter_by_id(fresh.mass)?.name,
+                    json.parameter_by_id(saved.mass)?.name,
+                    "{restriction}: {name} pole mass"
+                );
+                let roundtrip = restored.particle(name)?;
+                assert_eq!(
+                    ufo.parameter_by_id(fresh.mass)?.name,
+                    restored.parameter_by_id(roundtrip.mass)?.name,
+                    "{name} pole mass roundtrip"
+                );
                 assert_eq!(fresh.charge, roundtrip.charge, "{name} roundtrip");
                 assert_eq!(fresh.y_charge, roundtrip.y_charge, "{name} roundtrip");
                 assert_eq!(
@@ -1028,12 +962,17 @@ mod tests {
                     "{name} roundtrip"
                 );
                 assert_eq!(
-                    fresh.chemical_potential, roundtrip.chemical_potential,
+                    fresh
+                        .chemical_potential
+                        .map(|id| &ufo.parameter_by_id(id).unwrap().name),
+                    roundtrip
+                        .chemical_potential
+                        .map(|id| &restored.parameter_by_id(id).unwrap().name),
                     "{name} roundtrip"
                 );
             }
-            assert_eq!(ufo.get_particle("u").charge, Rational::from((2, 3)));
-            assert_eq!(ufo.get_particle("H").y_charge, None);
+            assert_eq!(ufo.particle("u")?.charge, Rational::from((2, 3)));
+            assert_eq!(ufo.particle("H")?.y_charge, None);
             for model in [&ufo, &json, &restored] {
                 for (particle, parameter) in [
                     ("e-", "mue"),
@@ -1042,7 +981,14 @@ mod tests {
                     ("ve~", "minus_muve"),
                 ] {
                     assert_eq!(
-                        model.get_particle(particle).chemical_potential.unwrap().0,
+                        UFOSymbol::from(
+                            model
+                                .parameter_by_id(
+                                    model.particle(particle)?.chemical_potential.unwrap()
+                                )?
+                                .name
+                                .as_str()
+                        ),
                         if restriction == "full" {
                             UFOSymbol::from(parameter)
                         } else {
@@ -1079,14 +1025,15 @@ mod tests {
                         );
                         assert_eq!(
                             model.get_parameter(parameter).value,
-                            Some(Complex::new_re(F(expected_value))),
+                            Some(NativeComplex::new(expected_value, 0.0)),
                             "{restriction}: {parameter}"
                         );
                     }
                     for name in [quark.to_string(), format!("{quark}~")] {
-                        let particle = model.get_particle(&name);
+                        let particle_id = model.get_particle(&name);
+                        let particle = model.particle_by_id(particle_id)?;
                         assert_eq!(
-                            particle.mass.0,
+                            UFOSymbol::from(model.parameter_by_id(particle.mass)?.name.as_str()),
                             if massless {
                                 UFOSymbol::zero()
                             } else {
@@ -1095,13 +1042,16 @@ mod tests {
                             "{restriction}: {name}"
                         );
                         assert_eq!(
-                            model.unresolved_particles["QCD"].contains(&particle),
+                            model.unresolved_particles()["QCD"].contains(&particle_id),
                             massless,
                             "{restriction}: {name} unresolved"
                         );
-                        let propagator = model.get_propagator(format!("{name}_propFeynman"));
-                        let reference = json.get_propagator(format!("{name}_propFeynman"));
-                        assert_eq!(propagator.particle.mass, particle.mass);
+                        let propagator = model.propagator(&format!("{name}_propFeynman"))?;
+                        let reference = json.propagator(&format!("{name}_propFeynman"))?;
+                        assert_eq!(
+                            model.particle_by_id(propagator.particle)?.mass,
+                            particle.mass
+                        );
                         assert_eq!(propagator.numerator, reference.numerator);
                         assert_eq!(propagator.denominator, reference.denominator);
                     }
@@ -1111,38 +1061,49 @@ mod tests {
             // merely matching vertex names misses a lost charged-Goldstone chirality.
             for model in [&ufo, &restored] {
                 assert_eq!(
-                    model.vertex_rules.len(),
-                    json.vertex_rules.len(),
+                    model.vertex_rules().len(),
+                    json.vertex_rules().len(),
                     "{restriction}"
                 );
-                for vertex in &model.vertex_rules {
-                    let reference = json.get_vertex_rule(&vertex.name);
+                for vertex in model.vertex_rules() {
+                    let reference = json.vertex_rule(&vertex.name)?;
                     assert!(vertex
                         .particles
                         .iter()
-                        .map(|p| p.name.as_str())
-                        .eq(reference.particles.iter().map(|p| p.name.as_str())));
-                    let tensors = [(model, vertex), (&json, &reference)].map(|(model, vertex)| {
-                        let mut tensor = Atom::Zero;
-                        for (color, row) in vertex.couplings.iter().enumerate() {
-                            for (lorentz, coupling) in row.iter().enumerate() {
-                                if let Some(coupling) = coupling {
-                                    tensor += &model.couplings[coupling].expression
-                                        * &vertex.color_structures.color_structure[color]
-                                        * &vertex.lorentz_structures[lorentz].structure;
+                        .map(|p| model.particle_by_id(*p).unwrap().name.as_str())
+                        .eq(reference.particles.iter().map(|p| json
+                            .particle_by_id(*p)
+                            .unwrap()
+                            .name
+                            .as_str())));
+                    let tensors = [(model, vertex), (&json, reference)].map(
+                        |(model, vertex)| -> Result<Atom> {
+                            let mut tensor = Atom::Zero;
+                            for (color, row) in vertex.couplings.iter().enumerate() {
+                                for (lorentz, coupling) in row.iter().enumerate() {
+                                    if let Some(coupling) = coupling {
+                                        tensor += &model.coupling_by_id(*coupling)?.expression
+                                            * &vertex.color_structures[color]
+                                            * &model
+                                                .lorentz_structure_by_id(
+                                                    vertex.lorentz_structures[lorentz],
+                                                )?
+                                                .structure;
+                                    }
                                 }
                             }
-                        }
-                        tensor.expand()
-                    });
-                    assert_eq!(tensors[0], tensors[1], "{restriction}: {}", vertex.name);
+                            Ok(tensor.expand())
+                        },
+                    );
+                    let [left, right] = tensors;
+                    assert_eq!(left?, right?, "{restriction}: {}", vertex.name);
                 }
             }
             if restriction != "full" && !restriction.starts_with("thermal") {
                 assert_eq!(json.get_parameter("muB").nature, ParameterNature::Internal);
                 assert_eq!(
                     json.get_parameter("muB").value,
-                    Some(Complex::new_re(F(0.0)))
+                    Some(NativeComplex::new(0.0, 0.0))
                 );
             } else {
                 // A zero-density comparison must not freeze later finite-density runs.
@@ -1153,11 +1114,11 @@ mod tests {
                         model.apply_param_card(card)?;
                         assert_eq!(
                             model.get_parameter("muu").value,
-                            Some(Complex::new_re(F(mu / 3.0)))
+                            Some(NativeComplex::new(mu / 3.0, 0.0))
                         );
                         assert_eq!(
                             model.get_parameter("minus_muu").value,
-                            Some(Complex::new_re(F(-mu / 3.0)))
+                            Some(NativeComplex::new(-mu / 3.0, 0.0))
                         );
                     }
                 }
@@ -1165,13 +1126,15 @@ mod tests {
             if matches!(restriction, "full" | "thermal_s_mass") {
                 for (model, card) in [(&mut ufo, &mut ufo_card), (&mut json, &mut json_card)] {
                     let higgs = model
-                        .vertex_rules
+                        .vertex_rules()
                         .iter()
                         .find(|vertex| {
                             vertex
                                 .particles
                                 .iter()
-                                .map(|particle| particle.name.as_str())
+                                .map(|particle| {
+                                    model.particle_by_id(*particle).unwrap().name.as_str()
+                                })
                                 .eq(["s~", "s", "H"])
                         })
                         .unwrap();
@@ -1180,13 +1143,21 @@ mod tests {
                         card.insert("MS".into(), Complex::new_re(F(mass)));
                         card.insert("yms".into(), Complex::new_re(F(yukawa_mass)));
                         model.apply_param_card(card)?;
-                        assert_eq!(model.get_particle("s").mass.0, UFOSymbol::from("MS"));
+                        assert_eq!(
+                            UFOSymbol::from(
+                                model
+                                    .parameter_by_id(model.particle("s")?.mass)?
+                                    .name
+                                    .as_str()
+                            ),
+                            UFOSymbol::from("MS")
+                        );
                         assert_eq!(
                             model.get_parameter("MS").value,
-                            Some(Complex::new_re(F(mass)))
+                            Some(NativeComplex::new(mass, 0.0))
                         );
-                        let vev = model.get_parameter("vev").value.unwrap().re.0;
-                        let value = model.couplings[&coupling].value.unwrap();
+                        let vev = model.get_parameter("vev").value.unwrap().re;
+                        let value = model.coupling_by_id(coupling)?.value.unwrap();
                         assert!(value.re.abs() < 1.0e-15);
                         assert!((value.im + yukawa_mass / vev).abs() < 1.0e-15);
                     }
@@ -1200,39 +1171,161 @@ mod tests {
         Ok(())
     }
 
-    #[cfg(feature = "ufo-import")]
+    #[cfg(feature = "ufo_support")]
     #[test]
     fn fresh_sm_ufo_preserves_virtual_gauge_and_covariant_cut_states() -> Result<()> {
         gammalooprs::initialisation::test_initialise()?;
         let assets = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/models");
         let (imported, _) = load_ufo_model(&assets.join("ufo/sm"), None, false)?;
-        let canonical = Model::from_file(assets.join("json/sm/sm.json"))?;
+        let canonical = Model::from_path(assets.join("json/sm/sm.json"))?;
         assert_eq!(
-            imported.covariant_cut_multiplets,
-            canonical.covariant_cut_multiplets
+            imported.covariant_cut_multiplets(),
+            canonical.covariant_cut_multiplets()
         );
         for name in [
             "W+", "W-", "Z", "G+", "G-", "G0", "ghWp", "ghWp~", "ghWm", "ghWm~", "ghZ", "ghZ~",
         ] {
             let fresh = imported
-                .propagators
+                .propagators()
                 .iter()
-                .find(|p| p.particle.name.as_str() == name)
+                .find(|p| imported.particle_by_id(p.particle).unwrap().name.as_str() == name)
                 .unwrap();
             let saved = canonical
-                .propagators
+                .propagators()
                 .iter()
-                .find(|p| p.particle.name.as_str() == name)
+                .find(|p| canonical.particle_by_id(p.particle).unwrap().name.as_str() == name)
                 .unwrap();
             assert_eq!(fresh.numerator, saved.numerator, "{name} numerator");
             assert_eq!(fresh.denominator, saved.denominator, "{name} denominator");
             assert_eq!(
-                fresh.particle.is_goldstone(),
-                saved.particle.is_goldstone(),
+                imported
+                    .particle_by_id(fresh.particle)
+                    .unwrap()
+                    .is_goldstone(),
+                canonical
+                    .particle_by_id(saved.particle)
+                    .unwrap()
+                    .is_goldstone(),
                 "{name} Goldstone metadata"
             );
-            assert_eq!(fresh.particle.mass, saved.particle.mass, "{name} pole mass");
+            assert_eq!(
+                imported
+                    .parameter_by_id(imported.particle_by_id(fresh.particle)?.mass)?
+                    .name,
+                canonical
+                    .parameter_by_id(canonical.particle_by_id(saved.particle)?.mass)?
+                    .name,
+                "{name} pole mass"
+            );
         }
+        // The real loader isolates imports, while a different source with the
+        // same module name may already occupy Python's import cache.
+        Python::attach(|py| -> Result<()> {
+            use pyo3::types::{PyDict, PyDictMethods};
+
+            let first_parent = tempfile::tempdir()?;
+            let second_parent = tempfile::tempdir()?;
+            let module_name = "feynkit_ufo_metadata_scope";
+            let first = first_parent.path().join(module_name);
+            let second = second_parent.path().join(module_name);
+            let shutil = py.import("shutil")?;
+            let copy_options = PyDict::new(py);
+            copy_options.set_item(
+                "ignore",
+                shutil.getattr("ignore_patterns")?.call1(("__pycache__",))?,
+            )?;
+            for (source, label, hypercharge) in [(&first, "A", 111), (&second, "B", 222)] {
+                shutil.getattr("copytree")?.call(
+                    (
+                        assets.join("ufo/sm").to_string_lossy().as_ref(),
+                        source.to_string_lossy().as_ref(),
+                    ),
+                    Some(&copy_options),
+                )?;
+                let init = source.join("__init__.py");
+                let mut contents = fs::read_to_string(&init)?;
+                contents.push_str(&format!(
+                    "\nparticles.d.YRight = {hypercharge}\nparticles.d.typstname = 'd_{label}'\nparticles.d.antitypstname = 'dbar_{label}'\nparameters.aEWM1.texname = '{label}_label'\nparameters.aEWM1.typstname = '{label}_typst'\n"
+                ));
+                if label == "B" {
+                    contents.push_str("covariant_cut_multiplets.pop(23)\n");
+                }
+                fs::write(init, contents)?;
+            }
+            let sys = py.import("sys")?;
+            let original_path = sys.getattr("path")?.call_method0("copy")?;
+            let original_profile = sys.call_method0("getprofile")?;
+            let original_bytecode: bool = sys.getattr("dont_write_bytecode")?.extract()?;
+            let source_path = py
+                .import("pathlib")?
+                .getattr("Path")?
+                .call1((first.to_string_lossy().as_ref(),))?;
+            let scope = py
+                .import("ufo_model_loader.raw")?
+                .getattr("imported_ufo_module")?
+                .call1((source_path,))?;
+            let cached = scope.call_method0("__enter__")?;
+            let scoped_path = sys.getattr("path")?.call_method0("copy")?;
+            let scoped_profile = sys.call_method0("getprofile")?;
+            let scoped_bytecode: bool = sys.getattr("dont_write_bytecode")?.extract()?;
+            let check_state = || -> Result<()> {
+                assert!(sys.getattr("modules")?.get_item(module_name)?.is(&cached));
+                assert!(sys.getattr("path")?.eq(&scoped_path)?);
+                assert!(sys.call_method0("getprofile")?.is(&scoped_profile));
+                assert_eq!(
+                    sys.getattr("dont_write_bytecode")?.extract::<bool>()?,
+                    scoped_bytecode
+                );
+                Ok(())
+            };
+            let result = (|| -> Result<()> {
+                for (source, label, hypercharge) in [(&first, "A", 111), (&second, "B", 222)] {
+                    let (loaded, _) = load_ufo_model(source, Some("full".into()), false)?;
+                    let particle = loaded.particle("d")?;
+                    assert_eq!(particle.y_charge_right, Some(Rational::from(hypercharge)));
+                    assert_eq!(
+                        particle.typstname.as_deref(),
+                        Some(format!("d_{label}").as_str())
+                    );
+                    assert_eq!(
+                        particle.antitypstname.as_deref(),
+                        Some(format!("dbar_{label}").as_str())
+                    );
+                    let parameter = loaded.get_parameter("aEWM1");
+                    assert_eq!(
+                        parameter.texname.as_deref(),
+                        Some(format!("{label}_label").as_str())
+                    );
+                    assert_eq!(
+                        parameter.typstname.as_deref(),
+                        Some(format!("{label}_typst").as_str())
+                    );
+                    assert_eq!(
+                        loaded.covariant_cut_multiplets().contains_key(&23),
+                        label == "A"
+                    );
+                    check_state()?;
+                }
+                let failing = second_parent.path().join("failure").join(module_name);
+                fs::create_dir_all(&failing)?;
+                fs::write(
+                    failing.join("__init__.py"),
+                    "raise RuntimeError('UFO import cleanup control')\n",
+                )?;
+                let error = load_ufo_model(&failing, Some("full".into()), false).unwrap_err();
+                assert!(format!("{error:?}").contains("UFO import cleanup control"));
+                check_state()?;
+                Ok(())
+            })();
+            scope.call_method1("__exit__", (py.None(), py.None(), py.None()))?;
+            assert!(sys.getattr("path")?.eq(&original_path)?);
+            assert!(sys.call_method0("getprofile")?.is(&original_profile));
+            assert_eq!(
+                sys.getattr("dont_write_bytecode")?.extract::<bool>()?,
+                original_bytecode
+            );
+            result
+        })?;
         Ok(())
     }
 }

@@ -1,4 +1,4 @@
-use crate::model::Model;
+use crate::model::{Model, ParticleGammaLoopExt};
 use crate::momentum::FourMomentum;
 use crate::settings::RuntimeSettings;
 use crate::utils::serde_utils::{
@@ -86,7 +86,7 @@ pub enum ObservablePhase {
 #[derive(
     Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum ObservableFileFormat {
     #[serde(rename = "none")]
     None,
@@ -333,7 +333,7 @@ impl QuantitySourceKind {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct QuantityComputationSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -446,7 +446,7 @@ impl QuantityComputationSettings {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct JetClusteringSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -477,6 +477,11 @@ struct ResolvedJetClusteringSettings {
 
 impl JetClusteringSettings {
     fn resolve(&self, model: Option<&Model>) -> Result<ResolvedJetClusteringSettings> {
+        if !self.min_jpt.is_finite() || self.min_jpt < 0.0 {
+            return Err(eyre!(
+                "minimum jet transverse momentum must be finite and nonnegative"
+            ));
+        }
         Ok(ResolvedJetClusteringSettings {
             algorithm: self.algorithm,
             d_r: self.dR,
@@ -499,13 +504,18 @@ impl JetClusteringSettings {
 
     fn default_clustered_pdgs(model: &Model) -> Result<Vec<isize>> {
         Ok(model
-            .particles
+            .particles()
             .iter()
             .filter(|particle| particle.is_qcd_charged())
             .map(|particle| {
-                particle
-                    .has_zero_resolved_mass(model)
-                    .map(|has_zero_mass| has_zero_mass.then_some(particle.pdg_code))
+                particle.has_zero_resolved_mass(model).map(|has_zero_mass| {
+                    has_zero_mass.then(|| {
+                        particle
+                            .pdg_code
+                            .try_into()
+                            .expect("PDG code must fit in an isize")
+                    })
+                })
             })
             .collect::<Result<Vec<_>>>()?
             .into_iter()
@@ -522,7 +532,7 @@ impl JetClusteringSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct ParticleQuantitySettings {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -544,7 +554,7 @@ impl ParticleQuantitySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct JetQuantitySettings {
     #[serde(flatten)]
@@ -567,7 +577,7 @@ impl JetQuantitySettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "type", rename_all = "snake_case")]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum QuantitySettings {
     Particle(ParticleQuantitySettings),
     Jet(JetQuantitySettings),
@@ -605,7 +615,7 @@ impl QuantitySettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct ValueRangeSelectorSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -620,7 +630,7 @@ pub struct ValueRangeSelectorSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct DiscreteRangeSelectorSettings {
     #[serde(default, skip_serializing_if = "IsDefault::is_default")]
@@ -633,7 +643,7 @@ pub struct DiscreteRangeSelectorSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(deny_unknown_fields)]
 pub struct CountRangeSelectorSettings {
     pub min_count: usize,
@@ -644,7 +654,7 @@ pub struct CountRangeSelectorSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "selector", rename_all = "snake_case")]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum SelectorDefinitionSettings {
     ValueRange(ValueRangeSelectorSettings),
     DiscreteRange(DiscreteRangeSelectorSettings),
@@ -653,7 +663,7 @@ pub enum SelectorDefinitionSettings {
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub struct SelectorSettings {
     pub quantity: String,
     pub active: bool,
@@ -840,7 +850,7 @@ impl<'de> Deserialize<'de> for SelectorSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct ContinuousHistogramSettings {
     #[serde(skip_serializing_if = "is_float::<0>")]
@@ -884,7 +894,7 @@ impl Default for ContinuousHistogramSettings {
     Debug, Clone, Copy, Default, Serialize, Deserialize, Encode, Decode, PartialEq, Eq, JsonSchema,
 )]
 #[serde(rename_all = "snake_case")]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum DiscreteBinOrdering {
     #[default]
     AscendingBinId,
@@ -928,7 +938,7 @@ pub enum DiscreteBinLabelsSettings {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[serde(default, deny_unknown_fields)]
 pub struct DiscreteHistogramSettings {
     pub domain: DiscreteBinDomainSettings,
@@ -967,7 +977,7 @@ impl Default for DiscreteHistogramSettings {
 #[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode, PartialEq, JsonSchema)]
 #[allow(non_snake_case)]
 #[serde(tag = "kind", rename_all = "snake_case")]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub enum HistogramSettings {
     Continuous(ContinuousHistogramSettings),
     Discrete(DiscreteHistogramSettings),
@@ -981,7 +991,7 @@ impl Default for HistogramSettings {
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq)]
 #[allow(non_snake_case)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 pub struct ObservableSettings {
     pub quantity: String,
     pub selections: Vec<String>,
@@ -1566,7 +1576,7 @@ impl ObjectQuantityDefinition {
 enum MetadataQuantityKind {
     GraphId,
     GraphGroupId,
-    OrientationId,
+    OrientationID,
     SamplingChannelId,
 }
 
@@ -1582,7 +1592,7 @@ impl MetadataQuantityDefinition {
             MetadataQuantityKind::GraphGroupId => {
                 event.cut_info.graph_group_id.map(|id| id as isize)
             }
-            MetadataQuantityKind::OrientationId => {
+            MetadataQuantityKind::OrientationID => {
                 event.cut_info.orientation_id.map(|id| id as isize)
             }
             MetadataQuantityKind::SamplingChannelId => {
@@ -1665,7 +1675,7 @@ impl ObservableDefinition {
             }
             QuantitySettings::OrientationId {} => {
                 ObservableDefinition::Metadata(MetadataQuantityDefinition {
-                    kind: MetadataQuantityKind::OrientationId,
+                    kind: MetadataQuantityKind::OrientationID,
                 })
             }
             QuantitySettings::SamplingChannelId {} => {
@@ -4517,6 +4527,20 @@ mod tests {
                 .to_string()
                 .contains("Cannot resolve default clustered_pdgs without a model")
         );
+    }
+
+    #[test]
+    fn jet_clustering_settings_reject_invalid_minimum_pt() {
+        for min_jpt in [-1.0, f64::NAN, f64::INFINITY] {
+            let error = JetClusteringSettings {
+                min_jpt,
+                clustered_pdgs: Some(Vec::new()),
+                ..JetClusteringSettings::default()
+            }
+            .resolve(None)
+            .expect_err("invalid minimum jet transverse momentum must be rejected");
+            assert!(error.to_string().contains("finite and nonnegative"));
+        }
     }
 
     #[test]

@@ -16,8 +16,8 @@
 # GammaLoop
 
 GammaLoop computes differential collider cross-sections with Local Unitarity. It combines a
-stateful command-line application with Rust and Python APIs and the Linnet, Spenso, Idenso, and
-Vakint research libraries.
+stateful command-line application with Rust and Python APIs and the FeynKit, Linnet, Spenso,
+Idenso, and Vakint research libraries.
 
 The [live αLoop documentation](https://alphal00p.github.io/gammaloop/) is the user entry point.
 Its canonical sources are Typst files under [`docs/products`](docs/products); this README is only
@@ -42,6 +42,16 @@ just build-cli-release
 The tutorial explains non-Nix prerequisites, the repository wrapper, state paths, run-card
 replay, and the cost of the maintained scientific examples.
 
+## Standalone FeynKit toolkit
+
+The `feynkit-*` crates expose reusable model loading, graph generation, CFF,
+kinematics, and tensor reduction through Rust and `symbolica.community.hepkit`.
+Start with the [FeynKit manual](https://alphal00p.github.io/gammaloop/products/feynkit/latest/),
+its [Rust quickstart](https://alphal00p.github.io/gammaloop/products/feynkit/latest/quickstart/rust/),
+or its [Python quickstart](https://alphal00p.github.io/gammaloop/products/feynkit/latest/quickstart/python/).
+The [canonical Typst manual](docs/products/feynkit/main.typ) also covers tensor selectors,
+notebook rendering, and registration in the combined Symbolica host.
+
 ## Related products
 
 - [Linnet](https://alphal00p.github.io/gammaloop/products/linnet/latest/): half-edge graphs, Linnest layout, and Clinnet rendering
@@ -52,7 +62,7 @@ replay, and the cost of the maintained scientific examples.
 
 Spenso's matching Typst, HTML, SVG, and notebook display API is documented in the
 [Python guide](https://alphal00p.github.io/gammaloop/products/spenso/latest/guides/python/),
-including the optional `gammaloop[typst-display]` renderer.
+including its embedded Rust Typst renderer.
 
 See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and literature.
 

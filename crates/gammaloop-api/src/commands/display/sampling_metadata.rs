@@ -8,6 +8,7 @@ use gammalooprs::{
         ProcessIntegrand, SamplingCatalogueEntry, SamplingChannelCatalogue,
         SamplingChannelSelector, SamplingMapDefinition,
     },
+    model::Model,
     processes::GraphGroupSelectionSpec,
     settings::runtime::{SamplingChannelWeight, SamplingSettingsParser, SumMode},
     utils::{serde_utils::ShowDefaultsGuard, symbolica_ext::LOGPRINTOPTS},
@@ -33,7 +34,7 @@ pub(super) fn render(
         .process_list
         .get_integrand(process_id, integrand_name)?;
     let integrand = resolved.require_generated()?;
-    let metadata = SamplingMetadata::collect(integrand, requested_graphs)?;
+    let metadata = SamplingMetadata::collect(&state.model, integrand, requested_graphs)?;
     match format {
         MetadataDisplayFormat::Pretty => {
             let heading = format!(
@@ -67,7 +68,11 @@ struct GraphSamplingMetadata {
 }
 
 impl SamplingMetadata {
-    fn collect(integrand: &ProcessIntegrand, requested_graphs: &[String]) -> Result<Self> {
+    fn collect(
+        model: &Model,
+        integrand: &ProcessIntegrand,
+        requested_graphs: &[String],
+    ) -> Result<Self> {
         for name in requested_graphs {
             integrand.resolve_group_id_by_master_name(name)?;
         }
@@ -82,12 +87,13 @@ impl SamplingMetadata {
                 settings.selected_graph_names().to_vec(),
             );
             Some(match integrand {
-                ProcessIntegrand::Amplitude(amplitude) => selection
-                    .plan(&amplitude.data.graph_group_structure, |id| {
+                ProcessIntegrand::Amplitude(amplitude) => {
+                    selection.plan(model, &amplitude.data.graph_group_structure, |id| {
                         amplitude.data.graph_terms.get(id).map(|term| &term.graph)
-                    })?,
+                    })?
+                }
                 ProcessIntegrand::CrossSection(cross_section) => {
-                    selection.plan(&cross_section.data.graph_group_structure, |id| {
+                    selection.plan(model, &cross_section.data.graph_group_structure, |id| {
                         cross_section
                             .data
                             .graph_terms
@@ -237,7 +243,10 @@ impl SamplingMetadata {
                     },
                 )
             {
-                return Err(eyre!("Cannot export sampling for '{}': explicit selectors changed the canonical channel IDs or definitions", graph.name));
+                return Err(eyre!(
+                    "Cannot export sampling for '{}': explicit selectors changed the canonical channel IDs or definitions",
+                    graph.name
+                ));
             }
         }
         Ok(())

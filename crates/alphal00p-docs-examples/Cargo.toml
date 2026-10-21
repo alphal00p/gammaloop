@@ -5,14 +5,22 @@ edition.workspace = true
 publish = false
 build = "build.rs"
 
-[dev-dependencies]
+[dependencies]
 eyre.workspace = true
+feynkit = { path = "../feynkit" }
+feynkit-model = { path = "../feynkit-model" }
+feynkit-ufo = { path = "../feynkit-ufo" }
+feynkit-kinematics = { path = "../feynkit-kinematics" }
+feynkit-graph = { path = "../feynkit-graph" }
+feynkit-generator = { path = "../feynkit-generator" }
+feynkit-cff = { path = "../feynkit-cff" }
+feynkit-tensor = { path = "../feynkit-tensor" }
 gammaloop-api = { path = "../gammaloop-api", default-features = false, features = ["cli"] }
 gammalooprs = { path = "../gammalooprs", default-features = false }
-idenso = { workspace = true, features = ["reference-cases"] }
-linnet = { path = "../linnet", default-features = false, features = ["bincode", "drawing", "serde", "symbolica"] }
+idenso = { workspace = true, features = ["bincode", "reference-cases"] }
+linnet = { path = "../linnet", default-features = false, features = ["nodestore-vec", "bincode", "drawing", "serde", "symbolica"] }
 ndarray.workspace = true
-spenso = { workspace = true, features = ["symbolica"] }
+spenso = { workspace = true, features = ["shadowing"] }
 spenso-hep-lib = { workspace = true, features = ["native"] }
 spenso-macros.workspace = true
 symbolica.workspace = true

@@ -16,6 +16,63 @@ Historical revision comparisons, temporary log locations, and
 external-reference convention tables belong in tests or investigation
 records rather than in the current architecture.
 
+== Symbolic values and backend boundaries
+<symbolic-values-and-backend-boundaries>
+Runtime edge and vertex numerators enter UV construction as
+`SymbolicTensor<IndexedStructure>`. `FourDSector::atom`, aggregate local-4D
+values, `FourDTerm::numerator` and canonical projection numerators retain the
+same carrier. Denominator classes, source incidence and momentum provenance
+remain separate ownership data. Typed addition and multiplication preserve
+logical ports and the rank of zero results.
+
+`IndexedStructure` retains canonical storage and the declared logical axis order
+with an explicit abstract index on every free port. Admission rejects unresolved
+ports, including scoped unresolved indices, instead of allocating labels.
+Closed compact dots and chains remain valid; indexed external interfaces do not
+require expanding internal tensor notation or fixing the Lorentz dimension.
+
+Direct-3D `Integrands` keeps an Atom coefficient program beside shared
+`FnMapEntry<SymbolicTensor<IndexedStructure>>` definitions. The program's
+numerator-family calls stand for those tensors; treating their opaque syntax
+as evidence of a scalar interface would erase that distinction. Root
+prefactors, markers and scalar energy substitutions remain separate from body
+algebra. Final evaluator preparation combines the referenced interfaces before
+lowering them through `SymbolicTensor::into_network` to finite components.
+Only completed component functions become scalar `FnMapEntry<Atom>` entries.
+
+Symbolica's series engine and the exact CFF energy mapper borrow Atom payloads.
+The caller retains the source tensor and checks each returned coefficient or
+mapped expression against its interface. Vakint is an explicit Atom backend
+boundary: export decodes native index syntax, and returned projected tensors
+are restored and checked against their retained source interface before
+dimensional algebra resumes. Projected-numerator cleanup materializes native
+`AbstractIndex` syntax directly. `IntegratedCts` retains
+typed pole and signed finite projections plus its loop-measure scale power.
+`Series<AtomField>` is temporary calculation storage. Each completed projection
+is checked against the source interface, including a vanishing projection.
+Nested forests and the localizer consume those tensors directly.
+Disconnected products use typed multiplication before the temporary Laurent
+projection, so contracted ports and vanishing products keep the product's
+established interface. Scalar marker and loop-measure coefficients do not
+replace that tensor ownership.
+These boundaries do not authorize distributing a graph numerator.
+
+Symbolica seals `AtomCore`, so a downstream `SymbolicTensor` cannot implement
+that trait and inherit its generic operation surface. Tensor-preserving
+operations must be explicit in Idenso's API; broader trait interoperability
+would require an upstream Symbolica change.
+
+The rewriting APIs distinguish scalar algebra (`with_algebra_result`), checked
+interface-preserving substitutions (`with_checked_expression`) and a genuinely
+changed interface (`with_transformed_expression`). Indexed results must retain
+explicit ports; matching ranks alone cannot certify their identities. Custom
+tensor-valued heads must declare their tensor semantics in addition to Symbolica
+linearity. Shared definitions reuse their Arc only when both value and `same_reduction_state`
+agree: a no-op contraction can establish a new completion certificate without
+changing the expression. Typed stage handoffs keep those facts instead of
+exporting and admitting the expression again. Timing evidence belongs in the
+merge-readiness record; this ownership contract makes no speedup guarantee.
+
 == Physical loop measure
 <physical-loop-measure>
 The amplitude measure is $product_ell d^4 k_ell \/ \( 2 pi \)^4$. Signed CFF contours use $d q^0 \/ \( 2 pi i \)$, so each remaining CFF loop contributes $i \/ \( 2 pi \)^3$. Integrated UV subgraphs use the same Minkowski convention: `VakintSettings::additional_normalization` defaults to `"1"`; the historical `"-1"` inserted an extra minus sign per integrated loop. The standard Vakint normalization, forest subtraction signs, and causal prescriptions retain their separate meanings. A graph with $L$ loops consequently receives the same phase whether a loop is represented by CFF or by an integrated UV term.
@@ -24,15 +81,45 @@ The amplitude measure is $product_ell d^4 k_ell \/ \( 2 pi \)^4$. Signed CFF con
 <dimensional-numerator-algebra>
 The covariant `Local4dCts` representation retains symbolic Lorentz dimension `d`; its name does not mean that spin algebra has been evaluated at four. Analytic UV preparation reconstructs the subgraph's Feynman-rule numerator and changes its Minkowski slots to `d` before contracting metrics or evaluating ordinary closed fermion traces. The spinor trace normalization remains four. Expansion is permitted within the subgraph being analytically integrated, while the retained cograph and numerical-production numerator remain factorized.
 
-GammaLoop owns the Dirac algebra. Vakint sees the Lorentz slots of opaque spin tensors and performs vacuum tensor projection in `d = 4 - 2 epsilon`. Projection can create new contractions between those slots. GammaLoop must restore and simplify the projected tensors in symbolic `d`, expose their scalar dimension dependence, and only then let Vakint select scalar backend orders and form Laurent coefficients. Merely collecting the resulting gamma chains does not evaluate their contractions. No hidden dimension-dependent trace may be deferred to final four-dimensional numerical assembly. The completed analytic result is expanded before its Laurent coefficients are stored and reinserted into the cograph, so equivalent scalar-master groupings produce the same counterterm. This normalization never expands the cograph.
+GammaLoop invokes Idenso's Dirac algebra before and after tensor projection. Vakint sees the Lorentz slots of opaque spin tensors and performs vacuum tensor projection in `d = 4 - 2 epsilon`. Projection can create new contractions between those slots. GammaLoop must restore and simplify the projected tensors in symbolic `d`, expose their scalar dimension dependence, and only then let Vakint select scalar backend orders and form Laurent coefficients. Merely collecting the resulting gamma chains does not evaluate their contractions. No hidden dimension-dependent trace may be deferred to final four-dimensional numerical assembly. The completed analytic result is expanded before its Laurent coefficients are stored and reinserted into the cograph, so equivalent scalar-master groupings produce the same counterterm. This normalization never expands the cograph.
+
+Restoration reattaches the Minkowski representation to numeric backend labels and symbolic native labels. Only numeric labels acquire the topology-local index chart; native abstract labels retain their source identity. Already represented slots keep their complete interface.
+
+Before reinsertion, completed internal momentum pairs are contracted and written
+as scalar products. This prevents independent integrated factors from retaining
+the same topology-local dummy label in their later product. Open boundary ports
+remain available to the cograph, and its numerator is not distributed.
 
 Unresolved closed spin/Lorentz traces and internal contractions between open spin chains must report unsupported dimensional algebra. Retained free tensor slots remain a valid external basis. This avoids implicitly assigning a four-dimensional value to an evanescent operator; Sigma tensors also require a symbolic dimensional implementation before analytic UV use.
 
+The structural residual check materializes native indices with the existing
+shorthand settings and strict slot-occurrence observer. Both encoded source
+dummy names and native generated dummy names remain reserved. A genuine third
+compatible occurrence is still an error; changing parser index types does not
+relax multiplicity or unresolved-dimensional-algebra checks.
+
+Validated fixed physical Minkowski basis projections are admissible at this
+boundary. A connection to `delta(cind(i),mink(d))` for coordinates zero through
+three does not require an unrestricted D-dimensional tensor reduction. Borrowed
+slot and component bounds recognize these selector leaves without rewriting
+the tensor factors or their scalar D and epsilon dependence. The query validates
+the original unfiltered multiplicities and scopes before excluding known momenta
+and these validated selectors from pair discovery. Unknown or out-of-range
+selectors and genuine summed Lorentz contractions remain visible and rejected.
+
 The required backend depth includes epsilon poles in numerator coefficients and loop-normalization factors. Positive epsilon orders needed by enclosing UV operations are retained using the forest's loop-order bound. A backend that cannot supply the required depth must report an error instead of silently returning a shallower expansion. The Laurent-series boundary also verifies integer powers and epsilon-independent coefficients. Supported scalar mathematical functions are expanded there; unresolved opaque epsilon dependence produces an error.
 
-When integrated counterterms are enabled, the shared UV entry checks the raw edge and vertex numerators of the current UV subgraph before simplification. Gamma5 and chiral projectors are rejected with graph, subgraph and source context, including gamma5 pairs that could subsequently cancel. A dimensional gamma5 prescription is not implemented. Gamma5 belonging only to the cograph or an external-state projector is outside this check.
+When integrated counterterms are enabled, the shared UV entry inspects the
+source payloads of the retained edge and vertex tensors of the current UV
+subgraph before simplification. Gamma5 and chiral projectors are rejected with graph, subgraph and source context, including gamma5 pairs that could subsequently cancel. A dimensional gamma5 prescription is not implemented. Gamma5 belonging only to the cograph or an external-state projector is outside this check.
 
-The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients. With `false`, each complete numerator follows the base branch's full FORM reduction and scalar-backend input path. Distinct denominator topologies remain separate; both modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
+The generation setting `uv.project_integrated_uv_cts_onto_tensor_integrals` defaults to `true`. It selects Vakint's universal tensor kernels and isolated scalar coefficients; `false` supplies the complete numerator to the selected tensor backend. This choice is independent of backend selection: the native FeynKit tensor reducer is the default, while AlphaLoop uses FORM. Scalar-master evaluation has its own backend policy. After tensor reduction, both projection modes use the same scalar coefficient kernel, retaining loop-independent factors outside the analytic backend and restoring them before final Laurent projection. Distinct denominator topologies remain separate; both projection modes use the same GammaLoop dimensional-algebra boundaries and conservative forest epsilon depth. Positive epsilon prefactors do not reduce that depth, and final truncation removes any excess orders.
+
+Physical fixed momentum components are lowered to contractions with fixed basis
+vectors at the Vakint boundary. Spatial basis contractions retain their Minkowski
+signs; repeated `cind(0)` factors are independent temporal projections, not a dummy
+index occurring more than twice. Open tensor ports and powered scalar spectators
+remain owned by the shared tensor interface.
 
 == Orchestrators
 <orchestrators>
@@ -52,6 +139,64 @@ modes:
 The backends share analytic operations and result types. Scheduling,
 dependency lookup, caching, and disconnected-component composition
 belong to the orchestrator because their traversal models differ.
+
+Comparison normalization sets the Lorentz dimension to four, reversibly cooks
+index syntax for checked `SymbolicTensor` admission, reduces colour identities,
+and contracts metrics and vector connections with chain and trace collection
+disabled. It then converts scalar-product notation and restores the original
+index encoding. Admission and normalization errors
+propagate to the comparison caller. No Dirac or epsilon identity is enabled by
+this normalization, and coefficient factorization is retained.
+
+Exact finite-component certificates keep the tensor's external interface while
+contracting its finite entries. Scalar normalization extracts numeric content
+from integer powers before protecting their bodies. Functions, fractional
+powers, and guarded inverse factors remain opaque. Positive scalar powers share
+their complete base with linear occurrences; a summed base remains one opaque
+factor. Restoring it may expose another linear cancellation, so the same
+protected pass repeats only after a strict expression-size decrease.
+Completed scalar components establish the absence of tensor interfaces once per
+scope, avoiding repeated subtree scans. Tensor-bearing scopes keep the existing
+factor-specific checks. The positive-power lookup skips summed-base
+normalization when no such base was found; neither guard isolation nor the
+collected expression changes.
+The shared Spenso scalar collector owns literal numeric-content extraction;
+GammaLoop uses that owner at its factor-preserving boundary.
+Literal numeric content uses the real rational GCD of all real and imaginary
+coefficient coordinates, including implicit units. The first coefficient in
+coefficient-free body order chooses a phase in `{1, -1, i, -i}` so its remaining
+real part is positive and its imaginary part is nonnegative. This preserves
+opposite and quarter-turned power owners without invoking Gaussian-integer GCD
+or changing any symbolic factor boundary.
+Numerical weights are distributed once at each current product/sum boundary,
+from the bottom up. Other multiplicative factors remain intact; rewritten
+scalar subtrees are not recursively revisited. This avoids repeated copying
+of deep signed sums in the scalar evaluator while preserving function,
+inverse-power and guarded boundaries. Common numeric content is then
+extracted by the same exact rule. Both enclosing normalization loops require
+strictly smaller expressions before another pass.
+
+Each finite-component pass makes one bounded collection in repeated literal
+scalar factors. Complete scalar sums are admitted only after checking their
+native scalar interface. A retained sum owns its proper additive subsets,
+identified by their direct coefficient-free terms; selecting both would hide
+their linear relation. Distinct summed candidates with the same
+coefficient-free support also leave their constituents available to the
+collector; complete positive-power bases remain opaque. Unrelated product
+factors stay outside the exact coefficient rows. Recomposition can expose another cancellation, so the same
+deterministic pass repeats only after a strict size decrease, at most eight
+times. Unsupported collection or the pass limit leaves an unproven residual.
+The certificate takes no numerical samples, forms no common denominators, and
+never distributes a graph numerator.
+
+Compact scalar collection also canonicalizes the precision metadata of an
+exactly zero component in a complex floating coefficient to its nonzero
+partner's precision. The nonzero component's value and precision bytes remain
+unchanged. This permits exact reconstruction of expressions containing the
+same numerical master coefficients without a tolerance or finite-value
+rounding; it does not establish the analytic accuracy of those coefficients.
+Source-frame certificates compare the independently normalized operands;
+subtracting them first can itself recreate differing zero metadata.
 
 == Scheme and Computation Ownership
 <scheme-and-computation-ownership>
@@ -138,8 +283,9 @@ local four-dimensional limit constructs the next counterterm as a signed
 `-T(...)` operation. Nested signs therefore arise from recursive
 operation composition, not from terminal depth or parity.
 
-For a connected counterterm, integration stores a Laurent series from
-which two physical projections are obtained:
+For a connected counterterm, the native Laurent series is temporary calculation
+storage. `IntegratedCts` retains two typed physical projections with the source
+logical interface, including a vanishing projection:
 
 ```text
 pole projection:               negative powers of integral(local)
@@ -176,7 +322,9 @@ Vacuum masses carry hard weight within the component on which a Taylor operation
 
 A localized integrated contribution keeps its finite coefficient in the active expression. Its mass dependence scales when the current Taylor subgraph contains the coefficient's integrated owner, and stays fixed when the owner is disjoint. A later enclosing Taylor operation can therefore scale a coefficient that an earlier disjoint operation left fixed. Only the separate normalized localization kernel remains frozen outside all later Taylor operations.
 
-The direct route retains this distinction with a transient one-argument `mUV(owner)` application of the existing vacuum-mass symbol. Each connected integrated coefficient is tagged before coefficients are multiplied. The owner uses the existing subgraph encoding: Taylor expansion scales the entire mass application for a contained owner, leaves a disjoint owner unchanged, and rejects partial overlaps. `DirectSector::combine` restores physical `mUV` on output copies; stored sectors retain their owners for further forest steps. This introduces no helper, type or symbol. Four-dimensional disconnected composition already applies the Taylor operations to their own components, so its runtime and `IntegratedCts` are unchanged.
+The finite coefficient is stored as a shared numerator definition, using the existing residue-key owner to apply its component momentum map exactly once. Scalar CFF branch weights and the frozen kernel remain separate. A later cograph numerator is another shared factor; it does not absorb or remap the integrated tensor vertex. This permits open spinor coefficients to be added to local counterterms without asking scalar branch assembly to combine incompatible tensor interfaces. The localization regression checks both the scalar affine substitution and the exact product of separate finite and cograph matrices.
+
+The direct route retains this distinction with a transient one-argument `mUV(owner)` application of the existing vacuum-mass symbol. Each connected integrated coefficient is tagged before coefficients are multiplied. The owner uses the existing subgraph encoding: Taylor expansion scales the entire mass application for a contained owner, leaves a disjoint owner unchanged, and rejects partial overlaps. `DirectSector::combine` restores physical `mUV` on output copies; stored sectors retain their owners for further forest steps. This introduces no helper, type or symbol. Four-dimensional disconnected composition already applies the Taylor operations to their own components; the retained-tensor change preserves that mass ownership and the projection signs.
 
 Consumed loop measures are recorded separately. Writing `s = uvIntegratedLoopScale`, `IntegratedCts` projects a coefficient `C` whose integration consumed `r` loops as `C(mUV) * s^(4*r)`. The enclosing four-dimensional Taylor operation transforms `s -> s*t`, supplying `t^(4*r)` to compensate consumed loop measures without cancelling the coefficient's mass rescaling. Integration and physical projection set `s = 1`. The active denominator rewrite introduces the unscaled vacuum mass for the enclosing propagator basis.
 
@@ -193,8 +341,9 @@ component counterterms.
 
 === Integrated terms
 <integrated-terms>
-Integrated counterterms are scalars and factorize over connected
-components. The stored disconnected value provides the product of
+Integrated coefficients have no remaining loop dependence from their
+integrated components, but can retain open tensor indices. They factorize
+over disjoint connected components. The stored disconnected value provides the product of
 component pole projections and the product of component
 finite-counterterm projections.
 
@@ -241,7 +390,10 @@ The projected local-4D route is separate: it completes the Taylor expansion in f
 <marker-representation>
 UV markers are diagnostic symbolic structure. Approximation,
 integration, series, and truncation are distinct canonical function
-heads applied to the history of current/given subgraphs. Spenso printing
+heads applied to the history of current/given subgraphs. Marker
+calls remain actual arguments rather than hidden body constants, so an outer
+approximation or cograph prefix updates each history before evaluator binding.
+This does not distribute the numerator. Spenso printing
 supplies the compact `K[...]`, angled-bracket, `Σ(...)`, and truncation
 notation while structured DOT uses the same underlying atoms. Typst
 presentation combines Symbolica\'s Typst arithmetic mode with those

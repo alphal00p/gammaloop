@@ -1,0 +1,1642 @@
+{
+  "source_commit": "e5554019e398bbbc114ae3dafedc88bf09cb6eeb",
+  "dy": {
+    "virtual triangle 1": {
+      "vectors": [
+        null,
+        [
+          -1,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          0,
+          1
+        ],
+        null,
+        [
+          1,
+          0,
+          1
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "photon",
+        "slash3",
+        "gluon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            -1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            1
+          ],
+          "mass_squared": false
+        }
+      ],
+      "powers": [
+        1,
+        1,
+        1
+      ],
+      "divisor_power": 0,
+      "cuts": {
+        "11": {
+          "mask": [
+            1,
+            1,
+            0,
+            1,
+            1
+          ],
+          "weight": "1",
+          "pm": true,
+          "mp": true,
+          "analytic": false
+        },
+        "10": {
+          "mask": [
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "weight": "-1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        },
+        "01": {
+          "mask": [
+            0,
+            1,
+            1,
+            1,
+            0
+          ],
+          "weight": "-1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        }
+      },
+      "observable_phase": "1"
+    },
+    "virtual triangle 2": {
+      "vectors": [
+        null,
+        [
+          -1,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          -1,
+          0,
+          1
+        ],
+        null,
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "photon",
+        "slash3",
+        "gluon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            -1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            -1,
+            0,
+            1
+          ],
+          "mass_squared": false
+        }
+      ],
+      "powers": [
+        1,
+        1,
+        1
+      ],
+      "divisor_power": 0,
+      "cuts": {
+        "00": {
+          "mask": [
+            0,
+            0,
+            1,
+            1,
+            1
+          ],
+          "weight": "1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        }
+      },
+      "observable_phase": "1"
+    },
+    "virtual bubble": {
+      "vectors": [
+        null,
+        [
+          0,
+          0,
+          1
+        ],
+        null,
+        [
+          1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          1
+        ],
+        null,
+        null,
+        [
+          0,
+          1,
+          0
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "slash3",
+        "photon",
+        "gluon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            -1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            1
+          ],
+          "mass_squared": false
+        }
+      ],
+      "powers": [
+        1,
+        0,
+        1
+      ],
+      "divisor_power": 0,
+      "cuts": {
+        "10": {
+          "mask": [
+            1,
+            0,
+            1,
+            0,
+            1
+          ],
+          "weight": "-1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        }
+      },
+      "observable_phase": "1"
+    },
+    "qq direct box": {
+      "vectors": [
+        null,
+        [
+          -1,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          -1,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "gluon",
+        "slash3",
+        "photon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            -1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            -1,
+            1,
+            1
+          ],
+          "mass_squared": true
+        }
+      ],
+      "powers": [
+        1,
+        2,
+        1
+      ],
+      "divisor_power": 0,
+      "cuts": {
+        "11": {
+          "mask": [
+            1,
+            1,
+            1,
+            0,
+            1
+          ],
+          "weight": "1",
+          "pm": true,
+          "mp": true,
+          "analytic": false
+        },
+        "01": {
+          "mask": [
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "weight": "-1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        }
+      },
+      "observable_phase": "-1"
+    },
+    "qq crossed box": {
+      "vectors": [
+        null,
+        [
+          -1,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          -1,
+          0,
+          1
+        ],
+        null,
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "photon",
+        "slash3",
+        "gluon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            -1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            -1,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            -1,
+            1,
+            1
+          ],
+          "mass_squared": true
+        }
+      ],
+      "powers": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "divisor_power": 0,
+      "cuts": {
+        "11": {
+          "mask": [
+            1,
+            1,
+            1,
+            0,
+            0,
+            1
+          ],
+          "weight": "-1",
+          "pm": true,
+          "mp": true,
+          "analytic": false
+        },
+        "10": {
+          "mask": [
+            1,
+            0,
+            1,
+            0,
+            1,
+            1
+          ],
+          "weight": "1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        },
+        "01": {
+          "mask": [
+            0,
+            1,
+            1,
+            1,
+            0,
+            1
+          ],
+          "weight": "1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        },
+        "00": {
+          "mask": [
+            0,
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "weight": "1",
+          "pm": false,
+          "mp": true,
+          "analytic": true
+        }
+      },
+      "observable_phase": "-1"
+    },
+    "qg box": {
+      "vectors": [
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          0,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "gluon",
+        "slash3",
+        "photon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            1,
+            1
+          ],
+          "mass_squared": true
+        }
+      ],
+      "powers": [
+        1,
+        2,
+        1
+      ],
+      "divisor_power": 0,
+      "cuts": {
+        "11": {
+          "mask": [
+            1,
+            1,
+            1,
+            0,
+            1
+          ],
+          "weight": "-1",
+          "pm": true,
+          "mp": true,
+          "analytic": false
+        },
+        "01": {
+          "mask": [
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "weight": "1",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        }
+      },
+      "observable_phase": "-1"
+    },
+    "qg triangle": {
+      "vectors": [
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          0,
+          0
+        ],
+        null,
+        [
+          0,
+          1,
+          1
+        ],
+        null,
+        [
+          0,
+          0,
+          1
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "photon",
+        "slash3",
+        "gluon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            1,
+            1
+          ],
+          "mass_squared": true
+        }
+      ],
+      "powers": [
+        1,
+        1,
+        1
+      ],
+      "divisor_power": 1,
+      "cuts": {
+        "11": {
+          "mask": [
+            1,
+            1,
+            1,
+            0,
+            1
+          ],
+          "weight": "2",
+          "pm": true,
+          "mp": true,
+          "analytic": false
+        },
+        "01": {
+          "mask": [
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "weight": "-2",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        }
+      },
+      "observable_phase": "-1"
+    },
+    "qg bubble": {
+      "vectors": [
+        null,
+        [
+          0,
+          1,
+          1
+        ],
+        null,
+        [
+          0,
+          0,
+          1
+        ],
+        null,
+        [
+          0,
+          1,
+          1
+        ],
+        null,
+        [
+          1,
+          0,
+          0
+        ]
+      ],
+      "labels": [
+        "photon",
+        "slash1",
+        "gluon",
+        "slash2",
+        "gluon",
+        "slash3",
+        "photon",
+        "slash4"
+      ],
+      "propagators": [
+        {
+          "momentum": [
+            0,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            0,
+            0,
+            1
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            0,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            1,
+            0
+          ],
+          "mass_squared": false
+        },
+        {
+          "momentum": [
+            1,
+            1,
+            1
+          ],
+          "mass_squared": true
+        }
+      ],
+      "powers": [
+        1,
+        0,
+        1
+      ],
+      "divisor_power": 2,
+      "cuts": {
+        "11": {
+          "mask": [
+            1,
+            1,
+            1,
+            0,
+            1
+          ],
+          "weight": "-1",
+          "pm": true,
+          "mp": true,
+          "analytic": false
+        },
+        "01": {
+          "mask": [
+            0,
+            1,
+            1,
+            1,
+            1
+          ],
+          "weight": "0",
+          "pm": false,
+          "mp": true,
+          "analytic": false
+        }
+      },
+      "observable_phase": "-1"
+    }
+  },
+  "dis": {
+    "q_triangle": {
+      "vectors": [
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          1
+        ],
+        null,
+        [
+          0,
+          1,
+          1
+        ],
+        null
+      ],
+      "labels": [
+        "rho1",
+        "sigma",
+        "rho2",
+        "mu",
+        "rho3",
+        "sigma",
+        "rho4",
+        "nu"
+      ],
+      "photon_slots": [
+        3,
+        7
+      ],
+      "powers": [
+        1,
+        1,
+        1,
+        0,
+        1,
+        1
+      ],
+      "channel": "q",
+      "relative_weight": "-2",
+      "cuts": [
+        {
+          "name": "external_external",
+          "initial": [
+            5
+          ],
+          "final": [
+            6
+          ],
+          "orders": [
+            [
+              5,
+              0
+            ],
+            [
+              6,
+              0
+            ]
+          ],
+          "relative_sign": "-1"
+        },
+        {
+          "name": "internal12_external_final",
+          "initial": [
+            1,
+            2
+          ],
+          "final": [
+            6
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              6,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        },
+        {
+          "name": "external_initial_internal13",
+          "initial": [
+            5
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        },
+        {
+          "name": "triple123",
+          "initial": [
+            1,
+            2
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        }
+      ]
+    },
+    "q_box": {
+      "vectors": [
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          1
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null
+      ],
+      "labels": [
+        "rho1",
+        "sigma",
+        "rho2",
+        "mu",
+        "rho3",
+        "nu",
+        "rho4",
+        "sigma"
+      ],
+      "photon_slots": [
+        3,
+        5
+      ],
+      "powers": [
+        1,
+        2,
+        1,
+        0,
+        1,
+        0
+      ],
+      "channel": "q",
+      "relative_weight": "-1",
+      "cuts": [
+        {
+          "name": "external_initial_internal13",
+          "initial": [
+            5
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        },
+        {
+          "name": "triple123",
+          "initial": [
+            1,
+            2
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        }
+      ]
+    },
+    "q_bubble": {
+      "vectors": [
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          1,
+          1
+        ],
+        null,
+        [
+          1,
+          1,
+          1
+        ],
+        null,
+        [
+          0,
+          1,
+          1
+        ],
+        null
+      ],
+      "labels": [
+        "rho1",
+        "mu",
+        "rho2",
+        "sigma",
+        "rho3",
+        "sigma",
+        "rho4",
+        "nu"
+      ],
+      "photon_slots": [
+        1,
+        7
+      ],
+      "powers": [
+        1,
+        0,
+        1,
+        0,
+        1,
+        2
+      ],
+      "channel": "q",
+      "relative_weight": "-1",
+      "cuts": [
+        {
+          "name": "external_external",
+          "initial": [
+            5
+          ],
+          "final": [
+            6
+          ],
+          "orders": [
+            [
+              5,
+              0
+            ],
+            [
+              6,
+              1
+            ]
+          ],
+          "relative_sign": "-1"
+        },
+        {
+          "name": "external_initial_internal13",
+          "initial": [
+            5
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        }
+      ]
+    },
+    "q_lsz": {
+      "vectors": [
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          0,
+          1,
+          1
+        ],
+        null,
+        [
+          0,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null
+      ],
+      "labels": [
+        "rho1",
+        "mu",
+        "rho2",
+        "nu",
+        "rho3",
+        "sigma",
+        "rho4",
+        "sigma"
+      ],
+      "photon_slots": [
+        1,
+        3
+      ],
+      "powers": [
+        1,
+        1,
+        0,
+        0,
+        2,
+        1
+      ],
+      "channel": "q",
+      "relative_weight": "-1",
+      "cuts": [
+        {
+          "name": "external_external",
+          "initial": [
+            5
+          ],
+          "final": [
+            6
+          ],
+          "orders": [
+            [
+              5,
+              1
+            ],
+            [
+              6,
+              0
+            ]
+          ],
+          "relative_sign": "-1"
+        },
+        {
+          "name": "internal12_external_final",
+          "initial": [
+            1,
+            2
+          ],
+          "final": [
+            6
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              6,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        }
+      ]
+    },
+    "g_box": {
+      "vectors": [
+        [
+          1,
+          0,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          1
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null
+      ],
+      "labels": [
+        "rho1",
+        "sigma",
+        "rho2",
+        "mu",
+        "rho3",
+        "nu",
+        "rho4",
+        "sigma"
+      ],
+      "photon_slots": [
+        3,
+        5
+      ],
+      "powers": [
+        1,
+        2,
+        1,
+        0,
+        1,
+        0
+      ],
+      "channel": "g",
+      "relative_weight": "1",
+      "cuts": [
+        {
+          "name": "external_initial_internal13",
+          "initial": [
+            5
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        },
+        {
+          "name": "triple123",
+          "initial": [
+            1,
+            2
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              1
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        }
+      ]
+    },
+    "g_crossed_box": {
+      "vectors": [
+        [
+          1,
+          0,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          0
+        ],
+        null,
+        [
+          1,
+          1,
+          1
+        ],
+        null,
+        [
+          1,
+          0,
+          1
+        ],
+        null
+      ],
+      "labels": [
+        "rho1",
+        "sigma",
+        "rho2",
+        "mu",
+        "rho3",
+        "sigma",
+        "rho4",
+        "nu"
+      ],
+      "photon_slots": [
+        3,
+        7
+      ],
+      "powers": [
+        1,
+        1,
+        1,
+        1,
+        1,
+        0
+      ],
+      "channel": "g",
+      "relative_weight": "1",
+      "cuts": [
+        {
+          "name": "external_initial_internal13",
+          "initial": [
+            5
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              5,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        },
+        {
+          "name": "triple123",
+          "initial": [
+            1,
+            2
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              2,
+              0
+            ],
+            [
+              3,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        },
+        {
+          "name": "triple134",
+          "initial": [
+            3,
+            4
+          ],
+          "final": [
+            1,
+            3
+          ],
+          "orders": [
+            [
+              1,
+              0
+            ],
+            [
+              3,
+              0
+            ],
+            [
+              4,
+              0
+            ]
+          ],
+          "relative_sign": "1"
+        }
+      ]
+    }
+  }
+}

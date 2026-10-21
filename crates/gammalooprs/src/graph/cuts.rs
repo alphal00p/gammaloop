@@ -6,7 +6,8 @@ use linnet::half_edge::{
     subgraph::{SuBitGraph, SubSetLike},
 };
 
-use crate::cff::{CutCFFIndex, esurface::RaisedEsurfaceGroup};
+use crate::cff::CutCFFIndex;
+use crate::cff::RaisedEsurfaceGroup;
 
 #[derive(Debug, Clone, Encode, Decode, PartialEq, Hash, Eq, PartialOrd, Ord)]
 pub struct CutSet {

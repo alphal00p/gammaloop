@@ -1,0 +1,98 @@
+--- a/src/poly.rs
++++ b/src/poly.rs
+@@ -2393,10 +2393,75 @@
+             })
+             .collect();
+ 
++        // Distinct normalized atomic variables cannot merge in a square-free
++        // monomial. Establish their factor order once for all monomials.
++        let simple_variables = vars.iter().flatten().all(|variable| {
++            matches!(variable.as_view(), AtomView::Var(_) | AtomView::Fun(_))
++                && !variable.as_view().needs_normalization()
++        });
+         let mut sorted_vars = (0..vars.len()).collect::<Vec<_>>();
+-        sorted_vars.sort_by_key(|&i| vars[i].clone());
++        if simple_variables {
++            sorted_vars.sort_by(|&i, &j| match (&vars[i], &vars[j]) {
++                (Some(a), Some(b)) => a.as_view().cmp_factors(&b.as_view()),
++                (None, Some(_)) => Ordering::Less,
++                (Some(_), None) => Ordering::Greater,
++                (None, None) => Ordering::Equal,
++            });
++        } else {
++            sorted_vars.sort_by_key(|&i| vars[i].clone());
++        }
++        let distinct_variables = simple_variables
++            && sorted_vars
++                .windows(2)
++                .all(|pair| match (&vars[pair[0]], &vars[pair[1]]) {
++                    (Some(a), Some(b)) => a != b,
++                    _ => true,
++                });
+ 
+         for monomial in self {
++            let square_free = distinct_variables
++                && monomial
++                    .exponents
++                    .iter()
++                    .all(|&power| power == E::zero() || power == E::one());
++            if square_free {
++                // These factors are already normalized and require no powers:
++                // emitting them cannot invoke callbacks before coefficient conversion.
++                monomial
++                    .coefficient
++                    .coefficient_to_expression(&self.ring(), &mut num_h);
++                if matches!(num_h.as_view(), AtomView::Num(_)) && num_h.is_finite() {
++                    if num_h.is_zero() {
++                        continue;
++                    }
++                    let has_coefficient = !num_h.is_one();
++                    let mul = mul_h.to_mul();
++                    if has_coefficient {
++                        mul.extend(num_h.as_view());
++                    }
++                    for &i in &sorted_vars {
++                        if monomial.exponents[i] != E::zero() {
++                            mul.extend(
++                                vars[i]
++                                    .as_ref()
++                                    .expect("an active polynomial variable must have an expression")
++                                    .as_view(),
++                            );
++                        }
++                    }
++                    match mul.get_nargs() {
++                        0 => add.extend(workspace.new_num(1).as_view()),
++                        1 => add.extend(mul.to_mul_view().iter().next().unwrap()),
++                        _ => {
++                            mul.set_has_coefficient(has_coefficient);
++                            mul.set_normalized(true);
++                            add.extend(mul.as_view());
++                        }
++                    }
++                    continue;
++                }
++            }
++
+             let mul = mul_h.to_mul();
+ 
+             for i in &sorted_vars {
+@@ -2416,9 +2481,15 @@
+                 }
+             }
+ 
+-            monomial
+-                .coefficient
+-                .coefficient_to_expression(&self.ring(), &mut num_h);
++            // Preserve factor and coefficient order in the general path. Compound
++            // variables can contribute rounded coefficients or normalization hooks.
++            // The square-free path already converted once and cannot overwrite num_h
++            // with a power exponent; never replay a custom coefficient conversion.
++            if !square_free {
++                monomial
++                    .coefficient
++                    .coefficient_to_expression(&self.ring(), &mut num_h);
++            }
+             mul.extend(num_h.as_view());
+             add.extend(mul_h.as_view());
+         }

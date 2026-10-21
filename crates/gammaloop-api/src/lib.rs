@@ -107,7 +107,7 @@ pub(crate) mod command_template;
 pub mod completion;
 pub mod integrand_info;
 pub(crate) mod model_parameters;
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 pub mod python;
 #[cfg(feature = "cli")]
 pub mod repl;

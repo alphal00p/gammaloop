@@ -5,7 +5,9 @@
   craneLib,
   workspaceRoot,
   cargoSources,
+  localCargoPatchSources,
   nonCargoBuildSources,
+  symbolicaRenderData,
   ciArgs,
   ciCargoProfile,
   nativeCargoArtifacts,
@@ -30,29 +32,19 @@ let
 
   docsTypst = typst015.withPackages (
     typstPackages: with typstPackages; [
-      cetz_0_5_1
+      # Linnest's marker batching uses the same reviewed CeTZ extension as
+      # the embedded renderer and Python wheels.
+      (cetz_0_5_1.overrideAttrs (_: {
+        src = workspaceRoot + "/vendor/typst-packages/preview/cetz/0.5.1";
+      }))
       mitex_0_2_6
+      parsely_0_1_0
+      parsely_0_1_1
       tidy_0_4_3
     ]
   );
 
-  # Keep pip and Nix on the published Python binding until 0.15.1 reaches PyPI.
-  linnetPython = docsPkgs.python313.withPackages (pythonPackages: [
-    (pythonPackages.typst.overridePythonAttrs (old: rec {
-      version = "0.15.0";
-      src = docsPkgs.fetchFromGitHub {
-        owner = "messense";
-        repo = "typst-py";
-        tag = "v${version}";
-        hash = "sha256-9wHUikOf/WULPaGkCOXa0aXcSme+xbweC6IDwaJnwRk=";
-      };
-      cargoDeps = docsPkgs.rustPlatform.fetchCargoVendor {
-        inherit (old) pname;
-        inherit version src;
-        hash = "sha256-TyLKnJUVbodCHQXhpjIr1numNDmeUkvpsKH1o5tWFCM=";
-      };
-    }))
-  ]);
+  linnetPython = docsPkgs.python313;
 
   docsFontPath = "${docsPkgs.roboto}/share/fonts/truetype";
 
@@ -109,6 +101,7 @@ let
         (workspaceRoot + "/crates/kurvst/typst/examples/knot-logo.typ")
         (workspaceRoot + "/scripts/update-docs-pages.sh")
         (workspaceRoot + "/examples/api/python")
+        (workspaceRoot + "/examples/notebooks")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL00.dot")
         (workspaceRoot + "/examples/cli/aa_aa/2L/graphs/GL08.dot")
         (workspaceRoot + "/examples/cli/aa_aa/3L/graphs/processes/amplitudes/aa_aa/3L/GL000.dot")
@@ -134,15 +127,20 @@ let
         (workspaceRoot + "/tests/resources/graphs/uv_tests/scalar_mirrored_cubic_exact_uv_rewrite.dot")
         (workspaceRoot + "/tests/resources/graphs/epemttbar.dot")
         (workspaceRoot + "/pyproject.toml")
-        (workspaceRoot + "/crates/linnet-py/pyproject.toml")
-        (workspaceRoot + "/crates/linnet-py/uv.lock")
-        (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+        (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
+        (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.py")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi")
+        (workspaceRoot + "/crates/feynkit-py/python/symbolica/community/hepkit/__init__.py")
+        (
+          workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"
+        )
+        (workspaceRoot + "/examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi")
+        (workspaceRoot + "/crates/feynkit-py/examples/ufo_generation.py")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
-        (workspaceRoot + "/crates/linnet-py/tests/test_basic.py")
-        (workspaceRoot + "/crates/linnet-py/tests/test_wasm.py")
-        (workspaceRoot + "/crates/linnet-py/tests/test_streaming.py")
+        (workspaceRoot + "/crates/linnet-py/tests")
+        (workspaceRoot + "/crates/feynkit-py/tests")
       ]
     );
   };
@@ -154,6 +152,7 @@ let
     fileset = lib.fileset.unions [
       (craneLib.fileset.cargoTomlAndLock workspaceRoot)
       (craneLib.fileset.rust workspaceRoot)
+      localCargoPatchSources
       (workspaceRoot + "/.cargo/config.toml")
       (lib.fileset.difference nonCargoBuildSources (
         lib.fileset.unions [
@@ -231,9 +230,13 @@ let
     product: product.rust_components or [ ]
   ) documentationRegistry.product;
   documentationCatalogFeatures = "gammaloop-reference,vakint-reference";
-  documentationPythonExporterBuildCommands = lib.concatMapStringsSep "\n" (product: ''
-    cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg product.id}
-  '') documentationRegistry.product;
+  # Products can share a Python owner (Idenso uses Spenso's binding module).
+  # Prebuild the exporter's actual feature contexts once each.
+  documentationPythonExporterBuildCommands = lib.concatMapStringsSep "\n" (feature: ''
+    cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg feature}
+  '') (builtins.attrNames (builtins.removeAttrs
+    (builtins.fromTOML (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-python-exporter/Cargo.toml"))).features
+    ["default"]));
   documentationRustdocBuildCommands = lib.concatMapStringsSep "\n" (
     component:
     let
@@ -270,7 +273,6 @@ let
         cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
         cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
         cargoWithProfile build --locked -p alphal00p-docs-builder
-        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3
         ${documentationRustdocBuildCommands}
         cargoWithProfile build --locked -p alphal00p-docs-catalogs \
           --features ${lib.escapeShellArg documentationCatalogFeatures} \
@@ -337,6 +339,7 @@ let
     TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
     ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
     SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+    SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
     doNotLinkInheritedArtifacts = true;
     doInstallCargoArtifacts = false;
     checkPhaseCargoCommand = "";
@@ -379,13 +382,13 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet
-    linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
+    linnet_python="$TMPDIR/alphal00p-docs-linnet-graph"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true
     uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
@@ -396,16 +399,11 @@ let
       --profile ${docsCargoProfile} \
       --interpreter "$linnet_python/bin/python" \
       --out "$linnet_wheels" \
-      --manifest-path crates/linnet-py/Cargo.toml \
-      --features extension-module,abi3
-    # Python imports the pinned Typst from Nix; uv does not discover those
-    # inherited packages when resolving dependencies.
+      --manifest-path examples/notebooks/symbolica-host/Cargo.toml
+    # The complete Community wheel embeds its graph renderer.
     uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
-      "$linnet_wheels"/linnet_py-*.whl
-    "$linnet_python/bin/python" -m unittest \
-      crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py \
-      crates/linnet-py/tests/test_streaming.py
+      "$linnet_wheels"/*.whl
+    "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
     svg_assets="$TMPDIR/alphal00p-svg-assets"
     bash scripts/render-docs-svg-assets.sh "$svg_assets"
@@ -490,7 +488,7 @@ let
           "$out/products/gammaloop/index.html"
         python3 scripts/check-docs-html.py "$out"
 
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$out/products/$product/snapshots/v0.3.4/.note"
         done
       '';
@@ -551,7 +549,7 @@ let
         cmp "$docs_pages_test/index.html" "$TMPDIR/portal-before-snapshot.html"
         cmp "$docs_pages_test/developers/.note" "$TMPDIR/developers-before-snapshot.note"
         cmp "$docs_pages_test/products/gammaloop/latest/.note" "$TMPDIR/latest-before-snapshot.note"
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           test -s "$docs_pages_test/products/$product/snapshots/v0.3.4/.note"
         done
 
@@ -573,7 +571,7 @@ let
         test -s "$out/developers/assets/site.js"
         test -s "$out/developers/architecture/gammaloop-architecture/index.html"
         ${alphal00pDocsDeveloperAssertions "$out"}
-        for product in gammaloop linnet spenso idenso vakint; do
+        for product in gammaloop linnet spenso idenso vakint feynkit; do
           product_root="$out/products/$product"
           test -s "$product_root/index.html"
           test -s "$product_root/latest/index.html"
@@ -584,12 +582,6 @@ let
           test -s "$product_root/latest/tutorial/index.html"
           test -s "$product_root/latest/reference/interfaces/index.html"
           test -s "$product_root/latest/version-history/index.html"
-          test -s "$product_root/latest/manual/interfaces/index.html"
-          test -s "$product_root/latest/manual/releases/index.html"
-          grep -Fq 'url=../../reference/interfaces/' \
-            "$product_root/latest/manual/interfaces/index.html"
-          grep -Fq 'url=../../version-history/' \
-            "$product_root/latest/manual/releases/index.html"
           test -s "$product_root/latest/assets/site.css"
           test -s "$product_root/latest/assets/site.js"
           test -s "$product_root/latest/assets/local-unitarity-light.svg"
@@ -603,6 +595,15 @@ let
           ! grep -q "Rustdoc generation was skipped" \
             "$product_root/latest/reference/rust/index.html"
         done
+        for product in gammaloop linnet spenso idenso vakint; do
+          product_root="$out/products/$product"
+          test -s "$product_root/latest/manual/interfaces/index.html"
+          test -s "$product_root/latest/manual/releases/index.html"
+          grep -Fq 'url=../../reference/interfaces/' \
+            "$product_root/latest/manual/interfaces/index.html"
+          grep -Fq 'url=../../version-history/' \
+            "$product_root/latest/manual/releases/index.html"
+        done
         test -s "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"
         test -s "$out/products/gammaloop/latest/reference/rust/gammaloop_api/index.html"
         test -s "$out/products/linnet/latest/reference/rust/linnet/index.html"
@@ -611,6 +612,10 @@ let
         test -s "$out/products/spenso/latest/reference/rust/spenso_hep_lib/index.html"
         test -s "$out/products/idenso/latest/reference/rust/idenso/index.html"
         test -s "$out/products/vakint/latest/reference/rust/vakint/index.html"
+        for component in feynkit feynkit_amplitude feynkit_model feynkit_ufo feynkit_kinematics feynkit_graph feynkit_generator feynkit_cff feynkit_tensor; do
+          test -s "$out/products/feynkit/latest/reference/rust/$component/index.html"
+        done
+        test -s "$out/products/feynkit/latest/reference/python/feynkit-community/index.html"
         test -s "$out/products/gammaloop/latest/reference/rust/theme.css"
         grep -Fq 'href="../theme.css"' \
           "$out/products/gammaloop/latest/reference/rust/gammalooprs/index.html"

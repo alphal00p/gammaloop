@@ -36,18 +36,7 @@ pub enum SerdeFileError {
 
 /// Preserve map entries as an ordered sequence of key-value pairs, including non-string keys.
 pub(crate) mod map_as_pairs {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-
-    pub fn serialize<'a, T, K, V, S>(target: T, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-        T: IntoIterator<Item = (&'a K, &'a V)>,
-        K: Serialize + 'a,
-        V: Serialize + 'a,
-    {
-        let entries: Vec<_> = target.into_iter().collect();
-        entries.serialize(serializer)
-    }
+    use serde::{Deserialize, Deserializer};
 
     pub fn deserialize<'de, T, K, V, D>(deserializer: D) -> Result<T, D::Error>
     where
@@ -254,7 +243,7 @@ impl<T> SmartSerde for BTreeMap<String, (T, T)> where
 {
 }
 
-impl SmartSerde for SerializableModel {}
+impl SmartSerde for Model {}
 // impl SmartSerde for Schema {}
 
 impl SmartSerde for GlobalSettings {
@@ -303,7 +292,7 @@ pub fn get_schema_folder(online: bool) -> Result<PathBuf> {
 }
 
 use crate::{
-    model::SerializableModel,
+    model::Model,
     settings::{GlobalSettings, RuntimeSettings},
     utils::F,
 };
@@ -570,7 +559,6 @@ mod tests {
         fn convert_models() {
             let name = "scalars";
             load_generic_model(name)
-                .to_serializable()
                 .to_file(
                     output_dir().join(format!("gammaloop_models/{name}.json")),
                     true,

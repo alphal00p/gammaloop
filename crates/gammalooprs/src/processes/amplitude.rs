@@ -1,3 +1,4 @@
+use feynkit_generator::GenerationType;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
@@ -14,12 +15,14 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use momtrop::SampleGenerator;
 
-use idenso::dirac::GammaSimplifier;
+use crate::cff::EsurfaceID;
+use idenso::{CookMode, CookSettings, dirac::GammaSimplifySettings, tensor::SymbolicTensor};
 use rayon::{
     ThreadPool,
     iter::{IndexedParallelIterator, IntoParallelRefMutIterator, ParallelIterator},
 };
 use spenso::algebra::complex::Complex;
+use spenso::structure::IndexedStructure;
 use tracing::{info_span, instrument};
 use tracing_indicatif::{span_ext::IndicatifSpanExt, style::ProgressStyle};
 use vakint::{EvaluationMethod, NumericalEvaluationResult, Vakint, vakint_symbol};
@@ -30,7 +33,6 @@ use crate::{
         CutCFFIndex,
         esurface::{GroupEsurfaceId, RaisedEsurfaceData, RaisedEsurfaceGroup, RaisedEsurfaceId},
     },
-    feyngen::GenerationType,
     graph::{
         GraphGroup, GraphGroupPosition, GroupId, LMBext, LmbIndex, LoopMomentumBasis,
         cuts::{CutSet, ResidueSelector},
@@ -42,9 +44,9 @@ use crate::{
         GenericEvaluator, LmbMultiChannelingSetup,
         amplitude::{AmplitudeGraphTerm, AmplitudeIntegrand, AmplitudeIntegrandData},
         graph_to_group_id_for_group_structure,
-        param_builder::FnMapEntry,
+        param_builder::NumeratorDefinition,
     },
-    model::ArcParticle,
+    model::ParticleId,
     momentum::{
         sample::{ExternalIndex, SubspaceData},
         signature::SignatureLike,
@@ -64,7 +66,10 @@ use crate::{
     utils::{F, GS, Length, W_},
     uv::{
         Integrands, RenormalizationPart, UVgenerationSettings, UltravioletGraph,
-        approx::{CutStructure, OrientationProjection, integrated::to_vakint_integrand},
+        approx::{
+            CutStructure, OrientationProjection,
+            integrated::{Integrated, to_vakint_integrand},
+        },
         settings::VakintSettings,
     },
 };
@@ -86,10 +91,9 @@ use typed_index_collections::{TiVec, ti_vec};
 use super::generation_progress::{self, GenerationProcessKind, GenerationProgressPhase};
 
 use crate::{
-    cff::esurface::EsurfaceID,
     graph::{FeynmanGraph, Graph},
     integrands::process::ProcessIntegrand,
-    model::Model,
+    model::{Model, ParticleIdGammaLoopExt},
     settings::global::{GenerationSettings, MediumMode},
 };
 
@@ -102,7 +106,7 @@ pub struct Amplitude {
     pub integrand: Option<ProcessIntegrand>,
     pub graphs: Vec<AmplitudeGraph>,
     pub graph_group_structure: TiVec<GroupId, GraphGroup>,
-    pub external_particles: Vec<ArcParticle>,
+    pub external_particles: Vec<ParticleId>,
     pub external_signature: SignatureLike<ExternalIndex>,
     pub group_derived_data: TiVec<GroupId, GroupDerivedData>,
 }
@@ -118,8 +122,9 @@ impl Amplitude {
     pub fn plan_graph_group_selection(
         &self,
         spec: &GraphGroupSelectionSpec,
+        model: &Model,
     ) -> Result<GraphGroupSelectionPlan> {
-        spec.plan(&self.graph_group_structure, |graph_id| {
+        spec.plan(model, &self.graph_group_structure, |graph_id| {
             self.graphs.get(graph_id).map(|graph| &graph.graph)
         })
     }
@@ -538,7 +543,7 @@ impl Amplitude {
                 }
             }
         }
-        self.generate_grouped_derived_data()?;
+        self.generate_grouped_derived_data(model)?;
 
         Ok(preprocess_reports)
     }
@@ -566,6 +571,12 @@ impl Amplitude {
         );
         if crate::is_interrupted() {
             return Err(eyre!("Generation interrupted by user"));
+        }
+        if self.graphs.is_empty() {
+            return Err(eyre!(
+                "Cannot build amplitude '{}' without any diagrams",
+                self.name
+            ));
         }
         let integrand_name = self.name.clone();
         generation_progress::begin_phase(
@@ -666,7 +677,13 @@ impl Amplitude {
             let master_external_pdgs = master_graph
                 .get_external_partcles()
                 .into_iter()
-                .map(|particle| particle.pdg_code)
+                .map(|particle| {
+                    particle
+                        .resolve(model)
+                        .pdg_code
+                        .try_into()
+                        .expect("PDG code must fit in an isize")
+                })
                 .collect_vec();
 
             for graph_id in group.into_iter() {
@@ -786,7 +803,7 @@ impl Amplitude {
         Ok(())
     }
 
-    pub fn generate_grouped_derived_data(&mut self) -> Result<()> {
+    pub fn generate_grouped_derived_data(&mut self, model: &Model) -> Result<()> {
         // for each group we must collect all inequivalent esurfaces.
 
         let group_derived_data = self
@@ -816,7 +833,8 @@ impl Amplitude {
                         .filter(|(_, raised_group)| raised_group.max_occurence > 0)
                     {
                         let esurface = &esurfaces[raised_group.esurface_ids[0]];
-                        let esurface_atom = esurface.lmb_atom(&amplitude_graph.graph, &lmb_reps);
+                        let esurface_atom =
+                            esurface.lmb_atom(&amplitude_graph.graph, model, &lmb_reps);
 
                         group_esurface_structure
                             .entry(esurface_atom)
@@ -920,10 +938,7 @@ impl AmplitudeGraph {
                 threshold_counterterms: TiVec::new(),
                 threshold_counterterm_variants: TiVec::new(),
                 resolved_threshold_counterterms: None,
-                raised_data: RaisedEsurfaceData {
-                    raised_groups: TiVec::new(),
-                    pass_two_evaluator: None,
-                },
+                raised_data: RaisedEsurfaceData::default(),
                 raised_esurface_ids: TiVec::new(),
             },
         }
@@ -933,6 +948,7 @@ impl AmplitudeGraph {
 impl AmplitudeGraph {
     pub fn renormalization_part(
         &mut self,
+        model: &Model,
         settings: &UVgenerationSettings,
     ) -> Result<RenormalizationPart> {
         if self.derived_data.cff_expression.is_none() {
@@ -947,6 +963,7 @@ impl AmplitudeGraph {
         }
         settings.orchestrator.renormalization_part(
             &mut self.graph,
+            model,
             // RenormalizationPart forces a 4D forest: it never builds a CFF
             // or attaches 3D numerator factors and needs no stored source.
             OrientationProjection::four_d(&OrientationPattern::default()),
@@ -1072,10 +1089,10 @@ impl AmplitudeGraph {
             )
         });
 
-        self.build_integrands(settings, vk)?;
+        self.build_integrands(model, settings, vk)?;
 
         if self.graph.is_group_master {
-            self.build_tropical_sampler(settings)?;
+            self.build_tropical_sampler(model, settings)?;
         }
 
         self.build_lmbs();
@@ -1212,7 +1229,7 @@ impl AmplitudeGraph {
         &self,
         component: &S,
         config: AnalyticalEvaluationConfig<'_>,
-    ) -> Result<Atom> {
+    ) -> Result<SymbolicTensor<IndexedStructure>> {
         if self.graph.param_builder.medium_mode != MediumMode::Vacuum {
             return Err(eyre!(
                 "Analytical evaluation with Vakint does not support thermal modes (graph '{}', mode {:?}); use inspect or integrate for medium-dependent results",
@@ -1302,14 +1319,34 @@ impl AmplitudeGraph {
 
         let mut num = self
             .graph
-            .numerator(component, &self.graph.empty_subgraph());
+            .numerator(component, &self.graph.empty_subgraph())?;
         if config.include_global_numerator {
-            num.state.expr *= &self.graph.global_prefactor.num;
+            num.state.expr = num
+                .state
+                .expr
+                .multiply(self.graph.global_prefactor.num.clone())?;
         }
 
-        let before_gamma = num.to_d_dim(GS.dim).get_single_atom().unwrap();
+        let numerator = num.to_d_dim(GS.dim)?;
+        let before_gamma = numerator.get_single_atom()?;
         let before_gamma_plain = before_gamma.to_plain_string();
-        let four_dimensional_numerator = before_gamma.simplify_gamma();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let simplified = numerator
+            .state
+            .expr
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
+        let four_dimensional_numerator = cooking.uncook(simplified.expression().as_view());
         let after_gamma_plain = four_dimensional_numerator.to_plain_string();
         crate::debug_tags!(#uv, #integrated, #vakint, #profile, #trace;
             stage = "amplitude_to_vakint_after_simplify_gamma",
@@ -1323,10 +1360,12 @@ impl AmplitudeGraph {
             "Gamma simplification before Vakint"
         );
 
-        let mut four_dimensional_integrand = four_dimensional_numerator
-            / self
-                .graph
-                .denominator(component, |e| e.extra_data.vakint_edge_power.unwrap_or(1));
+        let denominator = crate::numerator::AppliedFeynmanRule::new(self.graph.denominator(
+            component,
+            config.model,
+            |e: &crate::graph::Edge| e.extra_data.vakint_edge_power.unwrap_or(1),
+        ))?;
+        let mut four_dimensional_integrand = simplified.divide(&denominator.expr)?;
 
         // println!("Four-dimensional integrand: {}", four_dimensional_integrand);
 
@@ -1343,7 +1382,11 @@ impl AmplitudeGraph {
         // }
 
         // rewrite the inner_t as well
-        four_dimensional_integrand = four_dimensional_integrand.replace_multiple(&mom_reps);
+        four_dimensional_integrand = four_dimensional_integrand.with_checked_expression(
+            four_dimensional_integrand
+                .expression()
+                .replace_multiple(&mom_reps),
+        )?;
 
         // println!("LMB: {}", lmb);
         // let vk_mom = vakint_symbol!("k");
@@ -1359,8 +1402,13 @@ impl AmplitudeGraph {
         //         .with(function!(vk_mom, i as i64 + 1, W_.x___));
         // }
 
+        // Vakint uses raw numeric labels for generated projector dummies. Keep
+        // identically written public source ports distinct before crossing that
+        // ABI, then restore their original identities through the tensor owner.
+        let (backend_integrand, source_ports) =
+            Integrated::protect_numeric_ports(&four_dimensional_integrand)?;
         let mut vakint_integrand = to_vakint_integrand(
-            &four_dimensional_integrand,
+            &backend_integrand,
             &self.graph,
             &self.graph.full_filter(),
             &self.graph.empty_subgraph::<SuBitGraph>(),
@@ -1384,8 +1432,8 @@ impl AmplitudeGraph {
         //     "\nVakint analytical evaluation:\n{:#}",
         //     analytical_evaluation
         // );
-        if !config.evaluate_numerically {
-            Ok(analytical_evaluation)
+        let evaluation = if !config.evaluate_numerically {
+            analytical_evaluation
         } else {
             let (numerical_evaluation, _error) = config
                 .vakint
@@ -1400,16 +1448,22 @@ impl AmplitudeGraph {
 
             // println!("\nVakint numerical evaluation:\n{:#}", numerical_evaluation);
 
-            let numerical_evaluation_atom =
-                numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()));
-
-            Ok(numerical_evaluation_atom)
+            numerical_evaluation.to_atom(vakint_symbol!(true_settings.epsilon_symbol.clone()))
+        };
+        let restored = Integrated::restore_numerator(evaluation, 0);
+        let result =
+            backend_integrand.with_checked_expression(cooking.try_cook(restored.as_view())?)?;
+        if source_ports.is_empty() {
+            Ok(result)
+        } else {
+            Ok(result.reindex_interface_ports(&source_ports)?)
         }
     }
 
     #[instrument(skip_all, err)]
     pub(crate) fn build_integrands(
         &mut self,
+        model: &Model,
         settings: &GenerationSettings,
         vakint: &Vakint,
     ) -> Result<()> {
@@ -1442,6 +1496,7 @@ impl AmplitudeGraph {
         let orchestration_started = std::time::Instant::now();
         let parametric_exprs = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            model,
             cutstructure,
             vakint,
             OrientationProjection::exact_expression(
@@ -2208,6 +2263,7 @@ impl AmplitudeGraph {
         let cut_structure = CutStructure { cuts };
         let exprs: Vec<_> = settings.uv.orchestrator.parametric_integrands(
             &mut self.graph,
+            model,
             cut_structure,
             vakint,
             OrientationProjection::exact_expression(
@@ -2304,7 +2360,11 @@ impl AmplitudeGraph {
     }
 
     #[instrument(skip_all, err)]
-    fn build_tropical_sampler(&mut self, process_settings: &GenerationSettings) -> Result<()> {
+    fn build_tropical_sampler(
+        &mut self,
+        model: &Model,
+        process_settings: &GenerationSettings,
+    ) -> Result<()> {
         let _progress_guard =
             generation_progress::enter_detailed_progress_span("Building Tropical Sampler");
         if process_settings
@@ -2335,7 +2395,7 @@ impl AmplitudeGraph {
             .graph
             .iter_loop_edges()
             .map(|(pair, _edge_id, edge)| {
-                let is_massive = edge.data.particle.is_massive();
+                let is_massive = edge.data.particle.is_massive(model);
 
                 let vertices = match pair {
                     HedgePair::Paired { source, sink } => (
@@ -2453,7 +2513,7 @@ pub struct AmplitudeDerivedData {
     /// Master topology and coordinates used to interpret graph-group threshold metadata.
     pub threshold_topology: Option<(Graph, TiVec<LmbIndex, LoopMomentumBasis>)>,
     pub all_mighty_integrand: Atom,
-    pub all_mighty_numerators: Vec<Arc<FnMapEntry>>,
+    pub all_mighty_numerators: Vec<Arc<NumeratorDefinition>>,
     /// Compatibility storage used by the current homogeneous amplitude runtime.
     pub threshold_counterterms: TiVec<RaisedEsurfaceId, AmplitudeCountertermAtom>,
     /// Canonical variant-indexed symbolic storage. Duplicate geometric thresholds remain distinct.
@@ -2502,8 +2562,12 @@ impl AmplitudeState for Processed {}
 // impl AmplitudeState for ReadyForTerm {}
 
 impl Amplitude {
-    pub fn from_dot_string<Str: AsRef<str>>(s: Str, name: String, model: &Model) -> Result<Self> {
-        let graphs = Graph::from_string(s, model)?;
+    pub fn from_finalized_runtime_dot_string<Str: AsRef<str>>(
+        s: Str,
+        name: String,
+        model: &Model,
+    ) -> Result<Self> {
+        let graphs = Graph::from_finalized_runtime_string(s, model)?;
 
         let mut amp = Amplitude::new(name);
         for g in graphs {
@@ -2512,11 +2576,11 @@ impl Amplitude {
         Ok(amp)
     }
 
-    pub fn from_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
+    pub fn from_finalized_runtime_dot_file<P>(p: P, name: String, model: &Model) -> Result<Self>
     where
         P: AsRef<Path>,
     {
-        let graphs = Graph::from_file(p, model)?;
+        let graphs = Graph::from_finalized_runtime_file(p, model)?;
 
         let mut amp = Amplitude::new(name);
         for g in graphs {
@@ -2748,11 +2812,10 @@ pub mod test {
     use crate::{
         DependentMomentaConstructor, GammaLoopContextContainer,
         cff::{CutCFFIndex, esurface::ExistingEsurfaceId, expression::OrientationID},
-        dot,
+        finalized_runtime_dot,
         graph::{
             FeynmanGraph, Graph, GraphGroupPosition,
             autogen::Autogen,
-            parse::IntoGraph,
             threshold_counterterms::{
                 ThresholdCountertermCut, ThresholdCountertermMultiplier, ThresholdCountertermSpec,
                 ThresholdCountertermThreshold, ThresholdCountertermVariant,
@@ -2786,6 +2849,7 @@ pub mod test {
     };
     use itertools::Itertools;
     use spenso::algebra::complex::Complex;
+    use symbolica::atom::Atom;
     use symbolica::state::State;
     use typed_index_collections::TiVec;
 
@@ -2796,13 +2860,10 @@ pub mod test {
             .spawn(|| {
                 test_initialise().unwrap();
                 let model = load_generic_model("scalars");
-                let graphs = Graph::from_string(
-                    include_str!(concat!(
+                let graphs = crate::graph::Graph::import_dot(include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/../../tests/resources/graphs/grouped_subtraction/group.dot"
-                    )),
-                    &model,
-                )
+                    )), &model)
                 .unwrap();
                 let mut amplitude =
                     super::Amplitude::from_graph_list("native_group_defaults", graphs).unwrap();
@@ -2845,7 +2906,7 @@ pub mod test {
                     }).unwrap();
                 }
                 let reimported = super::Amplitude::from_graph_list(
-                    "native_group_defaults_roundtrip", Graph::from_string(&exported, &model).unwrap()
+                    "native_group_defaults_roundtrip", Graph::from_finalized_runtime_string(&exported, &model).unwrap()
                 ).unwrap();
                 assert!(reimported.graphs[1].graph.threshold_counterterms.autogenerated,
                     "export must not reinterpret a native default as explicit master metadata");
@@ -2858,7 +2919,8 @@ pub mod test {
     #[test]
     fn amplitude_group_ids_are_contiguous_across_members() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(
+        let graph: Graph = crate::graph::Graph::import_dot(
+            stringify!(
             digraph shared_group_id_namespace {
                 graph [group_id=0]
                 edge [particle=scalar_0]
@@ -2868,9 +2930,13 @@ pub mod test {
                 B:1 -> e [id=2]
                 A -> B [id=1]
                 A -> B [id=0 lmb_id=0]
-            },
-            "scalars"
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
         .unwrap();
         let members = (0..2)
             .map(|group_id| {
@@ -2977,31 +3043,33 @@ pub mod test {
     #[test]
     fn member_threshold_subspace_is_interpreted_on_master_topology() {
         test_initialise().unwrap();
-        let master: Graph = dot!(digraph metadata_master {
+        let master: Graph = crate::finalized_runtime_dot!(digraph metadata_master {
+ graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a [id=0]
-            ext -> b [id=1]
-            ext -> c [id=2]
-            a -> b [id=3]
-            b -> c [id=4]
-            c -> a [id=5 lmb_id=0]
-        })
+            ext -> a [id=0 sink="{ufo_order:0}"]
+            ext -> b [id=1 sink="{ufo_order:0}"]
+            ext -> c [id=2 sink="{ufo_order:0}"]
+            a -> b [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            b -> c [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            c -> a [id=5 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         // Deliberately change a member-local edge orientation. Metadata still follows
         // the supplied master's convention; aligning physical meaning is the user's task.
-        let member: Graph = dot!(digraph metadata_member {
+        let member: Graph = crate::finalized_runtime_dot!(digraph metadata_member {
+ graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=0]
-            ext -> a [id=0]
-            ext -> b [id=1]
-            ext -> c [id=2]
-            b -> a [id=3]
-            b -> c [id=4]
-            c -> a [id=5 lmb_id=0]
-        })
+            ext -> a [id=0 sink="{ufo_order:0}"]
+            ext -> b [id=1 sink="{ufo_order:0}"]
+            ext -> c [id=2 sink="{ufo_order:0}"]
+            b -> a [id=3 source="{ufo_order:1}" sink="{ufo_order:1}"]
+            b -> c [id=4 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            c -> a [id=5 lmb_id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))
         .unwrap();
         let edges = vec![super::EdgeIndex::from(5)];
         let master_lmbs = typed_index_collections::ti_vec![master.loop_momentum_basis.clone()];
@@ -3054,10 +3122,16 @@ pub mod test {
     fn amplitude_legacy_parent_falls_back_when_the_generation_lmb_is_not_generated() {
         test_initialise().unwrap();
         let model = load_generic_model("scalars");
-        let mut graph: AmplitudeGraph =
-            include_str!("../../../../tests/resources/graphs/uv_tests/dotted_sunrise.dot")
-                .into_graph(&model)
-                .unwrap();
+        let mut graph: AmplitudeGraph = crate::graph::Graph::import_dot(
+            include_str!("../../../../tests/resources/graphs/uv_tests/dotted_sunrise.dot"),
+            &model,
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
+        .map(crate::processes::AmplitudeGraph::new)
+        .unwrap();
         graph.build_lmbs();
 
         let all_lmbs = graph.derived_data.lmbs.as_ref().unwrap();
@@ -3103,7 +3177,8 @@ pub mod test {
     #[test]
     fn amplitude_rejects_a_valid_edge_set_that_is_not_a_topological_threshold() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = dot!(
+        let mut graph: AmplitudeGraph = crate::graph::Graph::import_dot(
+            stringify!(
             digraph unmatched_amplitude_threshold {
                 edge [particle=scalar_1]
                 node [num=1]
@@ -3112,9 +3187,14 @@ pub mod test {
                 B:1 -> e [id=2]
                 A -> B [id=1]
                 A -> B [id=0]
-            },
-            "scalars"
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
+        .map(crate::processes::AmplitudeGraph::new)
         .unwrap();
         graph.graph.threshold_counterterms = Autogen::explicit(ThresholdCountertermSpec {
             schema_version: 1,
@@ -3168,19 +3248,25 @@ pub mod test {
     #[test]
     fn amplitude_orientation_excluded_topological_threshold_remains_dormant() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = dot!(
-            digraph dormant_amplitude_threshold {
-                edge [particle=scalar_1]
+        let mut graph: AmplitudeGraph = crate::graph::Graph::from_finalized_runtime_string(
+            stringify!(
+            digraph dormant_amplitude_threshold { graph [projector=1]
+                edge [particle=scalar_1 num="1𝑖"]
                 node [num=1]
                 e [style=invis]
-                e -> A:0 [id=4]
-                C:1 -> e [id=3]
-                A -> B [id=0]
-                B -> C [id=1]
-                A -> C [id=2]
-            },
-            "scalars"
+                e -> A:0 [id=4 sink="{ufo_order:0}"]
+                C:1 -> e [id=3 source="{ufo_order:0}"]
+                A -> B [id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                B -> C [id=1 source="{ufo_order:1}" sink="{ufo_order:2}"]
+                A -> C [id=2 source="{ufo_order:2}" sink="{ufo_order:1}" lmb_id=0]
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
+        .map(crate::processes::AmplitudeGraph::new)
         .unwrap();
         let selected_graph = graph.graph.clone();
         graph.generate_cff(&GenerationSettings::default()).unwrap();
@@ -3311,7 +3397,8 @@ pub mod test {
     #[test]
     fn amplitude_variant_subspace_resolves_in_the_requested_parent() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = dot!(
+        let mut graph: AmplitudeGraph = crate::graph::Graph::import_dot(
+            stringify!(
             digraph amplitude_variant_subspace {
                 edge [particle=scalar_1]
                 node [num=1]
@@ -3321,9 +3408,14 @@ pub mod test {
                 A -> B [id=0]
                 A -> B [id=1]
                 A -> B [id=2]
-            },
-            "scalars"
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
+        .map(crate::processes::AmplitudeGraph::new)
         .unwrap();
         graph.build_lmbs();
         let preferred_parent = graph.preferred_amplitude_parent_lmb().unwrap();
@@ -3371,7 +3463,8 @@ pub mod test {
             .stack_size(32 * 1024 * 1024)
             .spawn(|| {
                 test_initialise().unwrap();
-                let mut graph: AmplitudeGraph = dot!(
+                let mut graph: AmplitudeGraph = crate::graph::Graph::import_dot(
+                    stringify!(
                     digraph duplicate_threshold_variants {
                         edge [particle=scalar_1]
                         node [num=1]
@@ -3380,9 +3473,14 @@ pub mod test {
                         B:1 -> e [id=2]
                         A -> B [id=1]
                         A -> B [id=0]
-                    },
-                    "scalars"
+                    }),
+                    &crate::utils::load_generic_model("scalars"),
                 )
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
+                .map(crate::processes::AmplitudeGraph::new)
                 .unwrap();
                 graph.generate_cff(&GenerationSettings::default()).unwrap();
                 let threshold_edges = graph
@@ -3638,7 +3736,8 @@ pub mod test {
             .spawn(|| {
                 test_initialise().unwrap();
                 let model = load_generic_model("scalars");
-                let mut graph: Graph = dot!(
+                let mut graph: Graph = crate::graph::Graph::import_dot(
+                    stringify!(
                     digraph generalized_threshold_approach {
                         edge [particle=scalar_1]
                         node [num=1]
@@ -3648,9 +3747,13 @@ pub mod test {
                         A -> B [id=2]
                         A -> B [id=1]
                         A -> B [id=0]
-                    },
-                    "scalars"
+                    }),
+                    &crate::utils::load_generic_model("scalars"),
                 )
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
                 .unwrap();
                 let mut parent_probe = AmplitudeGraph::new(graph.clone());
                 parent_probe.build_lmbs();
@@ -3895,7 +3998,8 @@ pub mod test {
             .stack_size(32 * 1024 * 1024)
             .spawn(|| {
                 test_initialise().unwrap();
-                let mut graph: AmplitudeGraph = dot!(
+                let mut graph: AmplitudeGraph = crate::graph::Graph::import_dot(
+                    stringify!(
                     digraph amplitude_threshold_dot_export {
                         // A massive external scalar above the two-massless-particle threshold
                         // guarantees that the runtime part of this regression records L/I pieces.
@@ -3906,9 +4010,14 @@ pub mod test {
                         B:1 -> e [id=2 particle=scalar_2]
                         A -> B [id=1]
                         A -> B [id=0]
-                    },
-                    "scalars"
+                    }),
+                    &crate::utils::load_generic_model("scalars"),
                 )
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
+                .map(crate::processes::AmplitudeGraph::new)
                 .unwrap();
                 let model = load_generic_model("scalars");
                 let generation_settings = GenerationSettings {
@@ -3953,7 +4062,9 @@ pub mod test {
                     .write_dot_fmt(&mut ordinary, &DotExportSettings::default())
                     .unwrap();
                 assert!(!ordinary.contains("threshold_counterterms"));
-                let ordinary_import = Graph::from_string(&ordinary, &model).unwrap().remove(0);
+                let ordinary_import = Graph::from_finalized_runtime_string(&ordinary, &model)
+                    .unwrap()
+                    .remove(0);
                 assert!(ordinary_import.threshold_counterterms.autogenerated);
                 assert!(ordinary_import.threshold_counterterms.cuts.is_empty());
 
@@ -3967,7 +4078,9 @@ pub mod test {
                         },
                     )
                     .unwrap();
-                let normalized_import = Graph::from_string(&normalized, &model).unwrap().remove(0);
+                let normalized_import = Graph::from_finalized_runtime_string(&normalized, &model)
+                    .unwrap()
+                    .remove(0);
                 assert!(!normalized_import.threshold_counterterms.autogenerated);
                 assert_eq!(
                     *normalized_import.threshold_counterterms,
@@ -4018,7 +4131,9 @@ pub mod test {
                         .len(),
                 );
 
-                let normalized_graph = Graph::from_string(&normalized, &model).unwrap().remove(0);
+                let normalized_graph = Graph::from_finalized_runtime_string(&normalized, &model)
+                    .unwrap()
+                    .remove(0);
                 let loop_count = normalized_graph.get_loop_number();
                 // A deterministic timelike external momentum is required here: the generic
                 // random 1 -> 1 sample is lightlike and leaves this massless bubble below its
@@ -4128,7 +4243,8 @@ pub mod test {
             .spawn(|| {
                 test_initialise().unwrap();
                 let model = load_generic_model("scalars");
-                let mut member_a: Graph = dot!(
+                let mut member_a: Graph = crate::graph::Graph::import_dot(
+                    stringify!(
                     digraph grouped_threshold_member_a {
                         graph [group_id=0 is_group_master=true]
                         edge [particle=scalar_0]
@@ -4138,11 +4254,16 @@ pub mod test {
                         B:1 -> e [id=2 particle=scalar_2]
                         A -> B [id=1]
                         A -> B [id=0 lmb_id=0]
-                    },
-                    "scalars"
+                    }),
+                    &crate::utils::load_generic_model("scalars"),
                 )
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
                 .unwrap();
-                let mut member_b: Graph = dot!(
+                let mut member_b: Graph = crate::graph::Graph::import_dot(
+                    stringify!(
                     digraph grouped_threshold_member_b {
                         graph [group_id=0]
                         edge [particle=scalar_0]
@@ -4152,9 +4273,13 @@ pub mod test {
                         B:1 -> e [id=2 particle=scalar_2]
                         A -> B [id=1 lmb_id=0]
                         A -> B [id=0]
-                    },
-                    "scalars"
+                    }),
+                    &crate::utils::load_generic_model("scalars"),
                 )
+                .map(|mut graphs| {
+                    assert_eq!(graphs.len(), 1);
+                    graphs.remove(0)
+                })
                 .unwrap();
                 for (graph, name, subspace_edge, expression) in [
                     (&mut member_a, "member_a_one_loop", 0, "1"),
@@ -4288,7 +4413,8 @@ pub mod test {
                             },
                         )
                         .unwrap();
-                    let exported_graphs = Graph::from_string(&exported, &model).unwrap();
+                    let exported_graphs =
+                        Graph::from_finalized_runtime_string(&exported, &model).unwrap();
                     assert_eq!(exported_graphs.len(), 2);
                     for (graph, (graph_name, name, subspace_edge, expression)) in
                         exported_graphs.iter().zip(expected)
@@ -4496,13 +4622,13 @@ pub mod test {
     #[test]
     fn raised_amplitude_constituents_reject_different_group_ids() {
         test_initialise().unwrap();
-        let model = crate::model::Model::from_file(
+        let model = crate::model::Model::from_path(
             std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                 .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
         )
         .unwrap();
         let mut graph = AmplitudeGraph::new(
-            Graph::from_string(
+            crate::graph::Graph::import_dot(
                 include_str!("../../../../tests/resources/graphs/dotted_bubble_amp.dot"),
                 &model,
             )
@@ -4581,15 +4707,12 @@ pub mod test {
             .stack_size(32 * 1024 * 1024)
             .spawn(|| {
                 test_initialise().unwrap();
-                let model = crate::model::Model::from_file(
+                let model = crate::model::Model::from_path(
                     std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
                         .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
                 )
                 .unwrap();
-                let mut graph = Graph::from_string(
-                    include_str!("../../../../tests/resources/graphs/dotted_bubble_amp.dot"),
-                    &model,
-                )
+                let mut graph = crate::graph::Graph::import_dot(include_str!("../../../../tests/resources/graphs/dotted_bubble_amp.dot"), &model)
                 .unwrap()
                 .remove(0);
                 let mut generation_settings = GenerationSettings {
@@ -4933,18 +5056,21 @@ pub mod test {
     #[test]
     fn amplitude_tree() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = dot!(digraph qqx_aaa_tree_1 {
-                num="spenso::g(spenso::dind(spenso::cof(3, hedge(1))), spenso::cof(3, hedge(2)))/3"
-                ext    [style=invis]
-                ext -> v1:1 [particle="d" id=1];
-                ext -> v3:2 [particle="d~" id=2];
-                v1:3 -> ext [particle="a" id=3];
-                v2:4 -> ext [particle="a" id=4];
-                v3:0 -> ext [particle="a" id=0];
-                v1 -> v2 [particle="d" id=5];
-                v2 -> v3 [particle="d" id=6];
-    })
-    .unwrap();
+        let mut graph: AmplitudeGraph = finalized_runtime_dot!(digraph qqx_aaa_tree_1 {
+                    num=1
+                    projector=1
+                    node [num=1]
+                    edge [num=1]
+                    ext    [style=invis]
+                    ext -> v1:1 [particle="d" id=1 sink="{ufo_order:0}"];
+                    ext -> v3:2 [particle="d~" id=2 sink="{ufo_order:0}"];
+                    v1:3 -> ext [particle="a" id=3 source="{ufo_order:1}"];
+                    v2:4 -> ext [particle="a" id=4 source="{ufo_order:1}"];
+                    v3:0 -> ext [particle="a" id=0 source="{ufo_order:2}"];
+                    v1 -> v2 [particle="d" id=5 source="{ufo_order:2}" sink="{ufo_order:0}"];
+                    v2 -> v3 [particle="d" id=6 source="{ufo_order:2}" sink="{ufo_order:1}"];
+        })
+        .unwrap();
 
         let _model = load_generic_model("sm");
 
@@ -4968,7 +5094,8 @@ pub mod test {
     #[test]
     fn uncut_amplitude_generation_has_one_residue_for_both_uv_backends() {
         test_initialise().unwrap();
-        let mut amplitude_graph: AmplitudeGraph = dot!(
+        let mut amplitude_graph: AmplitudeGraph = crate::graph::Graph::import_dot(
+            stringify!(
             digraph bub {
                 edge [particle=scalar_1]
                 node [num=1]
@@ -4977,9 +5104,14 @@ pub mod test {
                 B:1 -> e [id=2]
                 A -> B [id=1]
                 A -> B [id=0]
-            },
-            "scalars"
+            }),
+            &crate::utils::load_generic_model("scalars"),
         )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })
+        .map(crate::processes::AmplitudeGraph::new)
         .unwrap();
         let generation_settings = GenerationSettings::default();
         amplitude_graph.generate_cff(&generation_settings).unwrap();
@@ -4993,6 +5125,7 @@ pub mod test {
             .production_cff_3d_expression_options(&generation_settings)
             .unwrap();
 
+        let model = amplitude_graph.graph.model.clone();
         for orchestrator in [UVOrchestrator::LegacyDagForest, UVOrchestrator::HedgePoset] {
             let mut graph = amplitude_graph.graph.clone();
             let cut_structure = CutStructure::empty(&graph);
@@ -5010,6 +5143,7 @@ pub mod test {
             let generated = orchestrator
                 .parametric_integrands(
                     &mut graph,
+                    &model,
                     cut_structure,
                     crate::utils::vakint().unwrap(),
                     OrientationProjection::exact_expression(
@@ -5033,32 +5167,25 @@ pub mod test {
     #[test]
     fn generation_orientation_pattern_filters_evaluator_orientations() {
         test_initialise().unwrap();
-        let mut graph: AmplitudeGraph = dot!(
+        let mut graph: AmplitudeGraph = finalized_runtime_dot!(
             digraph bub {
-                edge [particle=scalar_1]
+                projector=1
+                edge [particle=scalar_1 num=1]
                 node [num=1]
                 e [style=invis]
-                e -> A:0 [id=3]
-                B:1 -> e [id=2]
-                A -> B [id=1]
-                A -> B [id=0]
+                e -> A:0 [id=3 sink="{ufo_order:0}"]
+                B:1 -> e [id=2 source="{ufo_order:0}"]
+                A -> B [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:1}"]
+                A -> B [id=0 source="{ufo_order:2}" sink="{ufo_order:2}"]
             },
             "scalars"
         )
         .unwrap();
 
         let model = load_generic_model("scalars");
-        let generation_settings = GenerationSettings {
-            threshold_subtraction: ThresholdSubtractionSettings {
-                enable_thresholds: false,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-        let runtime_settings = RuntimeSettings::default();
-        graph
-            .preprocess(&model, &generation_settings, &(&runtime_settings).into())
-            .unwrap();
+        graph.generate_cff(&GenerationSettings::default()).unwrap();
+        graph.derived_data.all_mighty_integrand = Atom::one();
+        graph.build_lmbs();
 
         assert!(
             graph

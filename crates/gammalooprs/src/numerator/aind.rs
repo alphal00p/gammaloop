@@ -5,11 +5,14 @@ use linnet::half_edge::{
     involution::{EdgeIndex, Hedge},
 };
 use spenso::{
-    structure::slot::{AbsInd, DummyAind, ParseableAind, SlotError},
+    structure::{
+        representation::LibrarySlot,
+        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind, SlotError},
+    },
     utils::{to_subscript, to_superscript},
 };
 use symbolica::{
-    atom::{Atom, AtomView, Symbol, representation::FunView},
+    atom::{Atom, AtomCore, AtomView, Symbol, representation::FunView},
     coefficient::CoefficientView,
     function, symbol,
 };
@@ -42,6 +45,33 @@ pub enum Aind {
     UVTerm(u16, u16),
     Symbol(Symbol),
     Dummy(usize),
+}
+
+impl Aind {
+    /// Transport represented GammaLoop half-edge slots into the native UFO frame.
+    /// Scalar literals, momentum owners and other index kinds retain their meaning.
+    pub fn native_hedge_slots(expression: &Atom) -> eyre::Result<Atom> {
+        let mut overflow = false;
+        let result = expression.replace_map(|part, _, output| {
+            if let Ok(slot) = LibrarySlot::<Self>::try_from(part)
+                && let Self::Hedge(hedge, local) = slot.aind
+            {
+                if let Some(local) = local.checked_add(1) {
+                    **output = slot
+                        .rep()
+                        .slot::<Self, _>(Self::Hedge(hedge, local))
+                        .to_atom();
+                } else {
+                    overflow = true;
+                }
+            }
+        });
+        eyre::ensure!(
+            !overflow,
+            "compact half-edge index exceeds the native UFO index range"
+        );
+        Ok(result)
+    }
 }
 
 pub trait NewAind {
@@ -368,8 +398,9 @@ impl TryFrom<AtomView<'_>> for Aind {
 #[cfg(test)]
 mod tests {
     use idenso::{
+        CookMode, CookSettings,
         dirac::AGS,
-        shorthands::metric::MetricSimplifier,
+        tensor::ContractSettings,
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
     use spenso::{
@@ -433,7 +464,8 @@ mod tests {
     #[test]
     fn test_structure_parsing() {
         initialise().unwrap();
-        let expr = parse_lit!(gamma(
+        let _ = spenso::tensor_symbol!("gammalooprs::tests::index_fixture");
+        let expr = parse_lit!(gammalooprs::tests::index_fixture(
             spenso::mink(4, edge(1, 1)),
             spenso::mink(4, edge(1)),
             spenso::mink(4, hedge(1, 1)),
@@ -447,10 +479,22 @@ mod tests {
 
         match structure {
             Ok(s) => {
-                let pexpr = SymbolicTensor::from_canonicalized(&s)
-                    .unwrap()
-                    .expression
-                    .simplify_metrics();
+                let expression = SymbolicTensor::from_canonicalized(&s).unwrap();
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let contracted = SymbolicTensor::infer_indexed(
+                    cooking.try_cook(expression.expression().as_view()).unwrap(),
+                )
+                .unwrap()
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap();
+                let pexpr = cooking.uncook(contracted.expression().as_view());
                 assert_eq!(s.canonical().order(), 8);
                 assert_eq!(
                     expr,

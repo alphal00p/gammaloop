@@ -1455,6 +1455,13 @@ process-wide inventory. The catalogue helper enables its native feature anchor
 only for reference generation, so its use as a build dependency does not pull
 GammaLoop into a separate host-library build.
 
+The terminal source set also carries Spenso's packaged tensor stub alongside
+its documentation snapshot, so the isolated exporter validates both copies.
+FeynKit's amplitude Rust reference is included in the terminal route assertions;
+its compile-time tests receive the existing model fixture directory through the
+per-package extra-source map. These inputs extend their owning package and
+documentation closures without changing the reusable producer partition.
+
 The producer is keyed only by Cargo manifests, Rust, Cargo
 configuration, and non-Cargo build inputs. It and its consumer use the
 same relative Cargo target, compile-time Symbolica setting and workspace-hack
@@ -1467,14 +1474,14 @@ change the reusable Cargo artifact. Checks whose Rust source is
 generated from the manuals remain in the terminal Pages derivation so
 they still validate the content being published.
 
-The terminal documentation derivation tests `linnet-py` in a virtual
+The terminal documentation derivation tests Python `linnet` in a virtual
 environment based on a Nix-composed Python that includes `typst-py`
 0.15.0. System site packages keep that wheel dependency available to
-the offline installer. `linnet-py` embeds its pinned CeTZ and oxifmt
+the offline installer. The `linnet` extension embeds its pinned CeTZ and oxifmt
 package trees and passes the staged copy to its in-process compiler, so
 its graph renderer never requires a network fetch or the documentation
 package cache. The terminal Python environment uses the same pinned docs
-package set to satisfy `linnet-py`'s exact `typst==0.15.0` dependency. Both
+package set to satisfy Python `linnet`'s exact `typst==0.15.0` dependency. Both
 Cargo and uv dependency resolution run offline; a mismatched Python package
 must fail locally instead of attempting a download inside the Nix sandbox.
 The broader documentation renderer still receives the package tree from
@@ -1484,6 +1491,28 @@ intentionally enter the source key for `linnet-py` and aggregate Cargo
 producers that compile it. The package-specific source map keeps them out
 of unrelated per-crate producers, while downloaded Python wheels remain
 confined to the terminal documentation/runtime closure.
+
+=== Community rendering and UFO runtime inputs
+
+The shared Python rendering package is `linnet-render-py`, using Linnest's native
+SVG renderer. The graph API remains in `linnet-py`, and both packages retain
+separate Cargo dependency boundaries. Typst authoring assets live under
+`vendor/typst-packages`; their consumers own those source inputs.
+Asset manifests accompany their owning packages in dependency and production
+builds. FeynKit's native notebook widgets also own their embedded CSS, JavaScript
+and HTML inputs. Test producers explicitly stage their embedded Python, Atom,
+JSON and graph fixtures without adding those inputs to production packages.
+The `gammaloop-render-data` runtime package copies fonts from the
+Cargo-locked Typst asset release and the checked-in MathML font. Renderers retain
+their compiled hash checks. Only rendering test groups, doctests and documentation
+receive this resource closure; it remains separate from compiled producers.
+The development shell adds it to `SYMBOLICA_DATA_DIRECTORY`, preserving any
+additional directories already configured by the user.
+UFO import tests use the released wheels locked in `nix/ufo-runtime/uv.lock`
+(Symbolica 3.0.0 and ufo-model-loader 1.0.0). This runtime lock is independent
+of the root notebook environment's Community source pin. Native Rust continues
+to use the workspace Cargo lock. The UFO wheel closure is attached only to
+the selected runtime groups and does not enter unrelated compiled producers.
 
 == Follow-up: persistent Typst worlds in the live watcher
 <follow-up-persistent-typst-worlds>
@@ -1761,7 +1790,7 @@ The latest Pages tree and the immutable snapshot fixture are now separate,
 independently cacheable terminal derivations over the same Cargo producer.
 The lightweight full documentation check consumes both completed trees,
 installs them through the Pages history updater, and asserts the latest and
-snapshot routes for all five products together with the portal, developer
+snapshot routes for all six products together with the portal, developer
 pages, and generated API material. The manual NixCI graph orders both render
 jobs after the shared documentation Cargo artifact and orders the merge check
 after both renders, preventing concurrent consumers from rebuilding the same
@@ -1818,6 +1847,9 @@ four-photon fixtures used with `include_str!`. Its RQFT renormalization graphs
 are runtime inputs instead. Declaring these files at their owning boundaries
 keeps isolated Nix test runs equivalent to a complete checkout without widening
 unrelated production sources.
+The API and integration packages also declare the frozen GL15 graph as a
+runtime input: their metadata and event checks import the same physical
+pentagon independently of generator numbering.
 
 The Python ABI artifact family now selects Cargo library targets explicitly.
 Its `pyo3-extension-module` feature intentionally leaves Python symbols for

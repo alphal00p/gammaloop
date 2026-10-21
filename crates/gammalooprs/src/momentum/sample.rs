@@ -1200,11 +1200,7 @@ impl<T: FloatLike> MomentumSample<T> {
 #[cfg(test)]
 mod subspace_tests {
     use super::*;
-    use crate::{
-        dot,
-        graph::{lmb::LMBwithEdges, parse::from_dot::IntoGraph},
-        initialisation::test_initialise,
-    };
+    use crate::{graph::lmb::LMBwithEdges, initialisation::test_initialise};
     use typed_index_collections::ti_vec;
 
     #[test]
@@ -1260,18 +1256,19 @@ mod subspace_tests {
     #[test]
     fn selected_cycle_identity_and_radial_projection_survive_parent_changes() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph selected_cycles {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph selected_cycles {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->a:0 [id=0]
-            a->b [id=1 name=a1]
-            b->a [id=2 name=a2]
-            a->b [id=3 name=a3]
-            b->c [id=4 name=b1]
-            c->b [id=5 name=b2]
-            b->c [id=6 name=b3]
-            ext->c:1 [id=7]
+            ext->a:0 [id=0 sink="{ufo_order:0}"]
+            a->b [id=1 name=a1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            b->a [id=2 name=a2 source="{ufo_order:1}" sink="{ufo_order:2}"]
+            a->b [id=3 name=a3 source="{ufo_order:3}" sink="{ufo_order:2}" lmb_id=1]
+            b->c [id=4 name=b1 source="{ufo_order:3}" sink="{ufo_order:0}" lmb_id=2]
+            c->b [id=5 name=b2 source="{ufo_order:1}" sink="{ufo_order:4}"]
+            b->c [id=6 name=b3 source="{ufo_order:5}" sink="{ufo_order:2}" lmb_id=3]
+            ext->c:1 [id=7 sink="{ufo_order:3}"]
         })
         .unwrap();
         let edges = ["a1", "a2", "a3", "b1", "b2", "b3"]
@@ -1372,16 +1369,17 @@ mod subspace_tests {
     #[test]
     fn explicit_parent_basis_edges_recover_their_fundamental_cycle_subspace() {
         test_initialise().unwrap();
-        let graph: Graph = dot!(digraph explicit_basis_subspace {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph explicit_basis_subspace {
+            graph [projector=1]
             ext [style=invis]
             edge [num=1 mass=0]
             node [num=1]
-            ext->v1:0 [id=0]
-            v1->v2 [id=1]
-            v2->v1 [id=2]
-            v1->v2 [id=3]
-            v2->v1 [id=4]
-            ext->v2:1 [id=5]
+            ext->v1:0 [id=0 sink="{ufo_order:0}"]
+            v1->v2 [id=1 source="{ufo_order:1}" sink="{ufo_order:0}" lmb_id=0]
+            v2->v1 [id=2 source="{ufo_order:1}" sink="{ufo_order:2}" lmb_id=2]
+            v1->v2 [id=3 source="{ufo_order:3}" sink="{ufo_order:2}" lmb_id=1]
+            v2->v1 [id=4 source="{ufo_order:3}" sink="{ufo_order:4}"]
+            ext->v2:1 [id=5 sink="{ufo_order:4}"]
         })
         .unwrap();
         let all_lmbs = ti_vec![graph.loop_momentum_basis.clone()];

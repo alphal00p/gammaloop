@@ -1,5 +1,7 @@
 use color_eyre::Result;
+use idenso::tensor::SymbolicTensor;
 use linnet::half_edge::subgraph::{SubSetLike, SubSetOps};
+use spenso::structure::IndexedStructure;
 use symbolica::atom::Atom;
 use three_dimensional_reps::CffGenerationContext;
 
@@ -7,15 +9,18 @@ use crate::{
     debug_tags,
     graph::Graph,
     utils::GS,
-    uv::{UltravioletGraph, approx::ForestNodeLike},
+    uv::{
+        UltravioletGraph,
+        approx::{ForestNodeLike, direct_3d::DirectResidueBranches},
+    },
 };
 
-use super::{FrozenActiveCt, Localizer, OrientationIntegrands};
+use super::{FrozenActiveCt, Localizer, OrientationIntegrandBranch, OrientationIntegrands};
 
 impl Localizer<'_> {
     pub(crate) fn localize<S: ForestNodeLike>(
         &self,
-        expr: &Atom,
+        expr: &SymbolicTensor<IndexedStructure>,
         graph: &mut Graph,
         integrated_node: &S,
     ) -> Result<FrozenActiveCt> {
@@ -44,9 +49,11 @@ impl Localizer<'_> {
             integrated_loop_count,
             "Applied integrated UV forest-overlap addback rule"
         );
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            &graph.model,
+            |_| -1,
+        ));
 
         // CFF capacity belongs to the complete factorized numerator of this
         // reduced term. The integrated finite CT replaces the numerator of
@@ -56,12 +63,9 @@ impl Localizer<'_> {
             .full_filter()
             .subtract(to_contract)
             .subtract(&graph.initial_state_cut);
-        let outside_numerator = graph
-            .numerator(&reduced, to_contract)
-            .get_single_atom()
-            .expect("Graph numerator should be available")
-            * graph.global_atom();
-        let analysis_numerator = expr * &outside_numerator;
+        let outside_numerator = graph.numerator(&reduced, to_contract)?.state.expr;
+        let global = graph.global_numerator()?;
+        let analysis_numerator = expr.clone().multiply(outside_numerator)?.multiply(global)?;
 
         let localizing_integrand = GS.localizing_integrand(integrated_node.lmb());
         // Integration replaces the contracted spinney by an independent
@@ -70,36 +74,44 @@ impl Localizer<'_> {
         let mut active = self.with_independent_source_sum().projected_cff(
             graph,
             to_contract,
-            [&analysis_numerator],
+            [analysis_numerator.expression()],
             CffGenerationContext::Standalone,
         )?;
-        for branch in &mut active.0 {
-            // A source map owns the finite coefficient for every cut order;
-            // attaching it must not repeat the same numerator substitution.
-            let mapped_finite_ct = self.orientation.map_numerator(
-                graph,
-                branch.selector_id,
-                branch.source_edge_energy_map.as_deref(),
-                finite_ct,
-            )?;
-            branch.integrands = branch.integrands.map(|localized| {
-                let localized = localized * &fourddenoms;
-                let localized_cff_byte_size = localized.as_view().get_byte_size();
-                let active_ct = localized * &mapped_finite_ct;
-                debug_tags!(#generation, #profile, #uv, #integrated, #local, #term, #summary;
-                    stage = "localize_integrated_ct_term",
-                    integrated_node = %integrated_node.log_display(),
-                    contracted = %to_contract.string_label(),
-                    reduced = %reduced.string_label(),
-                    residue_map_key = branch.selector_id.0,
-                    localized_cff_byte_size,
-                    active_ct_byte_size = active_ct.as_view().get_byte_size(),
-                    localized_ct_byte_size = (&active_ct * &localizing_integrand).as_view().get_byte_size(),
-                    "Integrated UV CT localization size checkpoint"
-                );
-                active_ct
-            });
-        }
+        active = active.map(|localized| localized * &fourddenoms);
+        // The finite effective vertex has the same tensor ownership as every
+        // other mapped numerator. Keep its shared body separate from scalar
+        // CFF weights, so addition to a local numerator family cannot mix an
+        // explicit matrix with an unresolved scalar family call. The existing
+        // residue-key owner maps it exactly once using the source chart.
+        let mapped = DirectResidueBranches::from_transient(&active)?.multiply_key_mapped(
+            self.orientation,
+            graph,
+            finite_ct,
+            DirectResidueBranches::numerator_scope(),
+        )?;
+        let active = OrientationIntegrands(
+            mapped
+                .iter_keys()
+                .map(|(key, integrands)| {
+                    debug_tags!(#generation, #profile, #uv, #integrated, #local, #term, #summary;
+                        stage = "localize_integrated_ct_term",
+                        integrated_node = %integrated_node.log_display(),
+                        contracted = %to_contract.string_label(),
+                        reduced = %reduced.string_label(),
+                        residue_map_key = key.selector_host.0,
+                        scalar_weight_bytes = integrands.iter().map(|(_, atom)| atom.as_view().get_byte_size()).sum::<usize>(),
+                        shared_numerator_bytes = integrands.numerators().iter().map(|entry| entry.rhs.expression().as_view().get_byte_size()).sum::<usize>(),
+                        frozen_kernel_bytes = localizing_integrand.as_view().get_byte_size(),
+                        "Factorized integrated UV CT localization size checkpoint"
+                    );
+                    OrientationIntegrandBranch {
+                        selector_id: key.selector_host,
+                        source_edge_energy_map: key.source_edge_energy_map().map(<[_]>::to_vec),
+                        integrands: integrands.clone(),
+                    }
+                })
+                .collect(),
+        );
         let frozen_integrands = self
             .cutset
             .residue_selector

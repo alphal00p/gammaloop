@@ -1,7 +1,8 @@
 = Spenso Symbolica Syntax And Rewrite Idioms
 
 #quote(block: true)[
-#strong[Status:] Implemented reference; audited against Spenso and Idenso on 2026-09-14
+#strong[Status:] Implemented reference; source reviewed against Spenso and Idenso on 2026-10-17.
+Source review does not imply qualification of every newly added operation.
 
 The surface forms are owned by
 #link("../../crates/spenso/src/network/parsing/mod.rs")[Spenso parsing and materialization], while the
@@ -63,6 +64,9 @@ dind(cof(NC, j)) dual color-fundamental slot
 such as `mink`, `bis`, and `coad` use the same representation on both sides of a
 contraction. Dualizable representations such as `cof` use the unwrapped slot for
 one orientation and `dind(...)` for the dual orientation.
+Index canonicalization preserves these wrappers while renaming their shared
+base index. Removing duality first would allow a symmetric metric to merge two
+oppositely oriented occurrences into an invalid tensor square.
 
 Direct slot arguments define the exposed tensor structure. Non-slot arguments
 are metadata on the symbolic tensor leaf:
@@ -74,6 +78,58 @@ T(a, b, cof(NC, i))   symbolic tensor with scalar labels a, b and one slot
 
 The same convention is used in patterns: structural arguments are represented by
 slot or representation patterns, and scalar labels are ordinary Symbolica atoms.
+
+== Retained interfaces and source notation
+
+The Atom is the surface notation. Idenso's
+`SymbolicTensor<PartialStructure>` retains that payload together with its logical
+ports, validation facts and reduction state. Explicit ports are identified by
+their full representation, dimension, variance and index, so a change in
+normalized factor order need not change logical axis order. Anonymous ports are
+occurrence-local ordered axes; equal rank and representation do not make them
+interchangeable. A ranked zero has no payload slots and therefore requires its
+retained interface.
+
+`feynkit_graph::NumeratorInterface` is the shared source codec for diagrams and
+runtime graph import. Expression strings remain ordinary Spenso notation;
+optional `num_interface`, `numerator_prefactor_interface` and
+`projector_interface` metadata preserve interfaces that source inference alone
+cannot recover. `from_declared_parts` validates such declarations. A declaration
+does not authorize a mismatched nonzero payload.
+
+Native tensor operations transport the interface with the payload. The checked
+`rename_symbols` operation uses one simultaneous injective map, permits swaps,
+and rejects collisions with unmapped existing names, including names retained
+only by zero metadata. `map_representation_dimensions` changes representation
+dimensions in both places, decoding portable dimension payloads individually.
+Ordinary Atom substitution cannot update dimensions hidden inside encoded
+symbols or ports stored only in metadata. Callback-sensitive output remains
+checked; these operations do not grant a general interface-preservation proof
+to arbitrary replacements.
+
+For same-representation anonymous axes, checked expression mapping retains the
+ordered tensor witnesses. Unstructured scalar weights are opaque to that
+witness collection, while the final expression still undergoes scope and
+multiplicity validation. Dropping a scalar factor does not justify exchanging
+the axes of its tensor spectator.
+
+The consuming `into_network` handoff returns the existing component network with
+its `CanonicalLayout`. Consumers must apply that layout to component coordinates
+and shadow axes. A ranked zero becomes an empty sparse tensor with the declared
+ports. The parser still materializes component tensors; this is not a parse-free
+handoff. The optional configuration selects reversible index capture; that
+source filter controls cooking, while inverse restoration also exposes portable
+dimension payloads such as scalar dimension coefficients. Representation
+dimensions need their own checked specialization before finite component
+execution; formal dimensions do not acquire component tables through decoding.
+
+The carrier does not implement Symbolica's sealed `AtomCore` trait. Checked
+`TensorRule` replacement, fallible tensor arithmetic and explicit expression
+borrows are distinct APIs. Typed Taylor expansion and a general derivative API
+remain unavailable. The
+#link("idenso-architecture.typ")[Idenso architecture note] records these limits,
+the remaining scalar-parser boundaries and the distinction between earlier
+test qualification and the newly reviewed operations.
 
 == Supported Surface Forms
 
@@ -495,10 +551,13 @@ let settings = MatchSettings {
 };
 ```
 
-Implement FORM-like simplifiers as ordered passes, not as one unordered
-`replace_multiple` table. Put cheap terminal rules first, then structural
-normalization, then broader recursive searches. If a pass can expose another
-rule in the same family, run to a fixed point with an equality guard.
+Keep family kernels as ordered local rule applications. The public
+`simplify_algebra(AlgebraSettings)` and `contract(ContractSettings)` use one
+capability-driven domain planner and one structural contractor. Candidate heads
+and shallow graph boundaries determine eligible work; dependencies and estimated
+term growth determine scheduling. Actual changes update regional observations
+and pending work. Do not prescribe a fixed sequence of whole-expression family
+passes or use whole-alias-table equality to detect progress.
 
 Keep semantic boundaries clear:
 
@@ -516,8 +575,11 @@ Keep semantic boundaries clear:
 - Unit tests for narrow rule families should live next to the implementation.
   Larger FORM/FeynCalc/reference cases should stay in the broader test modules.
 
-The goal is source-backed named rule families plus a small ordered pass driver.
-Avoid a universal rewrite engine unless the algebraic strategy itself is shared.
+Public family simplification wrappers are replaced by `simplify_algebra` with
+explicit family settings. Notation conversions remain separate: `to_dots`
+normalizes surviving compact scalar products without contracting repeated
+indices; `undo_dots`, `undo_chain`, and `undo_trace` unfold the notation present.
+Construction, conjugation, indexing, and canonicalization remain orthogonal.
 
 == Factorization during index canonicalization
 
@@ -525,7 +587,21 @@ Index canonicalization retains independent scalar products instead of distributi
 tensor sums. Explicit free indices and compact-dot dummies occupy distinct reserved names; canceled
 representation groups do not advance the surviving contraction's canonical dummy allocation.
 
-Composite dimensions such as `Nc^2-1` receive temporary reversible labels before
-Spenso parsing and are restored in the returned expression. Their defining
-expressions remain distinct; this operation does not assign concrete component
-sizes. Ordinary function cooking and index-payload cooking remain separate.
+Canonicalization admits the source before antisymmetric-zero pruning, then
+reconstructs the validated graph for Symbolica's canonicalizer without executing
+tensor algebra. Closed scalar powers that Symbolica cannot directly canonicalize
+are scoped independently and restored after labeling. `wrap_indices` uses
+`spenso::index_scope(header, index)` to keep wrapped indices valid. Dirac-adjoint
+construction reverses and conjugates matrix words while preserving external
+ports; it does not implicitly request unrelated algebra reduction.
+
+The native `SymbolicTensor<PartialStructure>::dirac_adjoint` retains the logical
+interface and dualizes its slots, including for zero. Before adjunction it
+materializes anonymous axes into explicit fresh indices, using the same owner
+as logical permutation. This preserves nonsymmetric axis correspondence rather
+than trying to recover anonymous order from the resulting Atom. The
+`preserve_indices` option controls the existing boundary-endpoint transpose
+convention. Shared preparation uses native `AbstractIndex`; only spinor words
+receive the required gamma-zero construction and cleanup. Pure scalar and color
+inputs retain the existing conjugation semantics, and callback-sensitive output
+still passes checked reconstruction.

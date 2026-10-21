@@ -239,8 +239,8 @@ mod tests {
 
     use super::*;
     use crate::{
-        cff::surface::LinearEnergyExpr, dot, graph::parse::from_dot::IntoGraph,
-        initialisation::test_initialise, utils::external_energy_atom_from_index,
+        cff::surface::LinearEnergyExpr, finalized_runtime_dot, initialisation::test_initialise,
+        utils::external_energy_atom_from_index,
     };
 
     #[test]
@@ -250,10 +250,17 @@ mod tests {
             settings::global::OrientationPattern,
         };
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph G {
-            edge [particle="scalar_1"]; node [num=1];
-            v1 -> v2; v1 -> v2; v1 -> v2;
-        }, "scalars")?;
+        let mut graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph G {
+                edge [particle="scalar_1"]; node [num=1];
+                v1 -> v2; v1 -> v2; v1 -> v2;
+            }),
+            &crate::utils::load_generic_model("scalars"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
+        })?;
         for medium in [
             MediumMode::ThermodynamicEquilibrium,
             MediumMode::ZeroTemperatureEquilibrium,
@@ -275,6 +282,7 @@ mod tests {
             for ((raw_key, raw), (actual_key, actual)) in raw.iter().zip(actual.iter()) {
                 assert_eq!(raw_key, actual_key);
                 let vacuum = graph.make_thermal_distributions_explicit(
+                    &graph.model,
                     raw,
                     MediumMode::Vacuum,
                     graph.iter_edges().map(|(_, edge, _)| edge),
@@ -311,16 +319,23 @@ mod tests {
     #[test]
     fn thermal_surface_conversion_preserves_distribution_atoms() -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph thermal_triangle {
-            edge [num=1 mass=0]
-            node [num=1]
-            ext [style=invis]
-            ext -> a [id=3]
-            ext -> b [id=4]
-            c -> ext [id=5]
-            c -> a [id=0 lmb_id=0]
-            a -> b [id=1]
-            b -> c [id=2]
+        let graph: Graph = crate::graph::Graph::unit_numerator_fixtures(
+            stringify!(digraph thermal_triangle {
+                edge [num=1 mass=0]
+                node [num=1]
+                ext [style=invis]
+                ext -> a [id=3]
+                ext -> b [id=4]
+                c -> ext [id=5]
+                c -> a [id=0 lmb_id=0]
+                a -> b [id=1]
+                b -> c [id=2]
+            }),
+            &crate::utils::load_generic_model("sm"),
+        )
+        .map(|mut graphs| {
+            assert_eq!(graphs.len(), 1);
+            graphs.remove(0)
         })?;
         for medium_mode in [
             MediumMode::ThermodynamicEquilibrium,
@@ -353,12 +368,13 @@ mod tests {
     #[test]
     fn affine_energy_map_keeps_two_numerator_factors_under_one_map() -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(
+        let graph: Graph = finalized_runtime_dot!(
             digraph affine_map {
+                graph [projector="1"]
                 edge [num=1 mass=0]
                 node [num=1]
-                A -> B [id=0]
-                A -> B [id=1]
+                A -> B [source="{ufo_order:0}" sink="{ufo_order:0}" id=0 lmb_id=0]
+                A -> B [source="{ufo_order:1}" sink="{ufo_order:1}" id=1]
             }
         )?;
         let energy_map = LinearEnergyExpr {
@@ -401,19 +417,20 @@ mod tests {
     fn padded_external_energy_slots_do_not_erase_factorized_external_momenta()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph padded_external_energy_slots {
+        let graph: Graph = finalized_runtime_dot!(digraph padded_external_energy_slots {
+            graph [projector="1"]
             edge [num=1 mass=0]
             node [num=1]
             ext [style=invis]
             v0;
             v1;
             v2;
-            ext -> v0 [id=0]
-            ext -> v1 [id=1]
-            v2 -> ext [id=2]
-            v0 -> v2 [id=3 lmb_id=0]
-            v1 -> v0 [id=4]
-            v2 -> v1 [id=5]
+            ext -> v0 [sink="{ufo_order:0}" id=0]
+            ext -> v1 [sink="{ufo_order:0}" id=1]
+            v2 -> ext [source="{ufo_order:0}" id=2]
+            v0 -> v2 [source="{ufo_order:1}" sink="{ufo_order:1}" id=3 lmb_id=0]
+            v1 -> v0 [source="{ufo_order:1}" sink="{ufo_order:2}" id=4]
+            v2 -> v1 [source="{ufo_order:2}" sink="{ufo_order:2}" id=5]
         })?;
         let mapped_internal_energy = LinearEnergyExpr {
             internal_terms: vec![(EdgeIndex(3), 2.into())],

@@ -1,6 +1,7 @@
 use crate::{
     debug_tags,
     graph::{Graph, LoopMomentumBasis},
+    model::Model,
     settings::global::GenerationSettings,
     uv::{Spinney, approx::CutStructure, forest::CutForests},
 };
@@ -34,6 +35,7 @@ impl CutWoods {
     pub(crate) fn new(
         cuts: CutStructure,
         graph: &Graph,
+        model: &Model,
         settings: &GenerationSettings,
     ) -> Result<Self> {
         let mut woods = vec![];
@@ -44,7 +46,7 @@ impl CutWoods {
             subgraph.subtract_with(&cut.union);
 
             let mut spinneys = graph
-                .classified_spinneys(&subgraph, &settings.uv, &graph.loop_momentum_basis)
+                .classified_spinneys(&subgraph, model, &settings.uv, &graph.loop_momentum_basis)
                 .wrap_err_with(|| {
                     format!(
                         "graph '{}' cut {cut_index}: failed to classify UV counterterm components",

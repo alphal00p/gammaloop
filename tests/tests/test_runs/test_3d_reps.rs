@@ -281,16 +281,28 @@ fn cff_cli_validate_and_build_use_gammaloop_graph_state() -> Result<()> {
         gammalooprs::settings::global::UniformNumeratorSamplingScale::None
     );
 
-    let ltd_error = cli
-        .run_command(
-            "3Drep build -p threedreps_box_build -i default -g 0 --representation ltd --no-save-json --no-pretty",
-        )
-        .unwrap_err();
-    assert!(
-        format!("{ltd_error:?}").contains(
-            "three-dimensional representation mode Ltd is not implemented; only CFF is currently supported"
-        )
-    );
+    let ltd_path = test_root.join("ltd.json");
+    cli.run_command(&format!(
+        "3Drep build -p threedreps_box_build -i default -g 0 --representation ltd --workspace-path {} --json-out {} --no-pretty",
+        workspace_path.display(), ltd_path.display()
+    ))?;
+    let ltd = serde_json::from_str::<JsonValue>(&fs::read_to_string(ltd_path)?)?;
+    assert_eq!(ltd["family"].as_str(), Some("ltd"));
+    assert_eq!(ltd["validation"]["ok"].as_bool(), Some(true));
+    let ltd = serde_json::from_value::<ThreeDExpression<OrientationID>>(ltd["expression"].clone())?
+        .remap_energy_edge_indices(&local_map);
+    for seed in [17, 41] {
+        let input = EvaluationInput::deterministic(&parsed, seed, &Default::default(), None)?;
+        let actual = evaluate_expression(&parsed, &ltd, "1", &input)?.value;
+        let expected = evaluate_expression(&parsed, &reference.expression, "1", &input)?.value;
+        let scale = actual.abs().max(expected.abs()).max(f64::MIN_POSITIVE);
+        assert!(
+            actual.is_finite()
+                && expected.is_finite()
+                && (actual - expected).abs() <= 1.0e-12 * scale,
+            "the exported LTD source changed the scalar box at seed {seed}: {actual:e} != {expected:e}"
+        );
+    }
 
     clean_test(test_root);
     Ok(())

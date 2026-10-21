@@ -10,7 +10,7 @@ build:
     output_dir="target/$target/release"
     size_limit=10485760
 
-    cargo build --release --target "$target" --package tydenso-inflate-plugin --lib
+    cargo build --locked --release --target "$target" --package tydenso-inflate-plugin --lib
     wasm-opt -Oz --quiet \
       --enable-bulk-memory \
       --enable-bulk-memory-opt \
@@ -21,7 +21,7 @@ build:
       -o typst/tydenso-inflate.wasm \
       "$output_dir/tydenso_inflate_plugin.wasm"
 
-    cargo build --release --target "$target" --package tydenso-plugin
+    cargo build --locked --release --target "$target" --package tydenso-plugin
     wasm-opt -Oz --quiet \
       --enable-bulk-memory \
       --enable-bulk-memory-opt \
@@ -31,7 +31,7 @@ build:
       --strip-producers \
       -o "$output_dir/tydenso.raw.wasm" \
       "$output_dir/tydenso_plugin.wasm"
-    cargo run --release --package tydenso-inflate-plugin --bin tydenso-compress -- \
+    cargo run --locked --release --package tydenso-inflate-plugin --bin tydenso-compress -- \
       "$output_dir/tydenso.raw.wasm" typst/tydenso.wasm.zlib
 
     for asset in typst/tydenso-inflate.wasm typst/tydenso.wasm.zlib; do
@@ -48,7 +48,7 @@ check-wasm-features:
     #!/usr/bin/env bash
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
-    tree="$(cargo tree --target wasm32-unknown-unknown --package tydenso-plugin --edges normal --prefix none -e features)"
+    tree="$(cargo tree --locked --target wasm32-unknown-unknown --package tydenso-plugin --edges normal --prefix none -e features)"
     if grep -Eq 'feature "(integer-gmp|float-mpfr|native_code_generation)"|(gmp-mpfr-sys|rug) v|gammaloop-workspace-hack' <<<"$tree"; then
       echo "Tydenso's target graph contains native-only dependencies" >&2
       printf '%s\n' "$tree" >&2
@@ -66,7 +66,13 @@ check: build check-wasm-features
     set -euo pipefail
     cd "{{ justfile_directory() }}/tydenso"
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
-    tymbolica_revision="b96c1f3ebd1c2563bf91079a0dd6dc5ec82191c0"
+    tymbolica_revision="57b7455b37c30f4f87353c0073e49f5225e937ab"
+    symbolica_source="$(sed -n '/^name = "symbolica"$/,/^\[\[package\]\]/s/^source = "\(.*\)"$/\1/p' ../Cargo.lock)"
+    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=community#[0-9a-f]{40}$ ]]; then
+      echo "the root lock must select one Symbolica revision from the official community branch" >&2
+      exit 1
+    fi
+    symbolica_revision="${symbolica_source##*#}"
     if [ ! -f "$tymbolica_checkout/typst.toml" ]; then
       echo "set TYMBOLICA_CHECKOUT to the pinned symbolica-dev/symbolica-typst-plugin checkout" >&2
       exit 1
@@ -81,6 +87,23 @@ check: build check-wasm-features
     mkdir -p "$check_dir/tymbolica" ../target/tymbolica
     git -C "$tymbolica_checkout" archive "$tymbolica_revision" | tar -x -C "$check_dir/tymbolica"
     tymbolica_checkout="$check_dir/tymbolica"
+    # All three libraries share the Atom payload engine. Patch only this
+    # archived copy; the upstream checkout and its Wasm feature boundary stay intact.
+    python3 - "$tymbolica_checkout/Cargo.toml" <<'PYTHON'
+    import sys
+    from pathlib import Path
+
+    manifest = Path(sys.argv[1])
+    text = manifest.read_text()
+    upstream = 'symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "main" }'
+    if text.count(upstream) != 1:
+        raise SystemExit("pinned Tymbolica source patch differs from the reviewed manifest")
+    patches = "\n".join(
+        package + ' = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }'
+        for package in ("symbolica", "numerica", "graphica")
+    )
+    manifest.write_text(text.replace(upstream, patches, 1))
+    PYTHON
     # Rebuild the pinned combined algebra/integration engine without changing the checkout.
     # Its build script reads Cargo's target and feature settings; generated plugin
     # assets remain outside the Rust source inputs.
@@ -89,20 +112,30 @@ check: build check-wasm-features
     (
       cd "$tymbolica_checkout"
       unset CARGO_TARGET_DIR
+      # Upstream builds with --locked; match the workspace's engine revision first.
+      for package in symbolica numerica graphica; do
+        cargo update --package "$package" --precise "$symbolica_revision"
+      done
       nix run --no-write-lock-file "path:$PWD#build"
     )
     for lock in ../Cargo.lock Cargo.lock "$tymbolica_checkout/Cargo.lock"; do
-      for specification in symbolica:3.0.1 numerica:3.0.1 graphica:3.0.0; do
-        package="${specification%:*}"
-        version="${specification#*:}"
-        expected="$(printf 'version = "%s"\nsource = "registry+https://github.com/rust-lang/crates.io-index"\n' "$version")"
+      for package in symbolica numerica graphica; do
+        source="$symbolica_source"
+        symbolica_version="3.0.1"
+        expected="$(printf 'version = "%s"\nsource = "%s"\n' "$symbolica_version" "$source")"
         resolved="$(sed -n "/^name = \"$package\"$/,/^\[\[package\]\]/p" "$lock" | grep -E '^(version|source) = ')"
         if [ "$resolved" != "$expected" ]; then
-          echo "$lock must resolve exactly one crates.io $package at $version; found ${resolved:-none}" >&2
+          echo "$lock must resolve exactly one $package at $symbolica_version from $source; found ${resolved:-none}" >&2
           exit 1
         fi
       done
     done
+    tree="$(cargo tree --locked --manifest-path "$tymbolica_checkout/Cargo.toml" --target wasm32-unknown-unknown --package symbolica-typst-plugin --no-default-features --features wasm,plugin --edges normal --prefix none -e features)"
+    if grep -Eq 'feature "(integer-gmp|float-mpfr|native_code_generation)"|(gmp-mpfr-sys|rug) v|gammaloop-workspace-hack' <<<"$tree"; then
+      echo "Tymbolica's target graph contains native-only dependencies" >&2
+      printf '%s\n' "$tree" >&2
+      exit 1
+    fi
     cmp typst/render.typ ../crates/spynso3/typst/render.typ
     cmp typst/notation.typ ../crates/spynso3/typst/notation.typ
 

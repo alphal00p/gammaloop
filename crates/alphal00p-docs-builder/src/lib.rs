@@ -1,4 +1,4 @@
-//! Build and validate the five independently rendered product manuals.
+//! Build and validate the six independently rendered product manuals.
 
 #[cfg(feature = "watch")]
 mod server;
@@ -40,7 +40,14 @@ use tempfile::{Builder as TempDirBuilder, TempDir};
 use typst_render::{CliTypstRenderer, TypstRenderJob, TypstRenderer};
 use walkdir::WalkDir;
 
-const PRODUCT_IDS: [&str; 5] = ["gammaloop", "linnet", "spenso", "idenso", "vakint"];
+const PRODUCT_IDS: [&str; 6] = [
+    "gammaloop",
+    "linnet",
+    "spenso",
+    "idenso",
+    "vakint",
+    "feynkit",
+];
 const PORTAL_SCHEMA_VERSION: u32 = 2;
 const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
@@ -747,7 +754,7 @@ impl SiteBuilder {
             .map(|product| product.id.as_str())
             .collect::<BTreeSet<_>>();
         ensure!(
-            ids == PRODUCT_IDS.into_iter().collect(),
+            ids == PRODUCT_IDS.into_iter().collect::<BTreeSet<_>>(),
             "registry must contain exactly: {}",
             PRODUCT_IDS.join(", ")
         );
@@ -1267,8 +1274,8 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/showcase.js"))?;
         self.require_file(Path::new("docs/assets/showcase-hard-boiled.mp3"))?;
         self.require_file(Path::new("docs/assets/rustdoc.css"))?;
-        self.require_file(Path::new("docs/assets/STIXTwoMath-Regular.woff2"))?;
-        self.require_file(Path::new("docs/assets/STIX-Two-OFL.txt"))?;
+        self.require_file(Path::new("crates/spynso3/typst/STIXTwoMath-Regular.woff2"))?;
+        self.require_file(Path::new("crates/spynso3/typst/STIX-Two-OFL.txt"))?;
         self.require_file(Path::new("scripts/render-docs-svg-assets.sh"))?;
         for source in [
             "docs/portal/main.typ",
@@ -1774,6 +1781,22 @@ impl SiteBuilder {
                 source.display(),
                 typst.display()
             );
+            // Preserve upstream package metadata and executable HTML interfaces.
+            // These exact assets are not authored repository prose; neighboring
+            // documentation still follows the Typst-only policy.
+            if matches!(
+                source.to_str(),
+                Some(
+                    "vendor/typst-packages/preview/mitex/0.2.6/CHANGELOG.md"
+                        | "vendor/clarabel/CHANGELOG.md"
+                        | "vendor/clarabel/LICENSE.md"
+                        | "vendor/clarabel/html/rustdocs-header.html"
+                        | "crates/feynkit-py/src/cff/display.html"
+                        | "examples/layout/impred/playground.html"
+                )
+            ) {
+                continue;
+            }
             if !matches!(
                 source.file_name().and_then(|name| name.to_str()),
                 Some("AGENTS.md" | "README.md")
@@ -2075,6 +2098,13 @@ impl SiteBuilder {
         let site = staging.path().join("site");
         fs::create_dir_all(&site)?;
         self.write_site_assets(&site)?;
+        let notebooks = self.root.join(format!(
+            "docs/generated/notebooks/products/{}/latest/assets/notebooks",
+            product.id
+        ));
+        if notebooks.is_dir() {
+            copy_tree(&notebooks, &site.join("assets/notebooks"))?;
+        }
 
         let metadata = self.metadata(product, options.channel, options.tag, &channel_path)?;
         fs::write(
@@ -2256,10 +2286,10 @@ impl SiteBuilder {
                 "showcase-hard-boiled.mp3",
             ),
             (
-                "docs/assets/STIXTwoMath-Regular.woff2",
+                "crates/spynso3/typst/STIXTwoMath-Regular.woff2",
                 "STIXTwoMath-Regular.woff2",
             ),
-            ("docs/assets/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
+            ("crates/spynso3/typst/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
             (
                 "docs/assets/local-unitarity-light.svg",
                 "local-unitarity-light.svg",
@@ -3164,8 +3194,10 @@ impl SiteBuilder {
         if checked_in.is_file() {
             return Some(checked_in);
         }
-        if component.package == "linnet-py" {
-            let path = self.root.join("crates/linnet-py/linnet_py.pyi");
+        if component.package == "linnet" {
+            let path = self
+                .root
+                .join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi");
             if path.is_file() {
                 return Some(path);
             }
@@ -3304,6 +3336,21 @@ impl SiteBuilder {
         let path = site.join(&page.route).join("index.html");
         let source = fs::read_to_string(&path)?;
         let mut body = extract_html_body(&source)?.to_owned();
+        // Typst's inline frames carry Linnest's inspection protocol as SVG
+        // links. The drawing owner turns these into accessible controls before
+        // document navigation and link validation see the page.
+        let svg = Regex::new(r"(?s)<svg\b.*?</svg>")?;
+        let frames = svg
+            .find_iter(&body)
+            .map(|frame| {
+                linnest::svg::Scene::interactive_svg(frame.as_str())
+                    .map(|interactive| (frame.range(), interactive))
+                    .map_err(|error| eyre::eyre!("{}: {error}", path.display()))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        for (range, interactive) in frames.into_iter().rev() {
+            body.replace_range(range, &interactive);
+        }
         body = body.replace("<nav><a href=\"../../\">Documentation home</a></nav>", "");
         if page.route.is_empty() {
             body = format!("{}{body}", product_hero(product));
@@ -6786,7 +6833,7 @@ fn render_api_overloads(
         if let Some(docs) = &overload.docs {
             body.push_str(&render_doc_text_omitting_parameters(
                 docs,
-                6,
+                (overload_heading + 1).clamp(5, 6),
                 overload
                     .members
                     .iter()
@@ -6900,6 +6947,10 @@ fn render_doc_inline(text: &str, format: DocFormat) -> String {
                 .into_owned()
         }
         DocFormat::PythonDocstring => {
+            let roles =
+                Regex::new(r":(?:py:)?(?:class|meth|attr|func|mod|obj|data|const|exc):`([^`]+)`")
+                    .expect("static Python role regex");
+            rendered = roles.replace_all(&rendered, "<code>$1</code>").into_owned();
             let code = Regex::new(r"``([^`]+)``").expect("static Python code regex");
             rendered = code.replace_all(&rendered, "<code>$1</code>").into_owned();
             let code = Regex::new(r"`([^`]+)`").expect("static Python code regex");
@@ -7142,19 +7193,33 @@ fn render_python_example(content: &[&str]) -> String {
     }
 
     if content
-        .first()
-        .is_some_and(|line| line.trim_start().starts_with(">>>"))
+        .iter()
+        .any(|line| line.trim_start().starts_with(">>>"))
     {
-        let source = content
-            .iter()
-            .filter_map(|line| {
-                let line = line.trim_start();
-                line.strip_prefix(">>>")
-                    .or_else(|| line.strip_prefix("..."))
-                    .map(|line| line.strip_prefix(' ').unwrap_or(line))
+        return content
+            .split(|line| line.trim().is_empty())
+            .map(|paragraph| {
+                let code_start = paragraph
+                    .iter()
+                    .position(|line| line.trim_start().starts_with(">>>"));
+                let Some(code_start) = code_start else {
+                    return render_prose_blocks(paragraph, DocFormat::PythonDocstring);
+                };
+                let mut rendered =
+                    render_prose_blocks(&paragraph[..code_start], DocFormat::PythonDocstring);
+                let source = paragraph[code_start..]
+                    .iter()
+                    .filter_map(|line| {
+                        let line = line.trim_start();
+                        line.strip_prefix(">>>")
+                            .or_else(|| line.strip_prefix("..."))
+                            .map(|line| line.strip_prefix(' ').unwrap_or(line))
+                    })
+                    .collect::<Vec<_>>();
+                rendered.push_str(&render_code(&source));
+                rendered
             })
-            .collect::<Vec<_>>();
-        return render_code(&source);
+            .collect();
     }
     if let Some(code_start) = content
         .iter()
@@ -7164,7 +7229,7 @@ fn render_python_example(content: &[&str]) -> String {
         rendered.push_str(&render_code(&content[code_start..]));
         return rendered;
     }
-    render_code(content)
+    render_prose_blocks(content, DocFormat::PythonDocstring)
 }
 
 fn render_doc_text(docs: &alphal00p_docs_schema::DocText, heading_level: usize) -> String {
@@ -9576,6 +9641,25 @@ fn validate_local_target(
             return Ok(());
         }
     }
+    if link.rustdoc
+        && link.href == "index.html#insert-and-complex-keys"
+        && let Some(attribute) = &link.attribute
+    {
+        // Deref-inherited BTreeMap/BTreeSet prose retains this relative link
+        // to std::collections even when Rustdoc inlines it into another crate.
+        let target = "https://doc.rust-lang.org/std/collections/index.html#insert-and-complex-keys";
+        link_rewrites
+            .entry(link.source.to_path_buf())
+            .or_default()
+            .push(LinkRewrite {
+                range: attribute.target_range.clone(),
+                expected: link.href.to_owned(),
+                replacement: target.to_owned(),
+                target_before: link.href.to_owned(),
+                target_after: Some(target.to_owned()),
+            });
+        return Ok(());
+    }
     failures.push(format!(
         "{source_display} -> {} (missing fragment)",
         link.href
@@ -10116,16 +10200,16 @@ mod tests {
             (None, None),
         );
 
-        assert_eq!(module, "symbolica.community.spenso");
+        assert_eq!(module, "symbolica.community.tensor");
         assert_ne!(module, catalog.component.package);
-        assert_eq!(item.required_features.as_slice(), ["python-stubs"]);
+        assert_eq!(item.required_features.as_slice(), ["python_stubgen"]);
         assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));
         assert!(!rendered.contains(&format!(
             "<p><code>{}</code> · version",
             catalog.component.package
         )));
         assert!(rendered.contains(
-            "<strong>Source-build provenance:</strong> this catalog was generated with <code>python-stubs</code>."
+            "<strong>Source-build provenance:</strong> this catalog was generated with <code>python_stubgen</code>."
         ));
         assert!(!symbol.contains("api-feature-requirement"));
         assert!(symbol.contains("href=\"guides/python/\""));
@@ -10207,6 +10291,13 @@ mod tests {
         assert!(python.contains("<code data-lang=\"python\">engine.run()</code>"));
         assert!(python.contains("<p>Reuse the engine.</p>"));
         assert!(!python.contains("```"));
+        assert_eq!(
+            render_doc_inline(
+                "Use :class:`Particle`, :meth:`Model.particle`, and :attr:`name`.",
+                DocFormat::PythonDocstring,
+            ),
+            "Use <code>Particle</code>, <code>Model.particle</code>, and <code>name</code>."
+        );
     }
 
     #[test]
@@ -10256,6 +10347,13 @@ mod tests {
             "<code data-lang=\"python\">for name, values in groups.items():\n    for value in values:\n        print(name, value)</code>"
         ));
         assert!(!rendered.contains("<code data-lang=\"python\">Iterate over grouped values"));
+
+        let prose =
+            render_python_example(&["Leave ``model`` as the final expression in a notebook cell."]);
+        assert!(prose.contains(
+            "<p>Leave <code>model</code> as the final expression in a notebook cell.</p>"
+        ));
+        assert!(!prose.contains("data-lang=\"python\""));
     }
 
     #[test]
@@ -10290,6 +10388,23 @@ mod tests {
         ));
         assert!(!rendered.contains("&gt;&gt;&gt;"));
         assert!(!rendered.contains("\n3</code>"));
+
+        let mixed = render_python_example(&[
+            "Load a model:",
+            "",
+            ">>> model = Model(path)",
+            "",
+            "Then generate diagrams:",
+            "",
+            ">>> model.generate_diagrams(incoming, outgoing)",
+        ]);
+        assert!(mixed.contains("<p>Load a model:</p>"));
+        assert!(mixed.contains("<code data-lang=\"python\">model = Model(path)</code>"));
+        assert!(mixed.contains("<p>Then generate diagrams:</p>"));
+        assert!(mixed.contains(
+            "<code data-lang=\"python\">model.generate_diagrams(incoming, outgoing)</code>"
+        ));
+        assert!(!mixed.contains("&gt;&gt;&gt;"));
     }
 
     #[test]
@@ -10406,6 +10521,29 @@ mod tests {
         builder.legacy_prose.source.clear();
         fs::write(temporary.path().join("new-note.typ"), "= New prose").unwrap();
         assert!(builder.check_prose_sources().is_err());
+    }
+
+    #[test]
+    fn prose_source_gate_distinguishes_runtime_assets_from_neighboring_prose() {
+        let temporary = tempfile::tempdir().unwrap();
+        let mut builder = SiteBuilder::discover().unwrap();
+        builder.root = temporary.path().to_path_buf();
+        for asset in [
+            "vendor/clarabel/CHANGELOG.md",
+            "vendor/clarabel/LICENSE.md",
+            "vendor/clarabel/html/rustdocs-header.html",
+            "crates/feynkit-py/src/cff/display.html",
+            "examples/layout/impred/playground.html",
+        ] {
+            let path = temporary.path().join(asset);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(&path, "Asset").unwrap();
+            assert!(builder.check_prose_sources().is_ok(), "{asset}");
+            let prose = path.parent().unwrap().join("new-note.html");
+            fs::write(&prose, "New prose").unwrap();
+            assert!(builder.check_prose_sources().is_err(), "{asset}");
+            fs::remove_file(prose).unwrap();
+        }
     }
 
     #[test]
@@ -11722,6 +11860,56 @@ mod tests {
     }
 
     #[test]
+    fn python_overload_doc_sections_follow_their_parent_heading() {
+        use alphal00p_docs_schema::DocText;
+
+        let mut overload = DocMember::new("choose", DocMemberKind::Overload);
+        overload.signature = Some("def choose(value: int) -> int:".to_owned());
+        overload.docs = Some(DocText::new(
+            DocFormat::PythonDocstring,
+            "Choose one value.\n\nParameters\n----------\nvalue : int\n    Input value.\n\nReturns\n-------\nint\n    Selected value.\n\nNotes\n-----\nKeep `value` unchanged.\n\nExamples\n--------\n```python\n# This stays source.\nvalue = 1 < 2\n```",
+        ));
+        let mut parameter = DocMember::new("value", DocMemberKind::Parameter);
+        parameter.signature = Some("int".to_owned());
+        parameter.docs = Some(DocText::new(DocFormat::PythonDocstring, "Input value."));
+        overload.members.push(parameter);
+        let headings = Regex::new(r"<h([1-6])>").unwrap();
+
+        // Free functions and nested methods have different overload parents.
+        for (parent_level, expected_levels, section_level) in
+            [(2, [3, 4, 5, 5, 5, 5], 5), (3, [4, 5, 6, 6, 6, 6], 6)]
+        {
+            let mut rendered = String::new();
+            render_api_overloads(
+                std::slice::from_ref(&overload),
+                "choose",
+                parent_level,
+                &BTreeMap::new(),
+                &mut rendered,
+            );
+            let actual_levels = headings
+                .captures_iter(&rendered)
+                .map(|capture| capture[1].parse::<usize>().unwrap())
+                .collect::<Vec<_>>();
+            assert_eq!(actual_levels, expected_levels);
+            for title in ["Returns", "Notes", "Examples", "Parameters"] {
+                assert!(
+                    rendered.contains(&format!("<h{section_level}>{title}</h{section_level}>"))
+                );
+            }
+            assert_eq!(rendered.matches(">Parameters</h").count(), 1);
+            assert!(rendered.contains("choose(value: int)"));
+            assert!(rendered.contains("<p>Choose one value.</p>"));
+            assert!(rendered.contains("Selected value."));
+            assert!(rendered.contains("Input value."));
+            assert!(rendered.contains("Keep <code>value</code> unchanged."));
+            assert!(rendered.contains(
+                "<pre><code data-lang=\"python\"># This stays source.\nvalue = 1 &lt; 2</code></pre>"
+            ));
+        }
+    }
+
+    #[test]
     fn python_symbol_pages_and_search_use_canonical_routes() {
         use alphal00p_docs_schema::{
             DocComponent, DocExample, DocMemberKind, DocProduct, DocText, SCHEMA_VERSION,
@@ -12265,7 +12453,12 @@ mod tests {
 
         assert_eq!(
             fs::read(font).unwrap(),
-            fs::read(builder.root.join("docs/assets/STIXTwoMath-Regular.woff2")).unwrap()
+            fs::read(
+                builder
+                    .root
+                    .join("crates/spynso3/typst/STIXTwoMath-Regular.woff2")
+            )
+            .unwrap()
         );
     }
 
@@ -12912,6 +13105,60 @@ mod tests {
             )));
             assert!(rendered.contains("issues/new?labels=documentation&amp;title="));
         }
+    }
+
+    #[test]
+    fn inline_graph_frames_use_inspection_controls_and_preserve_document_links() {
+        let builder = SiteBuilder::discover().unwrap();
+        let product = builder
+            .registry
+            .product
+            .iter()
+            .find(|p| p.id == "linnet")
+            .unwrap();
+        let page = SitePage::new("guides/linnest/", "Linnest", "Guide");
+        let site = tempfile::tempdir().unwrap();
+        let destination = site.path().join(&page.route);
+        fs::create_dir_all(&destination).unwrap();
+        let ordinary = r##"<svg xmlns="http://www.w3.org/2000/svg"><a href="#topic"><path d="M 1 2 L 3 4"/></a></svg>"##;
+        let drawing = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 50"><a href="#linnet-node-2?{&quot;name&quot;:&quot;v&quot;}"><path d="M 0 0 L 1 1"/></a></svg>"##;
+        fs::write(destination.join("index.html"), format!(
+            "<!doctype html><html><body><h1>Linnest</h1><h2 id=\"topic\">Topic</h2>{ordinary}{drawing}{drawing}</body></html>"
+        )).unwrap();
+        let metadata = SnapshotMetadata {
+            schema: SCHEMA_VERSION,
+            product: &product.id,
+            title: &product.title,
+            channel: BuildChannel::Latest,
+            snapshot_tag: None,
+            git_commit: "0123456789abcdef".to_owned(),
+            git_timestamp: 1,
+            route: "products/linnet/latest/".to_owned(),
+            components: Vec::new(),
+        };
+        builder
+            .decorate_html_page(
+                product,
+                &metadata,
+                site.path(),
+                &page,
+                (None, None),
+                (BuildScope::FullSite, &[]),
+            )
+            .unwrap();
+        let rendered = fs::read_to_string(destination.join("index.html")).unwrap();
+        assert!(rendered.contains(ordinary));
+        assert_eq!(
+            rendered.matches("data-linnet-interactive=\"true\"").count(),
+            2
+        );
+        assert_eq!(rendered.matches("viewBox=\"0 0 40 50\"").count(), 2);
+        assert_eq!(rendered.matches("<path d=\"M 0 0 L 1 1\"/>").count(), 2);
+        assert_eq!(
+            rendered.matches("role=\"button\" tabindex=\"0\"").count(),
+            2
+        );
+        assert!(!rendered.contains("href=\"#linnet-node-"));
     }
 
     #[test]

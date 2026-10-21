@@ -678,7 +678,7 @@ impl TypstRenderer {
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             // Build detailed error message
-            let mut error_msg = format!("typst failed while {description}");
+            let mut error_msg = format!("typst failed while {description} ({})", output.status);
 
             // Show the command that was executed
             let cmd_str = format!("{:?}", command);
@@ -890,6 +890,15 @@ mod tests {
                 .is_some()
         );
         assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
+        for name in ["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"] {
+            assert!(
+                !LINNEST_PACKAGE_ASSETS
+                    .get_file(name)
+                    .unwrap()
+                    .contents()
+                    .is_empty()
+            );
+        }
         for package in [&LINNEST_PACKAGE_ASSETS, &KURVST_PACKAGE_ASSETS] {
             assert!(package.files().all(|file| {
                 let path = file.path();
@@ -897,7 +906,14 @@ mod tests {
                     && path.extension().is_some_and(|extension| extension == "typ"))
                     || matches!(
                         path.to_str(),
-                        Some("typst.toml" | "linnest.wasm" | "kurvst.wasm")
+                        Some(
+                            "typst.toml"
+                                | "linnest.wasm"
+                                | "kurvst.wasm"
+                                | "ec-layout.wasm"
+                                | "LICENSE.ec-layout"
+                                | "LICENSE.clarabel"
+                        )
                     )
             }));
         }
@@ -1278,22 +1294,44 @@ mod tests {
             .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
-        let manifest = Path::new(env!("CARGO_MANIFEST_DIR"));
-        let gamma_assertions = manifest.join("tests/resources/gamma-style-behavior.typ");
-        // The fixture imports across the workspace, so root the compilation there.
-        let workspace = manifest.join("../..").canonicalize().unwrap();
-        let imports = [
-            "crates/linnest/typst/src/lib.typ",
-            "assets/embedded/drawing/templates/layout-core.typ",
-            "docs/assets/typst/portal-graphs/edge-style.typ",
-        ]
-        .map(|import| workspace.join(import));
+        let gamma_assertions =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         renderer
             .compile_template(
                 &gamma_assertions,
                 base.join("gamma-style-assertions.pdf"),
-                &imports.each_ref().map(PathBuf::as_path),
+                &[&repository],
             )
+            .unwrap();
+
+        let preparation_assertions =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/preparation-behavior.typ");
+        renderer
+            .compile_template(
+                &preparation_assertions,
+                base.join("preparation-assertions.pdf"),
+                &[&repository],
+            )
+            .unwrap();
+
+        // Drawing supplied geometry must not load the unused EC seed plugin.
+        fs::remove_file(templates.join(LINNEST_PACKAGE_DIR).join("ec-layout.wasm")).unwrap();
+        let precomputed = templates.join("precomputed-without-ec.typ");
+        fs::write(
+            &precomputed,
+            r#"#import "crates/linnest/typst/src/graph.typ" as graph
+#import "crates/linnest/typst/src/render/layout.typ": layout-graph
+#let g = graph.build({
+  graph.node(<v>, pos: graph.pos(x: 0, y: 0))
+  graph.edge(graph.source(<v>), pos: graph.pos(x: 2, y: 0))
+})
+#context layout-graph((layouts: none, draw: (title: none)), g)
+"#,
+        )
+        .unwrap();
+        renderer
+            .compile_template(&precomputed, base.join("precomputed-without-ec.pdf"), &[])
             .unwrap();
 
         fs::remove_dir_all(base).unwrap();

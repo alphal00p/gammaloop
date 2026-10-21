@@ -11,10 +11,10 @@ use super::super::branches::DirectResidueKey;
 use super::*;
 use crate::{
     cff::expression::OrientationID,
-    graph::{FeynmanGraph, Graph, parse::IntoGraph},
+    graph::{FeynmanGraph, Graph},
     initialisation::test_initialise,
-    integrands::process::param_builder::FnMapEntry,
-    model::InputParamCard,
+    integrands::process::param_builder::NumeratorDefinition,
+    model::{InputParamCard, ModelGammaLoopExt},
     numerator::pole_certificate::{ScalarPoleCertificate, ScalarPoleFailure},
     settings::global::{GenerationSettings, ThresholdSubtractionSettings},
     uv::{
@@ -34,7 +34,7 @@ struct Capture {
     loop_edges: String,
     key: DirectResidueKey,
     cuts: Vec<String>,
-    numerators: Vec<Arc<FnMapEntry>>,
+    numerators: Vec<Arc<NumeratorDefinition>>,
     before: Atom,
     after: Atom,
 }
@@ -105,7 +105,7 @@ pub(super) fn record<S: ForestNodeLike>(
         + integrands
             .numerators()
             .iter()
-            .map(|entry| entry.rhs.as_view().get_byte_size())
+            .map(|entry| entry.rhs.expression().as_view().get_byte_size())
             .sum::<usize>();
     if recording.captures.len() == MAX_CAPTURES
         || bytes > MAX_CAPTURE_BYTES.saturating_sub(recording.bytes)
@@ -197,17 +197,23 @@ pub(crate) fn physical_full_h_fixture() -> Result<(Graph, GenerationSettings)> {
     test_initialise()?;
     // Match `import model sm-default`: apply the restriction before deriving
     // propagator masses and Feynman rules, keeping nonzero parameters symbolic.
-    let mut model = crate::utils::load_generic_model("sm");
-    model.restriction = Some("default".into());
+    let mut model =
+        crate::utils::load_generic_model("sm").with_restriction(Some("default".into()))?;
     let mut parameters = InputParamCard::from_str(
         include_str!("../../../../../../assets/models/json/sm/restrict_default.json").to_owned(),
         "json",
     )?;
     model.simplify(&mut parameters)?;
-    let graph: Graph = include_str!(
-        "../../../../../../tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"
+    let graph: Graph = Graph::import_dot(
+        include_str!(
+            "../../../../../../tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"
+        ),
+        &model,
     )
-    .into_graph(&model)?;
+    .map(|mut graphs| {
+        assert_eq!(graphs.len(), 1, "one fixture graph expected");
+        graphs.remove(0)
+    })?;
     assert_eq!(graph.name, "paper_figure_b1_double_triangle_soft_ir");
     assert_eq!(
         graph
@@ -218,11 +224,11 @@ pub(crate) fn physical_full_h_fixture() -> Result<(Graph, GenerationSettings)> {
             .collect_vec(),
         [6, 5, 8]
     );
-    assert!(!graph.global_prefactor.projector.is_one());
+    assert!(!graph.global_prefactor.projector.expression().is_one());
     for (pair, _, edge) in graph.iter_edges_of(&graph.full_filter()) {
         if pair.is_paired() {
             assert!(
-                edge.data.mass_atom().is_zero(),
+                edge.data.mass_atom(&graph.model).is_zero(),
                 "every internal quark/gluon must be massless"
             );
         }
@@ -284,7 +290,12 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         &generation.orientation_pattern,
         true,
     );
-    let wood = Wood::new(CutStructure::empty(&graph), &graph, &generation)?;
+    let wood = Wood::new(
+        CutStructure::empty(&graph),
+        &graph,
+        &graph.model,
+        &generation,
+    )?;
     let soft_components = wood
         .graph
         .iter_nodes()
@@ -307,13 +318,15 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
         orientations = production.expression.orientations.len(),
         file.settings = ?generation.uv, model = "sm-default",
         file.fixture = include_str!("../../../../../../tests/resources/graphs/paper_figure_b1_double_triangle_soft_ir.dot"),
-        file.projector = %graph.global_prefactor.projector.to_plain_string(),
+        file.projector = %graph.global_prefactor.projector.expression().to_plain_string(),
         loop_edges = ?graph.loop_momentum_basis.loop_edges, soft_components = ?soft_components,
         "Generate physical FullH inputs; no evaluator or certificate work"
     );
     let guard = RecordingGuard::start(&graph.name);
+    let model = graph.model.clone();
     forests.compute(
         &mut graph,
+        &model,
         crate::utils::vakint()?,
         orientation,
         &generation.uv,
@@ -341,6 +354,10 @@ fn physical_full_h_scalar_cancellation_certificates() -> Result<()> {
     let mut removed_factor_pairs = 0usize;
     let mut zero_pairs = 0usize;
     let mut unchanged_pairs = 0usize;
+    #[allow(
+        clippy::mutable_key_type,
+        reason = "shared bindings are immutable; SymbolicTensor Hash/Eq exclude mutable proof caches"
+    )]
     let mut definitions = std::collections::HashSet::new();
     for (root_id, capture) in recording.captures.iter().enumerate() {
         assert_eq!(

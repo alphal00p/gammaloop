@@ -47,6 +47,11 @@ dangling edge is an `Identity` fixed point and records its underlying `Flow`. `O
 separate, superficial direction used by callers and serialization; it must not be confused with
 the source/sink flow that maintains the pairing.
 
+Owned, shared, and mutable involution iterators delegate traversal and size hints
+to the underlying half-edge vector. They implement `ExactSizeIterator` and
+`FusedIterator`, so their remaining length is exact and exhaustion is permanent.
+These iterator guarantees preserve the store's half-edge order.
+
 Subgraphs are views over half-edge sets. `SubGraphLike` combines subset membership with
 edge-pair inclusion semantics, so an edge crossing a subset boundary becomes a split edge rather
 than silently disappearing. Concrete forms such as `SuBitGraph`, `InternalSubGraph`,
@@ -139,6 +144,13 @@ Timing instrumentation remains disabled unless this feature is selected.
 method from its textual label, including composite labels. Consumers can persist those labels
 and register the printers before importing a Symbolica archive; this restores display behavior
 without reconstructing graph topology or adding a persistence service to Linnet.
+
+First registration is serialized across subset types and index types. A lookup
+initializes Symbolica before the registration lock is acquired; a second lookup
+under that lock prevents concurrent callers from installing the same Rust
+formatter twice. Existing symbols and formatter output are reused unchanged.
+Registration errors are propagated after releasing the lock, so a caught
+invalid-label error cannot poison later registrations.
 
 == Maintained invariants
 

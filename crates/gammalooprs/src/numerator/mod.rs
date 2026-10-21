@@ -1,9 +1,10 @@
 #![allow(dead_code)]
 
 use aind::Aind;
-use idenso::color::ColorSimplifier;
-use idenso::dirac::GammaSimplifier;
-use idenso::representations::Bispinor;
+use idenso::{
+    CookMode, CookSettings, coad, cof, color::ColorSimplifySettings, color_cas, color_idx,
+    dirac::GammaSimplifySettings, tensor::SymbolicTensor,
+};
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use tracing::warn;
@@ -24,7 +25,6 @@ use spenso::tensors::parametric::TensorSet;
 use std::fmt::Debug;
 use std::ops::Deref;
 use std::sync::{Arc, Mutex};
-use symbolica_ext::NumeratorAtomExt;
 use thiserror::Error;
 use tracing::{debug, instrument};
 // use crate::feyngen::dis::{DisEdge, DisVertex};
@@ -35,12 +35,10 @@ use crate::utils::{FUN_LIB, GS, TENSORLIB, W_};
 use crate::{model::Model, utils::serde_utils::IsDefault};
 
 use crate::{GammaLoopContextContainer, disable};
-use ahash::AHashMap;
 use bincode::{Decode, Encode};
 use color_eyre::{Report, Result};
 use eyre::eyre;
 // use gxhash::GxBuildHasher;
-use itertools::Itertools;
 
 use serde::de::DeserializeOwned;
 use serde::ser::SerializeStruct;
@@ -50,10 +48,11 @@ use spenso::contraction::Contract;
 
 use spenso::network::library::symbolic::{ETS, ExplicitKey};
 
+use spenso::structure::IndexedStructure;
 use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
+use spenso::structure::dimension::Dimension;
 
-use spenso::structure::representation::{LibraryRep, Minkowski};
-use spenso::structure::{HasStructure, ScalarTensor, SmartShadowStructure};
+use spenso::structure::{CanonicalLayout, HasStructure, ScalarTensor, SmartShadowStructure};
 
 use spenso::{
     shadowing::Shadowable,
@@ -225,7 +224,11 @@ impl<S: NumeratorState> Numerator<S> {
             .unwrap();
 
         fn_map
-            .add_aliases([(parse!("TR"), Atom::num(Rational::from((1, 2))))])
+            .add_aliases([
+                (color_idx!(2, cof!(3)), Atom::num(Rational::from((1, 2)))),
+                (color_cas!(2, cof!(3)), Atom::num(Rational::from((4, 3)))),
+                (color_cas!(2, coad!(8)), Atom::num(3)),
+            ])
             .unwrap();
     }
 }
@@ -342,13 +345,15 @@ impl TypedNumeratorState for UnInit {
 struct _GlobalPrefactorAny {
     projector: serde_json::Value,
     num: serde_json::Value,
+    projector_interface: Option<serde_json::Value>,
+    num_interface: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode, PartialEq)]
 #[trait_decode(trait = crate::GammaLoopContext)]
 pub struct GlobalPrefactor {
-    pub projector: Atom,
-    pub num: Atom,
+    pub projector: SymbolicTensor<IndexedStructure>,
+    pub num: SymbolicTensor<IndexedStructure>,
 }
 
 impl JsonSchema for GlobalPrefactor {
@@ -363,7 +368,13 @@ impl JsonSchema for GlobalPrefactor {
 impl GlobalPrefactor {
     pub fn polarizations(&self) -> Vec<(PolDef, Atom)> {
         let mut pols = Vec::new();
-        let full_prefactor = &self.projector * &self.num;
+        // Polarization parameters use the component parser's source index
+        // syntax. This observation does not replace either retained tensor.
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let full_prefactor =
+            cooking.uncook((self.projector.expression() * self.num.expression()).as_view());
         let pat = function!(GS.epsilon, W_.e_, W_.i_).to_pattern();
         for m in full_prefactor.pattern_match(&pat, None, None) {
             let Some(e) = m.get(&W_.e_) else {
@@ -481,8 +492,8 @@ impl GlobalPrefactor {
 impl Default for GlobalPrefactor {
     fn default() -> Self {
         GlobalPrefactor {
-            projector: Atom::num(1),
-            num: Atom::num(1),
+            projector: SymbolicTensor::infer_indexed(Atom::one()).expect("one is a scalar tensor"),
+            num: SymbolicTensor::infer_indexed(Atom::one()).expect("one is a scalar tensor"),
         }
     }
 }
@@ -492,9 +503,23 @@ impl Serialize for GlobalPrefactor {
     where
         S: serde::Serializer,
     {
-        let mut state = serializer.serialize_struct("GlobalPrefactor", 2)?;
-        state.serialize_field("projector", &self.projector.to_string())?;
-        state.serialize_field("num", &self.num.to_string())?;
+        let (projector, projector_interface) =
+            feynkit_graph::NumeratorInterface::export(&self.projector);
+        let (num, num_interface) = feynkit_graph::NumeratorInterface::export(&self.num);
+        let mut state = serializer.serialize_struct(
+            "GlobalPrefactor",
+            2 + usize::from(projector_interface.is_some()) + usize::from(num_interface.is_some()),
+        )?;
+        // Source fields must not use the display printer, whose compact tensor
+        // notation can omit the slots retained by the interface declaration.
+        state.serialize_field("projector", &projector.to_canonical_string())?;
+        state.serialize_field("num", &num.to_canonical_string())?;
+        if let Some(interface) = projector_interface {
+            state.serialize_field("projector_interface", &interface.to_json())?;
+        }
+        if let Some(interface) = num_interface {
+            state.serialize_field("num_interface", &interface.to_json())?;
+        }
 
         state.end()
     }
@@ -509,11 +534,28 @@ impl<'de> Deserialize<'de> for GlobalPrefactor {
         struct GlobalPrefactorHelper {
             num: String,
             projector: String,
+            #[serde(default)]
+            num_interface: Option<String>,
+            #[serde(default)]
+            projector_interface: Option<String>,
         }
         let helper = GlobalPrefactorHelper::deserialize(deserializer)?;
+        let admit = |source: &str,
+                     interface: Option<String>|
+         -> std::result::Result<SymbolicTensor<IndexedStructure>, D::Error> {
+            let expression = try_parse!(source).map_err(serde::de::Error::custom)?;
+            let interface = interface
+                .map(|source| feynkit_graph::NumeratorInterface::parse(&source))
+                .transpose()
+                .map_err(serde::de::Error::custom)?;
+            feynkit_graph::NumeratorInterface::admit(expression, interface)
+                .map_err(serde::de::Error::custom)?
+                .try_into_indexed()
+                .map_err(serde::de::Error::custom)
+        };
         Ok(GlobalPrefactor {
-            projector: parse!(&helper.projector),
-            num: parse!(&helper.num),
+            projector: admit(&helper.projector, helper.projector_interface)?,
+            num: admit(&helper.num, helper.num_interface)?,
         })
     }
 }
@@ -534,9 +576,7 @@ impl Default for Numerator<UnInit> {
 #[derive(Debug, Clone, bincode_trait_derive::Encode, bincode_trait_derive::Decode)]
 #[trait_decode(trait = symbolica::state::HasStateMap)]
 pub struct SymbolicExpression<State> {
-    // pub colorless: ParamTensor<OrderedStructure<Euclidean, Aind>>,
-    // pub color: ParamTensor<OrderedStructure<Euclidean, Aind>>,
-    pub expr: Atom,
+    pub expr: SymbolicTensor<IndexedStructure>,
     pub state: State,
 }
 
@@ -556,7 +596,10 @@ pub trait UnexpandedNumerator: NumeratorState + GetSingleAtom {
 
 impl<E: ExpressionState> GetSingleAtom for SymbolicExpression<E> {
     fn get_single_atom(&self) -> Result<Atom, NumeratorStateError> {
-        Ok(self.expr.clone())
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        Ok(cooking.uncook(self.expr.expression().as_view()))
     }
 }
 
@@ -585,11 +628,19 @@ impl<E: ExpressionState> SymbolicExpression<E> {
 }
 
 impl<E: ExpressionState> SymbolicExpression<E> {
-    pub(crate) fn new(expression: Atom) -> Self {
+    pub(crate) fn new(expression: Atom) -> Result<Self> {
         E::new(expression)
     }
-    pub(crate) fn new_color(expression: Atom) -> Self {
+    pub(crate) fn new_color(expression: Atom) -> Result<Self> {
         E::new_color(expression)
+    }
+
+    /// Keep the interface and established facts of an admitted numerator.
+    pub(crate) fn from_tensor(expression: SymbolicTensor<IndexedStructure>) -> Self {
+        Self {
+            expr: expression,
+            state: E::default(),
+        }
     }
 }
 
@@ -604,22 +655,17 @@ pub trait ExpressionState:
 {
     fn forget_type(data: SymbolicExpression<Self>) -> PythonState;
 
-    fn new(expression: Atom) -> SymbolicExpression<Self> {
-        SymbolicExpression {
-            // colorless: ParamTensor::composite(DataTensor::new_scalar(expression)),
-            // color: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
-            expr: expression,
-            state: Self::default(),
-        }
+    fn new(expression: Atom) -> Result<SymbolicExpression<Self>> {
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        Ok(SymbolicExpression::from_tensor(
+            SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view())?)?,
+        ))
     }
 
-    fn new_color(expression: Atom) -> SymbolicExpression<Self> {
-        SymbolicExpression {
-            // color: ParamTensor::composite(DataTensor::new_scalar(expression)),
-            // colorless: ParamTensor::composite(DataTensor::new_scalar(Atom::num(1))),
-            expr: expression,
-            state: Self::default(),
-        }
+    fn new_color(expression: Atom) -> Result<SymbolicExpression<Self>> {
+        Self::new(expression)
     }
 
     fn get_expression(
@@ -709,16 +755,28 @@ impl ExpressionState for NonLocal {
 
 impl Numerator<Global> {
     #[instrument(skip(self))]
-    pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
+    pub(crate) fn color_simplify(self) -> Result<Numerator<ColorSimplified>> {
         // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
         let state = ColorSimplified {
-            expr: self.state.expr.simplify_color(),
+            expr: {
+                self.state
+                    .expr
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
+            },
             state: Color::Fully,
         };
         // debug!("Color simplified numerator:{}", state.expr);
-        Numerator { state }
+        Ok(Numerator { state })
     }
 }
 
@@ -812,117 +870,39 @@ impl<State: ExpressionState> NumeratorState for SymbolicExpression<State> {
     }
 }
 
-impl<T: Copy + Default> Numerator<SymbolicExpression<T>> {
-    pub(crate) fn canonize_lorentz(&self) -> Result<Self, String> {
-        let pats: Vec<LibraryRep> = vec![Minkowski {}.into(), Bispinor {}.into()];
-
-        let mut indices_map = AHashMap::new();
-
-        for p in &pats {
-            for a in self.state.expr.pattern_match(
-                &p.to_symbolic([W_.x_, W_.y_]).to_pattern(),
-                None,
-                None,
-            ) {
-                indices_map.insert(
-                    p.to_symbolic([a[&W_.x_].clone(), a[&W_.y_].clone()]),
-                    p.to_symbolic([a[&W_.x_].clone()]),
-                );
-            }
-        }
-
-        let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
-
-        let expr = self
-            .state
-            .expr
-            .canonize_tensors(sorted)
-            .map_err(|e| e.to_string())?
-            .canonical_form;
-
-        Ok(Self {
-            state: SymbolicExpression {
-                expr,
-                state: T::default(),
-            },
-        })
-    }
-
-    // pub(crate) fn canonize_color(&self) -> Result<Self, String> {
-
-    //     let pats: Vec<_> = vec![ColorAdjoint{}];
-    //     let dualizablepats: Vec<_> = vec![
-    //         ColorFundamental::selfless_symbol(),
-    //         ColorSextet::selfless_symbol(),
-    //     ];
-
-    //     let mut color = self.state.expr.replace(&function!(symbol!(DOWNIND), GS.x__).to_pattern())
-    //                 .with(Atom::var(GS.x__).to_pattern())
-    //     ;
-
-    //     let mut indices_map = AHashMap::new();
-
-    //     color.iter_flat().for_each(|(_, v)| {
-    //         for p in pats.iter().chain(&dualizablepats) {
-    //             for a in
-    //                 v.0.pattern_match(&function!(*p, GS.x_, GS.y_).to_pattern(), None, None)
-    //             {
-    //                 indices_map.insert(
-    //                     function!(*p, a[&GS.x_], a[&GS.y_]),
-    //                     function!(*p, a[&GS.x_]),
-    //                 );
-    //             }
-    //         }
-    //     });
-
-    //     let sorted = indices_map.into_iter().sorted().collect::<Vec<_>>();
-    //     // println!(
-    //     //     "indices sorted [{}]",
-    //     //     sorted
-    //     //         .iter()
-    //     //         .map(|(a, b)| format!(
-    //     //             "(Atom::parse(\"{}\").unwrap(),Atom::parse(\"{}\").unwrap())",
-    //     //             a, b
-    //     //         ))
-    //     //         .collect::<Vec<_>>()
-    //     //         .join(", ")
-    //     // );
-
-    //     color = color.map_data_ref_result(|a| a.0.canonize_tensors(&sorted).map(|a| a.into()))?;
-
-    //     let colorless = self.state.colorless.clone();
-    //     Ok(Self {
-    //         state: SymbolicExpression {
-    //             colorless,
-    //             color,
-    //             state: T::default(),
-    //         },
-    //     }));
-    //     todo!()
-    // }
-}
-
 impl Numerator<AppliedFeynmanRule> {
     #[allow(clippy::wrong_self_convention)]
-    pub(crate) fn to_d_dim<'a>(mut self, dim: impl Into<AtomOrView<'a>>) -> Self {
-        self.state.expr = self.state.expr.map_mink_dim(dim);
-        self
+    pub(crate) fn to_d_dim(mut self, dim: impl Into<Dimension>) -> Result<Self> {
+        self.state.expr = self.state.expr.with_lorentz_dimension(dim.into())?;
+        Ok(self)
     }
 
-    #[instrument(skip(self), fields(expr=%self.state.expr.to_ordered_simple()))]
-    pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
+    #[instrument(skip(self), fields(expr=%self.state.expr.expression().to_ordered_simple()))]
+    pub(crate) fn color_simplify(self) -> Result<Numerator<ColorSimplified>> {
         // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
         let state = ColorSimplified {
-            expr: self.state.expr.simplify_color(),
+            expr: {
+                self.state
+                    .expr
+                    .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })?
+                    .contract(idenso::tensor::ContractSettings {
+                        collect_chains: false,
+                        collect_traces: false,
+                        ..Default::default()
+                    })?
+            },
             state: Color::Fully,
         };
         debug!(
             "Color simplified numerator:{}",
-            state.expr.to_ordered_simple()
+            state.expr.expression().to_ordered_simple()
         );
-        Numerator { state }
+        Ok(Numerator { state })
     }
 }
 
@@ -933,21 +913,94 @@ impl Numerator<AppliedFeynmanRule> {
 // }
 
 impl Numerator<ColorSimplified> {
-    pub(crate) fn gamma_simplify(self) -> Numerator<GammaSimplified> {
+    pub(crate) fn gamma_simplify(self) -> Result<Numerator<GammaSimplified>> {
         debug!("Gamma simplifying color symplified numerator");
-        let expr = self.state.expr.simplify_gamma();
+        let expr = self
+            .state
+            .expr
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?;
         crate::debug_tags!(#generation, #inspect, #dump;
             stage = "numerator_after_simplify_gamma",
-            log.after_gamma = expr,
+            log.after_gamma = expr.expression(),
             "Numerator after gamma simplification"
         );
 
-        Numerator {
+        Ok(Numerator {
             state: GammaSimplified {
                 expr,
                 state: Default::default(),
             },
+        })
+    }
+}
+
+#[cfg(test)]
+mod typed_expression_tests {
+    use super::*;
+
+    #[test]
+    fn admitted_numerator_keeps_its_interface_through_color_and_gamma_stages() {
+        let input = function!(
+            spenso::tensor_symbol!("gammalooprs::typed_numerator_vector"),
+            spenso::mink!(4, 81)
+        );
+        let admitted = AppliedFeynmanRule::new(input.clone()).unwrap();
+        assert_eq!(admitted.expr.rank(), 1);
+        assert_eq!(admitted.get_single_atom().unwrap(), input);
+        let expected = admitted.expr.clone();
+        let simplified = Numerator { state: admitted }
+            .color_simplify()
+            .unwrap()
+            .gamma_simplify()
+            .unwrap();
+        assert!(simplified.state.expr.same_value(&expected));
+    }
+
+    #[test]
+    fn numerator_admission_requires_indexed_external_ports_but_keeps_closed_compact_dots() {
+        let head = spenso::vector_symbol!("gammalooprs::indexed_admission_vector");
+        let compact = function!(head, spenso::mink!(4));
+        assert!(AppliedFeynmanRule::new(compact.clone()).is_err());
+        let closed = AppliedFeynmanRule::new(spenso::dot!(&compact, &compact)).unwrap();
+        assert!(closed.expr.is_scalar());
+        let explicit = AppliedFeynmanRule::new(function!(head, spenso::mink!(4, 87))).unwrap();
+        assert_eq!(explicit.expr.rank(), 1);
+        let zero = explicit.expr.with_checked_expression(Atom::Zero).unwrap();
+        assert!(zero.is_zero());
+        assert_eq!(zero.structure(), explicit.expr.structure());
+    }
+
+    #[test]
+    fn zero_numerator_retains_open_tensor_rank_across_symbolic_states() {
+        let vector = AppliedFeynmanRule::new(function!(
+            spenso::tensor_symbol!("gammalooprs::typed_zero_numerator_vector"),
+            spenso::mink!(4, 83)
+        ))
+        .unwrap();
+        let zero = vector.expr.with_algebra_result(Atom::Zero).unwrap();
+        let expected = zero.structure().clone();
+        let simplified = Numerator {
+            state: AppliedFeynmanRule::from_tensor(zero),
         }
+        .to_d_dim(GS.dim)
+        .unwrap()
+        .color_simplify()
+        .unwrap()
+        .gamma_simplify()
+        .unwrap();
+        assert!(simplified.state.expr.is_zero());
+        assert_eq!(simplified.state.expr.rank(), 1);
+        assert_ne!(simplified.state.expr.structure(), &expected);
+        assert_eq!(simplified.state.expr.structure().canonical().order(), 1);
     }
 }
 
@@ -1195,15 +1248,20 @@ impl PolyContracted {}
 impl GammaSimplified {
     pub(crate) fn parse(self) -> Network {
         let lib = DummyLibrary::<ParamTensor<ShadowedStructure<Aind>>, _>::new();
-        let net = ParsingNet::try_from_view(
-            self.get_single_atom().unwrap().as_view(),
-            &lib,
-            &ParseSettings::default(),
-        )
-        .unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let (net, layout) = self
+            .expr
+            .into_network(
+                &lib,
+                &spenso::network::library::panicing::ErroringLibrary::<Symbol>::new(),
+                &ParseSettings::default(),
+                Some(&cooking),
+            )
+            .unwrap()
+            .into_parts();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
-        Network { net }
+        Network { net, layout }
     }
 
     // pub(crate) fn parse_only_colorless(self) -> Network {
@@ -1228,14 +1286,19 @@ impl Numerator<GammaSimplified> {
     pub(crate) fn parse(self) -> Result<Numerator<Network>> {
         // debug!("GammaSymplified numerator: {}", self.export());
         debug!("Parsing gamma simplified numerator into tensor network");
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let (net, layout) = self
+            .state
+            .expr
+            .into_network(
+                TENSORLIB.read().unwrap().deref(),
+                &spenso::network::library::panicing::ErroringLibrary::<Symbol>::new(),
+                &ParseSettings::default(),
+                Some(&cooking),
+            )?
+            .into_parts();
         Ok(Numerator {
-            state: Network {
-                net: ParsingNet::try_from_view(
-                    self.state.expr.as_view(),
-                    TENSORLIB.read().unwrap().deref(),
-                    &ParseSettings::default(),
-                )?,
-            },
+            state: Network { net, layout },
         })
     }
 
@@ -1259,6 +1322,8 @@ pub type ParsingNet = spenso::network::Network<
 pub struct Network {
     // #[bincode(with_serde
     pub net: ParsingNet,
+    /// Map canonical component axes to the numerator's declared logical axes.
+    pub layout: CanonicalLayout,
 }
 
 impl TryFrom<PythonState> for Network {
@@ -1312,10 +1377,21 @@ pub enum ExecutionMode {
 impl Network {
     pub(crate) fn parse_impl(expr: AtomView) -> Self {
         let lib = DummyLibrary::<ParamTensor<ShadowedStructure<Aind>>, _>::new();
-        let net = ParsingNet::try_from_view(expr, &lib, &ParseSettings::default()).unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let (net, layout) = AppliedFeynmanRule::new(expr.to_owned())
+            .unwrap()
+            .expr
+            .into_network(
+                &lib,
+                &spenso::network::library::panicing::ErroringLibrary::<Symbol>::new(),
+                &ParseSettings::default(),
+                Some(&cooking),
+            )
+            .unwrap()
+            .into_parts();
 
         // println!("net scalar{}", net.scalar.as_ref().unwrap());
-        Network { net }
+        Network { net, layout }
     }
 
     pub(crate) fn contract(&mut self, settings: impl Into<ContractionSettings>) -> Result<()> {

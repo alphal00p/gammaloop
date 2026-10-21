@@ -153,7 +153,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
             .collect::<BTreeSet<_>>();
         assert_eq!(
             masters,
-            BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
+            BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
             "the {process} direct-current acceptance must contain exactly the self-energy and vertex supergraphs",
         );
     }
@@ -313,7 +313,7 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
             17.0, -31.0, 43.0, -29.0, 53.0, 71.0, 17.0, -31.0, 43.0, -29.0, 53.0, 71.0,
         ],
     )?;
-    let graph_names = ["GL0", "GL2"];
+    let graph_names = ["GL1", "GL0"];
     // Retaining one eighth of ArbPrec's requested precision permits substantial
     // expression-dependent loss while still testing the precision-increase path.
     let tolerance = F(ArbPrec::default().epsilon()).sqrt().sqrt().sqrt();
@@ -460,15 +460,15 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
         .collect::<BTreeMap<_, _>>();
     assert_eq!(
         graph_estimates.keys().cloned().collect::<BTreeSet<_>>(),
-        BTreeSet::from(["GL0".to_string(), "GL2".to_string()]),
-        "the direct-current graph-MC breakdown must contain exactly GL0 and GL2",
+        BTreeSet::from(["GL0".to_string(), "GL1".to_string()]),
+        "the direct-current graph-MC breakdown must contain exactly GL1 and GL0",
     );
-    // In this two-master generation GL2 is the B.1 vertex graph and GL0 is
+    // In this two-master generation GL0 is the B.1 vertex graph and GL1 is
     // the B.2 self-energy graph, so the direct-current rows can be tested
     // separately without invoking a graphwise e+e- Ward decomposition.
     for (graph, target) in [
-        ("GL0", PUBLISHED_B2_SELF_ENERGY),
-        ("GL2", PUBLISHED_B1_VERTEX),
+        ("GL1", PUBLISHED_B2_SELF_ENERGY),
+        ("GL0", PUBLISHED_B1_VERTEX),
     ] {
         let (value, error) = graph_estimates
             .get(graph)
@@ -493,8 +493,8 @@ fn gamma_star_ddx_msbar_nlo_matches_the_published_graph_cross_sections() -> Resu
     for entry in &imaginary_graphs.entries {
         let graph = entry.bin_label.as_deref().unwrap();
         let target = match graph {
-            "GL0" => PUBLISHED_B2_SELF_ENERGY.abs(),
-            "GL2" => PUBLISHED_B1_VERTEX,
+            "GL1" => PUBLISHED_B2_SELF_ENERGY.abs(),
+            "GL0" => PUBLISHED_B1_VERTEX,
             _ => panic!("unexpected graph {graph}"),
         };
         assert!(

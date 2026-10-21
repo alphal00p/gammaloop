@@ -1,8 +1,11 @@
 //! Offline, finite component contraction of already bound numerator coefficients.
-//! This module is included only by the test-only overlap certificate. Neither
+//! Shared by the overlap and on-shell test certificates. Neither
 //! scalar nor tensor-valued graph numerators are polynomial-expanded here.
 
-use std::{collections::HashMap, ops::Deref};
+use std::{
+    collections::{HashMap, HashSet},
+    ops::Deref,
+};
 
 use color_eyre::{Result, eyre::ensure};
 use spenso::{
@@ -20,6 +23,8 @@ use crate::{
 
 const MAX_BODY_BYTES: usize = 2 * 1024 * 1024;
 const MAX_COMPONENTS: usize = 4096;
+// Exhausting this budget retains an unproven coefficient; it never proves zero.
+const MAX_SCALAR_PASSES: usize = 8;
 const MAX_RESULT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_CACHE_BYTES: usize = 64 * 1024 * 1024;
 
@@ -190,8 +195,190 @@ impl NumeratorJetCache {
         let mut components = Vec::new();
         let mut bytes = slots.as_view().get_byte_size();
         let mut scalar_prefactor = Atom::num(1);
-        for (index, value) in tensor.iter_flat() {
-            let mut value = value.collect_compact_factors();
+        for (ordinal, (index, value)) in tensor.iter_flat().enumerate() {
+            let mut value = value.to_owned();
+            for pass in 0..MAX_SCALAR_PASSES {
+                // Numeric signs and weights belong to the shared compact owner.
+                // In particular, do not run an unprotected numeric expansion here:
+                // it would enter fractional powers and denominator bodies.
+                let previous_bytes = value.as_view().get_byte_size();
+                let raw = value;
+                value = raw.collect_compact_factors();
+                if ordinal == 0 {
+                    crate::debug_tags!(#uv, #algebra, #trace;
+                        pass, stage = "finite_component_compact_input",
+                        file.raw = %raw.to_plain_string(),
+                        file.compact = %value.to_plain_string(),
+                        "Factorized finite component before literal collection"
+                    );
+                }
+                if !value.is_zero() {
+                    // One bounded collection in repeated literal scalar factors
+                    // can close a finite component identity without opening those
+                    // factors. Each pass has one deterministic decomposition;
+                    // only a strictly smaller completed result can enter another
+                    // pass. No alternative groupings or key orders are attempted.
+                    let mut occurrences = HashMap::<AtomView<'_>, usize>::new();
+                    let mut powered_bases = HashSet::new();
+                    value.visitor(&mut |part| {
+                        match part {
+                            AtomView::Fun(_) => {
+                                *occurrences.entry(part).or_default() += 1;
+                                return false;
+                            }
+                            AtomView::Pow(power) => {
+                                if i64::try_from(power.get_exp()).is_ok_and(|power| power > 0)
+                                    && matches!(
+                                        power.get_base(),
+                                        AtomView::Add(_) | AtomView::Fun(_)
+                                    )
+                                {
+                                    *occurrences.entry(power.get_base()).or_default() += 1;
+                                    powered_bases.insert(power.get_base());
+                                }
+                                return false;
+                            }
+                            AtomView::Add(_) if part != value.as_view() => {
+                                *occurrences.entry(part).or_default() += 1;
+                            }
+                            _ => {}
+                        }
+                        true
+                    });
+                    let mut factors = occurrences
+                        .into_iter()
+                        .filter_map(|(factor, count)| (count > 1).then_some(factor))
+                        .collect::<Vec<_>>();
+                    // Distinct sums with the same direct term support, such as
+                    // a+b and a-b, must not both hide their scalar constituents.
+                    // Let those constituents participate in the one bounded
+                    // collection instead. A positive power still owns its whole
+                    // base, including when that base occurs only once.
+                    let mut support_groups = HashMap::<Vec<Atom>, Vec<AtomView<'_>>>::new();
+                    for factor in &factors {
+                        if let AtomView::Add(sum) = factor {
+                            let mut support = sum
+                                .iter()
+                                .map(|term| Self::split_number(term.to_owned()).1)
+                                .collect::<Vec<_>>();
+                            support.sort();
+                            support_groups.entry(support).or_default().push(*factor);
+                        }
+                    }
+                    let dependent_sums = support_groups
+                        .into_values()
+                        .filter(|group| group.len() > 1)
+                        .flatten()
+                        .collect::<HashSet<_>>();
+                    factors.retain(|factor| {
+                        (!dependent_sums.contains(factor) || powered_bases.contains(factor))
+                            && !powered_bases
+                                .iter()
+                                .any(|base| base != factor && base.contains(*factor))
+                    });
+                    factors.sort_by(|left, right| {
+                        right
+                            .get_byte_size()
+                            .cmp(&left.get_byte_size())
+                            .then_with(|| left.cmp(right))
+                    });
+                    let mut keys = Vec::<Atom>::new();
+                    for factor in factors {
+                        if keys.iter().all(|key| {
+                            if factor.contains(key) || key.contains(factor) {
+                                return false;
+                            }
+                            // A retained summed factor also owns its proper
+                            // additive subsets. Selecting both X=t-S and S as
+                            // opaque independent keys would hide their linear
+                            // relation. Compare only literal direct term bodies;
+                            // no numerator products or powers are opened.
+                            if let (AtomView::Add(subset), AtomView::Add(owner)) =
+                                (factor, key.as_view())
+                                && subset.get_nargs() < owner.get_nargs()
+                            {
+                                let owner_terms = owner
+                                    .iter()
+                                    .map(|term| Self::split_number(term.to_owned()).1)
+                                    .collect::<Vec<_>>();
+                                if subset.iter().all(|term| {
+                                    owner_terms.contains(&Self::split_number(term.to_owned()).1)
+                                }) {
+                                    return false;
+                                }
+                            }
+                            true
+                        }) {
+                            keys.push(factor.to_owned());
+                        }
+                        if keys.len() > 128 {
+                            break;
+                        }
+                    }
+                    if ordinal == 0 {
+                        crate::debug_tags!(#uv, #algebra, #trace;
+                            pass, stage = "finite_component_literal_keys",
+                            file.keys = ?keys,
+                            file.key_admission = ?keys.iter().map(|key| {
+                                idenso::CookSettings::indices()
+                                    .with_mode(idenso::CookMode::ReversibleEncoding)
+                                    .try_cook(key.as_view()).map_err(|error| error.to_string())
+                                    .and_then(|cooked| idenso::tensor::SymbolicTensor::infer_indexed(cooked)
+                                        .map(|tensor| tensor.is_scalar()).map_err(|error| error.to_string()))
+                            }).collect::<Vec<_>>(),
+                            "Selected complete scalar factor owners"
+                        );
+                    }
+                    if !keys.is_empty() && keys.len() <= 128 {
+                        // Large unrelated graph factors remain outside the row
+                        // representation, including in this exact diagnostic.
+                        let (spectator, selected) = if let AtomView::Mul(product) = value.as_view()
+                        {
+                            let (selected, spectator): (Vec<_>, Vec<_>) = product
+                                .iter()
+                                .partition(|factor| keys.iter().any(|key| factor.contains(key)));
+                            (Atom::mul_many(spectator), Atom::mul_many(selected))
+                        } else {
+                            (Atom::one(), value.clone())
+                        };
+                        let rows = selected.coefficient_list_exact(&keys);
+                        if ordinal == 0 {
+                            crate::debug_tags!(#uv, #algebra, #trace;
+                                pass, stage = "finite_component_literal_rows",
+                                admitted = rows.is_some(),
+                                file.selected = %selected.to_plain_string(),
+                                file.spectator = %spectator.to_plain_string(),
+                                file.rows = ?rows,
+                                "Exact literal coefficient decomposition"
+                            );
+                        }
+                        if let Some(rows) = rows {
+                            let collected = spectator
+                                * Atom::add_many(rows.into_iter().map(
+                                    |(monomial, coefficient)| {
+                                        monomial * coefficient.collect_compact_factors()
+                                    },
+                                ))
+                                .collect_compact_factors();
+                            if ordinal == 0 {
+                                crate::debug_tags!(#uv, #algebra, #trace;
+                                    pass, stage = "finite_component_literal_recomposition",
+                                    accepted = collected.as_view().get_byte_size() < value.as_view().get_byte_size(),
+                                    file.recomposed = %collected.to_plain_string(),
+                                    "Factorized exact row recomposition"
+                                );
+                            }
+                            if collected.as_view().get_byte_size() < value.as_view().get_byte_size()
+                            {
+                                value = collected;
+                            }
+                        }
+                    }
+                }
+                if value.is_zero() || value.as_view().get_byte_size() >= previous_bytes {
+                    break;
+                }
+            }
             if value.is_zero() {
                 continue;
             }
@@ -284,6 +471,427 @@ mod tests {
         assert!(constant.key.is_one());
         assert_eq!(constant.scalar_prefactor, Atom::num(4));
         assert!(cache.canonicalize(&Atom::Zero).unwrap().is_zero);
+    }
+
+    #[test]
+    fn finite_numeric_coefficients_cancel_without_distributing_symbolic_factors() {
+        test_initialise().unwrap();
+        let mut cache = NumeratorJetCache::default();
+        let p = parse_lit!(p);
+        let k = parse_lit!(k);
+        // Existing scalar names and tagged Casimirs remain literal coefficients
+        // throughout finite component normalization.
+        let reserved = Atom::var(symbol!("gammalooprs::uv::scalar_component_0"));
+        for casimir in [Atom::one(), idenso::color_cas!(2, idenso::cof!(3))] {
+            let shared = parse_lit!((a + b) * (c + d)) * casimir * &reserved;
+            let difference = -(&shared * (-Atom::num(2) * &k)
+                + &shared * (-Atom::num(2) * (&p - &k)))
+                + &shared * (-Atom::num(2) * &p);
+            assert!(cache.canonicalize(&difference).unwrap().is_zero);
+            let retained = cache.canonicalize(&shared).unwrap();
+            assert!(!retained.is_zero);
+            assert!(
+                retained
+                    .key
+                    .replace(shared.to_pattern())
+                    .match_iter()
+                    .next()
+                    .is_some()
+            );
+        }
+    }
+
+    #[test]
+    fn opposite_finite_component_factors_cancel_without_expanding_spectators() {
+        test_initialise().unwrap();
+        let mut cache = NumeratorJetCache::default();
+        // Reduced (00) entry of the actual massive-quark bubble's U-US
+        // comparison. y and w stand for the imaginary spatial components.
+        let difference = parse_lit!(
+            (-k0 + k3) * (2 * p0 - 2 * p3)
+                + (-2 * p0 + 2 * p3) * (-k0 + k3)
+                + (2 * x + 2 * y) * (x - y)
+                + (-z + w) * (x + y)
+                + (-z - w) * (x - y)
+                + (-x + y) * (z + w)
+                + (-x + y) * (2 * x + 2 * y)
+                + (-x - y) * (z - w)
+                + (-2 * x + 2 * y) * (x + y)
+                + (-2 * x + 2 * y) * (-z - w)
+                + (-2 * x + 2 * y) * (-x - y)
+                + (-2 * x - 2 * y) * (-z + w)
+        );
+        let spectator =
+            parse_lit!((a + b) * (c + d) * (a - b) ^ 11) * idenso::color_cas!(2, idenso::cof!(3));
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        let retained = cache.canonicalize(&spectator).unwrap();
+        assert!(!retained.is_zero);
+        assert_eq!(
+            cache.canonicalize(&(&difference + &spectator)).unwrap(),
+            retained
+        );
+        assert!(
+            retained.key.contains(&parse_lit!((a - b) ^ 11))
+                || retained.key.contains(&parse_lit!((-a + b) ^ 11))
+        );
+        assert!(retained.key.contains(&parse_lit!(a + b)));
+        assert!(retained.key.contains(&parse_lit!(c + d)));
+    }
+
+    #[test]
+    fn nested_parent_scalar_entry_cancels_by_bounded_factor_regrouping() {
+        test_initialise().unwrap();
+        // Reduced first scalar entry of the two-loop OS parent's vacuum
+        // denominator class. All four binomial products remain factorized.
+        let difference = parse_lit!(
+            2 * (p1 - p2) * (2 * (p1 + p2) * (k0 + k3) - 2 * (k1 + k2) * (p0 + p3))
+                + 2 * (p1 + p2) * (2 * (k1 - k2) * (p0 + p3) - 2 * (p1 - p2) * (k0 + k3))
+                + 4 * (p0 + p3) * ((-k0 + k3) * (p0 + p3) + (p1 - p2) * (k1 + k2))
+                - 4 * (p0 + p3) * ((-k0 + k3) * (p0 + p3) + (p1 + p2) * (k1 - k2))
+        );
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        let spectator = parse_lit!((a + b) ^ 11) * idenso::color_cas!(2, idenso::cof!(3));
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        let retained = parse_lit!((p1 - p2) * (a + b) ^ 11);
+        assert!(
+            !cache
+                .canonicalize(&(&difference + &retained))
+                .unwrap()
+                .is_zero
+        );
+        let normalized = cache.canonicalize(&retained).unwrap().key;
+        assert!(normalized.contains(&parse_lit!((a + b) ^ 11)));
+        assert!(
+            normalized.contains(&parse_lit!(p1 - p2)) || normalized.contains(&parse_lit!(-p1 + p2))
+        );
+    }
+
+    #[test]
+    fn dependent_binomial_components_cancel_without_opening_powered_spectators() {
+        test_initialise().unwrap();
+        // The first remaining finite component of a three-loop forest identity.
+        // The four signed binomials are related scalar factors, not four
+        // independent indeterminates. Keep their products and spectators intact.
+        let [a, b, c, d] = [(2, 0), (2, 3), (4, 0), (4, 3)]
+            .map(|(edge, component)| GS.emr_mom(EdgeIndex(edge), GS.cind(component)));
+        let difference: Atom = (&a - &b) * (&c - &d)
+            + (&a - &b) * (&c + &d)
+            + (&a + &b) * (&c - &d)
+            + (&a + &b) * (&c + &d)
+            - 4 * &a * &c;
+        let spectator = parse_lit!((x + y) ^ 11 * opaque(u + 2 * (v + w)) / (s + t));
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        let nonzero = cache
+            .canonicalize(&(&spectator * (&difference + 1)))
+            .unwrap();
+        assert_eq!(nonzero, cache.canonicalize(&spectator).unwrap());
+        for factor in [
+            parse_lit!((x + y) ^ 11),
+            parse_lit!(opaque(u + 2 * (v + w))),
+            parse_lit!((s + t) ^ -1),
+        ] {
+            assert!(nonzero.key.contains(&factor));
+        }
+
+        // Even related repeated sums remain opaque when a positive power owns
+        // their base. A certificate may decline to prove an identity; it must
+        // never distribute that powered numerator to obtain a proof.
+        let plus = &a + &b;
+        let minus = &a - &b;
+        let powered = plus.pow(11);
+        let retained = &powered * (&plus * &c + &minus * &d + &minus * &c);
+        let certificate = cache.canonicalize(&retained).unwrap();
+        assert!(!certificate.is_zero);
+        assert!(certificate.key.contains(&powered));
+    }
+
+    #[test]
+    fn opaque_common_factors_cancel_without_opening_their_bodies() {
+        test_initialise().unwrap();
+        let [a, b, c, d, e, f] = ["a", "b", "c", "d", "e", "f"].map(|name| {
+            function!(
+                symbol!(&format!("overlap_factor_test::{name}")),
+                parse_lit!((x + y) ^ 11)
+            )
+        });
+        let difference =
+            &a * (&b * &c - &d * &e) + &b * (&f * &e - &a * &c) + &e * (&a * &d - &b * &f);
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(!cache.canonicalize(&(difference + &a)).unwrap().is_zero);
+        assert!(cache.canonicalize(&a).unwrap().key.contains(&a));
+    }
+
+    #[test]
+    fn repeated_scalar_products_keep_their_integer_power_relation() {
+        test_initialise().unwrap();
+        let contraction = parse_lit!(p0 * k0 - p1 * k1 - p2 * k2 - p3 * k3);
+        let opposite = (-&contraction).expand_num();
+        let spectator = parse_lit!((a + b) * (c + d) ^ 11);
+        let difference = contraction.pow(2) * opposite + contraction.pow(3);
+        let mut cache = NumeratorJetCache::default();
+        assert!(cache.canonicalize(&difference).unwrap().is_zero);
+        assert!(
+            cache
+                .canonicalize(&(&spectator * difference))
+                .unwrap()
+                .is_zero
+        );
+        let retained = cache
+            .canonicalize(&(&spectator * contraction.pow(3)))
+            .unwrap();
+        assert!(!retained.is_zero);
+        let retained = retained.key;
+        assert!(retained.contains(&parse_lit!((c + d) ^ 11)));
+        assert!(
+            retained.contains(contraction.pow(3))
+                || retained.contains((-&contraction).expand_num().pow(3))
+        );
+    }
+
+    #[test]
+    fn signed_integer_power_leaves_share_an_owner_without_expanding() {
+        test_initialise().unwrap();
+        let mut cache = NumeratorJetCache::default();
+        let base = parse_lit!(a - b);
+        let opposite = parse_lit!(-a + b);
+        for exponent in [-2, -1, 2, 3, 11] {
+            let left = base.pow(exponent);
+            let right = Atom::num(if exponent % 2 == 0 { 1 } else { -1 }) * opposite.pow(exponent);
+            assert_eq!(
+                cache.canonicalize(&left).unwrap(),
+                cache.canonicalize(&right).unwrap(),
+            );
+            assert!(cache.canonicalize(&(left - right)).unwrap().is_zero);
+        }
+        let fractional = parse_lit!((a - b) ^ (1 / 2));
+        assert!(
+            cache
+                .canonicalize(&fractional)
+                .unwrap()
+                .key
+                .contains(&fractional)
+        );
+    }
+
+    #[test]
+    fn finite_component_positive_dot_powers_keep_linear_base_relations() {
+        test_initialise().unwrap();
+        let e = parse_lit!(p0 * k0);
+        let f = parse_lit!(p1 * k1 + p2 * k2 + p3 * k3);
+        let c = parse_lit!(p0 * k0 - p1 * k1 - p2 * k2 - p3 * k3);
+        let difference: Atom = -2 * e.pow(2) + 3 * &c * &e + 2 * &f * &e - &c * &f - c.pow(2);
+        let spectator = parse_lit!((a + b) ^ 11 * opaque(c + 2 * (d + e)) / (x + y));
+        let mut cache = NumeratorJetCache::default();
+        assert!(
+            cache
+                .canonicalize(&(&spectator * &difference))
+                .unwrap()
+                .is_zero
+        );
+        assert_eq!(
+            cache
+                .canonicalize(&(&spectator * (&difference + 1)))
+                .unwrap(),
+            cache.canonicalize(&spectator).unwrap()
+        );
+    }
+
+    #[test]
+    fn finite_component_row_recomposition_closes_linear_dot_relations() {
+        test_initialise().unwrap();
+        // First surviving component of the simultaneous-hard mixed forest.
+        // K, X, Y and Z are complete dot sums. Their bodies are never expanded.
+        let k = parse_lit!(k0 ^ 2 - k1 ^ 2 - k2 ^ 2 - k3 ^ 2);
+        let x = parse_lit!(p0 * k0 - p1 * k1 - p2 * k2 - p3 * k3);
+        let y = parse_lit!(p0 * q0 - p1 * q1 - p2 * q2 - p3 * q3);
+        let z = parse_lit!(k0 * q0 - k1 * q1 - k2 * q2 - k3 * q3);
+        let t = parse_lit!(p0 * k0);
+        let spatial = parse_lit!(p1 * k1 + p2 * k2 + p3 * k3);
+        let h = parse_lit!(p0 * q0);
+        let mass_block = &k * &z * parse_lit!(v ^ 2 - m ^ 2)
+            - &k * &z * parse_lit!(m ^ 2 - p0 ^ 2 + p1 ^ 2 + p2 ^ 2 + p3 ^ 2)
+            - &k * &z * parse_lit!(v ^ 2 - m ^ 2 + p0 ^ 2 - p1 ^ 2 - p2 ^ 2 - p3 ^ 2)
+            + &k * &z * parse_lit!(m ^ 2);
+        for (grouping, spatial_terms) in [
+            ("grouped spatial sum", -4 * &z * &spatial),
+            (
+                "literal spatial terms",
+                -4 * &z * parse_lit!(p1 * k1)
+                    - 4 * &z * parse_lit!(p2 * k2)
+                    - 4 * &z * parse_lit!(p3 * k3),
+            ),
+        ] {
+            let difference: Atom = &mass_block
+                + 2 * &spatial * (-2 * &k * &h + &k * &y - 2 * &x * &z)
+                - 4 * &k * &x * &h
+                + 2 * (&k * &y - 2 * &x * &z) * &x
+                - 2 * (-2 * &k * &h + &k * &y - 6 * &x * &z + 4 * &z * &t + spatial_terms) * &t;
+            let spectator = parse_lit!((a + b) ^ 11 * opaque(c + 2 * (d + e)) / (u + v));
+            let mut momenta = difference.clone();
+            for (edge, variables) in [
+                (
+                    0,
+                    [
+                        parse_lit!(p0),
+                        parse_lit!(p1),
+                        parse_lit!(p2),
+                        parse_lit!(p3),
+                    ],
+                ),
+                (
+                    2,
+                    [
+                        parse_lit!(k0),
+                        parse_lit!(k1),
+                        parse_lit!(k2),
+                        parse_lit!(k3),
+                    ],
+                ),
+                (
+                    3,
+                    [
+                        parse_lit!(q0),
+                        parse_lit!(q1),
+                        parse_lit!(q2),
+                        parse_lit!(q3),
+                    ],
+                ),
+            ] {
+                for (component, variable) in variables.into_iter().enumerate() {
+                    momenta = momenta
+                        .replace(variable)
+                        .with(GS.emr_mom(EdgeIndex(edge), GS.cind(component)));
+                }
+            }
+            let mut cache = NumeratorJetCache::default();
+            for (notation, difference) in [
+                ("scalar variables", difference),
+                ("momentum components", momenta),
+            ] {
+                let certificate = cache.canonicalize(&(&spectator * &difference)).unwrap();
+                assert!(
+                    certificate.is_zero,
+                    "{grouping}, {notation}: see finite-component trace"
+                );
+                assert_eq!(
+                    cache
+                        .canonicalize(&(&spectator * (&difference + 1)))
+                        .unwrap(),
+                    cache.canonicalize(&spectator).unwrap(),
+                    "{grouping}, {notation}",
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn finite_component_recorded_mixed_forest_coefficient_reconstructs_exactly() {
+        test_initialise().unwrap();
+        // Literal post-contraction component from the simultaneous-hard limit.
+        // Keep all original masses, coupling phases, powers and grouping.
+        for (fixture, source) in [
+            (
+                "raw finite contraction",
+                include_str!(
+                    "../../../../tests/resources/algebra/mixed_forest_raw_finite_coefficient.atom"
+                ),
+            ),
+            (
+                "completed first pass",
+                include_str!(
+                    "../../../../tests/resources/algebra/mixed_forest_finite_coefficient.atom"
+                ),
+            ),
+        ] {
+            let coefficient = Atom::parse(source, "gammalooprs", Default::default()).unwrap();
+            let original = coefficient.clone();
+            let (number, without_number) = NumeratorJetCache::split_number(coefficient.clone());
+            let coupling = parse_lit!(UFO::GC_11 ^ 4);
+            let terms = match without_number.as_view() {
+                AtomView::Add(sum) => sum.iter().map(|term| term.to_owned()).collect::<Vec<_>>(),
+                _ => vec![without_number.clone()],
+            };
+            let without_coupling = Atom::add_many(terms.into_iter().map(|term| {
+                // Cancel an existing literal factor term by term; never clear
+                // denominators across the raw finite-contraction sum.
+                let stripped = &term / &coupling;
+                assert_eq!(&coupling * &stripped, term);
+                stripped
+            }));
+            assert_eq!(&number * &without_number, coefficient);
+            let renamed_masses = without_coupling
+                .replace(parse_lit!(UFO::MT))
+                .with(parse_lit!(m))
+                .replace(GS.m_uv_vacuum)
+                .with(parse_lit!(v));
+            let spectator = parse_lit!((a + b) ^ 11 * opaque(c + 2 * (d + e)) / (u + v));
+            let mut cache = NumeratorJetCache::default();
+            let mut results = Vec::new();
+            for (label, value) in [
+                ("literal recorded coefficient", coefficient.clone()),
+                ("without numeric prefactor", without_number),
+                ("without numeric and coupling prefactors", without_coupling),
+                ("renamed mass variables", renamed_masses),
+            ] {
+                crate::debug_tags!(#uv, #algebra, #trace;
+                    stage = "recorded_finite_component_replay", fixture, label,
+                    file.input = %value.to_plain_string(),
+                    "Replay exact coefficient representation toggle"
+                );
+                let result = cache.canonicalize(&value).unwrap();
+                let nonzero = cache.canonicalize(&(&spectator * (&value + 1))).unwrap();
+                let control = cache.canonicalize(&spectator).unwrap();
+                crate::debug_tags!(#uv, #algebra, #trace;
+                    stage = "recorded_finite_component_result", fixture, label,
+                    is_zero = result.is_zero, nonzero_control = nonzero == control,
+                    file.result = %result.key.to_plain_string(),
+                    "Completed exact coefficient replay"
+                );
+                results.push((label, result.is_zero, nonzero == control));
+            }
+            assert_eq!(coefficient, original);
+            assert!(
+                results.iter().all(|(_, zero, control)| *zero && *control),
+                "{fixture}: {results:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn finite_component_certificates_preserve_opaque_numeric_sum_payloads() {
+        test_initialise().unwrap();
+        let body = parse_lit!(c + 2 * (a + b));
+        let fractional = body.pow(parse_lit!(1 / 2));
+        let inverse = body.pow(-1);
+        let function = function!(symbol!("finite_component_opaque_payload"), &body);
+        let mut cache = NumeratorJetCache::default();
+        for value in [fractional, inverse, function] {
+            let before = value.clone();
+            let certificate = cache.canonicalize(&value).unwrap();
+            assert!(!certificate.is_zero);
+            assert!(certificate.key.contains(&value));
+            assert_eq!(value, before);
+        }
     }
 
     #[test]

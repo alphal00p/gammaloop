@@ -1,5 +1,6 @@
 #![allow(mixed_script_confusables)]
 pub mod alphaloop_numerics;
+mod citations;
 pub mod fmft;
 pub mod fmft_numerics;
 pub mod graph;
@@ -11,16 +12,23 @@ pub mod symbols;
 pub mod topologies;
 pub mod utils;
 
+use crate::citations::{CitationSource, USED_CITATIONS};
 use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
+use feynkit_tensor::TensorReducer;
 use graph::Graph;
 #[allow(unused)]
 use log::{debug, info, warn};
 
 use regex::Regex;
 use rug::float::Constant;
+use spenso::{
+    network::{library::symbolic::ETS, tags::SPENSO_TAG},
+    shadowing::{Collectable, TensorCollectFilter},
+    structure::representation::{BaseRepName, Minkowski, initialize as initialize_spenso_reps},
+};
 use std::{
     collections::{BTreeMap, HashMap, HashSet, hash_map::Entry},
     env,
@@ -43,11 +51,11 @@ use symbolica::{
     coefficient::{Coefficient, CoefficientView},
     domains::float::{FloatLike, RealLike},
 };
-#[cfg(feature = "python")]
+#[cfg(feature = "symbolica_community_module")]
 pub mod symbolica_community_module;
 
 /// Gather the Python API registered for the Vakint Symbolica community module.
-#[cfg(feature = "python-stubs")]
+#[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
     pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica".to_owned(),
@@ -78,6 +86,7 @@ use symbolica::{
     poly::series::Series,
     printer::{AtomPrinter, CanonicalOrderingSettings, PrintOptions},
     state::Workspace,
+    symbol,
     transformer::Transformer,
 };
 use utils::simplify_real;
@@ -113,6 +122,14 @@ pub type RealMomentum = (Float, Float, Float, Float);
 pub static FORM_REPLACEMENT_INDEX_SHIFT: u64 = 13370000;
 
 pub static NAMESPACE: &str = "vakint";
+static FEYNKIT_EXTERNAL_VECTOR: LazyLock<Symbol> = LazyLock::new(|| {
+    symbol!(
+        "vakint::feynkit_external_vector",
+        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
+    )
+});
+static FEYNKIT_OPAQUE_INDEX: LazyLock<Symbol> =
+    LazyLock::new(|| symbol!("vakint::feynkit_opaque_index"));
 // pub static PYSECDEC_NAMESPACE_SEPARATOR: &str = "NAMESPACESEP";
 // pub static PYSECDEC_UNDERSCORE: &str = "UNDERSCORE";
 // pub static PYSECDEC_ATTRIBUTE_START: &str = "ATTRIBUTESTART";
@@ -249,6 +266,14 @@ pub enum VakintError {
     FMFTError(String),
     #[error("Numerical evaluation error: {0}")]
     EvaluationError(String),
+    #[error(transparent)]
+    FeynKitTensorReduction(#[from] feynkit_tensor::TensorReductionError),
+    #[error("temporary FeynKit tensor-bridge syntax remained in the reduced numerator: {0}")]
+    FeynKitBridgeSyntax(String),
+    #[error("unsupported Spenso dot containing an integrated loop momentum: {0}")]
+    FeynKitLoopDot(String),
+    #[error("unknown numerator tensor reduction method '{0}'; expected 'alphaloop' or 'feynkit'")]
+    InvalidTensorReductionMethod(String),
     #[error("unknown vakint error")]
     Unknown,
 }
@@ -1911,14 +1936,10 @@ impl EvaluationMethod {
                 vakint.pysecdec_evaluate(settings, numerator, integral_specs, opts)
             }
         }?;
-        // Projected kernels contain only real scalar integral arguments. The
-        // monolithic numerator may contain complex user coefficients, so its
-        // functions must retain their original branches.
-        Ok(if settings.project_onto_tensor_integrals {
-            simplify_real(result.as_view())
-        } else {
-            result
-        })
+        // Scalar kernels contain only real integral arguments and opaque
+        // coefficient symbols. Complex user functions are restored afterward,
+        // preserving their original branches in both tensor-projection modes.
+        Ok(simplify_real(result.as_view()))
     }
 }
 
@@ -2039,6 +2060,39 @@ pub enum InputFloatRationalizationPrecision {
     TargetPrecision,
 }
 
+/// Strategy used to reduce tensor numerators before scalar-integral evaluation.
+///
+/// `AlphaLoop` invokes the historical FORM projector bundled with Vakint.
+/// `FeynKit` uses FeynKit's native symmetry-aware projector and therefore does
+/// not require FORM for numerator reduction.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum TensorReductionMethod {
+    AlphaLoop,
+    #[default]
+    FeynKit,
+}
+
+impl fmt::Display for TensorReductionMethod {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::AlphaLoop => write!(f, "alphaloop"),
+            Self::FeynKit => write!(f, "feynkit"),
+        }
+    }
+}
+
+impl std::str::FromStr for TensorReductionMethod {
+    type Err = VakintError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.to_ascii_lowercase().as_str() {
+            "alphaloop" => Ok(Self::AlphaLoop),
+            "feynkit" => Ok(Self::FeynKit),
+            _ => Err(VakintError::InvalidTensorReductionMethod(value.to_owned())),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct VakintSettings {
     #[allow(unused)]
@@ -2062,6 +2116,8 @@ pub struct VakintSettings {
     pub clean_tmp_dir: bool,
     /// Ordered analytic and numerical backends considered for each integral.
     pub evaluation_order: EvaluationOrder,
+    /// Numerator tensor reduction: native FeynKit by default, or the FORM-based AlphaLoop projector.
+    pub tensor_reduction_method: TensorReductionMethod,
     // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
     // For example when considering a 2-loop problem, then:
     //   a) for the nested one-loop integrals appearing, the single pole, finite term *and* order-epsilon term will need to be considered.
@@ -2072,8 +2128,10 @@ pub struct VakintSettings {
     pub precision_for_input_float_rationalization: InputFloatRationalizationPrecision,
     /// Whether reduced scalar products remain in dot-product notation.
     pub use_dot_product_notation: bool,
-    /// Project coefficient-one tensor integrals, keeping scalar coefficients
-    /// outside the backends. False sends each complete numerator through FORM.
+    /// Project coefficient-one tensor integrals. With AlphaLoop, false sends
+    /// the complete tensor numerator through FORM; native FeynKit uses its own
+    /// tensor reducer in either mode. Both modes keep loop-independent scalar
+    /// coefficients outside the analytic integration backend.
     pub project_onto_tensor_integrals: bool,
     /// Optional parent directory for uniquely named external-backend work directories.
     pub temporary_directory: Option<String>,
@@ -2286,6 +2344,7 @@ impl Default for VakintSettings {
             allow_unknown_integrals: true,
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
             evaluation_order: EvaluationOrder::default(),
+            tensor_reduction_method: TensorReductionMethod::FeynKit,
             // Default to a three-loop UV subtraction problem, for which alphaLoop implementation can be used.
             number_of_terms_in_epsilon_expansion: 4,
             precision_for_input_float_rationalization:
@@ -2372,17 +2431,12 @@ impl VakintTerm {
             self.integral = Atom::one();
             return Ok(());
         }
-        let (kernel, aliases, numerator_orders) = if settings.project_onto_tensor_integrals {
-            terms.backend_kernel(settings, slice::from_ref(&self.integral))?
-        } else {
-            let pole_order =
-                projection::ScalarTerms::epsilon_pole_order(numerator.as_view(), settings)?;
-            // One common Laurent pole is restored after backend evaluation;
-            // the complete numerator otherwise enters the backend unchanged.
-            let kernel =
-                numerator * Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(pole_order);
-            (kernel, Vec::new(), pole_order)
-        };
+        // Tensor projection has already completed. Both tensor-reduction
+        // modes now share the scalar coefficient boundary: the analytic
+        // backend sees one kernel, while complete graph coefficients retain
+        // their factorization and epsilon dependence for restoration below.
+        let (kernel, aliases, numerator_orders) =
+            terms.backend_kernel(settings, slice::from_ref(&self.integral))?;
         let epsilon_overflow = || VakintError::InvalidNumerator("epsilon order overflow".into());
         let n_loops = i64::try_from(integral_specs.canonical_topology.get_integral().n_loops)
             .map_err(|_| epsilon_overflow())?;
@@ -2527,14 +2581,7 @@ impl VakintTerm {
                     Replacement::new(alias.to_pattern(), coefficient.to_pattern())
                 })
                 .collect::<Vec<_>>(),
-        ) / normalization_power
-            / Atom::var(vk_symbol!(&settings.epsilon_symbol)).pow(
-                if settings.project_onto_tensor_integrals {
-                    0
-                } else {
-                    numerator_orders
-                },
-            );
+        ) / normalization_power;
         self.numerator = projection::ScalarTerms::epsilon_series(
             restored.as_view(),
             settings,
@@ -2754,6 +2801,8 @@ impl VakintTerm {
             .any(|edge| edge.momentum.get_all_symbols(true).contains(&S.p));
         if nonvacuum {
             self.numerator = Vakint::convert_to_dot_notation(settings, self.numerator.as_view())?;
+        } else if settings.tensor_reduction_method == TensorReductionMethod::FeynKit {
+            self.tensor_reduce_feynkit(settings)?;
         } else if !settings.project_onto_tensor_integrals {
             // Validate and contract existing Lorentz factors before FORM can
             // cancel an odd sector; malformed dummy indices must still error.
@@ -2777,7 +2826,20 @@ impl VakintTerm {
         settings: &VakintSettings,
         numerator: Atom,
     ) -> Result<Atom, VakintError> {
-        let mut form_numerator = numerator;
+        let dimension =
+            Atom::num(4) - Atom::num(2) * Atom::var(vk_symbol!(&settings.epsilon_symbol));
+        // FORM may distribute the loop-tensor polynomial, but unrelated
+        // scalar graph factors stay in the same coefficient owner used by
+        // analytic integration. Open Lorentz ports remain visible so FORM's
+        // index renaming also acts on their actual native tensor leaves.
+        let (mut form_numerator, coefficients) =
+            projection::ScalarTerms::protect_coefficients(numerator.as_view(), |term| {
+                if term.contains_symbol(S.k) {
+                    Ok(false)
+                } else {
+                    Ok(lorentz::LorentzTensor::parse(term, &dimension)?.is_scalar())
+                }
+            })?;
         // Make sure to undo the dot product notation.
         // If it was not used, the command below will do nothing.
         form_numerator = Vakint::convert_from_dot_notation(form_numerator.as_view());
@@ -2901,7 +2963,1001 @@ impl VakintTerm {
                 )
         }
 
-        Ok(reduced_numerator)
+        Ok(
+            reduced_numerator.replace_multiple(coefficients.iter().map(|(coefficient, alias)| {
+                Replacement::new(alias.to_pattern(), coefficient.to_pattern())
+            })),
+        )
+    }
+
+    fn tensor_reduce_feynkit(&mut self, settings: &VakintSettings) -> Result<(), VakintError> {
+        initialize_spenso_reps();
+        let epsilon = vk_parse!(&settings.epsilon_symbol).map_err(VakintError::SymbolicaError)?;
+        let dimension = Atom::num(4) - Atom::num(2) * epsilon;
+        // The native reducer operates on explicit indexed vectors.  In
+        // particular, a compact contraction such as dot(p(1),k(1)) contains
+        // one power of the integrated momentum and must not be treated as an
+        // opaque scalar factor.  Expand Vakint's dot shorthand before adding
+        // Spenso slots, just as the AlphaLoop backend does before invoking
+        // FORM.
+        Self::validate_spenso_loop_dots(self.numerator.as_view())?;
+        let vakint_dots = self.numerator.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let arguments = function.iter().collect::<Vec<_>>();
+            if function.get_symbol() == SPENSO_TAG.dot
+                && arguments.len() == 2
+                && Self::is_reducible_spenso_loop_dot(&arguments)
+            {
+                **out = FunctionBuilder::new(S.dot).add_args(arguments).finish();
+            }
+        });
+        let indexed_numerator = Vakint::convert_from_dot_notation(vakint_dots.as_view());
+        let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
+        let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
+        let lorentz = TensorCollectFilter::Reps([Minkowski {}.into()]);
+        // The frontend still carries Vakint's raw-index k/p/g leaves here.
+        // Keep their original representation metadata together until each
+        // selected sector enters the checked tensor reducer. Scalar coefficient
+        // subtrees stay opaque in the existing filtered collector.
+        let selected = indexed_numerator.collect_with_map(|value| match value {
+            AtomView::Fun(function) => {
+                [S.k, S.p, S.g].contains(&function.get_symbol()) || lorentz.matches(value)
+            }
+            AtomView::Pow(power) => {
+                // A closed indexed power owns a fresh dummy scope per copy.
+                // The typed reducer handles that scope; raw collection must
+                // not distribute the base and merge those labels first.
+                let base = power.get_base();
+                [S.k, S.p, S.g]
+                    .into_iter()
+                    .any(|head| Self::contains_function_head(base, head))
+                    || base.contains_symbol(Minkowski::selfless_symbol())
+            }
+            _ => false,
+        });
+        let mut failure = None;
+        let mut reduced = selected
+            .into_inner()
+            .map_collects(|collected, _, out| {
+                if failure.is_some() {
+                    return;
+                }
+                let AtomView::Fun(collected) = collected else {
+                    unreachable!("map_collects visits only collector wrappers")
+                };
+                let term = collected.iter().next().expect("collector wrapper payload");
+                match Self::tensor_reduce_feynkit_term(term, &reducer, &mut next_bridge_dummy) {
+                    Ok(value) => **out = value,
+                    Err(error) => failure = Some(error),
+                }
+            })
+            .unwrap_collect();
+        if let Some(error) = failure {
+            return Err(error);
+        }
+        if !settings.use_dot_product_notation {
+            reduced = Vakint::convert_from_dot_notation(reduced.as_view());
+        }
+        self.numerator = reduced;
+        Ok(())
+    }
+
+    fn tensor_reduce_feynkit_term(
+        numerator: AtomView<'_>,
+        reducer: &TensorReducer,
+        next_bridge_dummy: &mut usize,
+    ) -> Result<Atom, VakintError> {
+        let dimension = reducer.dimension();
+        let opaque_minkowski_slots = Self::collect_opaque_minkowski_slots(numerator);
+        let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
+        let numerator =
+            Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
+        // This is the external Vakint source boundary. Admit the complete
+        // converted tensor once; retain it through reduction and decode only
+        // when returning to Vakint's raw projector/index notation.
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = reducer.admit(
+            cooking
+                .try_cook(numerator.as_view())
+                .map_err(|error| VakintError::SymbolicaError(error.to_string()))?,
+        )?;
+        let reduced = reducer.reduce(&numerator)?.into_expression()?;
+        let reduced = cooking.uncook(reduced.expression().as_view());
+        let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);
+        let reduced =
+            Self::spenso_to_vakint_numerator(reduced.as_view(), dimension, &opaque_compact_vectors);
+        if Self::contains_feynkit_bridge_syntax(reduced.as_view()) {
+            return Err(VakintError::FeynKitBridgeSyntax(
+                reduced.to_canonical_string(),
+            ));
+        }
+        Ok(reduced)
+    }
+
+    fn vakint_to_spenso_numerator(
+        numerator: AtomView<'_>,
+        dimension: &Atom,
+        opaque_slots: &BTreeMap<Atom, Atom>,
+    ) -> Atom {
+        numerator.replace_map(|term, _context, out| {
+            if let AtomView::Add(sum) = term {
+                // A preserved power can contain additive branches with the
+                // same dummy label but different original dimensions. Attach
+                // provenance within each branch before the typed reducer
+                // handles that power; never distribute the surrounding graph.
+                **out = Atom::add_many(
+                    sum.iter()
+                        .map(|summand| {
+                            let slots = Self::collect_opaque_minkowski_slots(summand);
+                            Self::vakint_to_spenso_numerator(summand, dimension, &slots)
+                        })
+                        .collect::<Vec<_>>(),
+                );
+                return;
+            }
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let arguments = function.iter().collect::<Vec<_>>();
+            if (function.get_symbol() == S.k || function.get_symbol() == S.p)
+                && arguments.len() >= 3
+                && Self::is_compact_spenso_minkowski_representation(arguments[arguments.len() - 2])
+                && Self::is_dot_dummy_index(arguments[arguments.len() - 1])
+            {
+                let slot = Self::retarget_or_create_spenso_slot(
+                    arguments[arguments.len() - 1],
+                    dimension,
+                    opaque_slots,
+                );
+                **out = arguments[..arguments.len() - 2]
+                    .iter()
+                    .fold(
+                        FunctionBuilder::new(function.get_symbol()),
+                        |builder, argument| builder.add_arg(*argument),
+                    )
+                    .add_arg(slot)
+                    .finish();
+            } else if (function.get_symbol() == S.k || function.get_symbol() == S.p)
+                && arguments.len() == 2
+            {
+                if Self::is_compact_spenso_minkowski_representation(arguments[1]) {
+                    **out = term.to_owned();
+                    return;
+                }
+                let slot =
+                    Self::retarget_or_create_spenso_slot(arguments[1], dimension, opaque_slots);
+                **out = FunctionBuilder::new(function.get_symbol())
+                    .add_arg(arguments[0])
+                    .add_arg(slot)
+                    .finish();
+            } else if function.get_symbol() == S.g && arguments.len() == 2 {
+                let left =
+                    Self::retarget_or_create_spenso_slot(arguments[0], dimension, opaque_slots);
+                let right =
+                    Self::retarget_or_create_spenso_slot(arguments[1], dimension, opaque_slots);
+                **out = ETS.metric(left, right);
+            } else if function.get_symbol() == Minkowski::selfless_symbol()
+                && matches!(arguments.len(), 1 | 2)
+            {
+                let mut representation =
+                    FunctionBuilder::new(Minkowski::selfless_symbol()).add_arg(dimension);
+                if let Some(index) = arguments.get(1) {
+                    representation =
+                        representation.add_arg(Self::protect_opaque_index(*index, opaque_slots));
+                }
+                **out = representation.finish();
+            } else if function.get_symbol().has_tag(&SPENSO_TAG.rank1) {
+                if let Some(vector) = Self::bridge_tagged_vector(
+                    function.get_symbol(),
+                    &arguments,
+                    dimension,
+                    opaque_slots,
+                ) {
+                    **out = vector;
+                } else if arguments.last().is_some_and(|argument| {
+                    Self::is_compact_spenso_minkowski_representation(*argument)
+                }) {
+                    // A compact tagged vector is already a scalar object from
+                    // the reducer's point of view. Preserve its original
+                    // representation instead of recursively retargeting it.
+                    **out = term.to_owned();
+                }
+            } else if let Some(vector) = Self::bridge_untagged_indexed_vector(
+                function.get_symbol(),
+                &arguments,
+                dimension,
+                opaque_slots,
+            ) {
+                **out = vector;
+            } else if arguments.len() >= 2
+                && Self::is_compact_spenso_minkowski_representation(arguments[arguments.len() - 2])
+                && Self::is_dot_dummy_index(arguments[arguments.len() - 1])
+            {
+                let original = arguments[..arguments.len() - 1]
+                    .iter()
+                    .fold(
+                        FunctionBuilder::new(function.get_symbol()),
+                        |builder, argument| builder.add_arg(*argument),
+                    )
+                    .finish();
+                let slot = Self::retarget_or_create_spenso_slot(
+                    arguments[arguments.len() - 1],
+                    dimension,
+                    opaque_slots,
+                );
+                **out = FunctionBuilder::new(*FEYNKIT_EXTERNAL_VECTOR)
+                    .add_arg(
+                        FunctionBuilder::new(SPENSO_TAG.pure_scalar)
+                            .add_arg(original)
+                            .finish(),
+                    )
+                    .add_arg(slot)
+                    .finish();
+            }
+        })
+    }
+
+    fn bridge_untagged_indexed_vector(
+        head: Symbol,
+        arguments: &[AtomView<'_>],
+        dimension: &Atom,
+        opaque_slots: &BTreeMap<Atom, Atom>,
+    ) -> Option<Atom> {
+        let slot = *arguments.last()?;
+        let (original_dimension, _index) = Self::spenso_minkowski_slot_parts(slot)?;
+        if arguments[..arguments.len() - 1]
+            .iter()
+            .any(|argument| {
+                matches!(argument, AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.representation))
+            })
+        {
+            return None;
+        }
+        let original = arguments[..arguments.len() - 1]
+            .iter()
+            .fold(FunctionBuilder::new(head), |builder, argument| {
+                builder.add_arg(*argument)
+            })
+            .add_arg(
+                FunctionBuilder::new(Minkowski::selfless_symbol())
+                    .add_arg(original_dimension)
+                    .finish(),
+            )
+            .finish();
+        Some(
+            FunctionBuilder::new(*FEYNKIT_EXTERNAL_VECTOR)
+                .add_arg(
+                    FunctionBuilder::new(SPENSO_TAG.pure_scalar)
+                        .add_arg(original)
+                        .finish(),
+                )
+                .add_arg(Self::retarget_or_create_spenso_slot(
+                    slot,
+                    dimension,
+                    opaque_slots,
+                ))
+                .finish(),
+        )
+    }
+
+    fn bridge_tagged_vector(
+        head: Symbol,
+        arguments: &[AtomView<'_>],
+        dimension: &Atom,
+        opaque_slots: &BTreeMap<Atom, Atom>,
+    ) -> Option<Atom> {
+        let last = *arguments.last()?;
+        let (original, slot) =
+            if let Some((original_dimension, _index)) = Self::spenso_minkowski_slot_parts(last) {
+                let compact_representation = FunctionBuilder::new(Minkowski::selfless_symbol())
+                    .add_arg(original_dimension)
+                    .finish();
+                let original = arguments[..arguments.len() - 1]
+                    .iter()
+                    .fold(FunctionBuilder::new(head), |builder, argument| {
+                        builder.add_arg(*argument)
+                    })
+                    .add_arg(compact_representation)
+                    .finish();
+                let slot = Self::retarget_or_create_spenso_slot(last, dimension, opaque_slots);
+                (original, slot)
+            } else if arguments.len() >= 2
+                && Self::is_compact_spenso_minkowski_representation(arguments[arguments.len() - 2])
+                && Self::is_dot_dummy_index(last)
+            {
+                let original = arguments[..arguments.len() - 1]
+                    .iter()
+                    .fold(FunctionBuilder::new(head), |builder, argument| {
+                        builder.add_arg(*argument)
+                    })
+                    .finish();
+                let slot = Self::retarget_or_create_spenso_slot(last, dimension, opaque_slots);
+                (original, slot)
+            } else if Self::is_dot_dummy_index(last) {
+                let original = arguments[..arguments.len() - 1]
+                    .iter()
+                    .fold(FunctionBuilder::new(head), |builder, argument| {
+                        builder.add_arg(*argument)
+                    })
+                    .finish();
+                let slot = Self::retarget_or_create_spenso_slot(last, dimension, opaque_slots);
+                (original, slot)
+            } else {
+                return None;
+            };
+
+        Some(
+            FunctionBuilder::new(*FEYNKIT_EXTERNAL_VECTOR)
+                .add_arg(
+                    FunctionBuilder::new(SPENSO_TAG.pure_scalar)
+                        .add_arg(original)
+                        .finish(),
+                )
+                .add_arg(slot)
+                .finish(),
+        )
+    }
+
+    fn is_spenso_minkowski_representation(argument: AtomView<'_>) -> bool {
+        matches!(
+            argument,
+            AtomView::Fun(representation)
+                if representation.get_symbol().get_namespace() == "spenso"
+                    && representation.get_symbol().get_stripped_name() == "mink"
+                    && matches!(representation.get_nargs(), 1 | 2)
+        )
+    }
+
+    fn is_compact_spenso_minkowski_representation(argument: AtomView<'_>) -> bool {
+        matches!(
+            argument,
+            AtomView::Fun(representation)
+                if Self::is_spenso_minkowski_representation(argument)
+                    && representation.get_nargs() == 1
+        )
+    }
+
+    fn compact_spenso_minkowski_vector_representation(
+        argument: AtomView<'_>,
+    ) -> Option<AtomView<'_>> {
+        let AtomView::Fun(vector) = argument else {
+            return None;
+        };
+        let arguments = vector.iter().collect::<Vec<_>>();
+        let representation = *arguments.last()?;
+        if !Self::is_compact_spenso_minkowski_representation(representation)
+            || arguments[..arguments.len() - 1]
+                .iter()
+                .any(|argument| Self::contains_spenso_representation(*argument))
+        {
+            return None;
+        }
+        Some(representation)
+    }
+
+    fn is_reducible_spenso_loop_dot(arguments: &[AtomView<'_>]) -> bool {
+        let [left, right] = arguments else {
+            return false;
+        };
+        let (Some(left_representation), Some(right_representation)) = (
+            Self::compact_spenso_minkowski_vector_representation(*left),
+            Self::compact_spenso_minkowski_vector_representation(*right),
+        ) else {
+            return false;
+        };
+        left_representation == right_representation
+            && arguments.iter().any(
+                |argument| matches!(argument, AtomView::Fun(vector) if vector.get_symbol() == S.k),
+            )
+    }
+
+    fn validate_spenso_loop_dots(expression: AtomView<'_>) -> Result<(), VakintError> {
+        if let AtomView::Fun(function) = expression
+            && function.get_symbol() == SPENSO_TAG.dot
+        {
+            let arguments = function.iter().collect::<Vec<_>>();
+            if arguments
+                .iter()
+                .any(|argument| Self::contains_function_head(*argument, S.k))
+                && !Self::is_reducible_spenso_loop_dot(&arguments)
+            {
+                return Err(VakintError::FeynKitLoopDot(
+                    expression.to_owned().to_canonical_string(),
+                ));
+            }
+        }
+        for child in expression.children() {
+            Self::validate_spenso_loop_dots(child)?;
+        }
+        Ok(())
+    }
+
+    fn contains_spenso_representation(argument: AtomView<'_>) -> bool {
+        if let AtomView::Fun(function) = argument
+            && function.get_symbol().has_tag(&SPENSO_TAG.representation)
+        {
+            return true;
+        }
+        argument
+            .children()
+            .any(Self::contains_spenso_representation)
+    }
+
+    fn contains_function_head(argument: AtomView<'_>, head: Symbol) -> bool {
+        if matches!(argument, AtomView::Fun(function) if function.get_symbol() == head) {
+            return true;
+        }
+        argument
+            .children()
+            .any(|child| Self::contains_function_head(child, head))
+    }
+
+    fn is_dot_dummy_index(argument: AtomView<'_>) -> bool {
+        matches!(
+            argument,
+            AtomView::Fun(function)
+                if function.get_symbol() == S.dot_dummy_ind && function.get_nargs() == 1
+        )
+    }
+
+    fn repair_expanded_spenso_vector_slots(numerator: AtomView<'_>) -> Atom {
+        numerator.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let arguments = function.iter().collect::<Vec<_>>();
+            if arguments.len() < 2
+                || !Self::is_compact_spenso_minkowski_representation(arguments[arguments.len() - 2])
+                || !Self::is_dot_dummy_index(arguments[arguments.len() - 1])
+            {
+                return;
+            }
+            let AtomView::Fun(compact_representation) = arguments[arguments.len() - 2] else {
+                return;
+            };
+            let Some(representation_dimension) = compact_representation.iter().next() else {
+                return;
+            };
+            let indexed_representation = FunctionBuilder::new(Minkowski::selfless_symbol())
+                .add_arg(representation_dimension)
+                .add_arg(arguments[arguments.len() - 1])
+                .finish();
+            **out = arguments[..arguments.len() - 2]
+                .iter()
+                .fold(
+                    FunctionBuilder::new(function.get_symbol()),
+                    |builder, argument| builder.add_arg(*argument),
+                )
+                .add_arg(indexed_representation)
+                .finish();
+        })
+    }
+
+    fn retarget_or_create_spenso_slot(
+        argument: AtomView<'_>,
+        dimension: &Atom,
+        opaque_slots: &BTreeMap<Atom, Atom>,
+    ) -> Atom {
+        if let AtomView::Fun(representation) = argument
+            && Self::is_spenso_minkowski_representation(argument)
+            && representation.get_nargs() == 2
+        {
+            let index = representation.iter().nth(1).unwrap();
+            return FunctionBuilder::new(Minkowski::selfless_symbol())
+                .add_arg(dimension)
+                .add_arg(Self::protect_opaque_index(index, opaque_slots))
+                .finish();
+        }
+        FunctionBuilder::new(Minkowski::selfless_symbol())
+            .add_arg(dimension)
+            .add_arg(Self::protect_opaque_index(argument, opaque_slots))
+            .finish()
+    }
+
+    fn protect_opaque_index(index: AtomView<'_>, opaque_slots: &BTreeMap<Atom, Atom>) -> Atom {
+        opaque_slots.get(&index.to_owned()).map_or_else(
+            || index.to_owned(),
+            |original_slot| {
+                FunctionBuilder::new(*FEYNKIT_OPAQUE_INDEX)
+                    .add_arg(original_slot)
+                    .finish()
+            },
+        )
+    }
+
+    fn original_opaque_slot(index: AtomView<'_>) -> Option<AtomView<'_>> {
+        let AtomView::Fun(function) = index else {
+            return None;
+        };
+        if function.get_symbol() != *FEYNKIT_OPAQUE_INDEX || function.get_nargs() != 1 {
+            return None;
+        }
+        function.iter().next()
+    }
+
+    fn contains_feynkit_bridge_syntax(expression: AtomView<'_>) -> bool {
+        if let AtomView::Fun(function) = expression
+            && (function.get_symbol() == *FEYNKIT_EXTERNAL_VECTOR
+                || function.get_symbol() == *FEYNKIT_OPAQUE_INDEX)
+        {
+            return true;
+        }
+        expression
+            .children()
+            .any(Self::contains_feynkit_bridge_syntax)
+    }
+
+    fn spenso_minkowski_slot_parts(slot: AtomView<'_>) -> Option<(AtomView<'_>, AtomView<'_>)> {
+        let AtomView::Fun(representation) = slot else {
+            return None;
+        };
+        if !Self::is_spenso_minkowski_representation(slot) || representation.get_nargs() != 2 {
+            return None;
+        }
+        let arguments = representation.iter().collect::<Vec<_>>();
+        Some((arguments[0], arguments[1]))
+    }
+
+    fn collect_opaque_minkowski_slots(numerator: AtomView<'_>) -> BTreeMap<Atom, Atom> {
+        fn collect(expression: AtomView<'_>, slots: &mut BTreeMap<Atom, Atom>) {
+            if let AtomView::Fun(function) = expression {
+                if function.get_symbol() == Minkowski::selfless_symbol()
+                    || function.get_symbol() == ETS.metric
+                    || (function.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                        && ![S.k, S.p].contains(&function.get_symbol()))
+                {
+                    return;
+                }
+                // Explicit source slots on integrated and external momenta
+                // retain their original representation, like opaque tensor
+                // ports. Otherwise a surviving numeric source label becomes
+                // indistinguishable from a raw backend dummy on restoration.
+                for argument in function.iter() {
+                    if let Some((_dimension, index)) =
+                        VakintTerm::spenso_minkowski_slot_parts(argument)
+                    {
+                        slots
+                            .entry(index.to_owned())
+                            .or_insert_with(|| argument.to_owned());
+                    } else {
+                        collect(argument, slots);
+                    }
+                }
+                return;
+            }
+            for child in expression.children() {
+                collect(child, slots);
+            }
+        }
+
+        let mut slots = BTreeMap::new();
+        collect(numerator, &mut slots);
+        slots
+    }
+
+    fn collect_opaque_compact_vectors(
+        numerator: AtomView<'_>,
+        dimension: &Atom,
+    ) -> BTreeMap<Atom, Atom> {
+        fn collect(expression: AtomView<'_>, dimension: &Atom, vectors: &mut BTreeMap<Atom, Atom>) {
+            if let AtomView::Fun(function) = expression {
+                if function.get_symbol() == Minkowski::selfless_symbol()
+                    || function.get_symbol() == ETS.metric
+                    || function.get_symbol() == S.k
+                    || function.get_symbol() == S.p
+                    || function.get_symbol() == S.g
+                    || function.get_symbol().has_tag(&SPENSO_TAG.rank1)
+                {
+                    return;
+                }
+                let arguments = function.iter().collect::<Vec<_>>();
+                let slots = arguments
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(position, argument)| {
+                        VakintTerm::spenso_minkowski_slot_parts(*argument)
+                            .map(|(slot_dimension, _index)| (position, slot_dimension))
+                    })
+                    .collect::<Vec<_>>();
+                if let [(position, original_dimension)] = slots.as_slice() {
+                    let normalized = arguments.iter().enumerate().fold(
+                        FunctionBuilder::new(function.get_symbol()),
+                        |builder, (argument_position, argument)| {
+                            if argument_position == *position {
+                                builder.add_arg(
+                                    FunctionBuilder::new(Minkowski::selfless_symbol())
+                                        .add_arg(dimension)
+                                        .finish(),
+                                )
+                            } else {
+                                builder.add_arg(*argument)
+                            }
+                        },
+                    );
+                    let original = arguments.iter().enumerate().fold(
+                        FunctionBuilder::new(function.get_symbol()),
+                        |builder, (argument_position, argument)| {
+                            if argument_position == *position {
+                                builder.add_arg(
+                                    FunctionBuilder::new(Minkowski::selfless_symbol())
+                                        .add_arg(*original_dimension)
+                                        .finish(),
+                                )
+                            } else {
+                                builder.add_arg(*argument)
+                            }
+                        },
+                    );
+                    vectors.insert(normalized.finish(), original.finish());
+                }
+                for argument in arguments {
+                    if !VakintTerm::is_spenso_minkowski_representation(argument) {
+                        collect(argument, dimension, vectors);
+                    }
+                }
+                return;
+            }
+            for child in expression.children() {
+                collect(child, dimension, vectors);
+            }
+        }
+
+        let mut vectors = BTreeMap::new();
+        collect(numerator, dimension, &mut vectors);
+        vectors
+    }
+
+    fn next_dot_dummy_index(numerator: AtomView<'_>) -> usize {
+        let mut largest = 0;
+        let mut reserve = |index| {
+            if let Ok(index) = usize::try_from(index) {
+                largest = largest.max(index);
+            }
+        };
+        numerator.visitor(&mut |view| {
+            let AtomView::Fun(function) = view else {
+                return true;
+            };
+            if function.get_symbol() == S.dot_dummy_ind && function.get_nargs() == 1 {
+                reserve(function.get(0));
+            } else if [S.k, S.p].contains(&function.get_symbol()) && function.get_nargs() == 2 {
+                reserve(function.get(1));
+            } else if function.get_symbol() == S.g {
+                for index in function {
+                    reserve(index);
+                }
+            } else if function.get_symbol() == S.tensor {
+                for index in function.iter().skip(1) {
+                    reserve(index);
+                }
+            } else if let Some((_, index)) = Self::spenso_minkowski_slot_parts(view) {
+                reserve(index);
+            }
+            true
+        });
+        largest + 1
+    }
+
+    fn bridge_opaque_projectors(numerator: AtomView<'_>, next_dummy: &mut usize) -> Atom {
+        let projected = numerator.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            let arguments = function.iter().collect::<Vec<_>>();
+
+            if function.get_symbol() == ETS.metric && arguments.len() == 2 {
+                let Some((_left_dimension, left_index)) =
+                    Self::spenso_minkowski_slot_parts(arguments[0])
+                else {
+                    return;
+                };
+                let Some((_right_dimension, right_index)) =
+                    Self::spenso_minkowski_slot_parts(arguments[1])
+                else {
+                    return;
+                };
+                let left_opaque = Self::original_opaque_slot(left_index);
+                let right_opaque = Self::original_opaque_slot(right_index);
+                if left_opaque.is_some() || right_opaque.is_some() {
+                    **out = FunctionBuilder::new(S.g)
+                        .add_arg(left_opaque.unwrap_or(arguments[0]))
+                        .add_arg(right_opaque.unwrap_or(arguments[1]))
+                        .finish();
+                }
+                return;
+            }
+
+            if function.get_symbol() != S.p && function.get_symbol() != *FEYNKIT_EXTERNAL_VECTOR {
+                return;
+            }
+            let Some(slot) = arguments.last() else {
+                return;
+            };
+            let Some((slot_dimension, index)) = Self::spenso_minkowski_slot_parts(*slot) else {
+                return;
+            };
+            let Some(opaque_slot) = Self::original_opaque_slot(index) else {
+                return;
+            };
+            let dummy = S.dot_dummy_ind(*next_dummy);
+            *next_dummy += 1;
+            if function.get_symbol() == *FEYNKIT_EXTERNAL_VECTOR {
+                let Some(AtomView::Fun(metadata)) = arguments.first() else {
+                    return;
+                };
+                if metadata.get_symbol() != SPENSO_TAG.pure_scalar || metadata.get_nargs() != 1 {
+                    return;
+                }
+                let original = metadata.iter().next().unwrap();
+                let original_dimension =
+                    Self::compact_spenso_minkowski_vector_representation(original)
+                        .and_then(|representation| match representation {
+                            AtomView::Fun(representation) => representation.iter().next(),
+                            _ => None,
+                        })
+                        .unwrap_or(slot_dimension);
+                let indexed_slot = FunctionBuilder::new(Minkowski::selfless_symbol())
+                    .add_arg(original_dimension)
+                    .add_arg(&dummy)
+                    .finish();
+                let Some(vector) =
+                    Self::replace_compact_minkowski_slot(original, indexed_slot.as_view())
+                else {
+                    return;
+                };
+                **out = FunctionBuilder::new(ETS.metric)
+                    .add_arg(opaque_slot)
+                    .add_arg(&indexed_slot)
+                    .finish()
+                    * vector;
+                return;
+            }
+            // Keep Vakint's established metric/vector boundary convention.
+            // GammaLoop upgrades this paired raw dummy to its topology-local
+            // Spenso index before simplifying the metric. Replacing the pair
+            // by a direct shared slot changes bispinor-projector semantics in
+            // the existing renormalization pipeline.
+            let vector = arguments[..arguments.len() - 1]
+                .iter()
+                .fold(
+                    FunctionBuilder::new(function.get_symbol()),
+                    |builder, argument| builder.add_arg(*argument),
+                )
+                .add_arg(&dummy)
+                .finish();
+            **out = FunctionBuilder::new(S.g)
+                .add_arg(opaque_slot)
+                .add_arg(&dummy)
+                .finish()
+                * vector;
+        });
+
+        projected.replace_map(|term, _context, out| {
+            let Some((_slot_dimension, index)) = Self::spenso_minkowski_slot_parts(term) else {
+                return;
+            };
+            if let Some(original_slot) = Self::original_opaque_slot(index) {
+                **out = original_slot.to_owned();
+            }
+        })
+    }
+
+    fn replace_compact_minkowski_slot(
+        vector: AtomView<'_>,
+        replacement: AtomView<'_>,
+    ) -> Option<Atom> {
+        let AtomView::Fun(function) = vector else {
+            return None;
+        };
+        let arguments = function.iter().collect::<Vec<_>>();
+        let compact_slot_position = arguments
+            .last()
+            .is_some_and(|argument| Self::is_compact_spenso_minkowski_representation(*argument))
+            .then_some(arguments.len() - 1);
+        let mut builder = FunctionBuilder::new(function.get_symbol());
+        for (position, argument) in arguments.iter().enumerate() {
+            if Some(position) != compact_slot_position {
+                builder = builder.add_arg(*argument);
+            }
+        }
+        Some(builder.add_arg(replacement).finish())
+    }
+
+    fn spenso_to_vakint_numerator(
+        numerator: AtomView<'_>,
+        dimension: &Atom,
+        opaque_compact_vectors: &BTreeMap<Atom, Atom>,
+    ) -> Atom {
+        let dots_mapped = numerator.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if function.get_symbol() != SPENSO_TAG.dot || function.get_nargs() != 2 {
+                return;
+            }
+            let arguments = function.iter().collect::<Vec<_>>();
+            let Some(left) =
+                Self::compact_spenso_vector(arguments[0], dimension, opaque_compact_vectors)
+            else {
+                return;
+            };
+            let Some(right) =
+                Self::compact_spenso_vector(arguments[1], dimension, opaque_compact_vectors)
+            else {
+                return;
+            };
+            **out = FunctionBuilder::new(S.dot)
+                .add_arg(left)
+                .add_arg(right)
+                .finish();
+        });
+
+        dots_mapped.replace_map(|term, _context, out| {
+            let AtomView::Fun(function) = term else {
+                return;
+            };
+            if let Some(vector) = opaque_compact_vectors.get(&term.to_owned()) {
+                **out = vector.clone();
+                return;
+            }
+            let arguments = function.iter().collect::<Vec<_>>();
+            if function.get_symbol() == *FEYNKIT_EXTERNAL_VECTOR {
+                if let Some(vector) = Self::restore_external_vector(&arguments, dimension) {
+                    **out = vector;
+                }
+                return;
+            }
+            if function.get_symbol() == ETS.metric && arguments.len() == 2 {
+                if arguments.iter().any(|slot| {
+                    Self::spenso_minkowski_slot_parts(*slot)
+                        .is_some_and(|(_dimension, index)| Self::is_dot_dummy_index(index))
+                }) {
+                    return;
+                }
+                let (Some(left), Some(right)) = (
+                    Self::spenso_slot_index(arguments[0], dimension),
+                    Self::spenso_slot_index(arguments[1], dimension),
+                ) else {
+                    return;
+                };
+                **out = FunctionBuilder::new(S.g)
+                    .add_arg(left)
+                    .add_arg(right)
+                    .finish();
+            } else if function.get_symbol() == S.k || function.get_symbol() == S.p {
+                let Some(slot) = arguments.last() else {
+                    return;
+                };
+                let Some(index) = Self::spenso_slot_index(*slot, dimension) else {
+                    return;
+                };
+                **out = arguments[..arguments.len() - 1]
+                    .iter()
+                    .fold(
+                        FunctionBuilder::new(function.get_symbol()),
+                        |builder, argument| builder.add_arg(*argument),
+                    )
+                    .add_arg(index)
+                    .finish();
+            }
+        })
+    }
+
+    fn compact_spenso_vector(
+        vector: AtomView<'_>,
+        dimension: &Atom,
+        opaque_compact_vectors: &BTreeMap<Atom, Atom>,
+    ) -> Option<Atom> {
+        if let Some(original) = opaque_compact_vectors.get(&vector.to_owned()) {
+            return Some(original.clone());
+        }
+        let AtomView::Fun(function) = vector else {
+            return None;
+        };
+        let arguments = function.iter().collect::<Vec<_>>();
+        if function.get_symbol() == *FEYNKIT_EXTERNAL_VECTOR {
+            return Self::restore_external_vector(&arguments, dimension);
+        }
+        if function.get_symbol() != S.k && function.get_symbol() != S.p {
+            return None;
+        }
+        let AtomView::Fun(representation) = *arguments.last()? else {
+            return None;
+        };
+        if representation.get_symbol() != Minkowski::selfless_symbol()
+            || representation.get_nargs() != 1
+            || representation.iter().next()? != dimension.as_view()
+        {
+            return None;
+        }
+        Some(
+            arguments[..arguments.len() - 1]
+                .iter()
+                .fold(
+                    FunctionBuilder::new(function.get_symbol()),
+                    |builder, argument| builder.add_arg(*argument),
+                )
+                .finish(),
+        )
+    }
+
+    fn restore_external_vector(arguments: &[AtomView<'_>], dimension: &Atom) -> Option<Atom> {
+        let [AtomView::Fun(metadata), slot] = arguments else {
+            return None;
+        };
+        // Original vector syntax is opaque metadata, not another tensor port.
+        if metadata.get_symbol() != SPENSO_TAG.pure_scalar || metadata.get_nargs() != 1 {
+            return None;
+        }
+        let original = metadata.iter().next()?;
+        let AtomView::Fun(representation) = slot else {
+            return None;
+        };
+        if representation.get_symbol() != Minkowski::selfless_symbol()
+            || !matches!(representation.get_nargs(), 1 | 2)
+            || representation.iter().next()? != dimension.as_view()
+        {
+            return None;
+        }
+        if representation.get_nargs() == 1 {
+            return Some(original.to_owned());
+        }
+
+        let index = representation.iter().nth(1)?;
+        let AtomView::Fun(original_function) = original else {
+            return None;
+        };
+        let original_arguments = original_function.iter().collect::<Vec<_>>();
+        if original_arguments
+            .last()
+            .is_some_and(|argument| Self::is_compact_spenso_minkowski_representation(*argument))
+        {
+            let original_dimension = match *original_arguments.last().unwrap() {
+                AtomView::Fun(original_representation) => original_representation.iter().next()?,
+                _ => return None,
+            };
+            let indexed_representation = FunctionBuilder::new(Minkowski::selfless_symbol())
+                .add_arg(original_dimension)
+                .add_arg(index)
+                .finish();
+            return Some(
+                original_arguments[..original_arguments.len() - 1]
+                    .iter()
+                    .fold(
+                        FunctionBuilder::new(original_function.get_symbol()),
+                        |builder, argument| builder.add_arg(*argument),
+                    )
+                    .add_arg(indexed_representation)
+                    .finish(),
+            );
+        }
+        Some(
+            original_arguments
+                .iter()
+                .fold(
+                    FunctionBuilder::new(original_function.get_symbol()),
+                    |builder, argument| builder.add_arg(*argument),
+                )
+                .add_arg(index)
+                .finish(),
+        )
+    }
+
+    fn spenso_slot_index(slot: AtomView<'_>, dimension: &Atom) -> Option<Atom> {
+        let AtomView::Fun(representation) = slot else {
+            return None;
+        };
+        if representation.get_symbol() != Minkowski::selfless_symbol()
+            || representation.get_nargs() != 2
+        {
+            return None;
+        }
+        let arguments = representation.iter().collect::<Vec<_>>();
+        (arguments[0] == dimension.as_view()).then(|| arguments[1].to_owned())
     }
 }
 
@@ -3379,6 +4435,7 @@ impl Vakint {
     }
 
     pub fn new() -> Result<Self, VakintError> {
+        citations::USED_CITATIONS.record(citations::CitationSource::Vakint);
         // Force initialization of symbolica symbols with proper attributes
         LazyLock::force(&S);
 
@@ -4784,7 +5841,8 @@ Evaluated (n_loops=1, mu_r=1) :
     pub fn convert_from_dot_notation(atom: AtomView) -> Atom {
         let dummy_pat = function!(S.dot_dummy_ind, S.a_).to_pattern();
 
-        atom.replace(S.dot(S.a_, S.b_).pow(Atom::var(S.c_)))
+        let indexed = atom
+            .replace(S.dot(S.a_, S.b_).pow(Atom::var(S.c_)))
             .with(S.dot_pow(S.a_, S.b_, S.c_))
             .replace(S.dot(S.a_, S.b_))
             .with(S.dot_pow(S.a_, S.b_, 1))
@@ -4792,97 +5850,53 @@ Evaluated (n_loops=1, mu_r=1) :
             .when(S.c_.filter(|a| a < 0))
             .with(S.dot_pow(S.a_, S.b_, -Atom::var(S.c_)).pow(-1))
             .map_terms_single_core(|a| {
-                let mut dummy = 1;
-                for m in a.replace(&dummy_pat).match_iter() {
-                    let Ok(d) = usize::try_from(&m[&S.a_]) else {
-                        continue;
-                    };
-                    if dummy <= d {
-                        dummy = d;
-                    }
-                }
-                dummy += 1;
+                // Numeric source slots and generated dot labels later share
+                // the backend's index chart. Reserve both before introducing
+                // a contraction, including represented native source slots.
+                let mut dummy = VakintTerm::next_dot_dummy_index(a).max(2);
                 let first_new_dummy = dummy;
 
-                let mut a = a.to_owned();
-                loop {
-                    let dummy_wrapped = S.dot_dummy_ind(dummy);
-                    let new = a
-                        .replace(S.dot_pow(S.a_, S.b_, S.c_))
-                        .once()
-                        .with_map(move |m| {
-                            let Match::Single(a) = m.get(S.a_).unwrap() else {
-                                unreachable!()
-                            };
-                            let Match::Single(b) = m.get(S.b_).unwrap() else {
-                                unreachable!()
-                            };
-                            let rest = S
-                                .dot_pow(S.a_, S.b_, Atom::var(S.c_) - 1)
-                                .to_pattern()
-                                .replace_wildcards_with_matches(m);
-
-                            // if let (Ok(a), Ok(b)) =
-                            //     (FunctionBuilder::try_from(m.get(S.a_)), FunctionBuilder::try_from(b))
-                            // {
-                            //     a.add_arg(dummy).finish() * b.add_arg(dummy).finish() * rest
-                            // }
-                            match (a, b) {
-                                (AtomView::Var(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Var(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Var(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                (AtomView::Fun(a), AtomView::Fun(b)) => {
-                                    FunctionBuilder::new(a.get_symbol())
-                                        .add_args(a.iter().collect::<Vec<_>>())
-                                        .add_arg(&dummy_wrapped)
-                                        .finish()
-                                        * FunctionBuilder::new(b.get_symbol())
-                                            .add_args(b.iter().collect::<Vec<_>>())
-                                            .add_arg(&dummy_wrapped)
-                                            .finish()
-                                        * rest
-                                }
-                                _ => S
-                                    .dot_pow(S.a_, S.b_, S.c_)
-                                    .to_pattern()
-                                    .replace_wildcards_with_matches(m),
-                            }
-                        })
-                        .replace(S.dot_pow(S.a_, S.b_, 0))
-                        .with(1);
-
-                    if new == a {
-                        break;
+                // Visit each dot once. Replacing a single occurrence and
+                // rescanning the whole factorized numerator for the next one
+                // made this conversion quadratic in the number of dots.
+                let a = a.replace_map_bottom_up(|view, _, out| {
+                    let AtomView::Fun(dot) = view else { return };
+                    if dot.get_symbol() != S.dot_pow || dot.get_nargs() != 3 {
+                        return;
                     }
-                    a = new;
-                    dummy += 1;
-                }
+                    let arguments = dot.iter().collect::<Vec<_>>();
+                    let [left, right, exponent] = arguments.as_slice() else {
+                        unreachable!()
+                    };
+                    let Ok(copies) = usize::try_from(*exponent) else {
+                        // A non-integral scalar power has no finite indexed
+                        // product. Preserve its original compact notation.
+                        **out = S.dot(*left, *right).pow(*exponent);
+                        return;
+                    };
+                    if ![left, right]
+                        .iter()
+                        .all(|vector| matches!(vector, AtomView::Var(_) | AtomView::Fun(_)))
+                    {
+                        **out = S.dot(*left, *right).pow(*exponent);
+                        return;
+                    }
+                    let mut product = Atom::one();
+                    for _ in 0..copies {
+                        let index = S.dot_dummy_ind(dummy);
+                        dummy += 1;
+                        for vector in [left, right] {
+                            let indexed = match vector {
+                                AtomView::Var(vector) => FunctionBuilder::new(vector.get_symbol()),
+                                AtomView::Fun(vector) => FunctionBuilder::new(vector.get_symbol())
+                                    .add_args(vector.iter()),
+                                _ => unreachable!("vector heads were checked above"),
+                            };
+                            product *= indexed.add_arg(&index).finish();
+                        }
+                    }
+                    **out = product;
+                });
                 // Each copy of a powered scalar sum owns independent dummy
                 // contractions. Keep those copies factorized: expanding the
                 // numerator before conversion would hide index capture.
@@ -4925,7 +5939,11 @@ Evaluated (n_loops=1, mu_r=1) :
                     }
                     **out = product.pow(exponent.signum());
                 })
-            })
+            });
+        // Both tensor reduction and scalar integration can request indexed
+        // output. A native vector already declares its compact representation;
+        // bind the generated index there instead of leaving an extra raw port.
+        VakintTerm::repair_expanded_spenso_vector_slots(indexed.as_view())
     }
 
     pub fn convert_to_dot_notation(
@@ -5276,6 +6294,17 @@ Evaluated (n_loops=1, mu_r=1) :
             additional_user_symbols,
         )?;
 
+        // Index metadata bypasses FORM and also identifies vector-mapping
+        // sources. Return it in the caller's epsilon convention, as at input.
+        let indices = indices
+            .into_iter()
+            .map(|index| {
+                index
+                    .replace(vk_parse!("ep").unwrap().to_pattern())
+                    .with(vk_parse!(&settings.epsilon_symbol).unwrap())
+            })
+            .collect();
+
         Ok((form_header_additions, expression_str, indices))
     }
 
@@ -5486,6 +6515,7 @@ Evaluated (n_loops=1, mu_r=1) :
             }
         }
 
+        USED_CITATIONS.record(CitationSource::PySecDec);
         let mut cmd = Command::new(settings.python_exe_path.as_str());
         cmd.arg(input[0].clone().0);
         for opt in options {
@@ -5564,6 +6594,7 @@ Evaluated (n_loops=1, mu_r=1) :
             fs::write(tmp_dir.join(resource), source)?;
         }
         fs::write(tmp_dir.join(&input.0), &input.1)?;
+        USED_CITATIONS.record(CitationSource::Form);
         let mut cmd = Command::new(settings.form_exe_path.as_str());
         for opt in options {
             cmd.arg(opt);
@@ -5767,6 +6798,70 @@ mod tests {
             assert!(!method.supports(&settings, &topology), "{propagators}");
             settings.number_of_terms_in_epsilon_expansion = 6;
         }
+    }
+
+    #[test]
+    fn form_roundtrip_restores_epsilon_in_saved_lorentz_indices() {
+        let vakint = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            epsilon_symbol: "form_saved_index::epsilon".into(),
+            ..Default::default()
+        };
+        let epsilon = vk_parse!(&settings.epsilon_symbol).unwrap();
+        let mu = vk_parse!("form_saved_index::mu").unwrap();
+        let index = function!(
+            Minkowski::selfless_symbol(),
+            Atom::num(4) - 2 * &epsilon,
+            &mu
+        );
+        let coefficient = Atom::one() + &epsilon;
+        let source = function!(vk_symbol!("p1"), &index);
+        let target = function!(S.p, 1, &index);
+        let metric = &coefficient * function!(vk_symbol!(METRIC_SYMBOL), &index, &mu);
+        for (expression, expected, mapping) in [
+            (
+                &coefficient * function!(vk_symbol!("vec1"), vk_parse!("p1").unwrap(), &index),
+                &coefficient * &target,
+                BTreeMap::from([(source, target)]),
+            ),
+            (metric.clone(), metric, BTreeMap::default()),
+        ] {
+            for substitute_indices in [false, true] {
+                let (_, serialized, indices) = vakint
+                    .prepare_expression_for_form(
+                        &settings,
+                        expression.clone(),
+                        substitute_indices,
+                        &[],
+                    )
+                    .unwrap();
+                assert_eq!(indices.is_empty(), !substitute_indices);
+                assert!(
+                    indices
+                        .iter()
+                        .all(|index| !index.contains_symbol(vk_symbol!("ep")))
+                );
+                let restored = vakint
+                    .process_form_output(&settings, serialized, indices, mapping.clone())
+                    .unwrap();
+                assert_eq!(restored, expected);
+                assert!(!restored.contains_symbol(vk_symbol!("ep")));
+            }
+        }
+        let declaration = Atom::var(Minkowski::selfless_symbol()).to_canonical_string();
+        assert!(declaration.contains("spenso::self_dual"));
+        let conflicting =
+            declaration.replacen("spenso::self_dual", "form_saved_index::conflicting_tag", 1);
+        assert!(
+            vakint
+                .process_form_output(
+                    &settings,
+                    format!("{conflicting}(4,form_saved_index::mu)"),
+                    Vec::new(),
+                    BTreeMap::default(),
+                )
+                .is_err()
+        );
     }
 
     #[test]
@@ -6050,6 +7145,61 @@ mod tests {
     }
 
     #[test]
+    fn tensor_backend_modes_retain_powered_external_coefficients() {
+        let vakint = Vakint::new().unwrap();
+        let spectator =
+            vk_parse!("(coefficient_a+coefficient_b)^11*(coefficient_c+coefficient_d)").unwrap();
+        for tensor_reduction_method in [
+            TensorReductionMethod::FeynKit,
+            TensorReductionMethod::AlphaLoop,
+        ] {
+            for project_onto_tensor_integrals in [false, true] {
+                let settings = VakintSettings {
+                    tensor_reduction_method,
+                    project_onto_tensor_integrals,
+                    use_dot_product_notation: true,
+                    ..VakintSettings::default()
+                };
+                let mut term = VakintTerm {
+                    integral: vk_parse!("topo(I1L(coefficient_mass_squared,3))").unwrap(),
+                    numerator: &spectator * vk_parse!("k(1,31)*k(1,32)").unwrap(),
+                    vectors: vec![("k".into(), 1)],
+                };
+                term.tensor_reduce(&vakint, &settings).unwrap();
+                assert!(
+                    term.numerator
+                        .pattern_match(&spectator.to_pattern(), None, None)
+                        .next()
+                        .is_some(),
+                    "{tensor_reduction_method:?}, projected={project_onto_tensor_integrals}: {}",
+                    term.numerator
+                );
+                // Compare only the rational projector coefficient; FORM may
+                // write 1/(4-2*epsilon) as -1/(-4+2*epsilon). No graph
+                // numerator or powered spectator enters denominator algebra.
+                let tensor_kernel = vk_parse!("g(31,32)*dot(k(1),k(1))").unwrap();
+                let stripped = term.numerator.replace(spectator.to_pattern()).with(1);
+                assert!(
+                    stripped
+                        .pattern_match(&tensor_kernel.to_pattern(), None, None)
+                        .next()
+                        .is_some(),
+                    "the exact rank-two tensor kernel must remain present"
+                );
+                let coefficient = stripped.replace(tensor_kernel.to_pattern()).with(1);
+                let dimension =
+                    Atom::num(4) - Atom::num(2) * Atom::var(vk_symbol!(&settings.epsilon_symbol));
+                assert_eq!(
+                    (coefficient * dimension).cancel(),
+                    Atom::one(),
+                    "{tensor_reduction_method:?}, projected={project_onto_tensor_integrals}: {}",
+                    term.numerator
+                );
+            }
+        }
+    }
+
+    #[test]
     fn scalar_contraction_preserves_spectators_and_independent_components() {
         let _ = S.dot;
         let settings = VakintSettings {
@@ -6138,7 +7288,7 @@ mod tests {
                 )
             })
             .collect();
-        let input = vk_parse!("(p(1,11)+p(2,11))*p(3,11)").unwrap();
+        let input = crate::vakint_parse!("(p(1,11)+p(2,11))*p(3,11)").unwrap();
         let partial = Vakint::partial_numerical_evaluation(
             &settings,
             input.as_view(),

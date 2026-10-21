@@ -584,6 +584,7 @@ impl Vakint {
 
         let rendered = Self::render_template(include_str!("../templates/run_matad.txt"), &vars);
 
+        crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::Matad);
         let form_result = self.run_form(
             settings,
             &["matad-ng.hh".into()],

@@ -3744,8 +3744,7 @@ mod tests {
         use super::super::context::SamplingLUHostPlan;
         use crate::{
             cff::{VertexSet, esurface::Esurface},
-            dot,
-            graph::{Graph, parse::from_dot::IntoGraph},
+            graph::Graph,
             momentum::{FourMomentum, sample::ExternalFourMomenta},
             processes::{CutGroupId, CutId},
             utils::{ArbPrec, QuadFloat},
@@ -3754,15 +3753,16 @@ mod tests {
         use std::cell::Cell;
 
         test_initialise()?;
-        let graph: Graph = dot!(digraph host_source {
+        let graph: Graph = crate::finalized_runtime_dot!(digraph host_source {
+ graph [projector=1]
             ext [style=invis]
             node [num=1]
             edge [num=1 mass=1]
-            ext -> a:0 [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2]
-            b:1 -> ext [id=3]
-        })?;
+            ext -> a:0 [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            b:1 -> ext [id=3 source="{ufo_order:2}"]
+        }, &crate::utils::load_generic_model("sm"))?;
         let surface = Esurface {
             energies: vec![EdgeIndex(1), EdgeIndex(2)],
             external_shift: vec![(EdgeIndex(0), -1)],

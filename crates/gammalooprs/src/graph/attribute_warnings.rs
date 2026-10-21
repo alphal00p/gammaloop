@@ -12,13 +12,17 @@ struct AttributeSpec {
 const GRAPH_SPEC: AttributeSpec = AttributeSpec {
     entity: "graph",
     known: &[
+        "canonical_cuts_required",
+        "gammaloop_runtime",
         "group_id",
         "is_group_master",
         "num",
+        "numerator_prefactor_interface",
         "overall_factor",
         "pole_part",
         "params",
         "projector",
+        "projector_interface",
         "threshold_counterterms",
     ],
     ignored: &[
@@ -48,13 +52,16 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
     known: &[
         "dod",
         "is_cut",
+        "initial_state_connection",
         "is_dummy",
         "lmb_id",
         "mass",
         "momtrop_edge_power",
         "name",
         "num",
+        "num_interface",
         "particle",
+        "particle_id",
         "pdg",
         "vakint_edge_power",
     ],
@@ -71,6 +78,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
         "lmb_rep",
         "penwidth",
         "pin",
+        "pos",
         "sink",
         "source",
         "style",
@@ -88,7 +96,7 @@ const EDGE_SPEC: AttributeSpec = AttributeSpec {
 
 const NODE_SPEC: AttributeSpec = AttributeSpec {
     entity: "node",
-    known: &["dod", "int_id", "name", "num"],
+    known: &["dod", "int_id", "name", "num", "num_interface"],
     ignored: &[
         "color",
         "fillcolor",

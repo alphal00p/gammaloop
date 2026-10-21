@@ -15,6 +15,7 @@ use symbolica::domains::rational::Rational;
 use thiserror::Error;
 use three_dimensional_reps::utils::{rank_i64, solve_rational_system};
 
+use super::GetSingleAtom;
 use crate::{
     graph::Graph,
     momentum::SignOrZero,
@@ -2021,12 +2022,22 @@ impl Graph {
     }
 
     pub fn full_numerator_atom(&self) -> Atom {
-        self.numerator(&self.full_filter(), &self.empty_subgraph())
+        let numerator = self
+            .numerator(&self.full_filter(), &self.empty_subgraph())
+            .expect("validated graph numerator must have a compatible tensor interface")
+            .state
+            .expr;
+        let overall_factor =
+            idenso::tensor::SymbolicTensor::infer_indexed(self.overall_factor.clone())
+                .expect("the declared overall factor must have a valid scalar interface");
+        let numerator = numerator
+            .multiply(self.global_prefactor.num.clone())
+            .and_then(|value| value.multiply(self.global_prefactor.projector.clone()))
+            .and_then(|value| value.multiply(overall_factor))
+            .expect("the complete numerator must have compatible tensor ports");
+        super::AppliedFeynmanRule::from_tensor(numerator)
             .get_single_atom()
             .expect("Graph numerator should be available")
-            * &self.global_prefactor.num
-            * &self.global_prefactor.projector
-            * &self.overall_factor
     }
 
     pub fn numerator_energy_power_caps(
@@ -2155,8 +2166,8 @@ mod tests {
     use std::collections::BTreeMap;
 
     use crate::{
-        dot,
-        graph::{Graph, LMBext, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::{Graph, LMBext},
         initialisation::test_initialise,
         numerator::energy_degree::{
             EnergyCandidateFamily, EnergyPowerAnalysisError, EnergyPowerAnalyzer, EnergyReference,
@@ -2468,18 +2479,19 @@ mod tests {
     fn soft_taylor_routing_balances_the_outer_envelope_without_moving_originals()
     -> color_eyre::Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph soft_taylor_cograph {
+        let graph: Graph = finalized_runtime_dot!(digraph soft_taylor_cograph {
+            projector=1
             edge [num=1 mass=1]
             node [num=1]
             incoming [style=invis]
             outgoing [style=invis]
-            incoming -> a [id=0]
-            a -> b [id=1 lmb_id=0]
-            a -> b [id=2]
-            b -> c [id=3 lmb_id=1]
-            c -> d [id=4]
-            d -> a [id=5]
-            d -> outgoing [id=6]
+            incoming -> a [id=0 sink="{ufo_order:0}"]
+            a -> b [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            a -> b [id=2 source="{ufo_order:2}" sink="{ufo_order:1}"]
+            b -> c [id=3 lmb_id=1 source="{ufo_order:2}" sink="{ufo_order:0}"]
+            c -> d [id=4 source="{ufo_order:1}" sink="{ufo_order:0}"]
+            d -> a [id=5 source="{ufo_order:1}" sink="{ufo_order:3}"]
+            d -> outgoing [id=6 source="{ufo_order:2}"]
         })?;
         let soft_component = |index: Atom| {
             let owner = Atom::num(4);

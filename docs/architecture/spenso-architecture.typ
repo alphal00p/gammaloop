@@ -46,6 +46,22 @@ canonical order alongside its immutable `CanonicalLayout`; `reindex_storage` ins
 `Reindexed`, with a checked pending index permutation to apply to the payload. `HasStructure`
 keeps metadata separate from that payload.
 
+`IndexedStructure` names
+`Canonicalized<OrderedStructure<LibraryRep, AbstractIndex>>`. Its
+`logical_slots()` applies the retained layout to recover the declared axis order.
+The alias alone does not exclude `AbstractIndex::Open`; the strict `TryFrom`
+conversion from `PartialStructure` rejects unresolved ports, including open
+indices nested in scopes. It allocates no indices and preserves canonical slot
+order, representation partitions and both layout permutations without sorting
+again. This matters when symbolic dimensions compare equal during ordering.
+
+`PartialStructure` keeps the same layout with `PartialIndex<AbstractIndex>` for
+general symbolic and positional composition. Indexed-to-partial metadata
+projection wraps each index as explicit and retains the existing order. These
+structure operations do not rewrite tensor payloads; Idenso owns checked carrier
+conversion and proof preservation. Neither layout-bearing wrapper implements the
+canonical-storage `TensorStructure` contract of bare `OrderedStructure`.
+
 The principal materialized payloads are:
 
 - `DenseTensor<T, S>`, an element vector plus structure. Its checked constructor requires the
@@ -102,6 +118,15 @@ not a duplicate leaf cache. The graph never embeds the external library value. M
 occurs through the supplied `Library`, while opaque function nodes delegate to the supplied
 `FunctionLibrary`.
 
+`map_occurrences` materializes each graph occurrence against its current port
+bindings while reusing untouched stored aliases with the same logical layout.
+It checks surviving storage slots and records any storage permutation separately
+from the logical-position witness. `reindex_ports` applies simultaneous external
+port assignments through this boundary; it does not relabel unrelated internal
+contractions with matching labels. Concrete execution rejects unmaterialized
+bound ports. Network arithmetic refreshes its state from the resulting graph,
+and component execution invalidates logical layout observations it cannot retain.
+
 Execution follows one semantic path with interchangeable policies:
 
 ```text
@@ -125,9 +150,9 @@ is disabled or the contraction strategy performs partial graph rewrites.
 
 === Symbolic parallelism and optimized sums
 
-With `symbolica`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
-Symbolica atoms. `Auto` checks the Symbolica license once and uses a workload heuristic where an
-operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
+With `shadowing`, the process-wide `SymbolicParallelism` policy controls Rayon work involving
+Symbolica atoms. `Auto` keeps WebAssembly kernels serial; on native targets it checks the
+Symbolica license once and uses a workload heuristic where an operation provides one; `Serial` disables Rayon; `Parallel` forces Rayon and bypasses `Auto`'s
 license safety check. Configure the policy before tensor work: changing it concurrently with an
 active operation is unsupported.
 
@@ -144,7 +169,7 @@ require `SPENSO_NETWORK_PROFILE_VERBOSE`.
 
 == Symbolica parsing boundary
 
-The `symbolica` feature enables `network::parsing`. `NetworkParse` and the more general
+The `shadowing` feature enables `network::parsing`. `NetworkParse` and the more general
 `Network::try_from_view` lower a Symbolica `AtomView` into the same graph and store used by
 programmatic construction. Dispatch recognizes addition, multiplication, integer powers, and
 functions before falling back to scalar or opaque-tensor construction.
@@ -159,11 +184,17 @@ Positive powers that lower shorthand with internal dummies reparse each copy fro
 base, giving it fresh internal indices while retaining explicit boundary slots. Callers combining
 independently parsed expressions must still manage index namespaces deliberately.
 
-Scalar precontraction applies to both products and sums. For a mixed sum, parsing
-collects the pure-scalar terms and combines them in one n-ary addition; a fully
-scalar sum reuses the original normalized atom. It does not grow an intermediate
-scalar sum by repeated pairwise copying. Closed lazy tensor leaves are converted
-to their scalar entries before execution adds them, independently of leaf order.
+Trusted shallow planning uses `Network::try_from_admitted_view` with opaque
+shorthand and depth one. It shares the ordinary parser's construction and
+dispatch, while reusing established syntax and dummy-scope admission instead of
+validating and reserving the whole input again. `LeafInterfaceCache` stores exact
+boundary expressions' tensor classification and logical slots. Unchanged leaves
+reuse these facts across graph replacements, including scalar interfaces with
+internal contractions. The cache requires unchanged classification policy and
+admission facts; callbacks and materialized rewrites leave the trusted path.
+No live occurrence binding is stored in this cache: graph ports still own it.
+The profiler records misses, hits, actual syntactic visits, and uncached inference
+time separately from general structure-attempt time.
 
 The detailed dispatch and shorthand behavior are recorded in the
 #link("parsing-flow.typ")[Symbolica-to-network parsing flow]. Syntax and rewrite ownership across
@@ -174,18 +205,18 @@ Spenso and Idenso are recorded in the
 
 The default `native` feature forwards GMP/MPFR support; `wasm` selects Symbolica's Wasm backend
 with default features disabled. Native code generation is a separate `native-code-generation`
-feature. `symbolica` enables Symbolica atoms,
+feature. `shadowing` enables Symbolica atoms,
 parametric tensors, parsing, state-aware decoding, and Linnet's Symbolica adapter. `python`
 only adds PyO3 extraction for Spenso's complex scalar type; the full Python tensor surface lives
-in `spynso3`. `python-stubs` adds stub metadata and implies `python`.
+in `spynso3`. `python_stubgen` adds stub metadata and implies `python`.
 
 Structures, dense and sparse tensors, `DataTensor`, `NetworkGraph`, `NetworkStore`, and
 `Network` derive Serde and bincode representations when their generic fields support them.
-Under `symbolica`, selected types also decode through Symbolica's state map. These are type-level
+Under `shadowing`, selected types also decode through Symbolica's state map. These are type-level
 encodings, not a versioned checkpoint protocol: Spenso provides no state directory, database,
 schema migration, or cross-version compatibility promise. The optional `portable-payload`
 module carries representation and math-display declarations beside native Atom bytes through
-`symbolica-typst-atom-payload`; Spenso-aware consumers validate and register these before Atom import.
+`symbolica-typst-plugin`; Spenso-aware consumers validate and register these before Atom import.
 The caller still owns byte storage, format versioning, Symbolica-state availability, and
 library-key reconstruction.
 
@@ -231,7 +262,7 @@ Unit and snapshot tests live beside structures, dense and sparse data, contracti
 network graph and store operations, libraries, execution strategies, symbolic parsing,
 parametric tensors, and serialization-sensitive types. The default typed boundary is exercised
 with `cargo test -p spenso`; parsing and symbolic execution require
-`cargo test -p spenso --features symbolica`. Rayon behavior also depends on the Symbolica
+`cargo test -p spenso --features shadowing`. Rayon behavior also depends on the Symbolica
 parallelism setting, so performance checks should record both the Cargo feature set and runtime
 thread configuration.
 
@@ -248,5 +279,13 @@ separate from the core crate described here.
 Parsing retains scalar spectators and compatible sum boundaries. Fallible `Concretize` methods
 separate target construction from canonical layout: symbolic tensors may retain symbolic dimensions,
 while finite-component targets report errors. This uses the same `CanonicalLayout` as library leaves.
+`TensorFromExpression` returns that layout together with the resulting tensor.
+An eager opaque-word realization can contract repeated spectator ports before
+the outer network is assembled; its layout therefore describes the realized
+coordinate order. Symbolic targets retain the source layout because their
+contractions still belong to the outer network. The parser never reattaches a
+pre-contraction layout to a tensor with a smaller interface.
+The eager boundary also resolves completed lazy scaled tensors and tensor sums
+through `result_tensor`, preserving their coefficients and logical coordinates.
 Odd tensor powers preserve the remaining base after paired contractions. Completed execution waves
 release unused store payloads while retaining live aliases and tensor handles.

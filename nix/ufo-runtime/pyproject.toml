@@ -1,0 +1,8 @@
+[project]
+name = "gammaloop-ci-ufo-runtime"
+version = "0.0.0"
+requires-python = ">=3.13,<3.14"
+dependencies = ["symbolica==3.0.0", "ufo-model-loader==1.0.1"]
+
+[tool.uv]
+package = false

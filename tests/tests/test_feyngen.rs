@@ -1,9 +1,8 @@
 use color_eyre::{Result, eyre::eyre};
 use std::fs;
 
+use feynkit_graph::expressions::evaluate_overall_factor;
 use gammaloop_api::state::SyncSettings;
-use gammalooprs::feyngen::diagram_generator::evaluate_overall_factor;
-use gammalooprs::feyngen::diagram_generator::evaluate_sign_origin;
 use gammalooprs::integrands::process::amplitude::load::StandaloneEvaluatorArchive;
 use gammalooprs::integrands::process::cross_section::load::StandaloneCrossSectionArchive;
 use gammalooprs::processes::{
@@ -15,9 +14,11 @@ use gammalooprs::processes::{
 
 use gammaloop_integration_tests::{CLIState, get_test_cli, get_tests_workspace_path, run_commands};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, AtomView},
     domains::float::Complex,
+    function,
     printer::CanonicalOrderingSettings,
+    symbol,
 };
 use tracing::debug;
 
@@ -34,6 +35,47 @@ const DDX_AMPLITUDE_SELECTION_OPTIONS: &str =
 const DDXG_RAISED_CUT_PROCESS_NAME: &str = "epem_ddxg_raised_cuts";
 const DDXG_RAISED_CUT_INTEGRAND_NAME: &str = "LO";
 const DDXG_RAISED_CUT_ONLY_DIAGRAMS_COMMAND: &str = "generate xs e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign -p epem_ddxg_raised_cuts -i LO --only-diagrams";
+
+fn evaluate_sign_origin(factor: AtomView<'_>) -> Atom {
+    let mut result = factor.to_owned();
+    for head in [
+        "AutG",
+        "CouplingsMultiplicity",
+        "InternalFermionLoopSign",
+        "ExternalFermionOrderingSign",
+        "AntiFermionSpinSumSign",
+        "NumeratorIndependentSymmetryGrouping",
+    ] {
+        for symbol in [
+            symbol!(head),
+            symbol!(&format!("feynkit_generator_factor::{head}")),
+        ] {
+            result = result
+                .replace(function!(symbol, Atom::var(symbol!("x_"))).to_pattern())
+                .with(Atom::var(symbol!("x_")).to_pattern());
+        }
+    }
+    for head in [
+        symbol!("NumeratorDependentGrouping"),
+        symbol!("feynkit_generator::NumeratorDependentGrouping"),
+        symbol!("feynkit_generator_factor::NumeratorDependentGrouping"),
+    ] {
+        result = result
+            .replace(function!(
+                head,
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ))
+            .with(function!(
+                symbol!("Group"),
+                Atom::var(symbol!("GraphId_")),
+                Atom::var(symbol!("ratio_")),
+                Atom::var(symbol!("GraphSymmetryFactor_"))
+            ));
+    }
+    result.expand()
+}
 
 fn count_graphs_in_processes(cli: &CLIState) -> (usize, Atom) {
     assert_eq!(cli.state.process_list.processes.len(), 1);
@@ -457,10 +499,14 @@ fn tth_master_vertex_signature_specs(
                 .underlying
                 .iter_nodes()
                 .filter_map(|(_, _, vertex)| {
-                    vertex
-                        .vertex_rule
-                        .as_ref()
-                        .map(|vertex_rule| vertex_rule.name.to_string())
+                    vertex.vertex_rule.as_ref().map(|vertex_rule| {
+                        cli.state
+                            .model
+                            .vertex_rule_by_id(*vertex_rule)
+                            .expect("runtime graph vertex rule must belong to its model")
+                            .name
+                            .clone()
+                    })
                 })
                 .collect::<Vec<_>>();
             vertex_rule_names.sort();
@@ -477,6 +523,7 @@ fn tth_master_vertex_signature_specs(
 fn tth_signature_inventory(cli: &CLIState) -> GraphSelectionSignatureInventory {
     let cross_section = tth_cross_section(cli);
     GraphSelectionSignatureInventory::from_master_graphs(
+        &cli.state.model,
         cross_section.graph_group_structure.iter().map(|group| {
             let master_graph_id = group
                 .into_iter()
@@ -618,11 +665,13 @@ fn feyngen_str(
                 .include_namespace(false)
                 .include_attributes(false),
         ),
-        evaluate_overall_factor(overall_factor_sum.as_view()).to_canonically_ordered_string(
-            CanonicalOrderingSettings::new()
-                .include_namespace(false)
-                .include_attributes(false),
-        )
+        evaluate_overall_factor(overall_factor_sum.as_view())
+            .expand()
+            .to_canonically_ordered_string(
+                CanonicalOrderingSettings::new()
+                    .include_namespace(false)
+                    .include_attributes(false),
+            )
     ))
 }
 
@@ -639,18 +688,18 @@ fn closed_ghost_loops_preserve_statistics_weights() -> Result<()> {
     // The ghost bubble has one closed Grassmann minus and the external
     // fermion-ordering minus. Grouping the identical u/d bubbles keeps ratio1.
     assert_snapshot!(
-        feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes", false)?,
+        feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping", false)?,
         @"10 | -7/2 = -7/2"
     );
     assert_snapshot!(
         feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping group_identical_graphs_up_to_sign", false)?,
-        @"9 | -11/2+Group(0,1,1)+Group(7,1,1) = -7/2"
+        @"9 | -11/2+Group(5,1,1)+Group(9,1,1) = -7/2"
     );
     // Each ghost-bubble supergraph has a closed ghost loop and a closed
     // quark loop, so their two Grassmann signs multiply to +1.
     assert_snapshot!(
         feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true", false)?,
-        @"16 | -3/2+Group(0,1,1)+Group(1,1,1)+Group(10,1,-2)+Group(11,1,-2)+Group(12,1,-1)+Group(13,1,-1)+Group(14,1,-1)+Group(15,1,-1)+Group(16,1,-1)+Group(17,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(23,1,-1)+Group(24,1,-1)+Group(3,1,-1)+Group(4,1,1)+Group(5,1,1)+Group(6,1,-1)+Group(8,1,-1/2)+Group(9,1,-1/2) = -29/2"
+        @"16 | -3/2+Group(1,1,1)+Group(11,1,-1)+Group(12,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(2,1,1)+Group(20,1,-1)+Group(21,1,-1)+Group(22,1,-1)+Group(23,1,-1)+Group(24,1,-1)+Group(25,1,1)+Group(26,1,-1)+Group(27,1,1)+Group(28,1,-1)+Group(29,1,-1)+Group(4,1,-1/2)+Group(5,1,-1/2)+Group(6,1,-1)+Group(7,1,-1)+Group(8,1,-1)+Group(9,1,-1) = -29/2"
     );
     gammaloop_integration_tests::clean_test(&cli.cli_settings.state.folder);
     Ok(())
@@ -1283,7 +1332,7 @@ fn cp_fix_from_symbolica()->Result<()>{
 
     // Group IDs here use the explicitly requested CP canonicalization;
     // default forward-side generation has a different label assignment.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-12*G^2*ee^(-2)+-9*G^2*Nc*ee^(-2)+9*G^2*Nc^(-1)*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//good
     Ok(())
 }
 
@@ -1304,7 +1353,7 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
             generate_graphs_and_count(
                 &mut cli,
                 "xs",
-                "a > d d~ [{{2}}] --numerator-grouping only_detect_zeroes",
+                "a > d d~ [{{2}}] --filter-zero-color --numerator-grouping no_grouping",
                 false
             )?
             .1
@@ -1350,7 +1399,7 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
     let _ = generate_graphs_and_count(
         &mut cli,
         "amp",
-        "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",
+        "{} > {} | g d d~ ghG ghG~ [{4}] --filter-zero-color --numerator-grouping no_grouping --number-of-factorized-loop-subtopologies 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",
         false,
     )?;
     let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
@@ -1366,10 +1415,11 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
         let graph = &amplitude_graph.graph;
         let fermions: SuBitGraph = graph
             .underlying
-            .from_filter(|edge| edge.particle.is_fermion());
-        let ghosts: SuBitGraph = graph
-            .underlying
-            .from_filter(|edge| edge.particle.is_anticommutating() && !edge.particle.is_fermion());
+            .from_filter(|edge| edge.particle.is_fermion(&graph.model));
+        let ghosts: SuBitGraph = graph.underlying.from_filter(|edge| {
+            edge.particle.is_anticommutating(&graph.model)
+                && !edge.particle.is_fermion(&graph.model)
+        });
         // These QCD species form disjoint closed chains, so cycle rank counts loops.
         for subset in [&fermions, &ghosts] {
             for (_, neighbors, _) in graph.underlying.iter_nodes_of(subset) {
@@ -1390,7 +1440,7 @@ fn test_vacuum_amplitude_kaapo() -> Result<()> {
         bucket.0 += 1;
         bucket.1 += &weight;
         // Undo only the new ghost statistics sign and restore the old F >= 1 filter.
-        // OnlyDetectZeroes does not merge nonzero numerators; UUV1 signs cannot alter zeros.
+        // Color filtering does not merge nonzero numerators; UUV1 signs cannot alter zeros.
         if f > 0 {
             old_count += 1;
             old_sum += weight * Atom::num(-1).pow(g as i64);
@@ -1422,33 +1472,33 @@ fn test_generate_sm_a_ddx() -> Result<()> {
 
     // Only d, g and a as particle contents
     // Test the validity of multiple final-state specifications for cross-section generation
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > {d d~, g g} [{{1}}] | d g a --numerator-grouping only_detect_zeroes",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > {d d~, g g} [{{1}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ g [{{2}}] | d g a --symmetrize-left-right-states true",false)?,@"2 | -1+Group(1,1,-1)+Group(2,1,-1) = -3");//good
     // A physical Z request requires its complete covariant cut multiplet.
-    let incomplete_z = feyngen_str(&mut cli, "xs", "a > d d~ z [{{2}}] | d g a --numerator-grouping only_detect_zeroes",false).unwrap_err().to_string();
+    let incomplete_z = feyngen_str(&mut cli, "xs", "a > d d~ z [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false).unwrap_err().to_string();
     assert!(incomplete_z.contains("covariant cut multiplet of physical PDG 23"));
     assert!(incomplete_z.contains("complete vector/Goldstone/ghost sector"));
     // An excluded scalar final state still produces no graphs.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ H [{{2}}] | d g a --numerator-grouping only_detect_zeroes",false)?,@"0 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ H [{{2}}] | d g a --filter-zero-color --numerator-grouping no_grouping",false)?,@"0 | 0 = 0");
 
 
     // Full particle contents
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{1}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"12 | -9+Group(10,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(8,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//not same (12 vs 10)
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(10,12*G^2*ee^(-2),-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,12*G^2*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-36*G^2*ee^(-2)");//not same (12 vs 10)
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -7+Group(10,12*G^2*ee^(-2),-1)+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(8,12*G^2*ee^(-2),-1)+Group(9,12*G^2*ee^(-2),-1) = -12+-36*G^2*ee^(-2)");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(11,1,-1)+Group(12,1,-1)+Group(5,1,-1)+Group(6,1,-1)+Group(8,1,-1)+Group(9,1,-1) = -15");//not same (12 vs 10)
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states false --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"12 | -9+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//not same (12 vs 10)
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,12*G^2*ee^(-2),-1)+Group(6,12*G^2*ee^(-2),-1)+Group(7,12*G^2*ee^(-2),-1)+Group(9,1,-1) = -12+-36*G^2*ee^(-2)");// symmetric canonical and sampled comparisons agree
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,12*G^2*ee^(-2),-1)+Group(6,12*G^2*ee^(-2),-1)+Group(7,12*G^2*ee^(-2),-1)+Group(9,1,-1) = -12+-36*G^2*ee^(-2)");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"12 | -9+Group(10,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(6,1,-1)+Group(7,1,-1)+Group(9,1,-1) = -15");//not same (12 vs 10)
 
     // Only 1-flavour pure QCD corrections
     assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{1}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"1 | -1 = -1");//good
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{2}} QCD=1] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"2 | -1+Group(1,1,-1)+Group(2,1,-1) = -3");//good
     // Each of the three ghost-bubble graphs has one closed ghost loop and
     // one closed quark loop: their two Grassmann signs multiply to +1.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"16 | -3/2+Group(0,1,1)+Group(1,1,1)+Group(10,1,-2)+Group(11,1,-2)+Group(12,1,-1)+Group(13,1,-1)+Group(14,1,-1)+Group(15,1,-1)+Group(16,1,-1)+Group(17,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(23,1,-1)+Group(24,1,-1)+Group(3,1,-1)+Group(4,1,1)+Group(5,1,1)+Group(6,1,-1)+Group(8,1,-1/2)+Group(9,1,-1/2) = -29/2");//good
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{3}} QCD=2] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",false)?,@"16 | -3/2+Group(1,1,1)+Group(11,1,-1)+Group(12,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(2,1,1)+Group(20,1,-1)+Group(21,1,-1)+Group(22,1,-1)+Group(23,1,-1)+Group(24,1,-1)+Group(25,1,1)+Group(26,1,-1)+Group(27,1,1)+Group(28,1,-1)+Group(29,1,-1)+Group(4,1,-1/2)+Group(5,1,-1/2)+Group(6,1,-1)+Group(7,1,-1)+Group(8,1,-1)+Group(9,1,-1) = -29/2");//good
     // Neutral adjoint ghost CP retains derivative flow; directed AutG
     // and every closed Grassmann circuit fix these certified class weights.
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{4}} QCD=3] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",true)?,@"161 | -20/3+Group(0,1,1)+Group(1,1,1)+Group(10,1,-1)+Group(100,1,-1)+Group(103,1,1)+Group(104,1,1)+Group(107,1,1)+Group(108,1,1)+Group(11,1,-1)+Group(110,1,-1/4)+Group(111,1,-1/4)+Group(112,1,-1)+Group(113,1,-1)+Group(114,1,-1/2)+Group(115,1,-1/2)+Group(116,1,-1/2)+Group(117,1,-1/2)+Group(118,1,-1/4)+Group(119,1,-1/4)+Group(12,1,1)+Group(120,1,-1/6)+Group(121,1,-1/6)+Group(122,1,-1)+Group(123,1,-1)+Group(124,1,-1)+Group(125,1,-1)+Group(126,1,-2)+Group(127,1,-2)+Group(128,1,1)+Group(129,2/7,1)+Group(13,1,1)+Group(130,2/7,1)+Group(131,1,1)+Group(132,1,1)+Group(133,2/7,1)+Group(134,1,-1)+Group(135,1,-1)+Group(136,2/7,1)+Group(137,1,1)+Group(138,1,-1)+Group(139,1,-1)+Group(14,1,1)+Group(140,1,-1/2)+Group(141,1,-1/2)+Group(142,1,1)+Group(143,1,1)+Group(144,1,1)+Group(145,1,1)+Group(146,1,1)+Group(147,1,1)+Group(148,1,-1/2)+Group(149,1,-1/2)+Group(15,1,1)+Group(150,1,-1)+Group(151,1,-1)+Group(152,1,-1)+Group(153,1,-1)+Group(154,1,-1/2)+Group(155,1,-1/2)+Group(156,1,-1)+Group(157,1,-1)+Group(158,1,-1/2)+Group(159,1,-1/2)+Group(16,1,2)+Group(160,1,-1)+Group(161,1,-1)+Group(164,1,-2)+Group(165,1,-2)+Group(166,1,-1)+Group(167,1,-1)+Group(168,1,-1)+Group(169,1,-1)+Group(17,1,2)+Group(170,1,-1)+Group(171,1,-1)+Group(172,1,-2)+Group(173,1,-2)+Group(174,1,-2)+Group(175,1,-2)+Group(176,1,-2)+Group(177,1,-2)+Group(178,1,-2)+Group(179,1,-2)+Group(18,1,2)+Group(180,1,-2)+Group(181,1,-2)+Group(182,1,-1)+Group(183,1,-1)+Group(184,1,-2)+Group(185,1,-2)+Group(186,1,1)+Group(187,1,1)+Group(188,1,1)+Group(189,1,1)+Group(19,1,2)+Group(190,1,1)+Group(191,1,1)+Group(192,1,-1/2)+Group(193,1,-1/2)+Group(194,1,-1)+Group(195,1,-1)+Group(196,1,-1)+Group(197,1,-1)+Group(198,1,-1)+Group(199,1,-1)+Group(2,1,2)+Group(20,1,2)+Group(200,1,-1)+Group(201,1,-1)+Group(207,1,-1)+Group(208,1,-1)+Group(209,1,-1)+Group(21,1,2)+Group(210,1,-1)+Group(213,1,-1)+Group(214,1,-1)+Group(215,1,-1)+Group(216,1,-1)+Group(219,1,-2)+Group(22,1,1/2)+Group(220,1,-2)+Group(221,1,-2)+Group(222,1,-2)+Group(223,1,1)+Group(224,-7/2,1)+Group(225,1,-2)+Group(226,1,-2)+Group(227,1,-2)+Group(228,1,-2)+Group(229,1,-1)+Group(23,1,1/2)+Group(230,1,-1)+Group(231,1,-1)+Group(232,1,-1)+Group(233,1,-1/2)+Group(234,1,-1/2)+Group(235,1,-1)+Group(236,1,-1)+Group(237,1,-1/2)+Group(238,1,-1/2)+Group(24,1,2)+Group(243,1,-2)+Group(244,1,-2)+Group(245,1,-2)+Group(246,1,-2)+Group(25,1,2)+Group(251,1,-2)+Group(252,1,-2)+Group(253,1,-2)+Group(254,1,-2)+Group(255,1,-1/2)+Group(256,1,-1/2)+Group(257,1,-1)+Group(258,1,-1)+Group(259,1,-1)+Group(26,1,1)+Group(260,1,-1)+Group(265,1,-1/2)+Group(266,1,-1/2)+Group(27,1,1)+Group(271,1,1)+Group(272,1,1)+Group(274,1,-1)+Group(275,1,-1)+Group(276,1,-1)+Group(277,1,-1)+Group(278,1,-2)+Group(279,1,-2)+Group(28,1,1)+Group(280,1,-2)+Group(281,1,-2)+Group(282,1,-2)+Group(283,1,-2)+Group(284,1,-2)+Group(285,1,-2)+Group(286,1,-2)+Group(287,1,-2)+Group(288,1,-2)+Group(289,1,-2)+Group(29,1,1)+Group(290,1,-2)+Group(291,1,-2)+Group(292,1,-1)+Group(293,1,-1)+Group(298,1,-2)+Group(299,1,-2)+Group(3,1,2)+Group(30,1,1)+Group(300,1,-1)+Group(301,1,-1)+Group(303,1,2)+Group(304,1,2)+Group(305,1,2)+Group(306,1,2)+Group(307,1,1)+Group(308,1,1)+Group(309,1,2)+Group(31,1,1)+Group(310,1,2)+Group(311,1,2)+Group(312,1,2)+Group(313,1,-1)+Group(314,1,-1)+Group(315,1,-1)+Group(316,1,-1)+Group(317,1,-1)+Group(318,1,-1)+Group(32,1,2)+Group(323,1,-1/2)+Group(324,1,-1/2)+Group(325,1,-1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,-2/7,1)+Group(329,-2/7,1)+Group(33,1,2)+Group(330,1,1)+Group(331,1,-1)+Group(332,1,-1)+Group(333,1,-1)+Group(334,1,-1)+Group(335,1,-1)+Group(336,1,-1)+Group(342,1,-2)+Group(343,1,-2)+Group(344,1,-2)+Group(345,1,-2)+Group(346,1,-2)+Group(347,1,-2)+Group(352,1,-1)+Group(353,1,-1)+Group(354,1,-2)+Group(355,1,-2)+Group(38,1,1)+Group(39,1,1)+Group(4,1,1)+Group(40,1,1)+Group(41,1,1)+Group(42,1,1)+Group(43,1,1)+Group(45,1,2)+Group(46,1,2)+Group(47,1,2)+Group(48,1,2)+Group(49,1,2)+Group(5,1,1)+Group(50,1,2)+Group(51,1,1)+Group(52,1,1)+Group(53,1,2)+Group(54,1,2)+Group(55,1,1)+Group(56,1,1)+Group(57,1,1)+Group(58,1,1)+Group(6,1,1)+Group(60,1,-1)+Group(61,1,-1)+Group(63,1,-1)+Group(64,1,1)+Group(65,1,1)+Group(66,1,-1)+Group(67,1,-1/2)+Group(68,1,-1/2)+Group(69,1,-1)+Group(7,1,1)+Group(70,1,-1)+Group(71,1,2)+Group(72,1,2)+Group(73,1,1)+Group(74,1,1)+Group(75,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(79,1,2)+Group(8,1,-2)+Group(80,1,2)+Group(81,1,1/2)+Group(82,1,1/2)+Group(83,1,1)+Group(84,1,1)+Group(85,1,-1)+Group(86,1,1)+Group(87,1,1)+Group(88,1,-1)+Group(89,1,1)+Group(9,1,-2)+Group(90,1,1)+Group(91,1,-1)+Group(96,1,-1)+Group(97,1,-1)+Group(98,1,1)+Group(99,1,1) = -1287/14");//less 158 vs 166 (lorentz cancellations)
+    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d g ghG a QED^2==2 [{{4}} QCD=3] --symmetrize-left-right-states true --symmetric-left-right-polarizations true",true)?,@"161 | -14/3+Group(1,1,1)+Group(10,1,-1)+Group(100,1,-1/2)+Group(101,1,-1/2)+Group(102,1,-1/2)+Group(103,1,-1/2)+Group(104,1,-1)+Group(105,1,-1)+Group(106,1,-1/2)+Group(107,1,-1/2)+Group(108,1,-1/2)+Group(109,1,-1/2)+Group(11,1,-1)+Group(110,1,-1/2)+Group(111,1,-1/2)+Group(113,1,-1/2)+Group(114,1,-1/2)+Group(115,1,-1/4)+Group(116,1,-1/4)+Group(117,1,-1/2)+Group(118,1,-1/2)+Group(119,1,-1/2)+Group(12,1,1)+Group(120,1,-1/2)+Group(124,1,-1/2)+Group(125,1,-1/2)+Group(128,1,-1)+Group(129,1,-1)+Group(13,1,1)+Group(130,1,-1)+Group(131,1,-1)+Group(132,1,-1/2)+Group(133,1,-1/2)+Group(134,1,-1/2)+Group(135,1,-1/2)+Group(136,1,-1/2)+Group(137,1,-1/2)+Group(138,1,-1/2)+Group(139,1,-1/2)+Group(14,1,1)+Group(140,1,-1/2)+Group(141,1,-1/2)+Group(142,1,-1/2)+Group(143,1,-1/2)+Group(147,1,-1/2)+Group(148,1,-1/2)+Group(149,1,-1/2)+Group(15,1,1)+Group(150,1,-1/2)+Group(155,1,1/2)+Group(156,1,1/2)+Group(159,1,-1)+Group(16,1,1)+Group(160,1,-1)+Group(161,1,-1)+Group(162,1,-1)+Group(163,1,-1/2)+Group(164,1,-1/2)+Group(165,1,-1/2)+Group(166,1,-1/2)+Group(167,1,-1/2)+Group(168,1,-1/2)+Group(169,1,-1/2)+Group(17,1,1)+Group(170,1,-1/2)+Group(171,1,1)+Group(172,1,1)+Group(173,1,1/2)+Group(174,1,1/2)+Group(175,1,1/2)+Group(176,1,1/2)+Group(177,1,-1/2)+Group(178,1,-1/2)+Group(179,1,-1/2)+Group(18,1,1)+Group(180,1,-1/2)+Group(181,1,-1/2)+Group(182,1,-1/2)+Group(183,1,-1/2)+Group(184,1,-1/2)+Group(185,1,-1/2)+Group(186,1,-1/2)+Group(187,1,-1/2)+Group(188,1,-1/2)+Group(189,1,-1/2)+Group(19,1,1)+Group(190,1,-1/2)+Group(191,1,-1/2)+Group(192,1,-1/2)+Group(193,1,-1)+Group(194,1,-1)+Group(195,1,-1)+Group(196,1,-1)+Group(197,1,-1)+Group(198,1,-1)+Group(199,1,-1)+Group(2,1,1)+Group(20,1,1)+Group(200,1,-1)+Group(201,1,-1)+Group(202,1,-1)+Group(203,1,-1)+Group(204,1,-1)+Group(205,1,-1)+Group(206,1,-1)+Group(207,1,-1)+Group(208,1,-1)+Group(209,1,-1)+Group(21,1,1)+Group(210,1,-1)+Group(211,1,-1)+Group(212,1,-1)+Group(213,1,-1)+Group(214,1,-1)+Group(215,1,-1)+Group(216,1,-1)+Group(217,1,-1)+Group(218,1,-1)+Group(219,1,-1)+Group(22,1,1)+Group(220,1,-1)+Group(221,1,1)+Group(222,1,1)+Group(223,1,1)+Group(224,1,1)+Group(225,1,-1)+Group(226,1,-1)+Group(227,1,1)+Group(228,1,1)+Group(229,1,-1)+Group(23,1,1)+Group(230,1,-1)+Group(231,1,-1)+Group(232,1,-1)+Group(233,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-1)+Group(237,1,-1)+Group(238,1,-1)+Group(24,1,1)+Group(243,1,1)+Group(244,1,1)+Group(25,1,1)+Group(253,1,-1)+Group(254,1,-1)+Group(255,1,-1)+Group(256,1,-1)+Group(257,1,-1)+Group(258,1,-1)+Group(259,1,-1)+Group(260,1,-1)+Group(261,1,-1)+Group(262,1,-1)+Group(263,1,1)+Group(264,1,1)+Group(265,1,1)+Group(266,1,1)+Group(267,1,1)+Group(268,1,1)+Group(269,1,-1)+Group(27,1,1/2)+Group(270,1,-1)+Group(271,1,-1)+Group(272,1,-1)+Group(273,1,1)+Group(274,1,1)+Group(275,1,1)+Group(276,1,1)+Group(277,1,-1)+Group(278,1,-1)+Group(279,1,-1)+Group(28,1,1/2)+Group(280,1,-1)+Group(281,1,-1)+Group(282,1,-1)+Group(284,1,-1/6)+Group(285,1,-1/6)+Group(287,1,-1)+Group(288,1,-1)+Group(29,1,1)+Group(290,1,-1)+Group(291,1,-1)+Group(293,1,-1)+Group(294,1,-1)+Group(295,1,-1)+Group(296,1,-1)+Group(297,1,1)+Group(298,-2/7,1)+Group(299,-2/7,1)+Group(30,1,1)+Group(300,1,1)+Group(301,1,-1)+Group(302,1,-1)+Group(303,1,-1)+Group(304,1,-1)+Group(305,1,-1)+Group(306,1,-1)+Group(307,1,1)+Group(308,-7/2,1)+Group(31,1,1/2)+Group(310,1,-1)+Group(311,1,-1)+Group(312,1,1)+Group(313,1,1)+Group(314,1,-1)+Group(315,1,-1)+Group(316,1,-1)+Group(317,1,-1)+Group(318,1,-1)+Group(319,1,-1)+Group(32,1,1/2)+Group(320,1,-1)+Group(321,1,1)+Group(322,7/2,1)+Group(323,1,-1)+Group(324,1,1)+Group(325,7/2,1)+Group(326,1,-1)+Group(327,1,-1)+Group(328,1,-1)+Group(329,1,-1)+Group(33,1,1/2)+Group(330,1,-1)+Group(331,1,-1)+Group(332,1,-1)+Group(333,1,-1)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,-1)+Group(339,1,-1)+Group(34,1,1/2)+Group(340,1,-1)+Group(341,1,-1)+Group(342,1,-1)+Group(343,1,-1)+Group(344,1,1)+Group(345,1,1)+Group(346,1,1)+Group(347,1,1)+Group(348,1,-1)+Group(349,1,-1)+Group(35,1,1)+Group(350,1,-1)+Group(351,1,-1)+Group(352,1,-1)+Group(353,1,-1)+Group(354,1,1)+Group(355,1,1)+Group(36,1,1)+Group(361,1,-1)+Group(362,1,-1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(366,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(369,1,1)+Group(37,1,1)+Group(370,1,1)+Group(371,1,-1)+Group(372,1,-1)+Group(373,1,-1)+Group(374,1,-1)+Group(375,1,-1)+Group(376,1,-1)+Group(377,1,-1)+Group(378,1,-1)+Group(38,1,1)+Group(39,1,1)+Group(392,1,1)+Group(393,1,1)+Group(4,1,1)+Group(40,1,1)+Group(407,1,-1)+Group(408,1,-1)+Group(409,1,-1)+Group(41,1,1)+Group(410,1,-1)+Group(411,1,-1)+Group(412,1,-1)+Group(413,1,1)+Group(414,1,1)+Group(415,1,-1)+Group(416,1,-1)+Group(417,1,-1)+Group(418,1,-1)+Group(419,1,1)+Group(42,1,1)+Group(420,1,1)+Group(421,1,-1)+Group(422,1,-1)+Group(423,1,-1)+Group(424,1,-1)+Group(425,1,-1)+Group(426,1,-1)+Group(427,1,-1)+Group(428,1,-1)+Group(429,1,1)+Group(43,1,1)+Group(430,7/2,1)+Group(431,1,-1)+Group(432,1,-1)+Group(433,1,-1)+Group(434,1,-1)+Group(435,1,1)+Group(436,7/2,1)+Group(437,1,-1)+Group(438,1,-1)+Group(439,1,-1)+Group(44,1,1)+Group(440,1,-1)+Group(441,1,1)+Group(442,1,1)+Group(443,1,-1)+Group(444,1,-1)+Group(445,1,1)+Group(446,1,1)+Group(447,1,-1)+Group(448,1,-1)+Group(449,1,1)+Group(45,1,1)+Group(450,1,1)+Group(451,1,-1)+Group(452,1,-1)+Group(453,1,-1)+Group(454,1,-1)+Group(455,1,1)+Group(456,1,-1)+Group(457,1,1)+Group(458,1,-1)+Group(459,1,1)+Group(46,1,1)+Group(460,1,1)+Group(461,1,1)+Group(462,1,-1)+Group(463,1,1)+Group(464,1,1)+Group(465,1,1)+Group(466,1,-1)+Group(467,1,-1)+Group(468,1,-1)+Group(469,1,-1)+Group(47,1,1)+Group(470,1,-1)+Group(471,1,-1)+Group(472,1,-1)+Group(473,1,1)+Group(474,1,1)+Group(475,1,-1)+Group(476,1,-1)+Group(477,1,1)+Group(478,1,1)+Group(479,1,-1)+Group(48,1,1)+Group(480,1,-1)+Group(49,1,1)+Group(5,1,1)+Group(50,1,1)+Group(51,1,1)+Group(52,1,1)+Group(53,1,1)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(57,1,1)+Group(58,1,1)+Group(59,1,1)+Group(6,1,1)+Group(60,1,1)+Group(65,1,-1)+Group(66,1,-1)+Group(67,1,1)+Group(68,1,1)+Group(69,1,1)+Group(7,1,1)+Group(70,1,1)+Group(71,1,1)+Group(72,1,1)+Group(73,1,1)+Group(74,1,1)+Group(75,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(79,1,-1)+Group(8,1,1)+Group(80,1,-1)+Group(81,1,-1)+Group(82,1,-1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(86,1,1)+Group(9,1,1)+Group(90,1,-1/2)+Group(91,1,-1/2)+Group(92,1,-1/2)+Group(93,1,-1/2)+Group(94,1,-1/4)+Group(95,1,-1/4)+Group(96,1,-1)+Group(97,1,-1)+Group(98,1,-1/2)+Group(99,1,-1/2) = -1107/14");//less 158 vs 166 (lorentz cancellations)
 
 
     Ok(())
@@ -1462,19 +1512,19 @@ fn test_generate_amplitude_1l_sm_jets() -> Result<()> {
     //cli.run_command(&format!("set global kv global.n_cores.feyngen=16"))?;
 
     // Targets confirmed by MadGraph
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"20 | 0 = 0");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"192 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"20 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"192 | 0 = 0");
     // Include the Grassmann minus from every closed ghost circuit.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"384 | -100 = -100");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"1139 | -765/2 = -765/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"2284 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > g g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"384 | -100 = -100");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "g g > g g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1139 | -765/2 = -765/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"2284 | 0 = 0");
     // Closed ghosts contribute the same Grassmann-loop minus as quarks;
     // the ghost bubble has positive weight after external fermion ordering.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"10 | -7/2 = -7/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"96 | -87/2 = -87/2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g g | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"1142 | -504 = -504");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"414 | 0 = 0");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ d d~ | u d g ghg a QED==0 [QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"1242 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"10 | -7/2 = -7/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"96 | -87/2 = -87/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ g g | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1142 | -504 = -504");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > u u~ d d~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"414 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "d d~ > d d~ d d~ | u d g ghg a QED==0 [QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1242 | 0 = 0");
 
     Ok(())
 }
@@ -1513,14 +1563,14 @@ fn test_dis_isr() -> Result<()> {
     // cli.run_command(&format!("set global kv global.n_cores.feyngen=4"))?;
 
     // 2>N amplitude, no symmetrization
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{0}] --numerator-grouping only_detect_zeroes",false)?,@"1 | -1 = -1");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{1}] --numerator-grouping only_detect_zeroes",false)?,@"1 | -1 = -1");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{0}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{1}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");
     // One closed ghost loop has sign -1: with external ordering -1 and
     // AutG=1 its weight is +1, giving -9/2 after the nine color zeros.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{2}] --numerator-grouping only_detect_zeroes",true)?,@"13 | -9/2 = -9/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{2}] --filter-zero-color --numerator-grouping no_grouping",true)?,@"13 | -9/2 = -9/2");
     // The 241 nonzero color networks sum to -56/3 with a minus for
     // every closed Grassmann circuit, including ghosts.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{3}] --numerator-grouping only_detect_zeroes",false)?,@"241 | -56/3 = -56/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{3}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"241 | -56/3 = -56/3");
 
     // 2>N amplitude, with symmetrization
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{0}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"1 | -1 = -1");
@@ -1533,11 +1583,11 @@ fn test_dis_isr() -> Result<()> {
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d > e- d | e- a d g ghg QED==2 [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"191 | -170/3+Group(102,1,1)+Group(103,-2/7,1)+Group(104,1,1)+Group(105,-7/2,1)+Group(162,1,1)+Group(163,7/2,1)+Group(164,1,1)+Group(165,2/7,1)+Group(172,1,1)+Group(173,1,1)+Group(315,1,1)+Group(316,-2/7,1) = -1049/21");
 
     // 3>N no symmetrization
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{0}] --numerator-grouping only_detect_zeroes",false)?,@"2 | -2 = -2");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{1}] --numerator-grouping only_detect_zeroes",false)?,@"13 | -9 = -9");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{0}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"2 | -2 = -2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{1}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"13 | -9 = -9");
     // The 22 surviving odd-ghost graphs have total weight +18.
     // Omitting their ghost-loop sign gives the historical -169/2.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{2}] --numerator-grouping only_detect_zeroes",false)?,@"225 | -97/2 = -97/2");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{2}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"225 | -97/2 = -97/2");
 
     // 3>N with symmetrization
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{0}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | -2 = -2");
@@ -1547,12 +1597,12 @@ fn test_dis_isr() -> Result<()> {
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d g > e- d | e- a d g ghg QED==2 [{2}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"181 | -179/2+Group(195,1,1)+Group(196,2/7,1)+Group(198,1,1)+Group(199,7/2,1)+Group(206,1,1)+Group(207,-7/2,1)+Group(211,1,1)+Group(212,-2/7,1)+Group(74,1,1)+Group(75,7/2,1)+Group(80,1,1)+Group(81,-2/7,1) = -562/7");
 
     // 4>N no symmetrization
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{0}] --numerator-grouping only_detect_zeroes",false)?,@"4 | 4 = 4");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{0}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"4 | 4 = 4");
     // Four surviving closed ghost loops each contribute -1, shifting the old total by -8.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{1}] --numerator-grouping only_detect_zeroes",false)?,@"62 | 28 = 28");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{1}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"62 | 28 = 28");
     // The 170 surviving odd-ghost graphs have total weight -118.
     // Omitting their ghost-loop sign gives the historical 1298/3.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{2}] --numerator-grouping only_detect_zeroes",false)?,@"1428 | 590/3 = 590/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{2}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"1428 | 590/3 = 590/3");
 
     // 4>N with symmetrization
     assert_snapshot!(feyngen_str(&mut cli, "amp", "e- d u u~ > e- d | e- a d u g ghg QED==2 [{0}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"4 | 4 = 4");
@@ -1658,7 +1708,7 @@ mod failing {
 
         // A first process
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ / z QED^2==4 [{{1}} QCD] --numerator-grouping no_grouping",false)?,@"1 | -1 = -1");//good
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");//good
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");//good
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | e- a d g QED^2==4 [{{2}} QCD] --numerator-grouping group_identical_graphs_up_to_sign",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");//good
         assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies true",false)?,@"1 | 1 = 1");//good
         assert_snapshot!(feyngen_str(&mut cli, "amp", "e+ e- > d d~ / z QED==2 [{1}] --filter-selfenergies false",false)?,@"3 | 3 = 3");//good
@@ -1702,8 +1752,8 @@ mod failing {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping only_detect_zeroes",false)?,@"1194 | -1260 = -1260");//good
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping only_detect_zeroes",false)?,@"7018 | -12747 = -12747");//sum is larger and there are more graphs.. this is questionable
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --filter-zero-color --numerator-grouping no_grouping",false)?,@"1194 | -1260 = -1260");//good
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "h > g g g | h g b t ghg [{3}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --filter-zero-color --numerator-grouping no_grouping",false)?,@"7018 | -12747 = -12747");//sum is larger and there are more graphs.. this is questionable
 
         Ok(())
     }
@@ -1715,10 +1765,10 @@ mod failing {
         cli.run_command("import model sm.json")?;
 
         // Cross sections
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d a ghg g QED^2==2 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{3}} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"30 | -30 = -30");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{4}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"594 | -261 = -261");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d a ghg g QED^2==2 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{3}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"30 | -30 = -30");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a > b b~ h | d b h a ghg g QED^2==4 [{{4}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"594 | -261 = -261");
 
         // Enable left-right-symmetry and grouping
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ | d a ghg g QED^2==2 [{{2}}] --symmetrize-left-right-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");
@@ -1737,10 +1787,10 @@ mod failing {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{0} QCD=0] --numerator-grouping only_detect_zeroes",false)?,@"2 | 2 = 2");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{1} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"8 | 8 = 8");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{2} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"152 | 28 = 28");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{3} QCD=3] --numerator-grouping only_detect_zeroes",false)?,@"3608 | -104/3 = -104/3");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{0} QCD=0] --filter-zero-color --numerator-grouping no_grouping",false)?,@"2 | 2 = 2");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{1} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"8 | 8 = 8");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{2} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"152 | 28 = 28");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{3} QCD=3] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3608 | -104/3 = -104/3");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{0} QCD=0] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"1 | 2 = 2");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "a a > t t~ | a t g b ghg QED==2 [{1} QCD=1] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"4 | 8 = 8");
         // Six additional cancellations imply that the total overall factor is different
@@ -1756,9 +1806,9 @@ mod failing {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"4 | -4 = -4");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"40 | -40 = -40");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --numerator-grouping only_detect_zeroes --max-multiplicity-for-fast-cut-filter 0",false)?,@"874 | -266 = -266");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --filter-zero-color --numerator-grouping no_grouping",false)?,@"4 | -4 = -4");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"40 | -40 = -40");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"874 | -266 = -266");
 
         Ok(())
     }
@@ -1779,14 +1829,22 @@ fn unrestricted_sm_light_quarks_preserve_two_loop_inventory() -> Result<()> {
     // 4513/24. Removing the 36 color-zero graphs leaves 563 with weight 2003/12.
     // Keep this unrestricted-model check separate from the legacy grouping fixture.
     for (grouping, expected_count, expected_weight) in [
-        ("no_grouping", 599, Atom::num((4513, 24))),
-        ("only_detect_zeroes", 563, Atom::num((2003, 12))),
+        (
+            "--numerator-grouping no_grouping",
+            599,
+            Atom::num((4513, 24)),
+        ),
+        (
+            "--numerator-grouping no_grouping --filter-zero-color",
+            563,
+            Atom::num((2003, 12)),
+        ),
     ] {
         let (count, weight) = generate_graphs_and_count(
             &mut cli,
             "amp",
             &format!(
-                "{{}} > {{}} [{{2}}] --numerator-grouping {grouping} --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1"
+                "{{}} > {{}} [{{2}}] {grouping} --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1"
             ),
             false,
         )?;
@@ -1810,27 +1868,27 @@ fn test_vacuum_amplitude_generation_full_sm_two_loop() -> Result<()> {
     // Including all graphs
     // The restricted 513/477 graph inventory gives 1469/12 after
     // closed Grassmann signs and directed self-loop symmetries.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 --filter-zero-flow-edges false --filter-selfenergies false --filter-tadpoles false --filter-snails false",false)?,@"477 | 1469/12 = 1469/12");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 --filter-zero-flow-edges false --filter-selfenergies false --filter-tadpoles false --filter-snails false",false)?,@"477 | 1469/12 = 1469/12");
 
     // Compare various numerator comparison options below:
     // a) Symbolic tensor canonization with numerical color dimensions.
     // Directed loops have no end-flip symmetry; closed ghost chains carry a minus.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"300 | 431/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,3*G^2*ee^(-2),-1/2)+Group(155,3*G^2*ee^(-2),-1/2)+Group(162,3*G^2*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(203,1,1)+Group(204,1,1)+Group(205,1,1)+Group(206,1,1)+Group(207,1,1)+Group(215,1,1)+Group(216,1,1)+Group(217,1,1)+Group(222,1,1)+Group(223,1,1)+Group(229,1,1)+Group(230,1,1)+Group(231,1,1)+Group(236,1,1)+Group(237,1,1)+Group(239,1,-1)+Group(240,1,1/2)+Group(241,1,1)+Group(242,1,1)+Group(243,1,1)+Group(244,1,1)+Group(245,1,-1/2)+Group(246,1,1/2)+Group(247,1,1)+Group(248,1,1)+Group(249,1,1)+Group(250,1,-1/2)+Group(251,1,1/2)+Group(252,1,1)+Group(253,1,1)+Group(254,1,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,(-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*sw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*cw^2,-1)+Group(324,1,-1)+Group(33,1,1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(374,1,-1)+Group(375,1,-1)+Group(376,1,-1)+Group(379,1,-1)+Group(380,1,-1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,3*G^2*ee^(-2),-1/2)+Group(42,1,1)+Group(420,3*G^2*ee^(-2),-1/2)+Group(429,12*G^2*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(454,1,1/2)+Group(455,1,1)+Group(456,1,-1/2)+Group(464,1,1/2)+Group(465,1,-1/2)+Group(472,1,1)+Group(473,1,1)+Group(474,1,1)+Group(479,1,1)+Group(480,1,1)+Group(487,1,-1/2)+Group(488,1,-1/2)+Group(52,1,1)+Group(53,1,1)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(63,1,1)+Group(64,1,1)+Group(65,1,1)+Group(70,1,1)+Group(71,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(83,1,1)+Group(84,1,1) = (-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*cw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*sw^2+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+191/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"300 | 431/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(225,1,-1)+Group(226,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-1)+Group(24,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(25,1,-1)+Group(250,1,-1)+Group(251,1,-1)+Group(252,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,12*G^2*ee^(-2),-1/2)+Group(301,12*G^2*ee^(-2),-1/2)+Group(307,12*G^2*ee^(-2),-1/2)+Group(325,1,1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,1,1)+Group(329,1,1)+Group(330,1,1)+Group(331,1,1)+Group(332,1,1)+Group(333,1,1)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,1/2)+Group(339,1,-1/2)+Group(340,1,1)+Group(341,1,1)+Group(342,1,1)+Group(343,1,1)+Group(344,1,1)+Group(345,1,1)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(358,1,1)+Group(359,1,1)+Group(360,1,1)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(432,1,1)+Group(433,1,1)+Group(434,1,1)+Group(441,1,1)+Group(442,1,1)+Group(443,1,1)+Group(449,1,1)+Group(450,1,1)+Group(451,1,1)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,12*G^2*ee^(-2),-1/2)+Group(472,3*G^2*ee^(-2),-1/2)+Group(475,3*G^2*ee^(-2),-1/2)+Group(490,1,1)+Group(491,1,1)+Group(492,1,1)+Group(496,1,1)+Group(497,1,1)+Group(498,1,1)+Group(501,1,1)+Group(502,1,1)+Group(503,1,1)+Group(504,1,1/2)+Group(505,1,-1/2)+Group(506,1,1)+Group(507,1,1)+Group(508,1,1/2)+Group(509,1,-1/2)+Group(510,1,1)+Group(511,1,1/2)+Group(512,1,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27*G^2*ee^(-2)+725/12");
     // b) The same exact tensor comparison retains formal Nc. Its six
     // QCD/electroweak ratios specialize to the preceding values at Nc=3.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"300 | 431/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(155,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(162,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(203,1,1)+Group(204,1,1)+Group(205,1,1)+Group(206,1,1)+Group(207,1,1)+Group(215,1,1)+Group(216,1,1)+Group(217,1,1)+Group(222,1,1)+Group(223,1,1)+Group(229,1,1)+Group(230,1,1)+Group(231,1,1)+Group(236,1,1)+Group(237,1,1)+Group(239,1,-1)+Group(240,1,1/2)+Group(241,1,1)+Group(242,1,1)+Group(243,1,1)+Group(244,1,1)+Group(245,1,-1/2)+Group(246,1,1/2)+Group(247,1,1)+Group(248,1,1)+Group(249,1,1)+Group(250,1,-1/2)+Group(251,1,1/2)+Group(252,1,1)+Group(253,1,1)+Group(254,1,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,(-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*sw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*cw^2,-1)+Group(324,1,-1)+Group(33,1,1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(374,1,-1)+Group(375,1,-1)+Group(376,1,-1)+Group(379,1,-1)+Group(380,1,-1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(42,1,1)+Group(420,-9/8*G^2*Nc^(-1)*ee^(-2)+9/8*G^2*Nc*ee^(-2),-1/2)+Group(429,-9/2*G^2*Nc^(-1)*ee^(-2)+9/2*G^2*Nc*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(454,1,1/2)+Group(455,1,1)+Group(456,1,-1/2)+Group(464,1,1/2)+Group(465,1,-1/2)+Group(472,1,1)+Group(473,1,1)+Group(474,1,1)+Group(479,1,1)+Group(480,1,1)+Group(487,1,-1/2)+Group(488,1,-1/2)+Group(52,1,1)+Group(53,1,1)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(63,1,1)+Group(64,1,1)+Group(65,1,1)+Group(70,1,1)+Group(71,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(83,1,1)+Group(84,1,1) = (-1/4*sw^2+1/4*cw^2)^(-1)*-1/4*cw^2+(-1/4*sw^2+1/4*cw^2)^(-1)*1/4*sw^2+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-81/16*G^2*Nc*ee^(-2)+191/3+81/16*G^2*Nc^(-1)*ee^(-2)");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator true --number-of-samples-for-numerator-comparisons 0 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"300 | 431/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(225,1,-1)+Group(226,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-1)+Group(24,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(25,1,-1)+Group(250,1,-1)+Group(251,1,-1)+Group(252,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1/2)+Group(301,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1/2)+Group(307,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1/2)+Group(325,1,1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,1,1)+Group(329,1,1)+Group(330,1,1)+Group(331,1,1)+Group(332,1,1)+Group(333,1,1)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,1/2)+Group(339,1,-1/2)+Group(340,1,1)+Group(341,1,1)+Group(342,1,1)+Group(343,1,1)+Group(344,1,1)+Group(345,1,1)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(358,1,1)+Group(359,1,1)+Group(360,1,1)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(432,1,1)+Group(433,1,1)+Group(434,1,1)+Group(441,1,1)+Group(442,1,1)+Group(443,1,1)+Group(449,1,1)+Group(450,1,1)+Group(451,1,1)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1/2)+Group(472,(-1+Nc^2)*9/8*G^2*Nc^(-1)*ee^(-2),-1/2)+Group(475,(-1+Nc^2)*9/8*G^2*Nc^(-1)*ee^(-2),-1/2)+Group(490,1,1)+Group(491,1,1)+Group(492,1,1)+Group(496,1,1)+Group(497,1,1)+Group(498,1,1)+Group(501,1,1)+Group(502,1,1)+Group(503,1,1)+Group(504,1,1/2)+Group(505,1,-1/2)+Group(506,1,1)+Group(507,1,1)+Group(508,1,1/2)+Group(509,1,-1/2)+Group(510,1,1)+Group(511,1,1/2)+Group(512,1,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-81/8*G^2*Nc*ee^(-2)+725/12+81/8*G^2*Nc^(-1)*ee^(-2)");
 
     // Preserve the sampled comparison modes and their original budgets.
     // Exact scalar-weight cancellation removes 39 zero classes in the
     // two formal-color modes below, leaving 247 graphs in each.
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"247 | 167/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,3*G^2*ee^(-2),-1/2)+Group(155,3*G^2*ee^(-2),-1/2)+Group(162,3*G^2*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(208,1,-1/2)+Group(239,1,-1)+Group(245,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(250,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(254,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,1,-1)+Group(324,1,-1)+Group(33,1,1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,3*G^2*ee^(-2),-1/2)+Group(42,1,1)+Group(420,3*G^2*ee^(-2),-1/2)+Group(429,12*G^2*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(456,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(465,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(487,1,-1/2)+Group(488,1,-1/2) = (-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-19/18*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-3/2*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-5/3+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+31/6");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators false",false)?,@"247 | 167/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(24,1,-1)+Group(25,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,12*G^2*ee^(-2),-1/2)+Group(301,12*G^2*ee^(-2),-1/2)+Group(307,12*G^2*ee^(-2),-1/2)+Group(326,1,-1/2)+Group(339,1,-1/2)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,12*G^2*ee^(-2),-1/2)+Group(472,3*G^2*ee^(-2),-1/2)+Group(475,3*G^2*ee^(-2),-1/2)+Group(487,((-1*sw^2+3*cw^2)*-1*sw^2+(-1*sw^2+3*cw^2)*3*cw^2+16*sw^4)*((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1),-1/2)+Group(505,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(509,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(512,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-13*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-6*cw^2*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-9*cw^4+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27*G^2*ee^(-2)+29/12");
 
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"288 | 59/12+Group(118,1,-1/2)+Group(147,1,-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(203,1,1)+Group(204,1,1)+Group(205,1,1)+Group(206,1,1)+Group(207,1,1)+Group(215,1,1)+Group(216,1,1)+Group(217,1,1)+Group(222,1,1)+Group(223,1,1)+Group(229,1,1)+Group(230,1,1)+Group(231,1,1)+Group(236,1,1)+Group(237,1,1)+Group(239,1,-1)+Group(240,1,1/2)+Group(241,1,1)+Group(242,1,1)+Group(243,1,1)+Group(244,1,1)+Group(245,1,-1/2)+Group(246,1,1/2)+Group(247,1,1)+Group(248,1,1)+Group(249,1,1)+Group(250,1,-1/2)+Group(251,1,1/2)+Group(252,1,1)+Group(253,1,1)+Group(254,1,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,1,-1)+Group(324,1,-1)+Group(33,1,1)+Group(363,1,-1)+Group(364,1,-1)+Group(365,1,-1)+Group(367,1,-1)+Group(368,1,-1)+Group(374,1,-1)+Group(375,1,-1)+Group(376,1,-1)+Group(379,1,-1)+Group(380,1,-1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(417,1,-1/2)+Group(42,1,1)+Group(420,1,-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(454,1,1/2)+Group(455,1,1)+Group(456,1,-1/2)+Group(464,1,1/2)+Group(465,1,-1/2)+Group(472,1,1)+Group(473,1,1)+Group(474,1,1)+Group(479,1,1)+Group(480,1,1)+Group(487,1,-1/2)+Group(488,1,-1/2)+Group(52,1,1)+Group(53,1,1)+Group(54,1,1)+Group(55,1,1)+Group(56,1,1)+Group(63,1,1)+Group(64,1,1)+Group(65,1,1)+Group(70,1,1)+Group(71,1,1)+Group(76,1,1)+Group(77,1,1)+Group(78,1,1)+Group(83,1,1)+Group(84,1,1) = 110/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3 --fully-numerical-substitution-when-comparing-numerators true",false)?,@"288 | 59/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(225,1,-1)+Group(226,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-1)+Group(24,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(25,1,-1)+Group(250,1,-1)+Group(251,1,-1)+Group(252,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(294,1,-1/2)+Group(301,1,-1/2)+Group(325,1,1/2)+Group(326,1,-1/2)+Group(327,1,1)+Group(328,1,1)+Group(329,1,1)+Group(330,1,1)+Group(331,1,1)+Group(332,1,1)+Group(333,1,1)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,1/2)+Group(339,1,-1/2)+Group(340,1,1)+Group(341,1,1)+Group(342,1,1)+Group(343,1,1)+Group(344,1,1)+Group(345,1,1)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(358,1,1)+Group(359,1,1)+Group(360,1,1)+Group(37,1,-1/2)+Group(38,1,-1/2)+Group(432,1,1)+Group(433,1,1)+Group(434,1,1)+Group(441,1,1)+Group(442,1,1)+Group(443,1,1)+Group(449,1,1)+Group(450,1,1)+Group(451,1,1)+Group(459,4,-1/2)+Group(468,1,-1/2)+Group(490,1,1)+Group(491,1,1)+Group(492,1,1)+Group(496,1,1)+Group(497,1,1)+Group(498,1,1)+Group(501,1,1)+Group(502,1,1)+Group(503,1,1)+Group(504,1,1/2)+Group(505,1,-1/2)+Group(506,1,1)+Group(507,1,1)+Group(508,1,1/2)+Group(509,1,-1/2)+Group(510,1,1)+Group(511,1,1/2)+Group(512,1,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = 413/12");
 
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"247 | 167/12+Group(100,1,-1)+Group(101,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(103,1,-1)+Group(104,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(106,1,-1)+Group(107,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(109,1,-1)+Group(110,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(112,1,-1)+Group(113,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(118,1,-1/2)+Group(131,1,-1/2)+Group(142,1,-1/2)+Group(147,3*G^2*ee^(-2),-1/2)+Group(155,3*G^2*ee^(-2),-1/2)+Group(162,3*G^2*ee^(-2),-1/2)+Group(182,1,1)+Group(183,1,1)+Group(194,1,1)+Group(195,1,1)+Group(208,1,-1/2)+Group(239,1,-1)+Group(245,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(250,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(254,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(258,1,-1/2)+Group(259,1,1)+Group(260,1,1/2)+Group(261,1,1)+Group(262,1,1)+Group(263,1,-1)+Group(264,1,-1/2)+Group(265,1,-1/2)+Group(266,1,-1)+Group(267,1,-1/2)+Group(276,1,-1/2)+Group(288,1,-1/2)+Group(290,1,-1)+Group(291,1,-1)+Group(292,1,-1)+Group(295,1,-1/2)+Group(296,1,1)+Group(297,1,1/2)+Group(298,1,1)+Group(299,1,-1)+Group(300,1,-1/2)+Group(301,1,-1/2)+Group(302,1,-1)+Group(303,1,-1/2)+Group(311,1,-1/2)+Group(32,1,1)+Group(322,1,-1/2)+Group(323,1,-1)+Group(324,1,-1)+Group(33,1,1)+Group(397,1/4,-1/2)+Group(399,1/4,-1/2)+Group(413,1,-1/2)+Group(417,3*G^2*ee^(-2),-1/2)+Group(42,1,1)+Group(420,3*G^2*ee^(-2),-1/2)+Group(429,12*G^2*ee^(-2),-1/2)+Group(43,1,1)+Group(444,1,1)+Group(445,1,1)+Group(456,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(465,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(487,1,-1/2)+Group(488,1,-1/2) = (-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-19/18*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-3/2*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-5/3+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+31/6");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"247 | 167/12+Group(10,1,-1/2)+Group(100,1,-1/2)+Group(11,1,-1/2)+Group(116,1,-1)+Group(117,1,-1)+Group(119,1,-1/2)+Group(126,1,1/2)+Group(127,1,-1/2)+Group(128,1,1)+Group(129,1,-1)+Group(130,1,-1/2)+Group(131,1,1)+Group(132,1,1)+Group(133,1,1)+Group(134,1,1)+Group(135,1,1)+Group(136,1,1)+Group(138,1,-1/2)+Group(150,1,-1/2)+Group(165,1,-1)+Group(166,1,-1)+Group(24,1,-1)+Group(25,1,-1)+Group(267,1,-1/2)+Group(277,1,-1/2)+Group(286,1,-1/2)+Group(294,12*G^2*ee^(-2),-1/2)+Group(301,12*G^2*ee^(-2),-1/2)+Group(307,12*G^2*ee^(-2),-1/2)+Group(326,1,-1/2)+Group(339,1,-1/2)+Group(361,1,-1)+Group(362,1,-1)+Group(363,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(364,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(368,1,-1)+Group(369,1,-1)+Group(37,1,-1/2)+Group(370,1,-1)+Group(371,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(372,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(373,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(38,1,-1/2)+Group(459,4,-1/2)+Group(463,1,-1/2)+Group(466,1,-1/2)+Group(468,12*G^2*ee^(-2),-1/2)+Group(472,3*G^2*ee^(-2),-1/2)+Group(475,3*G^2*ee^(-2),-1/2)+Group(487,((-1*sw^2+3*cw^2)*-1*sw^2+(-1*sw^2+3*cw^2)*3*cw^2+16*sw^4)*((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1),-1/2)+Group(505,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(509,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(512,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(63,1,-1)+Group(64,1,-1)+Group(66,1,-1/2)+Group(74,1,1/2)+Group(75,1,-1/2)+Group(76,1,1)+Group(77,1,1)+Group(78,1,-1)+Group(79,1,-1/2)+Group(80,1,1)+Group(81,1,1)+Group(82,1,1)+Group(83,1,1)+Group(84,1,1)+Group(85,1,1)+Group(87,1,-1/2) = (5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-13*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-6*cw^2*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-9*cw^4+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27*G^2*ee^(-2)+29/12");
     // Only non-factorizable ones
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"92 | -133/3 = -133/3");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"67 | -46/3+Group(18,1,-1)+Group(19,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(21,1,-1)+Group(22,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(24,1,-1)+Group(25,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(27,1,-1)+Group(28,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(30,1,-1)+Group(31,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(33,1,-1/2)+Group(34,1,-1/2)+Group(35,1,-1/2)+Group(36,3*G^2*ee^(-2),-1/2)+Group(37,3*G^2*ee^(-2),-1/2)+Group(38,3*G^2*ee^(-2),-1/2)+Group(43,1,-1/2)+Group(46,1,-1)+Group(47,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(48,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(49,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*1/3*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3,-1/2)+Group(50,1,-1/2)+Group(51,1,-1/2)+Group(52,1,-1/2)+Group(53,1,-1/2)+Group(54,1,-1)+Group(55,1,-1)+Group(56,1,-1)+Group(57,1,-1/2)+Group(58,1,-1/2)+Group(59,1,-1/2)+Group(60,1,-1/2)+Group(61,1,-1)+Group(62,1,-1)+Group(77,1/4,-1/2)+Group(78,1/4,-1/2)+Group(79,1,-1/2)+Group(80,3*G^2*ee^(-2),-1/2)+Group(81,3*G^2*ee^(-2),-1/2)+Group(82,12*G^2*ee^(-2),-1/2)+Group(85,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2)+Group(87,(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*2/3+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*5/9*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*cw^2*sw^(-2),-1/2) = (-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-19/18*cw^(-2)*sw^2+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-3/2*cw^2*sw^(-2)+(-2/3+17/9*cw^(-2)*sw^2+cw^2*sw^(-2))^(-1)*-5/3+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-27/2*G^2*ee^(-2)+-397/12");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"92 | -133/3 = -133/3");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"67 | -46/3+Group(10,1,-1)+Group(11,1,-1)+Group(12,1,-1/2)+Group(13,1,-1/2)+Group(14,1,-1/2)+Group(15,1,-1/2)+Group(16,1,-1)+Group(17,1,-1)+Group(31,1,-1/2)+Group(32,1,-1/2)+Group(33,1,-1/2)+Group(34,12*G^2*ee^(-2),-1/2)+Group(35,12*G^2*ee^(-2),-1/2)+Group(36,12*G^2*ee^(-2),-1/2)+Group(39,1,-1/2)+Group(4,1,-1)+Group(40,1,-1/2)+Group(42,1,-1)+Group(43,1,-1)+Group(44,I2x12^(-1)*I2x22*I3x21^(-1)*I3x22,-1)+Group(45,I2x13^(-1)*I2x23*I3x31^(-1)*I3x32,-1)+Group(49,1,-1)+Group(5,1,-1)+Group(50,1,-1)+Group(51,1,-1)+Group(52,(conj(CKM1x1))^(-1)*CKM1x1^(-1)*CKM1x2*conj(CKM1x2),-1)+Group(53,(conj(CKM2x1))^(-1)*CKM2x1^(-1)*CKM2x2*conj(CKM2x2),-1)+Group(54,(conj(CKM3x1))^(-1)*CKM3x1^(-1)*CKM3x2*conj(CKM3x2),-1)+Group(6,1,-1/2)+Group(7,1,-1/2)+Group(76,4,-1/2)+Group(77,1,-1/2)+Group(78,1,-1/2)+Group(79,12*G^2*ee^(-2),-1/2)+Group(8,1,-1/2)+Group(80,3*G^2*ee^(-2),-1/2)+Group(81,3*G^2*ee^(-2),-1/2)+Group(86,((-1*sw^2+3*cw^2)*-1*sw^2+(-1*sw^2+3*cw^2)*3*cw^2+16*sw^4)*((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1),-1/2)+Group(89,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(9,1,-1/2)+Group(90,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2)+Group(91,((3*cw^2+sw^2)*3*cw^2+(3*cw^2+sw^2)*sw^2+4*sw^4)^(-1)*(cw^2+sw^2)^2*3,-1/2) = (5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-13*sw^4+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-6*cw^2*sw^2+(5*sw^4+6*cw^2*sw^2+9*cw^4)^(-1)*-9*cw^4+(conj(CKM1x1))^(-1)*-1*CKM1x1^(-1)*CKM1x2*conj(CKM1x2)+(conj(CKM2x1))^(-1)*-1*CKM2x1^(-1)*CKM2x2*conj(CKM2x2)+(conj(CKM3x1))^(-1)*-1*CKM3x1^(-1)*CKM3x2*conj(CKM3x2)+-1*I2x12^(-1)*I2x22*I3x21^(-1)*I3x22+-1*I2x13^(-1)*I2x23*I3x31^(-1)*I3x32+-215/6+-27*G^2*ee^(-2)");
 
     Ok(())
 }
@@ -1847,7 +1905,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_raw() -> Result<()> {
 
     // Including all graphs
     assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping no_grouping --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"41650 | -14295/8 = -14295/8");
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"38696 | -46369/48 = -46369/48");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --filter-zero-flow-edges false --number-of-factorized-loop-subtopologies -1 -1",false)?,@"38696 | -46369/48 = -46369/48");
 
     Ok(())
 }
@@ -1863,9 +1921,31 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_filtered() -> Result<()> 
     cli.run_command("set global kv global.n_cores.feyngen=1")?;
 
     // Only non-factorizable ones
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"3150 | -9861/16 = -9861/16");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"3150 | -9861/16 = -9861/16");
 
-    // These selected diagrams have vanishing Lorentz numerators.
+    // Select the original two muon/G0/photon/charged-Goldstone/W graphs by
+    // their interaction inventory. GL0061/GL0062 no longer name them in the
+    // native generator. Each closed muon trace has gamma5 and fewer than four
+    // ordinary gamma matrices, so its Lorentz numerator must vanish.
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
+        else { panic!("the vacuum fixture must be an amplitude") };
+    let mut zero_graphs = amplitudes.values().flat_map(|amplitude| &amplitude.graphs)
+        .filter_map(|amplitude_graph| {
+            let graph = &amplitude_graph.graph;
+            let mut rules = graph.underlying.iter_nodes().map(|(_, _, vertex)| {
+                vertex.vertex_rule.and_then(|rule| cli.state.model.vertex_rule_by_id(rule).ok())
+                    .map(|rule| rule.name.as_str())
+            }).collect::<Option<Vec<_>>>()?;
+            rules.sort_unstable();
+            [
+                ["V_102", "V_41", "V_46", "V_99"],
+                ["V_102", "V_40", "V_47", "V_99"],
+            ].iter().any(|expected| rules == expected.as_slice())
+                .then(|| graph.name.clone())
+        }).collect::<Vec<_>>();
+    zero_graphs.sort();
+    assert_eq!(zero_graphs.len(), 2, "the Lorentz-zero check must receive both original physical graphs");
+
 
     // digraph GL0061{
     //   num = "1";
@@ -1884,7 +1964,7 @@ fn test_vacuum_amplitude_generation_full_sm_three_loop_filtered() -> Result<()> 
     //   2:8   -> 3:9   [id=4 dir=none source="{ufo_order:2}" sink="{ufo_order:2}"  dod=-2  lmb_id=2 lmb_rep="K(2,a___)" name=e4 num="1" particle="G-"];
     //   2:10  -> 3:11  [id=5 dir=none source="{ufo_order:0}" sink="{ufo_order:1}"  dod=0  lmb_rep="-1*K(0,a___)+-1*K(1,a___)+-1*K(2,a___)" name=e5 num="-1*spenso::g(spenso::mink(4,hedge(10)),spenso::mink(4,hedge(11)))+Q(5,spenso::mink(4,hedge(10)))*Q(5,spenso::mink(4,hedge(11)))*UFO::MW^(-2)" particle="W+"];
     // }
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3 --select-graphs GL0061 GL0062 --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3",false)?,@"0 | 0 = 0");
+    assert_snapshot!(feyngen_str(&mut cli, "amp", &format!("{{}} > {{}} [{{3}}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1 --numerical-samples-seed 3 --select-graphs {} --compare-canonized-numerator false --number-of-samples-for-numerator-comparisons 3", zero_graphs.join(" ")),false)?,@"0 | 0 = 0");
 
 
     Ok(())
@@ -1917,12 +1997,12 @@ mod slow {
         cli.run_command("import model sm.json")?;
 
         // Cross sections
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"3 | -3 = -3");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"30 | -30 = -30");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"594 | -261 = -261");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] --numerator-grouping only_detect_zeroes",false)?,@"21 | -21 = -21");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"171 | -171 = -171");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"3 | -3 = -3");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{3}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"30 | -30 = -30");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g QED^2==6 [{{4}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"594 | -261 = -261");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{2}}] --filter-zero-color --numerator-grouping no_grouping",false)?,@"21 | -21 = -21");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > b b~ h | d b h a e- ghg g z QED^2==6 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"171 | -171 = -171");
 
         // Enable grouping
         assert_snapshot!(feyngen_str(&mut cli, "xs", "e+ e- > d d~ | d a e- ghg g QED^2==4 [{{2}}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | -1+Group(0,1,-1)+Group(1,1,-1) = -3");
@@ -1950,9 +2030,9 @@ mod slow {
         let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
         cli.run_command("import model sm.json")?;
 
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --numerator-grouping only_detect_zeroes",false)?,@"4 | -4 = -4");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --numerator-grouping only_detect_zeroes",false)?,@"40 | -40 = -40");
-        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --numerator-grouping only_detect_zeroes",false)?,@"874 | -266 = -266");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --filter-zero-color --numerator-grouping no_grouping",false)?,@"4 | -4 = -4");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --filter-zero-color --numerator-grouping no_grouping",false)?,@"40 | -40 = -40");
+        assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --filter-zero-color --numerator-grouping no_grouping",false)?,@"874 | -266 = -266");
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{1}} QCD=0] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"2 | Group(0,1,-1)+Group(1,1,-1)+Group(2,1,-1)+Group(3,1,-1) = -4");
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{2}} QCD=1] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"14 | Group(0,1,-1)+Group(1,1,-1)+Group(10,1,-1)+Group(11,1,-1)+Group(12,1,-2)+Group(13,1,-2)+Group(14,1,-2)+Group(15,1,-2)+Group(16,1,-1)+Group(17,1,-1)+Group(18,1,-1)+Group(19,1,-1)+Group(2,1,-1)+Group(24,1,-1)+Group(25,1,-1)+Group(26,1,-1)+Group(27,1,-1)+Group(28,1,-2)+Group(29,1,-2)+Group(3,1,-1)+Group(30,1,-2)+Group(31,1,-2)+Group(4,1,-2)+Group(5,1,-2)+Group(6,1,-2)+Group(7,1,-2)+Group(8,1,-1)+Group(9,1,-1) = -40");
         assert_snapshot!(feyngen_str(&mut cli, "xs", "a a > t t~ | a t g b ghg QED^2==4 [{{3}} QCD=2] --symmetrize-initial-states true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling",false)?,@"223 | Group(0,1,-1)+Group(1,1,1)+Group(10,1,2)+Group(100,1,-2)+Group(101,1,-2)+Group(102,1,-2)+Group(103,1,-2)+Group(104,1,-2)+Group(105,1,-2)+Group(11,1,-2)+Group(110,1,-2)+Group(111,1,-2)+Group(112,1,-2)+Group(113,1,-2)+Group(114,1,-2)+Group(115,1,-2)+Group(116,1,-2)+Group(117,1,-2)+Group(118,1,-2)+Group(119,1,-2)+Group(12,1,-2)+Group(120,1,-2)+Group(121,1,-2)+Group(122,1,-2)+Group(123,1,-2)+Group(124,1,-2)+Group(125,1,-2)+Group(126,1,-2)+Group(127,1,-2)+Group(128,1,-2)+Group(129,1,-2)+Group(13,1,2)+Group(130,1,-2)+Group(131,1,-2)+Group(132,1,-2)+Group(133,1,-2)+Group(134,1,-2)+Group(135,1,-2)+Group(14,1,2)+Group(140,1,-2)+Group(141,1,-2)+Group(142,1,-2)+Group(143,1,-2)+Group(144,1,-2)+Group(145,1,-2)+Group(146,1,-2)+Group(147,1,-2)+Group(148,1,-2)+Group(149,1,-2)+Group(15,1,-2)+Group(150,1,-2)+Group(151,1,-2)+Group(152,1,-2)+Group(153,1,-2)+Group(154,1,-2)+Group(155,1,-2)+Group(16,1,-1)+Group(164,1,-1)+Group(165,1,-1)+Group(166,1,-1)+Group(167,1,-1)+Group(168,1,-2)+Group(169,1,-2)+Group(17,1,1)+Group(170,1,-2)+Group(171,1,-2)+Group(172,1,-1)+Group(173,1,-1)+Group(174,1,-1)+Group(175,1,-1)+Group(176,1,-2)+Group(177,1,-2)+Group(178,1,-2)+Group(179,1,-2)+Group(18,1,1)+Group(180,1,-2)+Group(181,1,-2)+Group(186,1,-1)+Group(187,1,-1)+Group(188,1,-1)+Group(189,1,-1)+Group(19,1,-1)+Group(190,1,-2)+Group(191,1,-2)+Group(192,1,-2)+Group(193,1,-2)+Group(194,1,-2)+Group(195,1,-2)+Group(196,1,-2)+Group(197,1,-2)+Group(2,1,1)+Group(20,1,-1)+Group(202,1,-1)+Group(203,1,-1)+Group(204,1,-1)+Group(205,1,-1)+Group(206,1,-2)+Group(207,1,-2)+Group(208,1,-2)+Group(209,1,-2)+Group(21,1,1)+Group(210,1,-2)+Group(211,1,-2)+Group(22,1,1)+Group(220,1,-1)+Group(221,1,-1)+Group(222,1,-1)+Group(223,1,-1)+Group(224,1,-2)+Group(225,1,-2)+Group(226,1,-2)+Group(227,1,-2)+Group(228,1,-1)+Group(229,1,-1)+Group(23,1,-1)+Group(230,1,-1)+Group(231,1,-1)+Group(232,1,-1)+Group(233,1,-1)+Group(234,1,-1)+Group(235,1,-1)+Group(236,1,-2)+Group(237,1,-2)+Group(238,1,-2)+Group(239,1,-2)+Group(24,1,2)+Group(240,1,-1)+Group(241,1,-1)+Group(242,1,-1)+Group(243,1,-1)+Group(246,1,-2)+Group(247,1,-2)+Group(25,1,2)+Group(254,1,-2)+Group(255,1,-2)+Group(256,1,-1)+Group(257,1,-1)+Group(258,1,-1)+Group(259,1,-1)+Group(26,1,2)+Group(260,1,-2)+Group(261,1,-2)+Group(262,1,-1)+Group(263,1,-1)+Group(264,1,-1)+Group(265,1,-1)+Group(266,1,1)+Group(267,1,1)+Group(268,1,1)+Group(269,1,1)+Group(27,1,2)+Group(270,1,1)+Group(271,1,1)+Group(272,1,1)+Group(273,1,1)+Group(274,1,-1)+Group(275,1,-1)+Group(276,1,-1)+Group(277,1,-1)+Group(278,1,-1)+Group(279,1,-1)+Group(28,1,1)+Group(280,1,-1)+Group(281,1,-1)+Group(286,1,-2)+Group(287,1,-2)+Group(288,1,-2)+Group(289,1,-2)+Group(29,1,1)+Group(294,1,-2)+Group(295,1,-2)+Group(296,1,-2)+Group(297,1,-2)+Group(3,1,-1)+Group(30,1,1)+Group(306,1,-1)+Group(307,1,-1)+Group(308,1,-1)+Group(309,1,-1)+Group(31,1,1)+Group(310,1,-2)+Group(311,1,-2)+Group(312,1,-2)+Group(313,1,-2)+Group(314,1,-2)+Group(315,1,-2)+Group(316,1,-1)+Group(317,1,-1)+Group(318,1,-1)+Group(319,1,-1)+Group(324,1,-2)+Group(325,1,-2)+Group(326,1,-2)+Group(327,1,-2)+Group(328,1,-2)+Group(329,1,-2)+Group(330,1,-2)+Group(331,1,-2)+Group(332,1,-2)+Group(333,1,-2)+Group(334,1,1)+Group(335,1,1)+Group(336,1,1)+Group(337,1,1)+Group(338,1,-2)+Group(339,1,-2)+Group(340,1,-2)+Group(341,1,-2)+Group(342,1,-2)+Group(343,1,-2)+Group(344,1,-2)+Group(345,1,-2)+Group(346,1,1)+Group(347,1,1)+Group(348,1,1)+Group(349,1,1)+Group(350,1,-2)+Group(351,1,-2)+Group(356,1,-2)+Group(357,1,-2)+Group(358,1,-2)+Group(359,1,-2)+Group(36,1,1)+Group(360,1,-2)+Group(361,1,-2)+Group(362,1,-2)+Group(363,1,-2)+Group(364,1,-1)+Group(365,1,-1)+Group(366,1,-1)+Group(367,1,-1)+Group(37,1,1)+Group(372,1,-2)+Group(373,1,-2)+Group(374,1,-2)+Group(375,1,-2)+Group(38,1,1)+Group(380,1,-2)+Group(381,1,-2)+Group(386,1,-1)+Group(387,1,-1)+Group(388,1,-1)+Group(389,1,-1)+Group(39,1,1)+Group(398,1,-2)+Group(399,1,-2)+Group(4,1,-1)+Group(40,1,2)+Group(400,1,-2)+Group(401,1,-2)+Group(402,1,-2)+Group(403,1,-2)+Group(404,1,-2)+Group(405,1,-2)+Group(41,1,2)+Group(410,1,-1)+Group(411,1,-1)+Group(412,1,-1)+Group(413,1,-1)+Group(414,1,-2)+Group(415,1,-2)+Group(416,1,-2)+Group(417,1,-2)+Group(418,1,-2)+Group(419,1,-2)+Group(42,1,2)+Group(420,1,-2)+Group(421,1,-2)+Group(426,1,-1)+Group(427,1,-1)+Group(428,1,-1)+Group(429,1,-1)+Group(43,1,2)+Group(430,1,-2)+Group(431,1,-2)+Group(432,1,-2)+Group(433,1,-2)+Group(434,1,-2)+Group(435,1,-2)+Group(436,1,-1)+Group(437,1,-1)+Group(438,1,-1)+Group(439,1,-1)+Group(440,1,-2)+Group(441,1,-2)+Group(442,1,-2)+Group(443,1,-2)+Group(444,1,-1)+Group(445,1,-1)+Group(446,1,-1)+Group(447,1,-1)+Group(448,1,-1/2)+Group(449,1,-1/2)+Group(450,1,-1/2)+Group(451,1,-1/2)+Group(452,1,-1)+Group(453,1,-1)+Group(454,1,-1)+Group(455,1,-1)+Group(456,1,-1/2)+Group(457,1,-1/2)+Group(458,1,-1/2)+Group(459,1,-1/2)+Group(464,1,1)+Group(465,1,1)+Group(466,1,1)+Group(467,1,1)+Group(468,1,1)+Group(469,1,1)+Group(470,1,1)+Group(471,1,1)+Group(48,1,-1)+Group(480,1,-2)+Group(481,1,-2)+Group(482,1,-2)+Group(483,1,-2)+Group(484,1,-2)+Group(485,1,-2)+Group(486,1,-1)+Group(487,1,-1)+Group(488,1,-1)+Group(489,1,-1)+Group(49,1,-1)+Group(490,1,-1)+Group(491,1,-1)+Group(492,1,-1)+Group(493,1,-1)+Group(494,1,-2)+Group(495,1,-2)+Group(496,1,-2)+Group(497,1,-2)+Group(498,1,-2)+Group(499,1,-2)+Group(5,1,1)+Group(50,1,-1)+Group(500,1,-1)+Group(501,1,-1)+Group(502,1,-1)+Group(503,1,-1)+Group(504,1,1)+Group(505,1,1)+Group(506,1,-1)+Group(507,1,-1)+Group(508,1,-1)+Group(509,1,-1)+Group(51,1,-1)+Group(512,1,-2)+Group(513,1,-2)+Group(514,1,-2)+Group(515,1,-2)+Group(516,1,-1)+Group(517,1,-1)+Group(518,1,-1)+Group(519,1,-1)+Group(522,1,-1)+Group(523,1,-1)+Group(524,1,-1)+Group(525,1,-1)+Group(526,1,-1/2)+Group(527,1,-1/2)+Group(528,1,-1/2)+Group(529,1,-1/2)+Group(534,1,-1/2)+Group(535,1,-1/2)+Group(536,1,-1/2)+Group(537,1,-1/2)+Group(538,1,-1)+Group(539,1,-1)+Group(540,1,-1)+Group(541,1,-1)+Group(542,1,1)+Group(543,1,1)+Group(552,1,-2)+Group(553,1,-2)+Group(554,1,-2)+Group(555,1,-2)+Group(556,1,-1)+Group(557,1,-1)+Group(558,1,-1)+Group(559,1,-1)+Group(56,1,-2)+Group(564,1,-1)+Group(565,1,-1)+Group(566,1,-1)+Group(567,1,-1)+Group(568,1,-2)+Group(569,1,-2)+Group(57,1,-2)+Group(570,1,-2)+Group(571,1,-2)+Group(58,1,-2)+Group(586,1,1)+Group(587,1,1)+Group(588,1,1)+Group(589,1,1)+Group(59,1,-2)+Group(590,1,2)+Group(591,1,2)+Group(592,1,2)+Group(593,1,2)+Group(594,1,1)+Group(595,1,1)+Group(596,1,1)+Group(597,1,1)+Group(598,1,2)+Group(599,1,2)+Group(6,1,1)+Group(60,1,-2)+Group(600,1,2)+Group(601,1,2)+Group(602,1,1)+Group(603,1,1)+Group(604,1,1)+Group(605,1,1)+Group(61,1,-2)+Group(610,1,1)+Group(611,1,1)+Group(612,1,1)+Group(613,1,1)+Group(614,1,2)+Group(615,1,2)+Group(616,1,2)+Group(617,1,2)+Group(62,1,-2)+Group(63,1,-2)+Group(634,1,1)+Group(635,1,1)+Group(636,1,1)+Group(637,1,1)+Group(638,1,1)+Group(639,1,1)+Group(64,1,-2)+Group(640,1,1)+Group(641,1,1)+Group(65,1,-2)+Group(658,1,1)+Group(659,1,1)+Group(66,1,-2)+Group(660,1,1)+Group(661,1,1)+Group(662,1,1)+Group(663,1,1)+Group(664,1,1)+Group(665,1,1)+Group(666,1,1)+Group(667,1,1)+Group(668,1,1)+Group(669,1,1)+Group(67,1,-2)+Group(68,1,-2)+Group(69,1,-2)+Group(694,1,1)+Group(695,1,1)+Group(696,1,1)+Group(697,1,1)+Group(7,1,-1)+Group(70,1,-2)+Group(71,1,-2)+Group(72,1,-2)+Group(73,1,-2)+Group(730,1,1)+Group(731,1,1)+Group(74,1,-2)+Group(75,1,-2)+Group(76,1,-1)+Group(77,1,-1)+Group(78,1,-1)+Group(79,1,-1)+Group(8,1,-2)+Group(9,1,2) = -426");
@@ -1976,24 +2056,24 @@ mod slow {
         // // Including all graphs
         // Closed ghost circuits carry the same Grassmann minus as quarks.
         // Recompute only the statistics weights; counts, group IDs and ratios stay fixed.
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 ",false)?,@"6 | -43/24 = -43/24");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1 ",false)?,@"6 | -43/24 = -43/24");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"5 | -19/24+Group(0,1,-1/2)+Group(5,1,-1/2) = -43/24");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"36 | -91/48 = -91/48");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"36 | -91/48 = -91/48");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"27 | -83/48+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(11,1,1/2)+Group(16,1,1/2)+Group(19,1,1/2)+Group(2,1,-1/4)+Group(3,1,-1/3)+Group(30,1,-1/4)+Group(31,1,-1/4)+Group(32,1,-1/3)+Group(33,1,-1/4)+Group(34,1,1/4)+Group(35,1,-1/2)+Group(4,1,1/4)+Group(5,1,-1/2)+Group(6,1,1/2)+Group(7,1,1/2) = -91/48");
         // Exact color contraction removes six of the 270 raw networks;
         // directed AutG and closed Grassmann circuits give 191/24.
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping only_detect_zeroes --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"264 | 191/24 = 191/24");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"264 | 191/24 = 191/24");
         // Old target in main:
         // ('{} > {} | g ghg t u d QED==0 [{4}] -a -num_grouping group_identical_graphs_up_to_scalar_rescaling --max_n_bridges -1 --number_of_factorized_loop_subtopologies -1', snapshot(179), snapshot('-731/168')),
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges -1 --number-of-factorized-loop-subtopologies -1 -1",false)?,@"178 | -13/24+Group(0,1,-1/8)+Group(1,1,-1/2)+Group(10,1,-1/8)+Group(100,1,1)+Group(101,1,1)+Group(105,1,1)+Group(107,1,1/2)+Group(11,1,-1/3)+Group(111,1,1/2)+Group(115,1,-1/2)+Group(119,1,-1/2)+Group(12,1,-1/2)+Group(126,1,1/6)+Group(127,7/2,1/6)+Group(13,1,-1/2)+Group(134,1,-1/2)+Group(135,1,-1/2)+Group(136,1,-1)+Group(137,1,-1/2)+Group(138,1,-1/4)+Group(139,1,-1/2)+Group(14,1,-1/2)+Group(140,1,-1)+Group(141,1,1/2)+Group(15,1,-1/2)+Group(153,1,1)+Group(154,1,-1/2)+Group(155,1,-1/2)+Group(156,1,-1/2)+Group(157,1,-1/4)+Group(158,1,-1)+Group(159,1,-1)+Group(16,1,-1/2)+Group(160,1,-1/2)+Group(161,1,1/2)+Group(162,1,-1/3)+Group(163,1,-1/3)+Group(169,1,-1/3)+Group(17,1,-1/2)+Group(170,1,-1/3)+Group(172,1,-1)+Group(175,1,-1)+Group(18,1,-1/4)+Group(184,1,-1/2)+Group(187,1,-1/2)+Group(19,1,-1/4)+Group(2,1,-1/4)+Group(21,1,-1/4)+Group(22,1,-1)+Group(228,1,1)+Group(229,1,1/2)+Group(23,1,1/4)+Group(230,1,1)+Group(231,1,-1/8)+Group(232,1,-1/2)+Group(233,1,-1/4)+Group(234,1,-1/8)+Group(235,1,-1/4)+Group(236,1,-1/8)+Group(237,1,-1/4)+Group(238,1,-1/8)+Group(239,1,-1/12)+Group(24,1,1/4)+Group(240,1,-1/4)+Group(241,1,-1/8)+Group(242,1,-1/3)+Group(243,1,-1/2)+Group(244,1,-1/2)+Group(245,1,-1/2)+Group(246,1,-1/2)+Group(247,1,-1/2)+Group(248,1,-1/2)+Group(249,1,-1/4)+Group(25,1,1/4)+Group(250,1,-1/4)+Group(252,1,-1/4)+Group(253,1,-1)+Group(254,1,1/4)+Group(255,1,1/4)+Group(256,1,1/4)+Group(257,1,1/8)+Group(258,1,-1)+Group(259,1,-1/6)+Group(26,1,1/8)+Group(260,1,1)+Group(261,1,-1/2)+Group(262,1,-1)+Group(263,1,1/6)+Group(264,7/2,1/6)+Group(265,1,1/2)+Group(266,1,1)+Group(267,1,-1/3)+Group(268,1,-1/2)+Group(269,1,-1/6)+Group(27,1,-1)+Group(28,1,-1/6)+Group(29,1,1)+Group(3,1,-1/8)+Group(30,1,-1/2)+Group(31,1,-1/2)+Group(32,1,1/6)+Group(33,7/2,1/6)+Group(34,1,-1)+Group(35,1,1/2)+Group(36,1,1)+Group(37,1,-1/3)+Group(38,1,-1/2)+Group(39,1,-1/6)+Group(4,1,-1/4)+Group(40,1,1/2)+Group(41,1,1/2)+Group(42,1,1/2)+Group(43,1,1/4)+Group(44,1,1)+Group(45,1,-1/2)+Group(46,7/2,1/3)+Group(47,1,1/3)+Group(48,1,1/2)+Group(49,1,1)+Group(5,1,-1/8)+Group(50,1,1/2)+Group(51,1,1/2)+Group(52,1,1)+Group(53,1,1/2)+Group(54,1,1/4)+Group(55,1,1/2)+Group(56,1,1)+Group(57,1,-1/2)+Group(58,1,1)+Group(6,1,-1/4)+Group(61,1,1)+Group(7,1,-1/8)+Group(79,1,-1)+Group(8,1,-1/12)+Group(80,1,1/2)+Group(81,1,1/2)+Group(82,1,1/2)+Group(83,1,1/4)+Group(84,1,1)+Group(85,1,1)+Group(86,1,1/2)+Group(87,1,-1/2)+Group(88,1,1/3)+Group(89,2/7,1/3)+Group(9,1,-1/4)+Group(90,1,1)+Group(91,1,-1/3)+Group(92,1,-1/3)+Group(98,1,1/3)+Group(99,2/7,1/3) = -731/168");
 
         // // Only non-factorizable ones
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"5 | -11/12 = -11/12");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"5 | -11/12 = -11/12");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{2}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"4 | 1/12+Group(0,1,-1/2)+Group(4,1,-1/2) = -11/12");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"30 | -17/12 = -17/12");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"30 | -17/12 = -17/12");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"22 | 1/4+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(14,1,-1/2)+Group(16,1,-1/2)+Group(2,1,-1/3)+Group(25,1,-1/4)+Group(26,1,-1/3)+Group(27,1,-1/4)+Group(28,1,1/4)+Group(29,1,-1/2)+Group(3,1,1/4)+Group(4,1,-1/2)+Group(5,1,1/2)+Group(6,1,1/2)+Group(9,1,1/2) = -17/12");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{3}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 1 --number-of-factorized-loop-subtopologies 1 1",true)?,@"22 | 1/4+Group(0,1,-1/4)+Group(1,1,-1/4)+Group(14,1,-1/2)+Group(16,1,-1/2)+Group(2,1,-1/3)+Group(25,1,-1/4)+Group(26,1,-1/3)+Group(27,1,-1/4)+Group(28,1,1/4)+Group(29,1,-1/2)+Group(3,1,1/4)+Group(4,1,-1/2)+Group(5,1,1/2)+Group(6,1,1/2)+Group(9,1,1/2) = -17/12");
-        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping only_detect_zeroes --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"200 | -199/48 = -199/48");
+        assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --filter-zero-color --numerator-grouping no_grouping --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"200 | -199/48 = -199/48");
         assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g ghg t u d QED==0 [{4}] --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --max-n-bridges 0 --number-of-factorized-loop-subtopologies 1 1",false)?,@"130 | -71/48+Group(0,1,-1/8)+Group(1,1,-1/2)+Group(10,1,-1/2)+Group(106,1,-1/2)+Group(107,1,-1)+Group(108,1,-1/2)+Group(109,1,-1/2)+Group(11,1,-1/4)+Group(110,1,-1)+Group(111,1,1/2)+Group(118,1,1)+Group(119,1,-1/2)+Group(120,1,-1/2)+Group(121,1,-1)+Group(122,1,-1)+Group(123,1,-1/2)+Group(124,1,1/2)+Group(125,1,-1/3)+Group(126,1,-1/3)+Group(13,1,-1/4)+Group(131,1,-1/3)+Group(132,1,-1/3)+Group(134,1,-1)+Group(136,1,-1)+Group(14,1,-1)+Group(144,1,-1/2)+Group(146,1,-1/2)+Group(15,1,1/4)+Group(16,1,1/4)+Group(17,1,-1)+Group(174,1,1)+Group(175,1,1/2)+Group(176,1,1)+Group(177,1,-1/8)+Group(178,1,-1/2)+Group(179,1,-1/4)+Group(18,1,-1/6)+Group(180,1,-1/4)+Group(181,1,-1/8)+Group(182,1,-1/12)+Group(183,1,-1/3)+Group(184,1,-1/2)+Group(185,1,-1/2)+Group(186,1,-1/2)+Group(187,1,-1/2)+Group(188,1,-1/4)+Group(19,1,1)+Group(190,1,-1/4)+Group(191,1,-1)+Group(192,1,1/4)+Group(193,1,1/4)+Group(194,1,-1)+Group(195,1,-1/6)+Group(196,1,1)+Group(197,1,-1/2)+Group(198,1,-1)+Group(199,1,1/6)+Group(2,1,-1/4)+Group(20,1,-1/2)+Group(200,7/2,1/6)+Group(201,1,1/2)+Group(202,1,1)+Group(203,1,-1/3)+Group(204,1,-1/2)+Group(205,1,-1/6)+Group(21,1,-1/2)+Group(22,1,1/6)+Group(23,7/2,1/6)+Group(24,1,-1)+Group(25,1,1/2)+Group(26,1,1)+Group(27,1,-1/3)+Group(28,1,-1/2)+Group(29,1,-1/6)+Group(3,1,-1/4)+Group(30,1,1/2)+Group(31,1,1/2)+Group(32,1,1)+Group(33,1,-1/2)+Group(34,7/2,1/3)+Group(35,1,1/3)+Group(36,1,1/2)+Group(37,1,1)+Group(38,1,1/2)+Group(39,1,1)+Group(4,1,-1/8)+Group(40,1,1/2)+Group(41,1,1/2)+Group(42,1,1)+Group(43,1,-1/2)+Group(44,1,1)+Group(46,1,1)+Group(5,1,-1/12)+Group(58,1,-1)+Group(59,1,1/2)+Group(6,1,-1/3)+Group(60,1,1/2)+Group(61,1,1)+Group(62,1,1)+Group(63,1,1/2)+Group(64,1,-1/2)+Group(65,1,1/3)+Group(66,2/7,1/3)+Group(67,1,1)+Group(68,1,-1/3)+Group(69,1,-1/3)+Group(7,1,-1/2)+Group(74,1,1/3)+Group(75,2/7,1/3)+Group(76,1,1)+Group(77,1,1)+Group(8,1,-1/2)+Group(80,1,1)+Group(82,1,1/2)+Group(85,1,1/2)+Group(89,1,-1/2)+Group(9,1,-1/2)+Group(92,1,-1/2)+Group(98,1,1/6)+Group(99,7/2,1/6) = -853/336");
 
         Ok(())
@@ -2014,4 +2094,166 @@ mod slow {
 
         Ok(())
     }
+}
+
+#[test]
+fn scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory() -> color_eyre::Result<()>
+{
+    use feynkit_graph::expressions::evaluate_overall_factor;
+    use gammalooprs::{
+        graph::{FinalizedCut, FinalizedTopologyThresholdCandidate, Graph},
+        uv::uv_graph::UVE,
+    };
+    use linnet::half_edge::involution::{Flow, HedgePair};
+    use std::collections::BTreeMap;
+    use symbolica::graph::Graph as ColoredGraph;
+
+    let _serial_guard = gammaloop_integration_tests::SERIAL_TEST_LOCK.lock();
+    let test_name = "scalar_three_loop_generator_preserves_the_fixed_acceptance_inventory";
+    let mut cli = gammaloop_integration_tests::get_test_cli(
+        None,
+        gammaloop_integration_tests::get_tests_workspace_path().join(test_name),
+        Some(test_name.to_string()),
+        true,
+    )?;
+    cli.run_command("import model scalars-default.json")?;
+    cli.run_command("generate xs scalar_1 > {scalar_0 scalar_0, scalar_0 scalar_0 scalar_1} | scalar_0 scalar_1 [{{3}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p inventory -i all --only-diagrams")?;
+    let gammalooprs::processes::ProcessCollection::CrossSections(cross_sections) =
+        &cli.state.process_list.processes[0].collection
+    else {
+        panic!("expected a cross section")
+    };
+    let generated = &cross_sections["all"].supergraphs;
+    assert_eq!(generated.len(), 49);
+
+    // Scalar rule legs are interchangeable. Compare the colored physics graph,
+    // its local factors, both sides of every initial/physical/threshold cut and its
+    // overall coefficient; omit only labels, routing coordinates and UFO slots.
+    let cooking = idenso::CookSettings::indices()
+        .with_mode(idenso::CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let key = |graph: &Graph,
+               cuts: &[FinalizedCut],
+               thresholds: &[FinalizedTopologyThresholdCandidate]| {
+        let mut colored = ColoredGraph::new();
+        let nodes = graph
+            .underlying
+            .iter_nodes()
+            .map(|(node, _, data)| {
+                let color = format!(
+                    "vertex:{:?}:{}:{}",
+                    data.vertex_rule,
+                    cooking
+                        .uncook(data.num.value.expression().as_view())
+                        .to_plain_string(),
+                    data.dod.value
+                );
+                (node, colored.add_node(color))
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (pair, _, edge) in graph.underlying.iter_edges() {
+            let color = format!(
+                "edge:{:?}:{}:{}:{}",
+                edge.data.particle_pdg_code(&graph.model),
+                cooking
+                    .uncook(edge.data.num.value.expression().as_view())
+                    .to_plain_string(),
+                edge.data.dod.value,
+                edge.data.is_dummy
+            );
+            let (source, target) = match pair {
+                HedgePair::Paired { source, sink } => (
+                    nodes[&graph.underlying.node_id(source)],
+                    nodes[&graph.underlying.node_id(sink)],
+                ),
+                HedgePair::Unpaired { hedge, flow } => {
+                    let external = colored.add_node(format!("external:{flow:?}"));
+                    let internal = nodes[&graph.underlying.node_id(hedge)];
+                    if flow == Flow::Sink {
+                        (external, internal)
+                    } else {
+                        (internal, external)
+                    }
+                }
+                _ => unreachable!("whole-graph edges cannot be split"),
+            };
+            colored.add_edge(source, target, false, color).unwrap();
+        }
+        for (kind, left, right) in cuts
+            .iter()
+            .map(|c| ("physical", &c.left, &c.right))
+            .chain(thresholds.iter().map(|c| ("threshold", &c.left, &c.right)))
+            .chain(std::iter::once((
+                "initial",
+                &graph.initial_state_cut.left,
+                &graph.initial_state_cut.right,
+            )))
+        {
+            let left_node = colored.add_node(format!("{kind}:left"));
+            let right_node = colored.add_node(format!("{kind}:right"));
+            colored
+                .add_edge(left_node, right_node, false, "cut-pair".to_string())
+                .unwrap();
+            for (side, filter) in [(left_node, left), (right_node, right)] {
+                for (node, _, _) in graph.underlying.iter_nodes_of(filter) {
+                    colored
+                        .add_edge(side, nodes[&node], false, "cut-membership".to_string())
+                        .unwrap();
+                }
+            }
+        }
+        let canonical = colored.canonize().graph;
+        let (numerator, numerator_interface) =
+            feynkit_graph::NumeratorInterface::export(&graph.global_prefactor.num);
+        let (projector, projector_interface) =
+            feynkit_graph::NumeratorInterface::export(&graph.global_prefactor.projector);
+        (
+            canonical
+                .nodes()
+                .iter()
+                .map(|node| node.data.clone())
+                .collect::<Vec<_>>(),
+            canonical
+                .edges()
+                .iter()
+                .map(|edge| (edge.vertices, edge.directed, edge.data.clone()))
+                .collect::<Vec<_>>(),
+            evaluate_overall_factor(graph.overall_factor.as_view()),
+            (numerator, numerator_interface.map(|ports| ports.to_json())),
+            (projector, projector_interface.map(|ports| ports.to_json())),
+        )
+    };
+    let mut actual = BTreeMap::new();
+    for graph in generated {
+        *actual
+            .entry(key(
+                &graph.graph,
+                &graph.cuts.raw,
+                &graph.topology_threshold_candidates,
+            ))
+            .or_insert(0usize) += 1;
+    }
+    let mut expected = BTreeMap::new();
+    for index in 0..49 {
+        let path = format!("tests/resources/graphs/scalar_3l_reference/GL{index:02}.dot");
+        let graphs = Graph::import_dot(&std::fs::read_to_string(path)?, &cli.state.model)?;
+        let [graph] = graphs.as_slice() else {
+            panic!("each fixed input contains exactly one graph")
+        };
+        assert_eq!(graph.loop_momentum_basis.loop_edges.len(), 3);
+        assert!(!graph.finalized_cuts.is_empty());
+        *expected
+            .entry(key(
+                graph,
+                &graph.finalized_cuts,
+                &graph.finalized_topology_threshold_candidates,
+            ))
+            .or_insert(0usize) += 1;
+    }
+    assert_eq!(
+        actual, expected,
+        "native generation must preserve every fixed physical graph, weight and cut"
+    );
+    gammaloop_integration_tests::clean_test(&cli.cli_settings.state.folder);
+    Ok(())
 }

@@ -3,6 +3,7 @@ use std::{
     fmt::Display,
 };
 
+use crate::cff::Esurface;
 use bincode_trait_derive::{Decode, Encode};
 use eyre::Result;
 use linnet::half_edge::involution::EdgeVec;
@@ -14,7 +15,6 @@ use typed_index_collections::TiVec;
 
 use crate::{
     DependentMomentaConstructor, GammaLoopContext,
-    cff::esurface::Esurface,
     graph::LoopMomentumBasis,
     integrands::process::SamplingMapDefinition,
     integrands::process::evaluators::EvaluatorMethod,
@@ -35,7 +35,10 @@ use symbolica::domains::{float::Real, integer::Integer, rational::Rational};
 
 use super::{RuntimeSettings, global::OrientationPattern};
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
 #[serde(default)]
 pub struct RuntimeModelSettings {
@@ -43,7 +46,10 @@ pub struct RuntimeModelSettings {
     pub external_parameters: BTreeMap<String, (F<f64>, F<f64>)>,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct SubtractionSettings {
@@ -175,7 +181,7 @@ impl<'a> LockedRuntimeSettings<'a> {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Debug, Copy, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, Eq, JsonSchema, Default,
 )]
@@ -211,7 +217,10 @@ impl IntegralUnit {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[trait_decode(trait= GammaLoopContext)]
 #[serde(default, deny_unknown_fields)]
@@ -295,7 +304,7 @@ impl GeneralSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Debug, Copy, Clone, PartialEq, Deserialize, Default, Serialize, Encode, Decode, JsonSchema,
 )]
@@ -313,7 +322,10 @@ pub enum IntegratedPhase {
 
 pub mod kinematic;
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ObservablesOutputSettings {
@@ -354,7 +366,10 @@ impl ObservablesOutputSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct IntegratorSettings {
@@ -431,7 +446,10 @@ impl Default for IntegratorSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct ParameterizationSettings {
@@ -1179,7 +1197,10 @@ channel_weight = "{local}"
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Serialize, Deserialize, Debug, Clone, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct StabilitySettings {
@@ -1237,7 +1258,10 @@ impl Default for StabilitySettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct StabilityRecordingSettings {
@@ -1263,7 +1287,10 @@ impl Default for StabilityRecordingSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, Encode, Decode, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct StabilityLevelSetting {
@@ -1334,7 +1361,10 @@ impl StabilityLevelSetting {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "type")]
 #[serde(deny_unknown_fields)]
@@ -1390,7 +1420,7 @@ impl RotationSetting {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(
     Serialize, Deserialize, Debug, Clone, PartialEq, Copy, Hash, Eq, Encode, Decode, JsonSchema,
 )]
@@ -1411,7 +1441,10 @@ impl Display for Precision {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum ParameterizationMode {
@@ -1434,7 +1467,10 @@ pub enum ParameterizationMode {
     SphericalProductCommonRadial,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct OutputMetadata {
@@ -1465,7 +1501,7 @@ impl Display for ParameterizationMode {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Deserialize, PartialEq, Default, Serialize, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub enum ParameterizationMapping {
@@ -1479,7 +1515,10 @@ pub enum ParameterizationMapping {
 }
 
 #[derive(Debug, Clone, PartialEq, Encode, Decode)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub enum SamplingSettings {
     Default(ParameterizationSettings),
     MultiChanneling(MultiChannelingSettings),
@@ -1487,7 +1526,10 @@ pub enum SamplingSettings {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingSettingsParser {
     /// Whether graph contributions are summed deterministically or sampled as a discrete axis.
@@ -1548,7 +1590,7 @@ pub struct SamplingSettingsParser {
 // `sampling_*` names as the canonical fields.  Serde aliases above cover TOML
 // and JSON cards; these accessors cover callers that construct parser settings
 // directly through the Python bindings.
-#[cfg(feature = "python")]
+#[cfg(feature = "python_api")]
 #[pyo3::pymethods]
 impl SamplingSettingsParser {
     #[getter(lmb_multichanneling)]
@@ -1612,7 +1654,10 @@ impl Default for SamplingSettingsParser {
 #[derive(
     Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub enum SamplingChannelWeight {
     #[serde(rename = "map_density")]
     #[default]
@@ -1629,7 +1674,10 @@ pub enum SamplingChannelWeight {
 #[derive(
     Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SamplingRadialProfileKind {
     #[default]
@@ -1639,7 +1687,10 @@ pub enum SamplingRadialProfileKind {
 #[derive(
     Debug, Default, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Encode, Decode, JsonSchema,
 )]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(rename_all = "snake_case")]
 pub enum SamplingRadialApproximation {
     #[default]
@@ -1649,7 +1700,10 @@ pub enum SamplingRadialApproximation {
 /// A normalized proposal for the auxiliary LU scale. This changes sampling
 /// only: the physical LU h-function and its raised-cut derivatives are intact.
 #[derive(Debug, Clone, Serialize, PartialEq, Encode, Decode, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[schemars(with = "SamplingRadialProfileInput")]
 pub struct SamplingRadialProfile {
     pub kind: SamplingRadialProfileKind,
@@ -1729,7 +1783,10 @@ impl<'de> Deserialize<'de> for SamplingRadialProfile {
 /// resolving a short expression against a graph is a later validation step,
 /// while exported definitions must never lose the routing frame they use.
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingChannelDefinition {
     pub around: String,
@@ -1758,7 +1815,10 @@ pub struct SamplingChannelDefinition {
 
 /// Selection and user definitions for graph-aware sampling channels.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[serde(default, deny_unknown_fields)]
 pub struct SamplingChannelSelection {
     #[serde(skip_serializing_if = "IsDefault::is_default")]
@@ -1789,7 +1849,10 @@ impl Default for SamplingChannelSelection {
 }
 
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub enum SumMode {
     #[serde(rename = "summed")]
     #[default]
@@ -1799,7 +1862,10 @@ pub enum SumMode {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 pub enum CoordinateSystem {
     #[serde(rename = "cartesian")]
     Cartesian,
@@ -2373,7 +2439,10 @@ impl SamplingSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Default, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct MultiChannelingSettings {
@@ -2382,7 +2451,10 @@ pub struct MultiChannelingSettings {
     pub parameterization_settings: ParameterizationSettings,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct GammaloopTropicalSamplingSettings {
@@ -2413,7 +2485,10 @@ impl GammaloopTropicalSamplingSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "subtype", deny_unknown_fields)]
 pub enum DiscreteGraphSamplingType {
@@ -2433,7 +2508,10 @@ impl Default for DiscreteGraphSamplingType {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema, Default)]
 #[serde(deny_unknown_fields, default)]
 pub struct DiscreteGraphSamplingSettings {
@@ -2448,7 +2526,10 @@ pub struct DiscreteGraphSamplingSettings {
     pub sampling_type: DiscreteGraphSamplingType,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct LocalCounterTermSettings {
@@ -2457,7 +2538,10 @@ pub struct LocalCounterTermSettings {
     pub uv_localisation: UVLocalisationSettings,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(default, deny_unknown_fields)]
 pub struct UVLocalisationSettings {
@@ -2490,7 +2574,10 @@ impl Default for UVLocalisationSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct IntegratedCounterTermSettings {
@@ -2499,7 +2586,10 @@ pub struct IntegratedCounterTermSettings {
     pub range: IntegratedCounterTermRange,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(tag = "type")]
 #[serde(deny_unknown_fields)]
@@ -2523,7 +2613,10 @@ impl Default for IntegratedCounterTermRange {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object, get_all, set_all))]
+#[cfg_attr(
+    feature = "python_api",
+    pyo3::pyclass(from_py_object, get_all, set_all)
+)]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[serde(default)]
@@ -2554,7 +2647,7 @@ impl Default for OverlapSettings {
     }
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
 // #[trait_decode(trait= GammaLoopContext)]
@@ -2570,7 +2663,7 @@ pub enum HFunction {
     ExponentialCT,
 }
 
-#[cfg_attr(feature = "python", pyo3::pyclass(from_py_object))]
+#[cfg_attr(feature = "python_api", pyo3::pyclass(from_py_object))]
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Encode, Decode, JsonSchema)]
 #[serde(deny_unknown_fields)]
 #[serde(default)]

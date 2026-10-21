@@ -21,49 +21,37 @@ kind = "System architecture"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-09"
-review_ref = "c2f94664f0dfb28e98160a5d06768fa55b4a1dff"
-products = ["gammaloop"]
+reviewed_at = "2026-08-18"
+review_ref = "c9f4e32acd2c"
+products = ["gammaloop", "feynkit"]
 topics = ["state", "python", "generation", "evaluation", "events", "integration", "persistence"]
-review_triggers = ["crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
+review_triggers = ["crates/feynkit*/**", "crates/gammaloop-api/src/**", "crates/gammaloop-api/python/**", "crates/gammalooprs/src/**"]
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/state.rs"
 symbol = "gammaloop_api::state::State::load"
 anchor = "load_state_manifest(&save_path)?"
-# Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
-# No architecture impact 2026-09-23: test momentum chunks use fixed-size arrays;
-# state loading and persistence behavior are unchanged.
-# No architecture impact 2026-09-24: the legacy-command test asserts absent
-# optional metadata-display flags; state loading and persistence are unchanged.
-# Reviewed 2026-09-24: state version 10 persists and restores UFO and Linnet
-# printer registrations before model/archive parsing; regeneration and callback
-# ownership are documented in architecture-current.typ.
-# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
-# only module/import paths changed, with numerical and persistence contracts unchanged.
-# Reviewed 2026-10-01: State v11 retains printer registrations and adds inlining policies and caller-scope aliases; architecture-current.typ documents the combined format.
-# Reviewed 2026-10-09: architecture-current.typ documents state v12 rejecting
-# states predating the OnShellEnergy/Esurface rename before import. Generation
-# monitoring now reads process-local Linux RSS and wakes on completion; this
-# monitoring change preserves persistence and numerical contracts.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-# No architecture impact 2026-10-03: the state-load test also checks reloaded
-# model values and coupling slots; State::load and persistence are unchanged.
-# Reviewed 2026-10-07: state version 13 persists the selected medium in graph
-# parameter builders, as documented in architecture-current.typ.
-# Reviewed 2026-10-10: the version-13 comment also names the persisted Fermi-surface
-# evaluators, matching the persistence contract; State::load is unchanged.
-# Reviewed 2026-10-13: state version 14 consolidates generated-CFF source-frame
-# signs; architecture-current.typ records the changed binary layout and regeneration.
-# Reviewed 2026-10-14: the version-13 history now also records denominator H-surfaces
-# and frozen compilation snapshots. Only comments changed;
-# version 14 and the exact-version load guard are unchanged.
-# Reviewed 2026-10-14: version 15 rejects saved Fermi coefficient catalogues with
-# the previous global-index semantics; the one-entry catalogue mapping and
-# regeneration requirement are documented in architecture-current.typ.
-digest = "b07adbd4a1cf8299414e885a2de300264295388c"
+# Reviewed 2026-09-16: state version 2 persists the canonical FeynKit model;
+# the architecture records the regeneration requirement for version-1 states.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# No state-lifecycle impact 2026-09-29: imported-graph validation reads the
+# process definition's stored generation_type; State::load and version 8 persistence are unchanged.
+# Reviewed 2026-10-15: Manifest version 17 and regeneration of older positional
+# layouts match the current architecture. Canonical model loading and symbol
+# registration precede saved symbolic data.
+# Reviewed 2026-10-15: State version 18 combines canonical FeynKit ownership and
+# thermal/Fermi payloads; the current architecture records regeneration of older
+# states.
+# Reviewed 2026-10-15: State tests now supply finalized numerator metadata and
+# explicit physical cuts. The architecture records restored TOML process-history
+# persistence; the manifest boundary and version18 rejection policy are unchanged.
+# Reviewed 2026-10-15: The persisted-UV fixture now uses its declared scalar model and native
+# graph importer. Canonical printer replay and current version18 boundaries retain
+# the documented save/load behavior; exact physical and reference acceptance pass.
+# Reviewed 2026-10-17: The architecture records state version 19 for retained tensor payloads, checked symbol-remapped loading, and unchanged standalone scalar evaluator versions.
+# Reviewed 2026-10-17: Full state version 20 retains global numerator/projector interfaces in addition to version19 runtime tensors; standalone evaluator formats remain unchanged.
+# Reviewed 2026-10-18: Full state 21 stores explicit indexed tensor slots and rejects unresolved runtime ports; architecture-current records regeneration of earlier full states and unchanged standalone formats.
+digest = "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -71,19 +59,15 @@ symbol = "gammaloop_api::commands::integrate::Integrate::default_workspace_path"
 anchor = "fn default_workspace_path(&self"
 # Reviewed 2026-09-14: fallible grid constructors changed only test fixtures;
 # integration-workspace and persistence boundaries remain unchanged.
-# Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
-# No architecture impact 2026-09-23: corrected the JSON example code span;
-# command behavior and dashboard ownership are unchanged.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-# Reviewed 2026-10-03: integration panics become command errors after dashboard
-# shutdown, as documented in ratatui-integration-dashboard.typ; workspace paths
-# and persistence are unchanged.
-# Reviewed 2026-10-14: only streamed integrations convert panics into command
-# errors; non-streamed runs preserve ordinary unwinding and the original report.
-# The dashboard note records this; workspace and persistence contracts are unchanged.
-digest = "0bdb5ccde10675a71a3fa52ed6c8d7da36d71bfa"
+# No integration/dashboard impact 2026-09-16: graph-group selection now
+# receives the canonical model; persistence and terminal ownership are unchanged.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# Reviewed 2026-10-15: The maintained notes cover completed-iteration resume, read-
+# only output placement, signed/absolute views and terminal cleanup. Explicit model
+# access and fixture formatting preserve workspace and dashboard ownership.
+# Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
+# recovery shuts down the renderer; non-streamed runs preserve unwinding.
+digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -110,29 +94,16 @@ anchor = "pub fn warm_up(&mut self, model"
 # and added regression coverage.
 # Reviewed 2026-09-14: canonical tensor layouts and fallible Symbolica APIs
 # preserve the documented warm-up and state-ownership boundaries.
-# Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
-# Reviewed 2026-09-23: Amplitude norm stability uses phase-invariant complex
-# magnitudes and a private channel norm sum; public absolute components and
-# cross-section phase checks retain their documented meaning.
-# Reviewed 2026-09-24: explicit generated LMB selectors and read-only metadata
-# share the canonical catalogue owner documented in architecture-current.typ;
-# warm-up and numerical preparation retain their existing ownership.
-# Reviewed 2026-09-25: sampling files now share process::sampling ownership;
-# only module/import paths changed, with numerical and persistence contracts unchanged.
-# Reviewed 2026-10-01: Candidate-LMB routing follows exact precision promotion into the selected member graph before native materialization and rotation; architecture-current.typ documents canonical source ownership.
-# Reviewed 2026-10-03: UV profile measures enter stability bounds, as documented
-# in architecture-current.typ, and LMB multichanneling accepts an empty external
-# basis; warm-up and numerical preparation ownership are unchanged.
-# Reviewed 2026-10-03: the module now declares process::fermi_surface, whose
-# zero-temperature localization is documented in architecture-current.typ.
-# Reviewed 2026-10-07: LMB mass warm-up propagates the medium-parameter validation
-# documented in architecture-current.typ; warm-up ownership is unchanged.
-# No architecture impact 2026-10-11: Fermi-surface implementation visibility is
-# restricted to this crate; warm-up and localization behavior are unchanged.
-# No architecture impact 2026-10-11: the precise profile evaluator retains its
-# existing arguments with a scoped Clippy allowance; runtime behavior is unchanged.
-digest = "ce12a0f560b08a6198ca32f950d8063b3e84afa9"
+# Reviewed 2026-09-16: selection receives the canonical model and CFF IDs
+# come from FeynKit; warm-up and evaluator activation remain downstream.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# Reviewed 2026-10-15: Canonical model arguments, shared numerator definitions,
+# evaluator activation and Gaussian reference behavior match the maintained
+# architecture; runtime orchestration remains downstream of generation.
+# Reviewed 2026-10-15: The current architecture covers Fermi-surface evaluation and
+# weighted precise profiles alongside canonical FeynKit models.
+# Reviewed 2026-10-16: Authored warm-up fixtures declare a physical loop basis and only real endpoint rule slots. Production warm-up ownership is unchanged.
+digest = "c795c1a404f9a6118501d7b5ee2d5e580e44886c"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/observables/events.rs"
@@ -153,13 +124,13 @@ digest = "6450148360cff16688c3e37986180c678682606e"
 path = "crates/gammalooprs/src/observables/mod.rs"
 symbol = "gammalooprs::observables::EventProcessingRuntime"
 anchor = "pub struct EventProcessingRuntime {"
-# Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
-# Reviewed 2026-10-04: architecture-current.typ documents normalized unlabeled
-# continuous checkpoint metadata, with explicit labels and merge guards retained.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-digest = "e42015d34dc3d2d1b27d75a1a35dd96002fe8604"
+# No event-ownership impact 2026-09-16: canonical model access and finite,
+# nonnegative jet-threshold validation preserve grouping and accumulation.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# Reviewed 2026-10-15: Canonical model lookups preserve graph-group event ownership
+# and per-sample accumulation. Retained main observable and cut metadata behavior
+# stays in the runtime owner.
+digest = "e0a87225a5073e48c6d82a4d8f39cddac43d1684"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -167,15 +138,20 @@ symbol = "gammaloop_api::python::GammaLoopAPI"
 anchor = "struct GammaLoopAPI {"
 # No architecture impact: the 2026-09-02 doctest correction only marks Python
 # examples as Python in rendered/exported documentation; binding behavior is unchanged.
-# Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-# Reviewed 2026-09-23: Canonical sampling/native weighted results, selected loading, state v9, structured Python integration, and threshold event metadata are documented in architecture-current.typ.
-# Reviewed 2026-09-23: Stub-generation inventory includes threshold metadata and
-# absolute-result classes; runtime Python registration and behavior are unchanged.
-# Reviewed 2026-09-23: Getter prose distinguishes physical contributions from
-# outer-grid weights; the typed integration entrypoint remains disabled.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-digest = "f49d9a4a439665c6944987961a185d3596fbd3f3"
+# Reviewed 2026-09-16: Python CFF uses FeynKit topology directly and runtime
+# graph imports require finalized artifacts, matching the ownership record.
+# No architecture impact 2026-09-16: next_back preserves last-graph
+# selection while avoiding traversal of the entire DOT graph iterator.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# No Python-session architecture impact 2026-09-29: the standalone atom helper
+# is now contract, delegating admission and reduction to the shared Idenso tensor;
+# GammaLoopAPI state, threading, command dispatch and persistence are unchanged.
+# The helper explicitly retains its previous metric/vector scope without
+# enabling the unified contractor's new chain/trace collection defaults.
+# Reviewed 2026-10-15: Python delegates imports and symbolic operations to canonical
+# graph and typed tensor owners. Session/state ownership and the f64 boundary remain
+# unchanged; compact import now has a dedicated documented scope.
+digest = "adc6974f20de538c6acfb2913aa5c9b16b590617"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/lib.rs"
@@ -188,25 +164,122 @@ digest = "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16"
 # No-impact attestation 2026-08-28: tadpole-filter validation failures now
 # warn and reject the candidate instead of panicking; generation ownership and
 # the documented filtering pipeline are unchanged.
-path = "crates/gammalooprs/src/feyngen/diagram_generator.rs"
-symbol = "gammalooprs::feyngen::DiagramGenerator::generate"
+path = "crates/feynkit-generator/src/generation.rs"
+symbol = "feynkit_generator::Generator::generate"
 anchor = "pub fn generate("
 # Reviewed 2026-09-14: Symbolica's graph/canonicalization API migration
 # preserves generation, filtering, and persistence ownership.
-# Reviewed 2026-09-17: State versioning, shared numerator definitions, sampling scale, event pair lists, and covariant cuts are documented in architecture-current.typ.
-# No-impact attestation 2026-09-22: diagram generation uses the shared
-# ParsingNet name for its existing parametric network type; generation and
-# filtering behavior, including the strict function policy, are unchanged.
-# Reviewed 2026-10-05: documented physical ghost-flow chart ownership, second-pass invariance, closed-ghost signs, and directed-self-loop automorphism factors.
-# Reviewed 2026-10-05: neutral adjoint QCD ghost CP preserves ghost number; charged electroweak treatment remains unchanged.
-# Reviewed 2026-10-05: outgoing comparison wavefunctions use source-flow keys; sampled scalar polynomials are cached lazily, preserving exact zero and ratio semantics.
-# Reviewed 2026-10-05: exactly unchanged indexed flows reuse the validated original parse; changed flows retain their own momentum chart.
-# Reviewed 2026-10-06: per-term color caching preserves sample evaluation and error ordering; factorized spatial validation reports malformed calls safely.
-# No architecture impact 2026-10-07: graph parameter setup now propagates its
-# errors; diagram generation is unchanged.
-# No architecture impact 2026-10-11: the neutral-ghost predicate tests the
-# rational charge with is_zero, preserving the documented ghost-flow rule.
-digest = "185b08e821e88d54e7a981500fba2a757ab57b49"
+# Reviewed 2026-09-16: the complete generation pipeline moved to FeynKit;
+# the architecture and this scope now follow its canonical owner.
+# Reviewed 2026-09-16: browser kernels use the same coloring pipeline serially;
+# native Rayon configuration and generation ownership remain unchanged.
+# Reviewed 2026-09-18: stage/count snapshots and partial-topology filtering
+# share the existing generator and calling-thread Python execution boundary.
+# Reviewed 2026-09-18: coupling bounds prune signatures before enumeration,
+# and identical materialized diagrams and cut inventories are reused.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# Reviewed 2026-09-29: the neutral Process, call-owned generation mode and
+# options, loop-only irreducibility policy and completed-amplitude boundary are documented.
+# Reviewed 2026-10-15: Generation owns native rule construction, grouping and external
+# projectors. Compact topology parsing alone does not instantiate rules; explicit rule
+# application and exact source maps are documented.
+# Reviewed 2026-10-15: The spin/statistics diagnostic clears physical gauge-quartet declarations
+# after changing ghost spin; production generation and its documented ownership
+# are unchanged. The endpoint-sampling convention is documented separately.
+# Reviewed 2026-10-16: Process projector owners are resolved from external-leg labels before native finalization; the boundary and unchanged native local-slot convention are documented in the current architecture.
+# Reviewed 2026-10-16: Paired incoming-state permutations preserve sewn partners; canonical-only comparison permits zero numerical samples. The current architecture records the label/routing contract.
+# Reviewed 2026-10-17: Generation caches retain localized typed factors; source recipes are admitted at instantiation and finalized diagrams transport the carriers directly.
+# Reviewed 2026-10-17: Only toy-model fixtures change: singlet summands have matching scalar color factors, the dedicated colored test retains matching color tensors, and incompatible sums remain rejected before caching.
+# Reviewed 2026-10-17: The toy fermion propagator now uses standard UFO PSlash with valid spinor and contracted Lorentz ports; its original graph/sign/cut assertions remain intact.
+# Reviewed 2026-10-19: the architecture note records caller-thread execution for explicit threads(1), unchanged multi-worker behavior, exact epsilon import normalization and the new regression coverage; the readiness note keeps timing qualification separate.
+digest = "c410fad778b921428a9713a8e1579f30f06ea31d"
+
+[[section.note.scope]]
+path = "crates/feynkit-model/src/model.rs"
+symbol = "feynkit_model::Model"
+anchor = "pub struct Model {"
+# Reviewed 2026-09-16: the current architecture documents this standalone
+# FeynKit owner, with GammaLoop application state downstream.
+# Reviewed 2026-09-18: shared mass and particle-style methods now live on the
+# canonical particle type; both graph renderers reuse the same Typst mapping.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# Reviewed 2026-09-29: exact charges, optional chiral hypercharges, parameter
+# labels and shared oriented propagator lookup remain owned by the canonical model.
+# Reviewed 2026-10-15: The canonical model owns validated particle/rule identifiers
+# and persistence reconstruction. Runtime mass and rule queries use the supplied model
+# rather than a second model representation.
+# Reviewed 2026-10-15: The current architecture records typed chemical-potential
+# ownership, persistence and structural-zero normalization without freezing adjustable
+# zeros.
+# Reviewed 2026-10-15: The zero fixed point now uses idiomatic filter/map without changing the
+# structural proof or adjustable-parameter semantics.
+# Reviewed 2026-10-15: Absent chemical-potential metadata is omitted. A canonical ZERO supplies
+# fixed mass/medium identities while unrelated parameter expressions remain intact;
+# models without ZERO retain the exact proof on their internal parameters.
+# Reviewed 2026-10-16: The architecture distinguishes structural mass classification from a known zero pole in a massive covariant multiplet.
+# Reviewed 2026-10-16: Canonical expression export makes fingerprints independent of registration order; model ownership and strict import validation remain unchanged.
+digest = "0fdae8e4e1028c7e0cf0aa8e27f2443b53076d10"
+
+[[section.note.scope]]
+path = "crates/feynkit-graph/src/lib.rs"
+symbol = "feynkit_graph::FeynmanDiagram"
+anchor = "pub struct FeynmanDiagram {"
+# Reviewed 2026-09-16: the current architecture documents this standalone
+# FeynKit owner, with GammaLoop application state downstream.
+# Reviewed 2026-09-16: JSON and DOT parsing reuse exact registered symbol
+# declarations to preserve Symbolica 3 user data; graph ownership is unchanged.
+# Reviewed 2026-09-16: cut and threshold metadata decode JSON directly after
+# Linnet has removed DOT quoting; physical metadata ownership is unchanged.
+# Reviewed 2026-09-17: the architecture now records graph-owned symbol
+# registration, shared Spenso index display hooks, and typed Python numerators.
+# Reviewed 2026-09-18: numerator validation checks structural equality before
+# expansion, retaining algebraic comparison for differing representations.
+# No architecture impact 2026-09-20: rendering tests verify that finalized
+# cuts select cross-section placement using existing external connection IDs.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+# No graph-ownership impact 2026-09-29: QuadraticMomentum is re-exported and
+# integral-family tests explicitly pass their additional propagators.
+# Reviewed 2026-10-15: Canonical diagrams retain source-map ownership through import
+# and runtime conversion. Explicit fragments retain their declared frame; the new
+# importer scope owns compact GammaLoop frame conversion.
+# Reviewed 2026-10-16: The architecture records explicit half-edge order and orientations in the native builder for validated runtime export.
+# Reviewed 2026-10-16: Default ordered routing roots at the outgoing sewn attachment; a physical-cut box regression preserves the center-of-mass origin and topology/numerator identity.
+# Reviewed 2026-10-17: Live graph fragments, aggregate numerator, prefactor and projector retain tensors; the shared source codec records logical ports and ranked zeros in optional metadata.
+# Reviewed 2026-10-17: Artifact validation uses the native coefficient visitor and exact-only scalar zero certification while preserving tensor factorization; typed source fixtures retain owner and UV-degree assertions.
+# Reviewed 2026-10-19: the architecture note records the finalized retained-tensor prefactor replacement and its existing index frame; ranked-zero, precision, native JSON/DOT and reduction-proof controls preserve the current carrier boundary.
+# Reviewed 2026-10-20: the architecture records native vertex metadata requiring
+# model-fingerprint validation. Single and collection import regressions preserve
+# ordinary compact labels and num expressions without discarding native bindings.
+digest = "f1cff6ba0ac5a406d174c6bc71bd0cd4ffe0dc54"
+
+[[section.note.scope]]
+path = "crates/feynkit-tensor/src/lib.rs"
+symbol = "feynkit_tensor public reduction API"
+anchor = "mod orbit_projector;"
+# Reviewed 2026-09-16: the current architecture documents this standalone
+# FeynKit owner, with GammaLoop application state downstream.
+# Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
+digest = "f424864aa88eaacddbfe2c220aacef0a3af2f98d"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/graph/parse/mod.rs"
+symbol = "gammalooprs::graph::Graph DOT import boundary"
+anchor = "    pub fn import_dot(input: &str, model: &Model) -> Result<Vec<Self>> {"
+end_anchor = "    pub fn dot_serialize(&self, settings: &DotExportSettings) -> String {"
+# Reviewed 2026-10-15: Compact import owns dialect dispatch, native rules, explicit
+# fragments, represented half-edge index conversion and source-map metadata.
+# Canonical/finalized literals bypass compact conversion.
+# Reviewed 2026-10-15: Canonical graph ownership is unchanged; model-parameter
+# construction errors propagate through every finalized import path.
+# Reviewed 2026-10-16: Compact half-edge slot conversion now belongs to Aind and is shared with CLI projector input; the documented compact/native frames and ownership remain unchanged.
+# Reviewed 2026-10-16: The architecture records canonical cut export and runtime metadata restoration at the native artifact boundary.
+# Reviewed 2026-10-16: Import applies edge mass overrides before constructing energy definitions and mass evaluators; source-map and strict dialect ownership are unchanged.
+# Reviewed 2026-10-17: Runtime graph fragments retain typed interfaces; optional num_interface metadata preserves ranked zeros and logical port order at the source-artifact boundary.
+# Reviewed 2026-10-17: Native diagrams transfer typed fragments and global factors directly; authored DOT/JSON expressions use the shared source codec and preserve physical momentum validation.
+# Reviewed 2026-10-17: Compact annotations validate source graph-edge momentum
+# owners before native admission; graph-wide Q3-first validation borrows retained
+# tensor and scalar-factor payloads. The architecture records this boundary.
+digest = "fc058e64317d80978ebfc2ede480a29fd852a8a3"
 
 [[section.note]]
 id = "integration-dashboard"
@@ -229,18 +302,15 @@ symbol = "gammaloop_api::commands::integrate::dashboard_event_loop"
 anchor = "fn dashboard_event_loop(receiver"
 # Reviewed 2026-09-14: only grid constructors in test fixtures changed;
 # status flow, renderer ownership, and terminal lifecycle are unchanged.
-# Reviewed 2026-09-17: Documented stability medians, interrupted diagnostic previews, version-checked resume, and read-only output paths; completed-iteration checkpoint ownership is preserved.
-# Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
-# No architecture impact 2026-09-23: corrected the JSON example code span;
-# command behavior and dashboard ownership are unchanged.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-# Reviewed 2026-10-03: a panic during integration shuts the dashboard down through
-# the acknowledged path before its message is returned; the event loop is unchanged.
-# Reviewed 2026-10-14: ratatui-integration-dashboard.typ distinguishes streamed
-# recovery from non-streamed unwinding; renderer cleanup and event-loop ownership
-# are unchanged. Regression tests cover both paths and late streamed panics.
-digest = "0bdb5ccde10675a71a3fa52ed6c8d7da36d71bfa"
+# No integration/dashboard impact 2026-09-16: graph-group selection now
+# receives the canonical model; persistence and terminal ownership are unchanged.
+# Reviewed 2026-09-23: The main integration status and terminal ownership paths remain downstream of canonical FeynKit data.
+# Reviewed 2026-10-15: The maintained notes cover completed-iteration resume, read-
+# only output placement, signed/absolute views and terminal cleanup. Explicit model
+# access and fixture formatting preserve workspace and dashboard ownership.
+# Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
+# recovery shuts down the renderer; non-streamed runs preserve unwinding.
+digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -256,13 +326,15 @@ symbol = "gammalooprs::integrate"
 anchor = "mod render_ratatui;"
 # Reviewed 2026-09-14: test fixtures now unwrap fallible grid construction;
 # status flow and test assertions are unchanged.
-# Reviewed 2026-09-17: Documented stability medians, interrupted diagnostic previews, version-checked resume, and read-only output paths; completed-iteration checkpoint ownership is preserved.
-# Reviewed 2026-09-23: The dashboard documents signed/absolute view ownership, unchanged sampling/RNG behavior, and version-3 completed-iteration resume.
-# No architecture impact 2026-10-04: only the zero-reference test fixture and
-# its missing-reference positive control changed; integration behavior is unchanged.
-# No architecture impact 2026-10-11: the existing result-archive path helper is
-# public for acceptance tests; paths and persistence behavior are unchanged.
-digest = "96a529380419396b71a9e4fc3c4323215a75de74"
+# No dashboard impact 2026-09-16: unit-volume fixtures use named empty
+# FeynKit models; production status flow and terminal ownership are unchanged.
+# Reviewed 2026-09-23: The main integration status and terminal ownership paths remain downstream of canonical FeynKit data.
+# Reviewed 2026-10-15: The note covers physical sums before componentwise absolute
+# values, shallow monitoring without RNG changes and completed-iteration checkpoints.
+# Retained main behavior preserves renderer ownership.
+# Reviewed 2026-10-15: Model access follows canonical FeynKit ownership; checkpoint,
+# worker and renderer contracts remain unchanged.
+digest = "d131b0f6a513af1310b647474fac787105610a1b"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -285,14 +357,144 @@ symbol = "gammalooprs::uv::UVOrchestrator"
 anchor = "impl UVOrchestrator {"
 # Reviewed 2026-09-14: comparison propagates canonicalization errors;
 # backend selection, returned legacy result, and UV invariants are unchanged.
-# Reviewed 2026-09-17: Documented factorized numerator mapping, consumed measures, integrated mass ownership, and direct versus projected UV composition.
-# Reviewed 2026-10-01: Corrected IR support and the pre-computation mixed-prescription and integrated-OS rejections.
-# Reviewed 2026-10-03: the orchestrator takes full generation settings and rejects
-# expanded-4D local counterterms for medium modes and vacuum subtraction, as
-# documented in Current Boundaries; backend selection is unchanged.
-# No architecture impact 2026-10-07: that medium check moved to a shared
-# GenerationSettings validator with the same condition.
-digest = "230b9086b57f416da617ef0a42f24927cc2e0d0e"
+# No orchestrator impact 2026-09-16: the canonical model is passed through
+# both UV paths; forest dispatch and comparison semantics are unchanged.
+# Reviewed 2026-09-23: Both orchestrators retain their projection/assembly roles; graph-bound canonical model context feeds the shared production CFF engine.
+# Reviewed 2026-09-29: documented checked comparison normalization, explicit
+# colour/structural permissions, reversible indices, and propagated errors.
+# Reviewed 2026-10-15: Comparison uses checked typed contraction, reversible indices
+# and scalar-product normalization without the removed tensor-alias carrier.
+# Scheduling, forest ownership and returned legacy result retain their documented
+# meaning.
+# Reviewed 2026-10-15: The UV orchestrator retains canonical model access and complete
+# generation settings for medium-dependent forest selection.
+# Reviewed 2026-10-16: Only comparison fixtures changed: shared normalization contracts dummy charts; exact equivalence and retained scalar factors remain asserted. UV ownership is unchanged.
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "19e0c07de61017d01b36bfda24f60e48d4b17bfc"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/integrated.rs"
+symbol = "gammalooprs::uv::approx::Integrated analytic phase ordering"
+anchor = "                integrand_vakint.canonicalize("
+end_anchor = "                coefficient = Atom::from(integrand_vakint).replace_multiple("
+# Reviewed 2026-10-15: Tensor projection precedes completed native dimensional
+# algebra, then scalar Laurent evaluation. This range owns the phase ordering required
+# by evanescent coefficients.
+# Reviewed 2026-10-17: Scalar stage timers preserve tensor projection, native dimensional algebra and scalar backend evaluation order.
+digest = "46b735343d9c8be6b69c1bf738fda6a0733a2f4c"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/integrated.rs"
+symbol = "gammalooprs::uv::approx::Integrated projected numerator interface"
+anchor = "    fn simplify_projected_numerator("
+end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
+# Reviewed 2026-10-15: Typed projected-numerator restoration, branch-local residual
+# guards and dimension metadata own the bridge. Actual native ports and factorization
+# survive dot and indexed notation.
+# Reviewed symbolic-label roundtrip: native abstract indices retain source identity;
+# only numeric backend labels acquire the topology chart. Represented ports and
+# powered spectators remain intact. The UV note records this restoration boundary.
+# Reviewed 2026-10-16: Fixed components use signed basis-vector contractions before native projection; the UV note records the formal-dimensional port contract.
+# Reviewed 2026-10-17: The UV note records retained tensor bodies through symbolic preparation and explicit Vakint/Laurent interchange boundaries; additional normalization is checked as scalar.
+# Reviewed 2026-10-17: Native AbstractIndex materialization removes the decode/recook detour while retaining checked projected interfaces and strict residual/multiplicity guards.
+# Reviewed 2026-10-17: Completed pole and signed finite projections retain their source interface; native projected cleanup and backend restoration preserve ports and ranked zeros.
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+# Reviewed 2026-10-18: The UV note records validated physical fixed-selector
+# admissibility after original unfiltered scope validation. Formal D/epsilon,
+# tensor factorization, genuine summed contractions and selector bounds remain guarded.
+digest = "aa86a2bcf483dc539fbddb34f6983a095d192fde"
+
+[[section.note.scope]]
+path = "crates/vakint/src/lib.rs"
+symbol = "vakint::VakintSettings tensor and scalar policy fields"
+anchor = "    /// Ordered analytic and numerical backends considered for each integral."
+end_anchor = "    /// Optional parent directory for uniquely named external-backend work directories."
+# Reviewed 2026-10-15: Tensor backend, coefficient-one projection, dot notation and
+# epsilon depth are distinct policies. Complete-numerator mode does not itself select
+# FORM; scalar evaluation has its own policy.
+digest = "70d8d2815a16186713fb2b25f84643e27554481e"
+
+[[section.note.scope]]
+path = "crates/vakint/src/lib.rs"
+symbol = "vakint::VakintTerm tensor backend dispatch"
+anchor = "    fn project_numerator("
+end_anchor = "    fn tensor_reduce_form("
+# Reviewed 2026-10-15: Native and AlphaLoop dispatch share topology validation.
+# AlphaLoop distinguishes complete-numerator and coefficient-one FORM projection;
+# scalar evaluation order is independent.
+digest = "22a7663f68fb673976a0dcf4d701abed6134db8a"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/numerator/symbolica_ext.rs"
+symbol = "gammalooprs::numerator::NumeratorAtomExt scalar factor collection"
+anchor = "impl NumeratorAtomExt for AtomView<'_> {"
+end_anchor = "    fn series_preserving_factors(\n        &self,\n        variable: Symbol,\n        expansion_point: AtomView<'_>,\n        depth: i64,\n        numerator_family_keys: &[Atom],\n    ) -> color_eyre::Result<Atom> {\n        for (index, key) in numerator_family_keys.iter().enumerate() {"
+# Reviewed 2026-10-15: Literal coefficient columns retain original keys and reject
+# hidden/non-Laurent dependence; numeric content normalization respects power and
+# guard boundaries.
+# Numeric-content review: implicit unit coefficients enter the GCD; signs use
+# coefficient-free term order. Numeric distribution runs only behind opaque
+# function/power wrappers, preserving nested inverse and fractional bodies.
+# Positive-power review: scalar bases remain complete owners; inverse/fractional
+# powers and tensor/guard/family scopes retain their prior isolation. Repeated
+# normalization requires a strict size decrease, with mass/dot witness tests.
+# Zero-metadata review: only an exactly zero complex-float component takes
+# its nonzero partner precision. Nonzero bytes and factorized spectators remain
+# unchanged; unequal finite coefficients remain distinct in the regression.
+# Reviewed 2026-10-15: Exact complex content uses rational-coordinate GCDs
+# and a canonical unit phase, retaining opaque bodies and inverse guards.
+# Reviewed 2026-10-16: numeric distribution visits each current product/sum
+# boundary once from the bottom up instead of recursively revisiting rebuilt
+# scalar subtrees. Other factors, opaque functions/powers and guards retain
+# their ownership; both strict-size fixed-point checks are unchanged.
+# The UV note records this boundary. Deep exact recurrence and independent
+# centered-coefficient tests preserve the factorized algebraic contract.
+# Reviewed 2026-10-16: Numeric-content normalization delegates to the shared Spenso collector; retained functions, powers, guards and numerator-family boundaries are unchanged.
+# Reviewed 2026-10-16: Scalar scopes bypass repeated tensor scans; empty positive-power catalogs bypass numeric-content work. Original guards, power ownership, strict-size bounds and all 18 replay expressions are unchanged.
+# Guard-scan review: without guards, numerator families or tensor-bearing inverses, the occurrence-local predicate is identically false. Skipping its traversal preserves every factor and all 18 replay expressions.
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "786808befbd6d68f493db1aeb4ee7e1e8f92b710"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/overlap_numerators.rs"
+symbol = "gammalooprs::uv::overlap_numerators::NumeratorJetCache exact finite coefficients"
+anchor = "impl NumeratorJetCache {"
+end_anchor = "\n#[cfg(test)]"
+# Reviewed 2026-10-15: Finite tensor entries retain their external slots and exact
+# domain. One deterministic bounded literal collection preserves spectators and
+# accepts only smaller exact reconstructions.
+# Fixed-point review: the same deterministic coefficient decomposition repeats
+# only after strict byte decrease, capped at eight passes. Raw and recomposed
+# physical fixtures plus grouped/literal controls certify the required closure;
+# exhaustion retains an unproven residual with opaque spectators intact.
+# Maximal-sum review: direct coefficient-free support inclusion excludes a
+# retained sum's proper additive subset from independent keys. Its original
+# coefficient stays literal; no alternate key order or polynomial expansion.
+# No architecture impact 2026-10-16: test-only finite certificates exclude
+# related sums with equal coefficient-free support from independent opaque keys.
+# The existing bounded exact collector still owns every proof; powered bases,
+# opaque spectators, strict size descent and all algebra budgets are unchanged.
+# Native-component zero/nonzero controls and the complete three-loop identity
+# certify this selection repair without changing production normalization.
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+digest = "5422656f0c564e911f364e3c37da799493d519fc"
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/uv/approx/local_3d/integrated_localizer.rs"
+symbol = "gammalooprs::uv::approx::Localizer integrated tensor coefficient ownership"
+anchor = "impl Localizer<'_> {"
+# Reviewed 2026-10-15: Finite coefficients use the existing shared numerator
+# owner and residue-key momentum map. Scalar CFF weights and frozen kernels
+# remain separate; later cograph factors retain independent shared definitions.
+# The exact localizer test covers scalar affine maps and open tensor products.
+# Reviewed 2026-10-17: Localized integrated coefficients retain typed shared bodies. Scalar carrier dispatch and the documented separation from the cograph remain unchanged.
+# Reviewed 2026-10-17: Integrated pole/finite tensors reach localization directly; typed composition owns the complete CFF capacity input and finite-body mapping.
+# Reviewed 2026-10-17: The localizer consumes retained pole/finite tensor projections; scalar dispatch does not erase the coefficient body interface.
+# Reviewed 2026-10-18: UV owners retain IndexedStructure and strictly admit explicit public ports; the UV note preserves logical axes, ranked zeros, formal dimensions and existing Taylor/Vakint boundaries without changing forest or routing algorithms.
+# Reviewed 2026-10-18: consuming indexed multiplication moves the disposable
+# outside/global products; the retained integrated coefficient is cloned explicitly.
+# Coefficient interfaces, localization, routing and numerical assertions are unchanged.
+digest = "c4660d75be3e086dfc9d4e65b0c060fabb9def95"
 
 [[section.note]]
 id = "spenso-parsing-flow"
@@ -303,8 +505,8 @@ kind = "Architecture diagram"
 status = "Implemented"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-01"
-review_ref = "jj:xuoqsyop"
+reviewed_at = "2026-10-16"
+review_ref = "jj:krlonmsn"
 products = ["spenso", "idenso"]
 topics = ["parsing", "tensor-network"]
 review_triggers = ["crates/spenso/src/network/parsing/**", "crates/idenso/src/tensor/mod.rs"]
@@ -318,8 +520,24 @@ anchor = "pub enum ShorthandParsing {"
 # Reviewed 2026-09-17: Documented scalar-weighted compact vectors and fallible target materialization with canonical layouts.
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
-# Reviewed 2026-10-01: Documented borrowed scalar accumulation, one n-ary addition for mixed sums, and scalar input reuse.
-digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
+# Reviewed 2026-09-23: The merge retains input-index reservation and independent shorthand dummies for positive powers.
+# Documentation-impact review 2026-09-29: updated opaque-only syntactic inference,
+# arithmetic depth, shared construction, and the admitted depth-one entry. Exact leaf-
+# interface caching preserves logical slots, scopes and classification policy; callbacks
+# invalidate trust.
+# Test-only follow-up 2026-09-29: the existing Symbolica initializer reserves
+# the collision fixture before concurrent tests; production parsing is unchanged.
+# Reviewed 2026-10-15: The parsing note now records original admitted index spelling
+# without callback replay, compatible rank-one dot admission and metric syntax for
+# partial contractions. Scalar execution already documents MinIntermediateCost.
+# Reviewed 2026-10-16: Mixed sums batch only exact complex-rational leading
+# coefficients after child admission. Other domains keep the original ordered
+# fold; scalar-only input, tensor order and opaque factor bodies are unchanged.
+# Reviewed 2026-10-16: Exact mixed scalar sums use one batch; other numeric
+# domains retain the ordered fold. Parser admission and factor boundaries
+# are unchanged. Registry validation must use the builder for this workspace.
+# Reviewed 2026-10-16: Realized tensor layouts now travel with eager construction; parsing-flow and Spenso architecture describe post-contraction interfaces and lazy scaled results.
+digest = "583f0514c0418a75d13870024bb02a8b42f3ba02"
 
 [[section.note]]
 id = "schoonschip-network"
@@ -339,12 +557,17 @@ review_triggers = ["crates/idenso/src/shorthands/schoonschip/**", "crates/spenso
 [[section.note.scope]]
 path = "crates/idenso/src/shorthands/schoonschip/api.rs"
 symbol = "idenso::shorthands::schoonschip::Schoonschip"
-anchor = "pub trait Schoonschip {"
+anchor = "pub(crate) trait Schoonschip {"
 # Reviewed 2026-09-14: typed network errors are documented; opaque parsing,
 # contraction settings, and fixed-point execution remain unchanged.
-# Reviewed 2026-10-01: documented opt-in slot replacement for a vector sum
-# contracted with one tensor; API and parser defaults are unchanged.
-digest = "608eb6fd27a8463bc0bbfa6383c41db3a9e95000"
+# Reviewed 2026-09-23: Staged contraction and settings preserve spectator factors and the documented network execution boundary.
+# Documentation-impact review 2026-09-29: removed NetworkSchoonschip and its public
+# wrappers. The note records shared structural contraction, capability scheduling, exact
+# unfinished statuses, cached opaque boundaries and independent notation conversion.
+# Reviewed 2026-10-15: Removing the internal temporary pass argument leaves the
+# documented shared scheduler, exact graph frontier, capability selection and
+# completion semantics unchanged.
+digest = "3d4e374d18d8e9d69be971e943712b6246a6f362"
 
 [[section.note]]
 id = "gammaloop-draw-style-migration"
@@ -373,12 +596,12 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # extract_templates and its destination contract, is byte-identical to the
 # previous verified scope; only test coverage changed. The migration record's
 # current preface now names the style composer alongside its three adapters.
-# No architecture impact 2026-10-04: only the drawing test uses the public
-# mapper's flattened fields; template extraction and style ownership are unchanged.
-# Reviewed 2026-10-12: Template embedding uses include_dir and generated
-# include_bytes tables; extraction paths and shipped Typst assets are
-# unchanged.
-digest = "cc91f55813de46de52ab05aaa476e60714c9a4ed"
+# No-impact attestation 2026-09-16: the test module imports ModelGammaLoopExt
+# for the canonical model API; production template extraction is unchanged.
+# Reviewed 2026-10-15: Embedding now uses include_dir while retaining canonical
+# generated asset paths and shared drawing callbacks. This migration record remains
+# historical below its implemented preface.
+digest = "3dca6f84cadbe237f3beaa7ab05e11cea309cd41"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -425,10 +648,16 @@ anchor = "pub trait IndexTooling {"
 # Reviewed 2026-09-14: tagged builders and dualizable dot syntax match the note,
 # which now records the shared chain/trace placeholder scope.
 # Reviewed 2026-09-17: Documented factor preservation and explicit-index reservation during canonicalization.
-# Reviewed 2026-10-05: documented reversible formal-dimension labels around index canonicalization; component dimensions and factorization remain unchanged.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-digest = "026cfab08c153e267367672d0813462e81ff4807"
+# Reviewed 2026-09-23: Registered tensor syntax and fallible shorthand dispatch remain the documented public boundary.
+# Documentation-impact review 2026-09-29: documented independent canonicalization and
+# adjoint construction, valid index_scope wrapping, explicit notation conversions and the
+# shared domain planner replacing public family passes.
+# Reviewed 2026-10-15: Plain-Atom typed admission and canonical index registration
+# match the maintained notes; the former tensor-alias implementation remains archived.
+# Evaluator scalar aliases are a separate downstream owner.
+# Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
+# Reviewed 2026-10-17: IndexTooling dimension transforms now receive fallible callbacks from the retained tensor owner; the syntax and Idenso notes describe native index/dimension transport and checked API boundaries.
+digest = "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -453,9 +682,12 @@ anchor = "pub trait TensorStructure {"
 # slot-order, index-matching, and coordinate contracts explicit in Rustdoc.
 # Reviewed 2026-09-14: the note distinguishes canonical layouts from pending
 # index permutations and records backend features and portable attachments.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-digest = "9385506a01703431293c49f82c1ff578d299ab7e"
+# Reviewed 2026-09-23: Structure and network ownership remain in Spenso; parsing preserves fresh dummy indices.
+# Reviewed 2026-10-15: Checked slot access and representation metadata enforce the
+# existing logical-interface contract. Symbolic unresolved slots and finite component
+# execution remain distinct.
+# Reviewed 2026-10-18: The Spenso note documents IndexedStructure, strict partial-interface conversion and exact layout-preserving metadata transport; the partial positional interface and canonical-storage trait remain distinct.
+digest = "811c525ab9896dcd834ad30f27e14b84e65ec08a"
 
 [[section.note.scope]]
 path = "crates/spenso/src/tensors/data.rs"
@@ -465,7 +697,10 @@ anchor = "pub enum DataTensor<T, I = OrderedStructure> {"
 # explicit storage reindexing replace the previous permuted wrapper.
 # Reviewed 2026-10-12: Capability feature names and formatting are updated;
 # the reviewed implementation and data contracts are unchanged.
-digest = "562c61b02f9ebd28e629be30dbbb7dab09a3e919"
+# Reviewed 2026-10-15: Shadowing feature ownership and typed storage/layout boundaries
+# already match the note. Test/import migration preserves finite tensor storage and
+# contraction semantics.
+digest = "f0e8de6af46e1464919245b04739bb6c8fb20eb2"
 
 [[section.note.scope]]
 path = "crates/spenso/src/contraction.rs"
@@ -484,14 +719,16 @@ anchor = "pub struct Network<S, LibKey, FunKey, Aind = AbstractIndex> {"
 # Reviewed 2026-09-14: the note now assigns live indices to graph edges;
 # graph/store separation and network execution ownership remain unchanged.
 # Reviewed 2026-09-17: Documented fallible materialization, retained sum boundaries, odd powers, and live store ownership.
-# No-impact attestation 2026-09-24: fused numeric contractions now align matched
-# coordinates by dual slot identity, restoring the documented contraction semantics
-# without changing network ownership, scheduling, or factor preservation.
-# Reviewed 2026-10-01: The added comment explains existing scalar extraction before summing closed lazy tensors; documented that leaf-order invariant.
-# Reviewed 2026-10-06: basic profiling retains counters, timers and slow-operation diagnostics; detailed execution and merge traces require verbose mode.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-digest = "0978dc338492b56f077d8e96923da176e2013df5"
+# Reviewed 2026-09-23: Structure and network ownership remain in Spenso; parsing preserves fresh dummy indices.
+# Documentation-impact review 2026-09-29: documented occurrence-local mapping,
+# simultaneous port reindexing, bound-port materialization, logical versus storage layouts
+# and graph-derived arithmetic state.
+# Reviewed 2026-10-15: Sparse coordinate-permutation repair enforces documented
+# logical slot alignment. Borrowed operation graphs, execution ownership and verbose-
+# profile controls remain as described.
+# Reviewed 2026-10-16: eager opaque realization uses result_tensor to resolve lazy
+# scaled leaves; its library bound now uses the existing WithIndices contract.
+digest = "410491ec4a23db5061510dc830fe9a880b6b6a0a"
 
 [[section.note.scope]]
 path = "crates/spenso/src/network/parsing/mod.rs"
@@ -502,15 +739,29 @@ anchor = "pub struct ParseSettings {"
 # Reviewed 2026-09-17: Documented fallible materialization, retained sum boundaries, odd powers, and live store ownership.
 # Reviewed 2026-09-21: Documented input-index reservation and fresh internal
 # dummies for separately lowered positive-power copies.
-# Reviewed 2026-10-01: Documented the scalar-sum parsing path and unchanged tensor compatibility boundary.
-digest = "bd148e50a697af51b0503822e3be0a1d3cc8229c"
+# Reviewed 2026-09-23: Structure and network ownership remain in Spenso; parsing preserves fresh dummy indices.
+# Documentation-impact review 2026-09-29: documented the admitted shallow parser and exact
+# boundary cache, callback invalidation, logical slot preservation and uncached inference
+# instrumentation; ordinary admission and materialization retain checked paths.
+# Test-only follow-up 2026-09-29: the existing Symbolica initializer reserves
+# the collision fixture before concurrent tests; production parsing is unchanged.
+# Reviewed 2026-10-15: The parsing note now records original admitted index spelling
+# without callback replay, compatible rank-one dot admission and metric syntax for
+# partial contractions. Scalar execution already documents MinIntermediateCost.
+# Reviewed 2026-10-16: Exact mixed scalar sums use one batch; other numeric
+# domains retain the ordered fold. Parser admission and factor boundaries
+# are unchanged. Registry validation must use the builder for this workspace.
+# Reviewed 2026-10-16: Realized tensor layouts now travel with eager construction; parsing-flow and Spenso architecture describe post-contraction interfaces and lazy scaled results.
+digest = "583f0514c0418a75d13870024bb02a8b42f3ba02"
 
 [[section.note.scope]]
 path = "crates/spenso/src/symbolic_parallelism.rs"
 symbol = "spenso::symbolic_parallelism::SymbolicParallelism"
 anchor = "pub enum SymbolicParallelism {"
 # No architecture impact 2026-09-14: only the LicenseManager import path changed.
-digest = "f9475edd533e069fc57ea28b6c14208d1c318a2d"
+# Reviewed 2026-09-16: Auto keeps browser symbolic work serial; native licensing
+# and explicit policy choices retain their documented behavior.
+digest = "f52c9ac14265f983c86c9affc9713970e6b28561"
 
 [[section.note]]
 id = "idenso-architecture"
@@ -525,7 +776,7 @@ reviewed_at = "2026-10-06"
 review_ref = "15f0aba87c360abf0123a41a6e347a1583b2f13a"
 products = ["idenso"]
 topics = ["symbolica", "tensor identities", "rewriting", "schoonschip", "index ownership"]
-review_triggers = ["crates/idenso/Cargo.toml", "crates/idenso/src/lib.rs", "crates/idenso/src/representations.rs", "crates/idenso/src/rep_symbols.rs", "crates/idenso/src/tensor/**", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**", "crates/idenso/src/epsilon.rs", "crates/idenso/src/selective_expand.rs", "crates/idenso/src/cook.rs", "crates/idenso/src/python.rs"]
+review_triggers = ["crates/idenso/Cargo.toml", "crates/idenso/src/lib.rs", "crates/idenso/src/representations.rs", "crates/idenso/src/rep_symbols.rs", "crates/idenso/src/tensor/**", "crates/idenso/src/shorthands/**", "crates/idenso/src/dirac/**", "crates/idenso/src/color/**", "crates/idenso/src/epsilon.rs", "crates/idenso/src/selective_expand.rs", "crates/idenso/src/cook.rs", "crates/spynso3/src/expression.rs", "crates/spynso3/src/simplification/**", "crates/spynso3/src/simplification.rs"]
 
 [[section.note.scope]]
 path = "crates/idenso/src/representations.rs"
@@ -533,10 +784,9 @@ symbol = "idenso::representations::initialize"
 anchor = "pub fn initialize() {"
 # Reviewed 2026-09-14: removed Python exposure of initialize; community-module
 # initialization still registers the same representations.
-# Reviewed 2026-10-12: Bincode derives are always available after removing the
-# redundant capability flag; representation types and wire encodings are
-# unchanged.
-digest = "ac418eb7016701a0e0bda4e300cc2a3b415e1ca1"
+# Reviewed 2026-09-29: the retired metric-rewrite dummy symbol is no longer
+# initialized; public representation and identity symbol ownership is unchanged.
+digest = "894b3ff3a258e79254b687b0d1d6d4229ddf2daa"
 
 [[section.note.scope]]
 path = "crates/idenso/src/lib.rs"
@@ -545,10 +795,15 @@ anchor = "pub trait IndexTooling {"
 # Reviewed 2026-09-14: typed structural errors and native/Wasm features are
 # documented; symbolic tensor and rewrite ownership remain unchanged.
 # Reviewed 2026-09-17: Documented factorized index canonicalization and symbolic-dimension materialization.
-# Reviewed 2026-10-05: documented reversible formal-dimension labels around index canonicalization; component dimensions and factorization remain unchanged.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-digest = "026cfab08c153e267367672d0813462e81ff4807"
+# Reviewed 2026-09-23: Idenso retains symbolic tensor algebra and staged simplification; structural network ownership remains in Spenso.
+# Reviewed 2026-09-29: index canonicalization reconstructs the admitted graph
+# without implicit algebra; conjugation and scoped index tooling use the shared tensor owner.
+# Reviewed 2026-10-15: Plain-Atom typed admission and canonical index registration
+# match the maintained notes; the former tensor-alias implementation remains archived.
+# Evaluator scalar aliases are a separate downstream owner.
+# Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
+# Reviewed 2026-10-17: IndexTooling dimension transforms now receive fallible callbacks from the retained tensor owner; the syntax and Idenso notes describe native index/dimension transport and checked API boundaries.
+digest = "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -556,37 +811,150 @@ symbol = "idenso::CookSettings"
 anchor = "pub struct CookSettings {"
 # No cooking-policy impact 2026-09-14: preserves_tags exposes existing settings
 # without changing selected tags or transformation behavior.
-# Reviewed 2026-10-05: documented representation_dimension user-data wrappers and restoration restricted to owned dimension payloads.
-digest = "2b9ca6fe51b247168e6bd3203e7ae572bf5b4b97"
+# Reviewed 2026-09-29: explicit reversible dimension cooking and its checked
+# portable arithmetic subset are documented separately from function/index cooking.
+# Reviewed 2026-10-15: Expression-local memoization preserves reversible cooking and
+# original admitted names; it does not introduce a second normalization or persistence
+# boundary.
+# Reviewed 2026-10-17: The existing portable dimension decoder is public for scalar dimension comparisons without decoding native slots or complete tensors; its behavior is unchanged.
+# Reviewed 2026-10-18: Strict indexed admission follows reversible public-index
+# Open/scope payloads without rebuilding expressions; opaque labels and closed
+# compact contractions retain the boundaries documented in the Idenso note.
+digest = "e38e0e3114eac5c8448ab37e7261d071f8dbbbee"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
 symbol = "idenso::tensor::SymbolicTensor"
-anchor = "pub struct SymbolicTensor<Aind: AbsInd = AbstractIndex> {"
+anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {"
 # Reviewed 2026-09-14: documented typed expansion and execution errors;
 # symbolic tensor ownership and rewrite boundaries remain unchanged.
 # Reviewed 2026-09-17: Documented factorized index canonicalization and symbolic-dimension materialization.
-digest = "bf2aad648a51b0beb0fcaa8d045a6e5b9a1cec27"
+# Reviewed 2026-09-23: Idenso retains symbolic tensor algebra and staged simplification; structural network ownership remains in Spenso.
+# Reviewed 2026-09-29: the same carrier owns partial and aliased interfaces,
+# trusted validation, domain observations and reusable opaque-leaf proofs.
+# Reviewed 2026-10-15: The documented typed interface remains authoritative for scalar
+# zero, declared open ports and callback validation. Reconciliation retains plain-Atom
+# storage and checked interfaces.
+# Reviewed 2026-10-16: Symbolic TensorFromExpression retains the canonical source layout; reviewed against the Idenso symbolic-target and Spenso realization descriptions.
+# Reviewed 2026-10-17: The Idenso note records retained reduction state, declared-interface persistence, consuming component handoff and its logical layout.
+# Reviewed 2026-10-18: The Idenso note documents indexed admission and checked methods, proof-preserving native interoperability, component lowering and explicit-slot archives; both interfaces share one algebra engine.
+digest = "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
 
 [[section.note.scope]]
-path = "crates/idenso/src/shorthands/schoonschip/settings.rs"
-symbol = "idenso::shorthands::schoonschip::SchoonschipSettings"
-anchor = "pub struct SchoonschipSettings {"
-digest = "6924df328f8de538c789d2b07b312508e7c87534"
+path = "crates/idenso/src/tensor/indexed.rs"
+symbol = "idenso::tensor::SymbolicTensor<IndexedStructure>::multiply"
+anchor = "    pub fn multiply("
+end_anchor = "    pub fn reindex_interface_ports("
+# Reviewed 2026-10-18: both owned operands move into the existing partial engine;
+# product planning and strict indexed result validation are unchanged. The Idenso
+# and readiness notes record explicit clones for retained values and measurement limits.
+digest = "a4c365bd57958f94f9070df4562bc957bc1d425c"
 
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/inference.rs"
+symbol = "idenso::tensor::SymbolicTensor::map_representation_dimensions"
+anchor = "    pub fn map_representation_dimensions("
+end_anchor = "    /// Scope explicit indices"
+# Reviewed 2026-10-17: unchanged payload and complete logical layout reuse the
+# existing finisher. Mapper execution, unchecked-input validation, ranked-zero
+# dimension changes and independent callback-result checks remain enforced.
+digest = "2fab115ac04bd931c076c9125b65d98748ca81bd"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/contract.rs"
+symbol = "idenso::tensor::ContractSettings"
+anchor = "pub struct ContractSettings<'a> {"
+# Reviewed 2026-09-29: public structural settings replace retired Schoonschip
+# orchestration; compatibility, filters and prerequisites use the shared contractor.
+# Reviewed follow-up: regression covers incompatible repeated external ports as
+# complete without spending a budget; the documented connection rule is unchanged.
+# Reviewed follow-up: regional explicit-source observations prove structural
+# fallback completion while preserving pending inexact sum contractions.
+# Metric substitutions into existing chain ports remain independent of the
+# rank-one permission; ordinary and axial fallback regressions cover both modes.
+# Test-only follow-up distinguishes a branch-local inexact coefficient from an
+# opaque scalar coefficient, which the factorized collector already supports.
+# Reviewed follow-up: maximum incidence per sum branch preserves the validated
+# external-boundary proof after substitution, with stable completed reruns.
+# Reviewed performance follow-up: domain contraction borrows the existing
+# registry, reports additions only, and resolves original bindings on demand.
+# Reviewed 2026-10-15: Contraction and algebra share the documented regional scheduler
+# with independent permissions. Factorized coefficients and logical interfaces retain
+# the shared graph/tape owner.
+# Reviewed 2026-10-19: only deferred-frontier test inputs change in this file; all completion assertions remain. The Idenso/readiness notes explain the newly supported vector-sum partner contraction and unchanged unsupported generic-tensor policy.
+digest = "80401bae3bb93c4cde4721ae682d6f7f2091a596"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/simplification.rs"
+symbol = "idenso::tensor::AlgebraSettings"
+anchor = "pub struct AlgebraSettings {"
+# Reviewed 2026-09-29: independent identity settings lower into the same domain
+# planner, with incremental observations, dependency invalidation and exact caps.
+# Reviewed performance follow-up: observed no-op prerequisites precede budget
+# admission; exact completion policies survive only unchanged domains.
+# Reviewed 2026-10-15: The note covers the unified scheduler and selected identity
+# families. Removed tensor-coefficient alias plumbing is reflected in the GammaLoop
+# summary; evaluator scalar aliases remain separate.
+# Reviewed 2026-10-16: The architecture records independent trace/Fierz settings. Symmetric trace prerequisites respect disabled trace evaluation.
+# Reviewed 2026-10-17: Generated scalar powers reuse the existing exact opaque
+# coefficient certificate; finite trace, power-domain and zero-budget regressions
+# preserve the documented factorization and planner policies.
+# Reviewed 2026-10-17: The Idenso note records that expand_dots retains the typed carrier and checked open interface; algebra and contraction continue to share the existing scheduler.
+# Reviewed 2026-10-18: One Cow planner retains validation, wildcard-alias and
+# completion rules while moving owned input at the existing ownership boundary.
+# Idenso and readiness notes distinguish removed payload copies from remaining
+# metadata and adapter copies; no runtime improvement is claimed without measurement.
+digest = "4969892c1c56ffb37acd8c45bc58165f39b1c12c"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/simplification/observation.rs"
+symbol = "idenso::tensor::simplification::observation::DomainObservations"
+anchor = "pub(crate) struct DomainObservations {"
+# Reviewed 2026-09-29: regional head multiplicities, source ports, dummy names,
+# and maximum per-branch incidence share one observation traversal. Replacements
+# reuse unchanged regions and invalidate only affected interface facts.
+# Reviewed 2026-10-15: Borrowed regional observations retain branch-local slots and
+# callback-sensitive validation. The note distinguishes admitted facts from explicit
+# component execution.
+# Reviewed 2026-10-16: The architecture records completed observation sharing during the initial walk while every occurrence is scanned and counted.
+digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+
+
+[[section.note.scope]]
+path = "crates/idenso/src/dirac/simplify.rs"
+symbol = "idenso::dirac::DiracSimplifier::simplify_trace_node"
+anchor = "    fn simplify_trace_node("
+end_anchor = "    /// Adjacent pairs remain cheapest."
+# Reviewed 2026-10-16: Mixed physical gamma0 traces use the existing trace
+# recurrence directly; formal dimensions and disabled trace evaluation retain
+# their boundary. This prevents component-only execution of reducible traces.
+# Reviewed 2026-10-16: The architecture records weighted Dirac trace recurrence and strict physical gamma0 dimensions, preserving spectator powers.
+# Reviewed 2026-10-17: shared named fixes preserve formal dimensions in temporal
+# sandwiches and uniformly reversed adjacent pairs; mixed-orientation guards remain.
+digest = "95ebfc105ffb0f9e506105642a6e1629b0e28ae8"
 
 [[section.note.scope]]
 path = "crates/idenso/src/color/simplify.rs"
-symbol = "idenso::color::simplify::ColorAlgebraSimplifier::simplify_cubic_trace_contraction"
-anchor = "fn simplify_cubic_trace_contraction(product: &ProductView) -> Option<Atom> {"
-# Reviewed 2026-10-05: the dimension-checked fundamental cubic trace rule
-# reduces exact color zeros inside the existing collected color payload;
-# momentum coefficients and unsupported invariant ranks remain factorized.
-# Reviewed 2026-10-05: dimension-gated long-trace Fierz and Schur reduction
-# require known invariant matrix factors and zero or one free adjoint slot;
-# the scalar projection uses a fresh typed dummy and closes all slots. Unknown operators and momentum spectators
-# retain their original meaning, as documented in idenso-architecture.typ.
-digest = "57935259c5087e041fd62906ba53446753c34831"
+symbol = "idenso::color::simplify::ColorAlgebraSimplifier::simplify_product"
+anchor = "    fn simplify_product("
+# Reviewed 2026-10-15: reconciliation keeps the shared typed planner and
+# collected color-product owner. Main's cubic/ordered-chain reference cases
+# use explicit reversible dimension admission instead of the retired raw
+# whole-expression Schur/Fierz helper path.
+# Reviewed 2026-10-15: Color reduction uses the typed regional owner and preserves
+# unrelated spin/momentum coefficients. Native tag and fixture migration retain exact
+# color and collision assertions.
+# Reviewed 2026-10-16: The architecture records complete SU(N) invariant projection, local cubic contractions and adjoint endpoint zero reduction.
+# Reviewed 2026-10-16: adjacent raw adjoint pairs now reduce to their signed Casimir before scalar evaluation; explicit-product orientation controls pass.
+# Reviewed 2026-10-17: connected adjoint chains expose explicit structure constants
+# only when an existing product identity reduces them; spectator factorization,
+# reserved dummy identities and ranked-zero ports remain with their native owners.
+# Reviewed 2026-10-17: opposite-endpoint two-matrix loops reuse the two-f identity;
+# shared loop edges exclude concrete components while preserving fixed spectators.
+# Reviewed 2026-10-17: normalized f-squares share the guarded two-f owner;
+# numeric phases and spectator powers remain factors, with no sum distribution.
+# Reviewed 2026-10-19: the Idenso and readiness notes record guarded closed quartic Gram reduction, raw-adjoint signs and spectator factorization; independent exact SU(2) matrix controls check the coefficient for all representation pairs.
+digest = "c8b1cab3f51883ca896853b12ae37030407d8ae7"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -612,8 +980,8 @@ kind = "System architecture"
 status = "Implemented · reviewed 2026-08-18"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-08-18"
-review_ref = "28275fc5d5154faa43a19dba0233bacd0dafbf1f"
+reviewed_at = "2026-10-16"
+review_ref = "jj:ywmmznxw"
 products = ["linnet"]
 topics = ["half-edge", "subgraph", "dot", "serialization", "algorithms"]
 review_triggers = ["crates/linnet/src/lib.rs", "crates/linnet/src/half_edge.rs", "crates/linnet/src/half_edge/**", "crates/linnet/src/parser/**", "crates/linnet/src/permutation.rs", "crates/linnet/src/tree/**", "crates/linnet/src/union_find/**", "crates/linnet/src/drawing.rs", "crates/linnet/src/num_traits.rs", "crates/linnet/Cargo.toml"]
@@ -644,7 +1012,9 @@ anchor = "pub struct Involution<E = EdgeIndex> {"
 # public involution invariants and terminology without changing behavior.
 # The 2026-08-27 serializer fix quotes endpoint statements without changing
 # graph invariants.
-digest = "2c3b0f19a5d4a991b493c75e3b0bb3294be302d6"
+# Reviewed 2026-09-29: documented exact-size and fused iterator guarantees;
+# delegated vector traversal, half-edge order, and graph invariants are unchanged.
+digest = "cb55dd1e057261356f1f2fdce9808b2252fc55ae"
 
 [[section.note.scope]]
 path = "crates/linnet/src/half_edge/subgraph.rs"
@@ -652,7 +1022,10 @@ symbol = "linnet::half_edge::subgraph::SubGraphLike"
 anchor = "pub trait SubGraphLike: SubSetLike<Hedge> + Inclusion<HedgePair> {"
 # Reviewed 2026-09-24: the existing subset printer can be restored from its
 # label, as documented in linnet-architecture.typ; topology ownership is unchanged.
-digest = "1a5c8409404365debe91a930a4c464b4e0a5c327"
+# Reviewed 2026-10-16: Callback registration is serialized with a second
+# lookup; existing labels and the printer body are unchanged. Errors propagate
+# after releasing the lock.
+digest = "61c2d5f958487a63d422201ad7d71a77840f90a7"
 
 [[section.note.scope]]
 # Documentation-impact attestation 2026-08-21: malformed DOT endpoint,
@@ -680,11 +1053,11 @@ title = "Vakint implementation architecture"
 summary = "Topology construction, canonicalization and tensor-reduction flow, backend selection, external-process ownership, persistence boundaries, invariants, and tests."
 source = "docs/architecture/vakint-architecture.typ"
 kind = "System architecture"
-status = "Implemented · reviewed 2026-10-04"
+status = "Implemented · reviewed 2026-09-16"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-04"
-review_ref = "jj:twxxuvmo"
+reviewed_at = "2026-09-16"
+review_ref = "2a2c9afe7417780d2102aaf5be6fb1860bb43651"
 products = ["vakint"]
 topics = ["topologies", "canonicalization", "tensor reduction", "FORM", "pySecDec"]
 review_triggers = ["crates/vakint/src/**", "crates/vakint/templates/**", "crates/vakint/form_src/**", "crates/vakint/build.rs", "crates/vakint/Cargo.toml"]
@@ -698,14 +1071,26 @@ anchor = "pub struct Vakint {"
 # Topology ownership and the documented FORM conversion contracts are unchanged.
 # Reviewed 2026-09-14: stub collection keeps upstream numeric types in Symbolica;
 # Vakint's explicitly registered Python surface and evaluation contracts are unchanged.
-# Reviewed 2026-09-17: Documented tensor projection, epsilon depth, opaque spin slots, and complex numerical parameters.
-# Reviewed 2026-10-01: Documented explicit zero masses, nonzero scale selection, withheld AlphaLoop massless representation, and numeric complex serialization.
-# Reviewed 2026-10-04: vakint-architecture.typ documents the certified six-term
-# tadpole exception and structural, namespace-preserving Laurent extraction.
-# Reviewed 2026-10-12: Embedded FORM sources and template substitution use
-# small static tables and the local renderer; solver dispatch and integral
-# algorithms are unchanged.
-digest = "7766f7350df0de625027faa69123030fcc83df59"
+# Reviewed 2026-09-16: native FeynKit tensor reduction is now the default;
+# the architecture distinguishes it from the explicit legacy FORM backend.
+# No runtime impact 2026-09-16: generated API prose now distinguishes native
+# tensor reduction from backend evaluation and its deferred tool validation.
+# Reviewed 2026-09-23: Native FeynKit reduction remains the default and FORM remains an explicit backend; external evaluation ownership is unchanged.
+# Reviewed 2026-09-29: documented filtered native projection, opaque vector
+# metadata, branch-local dimensions, independent power scopes, and usage citations.
+# Reviewed 2026-10-15: Both tensor modes share ScalarTerms coefficient kernels before
+# scalar backend evaluation and final Laurent projection. Whole AlphaLoop tensor
+# reduction protects only loop-independent Lorentz scalars; native ports and supported
+# compact/indexed syntax remain explicit.
+# Reviewed 2026-10-16: No architecture impact: the numerical unit fixture invokes the public parser to initialize the existing typed symbols before parsing.
+# Reviewed 2026-10-16: Dot conversion visits normalized dot powers once while reserving existing indices and preserving independent powered-sum scopes; native/FORM dispatch and scalar evaluation policy are unchanged.
+# Reviewed 2026-10-16: Reserve numeric source slots as well as generated dummy labels; bind native compact representations in the common converter; retain explicit k/p source-slot provenance through native projection. Existing backend dispatch and factorization remain unchanged.
+# Reviewed 2026-10-17: Vakint tensor reduction admits a typed tensor for the native reducer and explicitly exports its result to the backend Atom ABI; tensor metadata belongs to the retained caller.
+# Reviewed 2026-10-17: The real raw-to-native adapter calls TensorReducer::admit once, retaining precise domain diagnostics on rejected source input while the typed reduce path remains unique.
+# Reviewed 2026-10-20: Saved FORM index dimensions retain the caller epsilon convention
+# so exact vector-map sources match. Existing registered-metadata parsing, conflicting
+# tag refusal, and backend algebra are unchanged.
+digest = "c2e489a41ac7a123e652811ebe421f3e0852fd1c"
 
 [[section.note.scope]]
 path = "crates/vakint/src/topologies.rs"
@@ -730,10 +1115,80 @@ symbol = "vakint::symbolica_community_module::VakintWrapper"
 anchor = "pub struct VakintWrapper {"
 # No architecture impact: the 2026-08-21 APIDOC-005 review made the Python
 # wrapper contracts and required tool boundaries explicit without changing behavior.
-# Reviewed 2026-09-17: Documented tensor projection, epsilon depth, opaque spin slots, and complex numerical parameters.
-# Reviewed 2026-10-12: Capability feature names and formatting are updated;
-# the reviewed implementation and data contracts are unchanged.
-digest = "d2483b4ed0df187a8fb6997c70122cbe9887a8e6"
+# Reviewed 2026-09-16: Python selects the tensor backend and defers external
+# tool validation until an operation needs it, as recorded in the architecture.
+# No runtime impact 2026-09-16: generated API prose now distinguishes native
+# tensor reduction from backend evaluation and its deferred tool validation.
+# Reviewed 2026-09-23: Native FeynKit reduction remains the default and FORM remains an explicit backend; external evaluation ownership is unchanged.
+# Reviewed 2026-09-29: the note records the symbolica.community.hepkit.vakint namespace and cumulative
+# citation hook; wrappers still delegate evaluation and error conversion to Rust.
+# Reviewed 2026-10-15: Python backend settings and complex numerical substitutions
+# retain the documented API boundary. Physical PySecDec integration remains manual;
+# pure adapter tests remain automatic.
+# No-impact attestation 2026-10-15: Move the unchanged citation-recording helper
+# before the test module to satisfy Clippy in the Community feature configuration.
+# Runtime registration, signatures and evaluation behavior are unchanged.
+digest = "42363386100fcecf85037b215b2f6e187eefdb2d"
+
+[[section.note.scope]]
+path = "crates/vakint/src/lorentz.rs"
+symbol = "vakint::lorentz::LorentzTensor native incidence"
+anchor = "impl LorentzTensor {"
+end_anchor = "#[cfg(test)]"
+# Reviewed 2026-10-15: Complete represented slots and declared projector markers
+# retain actual native incidence. Hidden compound interfaces and loop-dependent native
+# leaves are rejected; ordinary raw loop/external pairs still contract.
+# Reviewed 2026-10-16: Admit a validated fixed-coordinate basis only as an operand of a closed external dot; reject standalone, invalid-component, open-port and active-loop cases.
+# Reviewed 2026-10-20: Successive native attachments retain remaining shared ports
+# inside products without obstructing contractions through closed native coefficients.
+# Reviewed 2026-10-20: Native incidence uses only complete Minkowski slots or
+# declared projector markers; equal scalar payloads and vector IDs are not ports.
+digest = "8375e68bc00affeb538695d1c5f460271cf2d4f6"
+
+[[section.note.scope]]
+path = "crates/vakint/src/projection.rs"
+symbol = "vakint::projection::ScalarTerms analytic coefficient boundary"
+anchor = "impl ScalarTerms {"
+end_anchor = "    /// Every coefficient is evaluated at the supplied point before one"
+# Reviewed 2026-10-15: Scalar loop inventory, collision-checked coefficient
+# protection, backend kernels and Laurent guards share this owner. Both scalar modes
+# preserve coefficient factors; whole-FORM protection additionally requires a closed
+# Lorentz interface.
+digest = "faee7fa232d9dd355e96826a5a49f66db9de802c"
+
+[[section.note]]
+id = "cff-surface-cache-ownership"
+title = "CFF surface-cache ownership"
+summary = "Shared generalized CFF recursion, standalone arenas, and explicit runtime surface boundaries."
+source = "docs/architecture/cff-surface-cache-ownership.typ"
+kind = "Architecture"
+status = "Implemented"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-09-16"
+review_ref = "2a2c9afe7417780d2102aaf5be6fb1860bb43651"
+products = ["gammaloop", "feynkit"]
+topics = ["cff", "cache", "ownership"]
+review_triggers = ["crates/feynkit-cff/**", "crates/gammalooprs/src/**/cff*", "crates/gammalooprs/src/graph/**"]
+
+[[section.note.scope]]
+path = "crates/feynkit-cff/src/generation.rs"
+symbol = "feynkit_cff::CffGenerator::generate_into"
+anchor = "pub fn generate_into("
+# Reviewed 2026-09-23: Updated the note for the shared generalized recursion and distinct standalone/runtime surface representations.
+digest = "89000ab1668f83dfb3b32351e6dbed65e0d5c91e"
+
+[[section.note.scope]]
+path = "crates/feynkit-cff/src/expression.rs"
+symbol = "feynkit_cff::CffExpression"
+anchor = "pub struct CffExpression {"
+digest = "22fbe168db1fc1e94241cd87507cd182e76f39a4"
+
+[[section.note.scope]]
+path = "crates/feynkit-cff/src/surface.rs"
+symbol = "feynkit_cff::SurfaceCache"
+anchor = "pub struct SurfaceCache {"
+digest = "e35249fe2ae3d1ed12cd9c5059e7a9f42f56eb51"
 
 [[section]]
 id = "proposals"
@@ -756,19 +1211,19 @@ topics = ["architecture", "roadmap"]
 review_triggers = ["crates/gammaloop-api/src/**", "crates/gammalooprs/src/**"]
 
 [[section.note]]
-id = "cff-surface-cache-ownership"
-title = "CFF surface-cache ownership"
-summary = "A proposal for expression-local surface ownership, its migration path, invariants, and rejected alternatives."
-source = "docs/architecture/cff-surface-cache-ownership.typ"
+id = "tensor-engine-consolidation-plan"
+title = "Tensor engine consolidation plan"
+summary = "Plan of record for one contraction engine on a borrowed structural network layer: Feynman-rule application, contraction and materialization as separate steps, aliased tensor expressions as results, rules and tensors certified once, a small public verb set, and the internal duplicates from both audits retired under measured gates."
+source = "docs/architecture/tensor-engine-consolidation-plan.typ"
 kind = "Design proposal"
 status = "Proposal"
 lifecycle = "proposal"
 owner = "unassigned"
-reviewed_at = "2026-08-17"
-review_ref = "c9f4e32acd2c"
-products = ["gammaloop"]
-topics = ["cff", "cache", "ownership"]
-review_triggers = ["crates/gammalooprs/src/**/cff*", "crates/gammalooprs/src/graph/**"]
+reviewed_at = "2026-09-27"
+review_ref = "a27ca81d8958"
+products = ["spenso", "idenso", "gammaloop"]
+topics = ["schoonschip", "tensor-network", "parsing", "rewrites", "python"]
+review_triggers = ["crates/idenso/src/**", "crates/spenso/src/network/**", "crates/spynso3/src/**"]
 
 [[section]]
 id = "investigations"
@@ -789,6 +1244,50 @@ captured_at = "2026-09-09"
 evidence_revision = "2fde2185a5989b08f702083b5f58567a3dc3486f"
 products = ["gammaloop", "spenso"]
 topics = ["thermal", "evaluation", "precision"]
+
+[[section.note]]
+id = "tensor-engine-checkpoint"
+title = "Tensor engine correctness checkpoint"
+summary = "Saved validation and measurement scope for the earlier shared tensor-owner consolidation, preceding the unified reduction API."
+source = "docs/architecture/tensor-engine-checkpoint.typ"
+kind = "Correctness checkpoint · 2026-09-29"
+status = "Archived · historical validation"
+lifecycle = "archived"
+owner = "unassigned"
+captured_at = "2026-09-29"
+evidence_revision = "78a0a22f0"
+products = ["spenso", "idenso", "gammaloop"]
+topics = ["tensor-network", "validation", "performance", "implementation-history"]
+
+[[section.note]]
+id = "hep-symbols-tensor-primitives"
+title = "HEP symbols and tensor primitives"
+summary = "Audit of all 22 Spenso-owned hep.Symbols entries, their existing typed replacements, and missing constructors or scalar conventions."
+source = "docs/architecture/hep-symbols-tensor-primitives.typ"
+kind = "API inventory"
+status = "Audited at 10a6c180"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-09-29"
+review_ref = "10a6c180"
+products = ["feynkit", "spenso", "idenso"]
+topics = ["python", "tensor-network", "api"]
+review_triggers = ["crates/feynkit-py/src/symbols.rs", "crates/spynso3/src/**"]
+
+[[section.note]]
+id = "tensor-engine-expansion-inventory"
+title = "Tensor engine expansion inventory"
+summary = "Fixed-base M0 inventory of direct and implicit tensor expansion, its existing owners, and the replacements required by the tensor engine consolidation plan."
+source = "docs/architecture/tensor-engine-expansion-inventory.typ"
+kind = "Implementation inventory"
+status = "In progress"
+lifecycle = "investigation"
+owner = "unassigned"
+reviewed_at = "2026-09-27"
+review_ref = "bfb80d8c"
+products = ["spenso", "idenso", "gammaloop"]
+topics = ["schoonschip", "tensor-network", "parsing", "rewrites"]
+review_triggers = ["crates/idenso/src/**", "crates/spenso/src/**"]
 
 [[section.note]]
 id = "gammaloop-drawing-evaluated-fields-history"
@@ -862,9 +1361,23 @@ products = ["gammaloop"]
 topics = ["performance", "three-loop", "integration", "memory"]
 
 [[section.note]]
+id = "unified-tensor-reduction"
+title = "Unified tensor reduction"
+summary = "Unified reduction API audit, reproducible correctness and timing baseline, FORM comparisons, and implementation validation."
+source = "docs/architecture/unified-tensor-reduction.typ"
+kind = "Performance investigation"
+status = "Implemented and validated; measured regressions retained"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-09-29"
+evidence_revision = "10a6c180"
+products = ["spenso", "idenso", "feynkit"]
+topics = ["tensor-algebra", "performance", "python", "validation"]
+
+[[section.note]]
 id = "network-simplification"
-title = "Network simplification status"
-summary = "Direct sum contraction behavior, profiling controls, current bottlenecks, reproduction commands, and open experiments."
+title = "Historical network simplification investigation"
+summary = "Archived measurements and controls for the retired network simplifier, with links to the shared typed contraction architecture."
 source = "docs/architecture/network-simplification-status.typ"
 kind = "Performance investigation"
 status = "Investigation record"
@@ -1027,6 +1540,56 @@ anchor = "ci-checks-and-upload:"
 digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
 
 [[section.note]]
+id = "feynkit-merge-readiness"
+title = "FeynKit merge readiness and performance"
+summary = "Measured reconciliation regressions, shared algebra repairs, unchanged validation contracts and before/after performance evidence."
+source = "docs/architecture/feynkit-merge-readiness.typ"
+kind = "Engineering investigation"
+status = "Repairs in progress"
+lifecycle = "current"
+owner = "unassigned"
+reviewed_at = "2026-10-16"
+review_ref = "f6d6b810cd15acde53003f0228bf5b7301dac492"
+products = ["gammaloop", "feynkit", "idenso", "spenso"]
+topics = ["performance", "testing", "tensor-network", "ci"]
+review_triggers = ["benchmarks/performance/**", "crates/feynkit-generator/src/grouping.rs", "crates/gammalooprs/src/integrands/process/evaluators.rs", "crates/idenso/src/dirac/simplify.rs", "crates/spenso/src/network/parsing/**"]
+
+[[section.note.scope]]
+path = "crates/gammalooprs/src/integrands/process/evaluators.rs"
+symbol = "EvaluatorStack::preprocess_numerator_families"
+anchor = "fn preprocess_numerator_families<A: AtomCore>("
+# Reviewed 2026-10-16: finite component factors are collected before registration;
+# guarded residue dispatch also skips default CPE across mutually exclusive branches.
+# The investigation records exact program replays, corpus pilots and pending gates.
+# Reviewed 2026-10-16: Added structured timing for post-algebra contraction, captured-formal discovery and finite-component collection. These diagnostics do not change evaluator algebra or guarded CPE policy.
+# Clippy review: copy Copy settings directly and iterate alias values; dispatch policy and iteration order are unchanged.
+# Reviewed 2026-10-17: The readiness note distinguishes previous qualified timings from the pending typed migration, including logical component layouts, retained zero-family interfaces, and separately timed raw-root admission.
+# Reviewed 2026-10-17: Scalar-argument finite dots lower after family shadows, before component parsing, with admission and scalar-component timers recorded separately.
+# Reviewed 2026-10-17: The scalar invariant rewrite with algebra disabled preserves the declared tensor interface via the checked finisher; reversed-axis nonzero and ranked-zero controls are retained.
+# Reviewed 2026-10-18: The readiness record separates the indexed continuation from prior qualification and records strict runtime interfaces, preserved component layouts, API limitations and pending performance measurements.
+digest = "3b507cbf49922826dc7426ae7fcfa75e95c43aed"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/simplification/observation.rs"
+symbol = "DomainObservations::finish_observation"
+anchor = "fn finish_observation("
+# Reviewed 2026-10-16: completed duplicate scopes share immutable observations;
+# every occurrence remains inspected and counted. Massif and RSS evidence is recorded.
+digest = "27c32f90af7aeed625ec0def5ca8f727dd7e3477"
+
+[[section.note.scope]]
+path = "crates/feynkit-generator/src/grouping.rs"
+symbol = "group_diagrams"
+anchor = "pub(crate) fn group_diagrams("
+# Reviewed 2026-10-16: isolated color contraction, scalar conjugation, exact
+# algebraic weight cancellation and numeric content preserve factorized inputs.
+# Reviewed 2026-10-17: Grouping retains exact, sampling-source and color-valued sampled tensors; finite Lorentz component values and certified ratios remain scalar. Historical timing identities are unchanged.
+# Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
+# Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
+# Reviewed 2026-10-19: exact preparation collects existing numerical content and scalar factors before its single index canonicalization. The added chiral-cycle control is red before this reorder and green afterward, preserves dummy/order variants and rejects a distinct matrix; no graph expansion or reference change.
+digest = "fc33f3fc768c2d69937c7c65535713b2f90df5de"
+
+[[section.note]]
 id = "nix-crane-cache-reuse"
 title = "Nix and Crane artifact reuse"
 summary = "Historical Rust CI cache experiments and the maintained documentation producer and live-watcher cache contract; current Rust CI guidance is recorded separately."
@@ -1101,7 +1664,9 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # Reviewed 2026-10-12: ABI/Python capability names are updated and
 # watcher/server checks are grouped under watch; reusable compiler and
 # terminal publication boundaries are retained.
-digest = "2c7dc06eb8221eb03f5d2925fbea9dc4fd61536d"
+# Reviewed 2026-10-15: The live registry remains the source of authored note/product
+# inputs. Historical CI experiments defer current policy to ci.typ.
+digest = "a6e8d348f30ef64d9c936604c62dcb59ca635d1a"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1110,15 +1675,21 @@ symbol = "documentation source ownership"
 # snapshot renders, whose source-link validation reads the staged repository.
 anchor = "repositoryDocumentationSources ="
 end_anchor = "documentationRegistry = builtins.fromTOML"
-# No-impact attestation 2026-09-22: stage the three graph fixtures linked by
-# the CFF architecture note. The terminal documentation source gains those
-# files; Cargo producer inputs and the documented cache boundaries are unchanged.
-# Reviewed 2026-09-25: include the three graph inputs linked by the sampling and
-# threshold guides in the existing hermetic documentation source set.
-# No-impact attestation 2026-09-29: the documentation source adds the Kurvst
-# knot-logo example imported by the GammaLoop marks; cache boundaries are
-# unchanged.
-digest = "7110bb47b3a576ab6987cfdf0d579f3aee98859f"
+# Reviewed 2026-09-16: FeynKit joins the existing product pipeline, including
+# shared package/docs stub validation and complete latest/snapshot bundles.
+# Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
+# Reviewed 2026-09-16: stage linked community showcase sources with existing documentation inputs.
+# Reviewed 2026-09-23: The merged workspace retains grouped fixture closures and the documented compiler-cache and docs build boundaries.
+# Source-scope review 2026-09-29 against commit 37e804d5: the sole range delta stages the
+# packaged Spenso stub for paired exporter validation. The note records this terminal
+# source input; reusable producer ownership is unchanged.
+# Reviewed 2026-10-15: Declared notes and native product assets remain explicit
+# documentation inputs. Current producer/runtime separation and all six products match
+# the maintained note.
+# Reviewed 2026-10-19: linked FeynKit installed tests and the notebook host's
+# Linnet Python shim are staged with existing terminal documentation sources.
+# Source-link and wheel validation stay strict; reusable compiler ownership is unchanged.
+digest = "bfafb920e4cc1fc0511aa12ad4c1f86272bb8e75"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1127,7 +1698,10 @@ anchor = "workspaceDependencyManifestFiles ="
 end_anchor = "cargoGraphGenerationSrc ="
 # No architecture impact 2026-10-10: remove the inactive virtual-workspace
 # build.rs input; member build scripts retain the platform linking behavior.
-digest = "1783ac735c1881e1fc45d30750138beccf1e2814"
+# Reviewed 2026-10-15: Dependency manifests remain the compilation input tier. Current
+# CI policy retains selected local checks, artifact upload and the existing
+# performance trigger.
+digest = "6ae7769a5fab0c19db4004118a07e14882b6f4af"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1140,16 +1714,46 @@ symbol = "workspace package source ownership"
 # guide records this input boundary and the restored binding-test coverage.
 anchor = "documentationCatalogAnnotatedItemSourcePaths ="
 end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
-# Reviewed 2026-09-17: No cache architecture impact: only compile-time graph and parametric numerator fixture roots were added to existing package source selections.
-# No cache architecture impact 2026-09-24: the GL638 embedded fixture and scalar
-# box subprocess fixture extend existing compile-time and runtime test inputs.
-# No-impact attestation 2026-09-29: Clinnet's runtime test sources add the
-# documentation theme imported by the portal edge style its Typst tests render.
-# Reviewed 2026-10-01: Retained main source ownership and added embedded GL256/GL262 and RQFT test fixtures; ci.typ documents their cache boundaries.
-# Reviewed 2026-10-12: Package source ownership now includes the shared
-# Linnest asset builder used by GammaLoop and Clinnet; the existing per-
-# package filtering boundary is retained.
-digest = "4b54f528d1200ddef5c742c27c80c825bb042022"
+# No documentation-cache impact 2026-09-16: FeynKit compile-time fixtures
+# and embedded renderer assets follow their package source ownership.
+# Reviewed 2026-09-16: stage the Python sources linked from the FeynKit guides.
+# Reviewed 2026-09-16: stage linked community showcase sources with existing documentation inputs.
+# Reviewed 2026-09-16: embed the pinned Typst packages for offline FeynKit rendering.
+# No cache-architecture impact 2026-09-18: FeynKit's Python renderer declares
+# the two shared physics-style files it now embeds as production source inputs.
+# Linnest, Kurvst, and package assets now arrive through its linnet-py dependency.
+# Reviewed 2026-09-20: FeynKit embeds the shared physics layout template;
+# placement and style policy now come from the same owner as GammaLoop drawing.
+# Reviewed 2026-09-23: The merged workspace retains grouped fixture closures and the documented compiler-cache and docs build boundaries.
+# Source-scope review 2026-09-29 against commit 6c4159e6: the sole range delta gives
+# feynkit-amplitude tests the existing model fixture directory. The note records package
+# fixture ownership; producer partitioning is unchanged.
+# Reviewed 2026-10-15: Annotated-item paths remain derived from the catalog owner,
+# preserving the documented narrow documentation source-filter boundary.
+# Reviewed 2026-10-15: The cache note records rendering source ownership and locked UFO
+# runtime wheels; removed nonexistent test paths do not alter test selection.
+# Reviewed 2026-10-15: Renderer data manifests are compilation inputs; their pinned font payloads
+# remain in a separate runtime closure, as recorded in the cache note.
+# Reviewed 2026-10-15: Compile-time test inputs now include the authoritative SM JSON for the
+# built-in model check and the captured paired-wavefunction numerator fixtures.
+# These remain in test producers, preserving production/runtime source ownership.
+# Reviewed 2026-10-15: Embedded-input audit covers renderer CSS/JS/HTML and
+# compile-time Python, Atom, JSON and graph fixtures in their owning producers.
+# Native FeynKit rendering no longer keys its producer on obsolete Typst templates.
+# Reviewed 2026-10-16: API and integration runtime inputs include the approved frozen GL15; the cache-source ownership note records that boundary.
+# No-impact attestation 2026-10-18: the captured d11 gamma0 chain is declared
+# in Idenso's compile-time test assets. The documented package-specific test
+# producer boundary is preserved; the fixture bytes and assertions are unchanged.
+# Reviewed 2026-10-18: Captured fixed-basis Atom fixtures are explicit gammalooprs
+# compile-time test inputs. Filtered source hashes verify both files; production
+# and runtime source ownership and cache policy are unchanged.
+# No-impact attestation 2026-10-18: documentation unit tests retain their existing
+# STIX font and license in the filtered runtime closure. Producer partitioning,
+# rendering behavior and assertions remain unchanged.
+# Reviewed 2026-10-19: the UFO adapter retains requested-source metadata under the
+# loader public import scope; its renamed embedded Python helper stays owned by
+# feynkit-ufo in both explicit source lists. Producer and runtime boundaries stay fixed.
+digest = "9ed8dd0ee840c3876b4c7a341bbd6a433d55ad0d"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1163,14 +1767,20 @@ end_anchor = "\nin\n{\n  inherit"
 # inherited Nix packages. The reusable Cargo producer boundary is unchanged.
 # Reviewed 2026-09-14: terminal renders receive runtime Symbolica licensing;
 # the reusable Cargo producer inputs remain unchanged.
-# No-impact attestation 2026-09-29: the rendered-SVG check also compares the
-# two GammaLoop construction marks; the Cargo producer boundary is unchanged.
-# Reviewed 2026-10-12: ABI/Python capability names are updated and
-# watcher/server checks are grouped under watch; reusable compiler and
-# terminal publication boundaries are retained.
-# Reviewed 2026-10-12: documentation validation runs the feature-enabled
-# GammaLoop and Linnet exporter tests; reusable producer inputs are unchanged.
-digest = "6d17c6abcbea74e222f6adaf0f3a74f4eaac309d"
+# Reviewed 2026-09-16: FeynKit joins the existing product pipeline, including
+# shared package/docs stub validation and complete latest/snapshot bundles.
+# Reviewed 2026-09-16: historical redirect assertions apply to the original
+# five products; new FeynKit bundles publish only their canonical routes.
+# Reviewed 2026-09-23: The merged workspace retains grouped fixture closures and the documented compiler-cache and docs build boundaries.
+# Source-scope review 2026-09-29 against commit 19a56863: the sole range delta adds
+# feynkit_amplitude to terminal Rust reference assertions. The note records the extra
+# route; artifact consumers and cache boundaries are unchanged.
+# Reviewed 2026-10-15: Documentation keeps its producer/runtime distinction. Four-
+# minute ordinary tests, larger main-push workloads and final-review performance
+# triggers remain owned by ci.typ.
+# Reviewed 2026-10-15: Terminal documentation checks receive the pinned font bundle through
+# SYMBOLICA_DATA_DIRECTORY; reusable compiler artifact ownership is unchanged.
+digest = "e27a783909bfe283190cb242f1325a1b94b77d0f"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"
@@ -1181,6 +1791,8 @@ end_anchor = "sortedUnique ="
 # Jujutsu workspaces; the terminal test closure supplies both Git and Jujutsu.
 # No-impact attestation 2026-09-29: the Clinnet group gains the pinned Typst
 # runtime tool so its Typst tests run; documentation groups are unchanged.
+# Reviewed 2026-10-15: Package grouping remains part of runtime producer selection;
+# this historical note defers current limits and trigger policy to ci.typ.
 digest = "0a568cb5712045aee37d96bfb2f91d3d32b7e9b9"
 
 [[section.note.scope]]
@@ -1188,6 +1800,8 @@ path = "nix/rust-workspace.nix"
 symbol = "nextestRuntimeSrcFor"
 anchor = "nextestRuntimeSrcFor ="
 end_anchor = "nextestFeatureArgsFor ="
+# Reviewed 2026-10-15: Runtime source selection retains the producer/runtime split.
+# Reconciliation does not add feature-branch performance triggers.
 digest = "e70efccc2a78b7ab7b002facfefa375418e590f0"
 
 [[section.note.scope]]
@@ -1217,7 +1831,9 @@ path = "nix/ci.nix"
 symbol = "documentation test group coverage"
 anchor = 'name = "docs";'
 end_anchor = 'name = "integration";'
-digest = "2084c83a58875b3ae7563ef5e4adb7408fec0ccb"
+# Reviewed 2026-10-15: The existing documentation test group receives the native-renderer font
+# bundle at runtime; its package and test selection are unchanged.
+digest = "6f841f176b4d76719aaaaf4f1a0e32c0ff7eb405"
 
 [[section]]
 id = "documentation"

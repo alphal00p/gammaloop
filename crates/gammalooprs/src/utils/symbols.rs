@@ -1,17 +1,20 @@
-use std::{cell::RefCell, collections::HashMap, sync::LazyLock};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, HashMap},
+    sync::LazyLock,
+};
 
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 
 use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    shadowing::symbolica_utils::SpensoPrintSettings,
+    spenso_print_scripted_indexed,
     structure::{
         abstract_index::AIND_SYMBOLS,
         concrete_index::ExpandedIndex,
         representation::{Minkowski, RepName},
     },
-    utils::{to_subscript, to_superscript},
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
@@ -286,7 +289,7 @@ impl GammaloopSymbols {
         {
             return arg.into_owned();
         }
-        let mut collected = arg
+        let mut expression = arg
             .replace(self.sign_theta(W_.a_))
             .with(Symbol::IF.call(Atom::var(W_.a_) + 1))
             .replace(Symbol::IF.call(W_.a_) * Symbol::IF.call(W_.b_))
@@ -298,94 +301,105 @@ impl GammaloopSymbols {
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]))
             .replace(Symbol::IF.call_args([Atom::var(W_.a_)]))
             .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::one(), Atom::Zero]));
-        // Tensor contractions are complete here. Residue-map deltas use
-        // IF(current_id-key, 0, body). Move complete scalar weights into their
-        // selected arms before merging same-key contributions. This
-        // keeps inactive inverses lazy and gives the evaluator one shared region.
-        // Collection can expose more weighted guards, so repeat until stable.
-        collected.repeat_map(Self::collect_orientation_if_terms);
-        collected
-    }
-
-    /// Absorb scalar weights into zero-arm guards without expanding products,
-    /// then merge same-key terms into one `IF(key, 0, sum of bodies)`. Unlike a
-    /// sweep of `.replace(IF(a_, 0, b_) + IF(a_, 0, c_)).with(IF(a_, 0, b_ + c_))`,
-    /// which merges one pair per sum, this merges all of them, so repeating it
-    /// does not retraverse the whole expression for every pair of a nested sum.
-    fn collect_orientation_if_terms(expr: AtomView<'_>) -> Atom {
-        fn key_and_body(term: AtomView<'_>) -> Option<(AtomView<'_>, AtomView<'_>)> {
-            let AtomView::Fun(call) = term else {
-                return None;
-            };
-            let (key, zero, body) = call.iter().collect_tuple()?;
-            (call.get_symbol() == Symbol::IF && zero == 0).then_some((key, body))
-        }
-
-        expr.replace_map(|term, _, out| {
-            if let AtomView::Fun(call) = term
-                && call.get_symbol() != Symbol::IF
-            {
-                // Function arguments can be literal parameter or alias tags.
-                // Keep the complete call as a factor so its lookup key survives.
-                out.set_from_view(&term);
-                return;
-            }
-            if let AtomView::Mul(product) = term {
-                let Some((key, _)) = product.iter().find_map(key_and_body) else {
+        loop {
+            // A zero-arm selector owns its complete scalar weight, including
+            // inverse factors which must remain inside the lazy selected arm.
+            // Function arguments can be literal alias tags: absorb weights only
+            // in arithmetic and IF bodies, without changing those lookup keys.
+            let weighted = expression.replace_map(|node, _, output| {
+                if let AtomView::Fun(call) = node
+                    && call.get_symbol() != Symbol::IF
+                {
+                    output.set_from_view(&node);
+                    return;
+                }
+                let AtomView::Mul(product) = node else { return };
+                let Some(condition) = product.iter().find_map(|factor| {
+                    if let AtomView::Fun(branch) = factor
+                        && branch.get_symbol() == Symbol::IF
+                        && branch.get_nargs() == 3
+                        && branch.get(1).is_zero()
+                    {
+                        Some(branch.get(0))
+                    } else {
+                        None
+                    }
+                }) else {
                     return;
                 };
-                // Same-key factors belong to one live arm. Different keys keep
-                // their own guards, and functions/powers remain complete factors.
                 let body = Atom::mul_many(product.iter().map(|factor| {
-                    key_and_body(factor)
-                        .filter(|(factor_key, _)| *factor_key == key)
-                        .map_or(factor, |(_, body)| body)
+                    if let AtomView::Fun(branch) = factor
+                        && branch.get_symbol() == Symbol::IF
+                        && branch.get_nargs() == 3
+                        && branch.get(0) == condition
+                        && branch.get(1).is_zero()
+                    {
+                        branch.get(2)
+                    } else {
+                        factor
+                    }
                 }));
-                let guarded = Symbol::IF.call_args([key, Atom::Zero.as_view(), body.as_view()]);
-                **out = Self::collect_orientation_if_terms(guarded.as_view());
-                return;
-            }
-            let AtomView::Add(sum) = term else {
-                return;
-            };
-            let mut groups = HashMap::<_, Vec<_>>::new();
-            for term in sum.iter() {
-                if let Some((key, _)) = key_and_body(term) {
-                    groups.entry(key).or_default().push(term);
+                **output = Symbol::IF.call_args([condition, Atom::Zero.as_view(), body.as_view()]);
+            });
+            // Ordinary same-key sums remain collectable inside functions. Their
+            // normalizers may create new sums, so both phases share this fixed
+            // point rather than rescanning the expression for each branch pair.
+            let collected = weighted.replace_map_bottom_up(|node, _, output| {
+                if let Some(collected) = Self::merge_orientation_branches(node) {
+                    **output = collected;
                 }
+            });
+            if collected == expression {
+                return collected;
             }
-            groups.retain(|_, group| group.len() > 1);
-            if groups.is_empty() {
-                return;
+            // Rebuilding a parent can invoke a normalizer that introduces new
+            // conditional sums after its children have already been visited.
+            expression = collected;
+        }
+    }
+
+    fn merge_orientation_branches(node: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Add(sum) = node else {
+            return None;
+        };
+        let mut groups = BTreeMap::<_, Vec<_>>::new();
+        let mut terms = Vec::<AtomOrView<'_>>::new();
+        for term in sum.iter() {
+            if let AtomView::Fun(branch) = term
+                && branch.get_symbol() == Symbol::IF
+                && branch.get_nargs() == 3
+                && branch.get(1).is_zero()
+            {
+                groups
+                    .entry(branch.get(0))
+                    .or_default()
+                    .push((term, branch.get(2)));
+            } else {
+                terms.push(term.into());
             }
-            let mut terms = sum
-                .iter()
-                .filter(|&term| {
-                    key_and_body(term).is_none_or(|(key, _)| !groups.contains_key(&key))
-                })
-                .map(AtomOrView::from)
-                .collect_vec();
-            for (key, mut group) in groups {
-                // Add bodies in the order of that pairwise replacement, which
-                // matches the first two same-key terms of the sorted sum, so
-                // floating-point coefficients round identically.
-                group.sort_by(|a, b| b.get_data().cmp(a.get_data()));
-                let mut group = group.into_iter().map(AtomOrView::from).collect_vec();
-                while group.len() > 1 {
-                    let pair = [group.pop().unwrap(), group.pop().unwrap()];
-                    let bodies = pair
-                        .iter()
-                        .map(|term| key_and_body(term.as_view()).unwrap().1);
-                    let body = Atom::add_many(bodies);
-                    let merged = Symbol::IF.call_args([key, Atom::Zero.as_view(), body.as_view()]);
-                    let data = merged.as_view().get_data();
-                    let at = group.partition_point(|term| term.as_view().get_data() > data);
-                    group.insert(at, merged.into());
-                }
-                terms.extend(group);
+        }
+        if groups.values().all(|group| group.len() == 1) {
+            return None;
+        }
+        // Group direct scalar branches after weight absorption. Powers and
+        // unrelated factors stay intact. One bulk sum avoids repeated matching
+        // and rebuilding a growing body.
+        for (condition, group) in groups {
+            if group.len() == 1 {
+                terms.push(group[0].0.into());
+                continue;
             }
-            **out = Self::collect_orientation_if_terms(Atom::add_many(terms).as_view());
-        })
+            let body = Atom::add_many(group.into_iter().map(|(_, body)| body));
+            // Joining bodies can expose another sum of conditionals. Its
+            // children were already visited; only collect this new sum root.
+            let body = Self::merge_orientation_branches(body.as_view()).unwrap_or(body);
+            terms.push(
+                Symbol::IF
+                    .call_args([condition, Atom::Zero.as_view(), body.as_view()])
+                    .into(),
+            );
+        }
+        Some(Atom::add_many(terms))
     }
 
     pub fn den<'a>(
@@ -514,130 +528,6 @@ pub static W_: LazyLock<WildCards> = LazyLock::new(|| WildCards {
     z___: symbol!("z___"),
 });
 
-macro_rules! spenso_print_scripted_indexed {
-    ($a:ident, $opt:ident, $symbol:expr) => {
-        spenso_print_scripted_indexed!($a, $opt, $symbol, $symbol)
-    };
-    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
-        match $opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(i)) => {
-                let SpensoPrintSettings {
-                    parens,
-                    symbol_scripts,
-                    commas,
-                    with_dim,
-                    ..
-                } = SpensoPrintSettings::from(*i as usize);
-
-                let AtomView::Fun(f) = $a else {
-                    return None;
-                };
-
-                let mut argiter = f.iter();
-                let id = argiter.next()?;
-                let Ok(i) = usize::try_from(id) else {
-                    return None;
-                };
-
-                let is_typst = $opt.typst_mode().is_some();
-                let mut out = if is_typst {
-                    $typst_symbol.to_string()
-                } else {
-                    $symbol.to_string()
-                };
-                if is_typst {
-                    out.push('_');
-                    out.push_str(&i.to_string());
-                } else {
-                    out.push_str(&to_subscript(i as isize));
-                }
-                if $opt.color_builtin_symbols && !is_typst {
-                    out = nu_ansi_term::Color::Magenta.paint(out).to_string();
-                }
-
-                let mut printed_args = false;
-                for arg in argiter {
-                    let hidden_representation = matches!(
-                        arg,
-                        AtomView::Fun(a)
-                            if a.get_symbol().has_tag(&SPENSO_TAG.representation)
-                                && a.get_nargs() == 1
-                                && !with_dim
-                    );
-                    if hidden_representation {
-                        continue;
-                    }
-
-                    if printed_args {
-                        out.push(if commas { ',' } else { ' ' });
-                    } else {
-                        if symbol_scripts {
-                            out.push('^');
-                        }
-                        if parens {
-                            out.push('(');
-                        }
-                        printed_args = true;
-                    }
-
-                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
-                }
-                if printed_args && parens {
-                    out.push(')');
-                }
-                Some(out)
-            }
-            _ => None,
-        }
-    }};
-}
-
-macro_rules! spenso_print_simple_indexed {
-    ($a:ident, $opt:ident, $symbol:expr) => {
-        spenso_print_simple_indexed!($a, $opt, $symbol, $symbol)
-    };
-    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
-        match $opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(_)) => {
-                let AtomView::Fun(f) = $a else {
-                    return None;
-                };
-
-                let mut out = $symbol.to_string();
-                let mut args = f.iter();
-
-                let id = args.next().unwrap();
-                let Ok(i) = usize::try_from(id) else {
-                    return None;
-                };
-
-                if $opt.typst_mode().is_some() {
-                    out = $typst_symbol.to_string();
-                    out.push('_');
-                    out.push_str(&i.to_string());
-                } else {
-                    out.push_str(&to_subscript(i as isize));
-                }
-                let mut first = true;
-                for arg in args {
-                    if first {
-                        first = false;
-                        out.push('(');
-                    } else {
-                        out.push(',');
-                    }
-                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
-                }
-                if !first {
-                    out.push(')');
-                }
-                Some(out)
-            }
-            _ => None,
-        }
-    }};
-}
-
 macro_rules! spenso_print_uv_unary {
     ($a:ident, $opt:ident, $prefix:expr, $suffix:expr) => {{
         match $opt.custom_print_mode.get("spenso") {
@@ -688,161 +578,17 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     localizing_integrand: symbol!("int_loc"),
     uvaind: symbol!(
         "uvind",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵘ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        } else {
-                            first = false;
-                        }
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:u".to_owned()]
     ),
-    edgeaind: symbol!(
-        "edge",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵉ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
-    ),
-    vertexaind: symbol!(
-        "vertex",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵛ".to_string();
-
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
-    ),
+    edgeaind: feynkit_graph::symbols::edge_index(),
+    vertexaind: feynkit_graph::symbols::vertex_index(),
     dummyaind: symbol!(
         "dummy",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵈ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
+        print = spenso::network::tags::tensor_print,
+        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:d".to_owned()]
     ),
-    hedgeaind: symbol!(
-        "hedge",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-                    let SpensoPrintSettings {
-                        index_subscripts, ..
-                    } = SpensoPrintSettings::from(*i as usize);
-
-                    let mut out = "".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-                        if index_subscripts {
-                            out.push_str(&to_superscript(i));
-                        } else {
-                            out.push_str(&to_subscript(i));
-                        }
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
-    ),
+    hedgeaind: feynkit_graph::symbols::hedge_index(),
     uv_subgraph: symbol!(
         "gammalooprs::uv::subgraph",
         print = |a, opt, _state| {
@@ -1038,48 +784,16 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         }
     ),
     num: symbol!("num"),
-    den: symbol!(
-        "denom",
-        der = |_, arg, out| {
-            if arg != 3 {
-                **out = Atom::Zero;
-            } else {
-                **out = Atom::num(1);
-            }
-        }
-    ),
-    ubar: symbol!(
-        "ubar",
-        print = |a, opt, _state| {
-            spenso_print_scripted_indexed!(a, opt, "u̅", "overline(u)")
-        },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    vbar: symbol!(
-        "vbar",
-        print = |a, opt, _state| {
-            spenso_print_scripted_indexed!(a, opt, "v̅", "overline(v)")
-        },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    den: feynkit_graph::symbols::denominator(),
+    ubar: feynkit_graph::symbols::ubar(),
+    vbar: feynkit_graph::symbols::vbar(),
     dot: symbol!("dot"),
-    dim: symbol!("dim"),
-    v: symbol!(
-        "v",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "v") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    u: symbol!(
-        "u",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "u") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    emr_mom: symbol!(
-        "Q",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"),
+    dim: feynkit_graph::symbols::dimension(),
+    v: feynkit_graph::symbols::v(),
+    u: feynkit_graph::symbols::u(),
+    emr_mom: feynkit_graph::symbols::momentum(),
+    // The original index-free momentum is provenance metadata, not a tensor child.
+    uv_momentum_provenance: symbol!("gammalooprs::uv::momentum_provenance"; Scalar),
     uv_class: symbol!("gammalooprs::uv::class"),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
@@ -1121,17 +835,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
-    ose: symbol!(
-        "OSE"; Scalar;
-        print = |a, opt, _state| {
-            spenso_print_simple_indexed!(a, opt, "Eᵒˢ", r#"E^("os")"#)
-        },
-            der = |_, arg, out| {
-                if arg == 1 {
-                    **out = Atom::num(1);
-                }
-            }
-    ),
+    ose: feynkit_cff::symbols::on_shell(),
     on_shell_energy: symbol!(
         "OnShellEnergy"; Scalar;
         norm = |view, out| {
@@ -1240,34 +944,13 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
                     .expect("a retained CFF surface has at least two summands")
             })
     ),
-    energy: symbol!(
-        "E",
-        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "E") }
-    ),
-    external_mom: symbol!(
-        "P",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "p") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    loop_mom: symbol!(
-        "K",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "k") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    epsilon: symbol!(
-        "ϵ",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    energy: feynkit_cff::symbols::energy(),
+    external_mom: feynkit_graph::symbols::external_momentum(),
+    loop_mom: feynkit_graph::symbols::loop_momentum(),
+    epsilon: feynkit_graph::symbols::epsilon(),
     pi: Symbol::PI,
     color_wrap: symbol!("color"),
-    epsilonbar: symbol!(
-        "ϵbar",
-        print = |a, opt, _state| {
-            spenso_print_scripted_indexed!(a, opt, "ϵ̅", "overline(epsilon.alt)")
-        },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    epsilonbar: feynkit_graph::symbols::epsilonbar(),
     coeff: symbol!("coef"),
     radius_left: symbol!("r_left"),
     radius_star_left: symbol!("r⃰_left"),
@@ -1653,6 +1336,7 @@ pub(crate) fn sign_atom(eid: EdgeIndex) -> Atom {
 mod tests {
     use insta::assert_snapshot;
     use spenso::shadowing::symbolica_utils::LogPrint;
+    use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 
     use super::*;
 
@@ -1984,6 +1668,226 @@ mod tests {
         assert_eq!(GS.collect_orientation_if(collected.clone()), collected);
     }
 
+    fn pairwise_orientation_branches(expression: &Atom) -> Atom {
+        expression
+            .replace(
+                Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_)])
+                    + Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.c_)]),
+            )
+            .repeat()
+            .with(Symbol::IF.call_args([Atom::var(W_.a_), Atom::Zero, Atom::var(W_.b_) + W_.c_]))
+    }
+
+    #[test]
+    fn orientation_collection_matches_pairwise_rule_for_nested_branches() {
+        let (key, nested, a, b, c, x, opaque) = symbol!(
+            "selector_nested_key",
+            "selector_nested_inner",
+            "selector_nested_a",
+            "selector_nested_b",
+            "selector_nested_c",
+            "selector_nested_x",
+            "selector_nested_opaque"
+        );
+        let branch =
+            |condition, body: Atom| Symbol::IF.call_args([Atom::var(condition), Atom::Zero, body]);
+        let inner = branch(nested, Atom::var(a)) + branch(nested, Atom::var(b));
+        let outer =
+            branch(key, branch(nested, Atom::var(a))) + branch(key, branch(nested, Atom::var(b)));
+        let spectators = Atom::var(x) * branch(key, Atom::var(a))
+            + 2 * branch(key, Atom::var(b))
+            + branch(key, Atom::var(c)).pow(2)
+            + Symbol::IF.call_args([Atom::var(key), Atom::var(a), Atom::Zero])
+            + Symbol::IF.call_args([Atom::var(key), Atom::var(b), Atom::var(c)]);
+        for expression in [
+            outer.clone(),
+            function!(opaque, &outer, &inner),
+            outer.pow(3),
+        ] {
+            let collected = GS.collect_orientation_if(&expression);
+            assert_eq!(collected, pairwise_orientation_branches(&expression));
+            assert_eq!(GS.collect_orientation_if(&collected), collected);
+        }
+        let spectator = (Atom::var(x) + c).pow(7);
+        let powered_branch = branch(key, Atom::var(c)).pow(2);
+        for expression in [&spectator * &outer, &inner + &spectators, spectators] {
+            let collected = GS.collect_orientation_if(&expression);
+            let previous = pairwise_orientation_branches(&expression);
+            // Weight absorption intentionally changes the old normal form.
+            // Exhaust every selector truth value, retaining symbolic payloads;
+            // only these small synthetic scalar oracle copies are distributed.
+            for key_value in [0, 1] {
+                for nested_value in [0, 1] {
+                    let select = |atom: &Atom| {
+                        atom.replace(key)
+                            .with(key_value)
+                            .replace(nested)
+                            .with(nested_value)
+                            .expand()
+                    };
+                    assert_eq!(select(&collected), select(&previous));
+                }
+            }
+            for retained in [&spectator, &powered_branch] {
+                if expression.contains(retained) {
+                    assert!(collected.contains(retained));
+                }
+            }
+            assert_eq!(GS.collect_orientation_if(&collected), collected);
+        }
+    }
+
+    #[test]
+    fn orientation_collection_revisits_callback_created_branches() {
+        let (key, nested, a, b, c, d, wrapper) = symbol!(
+            "selector_callback_key",
+            "selector_callback_nested",
+            "selector_callback_a",
+            "selector_callback_b",
+            "selector_callback_c",
+            "selector_callback_d",
+            "selector_callback_wrapper"
+        );
+        let branch =
+            |condition, body: Atom| Symbol::IF.call_args([Atom::var(condition), Atom::Zero, body]);
+        let introduced = function!(
+            wrapper,
+            branch(nested, Atom::var(c)) + branch(nested, Atom::var(d))
+        );
+        let callback = symbol!(
+            "selector_callback_parent",
+            norm = move |node, output| {
+                if let AtomView::Fun(parent) = node
+                    && parent.get_nargs() == 1
+                    && let AtomView::Fun(argument) = parent.get(0)
+                    && argument.get_symbol() == Symbol::IF
+                {
+                    **output = introduced.clone();
+                }
+            }
+        );
+        // The callback leaves the original sum alone, then creates a new sum
+        // below a fresh wrapper when its argument becomes one collected IF.
+        let expression = function!(
+            callback,
+            branch(key, Atom::var(a)) + branch(key, Atom::var(b))
+        );
+        let expected = function!(wrapper, branch(nested, Atom::var(c) + d));
+        let collected = GS.collect_orientation_if(&expression);
+        assert_eq!(collected, expected);
+        assert_eq!(collected, pairwise_orientation_branches(&expression));
+        assert_eq!(GS.collect_orientation_if(&collected), collected);
+    }
+
+    #[test]
+    fn orientation_collection_preserves_repeated_and_cancelling_payloads() {
+        let (key, a, b, x) = symbol!(
+            "selector_cancel_key",
+            "selector_cancel_a",
+            "selector_cancel_b",
+            "selector_cancel_x"
+        );
+        let branch = |body: Atom| Symbol::IF.call_args([Atom::var(key), Atom::Zero, body]);
+        let first = (Atom::var(a) + b).pow(5);
+        let second = Atom::var(x).pow(-1);
+        for expression in [
+            branch(first.clone()) + branch(-&first),
+            branch(first.clone()) + branch(second.clone()) + branch(&first + &second),
+            2 * branch(first.clone()) + branch(second.clone()) + branch(-second),
+        ] {
+            let collected = GS.collect_orientation_if(&expression);
+            let previous = pairwise_orientation_branches(&expression);
+            // Pairwise normalization may turn two equal calls into 2*IF and
+            // stop matching them. Bulk collection can keep that 2 inside the
+            // selected body instead. Expand only these small synthetic scalar
+            // branches for an exact oracle, never a graph numerator.
+            let pattern = Symbol::IF
+                .call_args([Atom::var(key), Atom::var(W_.a_), Atom::var(W_.b_)])
+                .to_pattern();
+            for selected in [W_.a_, W_.b_] {
+                assert_eq!(
+                    collected
+                        .replace(&pattern)
+                        .with(Atom::var(selected))
+                        .expand(),
+                    previous
+                        .replace(&pattern)
+                        .with(Atom::var(selected))
+                        .expand(),
+                );
+            }
+            assert_eq!(GS.collect_orientation_if(&collected), collected);
+        }
+    }
+
+    #[test]
+    fn orientation_collection_bulk_groups_many_branches_without_expansion() {
+        let (key, body, a, b, spectator) = symbol!(
+            "selector_bulk_key",
+            "selector_bulk_body",
+            "selector_bulk_a",
+            "selector_bulk_b",
+            "selector_bulk_spectator"
+        );
+        let factor = (Atom::var(a) + b).pow(7);
+        let branches = (0..3004)
+            .map(|index| {
+                let condition = function!(key, index % 4);
+                let payload = function!(body, index) * &factor;
+                Symbol::IF.call_args([condition, Atom::Zero, payload])
+            })
+            .collect::<Vec<_>>();
+        let unrelated = function!(spectator, &factor).pow(-1);
+        let expected = Atom::add_many((0..4).map(|group| {
+            Symbol::IF.call_args([
+                function!(key, group),
+                Atom::Zero,
+                Atom::add_many(
+                    (group..3004)
+                        .step_by(4)
+                        .map(|index| function!(body, index) * &factor),
+                ),
+            ])
+        })) + &unrelated;
+        for expression in [
+            Atom::add_many(branches.iter()) + &unrelated,
+            Atom::add_many(branches.iter().rev()) + &unrelated,
+        ] {
+            let collected = GS.collect_orientation_if(expression);
+            assert_eq!(collected, expected);
+            assert_eq!(GS.collect_orientation_if(&collected), collected);
+        }
+    }
+
+    #[test]
+    fn uv_provenance_is_scalar_metadata_with_exact_momentum_roundtrip() {
+        use idenso::tensor::SymbolicTensor;
+        use spenso::structure::representation::{Minkowski, RepName};
+
+        crate::initialisation::test_initialise().unwrap();
+        let momentum = GS.emr_mom.call(2) - GS.emr_mom.call(3);
+        let provenance =
+            GS.uv_momentum_provenance_tag(7, UvMomentumProvenanceRole::TaylorFixed, &momentum);
+        assert_eq!(
+            GS.uv_momentum_provenance_data(provenance.as_view()),
+            Some((
+                EdgeIndex(7),
+                UvMomentumProvenanceRole::TaylorFixed,
+                momentum.clone()
+            ))
+        );
+        let mink = Minkowski {}.new_rep(GS.dim);
+        for slot in [mink.to_symbolic([]), mink.to_symbolic([Atom::num(1)])] {
+            let tagged = function!(GS.emr_mom, &provenance, &slot);
+            let typed = SymbolicTensor::infer(tagged.clone()).unwrap();
+            assert_eq!(typed.expression(), &tagged);
+            assert_eq!(
+                GS.erase_uv_momentum_provenance(typed.expression()),
+                GS.indexed_momentum(&momentum, &[slot])
+            );
+        }
+    }
+
     #[test]
     fn orientation_collection_merges_nested_same_key_contributions() {
         let (key, a, b, c, d, w) = symbol!(
@@ -2156,10 +2060,7 @@ mod tests {
                 GS.vbar.call_args([Atom::num(2), Atom::num(12)]),
                 "overline(v)_2^(12)",
             ),
-            (
-                GS.ose.call_args([Atom::num(3), Atom::num(13)]),
-                r#"E^("os")_3(13)"#,
-            ),
+            (GS.ose.call_args([Atom::num(3)]), r#"E^("os")_(3)"#),
             (
                 GS.emr_vec(EdgeIndex(4), Minkowski {}.new_rep(4).to_symbolic([])),
                 "arrow(q)_4",

@@ -1,12 +1,14 @@
 use super::utils::*;
 use super::*;
+use feynkit_graph::DOD;
 use gammaloop_api::commands::evaluate_samples::{EvaluateSamplesPrecise, evaluate_sample_precise};
 use gammalooprs::{
     graph::Autogen,
     integrands::evaluation::PreciseEvaluationResultOutput,
     processes::ProcessCollection,
-    utils::{ArbPrec, FloatLike, symbolica_ext::DOD},
+    utils::{ArbPrec, FloatLike},
 };
+use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
 use ndarray::Array2;
 use spenso::algebra::algebraic_traits::IsZero;
 use std::time::Instant;
@@ -460,6 +462,9 @@ helicities = [0]
     // Keep every momentum-dependent probe on the graph element that owns it.
     // Splitting a dot product across its two edges preserves the shared Lorentz
     // contraction while allowing each UV subgraph to retain only its own factor.
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
     for (process_name, integrand_name, numerator) in owned_numerators {
         let (process_id, canonical_integrand_name) = cli.state.find_integrand_ref(
             Some(&ProcessRef::Unqualified((*process_name).to_string())),
@@ -492,8 +497,12 @@ helicities = [0]
                     )
                 })?;
             let edge = &mut supergraph.graph.underlying[edge_id];
-            let edge_numerator = &edge.num.value * factor;
-            let edge_dod = edge_numerator.edge_dod(edge_id) - 2;
+            let factor = SymbolicTensor::infer_indexed(cooking.try_cook(factor.as_view())?)?;
+            let edge_numerator = edge.num.value.clone().multiply(factor)?;
+            let edge_dod = edge_numerator
+                .expression()
+                .edge_dod(gammalooprs::utils::GS.emr_mom, edge_id.0)?
+                - 2;
             edge.num = Autogen::explicit(edge_numerator);
             edge.dod = Autogen::explicit(edge_dod);
         }
@@ -521,8 +530,11 @@ fn generate_graph_command(
     graph: &str,
     final_states: &str,
 ) -> String {
+    // Numerical probes and owned edge numerators refer to the original edge
+    // and loop frame. The separate native inventory test compares all 49
+    // topologies, local factors, weights and physical/threshold cuts exactly.
     format!(
-        "generate xs scalar_1 > {final_states} | scalar_0 scalar_1 [{{{{3}}}}] --allowed-vertex-interactions V_3_SCALAR_001 V_3_SCALAR_000 -p {process} -i {integrand} -o --select-graphs {graph}"
+        "import graphs tests/resources/graphs/scalar_3l_reference/{graph}.dot --process-spec 'scalar_1 > {final_states} | scalar_0 scalar_1 [{{{{3}}}}]' -p {process} -i {integrand}"
     )
 }
 
@@ -668,8 +680,11 @@ fn run_scalar_3l_cross_section_case_impl(
             .into_iter()
             .filter(|(owner, _)| *owner == edge.0)
             .fold(Atom::one(), |product, (_, factor)| product * factor);
-        let original = &graph.underlying[edge].num.value;
-        let coefficient = (original / &expected).collect_factors();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let original = cooking.uncook(graph.underlying[edge].num.value.expression().as_view());
+        let coefficient = (&original / &expected).collect_factors();
         // Check the stored original owner, not just the requested probe label.
         // Its Lorentz square(s) may carry a momentum-independent source factor.
         // Cancel only matching factors; keep the stored numerator unexpanded.
@@ -677,7 +692,7 @@ fn run_scalar_3l_cross_section_case_impl(
             || [GS.emr_mom, GS.loop_mom, GS.external_mom]
                 .into_iter()
                 .any(|momentum| coefficient.contains_symbol(momentum))
-            || !graph.underlying[edge].mass_atom().is_zero()
+            || !graph.underlying[edge].mass_atom(&graph.model).is_zero()
         {
             return Ok(false);
         }

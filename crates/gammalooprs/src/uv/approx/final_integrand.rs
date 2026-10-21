@@ -22,11 +22,15 @@ use crate::{
 };
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
+#[cfg(test)]
+use idenso::{CookMode, CookSettings};
 use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    shorthands::metric::MetricSimplifier,
+    color::ColorSimplifySettings,
+    tensor::{ContractSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
+use spenso::shadowing::TensorCollectFilter;
+use spenso::structure::IndexedStructure;
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Indeterminate},
     function,
@@ -52,11 +56,34 @@ impl FinalIntegrands {
         &self,
         mut map: impl FnMut(&Atom) -> Result<Atom>,
     ) -> Result<Self> {
-        Ok(Self(self.0.fallible_map(&mut map)?.map_numerators(map)?))
+        Ok(Self(self.0.fallible_map(&mut map)?.map_numerators(
+            |tensor| {
+                let mapped = map(tensor.expression())?;
+                debug_tags!(#uv, #final_integrand, #tensor, #trace;
+                    stage = "final_integrand_tensor_map",
+                    mapper = std::any::type_name_of_val(&map),
+                    source_interface = ?tensor.structure(),
+                    file.source = %tensor.expression().to_plain_string(),
+                    file.mapped = %mapped.to_plain_string(),
+                    "Mapped a retained final numerator before interface validation"
+                );
+                Ok(tensor.with_checked_expression(mapped)?)
+            },
+        )?))
     }
 
     pub(crate) fn zip_add(self, other: Self) -> Result<Self> {
         Ok(Self(self.0.zip_add([other.0])?))
+    }
+
+    pub(crate) fn collect<const N: usize>(&self, filter: TensorCollectFilter<N>) -> Result<Self> {
+        // Dispatch roots contain opaque calls whose tensor interfaces belong to
+        // the retained definitions. Collect those typed bodies directly; do not
+        // infer a scalar interface from an opaque call's syntax.
+        Ok(Self(
+            self.0
+                .map_numerators(|tensor| Ok(tensor.collect(filter)?))?,
+        ))
     }
 
     /// Recover shared numerator factors after all selected forests are assembled.
@@ -96,38 +123,33 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .subtract(&graph.initial_state_cut);
         let full_graph = graph.full_filter();
 
-        let global_num = graph.global_atom();
+        let global_num = graph.global_numerator()?;
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            global_num = %global_num.log_display(),
+            global_num = %global_num.expression().log_display(),
             "Computed global numerator"
         );
 
         // Resolve the cograph's color algebra before residue mapping repeats its
         // momentum numerator. The final pass still closes attached UV/projector
         // color indices that remain open at this boundary.
-        let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
+        let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
+        let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings {
                 ..Default::default()
-            })
-            * global_num;
+            }),
+            ..Default::default()
+        })?;
+        let resnum = resnum.multiply(global_num)?;
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
-            numerator_bytes = resnum.as_view().get_byte_size(),
-            file.atom = %resnum.to_canonical_string(),
+            numerator_bytes = resnum.expression().as_view().get_byte_size(),
+            file.atom = %resnum.expression().to_canonical_string(),
             "Cograph numerator before residue mapping"
         );
         let localized_integrated = self
             .localizer
-            .localize(
-                &integrated.physical_finite_counterterm_atom(),
-                graph,
-                current,
-            )?
+            .localize(&integrated.physical_finite_counterterm()?, graph, current)?
             .combine()?;
         let localized_integrated = DirectResidueBranches::from_transient(&localized_integrated)?
             .map(|atom| self.marker.prefix(&full_graph, current.subgraph(), atom));
@@ -149,9 +171,17 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // The final copy also simplifies arithmetic across energy-call boundaries
         // (for example even powers), so expose scalar bodies before normalizing.
         let normalize = Self::final_normalizer(graph, &reduced);
+        let normalize_scalar = Self::scalar_normalizer(graph, &reduced);
         let finalized = final_branches
             .resolved_scalars()?
-            .map_expressions(normalize)?;
+            .fallible_map(|_, atom| {
+                Ok(normalize_scalar(atom)
+                    .replace(GS.m_uv_expansion)
+                    .with(GS.m_uv_vacuum)
+                    .replace(GS.dim_epsilon)
+                    .with(0))
+            })?
+            .map_numerators(|entry| normalize(&entry.rhs))?;
 
         // `DirectResidueBranches` is the sparse, factorization-preserving
         // representation of sum_k sigma(k) I_k while the Taylor forest is
@@ -187,26 +217,25 @@ impl<'a> FinalIntegrandBuilder<'a> {
             .subtract(&graph.initial_state_cut);
         let full_graph = graph.full_filter();
 
-        let global_num = graph.global_atom();
+        let global_num = graph.global_numerator()?;
         debug_tags!(#generation, #profile, #uv, #graph, #summary;
-            global_num = %global_num.log_display(),
+            global_num = %global_num.expression().log_display(),
             "Computed global numerator"
         );
-        let resnum = graph
-            .numerator(&reduced, current.subgraph())
-            .get_single_atom()
-            .expect("graph numerator should be available")
-            .simplify_color_with(ColorSimplifySettings {
-                simplify_non_color: false,
+        let resnum = graph.numerator(&reduced, current.subgraph())?.state.expr;
+        let resnum = resnum.simplify_algebra(&idenso::tensor::AlgebraSettings {
+            color: Some(ColorSimplifySettings {
                 ..Default::default()
-            })
-            * global_num;
+            }),
+            ..Default::default()
+        })?;
+        let resnum = resnum.multiply(global_num)?;
         let localizer = self.localizer.with_independent_source_sum();
         debug_tags!(#generation, #profile, #uv, #numerator, #dump;
             stage = "final_cograph_numerator_ready",
             graph = %graph.name,
-            numerator_bytes = resnum.as_view().get_byte_size(),
-            file.atom = %resnum.to_canonical_string(),
+            numerator_bytes = resnum.expression().as_view().get_byte_size(),
+            file.atom = %resnum.expression().to_canonical_string(),
             "Cograph numerator before residue mapping"
         );
         // Only the projected local-4D route reaches this assembly boundary.
@@ -223,9 +252,11 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // contracts its loop-energy dependence.  The exact DDx GL0 UV ray
         // verifies that this is the full production tree, including the
         // carrier shared with the factorized self-energy coefficient.
-        let fourddenoms = GS.wrap_tree_denoms(
-            graph.denominator(&graph.tree_edges.subtract(&graph.initial_state_cut), |_| -1),
-        );
+        let fourddenoms = GS.wrap_tree_denoms(graph.denominator(
+            &graph.tree_edges.subtract(&graph.initial_state_cut),
+            &graph.model,
+            |_| -1,
+        ));
         let allowed_zero: Integrands = localizer
             .cutset
             .residue_selector
@@ -306,18 +337,21 @@ impl<'a> FinalIntegrandBuilder<'a> {
                 // Plan one product while retaining its two ordinary factors.
                 // The chosen occurrence-local route is replayed separately on
                 // the body and the small scalar carrier, never on expanded rows.
+                let source_numerator = entry.rhs.clone().multiply(resnum.clone())?;
                 let (mut factors, localized) = localizer
                     .projected_cff_from_soft_momentum_proposals(
                         graph,
                         current.subgraph(),
-                        &[&entry.rhs * &resnum, carrier],
+                        &[source_numerator.expression().clone(), carrier],
                         active_edges.iter().copied(),
                         CffGenerationContext::EmbeddedCffFactor,
                     )?;
                 let carrier = factors.pop().expect("routing retains the scalar carrier");
-                let numerator = factors
-                    .pop()
-                    .expect("routing retains the ordinary numerator");
+                let numerator = source_numerator.with_checked_expression(
+                    factors
+                        .pop()
+                        .expect("routing retains the ordinary numerator"),
+                )?;
                 // A selected cut can exclude every outer source row even
                 // when the child coefficient is nonzero. Its contribution
                 // keeps the allowed cut zeros without inventing a residue map.
@@ -415,11 +449,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
         // source map even when no compatible physical-prefix host survives.
         let localized_integrated = self
             .localizer
-            .localize(
-                &integrated.physical_finite_counterterm_atom(),
-                graph,
-                current,
-            )?
+            .localize(&integrated.physical_finite_counterterm()?, graph, current)?
             .combine()?;
         // An empty integrated zero contributes no source map. The typed local
         // zero above already retains the allowed cut shape; do not invent an
@@ -447,18 +477,26 @@ impl<'a> FinalIntegrandBuilder<'a> {
         let selector_free = selector_free.ok_or_else(|| {
             eyre::eyre!("final 3D UV integrand contains no production energy maps")
         })?;
+        let normalize = Self::final_normalizer(graph, &reduced);
+        let normalize_scalar = Self::scalar_normalizer(graph, &reduced);
         Ok(FinalIntegrands(
             allowed_zero
                 .zip_add(selector_free)?
                 .resolved_scalars()?
-                .fallible_map(Self::final_normalizer(graph, &reduced))?
-                .map_numerators(Self::final_normalizer(graph, &reduced))?,
+                .fallible_map(|atom| {
+                    Ok(normalize_scalar(atom)
+                        .replace(GS.m_uv_expansion)
+                        .with(GS.m_uv_vacuum)
+                        .replace(GS.dim_epsilon)
+                        .with(0))
+                })?
+                .map_numerators(normalize)?,
         ))
     }
 
-    /// Normalize an already mapped final atom without splitting its factors. This
-    /// tail is deliberately blind to residue maps and cannot map a numerator.
-    fn final_normalizer(graph: &Graph, reduced: &SuBitGraph) -> impl Fn(&Atom) -> Result<Atom> {
+    /// Scalar kinematic substitutions act on dispatch coefficients and typed
+    /// bodies alike. They do not claim a tensor interface for opaque family calls.
+    fn scalar_normalizer(graph: &Graph, reduced: &SuBitGraph) -> impl Fn(&Atom) -> Atom {
         let energy_replacements = graph
             .as_ref()
             .iter_edges_of(reduced)
@@ -469,10 +507,7 @@ impl<'a> FinalIntegrandBuilder<'a> {
             })
             .collect::<Vec<_>>();
         move |atom| {
-            // Mass-support tags distinguish equal physical or UV masses while
-            // nested/disconnected local operators are still being composed.
-            // They are mathematically one and disappear only on this final evaluator copy.
-            let mut atom = atom
+            let atom = atom
                 .replace(function!(*LOCAL_3D_MASS_SCOPE, W_.a_))
                 .with(Atom::one())
                 .replace_multiple(&energy_replacements)
@@ -497,38 +532,57 @@ impl<'a> FinalIntegrandBuilder<'a> {
                         }
                     }
                 });
-            // Color and dot simplification are linear, but separating scalar-CFF
-            // summands can destroy their common tensor factors and materialize a
-            // disconnected outer product. The typed source keeps those factors
-            // attached to their tensor network throughout normalization.
-            // Preserve the sum of CFF denominators after residue mapping, just
-            // as the Taylor stage preserves its separate propagator topologies.
-            atom = atom.replace(GS.dim).with(4).simplify_metrics();
+            atom.replace(GS.dim).with(4)
+        }
+    }
+
+    /// Normalize a mapped tensor without splitting its numerator factors.
+    fn final_normalizer(
+        graph: &Graph,
+        reduced: &SuBitGraph,
+    ) -> impl Fn(&SymbolicTensor<IndexedStructure>) -> Result<SymbolicTensor<IndexedStructure>>
+    {
+        let normalize_scalar = Self::scalar_normalizer(graph, reduced);
+        move |tensor| {
+            // Map representation metadata and logical ports together, including
+            // encoded dimensions and ports carried only by a zero. The remaining
+            // scalar rewrite must preserve that established logical interface.
+            let tensor = tensor
+                .map_representation_dimensions(|_, dimension| dimension.replace(GS.dim).with(4))?;
+            let tensor = tensor.with_checked_expression(normalize_scalar(tensor.expression()))?;
             debug_tags!(#generation, #profile, #uv, #numerator, #dump;
                 stage = "final_integrand_before_color",
                 graph = %graph.name,
-                numerator_bytes = atom.as_view().get_byte_size(),
-                file.atom = %atom.to_canonical_string(),
+                numerator_bytes = tensor.expression().as_view().get_byte_size(),
+                file.atom = %tensor.expression().to_canonical_string(),
                 "Mapped factorized integrand before final color simplification"
             );
-            atom = atom
-                .simplify_color_with(
-                    ColorSimplifySettings {
-                        simplify_non_color: false,
-                        ..Default::default()
-                    }
-                    .with_cof_dimension_invariants(),
-                )
+            let reduced = tensor
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    ..Default::default()
+                })?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
                 .expand_dots()?;
 
             // Exact production branches have already mapped every owned
             // numerator fragment. The former coarse export sign replacement
             // has no role here and must not remap these factors a second time.
-            Ok(atom
-                .replace(GS.m_uv_expansion)
-                .with(GS.m_uv_vacuum)
-                .replace(GS.dim_epsilon)
-                .with(0))
+            let reduced = reduced.map_representation_dimensions(|_, dimension| {
+                dimension.replace(GS.dim_epsilon).with(0)
+            })?;
+            Ok(reduced.with_checked_expression(
+                reduced
+                    .expression()
+                    .replace(GS.m_uv_expansion)
+                    .with(GS.m_uv_vacuum)
+                    .replace(GS.dim_epsilon)
+                    .with(0),
+            )?)
         }
     }
 }
@@ -538,8 +592,8 @@ mod tests {
     use super::*;
     use crate::{
         cff::{esurface::RaisedEsurfaceGroup, expression::OrientationID},
-        dot,
-        graph::{cuts::CutSet, parse::IntoGraph},
+        finalized_runtime_dot,
+        graph::cuts::CutSet,
         initialisation::test_initialise,
         settings::global::OrientationPattern,
         uv::{
@@ -557,19 +611,163 @@ mod tests {
         network::tags::SPENSO_TAG,
         structure::representation::{Minkowski, RepName},
     };
-    use symbolica::{atom::AtomView, parse, symbol};
+    use symbolica::{parse, symbol};
+
+    #[test]
+    fn final_color_collection_preserves_encoded_open_ports_and_dispatch_roots() -> Result<()> {
+        use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+
+        test_initialise()?;
+        let raw = parse!(
+            "1/3*gammalooprs::u(0,spenso::bis(4,gammalooprs::hedge(0,1)))*gammalooprs::ubar(1,spenso::bis(4,gammalooprs::hedge(1,1)))*spenso::g(spenso::cof(3,gammalooprs::hedge(1,1)),spenso::dind(spenso::cof(3,gammalooprs::hedge(0,1))))"
+        );
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let native = cooking.try_cook(raw.as_view())?;
+        assert_ne!(native, raw);
+        let tensor = SymbolicTensor::infer_indexed(native.clone())?;
+        assert_eq!(tensor.rank(), 4);
+        let tag = Atom::var(symbol!("final_color_collection_scope"));
+        let lhs = symbol!("gammalooprs::uv::numerator_family").call_args([tag.clone()]);
+        let entry = Arc::new(FnMapEntry {
+            lhs: lhs.clone(),
+            rhs: tensor.clone(),
+            args: Vec::new(),
+            tags: vec![tag],
+            inlining: symbolica::evaluate::InliningPolicy::Always,
+            is_alias: false,
+        });
+        let source = FinalIntegrands(
+            Integrands::from_iter([(CutCFFIndex::new_all_none(), OrientationID(3).atom() * lhs)])
+                .with_numerators([entry])?,
+        );
+        let collected = source.collect(TensorCollectFilter::Reps([
+            ColorAdjoint {}.into(),
+            ColorFundamental {}.into(),
+            ColorSextet {}.into(),
+        ]))?;
+        assert_eq!(
+            collected.0.iter().collect::<Vec<_>>(),
+            source.0.iter().collect::<Vec<_>>(),
+        );
+        assert_eq!(collected.0.numerators().len(), 1);
+        let retained = &collected.0.numerators()[0].rhs;
+        assert_eq!(retained.structure(), tensor.structure());
+        assert_eq!(retained.expression(), &native);
+        assert_eq!(cooking.uncook(retained.expression().as_view()), raw);
+        Ok(())
+    }
+
+    #[test]
+    fn final_normalization_preserves_logical_axes_and_specializes_encoded_zero_dimensions()
+    -> Result<()> {
+        use spenso::structure::slot::IsAbstractSlot;
+
+        test_initialise()?;
+        let graph: Graph = finalized_runtime_dot!(digraph final_dimension_ports {
+            graph [projector=1]
+            edge [num=1 mass=1];
+            node [num=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
+        })?;
+        let reduced = graph.full_filter();
+        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let tensor_head = spenso::tensor_symbol!("final_dimension_test::matrix");
+        let spectator = parse!("(final_dimension_test::a+final_dimension_test::b)^3");
+        for (dimension, physical_dimension) in [
+            (Atom::var(GS.dim), 4),
+            (Atom::var(GS.dim) + 2, 6),
+            (
+                Atom::var(GS.dim) - Atom::num(2) * Atom::var(GS.dim_epsilon),
+                4,
+            ),
+        ] {
+            let raw = (&Atom::var(GS.dim) + Atom::var(GS.dim_epsilon))
+                * &spectator
+                * function!(
+                    tensor_head,
+                    Minkowski {}.to_symbolic([dimension.clone(), Atom::num(7)]),
+                    Minkowski {}.to_symbolic([dimension.clone(), Atom::num(11)])
+                );
+            let admitted = SymbolicTensor::infer_indexed(cooking.try_cook(raw.as_view())?)?;
+            let physical_slots = admitted.structure().logical_slots();
+            if dimension != Atom::var(GS.dim) {
+                let encoded = physical_slots[0].dim().to_symbolic().get_symbol().unwrap();
+                assert_eq!(
+                    CookSettings::dimension_payload(encoded),
+                    Some(dimension.clone())
+                );
+            }
+            let source = SymbolicTensor::from_indexed_parts(
+                admitted.expression().clone(),
+                IndexedStructure::from_iter(physical_slots.into_iter().rev()),
+            )?;
+            let expected = SymbolicTensor::infer_indexed(
+                Atom::num(4)
+                    * &spectator
+                    * function!(
+                        tensor_head,
+                        Minkowski {}.to_symbolic([Atom::num(physical_dimension), Atom::num(7)]),
+                        Minkowski {}.to_symbolic([Atom::num(physical_dimension), Atom::num(11)])
+                    ),
+            )?;
+            let expected_slots = expected
+                .structure()
+                .logical_slots()
+                .into_iter()
+                .rev()
+                .collect::<Vec<_>>();
+            assert_ne!(
+                source.structure().logical_slots()[0].aind,
+                admitted.structure().logical_slots()[0].aind,
+                "the source's declared axes deliberately reverse its payload order"
+            );
+            let before = source.clone();
+            for input in [&source, &source.with_checked_expression(Atom::Zero)?] {
+                let output = normalize(input)?;
+                assert_eq!(output.rank(), 2);
+                assert_eq!(
+                    output.structure().logical_slots(),
+                    expected_slots,
+                    "dimension={dimension}, zero={}",
+                    input.is_zero()
+                );
+                assert_eq!(output.is_zero(), input.is_zero());
+                if !input.is_zero() {
+                    assert_eq!(output.expression(), expected.expression());
+                    assert!(output.expression().contains(&spectator));
+                }
+            }
+            assert_eq!(
+                source, before,
+                "finalization must leave the Taylor source unchanged"
+            );
+        }
+        Ok(())
+    }
 
     #[test]
     fn final_energy_copy_coalesces_owners_and_even_powers_after_taylor() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph final_energy {
+        let graph: Graph = finalized_runtime_dot!(digraph final_energy { graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
-        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let source = crate::numerator::AppliedFeynmanRule::new(atom.clone())?;
+            let result =
+                crate::numerator::AppliedFeynmanRule::from_tensor(normalize_tensor(&source.expr)?);
+            Ok(crate::numerator::GetSingleAtom::get_single_atom(&result)?)
+        };
         let mass_squared = Atom::var(symbol!("final_energy_test::mass")).pow(2);
         let momentum = Atom::var(symbol!("final_energy_test::momentum"));
         let squared = &mass_squared + momentum.pow(2);
@@ -600,14 +798,21 @@ mod tests {
     #[test]
     fn final_integrand_collects_tensor_factors_without_merging_denominators() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph factorized_final {
+        let graph: Graph = finalized_runtime_dot!(digraph factorized_final {
+            projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
-        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let source = crate::numerator::AppliedFeynmanRule::new(atom.clone())?;
+            let result =
+                crate::numerator::AppliedFeynmanRule::from_tensor(normalize_tensor(&source.expr)?);
+            Ok(crate::numerator::GetSingleAtom::get_single_atom(&result)?)
+        };
         let index = CutCFFIndex::new_all_none();
         let (a, b, d1, d2) = symbol!(
             "final_factor_test::a",
@@ -867,11 +1072,12 @@ mod tests {
     #[test]
     fn projected_zero_sectors_preserve_cut_orders_without_energy_maps() -> Result<()> {
         test_initialise()?;
-        let mut graph: Graph = dot!(digraph projected_zero {
+        let mut graph: Graph = finalized_runtime_dot!(digraph projected_zero {
+            projector=1;
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let current = OwnedForestNode {
             spinney: Spinney::new(
@@ -932,7 +1138,7 @@ mod tests {
         };
         let zero_local = uv_limit(
             &zero_prefix,
-            &UVCtx::new(&graph, &settings),
+            &UVCtx::new(&graph, &graph.model, &settings),
             &current,
             &given,
             &current,
@@ -982,14 +1188,20 @@ mod tests {
     #[test]
     fn branch_normalization_preserves_selectors_and_cut_support() -> Result<()> {
         test_initialise()?;
-        let graph: Graph = dot!(digraph normalization {
+        let graph: Graph = finalized_runtime_dot!(digraph normalization { graph [projector=1]
             edge [num=1 mass=1];
             node [num=1];
-            a -> b [id=0 lmb_id=0];
-            a -> b [id=1];
+            a -> b [id=0 lmb_id=0 source="{ufo_order:0}" sink="{ufo_order:0}"];
+            a -> b [id=1 source="{ufo_order:1}" sink="{ufo_order:1}"];
         })?;
         let reduced = graph.full_filter();
-        let normalize = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize_tensor = FinalIntegrandBuilder::final_normalizer(&graph, &reduced);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let source = crate::numerator::AppliedFeynmanRule::new(atom.clone())?;
+            let result =
+                crate::numerator::AppliedFeynmanRule::from_tensor(normalize_tensor(&source.expr)?);
+            Ok(crate::numerator::GetSingleAtom::get_single_atom(&result)?)
+        };
         let index = CutCFFIndex::new_all_none();
         let raised = CutCFFIndex {
             lu_cut_order: Some(1),
@@ -1054,30 +1266,31 @@ mod tests {
         let x = Atom::var(symbol!("final_integrand_normalization_x"));
         let y = Atom::var(symbol!("final_integrand_normalization_y"));
         let input =
-            &color * (&q0_dot_q1 / (&x + 1) + &q0_squared / (&y + 2)) + q1_squared / (&x + &y + 3);
+            &color * (&q0_dot_q1 / (&x + 1) + &q0_squared / (&y + 2)) + &q1_squared / (&x + &y + 3);
         let color_settings = ColorSimplifySettings::default().with_cof_dimension_invariants();
 
-        let legacy = input
-            .collect_factors()
-            .simplify_metrics()
-            .simplify_color_with(color_settings)
-            .expand_dots()?;
-        let color_simplified = input.simplify_metrics().expand_color().into_iter().fold(
-            Atom::Zero,
-            |result, (color, coefficient)| {
-                result + color.simplify_color_with(color_settings) * coefficient
-            },
-        );
-        let termwise = match color_simplified.as_view() {
-            AtomView::Add(terms) => terms
-                .iter()
-                .try_fold(Atom::Zero, |sum, term| -> Result<Atom> {
-                    Ok(sum + term.expand_dots()?)
-                })?,
-            term => term.expand_dots()?,
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let normalize = |atom: &Atom| -> Result<Atom> {
+            let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(color_settings),
+                    ..Default::default()
+                })?
+                .contract(ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })?
+                .expand_dots()?;
+            Ok(cooking.uncook(reduced.expression().as_view()))
         };
-
-        let difference = (legacy - termwise).together().cancel().expand();
+        let factored = normalize(&input)?;
+        // Compare separately supplied linear branches, without distributing any
+        // numerator product in the diagnostic copy.
+        let termwise = normalize(&(&color * &q0_dot_q1 / (&x + 1)))?
+            + normalize(&(&color * &q0_squared / (&y + 2)))?
+            + normalize(&(q1_squared / (&x + &y + 3)))?;
+        let difference = (factored - termwise).together().cancel().expand();
         assert!(
             difference.is_zero(),
             "termwise color/dot normalization changed the exact expression: {difference}"
