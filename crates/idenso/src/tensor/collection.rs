@@ -1,6 +1,6 @@
 //! Selected algebra on the existing parsed graph and arithmetic tape.
 
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, sync::Arc};
 
 use linnet::{
     half_edge::{
@@ -38,6 +38,22 @@ use super::{
 };
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
+
+/// A complete original source is either retained, replaced, or opened as
+/// arithmetic. Function and power bodies are never opened implicitly.
+pub enum OriginalArithmeticAction {
+    Retain,
+    Replace(SymbolicTensor<PartialStructure>),
+    Descend,
+}
+
+/// An original ordinary-arithmetic header, before constructing its changed
+/// result. The native network supplies the ordered operand occurrences.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum OriginalArithmeticOperation {
+    Sum,
+    Product,
+}
 
 #[cfg(test)]
 thread_local! {
@@ -591,6 +607,191 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
 }
 
 impl SymbolicTensor<PartialStructure> {
+    pub(super) fn observed_collection_interface(interface: PartialStructure) -> PartialStructure {
+        PartialStructure::from_logical_slots(interface.logical_slots().into_iter().map(|slot| {
+            let index = match slot.aind {
+                PartialIndex::Explicit(index) => {
+                    InterfaceInference::partial_index(index, LeafInference::Observe)
+                }
+                open => open,
+            };
+            slot.rep().slot(index)
+        }))
+    }
+
+    pub(super) fn checked_original_image(&self, image: Self) -> Result<Self> {
+        image.ensure_validated()?;
+        if image.structure.logical_slots() != self.structure.logical_slots() {
+            return Err(TensorInferenceError::invalid(
+                "original replacement changes its ordered tensor interface",
+            ));
+        }
+        Ok(if image.expression == self.expression {
+            self.clone()
+        } else {
+            image
+        })
+    }
+
+    /// Map original arithmetic through checked, source-bound tensor values.
+    ///
+    /// `node` sees the complete original carrier before parsing or descending.
+    /// `Descend` is supported only for original sums and ordinary products.
+    /// Every function, word, conjugate, power, and metadata wrapper therefore
+    /// needs an explicit retain or replacement decision. A caller can handle a
+    /// power's admitted mathematical body with its existing typed power owner.
+    ///
+    /// The cached depth-one network and its original logical-port analysis
+    /// provide each operand. Nested sums/products open a fresh depth-one view;
+    /// no operation expression is reconstructed to manufacture source syntax.
+    /// The source's declared frame is retained, including a ranked zero.
+    ///
+    /// After changed operands have been emitted once, `operation` receives the
+    /// genuine original root and typed operands in native network order, before
+    /// any ordinary Atom constructor runs. It can select a tensor or word
+    /// product owner. Unchanged operations return the exact original carrier
+    /// without invoking this hook. Replacements are not visited again.
+    ///
+    /// Every callback result must retain the exact original ordered interface.
+    /// Callers remain responsible for reserving and scoping new internal RHS
+    /// bindings across the complete simultaneous replacement request.
+    pub fn map_original_arithmetic(
+        &self,
+        node: &mut impl FnMut(&Self) -> Result<OriginalArithmeticAction>,
+        operation: &mut impl FnMut(&Self, OriginalArithmeticOperation, &[Self]) -> Result<Self>,
+    ) -> Result<Self> {
+        self.ensure_validated()?;
+        match node(self)? {
+            OriginalArithmeticAction::Retain => return Ok(self.clone()),
+            OriginalArithmeticAction::Replace(image) => {
+                return self.checked_original_image(image);
+            }
+            OriginalArithmeticAction::Descend => {}
+        }
+        let original_operation = match self.expression.as_view() {
+            AtomView::Add(_) => OriginalArithmeticOperation::Sum,
+            AtomView::Mul(_) => OriginalArithmeticOperation::Product,
+            _ => {
+                return Err(TensorInferenceError::invalid(
+                    "original arithmetic descent requires a sum or ordinary product; functions and powers require an explicit semantic cut",
+                ));
+            }
+        };
+        let network = self.shallow_graph()?;
+        let tree = network.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = network.graph.graph.node_id(network.graph.head());
+        let header_matches = matches!(
+            (&network.graph.graph[root], original_operation),
+            (
+                NetworkNode::Op(NetworkOp::Sum),
+                OriginalArithmeticOperation::Sum
+            ) | (
+                NetworkNode::Op(NetworkOp::Product),
+                OriginalArithmeticOperation::Product
+            )
+        );
+        if !header_matches {
+            return Err(TensorInferenceError::invalid(
+                "native shallow arithmetic does not retain the original operation header",
+            ));
+        }
+        let mut input =
+            CollectionInput::new(self, |_: AtomView<'_>| false, CollectionMode::Factored);
+        let (_, interfaces) = input.analyze(&network, &tree, root)?;
+        let node = RefCell::new(node);
+        let operation = RefCell::new(operation);
+        let emitted = RefCell::new(HashMap::<NodeIndex, Self>::new());
+        let expression = network.graph.to_expression_at_with_operation(
+            &tree,
+            root,
+            &mut |index, value| {
+                if index == root {
+                    return Ok(None);
+                }
+                let original = match value {
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                        network.store.tensors[*index].expression.clone()
+                    }
+                    NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                        network.store.get_scalar_ref(*index).clone()
+                    }
+                    _ => {
+                        return Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
+                            "native depth-one arithmetic operand is not a stored original leaf"
+                        )));
+                    }
+                };
+                if original == self.expression {
+                    return Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
+                        "native arithmetic opening did not make progress"
+                    )));
+                }
+                let original = Self::from_declared_parts(
+                    original,
+                    Self::observed_collection_interface(interfaces[&index].clone()),
+                )
+                .map_err(|error| spenso::network::TensorNetworkError::Other(error.into()))?;
+                let image = original
+                    .map_original_arithmetic(
+                        &mut **node.borrow_mut(),
+                        &mut **operation.borrow_mut(),
+                    )
+                    .map_err(|error| spenso::network::TensorNetworkError::Other(error.into()))?;
+                let expression = image.expression.clone();
+                emitted.borrow_mut().insert(index, image);
+                Ok(Some(expression))
+            },
+            &mut |index, _, expressions| {
+                if index != root {
+                    return Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
+                        "native depth-one arithmetic contains a non-root operation"
+                    )));
+                }
+                let children = tree
+                    .iter_children(root, &network.graph.graph)
+                    .collect::<Vec<_>>();
+                let values = children
+                    .iter()
+                    .map(|child| emitted.borrow()[child].clone())
+                    .collect::<Vec<_>>();
+                let unchanged = children.iter().zip(&values).all(|(child, value)| {
+                    let expression = match &network.graph.graph[*child] {
+                        NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                            &network.store.tensors[*index].expression
+                        }
+                        NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                            network.store.get_scalar_ref(*index)
+                        }
+                        _ => unreachable!("operand admission requires an original stored leaf"),
+                    };
+                    expression == &value.expression
+                });
+                debug_assert!(
+                    values
+                        .iter()
+                        .zip(expressions)
+                        .all(|(value, expression)| &value.expression == expression)
+                );
+                let image = if unchanged {
+                    self.clone()
+                } else {
+                    let image = operation.borrow_mut()(self, original_operation, &values).map_err(
+                        |error| spenso::network::TensorNetworkError::Other(error.into()),
+                    )?;
+                    self.checked_original_image(image)
+                        .map_err(|error| spenso::network::TensorNetworkError::Other(error.into()))?
+                };
+                let expression = image.expression.clone();
+                emitted.borrow_mut().insert(root, image);
+                Ok(Some(expression))
+            },
+        );
+        expression.map_err(|error| TensorInferenceError::invalid(error.to_string()))?;
+        emitted.into_inner().remove(&root).ok_or_else(|| {
+            TensorInferenceError::invalid("native arithmetic did not emit its original root")
+        })
+    }
+
     /// Retain the existing shallow Network and its discovered leaf interfaces
     /// with this immutable domain. A changed payload rebuilds topology while
     /// intrinsic replacements reuse the exact unchanged boundary interfaces.
@@ -1159,17 +1360,7 @@ impl SymbolicTensor<PartialStructure> {
         // Graph scratch retains encoded AUTO identities for incidence and
         // exposure. A domain callback receives the declared logical interface;
         // its checked finisher still compares encoded identities in the payload.
-        let interface = PartialStructure::from_logical_slots(
-            interface.logical_slots().into_iter().map(|slot| {
-                let index = match slot.aind {
-                    PartialIndex::Explicit(index) => {
-                        InterfaceInference::partial_index(index, LeafInference::Observe)
-                    }
-                    open => open,
-                };
-                slot.rep().slot(index)
-            }),
-        );
+        let interface = Self::observed_collection_interface(interface);
         let expression = Atom::mul_many(values.iter().map(|value| &value.expression));
         if let Some(value) = values.iter().find(|value| {
             value.proofs.validated.get() == Some(&true)
@@ -1209,6 +1400,9 @@ impl SymbolicTensor<PartialStructure> {
         Ok(value)
     }
 }
+
+#[cfg(test)]
+mod original_arithmetic_tests;
 
 #[cfg(test)]
 mod tests {

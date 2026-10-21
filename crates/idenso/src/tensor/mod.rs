@@ -53,6 +53,7 @@ mod collection;
 pub(crate) use collection::CollectionMode;
 #[cfg(test)]
 pub(crate) use collection::SELECTED_OPENS;
+pub use collection::{OriginalArithmeticAction, OriginalArithmeticOperation};
 pub mod composition;
 mod indexed;
 pub mod inference;

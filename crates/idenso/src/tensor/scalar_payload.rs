@@ -45,6 +45,75 @@ pub enum ScalarPayloadPosition<'a> {
 }
 
 impl Tensor {
+    fn require_closed_payload(value: &Self) -> Result<()> {
+        value.ensure_validated()?;
+        if !value.is_scalar() {
+            return Err(TensorInferenceError::invalid(
+                "a selected scalar payload must have a closed scalar interface",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Map the original factors of one complete closed native bracket.
+    ///
+    /// The complete source must be a checked scalar bracket before its body is
+    /// opened. `map` receives the original argument occurrences, in their
+    /// literal bracket order, with native observed logical interfaces. It may
+    /// open each factor's ordinary arithmetic through `map_original_arithmetic`;
+    /// powers, words, conjugates and metadata remain explicit semantic cuts.
+    ///
+    /// If a factor changes, `product` receives the genuine whole source and the
+    /// typed images in that same order, before constructing any product syntax.
+    /// Its checked scalar result is retained inside a closed bracket scope.
+    /// Unchanged brackets retain their exact syntax without invoking `product`.
+    /// Emitted values are never revisited. Simultaneous callers must reserve
+    /// and scope all new internal bindings before mapping the factors.
+    pub fn map_closed_bracket_factors(
+        &self,
+        mut map: impl FnMut(&Self) -> Result<Self>,
+        mut product: impl FnMut(&Self, &[Self]) -> Result<Self>,
+    ) -> Result<Self> {
+        Self::require_closed_payload(self)?;
+        let AtomView::Fun(function) = self.expression.as_view() else {
+            return Err(TensorInferenceError::invalid(
+                "closed bracket factor mapping requires an original native bracket",
+            ));
+        };
+        if function.get_symbol() != SPENSO_TAG.bracket {
+            return Err(TensorInferenceError::invalid(
+                "closed bracket factor mapping requires an original native bracket",
+            ));
+        }
+        let values = function
+            .iter()
+            .map(|argument| {
+                let interface = InterfaceInference::replacement_interface(argument)?;
+                let original = Self::from_declared_parts(
+                    argument.to_owned(),
+                    Self::observed_collection_interface(interface),
+                )?;
+                let image = map(&original)?;
+                original.checked_original_image(image)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        if function
+            .iter()
+            .zip(&values)
+            .all(|(original, image)| original == image.expression.as_view())
+        {
+            return Ok(self.clone());
+        }
+        let image = self.checked_original_image(product(self, &values)?)?;
+        if image.expression == self.expression {
+            return Ok(self.clone());
+        }
+        let expression = FunctionBuilder::new(SPENSO_TAG.bracket)
+            .add_arg(image.expression)
+            .finish();
+        Self::from_declared_parts(expression, self.structure.clone())
+    }
+
     /// Map caller-selected mathematical scalars without opening tensor scopes.
     ///
     /// Selection observes original positions. Selected nested payloads are
@@ -102,20 +171,10 @@ where
     S: FnMut(ScalarPayloadPosition<'_>) -> bool,
     M: FnMut(ScalarPayloadPosition<'_>, &Tensor) -> Result<Tensor>,
 {
-    fn require_scalar(value: &Tensor) -> Result<()> {
-        value.ensure_validated()?;
-        if !value.is_scalar() {
-            return Err(TensorInferenceError::invalid(
-                "a selected scalar payload must have a closed scalar interface",
-            ));
-        }
-        Ok(())
-    }
-
     fn apply(&mut self, position: ScalarPayloadPosition<'_>, value: &Tensor) -> Result<Tensor> {
-        Self::require_scalar(value)?;
+        Tensor::require_closed_payload(value)?;
         let result = (self.map)(position, value)?;
-        Self::require_scalar(&result)?;
+        Tensor::require_closed_payload(&result)?;
         Ok(result)
     }
 
@@ -131,7 +190,7 @@ where
             original.to_owned(),
             PartialStructure::from_logical_slots([]),
         )?;
-        Self::require_scalar(&value)?;
+        Tensor::require_closed_payload(&value)?;
         let expression = match position {
             // Enter ordered factors only after the whole original bracket has
             // proved closed. Its wrapper is not offered a second time.
