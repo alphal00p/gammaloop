@@ -190,33 +190,390 @@ maintained in
 == Code Quality Baseline
 
 === Rust
+<rust-style>
 
-- Format Rust changes and run checks appropriate to the affected code. Use
-  `cargo check` for quick feedback when useful; it is not a prerequisite for
-  every build or test run.
-- Run Clippy for relevant Rust changes and address warnings where practical.
-- Naming: `snake_case` for functions/modules, `CamelCase` for types/traits.
-- Prefer narrow imports and method-call syntax over repeated fully qualified
-  paths; retain qualification for disambiguation or macro hygiene.
-- Prefer methods on types to bare functions.
-- Prefer explicit function composition over function nesting: when a value
-  crosses a semantic boundary, bind it or use `From`/`TryFrom` so the
-  conversion is visible at the call site.
-- Name methods for the semantic result they compute, not for the current caller.
-  Avoid `*_for_<caller>` methods unless the result has a genuinely
-  caller-specific invariant.
-- For strategy/configuration variants, prefer a small builder-style API on the
-  owning type over extra method parameters or `*_with_*` methods. Named
-  constructors are enough when there are only a few modes; use a fuller builder
-  only when options become independent or numerous.
+==== Scope And Authority
+
+This document defines GammaLoop's mandatory, self-contained Rust policy for
+agents and human contributors. The
+#link("https://google.github.io/styleguide/rustguide.html")[Google Rust Style Guide]
+and #link("https://rust-lang.github.io/api-guidelines/")[Rust API Guidelines]
+are source material for this policy; their rules and future updates are adopted
+only through explicit changes to this document. Read this policy and applicable
+local guidance before editing Rust.
+
+Apply the policy to new and substantially modified code. Existing violations
+are not precedents for new code. Keep unrelated cleanup outside the task; a
+small edit does not require rewriting its surrounding module.
+
+State exceptions alongside the affected rule, with their scope and rationale.
+Numerical precision, mathematical notation, generated code, and interoperability
+may need specific allowances; none is a blanket exemption. Explain any departure
+outside the documented allowances in the change's review or handoff, identifying
+the affected rule and why the departure is necessary.
+
+Enforce mechanical requirements through formatting checks and selected Clippy
+lints. Review the final diff against the design rules as well: passing automated
+checks does not establish compliance with the whole policy. Report the relevant
+validation performed and any checks that could not be completed.
+
+==== Crates And Modules
+
+- Prefer small, cohesive crates with narrow dependencies. When adding a coherent
+  capability or substantially restructuring a subsystem, actively consider
+  extracting a focused crate instead of growing an already broad crate. Use
+  ownership, reuse, and dependency boundaries to guide the split. Reducing
+  recompilation, enabling parallel compilation, and improving reuse of unchanged
+  Nix build outputs are explicit design goals; crate boundaries and build-source
+  filtering must support those goals. Existing large crates are not a target
+  size for new code.
+- Use conventional Cargo layout with nested modules. Prefer `foo/mod.rs` for
+  modules with child files, keeping those files together under `foo/`. Leaf
+  modules may use `foo.rs`. Avoid unrelated layout-only renames when extending
+  an existing module tree.
+- Keep parent modules focused on declarations and re-exports. Put substantial
+  algorithms in child modules. Small shared types and coordination code may
+  live in the parent when they connect its children.
+- Keep implementation modules private. Use `pub(crate)` for items that need
+  access elsewhere in the crate, and make modules public only when callers need
+  that organization. Prefer explicit re-exports of the public items callers
+  need over exposing implementation structure.
+
+==== Imports And Paths
+
+- Put imports at module scope, including trait imports. Do not place `use`
+  statements inside functions or other local blocks. Imports for a test module
+  belong at that module's scope.
+- Use explicit imports. `use symbolica::prelude::*;` is allowed. Test modules
+  may also use `use super::*;`. Other dependency preludes do not inherit the
+  Symbolica exception. Import enum variants explicitly if they are needed as
+  unqualified names; other glob imports are not allowed.
+- Each `use` statement imports items from one source module. Group names from
+  that module, as in `use std::fmt::{Debug, Display};`, and use separate
+  statements for different modules instead of nested import trees.
+- Outside the macro-hygiene exception below, always import referenced items and
+  use their imported names instead of fully or partially qualified module or
+  crate paths. Names already in scope through a language prelude or an allowed
+  glob need no additional import. Resolve name collisions with import aliases,
+  such as `use std::io::Error as IoError;`,
+  rather than using `io::Error` or `std::io::Error` at the point of use.
+- In ordinary code, the only exception to module-path qualification is calling
+  a free function from another module: import its module and call
+  `module::function(...)`. For example, use `mem::take(...)` after
+  `use std::mem;`, rather than writing
+  `std::mem::take(...)` or importing `take` directly. Alias the imported module
+  if its name collides with another import.
+- Use ordinary method-call syntax. Associated items on an imported type or
+  `Self`, such as `Type::new()` or `Self::Item`, are distinct from module or
+  crate qualification and remain valid.
+
+==== Formatting
+
+- Format Rust with the repository's pinned stable `rustfmt`, available through
+  the Nix development environment. Use `just fmt` and the standard formatting
+  with a 100-column target. Follow the formatter's output.
+- Allow `#[rustfmt::skip]` only for meaningful mathematical alignment, such as
+  matrices or tables, or for generated code. Keep the exemption narrowly scoped
+  and explain its reason alongside the attribute or in the generator.
+- Use lowercase hexadecimal digits in numeric literals. Write invisible
+  characters in literals using explicit escapes, such as `\u{200d}` for a
+  zero-width joiner, so their presence is visible in source.
+- Keep formatting compatible with the pinned stable toolchain. Rules that its
+  formatter cannot enforce, including import grouping where unsupported, remain
+  review requirements. Do not require nightly-only formatting options.
+
+==== Ownership And Borrowing
+
+- Make ownership intentional. Prefer uniquely owned values and borrowing. Move
+  values when transferring ownership; borrow when a function only needs
+  temporary access.
+- Prefer borrowing over cloning. First consider whether borrowing or changing
+  the data flow avoids a copy. Clone when an independent value is required, or
+  when borrowing would make the design substantially harder to maintain. The
+  simplicity exception requires measurements showing that the cloning cost is
+  acceptable for the relevant workload. Use representative benchmarks or
+  profiles and record the workload and result in the review or handoff; an
+  assumption that the copy is cheap is not sufficient. Check the actual cloning
+  cost, especially for symbolic expressions, tensors, and evaluation loops.
+- Use `Rc` and `Arc` for deliberate shared ownership when multiple owners need
+  the same data and borrowing would be awkward. Cloning a reference-counted
+  handle is expected and does not copy its underlying data, but still has a
+  runtime cost. Apply the same measured-performance condition when choosing
+  shared ownership for simplicity.
+
+==== Function Inputs And Outputs
+
+- Accept flexible borrowed inputs when only their contents matter: prefer
+  `&str`, `&[T]`, `&T`, and `Option<&T>` over references to their owning
+  containers.
+- When iteration is the contract, reusable library APIs should accept
+  `impl IntoIterator`. Use slices when indexing, contiguous storage, or a
+  simpler internal interface matters.
+- Return iterators when results naturally stream. Return a collection when
+  the implementation already builds one, callers need indexing, or producing
+  an owned collection is the operation's purpose.
+- Use `impl Into<T>` selectively where a public API benefits from accepting
+  several input types. Prefer concrete inputs internally; weigh call-site
+  convenience against compilation cost, code size, and inference complexity.
+- Use named enums for ambiguous boolean flags. A clear boolean operation such
+  as `set_enabled(bool)` remains appropriate. Prefer a configuration object or
+  a small builder on the owning type for several independent options. Named
+  constructors are sufficient when there are only a few modes.
+
+==== Errors And Diagnostics
+
+- Use `Option` for meaningful absence. Use `Result` when callers need to
+  understand why an operation failed. Avoid `None` as an ambiguous signal that
+  nothing happened.
+- Return errors for expected failures, including invalid user input,
+  unsupported operations, I/O failures, and anticipated numerical failures.
+  Propagate them with useful context.
+- Use `thiserror` for typed errors in reusable Rust components, including their
+  public APIs. Expose the distinctions callers need to handle failures.
+- Use `eyre` results and contextual reports in application orchestration, such
+  as CLI commands and Python-facing workflows. This boundary depends on the
+  component's responsibility, not whether its crate name contains "api".
+  Reusable library APIs still use typed errors.
+- Preserve underlying errors as sources when adding context. Convert errors
+  explicitly to CLI diagnostics or Python exceptions at the presentation
+  boundary, preserving distinctions callers need to act on. Do not flatten
+  structured errors into message strings while propagating them internally.
+- At an operation boundary where an internal failure can be contained and the
+  operation cleanly abandoned, prefer returning an explicit internal-error
+  report. Identify it as a bug and preserve the context needed to investigate.
+  Retain panics for broken internal invariants; never continue using potentially
+  invalid state or turn an internal failure into a successful fallback result.
+- Prefer pattern matching when it proves a value is present. When a panic is
+  justified by an invariant, use `expect` with an explanation of that invariant
+  and give assertions useful failure context. Tests may use straightforward
+  assertions and `unwrap`.
+- Use `catch_unwind` only at explicit outer boundaries for cleanup and reporting.
+  The affected operation must fail; catching a panic does not establish that
+  its state is safe to reuse. Do not use panic catching as ordinary error
+  handling or resume work with potentially invalid state.
+
+==== Type Design
+
+- Use newtypes for distinct meanings or invariants, such as index domains,
+  units, or validated values that could otherwise be confused. Reuse existing
+  domain types and typed indices first.
+- Use type aliases for readability when semantic identity stays the same.
+  An alias does not establish a distinct type or enforce a new invariant.
+- Prefer named fields for multi-field data. Single-field newtypes and small,
+  obvious local tuples remain appropriate. Avoid APIs that make callers
+  remember the meanings of tuple positions.
+- Keep fields private when construction or mutation requires validation.
+  Plain data containers may expose fields. Avoid getters and setters that add
+  no useful contract.
+- Keep mode and strategy enums private unless callers need to inspect or match
+  on them.
+
+==== Traits And Dispatch
+
+- Prefer inherent methods for behavior belonging to one type. Introduce traits
+  for meaningful generic contracts, interchangeable implementations, or
+  extension methods, rather than merely organizing code.
+- Implement standard traits such as `From`, `TryFrom`, `FromStr`, and `Iterator`
+  when their contracts fit. Preserve GammaLoop's precision-aware semantics
+  when choosing conversions.
+- Eagerly implement applicable common traits for the types a crate defines,
+  following the adopted
+  #link("https://rust-lang.github.io/api-guidelines/interoperability.html#c-common-traits")[C-COMMON-TRAITS]
+  guidance. Consider `Copy`, `Clone`, `Eq`, `PartialEq`, `Ord`, `PartialOrd`,
+  `Hash`, `Debug`, `Display`, and `Default` before a current caller needs them:
+  downstream crates often cannot add these implementations themselves.
+  Applicability must respect the numerical and standard-trait contracts below.
+  Prefer derives when they produce the correct behavior, and avoid unnecessary
+  generic bounds.
+- Prefer generics for reusable libraries and performance-sensitive kernels.
+  Use `dyn Trait` for runtime-selected implementations or when reducing
+  compilation cost and code size justifies it. Measure performance-driven
+  tradeoffs.
+- Use extension traits deliberately and name them `SomethingExt`. For types
+  owned within the workspace, prefer adding functionality to the owning type.
 - Keep shared behavior behind the primary trait method when a type implements a
   trait. Put mode selection in the implementing type's configuration rather
   than exposing parallel helper methods that bypass the trait.
-- Keep mode and strategy enums private unless callers need to inspect or match
-  on them.
-- Follow clippy suggestions closely.
-- Prefer `pub(crate)` unless fully public exposure is necessary; this keeps
-  unused components visible to clippy.
+
+==== Standard Trait Contracts
+
+- Keep approximate comparisons in `ApproxEq` or explicitly named tolerance
+  checks. `PartialEq` must respect symmetry and transitivity; implement `Eq`
+  only when reflexivity also holds.
+- Implement `Ord` only with a defined total ordering consistent with equality
+  and `PartialOrd`. Numerical wrappers must define their NaN and signed-zero
+  handling explicitly. Do not silently treat incomparable values as equal.
+- Keep hashing consistent with equality: equal keys must hash identically.
+  Review custom equality and hashing together, particularly for numerical
+  values and cache keys.
+- Use `Copy` for small, inexpensive value types, and `Clone` when duplication
+  has meaningful semantics. Implementing either trait does not remove the
+  performance requirements on copying. Do not add `Copy` bounds to
+  precision-generic APIs merely because fixed-precision backends support them;
+  arbitrary-precision values may own storage and have different cloning costs.
+- Implement `Default` only for a valid, unambiguous default. Configuration
+  objects should support it when sensible. If construction requires a precision
+  or model context, use a context-aware constructor instead of inventing a
+  default. Keep settings defaults aligned with serialization and default
+  suppression as required by the settings policy below.
+
+==== Concurrency
+
+- Reuse existing parallel infrastructure. Prefer the established Rayon pools
+  for numerical work and respect the configured core budget. Avoid creating
+  threads or independent pools inside frequently called operations.
+- Prefer worker-owned state and share immutable data where appropriate. Keep
+  shared mutation and lock durations small. Avoid holding locks across
+  callbacks, blocking I/O, or expensive computation.
+- Treat poisoned locks as failures. Do not discard the poisoning error and
+  continue computing with potentially invalid state.
+- Give background workers an explicit lifecycle: define ownership,
+  shutdown/cancellation, and error propagation. Join workers or otherwise
+  ensure their completion is accounted for.
+- Make reproducibility requirements explicit. Parallel changes must preserve
+  the promised random-stream assignment and numerical reproducibility.
+  Validate changes to reduction order against those requirements, alongside
+  performance.
+
+==== Macros And Code Generation
+
+- Prefer ordinary functions, types, and traits when they express the
+  abstraction clearly.
+- Use `macro_rules!` for useful structural repetition, such as repeated
+  numerical implementations.
+- Introduce procedural macros only when their capabilities justify the
+  complexity. Established derives such as Serde and `thiserror` remain normal
+  tools.
+- Keep generated code reproducible. Change its generator or source inputs;
+  inspect representative expansions and test meaningful transformation
+  behavior.
+- Macro expansion templates may use qualified paths required for hygiene,
+  such as `$crate::LogMessage`, so an expansion resolves the intended definition
+  independently of the caller's imports. This exception is limited to the
+  generated expansion; ordinary implementation code and macro call sites still
+  follow the import rules above.
+
+==== Naming
+
+- Use standard Rust casing: `snake_case` for functions, methods, variables, and
+  modules; `UpperCamelCase` for types, traits, and enum variants; and
+  `SCREAMING_SNAKE_CASE` for constants and statics. Name operations for their
+  semantic result. Avoid `*_for_<caller>` names unless the result has a
+  caller-specific invariant.
+- Established mathematical notation and domain abbreviations such as CFF, UV,
+  and LMB are appropriate where their meaning is clear. Explain them at public
+  boundaries.
+- Use `as_` for cheap views, `to_` for conversions that preserve the source, and
+  `into_` for consuming conversions.
+- Use `new` and `try_new` for ordinary constructors, and meaningful names for
+  alternatives. Add an explicit constructor alongside `From` only when it
+  materially improves discoverability.
+- Receiver-based construction such as `from_usize(&self, ...)` and constant
+  methods such as `PI()` are allowed where they preserve the active numerical
+  context. Document the reason for associated lint exemptions.
+- Keep generic and lifetime names concise but informative. Single letters are
+  appropriate for conventional mathematics and simple relationships; use
+  descriptive names when several roles would otherwise be hard to distinguish.
+
+==== Rust Documentation
+
+- Document public API behavior and non-obvious internal invariants. Numerical
+  API contracts should explain relevant units, conventions, precision
+  assumptions, and data shapes. Avoid comments that merely repeat names.
+- Include `Errors`, `Panics`, and `Safety` sections where applicable. Unsafe
+  APIs must state what callers must guarantee.
+- Cover every public API item with an example exercising its functionality,
+  following the adopted
+  #link("https://rust-lang.github.io/api-guidelines/documentation.html#c-example")[C-EXAMPLE]
+  guidance. This includes public modules, traits, structs, enums, functions,
+  methods, macros, and type definitions. A link to a relevant example on another
+  item can provide that coverage without duplication. Apply the requirement
+  within reason: examples should show useful behavior or why an API is needed,
+  rather than mechanically illustrating basic Rust syntax. Prefer runnable
+  examples and doctests where practical, and demonstrate normal error
+  propagation with `?`.
+- Keep Rust API documentation beside the code in `///` and `//!` comments using
+  Rustdoc Markdown. Standalone manuals, architecture notes, and contributor
+  guidance remain Typst. Use ordinary comments for implementation rationale.
+
+==== Unsafe Code And Toolchain
+
+- Expect unsafe code to be rare. GammaLoop's numerical algorithms and
+  application logic should normally use safe Rust. Introduce `unsafe` only for
+  a concrete need in low-level operations or FFI, or when representative
+  benchmarks justify an optimization that safe alternatives cannot adequately
+  provide. Explain why the safe alternatives are insufficient.
+- Keep unsafe operations small and behind an abstraction that enforces their
+  requirements. Separate them from numerical algorithms and application logic
+  where practical.
+- Each unsafe block or implementation needs a `SAFETY:` comment explaining why
+  its obligations hold. Unsafe APIs must document caller obligations.
+- Validate relevant invariants with targeted tests and, where applicable,
+  Miri or sanitizers. These checks supplement the safety argument; passing
+  tests does not establish soundness.
+- Keep production code on the pinned stable toolchain, avoiding nightly-only
+  language and library features. Specialized validation tools may use a
+  separate toolchain without changing production requirements.
+
+==== API Conventions And Initialization
+
+- Use predictable accessors: `foo()`, `foo_mut()`, `set_foo()`, `take_foo()`, and
+  `replace_foo()` according to their behavior. Provide expected companions such
+  as `is_empty()` with `len()`.
+- Overload operators only for meaningful mathematical or logical operations.
+  Document conventions where the meaning could be ambiguous.
+- Use `#[must_use]` when ignoring an output is probably a mistake, including
+  pure transformations and lazy computations. Avoid redundant annotations
+  when the return type already provides the warning.
+- Make `const fn` a deliberate API choice for meaningful compile-time
+  evaluation. Account for callers when changing that capability.
+- Use `#[non_exhaustive]` selectively at external compatibility boundaries.
+  Do not apply it mechanically to internal types; GammaLoop's internal APIs
+  remain freely refactorable.
+- Treat dependencies' `#[doc(hidden)]` items as private.
+- Keep initialization explicit or controlled on first use; avoid hidden
+  execution before `main`. Symbolica's managed global state, thread-local
+  workspaces, and library-symbol registration are an explicit allowance.
+  Use its module-scope `initialize!` mechanism when symbols must be registered
+  as the global state initializes, before expressions use them. Preserve
+  initializer dependencies and the existing initializer-aware lazy wrappers
+  that prevent re-entry and lock-order problems. Retain the `StateMap` context
+  needed to translate imported identifiers into the current state. This
+  allowance covers Symbolica integration, not unrelated application startup
+  work in registration callbacks.
+
+==== Implementation Readability
+
+- Make inferred types understandable. Add annotations where `.parse()`,
+  `.into()`, or complex expressions obscure the result type. Prefer annotating
+  a binding when that reads better than a turbofish.
+- Choose loops or iterator chains for clarity. Keep concise transformations as
+  chains; use loops for complicated control flow or side effects. Name long
+  pipelines before consuming them.
+- Make matching intentional. Handle variants explicitly when each needs
+  consideration. Use `if let` or a deliberate wildcard when other variants are
+  irrelevant; do not silently swallow newly added cases.
+- Use `format!` and `write!` for interpolation and multi-part text assembly.
+  Reuse buffers where allocation cost matters.
+- Prefer explicit function composition over function nesting: when a value
+  crosses a semantic boundary, bind it or use `From`/`TryFrom` so the
+  conversion is visible at the call site.
+
+==== Clippy And Validation
+
+- Run checks appropriate to the affected code. Use `cargo check` for quick
+  feedback when useful; it is not a prerequisite for every build or test run.
+- Follow Clippy diligently. Run the repository's Clippy checks for relevant
+  Rust changes with the pinned toolchain and configured lint set. Address
+  warnings in new and substantially modified code before finishing. Report
+  unrelated existing warnings and any checks that could not be completed.
+- Apply suggestions with attention to semantics, numerical precision, and
+  measured performance. Review automated fixes; a lint suggestion does not
+  override the contracts in this guide.
+- A lint exemption needs a concrete reason, such as an intentional numerical
+  convention or a false positive. Name the specific lint, use the smallest
+  applicable scope, and document the reason. Do not add broad suppressions or
+  weaken lint settings merely to make checks pass.
 
 === Python
 
@@ -224,9 +581,11 @@ maintained in
 
 === Tests
 
-- Never weaken tests merely to make failures disappear. Updating expectations
-  for an explicitly requested behavior change is permitted; otherwise ask
-  before changing what a failing test asserts.
+- Never weaken tests merely to make failures disappear. Fix routine fixture
+  mistakes and straightforward obsolete expectations without asking,
+  preserving the test's validation purpose. Ask before non-trivial or deep
+  expectation changes unless they are already authorized, including changes
+  required by an explicitly requested behavior change.
 - During development, run checks relevant to the change. Before final review,
   prepare and upload the selected CI artifacts; NixCI runs the full suite.
 - Install `cargo-nextest` 0.9.137 or newer. The repository configuration
@@ -255,7 +614,7 @@ maintained in
 
 ==== Documentation Source Format
 
-- Typst (`.typ`) is the canonical source format for source-controlled authored
+- Typst (`.typ`) is the canonical source format for standalone authored
   repository documentation, including contributor guidance, manuals,
   architecture notes, investigations, plans, and changelogs. Never add a new
   Markdown/HTML prose source or a parallel copy.
@@ -263,6 +622,8 @@ maintained in
   compatibility exceptions: agent tooling discovers the former, while GitHub,
   Cargo, and package indexes discover the latter. Keep those files concise and
   link them to the canonical Typst documentation.
+- Rustdoc comments embedded in Rust source use Markdown as required by
+  Rustdoc; the standalone-document format rule does not apply to them.
 - Do not add a separately maintained `README.typ`; the compatibility README is
   its own deliberately small source. This applies in every directory. Changing
   extension spelling or case (`.MD`, `.mdx`, `.HTML`, `.TYP`, and similar) does
@@ -622,6 +983,7 @@ The following sections are narrower invariants. They are not general style
 preferences; they protect behavior that has been easy to regress.
 
 === Numeric Precision
+<numeric-precision>
 
 - In generic or arbitrary-precision code, do not introduce constants or
   intermediate values through `from_f64`, `std::f64::consts::*`, or other lossy
@@ -645,6 +1007,16 @@ preferences; they protect behavior that has been easy to regress.
   `F<T>` is missing an operation needed for precision-safe generic code, add or
   use a helper there instead. If it genuinely looks unavoidable to use
   Symbolica's trait directly, stop and ask first.
+- Floating-point underflow in exponentially suppressed tails may round to
+  zero, including when this makes stability comparisons trivially pass. Apply
+  routine underflow-to-zero corrections and update their test expectations
+  without asking again. Preserve meaningful contributions by combining
+  numerical factors before rounding; overflow and invalid numerical operations
+  remain separate issues.
+- For stability of an averaged component, its mean absolute fully weighted
+  probe value may establish underflow below binary64's smallest normal value.
+  Keep this bound separate for each component and observable; never borrow an
+  imaginary component's scale to accept a meaningful real discrepancy.
 
 === Settings Serialization
 
