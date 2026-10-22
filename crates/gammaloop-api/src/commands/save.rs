@@ -9,25 +9,26 @@ use color_eyre::{
 use gammalooprs::{
     model::ModelGammaLoopExt,
     processes::{
-        DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
-        StandaloneNumericTarget,
+        DotExportSettings, OutputPath, StandaloneDataFormat, StandaloneExportMode,
+        StandaloneExportSettings, StandaloneNumericTarget,
     },
     settings::RuntimeSettings,
-    utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
+    utils::serde_utils::ShowDefaultsGuard,
     uv::export::UVForestExportSettings,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::{
     commands::generate::ProcessArgs,
     commands::CliArgumentMetadataExt,
     state::{
         classify_state_folder, RunHistory, SerializeCommandsAsStringsGuard, State, StateFolderKind,
+        StateSaveContext, StateSaveMode,
     },
     templates::Assets,
-    write_schemas, CLISettings, DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME,
+    write_schemas, CLISettings,
 };
 
 #[derive(Subcommand, Debug, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
@@ -134,19 +135,17 @@ impl Save {
                     .ensure_write_target_outside_active_state(&target_dir, "save dot files")?;
                 info!("Saving dot files to {}", target_dir.display());
 
-                // Extract embedded templates to drawings/templates relative to target directory
-                if let Err(e) = Assets::extract_templates(&target_dir) {
-                    warn!(
-                        "Warning: Could not extract templates to drawings/templates: {}",
-                        e
-                    );
-                }
-
-                // Generate dynamic edge styles based on the model
-                let template_path = target_dir.join("drawings/templates/edge-style.typ");
-                if let Err(e) = state.model.generate_edge_style_template(&template_path) {
-                    warn!("Warning: Could not generate dynamic edge styles: {}", e);
-                }
+                let target = OutputPath::new(&target_dir)?;
+                let template_path = target
+                    .join("drawings")?
+                    .join("templates")?
+                    .join("edge-style.typ")?;
+                target.join("justfile")?;
+                Assets::extract_templates(&target_dir).context("Extracting drawing templates")?;
+                state
+                    .model
+                    .generate_edge_style_template(template_path.as_path())
+                    .context("Generating model edge styles")?;
 
                 let settings = DotExportSettings {
                     do_color_algebra: do_color_algebra.unwrap_or(false),
@@ -161,14 +160,7 @@ impl Save {
                 // Export dot files to original location
                 state.export_dots(&target_dir, &settings)?;
 
-                // Create Justfile with draw recipe from embedded template
-                if let Err(e) = Assets::extract_justfile(&target_dir) {
-                    warn!(
-                        "Warning: Could not create justfile at {}: {}",
-                        target_dir.join("justfile").display(),
-                        e
-                    );
-                }
+                Assets::extract_justfile(&target_dir).context("Writing the drawing justfile")?;
 
                 Ok(())
             }
@@ -335,83 +327,62 @@ impl SaveState {
             // info!("Skipping saving state as per user request");
             return Ok(());
         }
-        // println!(
-        //     "Saving state to {}..",
-        //     global_settings.state_folder.display()
-        // );
-        // let root_folder = root_folder.join("gammaloop_state");
-
-        // check if the export root exists, if not create it, if it does return error
         let mut selected_root_folder = self
             .path
             .clone()
-            .unwrap_or(global_settings.state.folder.clone());
-        global_settings
-            .ensure_write_target_outside_active_state(&selected_root_folder, "save state")?;
-        let state_folder_kind = classify_state_folder(&selected_root_folder)?;
-        if matches!(state_folder_kind, StateFolderKind::Missing) {
-            fs::create_dir_all(&selected_root_folder)?;
-        } else {
-            if self.strict.unwrap_or(false) {
+            .unwrap_or_else(|| global_settings.state.folder.clone());
+        let mode = loop {
+            global_settings
+                .ensure_write_target_outside_active_state(&selected_root_folder, "save state")?;
+            if self.strict.unwrap_or(false) && fs::symlink_metadata(&selected_root_folder).is_ok() {
                 return Err(eyre!(
-                    "Export root already exists, please choose a different path or remove the existing directory",
+                    "Export root already exists, please choose a different path or remove the existing directory"
                 ));
             }
-
-            if !matches!(state_folder_kind, StateFolderKind::Scratch)
-                && !self
-                    .override_state
-                    .unwrap_or(global_settings.override_state)
-            {
-                while selected_root_folder.clone().exists() {
-                    eprint!(
-                        "Gammaloop export root {} already exists. Specify '{}' for overwriting, '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
-                        selected_root_folder.display().to_string().green(),
-                        "o".red().bold(),
-                        "n".blue().bold(),
-                        "<NEW_PATH>".green().bold()
-                    );
-                    let mut user_input = String::new();
-                    std::io::stdin()
-                        .read_line(&mut user_input)
-                        .expect("Could not read user-specified gammaloop state export destination");
-                    //user_input = user_input.trim().into();
-                    match user_input.trim() {
-                        "o" => {
-                            info!(
-                                "Overwriting existing gammaloop state at {}",
-                                selected_root_folder.display().to_string().green()
-                            );
-                            break;
-                        }
-                        "n" => {
-                            return Ok(());
-                        }
-                        new_path => {
-                            selected_root_folder = new_path.into();
-                            continue;
-                        }
-                    }
+            let kind = classify_state_folder(&selected_root_folder)?;
+            match kind {
+                StateFolderKind::Missing | StateFolderKind::Scratch => {
+                    break StateSaveMode::CreateNew;
                 }
+                StateFolderKind::Invalid(reason) => return Err(eyre!(reason)),
+                StateFolderKind::Saved | StateFolderKind::Unmanifested => {}
             }
-        }
-
-        global_settings
-            .ensure_write_target_outside_active_state(&selected_root_folder, "save state")?;
-
-        state.save(&selected_root_folder, true, false)?;
-
+            if self
+                .override_state
+                .unwrap_or(global_settings.override_state)
+            {
+                break StateSaveMode::Replace;
+            }
+            eprint!(
+                "Gammaloop export root {} already exists. Specify '{}' for overwriting, '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
+                selected_root_folder.display().to_string().green(),
+                "o".red().bold(),
+                "n".blue().bold(),
+                "<NEW_PATH>".green().bold()
+            );
+            let mut user_input = String::new();
+            if std::io::stdin().read_line(&mut user_input)? == 0 {
+                return Err(eyre!("No save destination authorization received"));
+            }
+            match user_input.trim() {
+                "o" => break StateSaveMode::Replace,
+                "n" => return Ok(()),
+                new_path => selected_root_folder = new_path.into(),
+            }
+        };
         let _serialize_commands_guard = SerializeCommandsAsStringsGuard::new(
             self.try_strings.unwrap_or(global_settings.try_strings),
         );
-        run_history.save_toml(&selected_root_folder, true, false)?;
-
         let _show_defaults_guard = ShowDefaultsGuard::new(true);
-        default_runtime_settings.to_file(
-            selected_root_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
-            true,
+        state.save(
+            &selected_root_folder,
+            StateSaveContext {
+                run_history,
+                default_runtime_settings,
+                cli_settings: global_settings,
+            },
+            mode,
         )?;
-        global_settings.to_file(selected_root_folder.join(GLOBAL_SETTINGS_FILENAME), true)?;
 
         Ok(())
     }
@@ -420,13 +391,209 @@ impl SaveState {
 #[cfg(test)]
 mod tests {
     use super::{Save, SaveState};
+    use crate::state::{StateSaveContext, StateSaveMode};
     use crate::{
         commands::generate::ProcessArgs,
         state::{RunHistory, State},
         CLISettings,
     };
     use gammalooprs::settings::RuntimeSettings;
+    use std::collections::BTreeMap;
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
     use std::path::PathBuf;
+    use tempfile::tempdir;
+    use walkdir::WalkDir;
+
+    fn dot_export(path: PathBuf) -> Save {
+        Save::Dot {
+            path: Some(path),
+            combine_diagrams: false,
+            with_uv: None,
+            output_full_numerator: None,
+            do_gamma_algebra: None,
+            do_color_algebra: None,
+            split_xs_by_initial_states: None,
+            include_autogenerated_fields: None,
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dot_export_helpers_refuse_symlinks_into_read_only_saved_state() {
+        let temporary = tempdir().unwrap();
+        let protected = temporary.path().join("protected-state");
+        let mut state = State::new_test();
+        let history = RunHistory::default();
+        let runtime = RuntimeSettings::default();
+        let mut cli = CLISettings::default();
+        cli.state.folder = protected.clone();
+        state
+            .save(
+                &protected,
+                StateSaveContext {
+                    run_history: &history,
+                    default_runtime_settings: &runtime,
+                    cli_settings: &cli,
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        assert!(state.process_list.processes.is_empty());
+        let before: BTreeMap<_, _> = WalkDir::new(&protected)
+            .into_iter()
+            .map(|entry| {
+                let entry = entry.unwrap();
+                let bytes = entry
+                    .file_type()
+                    .is_file()
+                    .then(|| fs::read(entry.path()).unwrap());
+                (
+                    entry.path().strip_prefix(&protected).unwrap().to_owned(),
+                    bytes,
+                )
+            })
+            .collect();
+        cli.session.read_only_state = true;
+        for target in [
+            "drawings",
+            "drawings/templates",
+            "drawings/templates/edge-style.typ",
+            "drawings/templates/figure.typ",
+            "drawings/templates/crates/linnest/typst",
+            "justfile",
+        ] {
+            let export = temporary
+                .path()
+                .join(format!("export-{}", target.replace('/', "_")));
+            fs::create_dir(&export).unwrap();
+            let destination = export.join(target);
+            fs::create_dir_all(destination.parent().unwrap()).unwrap();
+            let is_file = target.ends_with(".typ") || target == "justfile";
+            unix_fs::symlink(
+                if is_file {
+                    protected.join("state_manifest.toml")
+                } else {
+                    protected.clone()
+                },
+                &destination,
+            )
+            .unwrap();
+            let error = dot_export(export)
+                .run(&mut state, &history, &runtime, &cli)
+                .unwrap_err();
+            assert!(
+                format!("{error:#}").contains("symlink"),
+                "{target}: {error:#}"
+            );
+            let after: BTreeMap<_, _> = WalkDir::new(&protected)
+                .into_iter()
+                .map(|entry| {
+                    let entry = entry.unwrap();
+                    let bytes = entry
+                        .file_type()
+                        .is_file()
+                        .then(|| fs::read(entry.path()).unwrap());
+                    (
+                        entry.path().strip_prefix(&protected).unwrap().to_owned(),
+                        bytes,
+                    )
+                })
+                .collect();
+            assert_eq!(after, before, "protected state changed through {target}");
+        }
+    }
+
+    #[test]
+    fn dot_export_helpers_preserve_directory_file_targets_and_return_errors() {
+        let temporary = tempdir().unwrap();
+        for target in ["drawings/templates/edge-style.typ", "justfile"] {
+            let export = temporary.path().join(target.replace('/', "_"));
+            let destination = export.join(target);
+            fs::create_dir_all(&destination).unwrap();
+            fs::write(destination.join("sentinel"), b"preserve directory").unwrap();
+            assert!(dot_export(export)
+                .run(
+                    &mut State::new_test(),
+                    &RunHistory::default(),
+                    &RuntimeSettings::default(),
+                    &CLISettings::default()
+                )
+                .is_err());
+            assert_eq!(
+                fs::read(destination.join("sentinel")).unwrap(),
+                b"preserve directory"
+            );
+        }
+    }
+
+    #[test]
+    fn dot_export_helpers_replacement_preserves_hardlinked_saved_manifest() {
+        let temporary = tempdir().unwrap();
+        let protected = temporary.path().join("state");
+        let export = temporary.path().join("export");
+        let mut state = State::new_test();
+        let history = RunHistory::default();
+        let runtime = RuntimeSettings::default();
+        let mut cli = CLISettings::default();
+        cli.state.folder = protected.clone();
+        state
+            .save(
+                &protected,
+                StateSaveContext {
+                    run_history: &history,
+                    default_runtime_settings: &runtime,
+                    cli_settings: &cli,
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        let original = fs::read(protected.join("state_manifest.toml")).unwrap();
+        fs::create_dir_all(export.join("drawings/templates")).unwrap();
+        fs::hard_link(
+            protected.join("state_manifest.toml"),
+            export.join("justfile"),
+        )
+        .unwrap();
+        fs::hard_link(
+            protected.join("state_manifest.toml"),
+            export.join("drawings/templates/edge-style.typ"),
+        )
+        .unwrap();
+        cli.session.read_only_state = true;
+        dot_export(export)
+            .run(&mut state, &history, &runtime, &cli)
+            .unwrap();
+        assert_eq!(
+            fs::read(protected.join("state_manifest.toml")).unwrap(),
+            original
+        );
+    }
+
+    #[test]
+    fn strict_save_refuses_existing_root_without_creating_a_lock() {
+        let root = tempdir().unwrap();
+        fs::write(root.path().join("sentinel"), b"preserve").unwrap();
+        let mut cli = CLISettings::default();
+        cli.state.folder = root.path().to_owned();
+        let error = SaveState {
+            strict: Some(true),
+            override_state: Some(true),
+            ..SaveState::default()
+        }
+        .save(
+            &mut State::new_test(),
+            &RunHistory::default(),
+            &RuntimeSettings::default(),
+            &cli,
+        )
+        .unwrap_err();
+        assert!(error.to_string().contains("Export root already exists"));
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+        assert_eq!(fs::read(root.path().join("sentinel")).unwrap(), b"preserve");
+        assert!(!root.path().join(".snapshot.lock").exists());
+    }
 
     #[test]
     fn save_state_rejects_default_state_path_in_read_only_mode() {

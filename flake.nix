@@ -108,8 +108,6 @@
         docsFontPath
         linnetPython
         alphal00pDocsCargoArtifacts
-        alphal00pDocsPages
-        alphal00pDocsSnapshotFixture
         allChecks
         hestiaChecks
         mainTestChecks
@@ -133,7 +131,12 @@
         craneTestDependencyOutputs
         craneTestBinaryPackageOutputs
         nextestContextualTestOutputs
-        impureCheckRunnerPackages
+        runtimeCheckPackages
+        ciRuntimeShell
+        ciRuntimeEnvironment
+        runtimeJobs
+        mainRuntimeJobs
+        doctestArtifacts
         commonArgs
         workspaceTestSrc
         nixCc
@@ -253,8 +256,10 @@
           "gammaloop-ufo-python-runtime" = nextestUfoPython;
           "gammaloop-render-data" = symbolicaRenderData;
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
-          "alphal00p-docs-pages" = alphal00pDocsPages;
-          "alphal00p-docs-snapshot-fixture" = alphal00pDocsSnapshotFixture;
+          "ci-runtime-environment" = ciRuntimeEnvironment;
+          "ci-doctest-artifacts" = doctestArtifacts;
+          "ci-runtime-jobs" = pkgs.writeText "ci-runtime-jobs.json" (builtins.toJSON {include = runtimeJobs;});
+          "ci-runtime-jobs-main" = pkgs.writeText "ci-runtime-jobs-main.json" (builtins.toJSON {include = mainRuntimeJobs;});
           "notebook-wasm-toolchain" = fenix.packages.${system}.combine [
             ciToolchain
             fenix.packages.${system}.targets.wasm32-unknown-emscripten.stable.rust-std
@@ -278,7 +283,7 @@
         // craneTestDependencyOutputs
         // craneTestBinaryPackageOutputs
         // nextestContextualTestOutputs
-        // impureCheckRunnerPackages
+        // runtimeCheckPackages
         // lib.optionalAttrs (!pkgs.stdenv.hostPlatform.isDarwin) {
           gammaloop-llvm-coverage = craneLib.cargoLlvmCov (commonArgs
             // {
@@ -315,6 +320,7 @@
       };
 
       devShells = {
+        ci-runtime = ciRuntimeShell;
         default = mkDevShell craneLib [clinnet-cli] "-C linker=${nixCc}";
         full = mkDevShell craneLib [clinnet-cli rscls] "-C linker=${nixCc}";
         clinnet = mkDevShell craneLib [clinnet-cli] "-C linker=${nixCc}";

@@ -1867,7 +1867,7 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
             );
 
             let save_root = TemporaryDirectory::new("gl638-ir-safe-threshold");
-            cross_section.save(&save_root.0, true).unwrap();
+            cross_section.write_snapshot(&save_root.0).unwrap();
 
             let mut state_bytes = Vec::new();
             State::export(&mut state_bytes).unwrap();
@@ -1877,7 +1877,7 @@ fn gl638_cartesian_structure_and_full_cut_runtime_roundtrip() {
                 state_map: &state_map,
             };
             let mut loaded =
-                CrossSection::load(save_root.0.join("NNLO_fixture"), context).unwrap();
+                CrossSection::load(save_root.0.join("NNLO_fixture"), context, true).unwrap();
             let loaded_integrand = loaded
                 .integrand
                 .as_mut()

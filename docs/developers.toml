@@ -29,8 +29,8 @@ review_triggers = ["crates/feynkit*/**", "crates/gammaloop-api/src/**", "crates/
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/state.rs"
-symbol = "gammaloop_api::state::State::load"
-anchor = "load_state_manifest(&save_path)?"
+symbol = "State::load_with_selection and ResolvedStateSnapshot pinned loading"
+anchor = "let snapshot = ResolvedStateSnapshot::open(&save_path)?;"
 # Reviewed 2026-09-16: state version 2 persists the canonical FeynKit model;
 # the architecture records the regeneration requirement for version-1 states.
 # Reviewed 2026-09-23: Canonical FeynKit model/graph ownership, version 8 persistence, and shared generalized CFF generation are documented in the current architecture.
@@ -51,7 +51,16 @@ anchor = "load_state_manifest(&save_path)?"
 # Reviewed 2026-10-17: The architecture records state version 19 for retained tensor payloads, checked symbol-remapped loading, and unchanged standalone scalar evaluator versions.
 # Reviewed 2026-10-17: Full state version 20 retains global numerator/projector interfaces in addition to version19 runtime tensors; standalone evaluator formats remain unchanged.
 # Reviewed 2026-10-18: Full state 21 stores explicit indexed tensor slots and rejects unresolved runtime ports; architecture-current records regeneration of earlier full states and unchanged standalone formats.
-digest = "5113940a12e8bac5ec042c59db01bd0ecfb05ef0"
+# Reviewed 2026-10-22 against the frozen state/output source ledger: version22
+# resolves one validated immutable generation before domain reads; loading
+# restores model/printer callbacks before Symbolica and process payloads.
+# architecture-current.typ records pinned readers and manifest-last generation
+# publication. The scope follows the current load owner rather than a deleted call.
+# No architecture impact 2026-10-23: the saved-state round-trip fixture now
+# records the actual generation reports/resources before persistence, matching
+# the graph-summary publication contract. The pinned-reader/load implementation
+# and version22 boundary are unchanged.
+digest = "62fe0cff164c3a716626ea33889681222b725ed2"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -67,7 +76,11 @@ anchor = "fn default_workspace_path(&self"
 # access and fixture formatting preserve workspace and dashboard ownership.
 # Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
 # recovery shuts down the renderer; non-streamed runs preserve unwinding.
-digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+# Reviewed 2026-10-22 against the frozen checkpoint source ledger: workspace
+# access follows the held owner and version4 manifest; read-only defaults retain
+# cwd-based state-named output placement. Dashboard/terminal ownership and
+# completed-iteration status semantics remain unchanged.
+digest = "b29c4277d85f1173705b44d64e583c96bbf58f78"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrands/evaluation.rs"
@@ -130,7 +143,15 @@ anchor = "pub struct EventProcessingRuntime {"
 # Reviewed 2026-10-15: Canonical model lookups preserve graph-group event ownership
 # and per-sample accumulation. Retained main observable and cut metadata behavior
 # stays in the runtime owner.
-digest = "e0a87225a5073e48c6d82a4d8f39cddac43d1684"
+# Reviewed 2026-10-22 against the frozen checkpoint source ledger: persisted
+# observable settings/membership are checked without activating quantities or
+# models. Live restore retains process-dependent layout validation. The current
+# architecture records immutable observable members and validated resume reads.
+# Reviewed 2026-10-22 after checkpoint r3: present histogram coordinates must
+# be finite before JSON publication; legitimate absent flow/discrete edges remain
+# valid. This strengthens the documented validated immutable-checkpoint boundary
+# without changing binning, event accumulation or reconstruction arithmetic.
+digest = "8964dbe9001edaf7f83e82ddfd630d28c4db21f7"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/python.rs"
@@ -158,7 +179,10 @@ path = "crates/gammalooprs/src/lib.rs"
 symbol = "gammalooprs module topology"
 anchor = "pub mod cff;"
 # Reviewed 2026-09-23: No architecture impact: obsolete root test-module exports were removed; production module ownership is unchanged.
-digest = "41d3e5da3e5b11fbfb34c30432192c7d3ed53e16"
+# No product-architecture impact 2026-10-23: a cfg(test) workspace-root helper
+# follows runtime cwd/executable/manifest ancestry for relocated archive fixtures.
+# Existing physics/model module ownership and public product behavior are unchanged.
+digest = "60d31affcc4839ec5f230805d19b6b8178c9446b"
 
 [[section.note.scope]]
 # No-impact attestation 2026-08-28: tadpole-filter validation failures now
@@ -310,7 +334,11 @@ anchor = "fn dashboard_event_loop(receiver"
 # access and fixture formatting preserve workspace and dashboard ownership.
 # Reviewed 2026-10-15: The dashboard note covers retained main behavior: streamed panic
 # recovery shuts down the renderer; non-streamed runs preserve unwinding.
-digest = "0f0ae2c8e593ca91f12be4b4c4e456f8817d7f9b"
+# Reviewed 2026-10-22 against the frozen checkpoint source ledger: workspace
+# access follows the held owner and version4 manifest; read-only defaults retain
+# cwd-based state-named output placement. Dashboard/terminal ownership and
+# completed-iteration status semantics remain unchanged.
+digest = "b29c4277d85f1173705b44d64e583c96bbf58f78"
 
 [[section.note.scope]]
 path = "crates/gammalooprs/src/integrate/render_ratatui.rs"
@@ -334,7 +362,13 @@ anchor = "mod render_ratatui;"
 # Retained main behavior preserves renderer ownership.
 # Reviewed 2026-10-15: Model access follows canonical FeynKit ownership; checkpoint,
 # worker and renderer contracts remain unchanged.
-digest = "d131b0f6a513af1310b647474fac787105610a1b"
+# Reviewed 2026-10-22 against the frozen checkpoint source ledger: one borrowed
+# workspace owner retains its writer lease through completed-iteration publication
+# and final reads. The internal version4 checkpoint commits before latest/history
+# refresh; refresh failures identify the iteration already committed. Renderer,
+# sampling and status ownership remain as documented; architecture-current owns
+# the detailed manifest/member and read-only summary protocol.
+digest = "c0d9f4c0da192a62053a888e897f249014925b0e"
 
 [[section.note]]
 id = "uv-renormalization"
@@ -601,7 +635,11 @@ anchor = "pub fn extract_templates<P: AsRef<Path>>"
 # Reviewed 2026-10-15: Embedding now uses include_dir while retaining canonical
 # generated asset paths and shared drawing callbacks. This migration record remains
 # historical below its implemented preface.
-digest = "3dca6f84cadbe237f3beaa7ab05e11cea309cd41"
+# Reviewed 2026-10-22 against the frozen state/output source ledger: canonical
+# template content/package layout and callback ownership remain unchanged.
+# Extraction now uses OutputPath and validates every embedded relative component
+# before writing; symlink containment is strengthened without changing styling.
+digest = "28342a2083aae84a441f4f4231d429e961fd09c2"
 
 [[section.note]]
 id = "gammaloop-drawing-architecture"
@@ -1518,8 +1556,8 @@ kind = "Build engineering"
 status = "Current guide"
 lifecycle = "current"
 owner = "unassigned"
-reviewed_at = "2026-10-06"
-review_ref = "jj:mrluluxqozss"
+reviewed_at = "2026-10-22"
+review_ref = "jj:mynuyvqo"
 products = ["gammaloop"]
 topics = ["nix", "ci", "cache", "testing"]
 review_triggers = ["flake.nix", "flake.lock", "nix/**", "nix-ci.nix", "just/ci.just", ".github/scripts/ci-report.mjs", "CONTRIBUTING.typ"]
@@ -1537,7 +1575,10 @@ anchor = "ci-checks-and-upload:"
 # No architecture impact 2026-10-10: remove recipes for absent audit/deny
 # checks and correct the dependency-profile comment; selected checks, uploads,
 # and runtime producer boundaries are unchanged.
-digest = "0f8a76ea61d80a7847d9e8d16756e9914e245ae2"
+# Reviewed 2026-10-22: runtime packages execute licensed checks directly; one
+# aggregate evaluation prepares the same selected outputs and keeps GC roots
+# through the unchanged upload barrier. ci.typ documents this boundary.
+digest = "c5ab99e32d498ef3969c719b7242f78ab49e0706"
 
 [[section.note]]
 id = "feynkit-merge-readiness"
@@ -1666,7 +1707,9 @@ end_anchor = "# Exercise the embedded Typst watcher"
 # terminal publication boundaries are retained.
 # Reviewed 2026-10-15: The live registry remains the source of authored note/product
 # inputs. Historical CI experiments defer current policy to ci.typ.
-digest = "a6e8d348f30ef64d9c936604c62dcb59ca635d1a"
+# Reviewed 2026-10-22: reusable compiled producers, feature contexts and target
+# ownership are retained; user licensing moved wholly to runtime consumers.
+digest = "4261d210965606723497a3502b4973d5c00ee117"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1757,8 +1800,8 @@ digest = "9ed8dd0ee840c3876b4c7a341bbd6a433d55ad0d"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
-symbol = "alphal00pDocsDerivationArgs and terminal documentation consumers"
-anchor = "alphal00pDocsDerivationArgs ="
+symbol = "runtimeSetup, runtimeBuild and runtimeCheck documentation consumers"
+anchor = "runtimeSetup ="
 end_anchor = "\nin\n{\n  inherit"
 # Reviewed 2026-09-14: Git and Jujutsu provide checkout provenance;
 # archive builds retain explicit revision and timestamp inputs.
@@ -1780,7 +1823,11 @@ end_anchor = "\nin\n{\n  inherit"
 # triggers remain owned by ci.typ.
 # Reviewed 2026-10-15: Terminal documentation checks receive the pinned font bundle through
 # SYMBOLICA_DATA_DIRECTORY; reusable compiler artifact ownership is unchanged.
-digest = "e27a783909bfe283190cb242f1325a1b94b77d0f"
+# Reviewed 2026-10-22: scope follows the current runtime setup/build/check owner.
+# The maintained note records runtime-only credentials and fresh execution;
+# old terminal-derivation measurements remain explicitly historical. The full
+# latest/snapshot/publication bodies and generated ownership fixture remain.
+digest = "692da63f910c866b55ee5b45b092c5ca8a7f1811"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

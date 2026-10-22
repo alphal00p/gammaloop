@@ -2916,9 +2916,58 @@ pub struct ObservableSnapshotBundle {
 }
 
 impl ObservableSnapshotBundle {
+    /// Check persisted configuration without compiling quantities or activating a model.
+    /// Process-dependent discrete labels are additionally checked by the live restore owner.
+    pub(crate) fn matches_checkpoint_settings(&self, settings: &ObservablesSettings) -> bool {
+        self.histograms.len() == settings.len()
+            && settings.iter().all(|(name, settings)| {
+                let Some(snapshot) = self.histograms.get(name) else {
+                    return false;
+                };
+                // JSON would turn Some(nonfinite) into null, which decodes as a valid None.
+                // Preserve legitimate absence, but reject that lossy conversion before writing.
+                let finite_bin_coordinates = snapshot
+                    .bins
+                    .iter()
+                    .chain([&snapshot.underflow_bin, &snapshot.overflow_bin])
+                    .all(|bin| {
+                        [bin.x_min, bin.x_max]
+                            .into_iter()
+                            .flatten()
+                            .all(f64::is_finite)
+                    });
+                if !finite_bin_coordinates
+                    || snapshot.phase != settings.phase
+                    || snapshot.value_transform != settings.value_transform
+                {
+                    return false;
+                }
+                match &settings.histogram {
+                    HistogramSettings::Continuous(histogram) => {
+                        snapshot.kind == HistogramSnapshotKind::Continuous
+                            && snapshot.title == histogram.title.as_deref().unwrap_or(name)
+                            && snapshot.type_description == histogram.type_description
+                            && snapshot.x_min == Some(histogram.x_min)
+                            && snapshot.x_max == Some(histogram.x_max)
+                            && snapshot.bins.len() == histogram.n_bins
+                            && snapshot.log_x_axis == histogram.log_x_axis
+                            && snapshot.log_y_axis == histogram.log_y_axis
+                    }
+                    HistogramSettings::Discrete(histogram) => {
+                        snapshot.kind == HistogramSnapshotKind::Discrete
+                            && snapshot.title == histogram.title.as_deref().unwrap_or(name)
+                            && snapshot.type_description == histogram.type_description
+                            && snapshot.discrete_ordering == Some(histogram.ordering)
+                            && snapshot.log_y_axis == histogram.log_y_axis
+                    }
+                }
+            })
+    }
+
     pub fn to_json_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let writer = BufWriter::new(File::create(path.as_ref())?);
-        serde_json::to_writer_pretty(writer, self)?;
+        let mut writer = BufWriter::new(File::create(path.as_ref())?);
+        serde_json::to_writer_pretty(&mut writer, self)?;
+        writer.flush()?;
         Ok(())
     }
 
@@ -2932,6 +2981,7 @@ impl ObservableSnapshotBundle {
         for histogram in self.histograms.values() {
             histogram.write_hwu_block(&mut writer)?;
         }
+        writer.flush()?;
         Ok(())
     }
 
@@ -4444,8 +4494,8 @@ mod tests {
         DiscreteRangeSelectorSettings, EntrySelection, HistogramAccumulatorState,
         HistogramBinSnapshot, HistogramProcessInfo, HistogramSettings, HistogramSnapshot,
         HistogramSnapshotKind, HistogramStatisticsSnapshot, JetClusteringSettings, ObservablePhase,
-        ObservableSettings, ObservableValueTransform, QuantitySettings, SelectorDefinitionSettings,
-        SelectorSettings, resolve_graph_group_context,
+        ObservableSettings, ObservableSnapshotBundle, ObservableValueTransform, QuantitySettings,
+        SelectorDefinitionSettings, SelectorSettings, resolve_graph_group_context,
     };
     use schemars::schema_for;
     use serde_json::Value as JsonValue;
@@ -4563,6 +4613,18 @@ mod tests {
         assert_eq!(loaded, snapshot);
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn observable_checkpoint_presentation_writers_check_buffer_flush() {
+        let bundle = ObservableSnapshotBundle {
+            histograms: BTreeMap::from([("histogram".into(), sample_histogram_snapshot())]),
+        };
+        // Both representations fit in BufWriter's buffer. /dev/full deterministically fails
+        // when that final buffer is flushed, independently of user privileges or permissions.
+        assert!(bundle.to_json_file("/dev/full").is_err());
+        assert!(bundle.write_hwu_file("/dev/full").is_err());
+    }
+
     #[test]
     fn continuous_histogram_checkpoint_resumes_worker_merges() {
         let mut uninterrupted = HistogramAccumulatorState::continuous(
@@ -4604,6 +4666,54 @@ mod tests {
         uninterrupted.update_results();
         resumed.update_results();
         assert_eq!(resumed.snapshot(), uninterrupted.snapshot());
+    }
+
+    #[test]
+    fn checkpoint_optional_bin_coordinates_require_finite_present_values() {
+        let settings: ObservableSettings = toml::from_str(
+            "quantity = 'integral'\ndomain = { type = 'single_bin' }\ntitle = 'count'",
+        )
+        .unwrap();
+        let settings = BTreeMap::from([("histogram".to_string(), settings)]);
+        let mut histogram = HistogramAccumulatorState::discrete(
+            "count".to_string(),
+            "AL".to_string(),
+            ObservablePhase::Real,
+            0,
+            0,
+            DiscreteBinOrdering::AscendingBinId,
+            true,
+            vec![None],
+        )
+        .unwrap();
+        histogram.fill_discrete_sample(&[(0, 1.0)]).unwrap();
+        histogram.update_results();
+        let bundle = ObservableSnapshotBundle {
+            histograms: BTreeMap::from([("histogram".to_string(), histogram.snapshot())]),
+        };
+        assert!(bundle.matches_checkpoint_settings(&settings));
+
+        for invalid in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN] {
+            for bin_index in 0..3 {
+                for minimum in [true, false] {
+                    let mut snapshot = histogram.snapshot();
+                    let bin = match bin_index {
+                        0 => &mut snapshot.bins[0],
+                        1 => &mut snapshot.underflow_bin,
+                        _ => &mut snapshot.overflow_bin,
+                    };
+                    if minimum {
+                        bin.x_min = Some(invalid);
+                    } else {
+                        bin.x_max = Some(invalid);
+                    }
+                    let bundle = ObservableSnapshotBundle {
+                        histograms: BTreeMap::from([("histogram".to_string(), snapshot)]),
+                    };
+                    assert!(!bundle.matches_checkpoint_settings(&settings));
+                }
+            }
+        }
     }
 
     #[test]

@@ -1,3 +1,6 @@
+use super::OutputPath;
+#[cfg(test)]
+use super::output::{self, SaveStep};
 use crate::model::ModelGammaLoopExt;
 use feynkit_generator::GenerationType;
 use std::{
@@ -814,8 +817,11 @@ impl CrossSection {
         Ok(())
     }
 
-    fn storage_path(&self, base: &Path) -> PathBuf {
-        base.join(&self.name)
+    fn storage_path(&self, base: &Path) -> Result<PathBuf> {
+        Ok(OutputPath::new(base)?
+            .join(&self.name)?
+            .as_path()
+            .to_owned())
     }
 
     pub fn export_standalone(
@@ -823,8 +829,10 @@ impl CrossSection {
         path: impl AsRef<Path>,
         settings: &crate::processes::StandaloneExportSettings,
     ) -> Result<()> {
+        let output = OutputPath::new(path.as_ref())?;
+        output.check_tree()?;
         if let Some(integrand) = &self.integrand {
-            integrand.export_standalone(path, settings)?;
+            integrand.export_standalone(output.as_path(), settings)?;
         } else {
             return Err(eyre!(
                 "Cannot export standalone cross section {} without integrand",
@@ -1186,9 +1194,9 @@ impl CrossSection {
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         info!("Compiling cross section {}", self.name);
-        let p = self.storage_path(path.as_ref());
+        let p = self.storage_path(path.as_ref())?;
 
-        let result = fs::create_dir_all(&p).with_context(|| {
+        let result = OutputPath::new(&p)?.ensure_directory().with_context(|| {
             format!(
                 "Trying to create directory to compile cross section {}",
                 p.display()
@@ -1200,6 +1208,14 @@ impl CrossSection {
         }
 
         if let Some(integrand) = &mut self.integrand {
+            let root = OutputPath::new(&p)?.join("integrand")?;
+            root.check_tree()?;
+            for id in 0..integrand.graph_count() {
+                let name = integrand
+                    .graph_name_by_id(id)
+                    .ok_or_else(|| eyre!("Missing graph name for compile graph ID {id}"))?;
+                root.join(name)?;
+            }
             let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
             return Ok(compile_times
                 .into_iter()
@@ -1217,43 +1233,52 @@ impl CrossSection {
         Ok(Vec::new())
     }
 
-    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = self.storage_path(path.as_ref());
-        let r = fs::create_dir_all(&p).with_context(|| {
-            format!(
-                "Trying to create directory to save cross section {}",
-                p.display()
-            )
-        });
-
-        if override_existing {
-            r?;
-        }
-
+    pub(super) fn write_snapshot(&mut self, path: &Path) -> Result<()> {
+        let p = OutputPath::new(path)?.join(&self.name)?;
+        p.create_directory()?;
+        let p = p.as_path();
         let integrand = self.integrand.take();
-        if let Some(integrand) = &integrand {
-            integrand.save(&p, override_existing)?;
-        }
-
-        let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
-        if override_existing {
-            fs::write(p.join("cs.bin"), &binary)?;
-        } else {
+        // Metadata encodes an absent integrand; restore the live owner on every
+        // ordinary serialization/write failure, without copying evaluators.
+        let result = (|| -> Result<()> {
+            #[cfg(test)]
+            output::save_step(SaveStep::Integrand, &p.join("integrand"))?;
+            if let Some(integrand) = &integrand {
+                integrand.save(p, false)?;
+            }
+            #[cfg(test)]
+            output::save_step(SaveStep::Metadata, &p.join("cs.bin"))?;
+            let binary = bincode::encode_to_vec(&*self, bincode::config::standard())?;
             let mut file = File::create_new(p.join("cs.bin"))?;
             file.write_all(&binary)?;
-        }
-
+            file.flush()?;
+            Ok(())
+        })();
         self.integrand = integrand;
-        Ok(())
+        result
     }
 
-    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+    pub(crate) fn load(
+        path: impl AsRef<Path>,
+        context: GammaLoopContextContainer,
+        generated: bool,
+    ) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("cs.bin"))?;
         let (mut cs, _): (Self, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
-        if path.as_ref().join("integrand").exists() {
+        if cs.integrand.is_some() {
+            return Err(eyre!(
+                "Saved cross-section metadata unexpectedly contains an integrand"
+            ));
+        }
+        if generated {
             let integrand = CrossSectionIntegrand::load(path.as_ref().join("integrand"), context)?;
+            if integrand.data.name != cs.name {
+                return Err(eyre!(
+                    "Saved generated payload name disagrees with its child metadata"
+                ));
+            }
             cs.integrand = Some(ProcessIntegrand::CrossSection(integrand));
         }
 
@@ -5005,7 +5030,7 @@ mod tests {
         let temp = fresh_temp_dir("cross-section-storage-path");
         let cross_section = super::CrossSection::new("NLO".to_string());
 
-        assert_eq!(cross_section.storage_path(&temp), temp.join("NLO"));
+        assert_eq!(cross_section.storage_path(&temp).unwrap(), temp.join("NLO"));
         fs::remove_dir_all(temp).unwrap();
     }
 

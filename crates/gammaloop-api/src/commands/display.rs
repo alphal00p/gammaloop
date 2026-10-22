@@ -22,7 +22,9 @@ use color_eyre::Result;
 use eyre::{eyre, Context};
 use gammalooprs::{
     model::ModelGammaLoopExt,
-    processes::{Amplitude, CrossSection, Process, ProcessCollection, ThresholdCountertermSide},
+    processes::{
+        Amplitude, CrossSection, OutputPath, Process, ProcessCollection, ThresholdCountertermSide,
+    },
     settings::RuntimeSettings,
 };
 
@@ -40,7 +42,10 @@ use crate::{
     },
     session::display_command,
     settings_tree::{serialize_settings_with_defaults, value_at_path},
-    state::{CommandsBlock, IntegrandGenerationSummary, ProcessRef, RunHistory, State},
+    state::{
+        resolve_state_folder, CommandsBlock, IntegrandGenerationSummary, ProcessRef,
+        ResolvedStateSnapshot, RunHistory, State, StateFolderKind,
+    },
     CLISettings,
 };
 
@@ -295,6 +300,7 @@ impl Display {
                     }
                     return Ok(());
                 }
+                let artifacts = IntegrandArtifacts::open(&global_settings.state.folder)?;
                 let process_id = process
                     .as_ref()
                     .map(|process_ref| state.resolve_process_ref(Some(process_ref)))
@@ -307,11 +313,7 @@ impl Display {
                         Some(&integrand_name.to_string()),
                     )?;
                     let process = &state.process_list.processes[process_id];
-                    let artifact_sizes = collect_integrand_artifact_sizes(
-                        &global_settings.state.folder,
-                        process,
-                        &detail.integrand_name,
-                    )?;
+                    let artifact_sizes = artifacts.sizes(process, &detail.integrand_name)?;
                     render_integrand_detail_from_info(
                         &detail,
                         &artifact_sizes,
@@ -322,11 +324,12 @@ impl Display {
                         *show_threshold_functions,
                     )?;
                 } else {
-                    render_integrands_table(state, &global_settings.state.folder, process_id)?;
+                    render_integrands_table(state, &artifacts, process_id)?;
                 }
             }
             Display::Processes => {
-                render_processes_table(state, &global_settings.state.folder)?;
+                let artifacts = IntegrandArtifacts::open(&global_settings.state.folder)?;
+                render_processes_table(state, &artifacts)?;
             }
             Display::Quantities { target } => {
                 render_named_process_settings(state, target, NamedProcessSettingKind::Quantity)?;
@@ -1311,7 +1314,7 @@ fn render_integrand_detail_from_info(
     Ok(())
 }
 
-fn render_processes_table(state: &State, state_folder: &Path) -> Result<()> {
+fn render_processes_table(state: &State, artifacts: &IntegrandArtifacts<'_>) -> Result<()> {
     if state.process_list.processes.is_empty() {
         info!("{}", "No processes generated yet.".yellow());
         return Ok(());
@@ -1330,7 +1333,7 @@ fn render_processes_table(state: &State, state_folder: &Path) -> Result<()> {
     ]);
 
     for process in &state.process_list.processes {
-        let metrics = collect_integrand_metrics(state_folder, process)?;
+        let metrics = collect_integrand_metrics(artifacts, process)?;
         builder.push_record([
             format!("#{}", process.definition.process_id)
                 .blue()
@@ -1364,7 +1367,7 @@ fn render_processes_table(state: &State, state_folder: &Path) -> Result<()> {
 
 fn render_integrands_table(
     state: &State,
-    state_folder: &Path,
+    artifacts: &IntegrandArtifacts<'_>,
     process_filter: Option<usize>,
 ) -> Result<()> {
     if state.process_list.processes.is_empty() {
@@ -1388,7 +1391,7 @@ fn render_integrands_table(
         if process_filter.is_some_and(|selected| selected != process_index) {
             continue;
         }
-        let metrics = collect_integrand_metrics(state_folder, process)?;
+        let metrics = collect_integrand_metrics(artifacts, process)?;
         for metric in metrics {
             num_rows += 1;
             builder.push_record([
@@ -1450,29 +1453,29 @@ fn render_integrands_table(
 }
 
 fn collect_integrand_metrics(
-    state_folder: &Path,
+    artifacts: &IntegrandArtifacts<'_>,
     process: &Process,
 ) -> Result<Vec<IntegrandMetrics>> {
     match &process.collection {
         ProcessCollection::Amplitudes(amplitudes) => amplitudes
             .values()
-            .map(|amplitude| integrand_metrics_from_amplitude(state_folder, process, amplitude))
+            .map(|amplitude| integrand_metrics_from_amplitude(artifacts, process, amplitude))
             .collect(),
         ProcessCollection::CrossSections(cross_sections) => cross_sections
             .values()
             .map(|cross_section| {
-                integrand_metrics_from_cross_section(state_folder, process, cross_section)
+                integrand_metrics_from_cross_section(artifacts, process, cross_section)
             })
             .collect(),
     }
 }
 
 fn integrand_metrics_from_amplitude(
-    state_folder: &Path,
+    artifacts: &IntegrandArtifacts<'_>,
     process: &Process,
     amplitude: &Amplitude,
 ) -> Result<IntegrandMetrics> {
-    let artifact_sizes = collect_integrand_artifact_sizes(state_folder, process, &amplitude.name)?;
+    let artifact_sizes = artifacts.sizes(process, &amplitude.name)?;
     Ok(IntegrandMetrics {
         name: amplitude.name.clone(),
         graphs: amplitude.graphs.len(),
@@ -1483,12 +1486,11 @@ fn integrand_metrics_from_amplitude(
 }
 
 fn integrand_metrics_from_cross_section(
-    state_folder: &Path,
+    artifacts: &IntegrandArtifacts<'_>,
     process: &Process,
     cross_section: &CrossSection,
 ) -> Result<IntegrandMetrics> {
-    let artifact_sizes =
-        collect_integrand_artifact_sizes(state_folder, process, &cross_section.name)?;
+    let artifact_sizes = artifacts.sizes(process, &cross_section.name)?;
     Ok(IntegrandMetrics {
         name: cross_section.name.clone(),
         graphs: cross_section.supergraphs.len(),
@@ -1498,32 +1500,60 @@ fn integrand_metrics_from_cross_section(
     })
 }
 
-fn collect_integrand_artifact_sizes(
-    state_folder: &Path,
-    process: &Process,
-    integrand_name: &str,
-) -> Result<IntegrandArtifactSizes> {
-    let artifact_root = integrand_artifact_root(state_folder, process, integrand_name);
-    Ok(IntegrandArtifactSizes {
-        bin_disk_size_bytes: disk_usage_for_extension(&artifact_root, "bin")?,
-        so_disk_size_bytes: disk_usage_for_extension(&artifact_root, "so")?,
-    })
+struct IntegrandArtifacts<'a> {
+    mutable_root: &'a Path,
+    snapshot: Option<ResolvedStateSnapshot>,
 }
 
-fn integrand_artifact_root(
-    state_folder: &Path,
-    process: &Process,
-    integrand_name: &str,
-) -> PathBuf {
-    let collection_dir = match &process.collection {
-        ProcessCollection::Amplitudes(_) => "amplitudes",
-        ProcessCollection::CrossSections(_) => "cross_sections",
-    };
-    state_folder
-        .join("processes")
-        .join(collection_dir)
-        .join(&process.definition.folder_name)
-        .join(integrand_name)
+impl<'a> IntegrandArtifacts<'a> {
+    fn open(root: &'a Path) -> Result<Self> {
+        let (kind, snapshot) = resolve_state_folder(root)?;
+        if let StateFolderKind::Invalid(reason) = kind {
+            return Err(eyre!(reason));
+        }
+        Ok(Self {
+            mutable_root: root,
+            snapshot,
+        })
+    }
+
+    fn sizes(&self, process: &Process, name: &str) -> Result<IntegrandArtifactSizes> {
+        let root = self.mutable_integrand_root(process, name)?;
+        // Explicit compile/standalone exports remain mutable outside generations.
+        let mut bin_disk_size_bytes = disk_usage_for_extension(&root, "bin")?;
+        let so_disk_size_bytes = disk_usage_for_extension(&root, "so")?;
+        if let Some(snapshot) = &self.snapshot {
+            for path in snapshot.integrand_binary_paths(process, name) {
+                let bytes = file_disk_usage_bytes(&fs::metadata(&path).with_context(|| {
+                    format!("Reading saved integrand artifact {}", path.display())
+                })?);
+                bin_disk_size_bytes = Some(
+                    bin_disk_size_bytes
+                        .unwrap_or(0)
+                        .checked_add(bytes)
+                        .ok_or_else(|| eyre!("Saved integrand artifact size overflow"))?,
+                );
+            }
+        }
+        Ok(IntegrandArtifactSizes {
+            bin_disk_size_bytes,
+            so_disk_size_bytes,
+        })
+    }
+
+    fn mutable_integrand_root(&self, process: &Process, name: &str) -> Result<PathBuf> {
+        let directory = match &process.collection {
+            ProcessCollection::Amplitudes(_) => "amplitudes",
+            ProcessCollection::CrossSections(_) => "cross_sections",
+        };
+        Ok(OutputPath::new(self.mutable_root)?
+            .join("processes")?
+            .join(directory)?
+            .join(&process.definition.folder_name)?
+            .join(name)?
+            .as_path()
+            .to_owned())
+    }
 }
 
 fn disk_usage_for_extension(root: &Path, extension: &str) -> Result<Option<u64>> {
@@ -2031,8 +2061,13 @@ fn format_json_value(value: &JsonValue) -> String {
 
 #[cfg(test)]
 mod test {
+    use crate::state::{StateSaveContext, StateSaveMode};
     use clap::Parser;
+    use gammalooprs::processes::{Amplitude, Process, ProcessCollection, ProcessDefinition};
     use serde_json::json;
+    use std::collections::BTreeMap;
+    use std::fs;
+    use tempfile::tempdir;
 
     use crate::{
         commands::Commands,
@@ -2060,6 +2095,72 @@ mod test {
         render_threshold_counterterms, serialize_settings_with_defaults, value_at_path, Display,
         DisplaySettingsTarget, IntegrandDisplayCategory, MetadataDisplayFormat,
     };
+    use super::{file_disk_usage_bytes, IntegrandArtifacts};
+
+    #[test]
+    fn display_artifact_sizes_pin_saved_generation_and_keep_mutable_outputs() {
+        let temporary = tempdir().unwrap();
+        let root = temporary.path().join("state");
+        let mut state = State::new_test();
+        let amplitude = Amplitude::from_graph_list("child", Vec::new()).unwrap();
+        state.process_list.add_process(Process {
+            definition: ProcessDefinition {
+                folder_name: "process".into(),
+                ..ProcessDefinition::default()
+            },
+            collection: ProcessCollection::Amplitudes(BTreeMap::from([(
+                "child".into(),
+                amplitude,
+            )])),
+            settings_history: None,
+        });
+        let history = RunHistory::default();
+        let runtime = RuntimeSettings::default();
+        let cli = CLISettings::default();
+        let session = StateSaveContext {
+            run_history: &history,
+            default_runtime_settings: &runtime,
+            cli_settings: &cli,
+        };
+        state
+            .save(&root, session, StateSaveMode::CreateNew)
+            .unwrap();
+        let pinned = IntegrandArtifacts::open(&root).unwrap();
+        let process = state.process_list.remove_process(0).unwrap();
+        let persisted: u64 = pinned
+            .snapshot
+            .as_ref()
+            .unwrap()
+            .integrand_binary_paths(&process, "child")
+            .iter()
+            .map(|path| file_disk_usage_bytes(&fs::metadata(path).unwrap()))
+            .sum();
+        assert_eq!(
+            pinned.sizes(&process, "child").unwrap().bin_disk_size_bytes,
+            Some(persisted)
+        );
+        let mutable = pinned.mutable_integrand_root(&process, "child").unwrap();
+        fs::create_dir_all(&mutable).unwrap();
+        fs::write(mutable.join("standalone.bin"), vec![1; 8192]).unwrap();
+        fs::write(mutable.join("compiled.so"), vec![2; 8192]).unwrap();
+        let transient_bin =
+            file_disk_usage_bytes(&fs::metadata(mutable.join("standalone.bin")).unwrap());
+        let transient_so =
+            file_disk_usage_bytes(&fs::metadata(mutable.join("compiled.so")).unwrap());
+        state.save(&root, session, StateSaveMode::Replace).unwrap();
+        let old_metrics = pinned.sizes(&process, "child").unwrap();
+        assert_eq!(
+            old_metrics.bin_disk_size_bytes,
+            Some(persisted + transient_bin)
+        );
+        assert_eq!(old_metrics.so_disk_size_bytes, Some(transient_so));
+        let current = IntegrandArtifacts::open(&root)
+            .unwrap()
+            .sizes(&process, "child")
+            .unwrap();
+        assert_eq!(current.bin_disk_size_bytes, Some(transient_bin));
+        assert_eq!(current.so_disk_size_bytes, Some(transient_so));
+    }
 
     #[test]
     fn threshold_rendering_dims_or_hides_non_existing_associations() {

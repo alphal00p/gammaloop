@@ -504,46 +504,57 @@
     ];
     "packages.x86_64-linux.nix-ci-check-alphal00p-docs" = [
       "packages.x86_64-linux.alphal00p-docs-cargo-artifacts"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-doctest" = [
       "packages.x86_64-linux.cargoArtifacts"
       "packages.x86_64-linux.cargoCheckArtifacts"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-clinnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-clinnet"
+      "packages.x86_64-linux.ci-runtime-environment"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-core" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-core"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-ufo-python-runtime"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-docs" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-docs"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-feynkit" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-feynkit"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-integration" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-integration"
+      "packages.x86_64-linux.ci-runtime-environment"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-linnet" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-linnet"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-python-api" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-python-api"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-python-module"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-spenso" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
+      "packages.x86_64-linux.ci-runtime-environment"
       "packages.x86_64-linux.gammaloop-render-data"
     ];
     "packages.x86_64-linux.nix-ci-check-gammaloop-nextest-vakint" = [
       "checks.x86_64-linux.gammaloop-nextest-binaries-vakint"
+      "packages.x86_64-linux.ci-runtime-environment"
     ];
   };
   dependency-discovery = {
@@ -557,7 +568,7 @@
       system = "x86_64-linux";
     };
   };
-  enable = true;
+  enable = false;
   fail-fast = true;
   fail-on-dangling-dependencies = true;
   onlyBuild = [
@@ -576,6 +587,7 @@
     "packages.x86_64-linux.alphal00p-docs-cargo-artifacts"
     "packages.x86_64-linux.cargoArtifacts"
     "packages.x86_64-linux.cargoCheckArtifacts"
+    "packages.x86_64-linux.ci-runtime-environment"
     "packages.x86_64-linux.crate-deps-gammaloop-workspace-hack"
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-builder"
     "packages.x86_64-linux.crate-test-binaries-alphal00p-docs-catalogs"

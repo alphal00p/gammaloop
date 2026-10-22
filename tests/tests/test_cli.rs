@@ -12,7 +12,7 @@ use color_eyre::Result;
 use feynkit_generator::GenerationType;
 use gammaloop_api::{
     CLISettings, OneShot, StateLoadOption,
-    state::{CommandHistory, CommandsBlock, RunHistory},
+    state::{CommandHistory, CommandsBlock, ResolvedStateSnapshot, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
 use gammalooprs::{
@@ -264,7 +264,11 @@ fn run_command_block_substitutes_define_variables() -> Result<()> {
         vec!["run set_display -D level=warn"]
     );
     cli.save_state()?;
-    let persisted = fs::read_to_string(cli.cli_settings.state.folder.join("run.toml"))?;
+    let persisted = fs::read_to_string(
+        ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+            .payload_root()
+            .join("run.toml"),
+    )?;
     assert!(persisted.contains("run set_display -D level=warn"));
     Ok(())
 }
@@ -398,7 +402,11 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
 
     cli.save_state()?;
 
-    let persisted = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
+    let persisted = RunHistory::load(
+        ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+            .payload_root()
+            .join("run.toml"),
+    )?;
     assert_eq!(persisted.command_blocks.len(), 1);
     assert_eq!(persisted.commands.len(), 2);
     assert_eq!(persisted.cli_settings.global, frozen_global);
@@ -798,7 +806,9 @@ fn save_state_writes_global_settings_file() -> Result<()> {
 
     cli.save_state()?;
 
-    let global_settings_path = cli.cli_settings.state.folder.join("global_settings.toml");
+    let global_settings_path = ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+        .payload_root()
+        .join("global_settings.toml");
     let global_settings_contents = fs::read_to_string(&global_settings_path)?;
 
     assert!(global_settings_path.exists());
@@ -1109,7 +1119,11 @@ commands = ["quit -n --override-state $(overwrite)"]
         ControlFlow::Continue(())
     ));
     cli.save_state()?;
-    cli.run_history = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
+    cli.run_history = RunHistory::load(
+        ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+            .payload_root()
+            .join("run.toml"),
+    )?;
     let flow = cli
         .run_command_flow("run quit_template -D overwrite=true")?
         .flow;

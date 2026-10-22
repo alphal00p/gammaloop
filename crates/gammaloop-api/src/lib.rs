@@ -10,6 +10,12 @@
 //! selected. Dropping [`LoadedState`] does not save it. Commands decide whether to mutate the
 //! in-memory state, write an explicitly requested export, or return a save/quit request.
 //!
+//! Saved sessions use version 22: `state_manifest.toml` points to one immutable
+//! directory under `generations/`, containing domain data, history and settings.
+//! Earlier saved-state layouts must be regenerated; there is no legacy loader.
+//! Old committed generations are retained so concurrent readers keep their files.
+//! Only explicit save commands publish a new generation.
+//!
 //! # Embedded lifecycle
 //!
 //! The following example is compile-checked but not run as a doctest because GammaLoop startup
@@ -51,7 +57,7 @@ use clap::{CommandFactory, FromArgMatches, Parser};
 use commands::save::SaveState;
 use commands::Commands;
 
-use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
+use gammalooprs::utils::serde_utils::SHOWDEFAULTS;
 use session::{CliSession, CliSessionState};
 use tracing::{
     configure_file_log_boot_mode, set_file_log_filter, set_file_log_filter_override,
@@ -80,7 +86,13 @@ use gammalooprs::{
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use state::{classify_state_folder, RunHistory, State, StateFolderKind, SyncSettings};
+use state::{
+    resolve_state_folder, ResolvedStateSnapshot, RunHistory, State, StateFolderKind, SyncSettings,
+};
+#[cfg(test)]
+use std::env;
+#[cfg(test)]
+use std::sync::OnceLock;
 use std::{ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
 use std::{fs, fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use walkdir::WalkDir;
@@ -130,19 +142,22 @@ fn is_test_workspace_root(path: &Path) -> bool {
 
 #[cfg(test)]
 pub(crate) fn test_workspace_root() -> &'static Path {
-    static WORKSPACE_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+    static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
 
     WORKSPACE_ROOT
         .get_or_init(|| {
-            let current_dir = std::env::current_dir().ok();
-            let current_exe = std::env::current_exe().ok();
-            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+            let current_dir = env::current_dir().ok();
+            let current_exe = env::current_exe().ok();
+            // Cargo and Nextest remap this at runtime; direct binaries retain the native fallback.
+            let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
+                .map(PathBuf::from)
+                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
 
             let mut candidates = Vec::new();
-            if let Some(dir) = current_dir.clone() {
+            if let Some(dir) = current_dir.as_deref() {
                 candidates.extend(dir.ancestors().map(Path::to_path_buf));
             }
-            if let Some(exe) = current_exe.clone() {
+            if let Some(exe) = current_exe.as_deref() {
                 candidates.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
             }
             candidates.extend(manifest_dir.ancestors().map(Path::to_path_buf));
@@ -1048,8 +1063,8 @@ impl OneShot {
         }
     }
 
-    fn current_state_folder_kind(&self) -> Result<StateFolderKind> {
-        classify_state_folder(&self.state_folder)
+    fn resolve_current_state(&self) -> Result<(StateFolderKind, Option<ResolvedStateSnapshot>)> {
+        resolve_state_folder(&self.state_folder)
     }
 
     fn clean_resolved_state_folder(&self) -> Result<()> {
@@ -1079,7 +1094,7 @@ impl OneShot {
                         "Failed to inspect state path '{}' before cleaning",
                         self.state_folder.display()
                     )
-                })
+                });
             }
         };
 
@@ -1105,11 +1120,14 @@ impl OneShot {
     fn initial_cli_settings_for_startup(
         &self,
         state_folder_kind: &StateFolderKind,
+        snapshot: Option<&ResolvedStateSnapshot>,
         boot_run_history: Option<&RunHistory>,
         settings_file_overrides: &SettingsFileOverrides,
     ) -> Result<CLISettings> {
         let mut cli_settings = match state_folder_kind {
-            StateFolderKind::Saved => Self::load_global_settings_file(&self.state_folder)?,
+            StateFolderKind::Saved => Self::load_global_settings_file(
+                snapshot.ok_or_else(|| eyre!("Missing pinned saved-state snapshot"))?,
+            )?,
             StateFolderKind::Missing | StateFolderKind::Scratch | StateFolderKind::Unmanifested => {
                 boot_run_history
                     .map(|run_history| run_history.cli_settings.clone())
@@ -1193,13 +1211,9 @@ impl OneShot {
         })
     }
 
-    fn load_global_settings_file(state_folder: &std::path::Path) -> Result<CLISettings> {
-        let global_settings_path = state_folder.join(GLOBAL_SETTINGS_FILENAME);
-        match CLISettings::from_file_typed(&global_settings_path) {
-            Ok(settings) => Ok(settings),
-            Err(SerdeFileError::FileError(_)) => Ok(CLISettings::default()),
-            Err(err) => Err(err.into()),
-        }
+    fn load_global_settings_file(snapshot: &ResolvedStateSnapshot) -> Result<CLISettings> {
+        CLISettings::from_file_typed(snapshot.payload_root().join(GLOBAL_SETTINGS_FILENAME))
+            .map_err(Into::into)
     }
 
     fn subcmd_input_string(
@@ -1323,6 +1337,7 @@ impl OneShot {
     fn load_with_boot_context(
         &mut self,
         state_folder_kind: StateFolderKind,
+        snapshot: Option<&ResolvedStateSnapshot>,
         boot_run_history: Option<&RunHistory>,
         settings_file_overrides: &SettingsFileOverrides,
     ) -> Result<(
@@ -1346,6 +1361,7 @@ impl OneShot {
         }
         let startup_cli_settings = self.initial_cli_settings_for_startup(
             &state_folder_kind,
+            snapshot,
             boot_run_history,
             settings_file_overrides,
         )?;
@@ -1355,9 +1371,11 @@ impl OneShot {
             match state_folder_kind {
                 StateFolderKind::Saved => {
                     let load_started = Instant::now();
-                    let mut state = State::load_with_selection(
-                        self.state_folder.clone(),
-                        self.model_file.clone(),
+                    let snapshot =
+                        snapshot.ok_or_else(|| eyre!("Missing pinned saved-state snapshot"))?;
+                    let mut state = State::load_snapshot(
+                        snapshot,
+                        self.model_file.as_deref(),
                         self.trace_logs_filename.clone(),
                         process_selection.as_ref(),
                     )
@@ -1379,23 +1397,16 @@ impl OneShot {
                             );
                     state.activate_loaded_integrand_backends(allow_symjit_fallback)?;
 
-                    let default_runtime = match RuntimeSettings::from_file_typed(
-                        self.state_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
-                    ) {
-                        Ok(a) => a,
-                        Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
-                        Err(e) => return Err(e.into()),
-                    };
-                    let run_path = self.state_folder.join("run.toml");
-                    let run_history = if run_path.exists() {
-                        RunHistory::load(run_path)?
-                    } else {
-                        RunHistory::default()
-                    };
+                    let default_runtime = RuntimeSettings::from_file_typed(
+                        snapshot
+                            .payload_root()
+                            .join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
+                    )?;
+                    let run_history = RunHistory::load(snapshot.payload_root().join("run.toml"))?;
 
                     let load_summary = StateLoadSummary {
                         elapsed: load_started.elapsed(),
-                        serialized_size_bytes: serialized_size_of_path(&self.state_folder),
+                        serialized_size_bytes: serialized_size_of_path(snapshot.payload_root()),
                         total_graphs: total_graph_count(&state),
                     };
 
@@ -1479,12 +1490,13 @@ impl OneShot {
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
         self.clean_resolved_state_folder()?;
-        let state_folder_kind = self.current_state_folder_kind()?;
+        let (state_folder_kind, snapshot) = self.resolve_current_state()?;
         if let StateFolderKind::Invalid(reason) = &state_folder_kind {
             return Err(eyre::eyre!(reason.clone()));
         }
         self.load_with_boot_context(
             state_folder_kind,
+            snapshot.as_ref(),
             boot_run_history.as_ref(),
             &settings_file_overrides,
         )
@@ -1495,7 +1507,7 @@ impl OneShot {
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
         self.clean_resolved_state_folder()?;
-        let state_folder_kind = self.current_state_folder_kind()?;
+        let (state_folder_kind, snapshot) = self.resolve_current_state()?;
         if let StateFolderKind::Invalid(reason) = &state_folder_kind {
             return Err(eyre::eyre!(reason.clone()));
         }
@@ -1509,6 +1521,7 @@ impl OneShot {
             state_load_summary,
         ) = self.load_with_boot_context(
             state_folder_kind,
+            snapshot.as_ref(),
             boot_run_history.as_ref(),
             &settings_file_overrides,
         )?;
@@ -1628,13 +1641,13 @@ impl OneShot {
             )?;
         if requested_active_state_save_after_auto_read_only {
             warn!(
-                "Skipping save state to {} because boot card settings differ from the frozen settings stored in {} and this session was forced into --read-only-state. The active state was left unchanged; save to a path outside the active state folder if you want a separate snapshot.",
+                "Skipping save state to {} because boot card settings differ from the frozen settings stored in saved state {} and this session was forced into --read-only-state. The active state was left unchanged; save to a path outside the active state folder if you want a separate snapshot.",
                 save_state
                     .path
                     .as_deref()
                     .unwrap_or(&cli_settings.state.folder)
                     .display(),
-                cli_settings.state.folder.join("run.toml").display()
+                cli_settings.state.folder.display()
             );
         }
         if !self.no_save_state
@@ -1901,7 +1914,7 @@ mod tests {
 
     use crate::commands::{Duplicate, Remove};
     use crate::settings_tree::serialize_settings_with_defaults;
-    use crate::state::ProcessRef;
+    use crate::state::{ProcessRef, ResolvedStateSnapshot, StateSaveContext, StateSaveMode};
     use crate::tracing::{
         configure_file_log_boot_mode, get_file_log_filter, get_stderr_log_filter,
         set_file_log_filter, set_file_log_filter_override, set_log_format_override, set_log_style,
@@ -2194,7 +2207,13 @@ mod tests {
             )
             .unwrap();
 
-        let persisted = RunHistory::load(state_path.join("run.toml")).unwrap();
+        let persisted = RunHistory::load(
+            ResolvedStateSnapshot::open(&state_path)
+                .unwrap()
+                .payload_root()
+                .join("run.toml"),
+        )
+        .unwrap();
         let commands = persisted
             .commands
             .iter()
@@ -2232,7 +2251,13 @@ mod tests {
             &cli_settings,
         )
         .unwrap();
-        let saved_run_toml = fs::read_to_string(state_path.join("run.toml")).unwrap();
+        let saved_run_toml = fs::read_to_string(
+            ResolvedStateSnapshot::open(&state_path)
+                .unwrap()
+                .payload_root()
+                .join("run.toml"),
+        )
+        .unwrap();
 
         let mut boot_runtime = RuntimeSettings::default();
         boot_runtime.general.mu_r = 29.0;
@@ -2262,7 +2287,13 @@ mod tests {
         one_shot.run("quit -o".to_string()).unwrap();
 
         assert_eq!(
-            fs::read_to_string(state_path.join("run.toml")).unwrap(),
+            fs::read_to_string(
+                ResolvedStateSnapshot::open(&state_path)
+                    .unwrap()
+                    .payload_root()
+                    .join("run.toml")
+            )
+            .unwrap(),
             saved_run_toml
         );
     }
@@ -2901,27 +2932,28 @@ mod tests {
     }
 
     #[test]
-    fn load_global_settings_file_uses_default_when_missing() {
+    fn load_global_settings_file_requires_the_pinned_member() {
         let temp = tempdir().unwrap();
-
         let mut new_settings = CLISettings::default();
         new_settings.global.display_directive = "warn".into();
-        fs::write(
-            temp.path().join(GLOBAL_SETTINGS_FILENAME),
-            toml::to_string_pretty(&new_settings).unwrap(),
-        )
-        .unwrap();
-
-        let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
+        let mut state = State::new_test();
+        state
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &RunHistory::default(),
+                    default_runtime_settings: &RuntimeSettings::default(),
+                    cli_settings: &new_settings,
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        let snapshot = ResolvedStateSnapshot::open(temp.path()).unwrap();
+        let loaded = OneShot::load_global_settings_file(&snapshot).unwrap();
         assert_eq!(loaded.global.display_directive, "warn");
-
-        fs::remove_file(temp.path().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
-        let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
-        assert_eq!(loaded, CLISettings::default());
-        assert_eq!(
-            loaded.global.log_style.log_format,
-            gammalooprs::utils::tracing::LogFormat::Long
-        );
+        fs::remove_file(snapshot.payload_root().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
+        assert!(OneShot::load_global_settings_file(&snapshot).is_err());
+        assert!(ResolvedStateSnapshot::open(temp.path()).is_err());
     }
 
     #[test]

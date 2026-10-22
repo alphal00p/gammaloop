@@ -746,6 +746,8 @@ impl TypstRenderer {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
+
     use super::*;
 
     fn value_dict(fields: impl IntoIterator<Item = (impl Into<String>, TypstValue)>) -> TypstValue {
@@ -1294,24 +1296,34 @@ mod tests {
             .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
-        let gamma_assertions =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let search_root = env::var_os("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| env::current_dir().expect("cannot read the current directory"));
+        let repository = search_root
+            .ancestors()
+            .find(|root| root.join("crates/clinnet/Cargo.toml").is_file())
+            .unwrap_or_else(|| {
+                panic!(
+                    "cannot locate the clinnet workspace from {}; run under Cargo/Nextest or inside the workspace",
+                    search_root.display()
+                )
+            });
+        let resources = repository.join("crates/clinnet/tests/resources");
+        let gamma_assertions = resources.join("gamma-style-behavior.typ");
         renderer
             .compile_template(
                 &gamma_assertions,
                 base.join("gamma-style-assertions.pdf"),
-                &[&repository],
+                &[repository],
             )
             .unwrap();
 
-        let preparation_assertions =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/preparation-behavior.typ");
+        let preparation_assertions = resources.join("preparation-behavior.typ");
         renderer
             .compile_template(
                 &preparation_assertions,
                 base.join("preparation-assertions.pdf"),
-                &[&repository],
+                &[repository],
             )
             .unwrap();
 

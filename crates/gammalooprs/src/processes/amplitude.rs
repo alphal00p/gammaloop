@@ -1,3 +1,6 @@
+use super::OutputPath;
+#[cfg(test)]
+use super::output::{self, SaveStep};
 use feynkit_generator::GenerationType;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -253,6 +256,8 @@ impl Amplitude {
         path: impl AsRef<Path>,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
+        let output = OutputPath::new(path.as_ref())?;
+        output.check_tree()?;
         if let Some(integrand) = &self.integrand {
             integrand.export_standalone(path, settings)?
         } else {
@@ -288,13 +293,27 @@ impl Amplitude {
               path = %path.as_ref().display(),
           )
     )]
-    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
+    pub(crate) fn load(
+        path: impl AsRef<Path>,
+        context: GammaLoopContextContainer,
+        generated: bool,
+    ) -> Result<Self> {
         let binary = fs::read(path.as_ref().join("amp.bin"))?;
         let (mut amp, _): (Self, _) =
             bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
 
-        if path.as_ref().join("integrand").exists() {
+        if amp.integrand.is_some() {
+            return Err(eyre!(
+                "Saved amplitude metadata unexpectedly contains an integrand"
+            ));
+        }
+        if generated {
             let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
+            if integrand.data.name != amp.name {
+                return Err(eyre!(
+                    "Saved generated payload name disagrees with its child metadata"
+                ));
+            }
             amp.integrand = Some(ProcessIntegrand::Amplitude(integrand));
         }
 
@@ -314,9 +333,12 @@ impl Amplitude {
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         info!("Compiling amplitude {}", self.name);
-        let p = path.as_ref().join(&self.name);
+        let p = OutputPath::new(path.as_ref())?
+            .join(&self.name)?
+            .as_path()
+            .to_owned();
 
-        let r = fs::create_dir_all(&p).with_context(|| {
+        let r = OutputPath::new(&p)?.ensure_directory().with_context(|| {
             format!(
                 "Trying to create directory to save amplitude {}",
                 p.display()
@@ -326,6 +348,14 @@ impl Amplitude {
             r?;
         }
         if let Some(integrand) = &mut self.integrand {
+            let root = OutputPath::new(&p)?.join("integrand")?;
+            root.check_tree()?;
+            for id in 0..integrand.graph_count() {
+                let name = integrand
+                    .graph_name_by_id(id)
+                    .ok_or_else(|| eyre!("Missing graph name for compile graph ID {id}"))?;
+                root.join(name)?;
+            }
             let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
             return Ok(compile_times
                 .into_iter()
@@ -347,37 +377,32 @@ impl Amplitude {
           skip_all,
           fields(
               amplitude.name = %self.name,
-              path = %path.as_ref().display(),
+              path = %path.display(),
           )
     )]
-    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = path.as_ref().join(&self.name);
-
-        let r = fs::create_dir_all(&p).with_context(|| {
-            format!(
-                "Trying to create directory to save amplitude {}",
-                p.display()
-            )
-        });
-        if override_existing {
-            r?;
-        }
-
+    pub(super) fn write_snapshot(&mut self, path: &Path) -> Result<()> {
+        let p = OutputPath::new(path)?.join(&self.name)?;
+        p.create_directory()?;
+        let p = p.as_path();
         let integrand = self.integrand.take();
-        if let Some(integrand) = &integrand {
-            integrand.save(&p, override_existing)?;
-        };
-
-        let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
-        if override_existing {
-            fs::write(p.join("amp.bin"), binary)?;
-        } else {
+        // Metadata encodes an absent integrand; restore the live owner on every
+        // ordinary serialization/write failure, without copying evaluators.
+        let result = (|| -> Result<()> {
+            #[cfg(test)]
+            output::save_step(SaveStep::Integrand, &p.join("integrand"))?;
+            if let Some(integrand) = &integrand {
+                integrand.save(p, false)?;
+            }
+            #[cfg(test)]
+            output::save_step(SaveStep::Metadata, &p.join("amp.bin"))?;
+            let binary = bincode::encode_to_vec(&*self, bincode::config::standard())?;
             let mut file = File::create_new(p.join("amp.bin"))?;
             file.write_all(&binary)?;
-        }
-
+            file.flush()?;
+            Ok(())
+        })();
         self.integrand = integrand;
-        Ok(())
+        result
     }
 
     #[instrument(
@@ -2803,6 +2828,7 @@ pub(crate) fn threshold_counterterm_recording_helper(
 #[cfg(test)]
 pub mod test {
 
+    use crate as gammalooprs;
     use std::{
         fs,
         io::Cursor,
@@ -4596,7 +4622,8 @@ pub mod test {
                     "gammalooprs-grouped-amplitude-threshold-{}-{unique}",
                     std::process::id(),
                 ));
-                amplitude.save(&save_root, true).unwrap();
+                fs::create_dir_all(&save_root).unwrap();
+                amplitude.write_snapshot(&save_root).unwrap();
                 let mut state_bytes = Vec::new();
                 State::export(&mut state_bytes).unwrap();
                 let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
@@ -4604,9 +4631,12 @@ pub mod test {
                     model: &model,
                     state_map: &state_map,
                 };
-                let mut loaded =
-                    super::Amplitude::load(save_root.join("grouped_threshold_ownership"), context)
-                        .unwrap();
+                let mut loaded = super::Amplitude::load(
+                    save_root.join("grouped_threshold_ownership"),
+                    context,
+                    true,
+                )
+                .unwrap();
                 let loaded_integrand = loaded.integrand.as_mut().unwrap();
                 loaded_integrand.warm_up(&model).unwrap();
                 inspect_ownership(loaded_integrand);
@@ -4623,8 +4653,8 @@ pub mod test {
     fn raised_amplitude_constituents_reject_different_group_ids() {
         test_initialise().unwrap();
         let model = crate::model::Model::from_path(
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+            gammalooprs::test_workspace_root()
+                .join("assets/models/json/scalars/scalars_2p_3p.json"),
         )
         .unwrap();
         let mut graph = AmplitudeGraph::new(
@@ -4708,8 +4738,8 @@ pub mod test {
             .spawn(|| {
                 test_initialise().unwrap();
                 let model = crate::model::Model::from_path(
-                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-                        .join("../../assets/models/json/scalars/scalars_2p_3p.json"),
+                    gammalooprs::test_workspace_root()
+                        .join("assets/models/json/scalars/scalars_2p_3p.json"),
                 )
                 .unwrap();
                 let mut graph = crate::graph::Graph::import_dot(include_str!("../../../../tests/resources/graphs/dotted_bubble_amp.dot"), &model)
@@ -5026,7 +5056,8 @@ pub mod test {
                     "gammalooprs-raised-amplitude-threshold-{}-{unique}",
                     std::process::id(),
                 ));
-                amplitude.save(&save_root, true).unwrap();
+                fs::create_dir_all(&save_root).unwrap();
+                amplitude.write_snapshot(&save_root).unwrap();
                 let mut state_bytes = Vec::new();
                 State::export(&mut state_bytes).unwrap();
                 let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
@@ -5036,7 +5067,7 @@ pub mod test {
                 };
                 let mut loaded = super::Amplitude::load(
                     save_root.join("generalized_raised_amplitude_threshold"),
-                    context,
+                    context, true,
                 )
                 .unwrap();
                 let loaded_integrand = loaded.integrand.as_mut().unwrap();

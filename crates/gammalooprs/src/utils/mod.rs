@@ -129,6 +129,7 @@ pub mod hyperdual_utils;
 pub mod progress;
 pub mod representations;
 pub mod serde_utils;
+pub mod snapshot;
 pub use progress::{long_running_progress_style, long_running_progress_style_with_eta_warmup};
 /// can be used instead of commenting out code
 #[macro_export]

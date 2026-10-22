@@ -12,11 +12,11 @@ doc-nix:
 
 # Run doctests via Nix (same as CI)
 doctest-nix:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-doctest
+    nix run .#nix-ci-check-gammaloop-doctest
 
 # Run workspace nextest via Nix (same as CI)
 test-nix-all:
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-nextest
+    nix run .#nix-ci-check-gammaloop-nextest
 
 # Run workspace nextest via Nix
 test-nix:
@@ -27,8 +27,11 @@ coverage-nix:
     nix build .#packages.$(nix eval --impure --raw --expr 'builtins.currentSystem').gammaloop-llvm-coverage
 
 # Run all CI checks locally (same as CI)
-ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix
-    nix build --impure .#checks.$(nix eval --impure --raw --expr 'builtins.currentSystem').alphal00p-docs
+ci-checks: clippy-nix fmt-check-nix ci-graph-check doctest-nix test-nix docs-check-nix
+
+# Execute the complete documentation validation/render/publication suite.
+docs-check-nix:
+    nix run .#nix-ci-check-alphal00p-docs
 
 # Check static inputs and upload compiled producers; leave runtime tests to NixCI.
 # See https://nix-ci.com/documentation/nix-ci-cache
@@ -38,26 +41,29 @@ ci-checks-and-upload:
     netrc="${NIXCI_NETRC:-$HOME/.netrc}"
     test -r "$netrc" || { echo 'Set up ~/.netrc or NIXCI_NETRC before uploading.' >&2; exit 1; }
 
-    selection=$(nix eval --impure --raw --expr '
-      let
-        system = builtins.currentSystem;
-        ci = import ./nix/ci.nix {
-          inherit system;
-          workspaceGraph = builtins.fromJSON (builtins.readFile ./nix/ci-workspace-graph.json);
-        };
-      in builtins.concatStringsSep "\n" ci.configuration.onlyBuild
-    ')
-    targets=()
-    while IFS= read -r target; do targets+=(".#$target"); done <<< "$selection"
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 
     # Scheduled builds include static checks, runtime launchers and their producers.
-    # Do not realize test-result checks: NixCI runs them after these inputs arrive.
+    # These outputs prepare runtime jobs; every NixCI launcher executes tests.
     started=$SECONDS
     # Keep all selected closures rooted until the upload finishes, including
     # across the gap between realization and nix copy on a shared daemon.
-    nix build --impure --out-link "$tmp/result" --print-out-paths "${targets[@]}" > "$tmp/outputs"
+    # Resolve the unchanged onlyBuild list through one flake evaluation. This
+    # avoids evaluating a separate .# installable for every selected job.
+    # --impure permits currentSystem and the local flake path, never licensing.
+    nix build --impure --out-link "$tmp/result" --print-out-paths --expr '
+      let
+        flake = builtins.getFlake (toString ./.);
+        system = builtins.currentSystem;
+        ci = import (flake.outPath + "/nix/ci.nix") {
+          inherit system;
+          workspaceGraph = builtins.fromJSON (builtins.readFile (flake.outPath + "/nix/ci-workspace-graph.json"));
+        };
+        lookup = path: flake.inputs.nixpkgs.lib.getAttrFromPath
+          (builtins.filter builtins.isString (builtins.split "\\." path)) flake;
+      in map lookup ci.configuration.onlyBuild
+    ' > "$tmp/outputs"
     printf 'CI static checks and artifact preparation completed (%ss).\n' "$((SECONDS - started))"
 
     # Keep a throwaway XDG_CACHE_HOME so locally remembered unsigned narinfo cannot
