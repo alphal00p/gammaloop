@@ -1,3 +1,4 @@
+use crate as gammalooprs;
 use crate::model::ModelGammaLoopExt;
 use color_eyre::Result;
 use spenso::algebra::complex::Complex;
@@ -140,8 +141,7 @@ fn production_fermi_uv_contributions_match_factorized_pointwise_oracle() -> Resu
     test_initialise()?;
     let mut model = load_generic_model("sm");
     let mut card = crate::model::InputParamCard::from_file(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/models/json/sm/restrict_thermal.json"),
+        gammalooprs::test_workspace_root().join("assets/models/json/sm/restrict_thermal.json"),
     )?;
     model.simplify(&mut card)?;
     let chemical_potential = 5.0;

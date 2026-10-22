@@ -1,25 +1,25 @@
 #[cfg(test)]
 use gammalooprs::integrands::process::EvaluationTarget;
-use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
-    fs::{self},
-    io::{self, IsTerminal},
-    ops::ControlFlow,
-    path::{Path, PathBuf},
-    str::FromStr,
-    sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, Mutex,
-    },
-    thread,
-    time::Duration,
-};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
+#[cfg(test)]
+use std::env;
+use std::fs::{self, File};
+use std::io::{self, ErrorKind, IsTerminal, Write};
+use std::mem;
+use std::ops::ControlFlow;
+use std::path::{Component, Path, PathBuf};
+use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 use clap::Args;
 use color_eyre::{Result, Section};
 use colored::Colorize;
 use eyre::{eyre, Context};
 use feynkit_generator::GenerationType;
+use gammalooprs::utils::snapshot::{GenerationId, ManifestName, SnapshotWriter};
 use gammalooprs::{
     processes::{Amplitude, CrossSection},
     utils::serde_utils::IsDefault,
@@ -28,6 +28,7 @@ use linnet::half_edge::subgraph::{SuBitGraph, SubGraphLike, SubSetLike};
 use schemars::{schema_for, JsonSchema, Schema};
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
+use symbolica::state::State as SymbolicaState;
 #[cfg(not(target_os = "linux"))]
 use sysinfo::{get_current_pid, ProcessRefreshKind, ProcessesToUpdate, System};
 use toml::Value as TomlValue;
@@ -46,14 +47,15 @@ use gammalooprs::{
         GenerationProcessKind, GenerationProgressMode, GenerationProgressModeGuard,
         GenerationProgressObserver, GenerationProgressObserverGuard, GenerationProgressPhase,
         GraphGenerationStats, GraphGroupSelectionMode, GraphGroupSelectionPlan,
-        GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, Process,
-        ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
+        GraphGroupSelectionReport, GraphGroupSelectionSpec, NamedGraphGenerationReport, OutputPath,
+        Process, ProcessCollection, ProcessDefinition, ProcessList, ProcessLoadSelection,
+        ProcessSnapshotIndex,
     },
     settings::{
         global::GenerationSettings, runtime::LockedRuntimeSettings, GlobalSettings, RuntimeSettings,
     },
     utils::{
-        serde_utils::{get_schema_folder, SmartSerde},
+        serde_utils::{get_schema_folder, ShowDefaultsGuard, SmartSerde},
         tracing::{init_bench_tracing, init_test_tracing},
         F,
     },
@@ -68,7 +70,7 @@ use crate::{
     model_parameters::{external_model_parameter_type, validate_model_parameter_type},
     render_smart_toml,
     tracing::{set_file_log_filter, set_log_style, set_stderr_log_filter},
-    CLISettings,
+    CLISettings, DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -176,12 +178,12 @@ struct SelectionSource {
     integrand_name: String,
 }
 
-enum IntegrandCopyPayload {
+enum IntegrandPayload {
     Amplitude(Amplitude),
     CrossSection(CrossSection),
 }
 
-impl IntegrandCopyPayload {
+impl IntegrandPayload {
     fn rename(&mut self, new_name: &str) {
         match self {
             Self::Amplitude(amplitude) => {
@@ -1661,26 +1663,179 @@ const INTEGRAND_GENERATION_SUMMARY_FILE: &str = "generation_summary.json";
 // Version 20 also retains the graph's global numerator and projector interfaces.
 // Version 21 stores fully indexed tensor interfaces without PartialIndex wire tags.
 // Older positional archives must be regenerated; unresolved ports are not assigned indices.
-const CURRENT_STATE_MANIFEST_VERSION: u32 = 21;
+// Version 22 publishes complete sessions as immutable, indexed generations.
+const CURRENT_STATE_MANIFEST_VERSION: u32 = 22;
 const GENERATION_THREAD_STACK_SIZE_BYTES: usize = 32 * 1024 * 1024;
+
+/// Borrowed session members that must commit together with the domain state.
+/// See [`State::save`] for an example.
+#[derive(Debug, Clone, Copy)]
+pub struct StateSaveContext<'a> {
+    pub run_history: &'a RunHistory,
+    pub default_runtime_settings: &'a RuntimeSettings,
+    pub cli_settings: &'a CLISettings,
+}
+
+/// Destination authorization for [`State::save`]. See its example.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StateSaveMode {
+    CreateNew,
+    Replace,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
 struct StateManifest {
     version: u32,
-    #[serde(default)]
+    generation: GenerationId,
+    processes: ProcessSnapshotIndex,
+    files: Vec<PathBuf>,
     ufo_print_symbols: Vec<String>,
-    #[serde(default)]
     linnet_subgraph_print_labels: Vec<String>,
 }
 
-impl Default for StateManifest {
-    fn default() -> Self {
+/// One manifest and its immutable payload root, pinned for an entire operation.
+/// Opening never creates a lockfile or repairs files. Old generations remain
+/// available while another writer commits a new one.
+///
+/// ```no_run
+/// # use gammaloop_api::state::{ResolvedStateSnapshot, State};
+/// # fn main() -> color_eyre::Result<()> {
+/// let snapshot = ResolvedStateSnapshot::open("gammaloop_state".as_ref())?;
+/// let state = State::load_snapshot(&snapshot, None, None, None)?;
+/// # Ok(()) }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ResolvedStateSnapshot {
+    manifest: StateManifest,
+    logical_root: PathBuf,
+    payload_root: PathBuf,
+}
+
+impl ResolvedStateSnapshot {
+    /// Read and validate the commit pointer once. See the example on [`Self`].
+    ///
+    /// # Errors
+    /// Refuses unsupported versions, unsafe paths, invalid membership and missing
+    /// or nonregular inventory members without writing or repairing the state.
+    pub fn open(root: &Path) -> Result<Self> {
+        OutputPath::new(root)?;
+        OutputPath::new(&root.join(STATE_MANIFEST_FILE))?;
+        let manifest = load_state_manifest(root)?;
+        let payload_root = root
+            .canonicalize()
+            .context("Resolving the physical state root")?
+            .join("generations")
+            .join(manifest.generation.as_str());
+        validate_state_layout(&manifest, &payload_root)?;
+        Ok(Self {
+            manifest,
+            logical_root: root.to_owned(),
+            payload_root,
+        })
+    }
+
+    /// Physical immutable directory for all payload reads. See [`Self`].
+    pub fn payload_root(&self) -> &Path {
+        &self.payload_root
+    }
+
+    /// Logical state folder for logs and access policy. See [`Self`].
+    pub fn logical_root(&self) -> &Path {
+        &self.logical_root
+    }
+
+    fn contains_file(&self, relative: &Path) -> bool {
+        self.manifest
+            .files
+            .binary_search_by(|file| file.as_path().cmp(relative))
+            .is_ok()
+    }
+
+    // Display metrics use the pinned inventory, including child metadata, and
+    // must not discover stray files or resolve the commit pointer per child.
+    pub(crate) fn integrand_binary_paths(&self, process: &Process, name: &str) -> Vec<PathBuf> {
+        let kind = match &process.collection {
+            ProcessCollection::Amplitudes(_) => GenerationType::Amplitude,
+            ProcessCollection::CrossSections(_) => GenerationType::CrossSection,
+        };
+        let Some(entry) = self.manifest.processes.processes.iter().find(|entry| {
+            entry.kind == kind
+                && entry.folder_name == process.definition.folder_name
+                && entry.children.iter().any(|child| child.name == name)
+        }) else {
+            return Vec::new();
+        };
+        let root = Path::new("processes")
+            .join(entry.kind_directory())
+            .join(&entry.folder_name)
+            .join(name);
+        self.manifest
+            .files
+            .iter()
+            .filter(|path| {
+                path.starts_with(&root)
+                    && path.extension().is_some_and(|extension| extension == "bin")
+            })
+            .map(|path| self.payload_root.join(path))
+            .collect()
+    }
+}
+
+impl StateManifest {
+    fn new(generation: GenerationId, processes: ProcessSnapshotIndex, files: Vec<PathBuf>) -> Self {
+        // Serialization can register symbols, so collect callbacks only after every
+        // payload has been serialized and Symbolica has been exported.
+        let mut ufo_print_symbols: Vec<_> = SymbolicaState::symbol_iter()
+            .filter(|(symbol, _)| {
+                symbol.get_namespace() == "UFO" && symbol.get_print_function().is_some()
+            })
+            .map(|(symbol, _)| symbol.get_stripped_name().to_owned())
+            .collect();
+        ufo_print_symbols.sort_unstable();
+        let mut linnet_subgraph_print_labels: Vec<_> = SymbolicaState::symbol_iter()
+            .filter(|(symbol, _)| {
+                symbol.get_namespace() == "linnet" && symbol.get_print_function().is_some()
+            })
+            .filter_map(|(symbol, _)| {
+                symbol
+                    .get_stripped_name()
+                    .strip_prefix("S_")
+                    .map(str::to_owned)
+            })
+            .collect();
+        linnet_subgraph_print_labels.sort_unstable();
         Self {
             version: CURRENT_STATE_MANIFEST_VERSION,
-            ufo_print_symbols: Vec::new(),
-            linnet_subgraph_print_labels: Vec::new(),
+            generation,
+            processes,
+            files,
+            ufo_print_symbols,
+            linnet_subgraph_print_labels,
         }
+    }
+
+    fn collect_files(root: &Path) -> Result<Vec<PathBuf>> {
+        let mut pending = vec![root.to_owned()];
+        let mut files = Vec::new();
+        while let Some(directory) = pending.pop() {
+            for entry in fs::read_dir(directory)? {
+                let entry = entry?;
+                let kind = entry.file_type()?;
+                if kind.is_dir() {
+                    pending.push(entry.path());
+                } else if kind.is_file() {
+                    files.push(entry.path().strip_prefix(root)?.to_owned());
+                } else {
+                    return Err(eyre!(
+                        "Nonregular snapshot member {}",
+                        entry.path().display()
+                    ));
+                }
+            }
+        }
+        files.sort();
+        Ok(files)
     }
 }
 
@@ -1703,36 +1858,97 @@ fn ensure_supported_state_manifest_version(manifest: &StateManifest) -> Result<(
     Ok(())
 }
 
-fn validate_state_layout(manifest: &StateManifest, save_path: &Path) -> Result<()> {
+fn validate_state_layout(manifest: &StateManifest, payload_root: &Path) -> Result<()> {
     ensure_supported_state_manifest_version(manifest)?;
-
-    match manifest.version {
-        CURRENT_STATE_MANIFEST_VERSION => {
-            if !save_path.join("symbolica_state.bin").exists() {
-                return Err(eyre!(
-                    "Saved state at '{}' is missing required file symbolica_state.bin",
-                    save_path.display()
-                ));
-            }
-            if !save_path.join("processes").exists() {
-                return Err(eyre!(
-                    "Saved state at '{}' is missing required folder processes/",
-                    save_path.display()
-                ));
-            }
-            if !save_path.join("model.json").exists() {
-                return Err(eyre!(
-                    "Saved state at '{}' is missing required file model.json",
-                    save_path.display()
-                ));
-            }
-            Ok(())
-        }
-        _ => Err(eyre!(
-            "State version {} is not supported by this binary.",
-            manifest.version
-        )),
+    manifest.processes.validate()?;
+    OutputPath::new(payload_root)?;
+    if !payload_root.is_dir() {
+        return Err(eyre!("Missing state generation {}", payload_root.display()));
     }
+    let mut previous: Option<&Path> = None;
+    for relative in &manifest.files {
+        if relative.as_os_str().is_empty()
+            || relative
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_)))
+        {
+            return Err(eyre!(
+                "Invalid snapshot inventory path {}",
+                relative.display()
+            ));
+        }
+        for component in relative.components() {
+            let name = component
+                .as_os_str()
+                .to_str()
+                .ok_or_else(|| eyre!("Non UTF-8 snapshot path"))?;
+            OutputPath::validate_component(name)?;
+        }
+        if previous.is_some_and(|path| path >= relative.as_path()) {
+            return Err(eyre!(
+                "Duplicate or unordered snapshot inventory path {}",
+                relative.display()
+            ));
+        }
+        let path = payload_root.join(relative);
+        OutputPath::new(&path)?;
+        if !fs::symlink_metadata(&path)
+            .with_context(|| format!("Missing snapshot member {}", path.display()))?
+            .is_file()
+        {
+            return Err(eyre!(
+                "Snapshot member is not a regular file: {}",
+                path.display()
+            ));
+        }
+        previous = Some(relative);
+    }
+    let mut required: BTreeSet<PathBuf> = [
+        "symbolica_state.bin",
+        "model.json",
+        "model_parameters.json",
+        "run.toml",
+        DEFAULT_RUNTIME_SETTINGS_FILENAME,
+        GLOBAL_SETTINGS_FILENAME,
+    ]
+    .into_iter()
+    .map(PathBuf::from)
+    .collect();
+    let mut optional_summaries = BTreeSet::new();
+    for process in &manifest.processes.processes {
+        required.extend(process.required_files());
+        let process_root = Path::new("processes")
+            .join(process.kind_directory())
+            .join(&process.folder_name);
+        for child in &process.children {
+            optional_summaries.insert(
+                process_root
+                    .join(&child.name)
+                    .join(INTEGRAND_GENERATION_SUMMARY_FILE),
+            );
+        }
+    }
+    for path in &required {
+        if manifest.files.binary_search(path).is_err() {
+            return Err(eyre!(
+                "State manifest omits required member {}",
+                path.display()
+            ));
+        }
+    }
+    for path in &manifest.files {
+        if !required.contains(path) && !optional_summaries.contains(path) {
+            return Err(eyre!(
+                "State inventory disagrees with process membership: {}",
+                path.display()
+            ));
+        }
+    }
+    OutputPath::new(&payload_root.join("processes"))?;
+    if !payload_root.join("processes").is_dir() {
+        return Err(eyre!("Missing required processes/ folder"));
+    }
+    Ok(())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1755,36 +1971,51 @@ fn is_scratch_state_entry(entry: &fs::DirEntry) -> bool {
 }
 
 pub fn classify_state_folder(save_path: &Path) -> Result<StateFolderKind> {
-    if !save_path.exists() {
-        return Ok(StateFolderKind::Missing);
+    Ok(resolve_state_folder(save_path)?.0)
+}
+
+pub(crate) fn resolve_state_folder(
+    save_path: &Path,
+) -> Result<(StateFolderKind, Option<ResolvedStateSnapshot>)> {
+    OutputPath::new(save_path)?;
+    if !save_path.try_exists()? {
+        return Ok((StateFolderKind::Missing, None));
     }
     if !save_path.is_dir() {
-        return Ok(StateFolderKind::Invalid(format!(
-            "'{}' exists but is not a directory",
-            save_path.display()
-        )));
+        return Ok((
+            StateFolderKind::Invalid(format!(
+                "'{}' exists but is not a directory",
+                save_path.display()
+            )),
+            None,
+        ));
     }
-
     let manifest_path = save_path.join(STATE_MANIFEST_FILE);
-    if manifest_path.exists() {
-        let manifest = load_state_manifest(save_path)?;
-        return Ok(match validate_state_layout(&manifest, save_path) {
-            Ok(()) => StateFolderKind::Saved,
-            Err(err) => StateFolderKind::Invalid(err.to_string()),
-        });
+    match fs::symlink_metadata(&manifest_path) {
+        Ok(_) => {
+            return Ok(match ResolvedStateSnapshot::open(save_path) {
+                Ok(snapshot) => (StateFolderKind::Saved, Some(snapshot)),
+                Err(error) => (StateFolderKind::Invalid(error.to_string()), None),
+            });
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => return Err(error).context("Inspecting the state manifest"),
     }
-
     let mut entries = fs::read_dir(save_path)
         .with_context(|| format!("Trying to read state folder '{}'", save_path.display()))?;
-    if entries.by_ref().all(|entry| {
+    let scratch = entries.all(|entry| {
         entry
             .map(|entry| is_scratch_state_entry(&entry))
             .unwrap_or(false)
-    }) {
-        return Ok(StateFolderKind::Scratch);
-    }
-
-    Ok(StateFolderKind::Unmanifested)
+    });
+    Ok((
+        if scratch {
+            StateFolderKind::Scratch
+        } else {
+            StateFolderKind::Unmanifested
+        },
+        None,
+    ))
 }
 
 fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
@@ -1795,52 +2026,35 @@ fn load_state_manifest(save_path: &Path) -> Result<StateManifest> {
             manifest_path.display()
         )
     })?;
-    let manifest = toml::from_str::<StateManifest>(&raw_manifest).map_err(|error| {
+    let header: TomlValue = toml::from_str(&raw_manifest).with_context(|| {
+        format!(
+            "Trying to parse state manifest file {}",
+            manifest_path.display()
+        )
+    })?;
+    let version = header
+        .get("version")
+        .and_then(TomlValue::as_integer)
+        .ok_or_else(|| eyre!("State manifest is missing field `version`"))?;
+    if version < i64::from(CURRENT_STATE_MANIFEST_VERSION) {
+        return Err(eyre!(
+            "State version {version} cannot be migrated; regenerate the saved state with this gammaloop binary."
+        ));
+    }
+    if version > i64::from(CURRENT_STATE_MANIFEST_VERSION) {
+        return Err(eyre!(
+            "State version {version} is newer than this binary supports (max {}).",
+            CURRENT_STATE_MANIFEST_VERSION
+        ));
+    }
+    let manifest = toml::from_str::<StateManifest>(&raw_manifest).with_context(|| {
         eyre!(
-            "Trying to parse state manifest file {}: {error}",
+            "Trying to parse state manifest file {}",
             manifest_path.display()
         )
     })?;
     ensure_supported_state_manifest_version(&manifest)?;
     Ok(manifest)
-}
-
-fn save_state_manifest(save_path: &Path) -> Result<()> {
-    // Symbolica exports the entire symbol registry, including couplings removed from the
-    // active model by restrictions. Its archive cannot serialize their print callbacks.
-    let mut ufo_print_symbols: Vec<_> = symbolica::state::State::symbol_iter()
-        .filter(|(symbol, _)| {
-            symbol.get_namespace() == "UFO" && symbol.get_print_function().is_some()
-        })
-        .map(|(symbol, _)| symbol.get_stripped_name().to_owned())
-        .collect();
-    ufo_print_symbols.sort_unstable();
-    let mut linnet_subgraph_print_labels: Vec<_> = symbolica::state::State::symbol_iter()
-        .filter(|(symbol, _)| {
-            symbol.get_namespace() == "linnet" && symbol.get_print_function().is_some()
-        })
-        .filter_map(|(symbol, _)| {
-            symbol
-                .get_stripped_name()
-                .strip_prefix("S_")
-                .map(str::to_owned)
-        })
-        .collect();
-    linnet_subgraph_print_labels.sort_unstable();
-    let manifest = StateManifest {
-        ufo_print_symbols,
-        linnet_subgraph_print_labels,
-        ..StateManifest::default()
-    };
-    let raw_manifest =
-        toml::to_string_pretty(&manifest).context("Trying to serialize state manifest to TOML")?;
-    fs::write(save_path.join(STATE_MANIFEST_FILE), raw_manifest).with_context(|| {
-        format!(
-            "Trying to write state manifest file {}",
-            save_path.join(STATE_MANIFEST_FILE).display()
-        )
-    })?;
-    Ok(())
 }
 
 fn integrand_generation_summary_path(
@@ -1891,6 +2105,8 @@ fn generated_integrand_artifact_path(
 }
 
 fn ensure_existing_path_under_root(path: &Path, root: &Path, description: &str) -> Result<PathBuf> {
+    OutputPath::new(root)?;
+    OutputPath::new(path)?;
     let canonical_root = root
         .canonicalize()
         .with_context(|| format!("Trying to resolve artifact cleanup root {}", root.display()))?;
@@ -1954,23 +2170,27 @@ fn remove_dir_if_exists_under_root(path: &Path, root: &Path, description: &str) 
     Ok(true)
 }
 
-fn remove_saved_process_artifacts(root_folder: &Path, process: &Process) -> Result<bool> {
+fn remove_mutable_process_artifacts(root_folder: &Path, process: &Process) -> Result<bool> {
+    OutputPath::validate_component(&process.definition.folder_name)?;
     let root = process_kind_folder(root_folder, process);
     let path = process_artifact_folder(root_folder, process);
-    remove_dir_if_exists_under_root(&path, &root, "saved process artifacts")
+    remove_dir_if_exists_under_root(&path, &root, "mutable process artifacts")
 }
 
-fn remove_saved_integrand_artifacts(
+fn remove_mutable_integrand_artifacts(
     root_folder: &Path,
     process: &Process,
     integrand_name: &str,
 ) -> Result<bool> {
+    OutputPath::validate_component(&process.definition.folder_name)?;
+    OutputPath::validate_component(integrand_name)?;
     let root = process_artifact_folder(root_folder, process);
     let path = integrand_artifact_folder(root_folder, process, integrand_name);
-    remove_dir_if_exists_under_root(&path, &root, "saved integrand artifacts")
+    remove_dir_if_exists_under_root(&path, &root, "mutable integrand artifacts")
 }
 
 fn validate_output_name(value: &str, flag_name: &str) -> Result<()> {
+    OutputPath::validate_component(value).with_context(|| format!("Invalid {flag_name}"))?;
     if value.trim().is_empty() {
         return Err(eyre!("{flag_name} must not be empty"));
     }
@@ -1993,16 +2213,23 @@ fn rename_process_integrand(integrand: Option<&mut ProcessIntegrand>, new_name: 
 }
 
 fn load_integrand_generation_summaries(
-    root_folder: &Path,
+    snapshot: &ResolvedStateSnapshot,
     process_list: &ProcessList,
 ) -> Result<BTreeMap<IntegrandGenerationSummaryKey, IntegrandGenerationSummary>> {
     let mut summaries = BTreeMap::new();
 
     for (process_id, process) in process_list.processes.iter().enumerate() {
+        let saved_process_id = snapshot
+            .manifest
+            .processes
+            .processes
+            .iter()
+            .position(|entry| entry.folder_name == process.definition.folder_name)
+            .ok_or_else(|| eyre!("Loaded process is absent from its pinned snapshot index"))?;
         for integrand_name in process.collection.get_integrand_names() {
             let summary_path =
-                integrand_generation_summary_path(root_folder, process, integrand_name);
-            if !summary_path.exists() {
+                integrand_generation_summary_path(snapshot.payload_root(), process, integrand_name);
+            if !snapshot.contains_file(summary_path.strip_prefix(snapshot.payload_root())?) {
                 continue;
             }
 
@@ -2023,6 +2250,12 @@ fn load_integrand_generation_summaries(
             // selective load renumbers the in-memory process list densely, so the
             // summary must follow its owning process rather than retain a stale id.
             for report in &mut summary.reports {
+                if report.process_id != saved_process_id || report.integrand_name != integrand_name
+                {
+                    return Err(eyre!(
+                        "Saved generation summary disagrees with its owning process/child"
+                    ));
+                }
                 report.process_id = process_id;
             }
             summaries.insert(
@@ -2219,7 +2452,7 @@ impl State {
                 .get_integrand_names()
                 .is_empty();
             if removed_empty_process {
-                self.process_list.processes.remove(process_id);
+                self.process_list.remove_process(process_id)?;
                 self.remove_generation_summaries_for_process(process_id);
             }
 
@@ -2239,7 +2472,7 @@ impl State {
 
     pub fn remove_process(&mut self, process: Option<&ProcessRef>) -> Result<RemovedProcess> {
         let process_id = self.resolve_process_ref(process)?;
-        let removed = self.process_list.processes.remove(process_id);
+        let removed = self.process_list.remove_process(process_id)?;
         self.remove_generation_summaries_for_process(process_id);
         Ok(RemovedProcess {
             process_id,
@@ -2276,7 +2509,7 @@ impl State {
             });
 
         if removed_empty_process {
-            self.process_list.processes.remove(process_id);
+            self.process_list.remove_process(process_id)?;
             self.remove_generation_summaries_for_process(process_id);
         }
 
@@ -2437,6 +2670,8 @@ impl State {
             }
 
             let process_entry = &self.process_list.processes[source.process_id];
+            OutputPath::validate_component(&process_entry.definition.folder_name)?;
+            OutputPath::validate_component(&source.integrand_name)?;
             let integrand_artifact_root = integrand_artifact_folder(
                 context.state_folder,
                 process_entry,
@@ -2596,18 +2831,18 @@ impl State {
         &self,
         source_process_id: usize,
         source_integrand_name: &str,
-    ) -> Result<IntegrandCopyPayload> {
+    ) -> Result<IntegrandPayload> {
         let source_process = &self.process_list.processes[source_process_id];
         match &source_process.collection {
             ProcessCollection::Amplitudes(amplitudes) => amplitudes
                 .get(source_integrand_name)
                 .cloned()
-                .map(IntegrandCopyPayload::Amplitude)
+                .map(IntegrandPayload::Amplitude)
                 .ok_or_else(|| eyre!("Missing source amplitude '{}'", source_integrand_name)),
             ProcessCollection::CrossSections(cross_sections) => cross_sections
                 .get(source_integrand_name)
                 .cloned()
-                .map(IntegrandCopyPayload::CrossSection)
+                .map(IntegrandPayload::CrossSection)
                 .ok_or_else(|| eyre!("Missing source cross section '{}'", source_integrand_name)),
         }
     }
@@ -2618,7 +2853,7 @@ impl State {
         source_process_id: usize,
         output_process_name: &str,
         output_integrand_name: &str,
-        payload: IntegrandCopyPayload,
+        payload: IntegrandPayload,
         clear_existing_processes: bool,
         replace_existing_process: bool,
         state_folder: Option<&Path>,
@@ -2638,7 +2873,7 @@ impl State {
                     ));
                 }
                 let removed_target_artifacts = if let Some(state_folder) = state_folder {
-                    remove_saved_process_artifacts(
+                    remove_mutable_process_artifacts(
                         state_folder,
                         &self.process_list.processes[destination_process_id],
                     )?
@@ -2697,7 +2932,7 @@ impl State {
 
             let removed_target_artifacts = if target_exists {
                 if let Some(state_folder) = state_folder {
-                    remove_saved_integrand_artifacts(
+                    remove_mutable_integrand_artifacts(
                         state_folder,
                         &self.process_list.processes[destination_process_id],
                         output_integrand_name,
@@ -2752,7 +2987,7 @@ impl State {
         source_process_id: usize,
         process_id: usize,
         process_name: &str,
-        payload: IntegrandCopyPayload,
+        payload: IntegrandPayload,
     ) -> Process {
         let source_process = &self.process_list.processes[source_process_id];
         let mut definition = source_process.definition.clone();
@@ -3129,7 +3364,7 @@ impl State {
 
     fn remove_generation_summaries_for_process(&mut self, process_id: usize) {
         let mut updated = BTreeMap::new();
-        for (mut key, mut summary) in std::mem::take(&mut self.generation_summaries) {
+        for (mut key, mut summary) in mem::take(&mut self.generation_summaries) {
             if key.process_id == process_id {
                 continue;
             }
@@ -3169,117 +3404,117 @@ impl State {
             overwrite,
             append,
         } = options;
-        let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
-        if let Some(definition) = &process_definition {
-            if definition.generation_type != generation_type {
-                return Err(eyre!(
-                    "--process-spec describes a {} process, but the imported graph list is {}",
-                    definition.generation_type,
-                    generation_type
-                ));
-            }
+        if overwrite && append {
+            return Err(eyre!("--overwrite and --append cannot be combined"));
         }
-
-        let integrand_base_name = integrand_name.clone().unwrap_or("default".to_string());
-        let process = if let Some(proc_id) = process_id {
-            if proc_id >= self.process_list.processes.len() {
+        let generation_type = Self::infer_graph_list_generation_type(&graphs)?;
+        if process_definition
+            .as_ref()
+            .is_some_and(|definition| definition.generation_type != generation_type)
+        {
+            return Err(eyre!(
+                "--process-spec generation type does not match the imported graph list"
+            ));
+        }
+        let base_name = integrand_name.unwrap_or_else(|| "default".to_owned());
+        let destination = if let Some(id) = process_id {
+            if id >= self.process_list.processes.len() {
                 return Err(eyre!(
-                    "Process ID {} invalid, only {} processes available",
-                    proc_id,
+                    "Process ID {id} invalid, only {} processes available",
                     self.process_list.processes.len()
                 ));
             }
-            Some(&mut self.process_list.processes[proc_id])
+            Some(id)
         } else {
-            let p_name = match process_name {
-                Some(n) => n,
-                None => {
-                    return Err(eyre!(
-                        "Either process ID or process name must be provided when importing graphs"
-                    ));
-                }
-            };
-            if let Some(existing_proc) = self
-                .process_list
+            let name = process_name.as_ref().ok_or_else(|| {
+                eyre!("Either process ID or process name must be provided when importing graphs")
+            })?;
+            self.process_list
                 .processes
-                .iter_mut()
-                .find(|p| p.definition.folder_name == p_name)
-            {
-                Some(existing_proc)
-            } else {
-                let mut process_definition = match process_definition.clone() {
-                    Some(definition) => definition,
-                    None => {
-                        ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?
-                    }
-                };
-                process_definition.process_id = self.process_list.processes.len();
-                let process = Process::from_graph_list(
-                    p_name,
-                    integrand_base_name.clone(),
-                    // TODO: avoid clone here
-                    graphs.clone(),
-                    generation_type,
-                    Some(process_definition),
-                    None,
-                    &self.model,
-                )?;
-
-                self.process_list.add_process(process);
-                None
-            }
+                .iter()
+                .position(|process| &process.definition.folder_name == name)
         };
-        if let Some(p) = process {
-            if let Some(mut imported_definition) = process_definition {
-                imported_definition.folder_name = p.definition.folder_name.clone();
-                imported_definition.process_id = p.definition.process_id;
-                if imported_definition != p.definition {
+        if let Some(id) = destination {
+            let process = &self.process_list.processes[id];
+            let same_kind = matches!(
+                (&process.collection, generation_type),
+                (ProcessCollection::Amplitudes(_), GenerationType::Amplitude)
+                    | (
+                        ProcessCollection::CrossSections(_),
+                        GenerationType::CrossSection
+                    )
+            );
+            if !same_kind {
+                return Err(eyre!(
+                    "Imported graph kind does not match existing process '{}'",
+                    process.definition.folder_name
+                ));
+            }
+            if let Some(mut definition) = process_definition {
+                definition.folder_name = process.definition.folder_name.clone();
+                definition.process_id = process.definition.process_id;
+                if definition != process.definition {
                     return Err(eyre!(
                         "--process-spec does not match existing process '{}'. Import the graphs into a new process or use the same process specification that created this process.",
-                        p.definition.folder_name
+                        process.definition.folder_name
                     ));
                 }
             }
-
-            let existing_names = p.get_integrand_names();
-            let integrand_name = if existing_names.contains(&integrand_base_name.as_str()) {
-                if append {
-                    let mut integrand_i = 0;
-                    while existing_names
-                        .iter()
-                        .any(|ce| *ce == format!("{}_{}", integrand_base_name, integrand_i))
-                    {
-                        integrand_i += 1;
-                    }
-                    format!("{}_{}", integrand_base_name, integrand_i)
-                } else if overwrite {
-                    p.collection.remove_integrand(&integrand_base_name)?;
-                    integrand_base_name.clone()
-                } else {
-                    return Err(eyre!(
-                        "Integrand name '{}' already exists in process '{}', use either --overwrite or --append flag when loading graphs",
-                        integrand_base_name,
-                        p.definition.folder_name
-                    ));
+            let names = process.get_integrand_names();
+            let target_exists = names.contains(&base_name.as_str());
+            let name = if target_exists && append {
+                let mut suffix = 0;
+                while names
+                    .iter()
+                    .any(|name| *name == format!("{base_name}_{suffix}"))
+                {
+                    suffix += 1;
                 }
+                format!("{base_name}_{suffix}")
+            } else if target_exists && !overwrite {
+                return Err(eyre!(
+                    "Integrand name '{}' already exists in process '{}', use either --overwrite or --append flag when loading graphs",
+                    base_name,
+                    process.definition.folder_name
+                ));
             } else {
-                integrand_base_name.clone()
+                base_name
             };
-
-            match generation_type {
-                GenerationType::Amplitude => p
-                    .collection
-                    .add_amplitude(Amplitude::from_graph_list(integrand_name.clone(), graphs)?),
-                GenerationType::CrossSection => {
-                    p.collection
-                        .add_cross_section(CrossSection::from_graph_list(
-                            integrand_name.clone(),
-                            graphs,
-                        )?)
+            // Complete all fallible graph/group/external validation before replacing
+            // the old generated object or clearing its summary.
+            let payload = match generation_type {
+                GenerationType::Amplitude => {
+                    IntegrandPayload::Amplitude(Amplitude::from_graph_list(name.clone(), graphs)?)
                 }
-            }
+                GenerationType::CrossSection => IntegrandPayload::CrossSection(
+                    CrossSection::from_graph_list(name.clone(), graphs)?,
+                ),
+            };
+            let process_name = process.definition.folder_name.clone();
+            payload.insert_into_process(&mut self.process_list.processes[id], &process_name)?;
+            self.generation_summaries
+                .remove(&IntegrandGenerationSummaryKey {
+                    process_id: id,
+                    integrand_name: name,
+                });
+        } else {
+            let name = process_name
+                .ok_or_else(|| eyre!("A process name is required for a new imported process"))?;
+            let definition = match process_definition {
+                Some(definition) => definition,
+                None => ProcessDefinition::from_graph_list(&graphs, generation_type, &self.model)?,
+            };
+            let process = Process::from_graph_list(
+                name,
+                base_name,
+                graphs,
+                generation_type,
+                Some(definition),
+                None,
+                &self.model,
+            )?;
+            self.process_list.add_process(process);
         }
-
         Ok(())
     }
 
@@ -3359,13 +3594,29 @@ impl State {
         trace_logs_filename: Option<String>,
         selection: Option<&ProcessLoadSelection>,
     ) -> Result<Self> {
-        // let root_folder = root_folder.join("gammaloop_state");
-        let manifest = load_state_manifest(&save_path)?;
-        validate_state_layout(&manifest, &save_path)?;
+        let snapshot = ResolvedStateSnapshot::open(&save_path)?;
+        Self::load_snapshot(
+            &snapshot,
+            model_path.as_deref(),
+            trace_logs_filename,
+            selection,
+        )
+    }
+
+    /// Decode all domain members using one pinned generation and StateMap.
+    /// See [`ResolvedStateSnapshot`] for an example.
+    pub fn load_snapshot(
+        snapshot: &ResolvedStateSnapshot,
+        model_path: Option<&Path>,
+        trace_logs_filename: Option<String>,
+        selection: Option<&ProcessLoadSelection>,
+    ) -> Result<Self> {
+        let save_path = snapshot.payload_root();
+        let manifest = &snapshot.manifest;
         // Install GammaLoop's subscriber before importing Symbolica state. Symbolica warnings
         // initialize its fallback subscriber on first use, which would otherwise claim the global
         // tracing dispatch and escape ANSI styling in all subsequent GammaLoop output.
-        let mut loaded_state = State::new(&save_path, trace_logs_filename);
+        let mut loaded_state = State::new(snapshot.logical_root(), trace_logs_filename);
         debug!("Loading state manifest version {}", manifest.version);
 
         // Restore even symbols absent from the restricted model before parsing expressions
@@ -3393,17 +3644,11 @@ impl State {
 
         debug!("Loaded model: {}", model.name());
 
-        let input_param_card = if save_path.join("model_parameters.json").exists() {
-            let a = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
+        let input_param_card = InputParamCard::from_file(save_path.join("model_parameters.json"))?;
+        model.apply_param_card(&input_param_card)?;
 
-            let _ = model.apply_param_card(&a);
-            a
-        } else {
-            model.default_param_card()
-        };
-
-        let symbolica_state = symbolica::state::State::import(
-            &mut fs::File::open(save_path.join("symbolica_state.bin"))
+        let symbolica_state = SymbolicaState::import(
+            &mut File::open(save_path.join("symbolica_state.bin"))
                 .context("Trying to open symbolica state binary")?,
             None,
         )?;
@@ -3413,14 +3658,15 @@ impl State {
             model: &model,
         };
 
-        let process_list = ProcessList::load_with_selection(&save_path, context, selection)
-            .context("Trying to load processList")?;
+        let process_list =
+            ProcessList::load_with_selection(save_path, &manifest.processes, context, selection)
+                .context("Trying to load processList")?;
 
         loaded_state.process_list = process_list;
         loaded_state.model = model;
         loaded_state.model_parameters = input_param_card;
         loaded_state.generation_summaries =
-            load_integrand_generation_summaries(&save_path, &loaded_state.process_list)?;
+            load_integrand_generation_summaries(snapshot, &loaded_state.process_list)?;
         Ok(loaded_state)
     }
 
@@ -3438,7 +3684,7 @@ impl State {
         override_compiled: bool,
         settings: &GlobalSettings,
     ) -> Result<()> {
-        fs::create_dir_all(root_folder)?;
+        OutputPath::new(root_folder)?.ensure_directory()?;
 
         let compile_pool = rayon::ThreadPoolBuilder::new()
             .num_threads(settings.n_cores.compile)
@@ -3449,6 +3695,30 @@ impl State {
     }
 
     fn save_generation_summaries(&self, root_folder: &Path) -> Result<()> {
+        for (key, summary) in &self.generation_summaries {
+            let process = self
+                .process_list
+                .processes
+                .get(key.process_id)
+                .ok_or_else(|| {
+                    eyre!(
+                        "Generation summary has invalid process ID {}",
+                        key.process_id
+                    )
+                })?;
+            if !process
+                .get_integrand_names()
+                .contains(&key.integrand_name.as_str())
+                || summary.reports.iter().any(|report| {
+                    report.process_id != key.process_id
+                        || report.integrand_name != key.integrand_name
+                })
+            {
+                return Err(eyre!(
+                    "Generation summary disagrees with its owning process/child"
+                ));
+            }
+        }
         for (process_id, process) in self.process_list.processes.iter().enumerate() {
             for integrand_name in process.collection.get_integrand_names() {
                 let summary_path =
@@ -3473,13 +3743,6 @@ impl State {
                             summary_path.display()
                         )
                     })?;
-                } else if summary_path.exists() {
-                    fs::remove_file(&summary_path).with_context(|| {
-                        format!(
-                            "Trying to remove stale integrand generation summary {}",
-                            summary_path.display()
-                        )
-                    })?;
                 }
             }
         }
@@ -3487,74 +3750,174 @@ impl State {
         Ok(())
     }
 
+    /// Publish one complete saved session. A failure before manifest replacement
+    /// preserves the previous commit and all its payloads. Committed generations
+    /// are retained for readers; this does not promise power-loss durability.
+    ///
+    /// # Errors
+    /// Refuses protected read-only destinations, unauthorized replacement, busy
+    /// writers and inconsistent process/summary IDs. Serialization and I/O errors
+    /// abandon the unpublished generation and preserve the previous commit.
+    ///
+    /// ```no_run
+    /// # use gammaloop_api::{CLISettings, state::{State, RunHistory, StateSaveContext, StateSaveMode}};
+    /// # use gammalooprs::settings::RuntimeSettings;
+    /// # fn main() -> color_eyre::Result<()> {
+    /// let mut state = State::new_test();
+    /// let history = RunHistory::default();
+    /// let runtime = RuntimeSettings::default();
+    /// let cli = CLISettings::default();
+    /// state.save("new-state".as_ref(), StateSaveContext {
+    ///     run_history: &history, default_runtime_settings: &runtime, cli_settings: &cli,
+    /// }, StateSaveMode::CreateNew)?;
+    /// # Ok(()) }
+    /// ```
     pub fn save(
         &mut self,
-        root_folder: &Path,
-        override_state_file: bool,
-        strict: bool,
+        root: &Path,
+        session: StateSaveContext<'_>,
+        mode: StateSaveMode,
     ) -> Result<()> {
-        // let root_folder = root_folder.join("gammaloop_state");
+        session
+            .cli_settings
+            .ensure_write_target_outside_active_state(root, "save state")?;
+        Self::validate_save_destination(root, mode)?;
+        let mut writer = SnapshotWriter::acquire(root)?;
+        Self::validate_save_destination(root, mode)?;
+        let stage = writer.begin()?;
+        let path = stage.path();
+        let processes = self.process_list.write_snapshot(path)?;
+        #[cfg(test)]
+        snapshot_faults::step("processes")?;
+        self.save_generation_summaries(path)?;
+        #[cfg(test)]
+        snapshot_faults::step("summaries")?;
+        self.model.write_json(path.join("model.json"))?;
+        #[cfg(test)]
+        snapshot_faults::step("model")?;
+        self.model_parameters
+            .to_file(path.join("model_parameters.json"), false)?;
+        #[cfg(test)]
+        snapshot_faults::step("parameters")?;
+        session.run_history.save_toml(path, false, false)?;
+        #[cfg(test)]
+        snapshot_faults::step("history")?;
+        let _show_defaults = ShowDefaultsGuard::new(true);
+        session
+            .default_runtime_settings
+            .to_file(path.join(DEFAULT_RUNTIME_SETTINGS_FILENAME), false)?;
+        #[cfg(test)]
+        snapshot_faults::step("runtime defaults")?;
+        session
+            .cli_settings
+            .to_file(path.join(GLOBAL_SETTINGS_FILENAME), false)?;
+        #[cfg(test)]
+        snapshot_faults::step("global settings")?;
+        let mut symbols = File::create_new(path.join("symbolica_state.bin"))?;
+        SymbolicaState::export(&mut symbols)?;
+        symbols.flush()?;
+        drop(symbols);
+        #[cfg(test)]
+        snapshot_faults::step("Symbolica")?;
+        let manifest = StateManifest::new(
+            stage.id().clone(),
+            processes,
+            StateManifest::collect_files(path)?,
+        );
+        validate_state_layout(&manifest, path)?;
+        let bytes = toml::to_string_pretty(&manifest).context("Serializing state manifest")?;
+        #[cfg(test)]
+        snapshot_faults::step("manifest")?;
+        stage.publish(bytes.as_bytes(), ManifestName::State)?;
+        Ok(())
+    }
 
-        // check if the export root exists, if not create it, if it does return error
-        let mut selected_root_folder = PathBuf::from(root_folder);
-        let mut user_input = String::new();
-        if !root_folder.exists() {
-            fs::create_dir_all(root_folder)?;
-        } else {
-            if strict {
+    fn validate_save_destination(root: &Path, mode: StateSaveMode) -> Result<()> {
+        OutputPath::new(root)?;
+        if !root.try_exists()? {
+            return Ok(());
+        }
+        if !root.is_dir() {
+            return Err(eyre!(
+                "State destination '{}' is not a directory",
+                root.display()
+            ));
+        }
+        if root.join(STATE_MANIFEST_FILE).try_exists()? {
+            // Unsupported archives are never implicitly overwritten or migrated.
+            load_state_manifest(root)?;
+            if mode == StateSaveMode::CreateNew {
                 return Err(eyre!(
-                    "Export root already exists, please choose a different path or remove the existing directory",
+                    "A committed state already exists at '{}'",
+                    root.display()
                 ));
             }
-
-            if !override_state_file {
-                while selected_root_folder.exists() {
-                    println!(
-                        "Gammaloop export root {} already exists. Specify 'o' for overwriting, 'n' for not saving, or '<NEW_PATH>' to specify where to save current state to:",
-                        selected_root_folder.display()
-                    );
-                    user_input.clear();
-                    io::stdin()
-                        .read_line(&mut user_input)
-                        .expect("Could not read user-specified gammaloop state export destination");
-                    //user_input = user_input.trim().into();
-                    match user_input.trim() {
-                        "o" => break,
-                        "n" => {
-                            return Ok(());
-                        }
-                        new_path => {
-                            selected_root_folder = PathBuf::from(new_path);
-                            continue;
+        } else if mode == StateSaveMode::CreateNew {
+            for entry in fs::read_dir(root)? {
+                let entry = entry?;
+                let name = entry.file_name();
+                let kind = entry.file_type()?;
+                let owned = (name == "logs" || name == "generations") && kind.is_dir()
+                    || name == ".snapshot.lock" && kind.is_file();
+                if !owned {
+                    return Err(eyre!(
+                        "State destination '{}' contains unapproved contents",
+                        root.display()
+                    ));
+                }
+                if name == "generations" {
+                    for generation in fs::read_dir(entry.path())? {
+                        let generation = generation?;
+                        let valid_id = generation
+                            .file_name()
+                            .to_str()
+                            .is_some_and(|name| name.parse::<GenerationId>().is_ok());
+                        if !valid_id || !generation.file_type()?.is_dir() {
+                            return Err(eyre!(
+                                "State destination '{}' contains unapproved generation contents",
+                                root.display()
+                            ));
                         }
                     }
                 }
             }
         }
+        Ok(())
+    }
+}
 
-        if selected_root_folder.join(STATE_MANIFEST_FILE).exists() {
-            load_state_manifest(&selected_root_folder)?;
+#[cfg(test)]
+mod snapshot_faults {
+    use std::cell::Cell;
+    use std::io::Error as IoError;
+
+    use color_eyre::Result;
+
+    thread_local! {
+        static FAIL_AFTER: Cell<Option<&'static str>> = const { Cell::new(None) };
+    }
+
+    pub(super) struct Guard;
+
+    impl Guard {
+        pub(super) fn new(member: &'static str) -> Self {
+            assert!(FAIL_AFTER.replace(Some(member)).is_none());
+            Self
         }
-        fs::create_dir_all(&selected_root_folder)?;
+    }
 
-        let mut state_file =
-        // info!("Hi");
-            fs::File::create(selected_root_folder.join("symbolica_state.bin"))?;
+    impl Drop for Guard {
+        fn drop(&mut self) {
+            FAIL_AFTER.set(None);
+        }
+    }
 
-        symbolica::state::State::export(&mut state_file)?;
-        self.process_list
-            .save(&selected_root_folder, override_state_file)?;
-        self.save_generation_summaries(&selected_root_folder)?;
-
-        // let binary = bincode::encode_to_vec(&self.integrands, bincode::config::standard())?;
-        // fs::write(root_folder.join("process_list.bin"), binary)?;?
-        self.model
-            .write_json(selected_root_folder.join("model.json"))?;
-        self.model_parameters.to_file(
-            selected_root_folder.join("model_parameters.json"),
-            override_state_file,
-        )?;
-        save_state_manifest(&selected_root_folder)?;
+    pub(super) fn step(member: &str) -> Result<()> {
+        if FAIL_AFTER.get() == Some(member) {
+            return Err(
+                IoError::other(format!("injected session write failure after {member}")).into(),
+            );
+        }
         Ok(())
     }
 }
@@ -3580,21 +3943,868 @@ mod tests {
         },
         utils::{load_generic_model, serde_utils::SHOWDEFAULTS},
     };
+    use rayon::ThreadPoolBuilder;
     use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
     use symbolica::atom::{Atom, AtomCore};
     use tempfile::tempdir;
+    use walkdir::WalkDir;
 
     use crate::commands::{
         display::Display,
         save::SaveState,
         set::{ProcessSetArgs, Set, SetArgs},
     };
+    use crate::StateLoadOption;
+    use gammalooprs::integrate::{IntegrationCheckpoint, IntegrationWorkspace};
 
     use super::*;
 
     const STATE_LOAD_ORDER_CHILD: &str = "GAMMALOOP_STATE_LOAD_ORDER_CHILD";
     const STATE_LOAD_ORDER_TEST: &str =
         "state::tests::state_load_preserves_ufo_symbols_and_model_values";
+
+    fn snapshot_bytes(snapshot: &ResolvedStateSnapshot) -> BTreeMap<PathBuf, Vec<u8>> {
+        snapshot
+            .manifest
+            .files
+            .iter()
+            .map(|relative| {
+                (
+                    relative.clone(),
+                    fs::read(snapshot.payload_root().join(relative)).unwrap(),
+                )
+            })
+            .collect()
+    }
+
+    fn add_empty_process(state: &mut State, name: &str, kind: GenerationType) {
+        let collection = match kind {
+            GenerationType::Amplitude => {
+                let mut collection = ProcessCollection::Amplitudes(BTreeMap::new());
+                collection
+                    .add_amplitude(Amplitude::from_graph_list("default", Vec::new()).unwrap());
+                collection
+            }
+            GenerationType::CrossSection => {
+                let mut collection = ProcessCollection::CrossSections(BTreeMap::new());
+                collection.add_cross_section(
+                    CrossSection::from_graph_list("default".into(), Vec::new()).unwrap(),
+                );
+                collection
+            }
+        };
+        state.process_list.add_process(Process {
+            definition: ProcessDefinition {
+                folder_name: name.into(),
+                generation_type: kind,
+                ..ProcessDefinition::default()
+            },
+            collection,
+            settings_history: None,
+        });
+    }
+
+    #[test]
+    fn saved_session_write_failures_preserve_previous_generation() {
+        const CHILD: &str = "GAMMALOOP_SESSION_FAILURE_CHILD";
+        if let Some(root) = env::var_os(CHILD) {
+            let snapshot = ResolvedStateSnapshot::open(Path::new(&root)).unwrap();
+            let loaded = State::load_snapshot(&snapshot, None, None, None).unwrap();
+            assert_eq!(loaded.process_list.processes.len(), 2);
+            let runtime = RuntimeSettings::from_file(
+                snapshot
+                    .payload_root()
+                    .join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
+                "runtime",
+            )
+            .unwrap();
+            assert_eq!(runtime.general.mu_r, 11.0);
+            assert_eq!(
+                RunHistory::load(snapshot.payload_root().join("run.toml"))
+                    .unwrap()
+                    .commands
+                    .len(),
+                1
+            );
+            assert_eq!(loaded.generation_summaries.len(), 1);
+            return;
+        }
+        let temp = tempdir().unwrap();
+        let mut state = build_scalar_bubble_diagram_state();
+        add_empty_process(&mut state, "cross", GenerationType::CrossSection);
+        let mut history = RunHistory::default();
+        history
+            .commands
+            .push(CommandHistory::from_raw_string("display settings global").unwrap());
+        let mut runtime = RuntimeSettings::default();
+        runtime.general.mu_r = 11.0;
+        let cli = CLISettings::default();
+        state.generation_summaries.insert(
+            IntegrandGenerationSummaryKey {
+                process_id: 0,
+                integrand_name: "default".into(),
+            },
+            IntegrandGenerationSummary {
+                peak_ram_bytes: 123,
+                reports: Vec::new(),
+            },
+        );
+        state
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &history,
+                    default_runtime_settings: &runtime,
+                    cli_settings: &cli,
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        let old = ResolvedStateSnapshot::open(temp.path()).unwrap();
+        let old_manifest = fs::read(temp.path().join(STATE_MANIFEST_FILE)).unwrap();
+        let old_bytes = snapshot_bytes(&old);
+        state
+            .remove_integrand(&ProcessRef::Id(0), "default")
+            .unwrap();
+        history.commands.clear();
+        runtime.general.mu_r = 29.0;
+        for member in [
+            "processes",
+            "summaries",
+            "model",
+            "parameters",
+            "history",
+            "runtime defaults",
+            "global settings",
+            "Symbolica",
+            "manifest",
+        ] {
+            let fault = snapshot_faults::Guard::new(member);
+            let error = state
+                .save(
+                    temp.path(),
+                    StateSaveContext {
+                        run_history: &history,
+                        default_runtime_settings: &runtime,
+                        cli_settings: &cli,
+                    },
+                    StateSaveMode::Replace,
+                )
+                .unwrap_err();
+            assert!(format!("{error:#}").contains("injected session write failure"));
+            drop(fault);
+            assert_eq!(
+                fs::read(temp.path().join(STATE_MANIFEST_FILE)).unwrap(),
+                old_manifest,
+                "after {member}"
+            );
+            assert_eq!(snapshot_bytes(&old), old_bytes, "after {member}");
+            assert_eq!(
+                fs::read_dir(temp.path().join("generations"))
+                    .unwrap()
+                    .count(),
+                1
+            );
+            let child = Command::new(env::current_exe().unwrap())
+                .args([
+                    "state::tests::saved_session_write_failures_preserve_previous_generation",
+                    "--exact",
+                    "--nocapture",
+                ])
+                .env(CHILD, temp.path())
+                .output()
+                .unwrap();
+            assert!(
+                child.status.success(),
+                "{member}: {}",
+                String::from_utf8_lossy(&child.stderr)
+            );
+        }
+        state
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &history,
+                    default_runtime_settings: &runtime,
+                    cli_settings: &cli,
+                },
+                StateSaveMode::Replace,
+            )
+            .unwrap();
+        let new = ResolvedStateSnapshot::open(temp.path()).unwrap();
+        assert_ne!(old.manifest.generation, new.manifest.generation);
+        assert_eq!(
+            State::load_snapshot(&old, None, None, None)
+                .unwrap()
+                .process_list
+                .processes
+                .len(),
+            2
+        );
+        assert_eq!(
+            State::load_snapshot(&new, None, None, None)
+                .unwrap()
+                .process_list
+                .processes
+                .len(),
+            1
+        );
+        assert_eq!(snapshot_bytes(&old), old_bytes);
+        assert!(RunHistory::load(new.payload_root().join("run.toml"))
+            .unwrap()
+            .commands
+            .is_empty());
+        let loaded_runtime = RuntimeSettings::from_file(
+            new.payload_root().join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
+            "runtime",
+        )
+        .unwrap();
+        assert_eq!(loaded_runtime.general.mu_r, 29.0);
+    }
+
+    #[test]
+    fn saved_session_failed_first_save_and_create_new_refusal_do_not_publish() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("state");
+        let mut state = build_scalar_bubble_diagram_state();
+        let history = RunHistory::default();
+        let runtime = RuntimeSettings::default();
+        let cli = CLISettings::default();
+        let context = StateSaveContext {
+            run_history: &history,
+            default_runtime_settings: &runtime,
+            cli_settings: &cli,
+        };
+        let fault = snapshot_faults::Guard::new("Symbolica");
+        assert!(state
+            .save(&root, context, StateSaveMode::CreateNew)
+            .is_err());
+        drop(fault);
+        assert!(!root.join(STATE_MANIFEST_FILE).exists());
+        assert!(matches!(
+            classify_state_folder(&root).unwrap(),
+            StateFolderKind::Unmanifested
+        ));
+        state
+            .save(&root, context, StateSaveMode::CreateNew)
+            .unwrap();
+        let snapshot = ResolvedStateSnapshot::open(&root).unwrap();
+        let before = snapshot_bytes(&snapshot);
+        let manifest = fs::read(root.join(STATE_MANIFEST_FILE)).unwrap();
+        assert!(state
+            .save(&root, context, StateSaveMode::CreateNew)
+            .is_err());
+        assert_eq!(snapshot_bytes(&snapshot), before);
+        assert_eq!(fs::read(root.join(STATE_MANIFEST_FILE)).unwrap(), manifest);
+        let foreign = temp.path().join("foreign");
+        fs::create_dir(&foreign).unwrap();
+        fs::write(foreign.join("sentinel"), b"preserve").unwrap();
+        assert!(state
+            .save(&foreign, context, StateSaveMode::CreateNew)
+            .is_err());
+        assert_eq!(fs::read_dir(&foreign).unwrap().count(), 1);
+        assert_eq!(fs::read(foreign.join("sentinel")).unwrap(), b"preserve");
+    }
+
+    #[test]
+    fn saved_session_remove_save_reload_is_exact_and_dense() {
+        let temp = tempdir().unwrap();
+        let mut state = build_scalar_bubble_diagram_state();
+        add_empty_process(&mut state, "cross", GenerationType::CrossSection);
+        add_empty_process(&mut state, "last", GenerationType::Amplitude);
+        for process_id in 0..3 {
+            state.generation_summaries.insert(
+                IntegrandGenerationSummaryKey {
+                    process_id,
+                    integrand_name: "default".into(),
+                },
+                IntegrandGenerationSummary {
+                    peak_ram_bytes: process_id as u64,
+                    reports: vec![GeneratedGraphReport {
+                        process_id,
+                        integrand_name: "default".into(),
+                        graph_name: "graph".into(),
+                        stats: GraphGenerationStats::default(),
+                    }],
+                },
+            );
+        }
+        let history = RunHistory::default();
+        let runtime = RuntimeSettings::default();
+        let cli = CLISettings::default();
+        let context = StateSaveContext {
+            run_history: &history,
+            default_runtime_settings: &runtime,
+            cli_settings: &cli,
+        };
+        state
+            .save(temp.path(), context, StateSaveMode::CreateNew)
+            .unwrap();
+        let pool = ThreadPoolBuilder::new().num_threads(1).build().unwrap();
+        for removed_id in [1, 0, 0] {
+            state
+                .remove_process(Some(&ProcessRef::Id(removed_id)))
+                .unwrap();
+            state
+                .save(temp.path(), context, StateSaveMode::Replace)
+                .unwrap();
+            let snapshot = ResolvedStateSnapshot::open(temp.path()).unwrap();
+            fs::create_dir_all(
+                snapshot
+                    .payload_root()
+                    .join("processes/amplitudes/stray/default"),
+            )
+            .unwrap();
+            let mut reloaded = State::load_snapshot(&snapshot, None, None, None).unwrap();
+            assert_eq!(
+                reloaded.process_list.processes.len(),
+                state.process_list.processes.len()
+            );
+            for (id, process) in reloaded.process_list.processes.iter().enumerate() {
+                assert_eq!(process.definition.process_id, id);
+                assert_eq!(
+                    process.definition.folder_name,
+                    state.process_list.processes[id].definition.folder_name
+                );
+                assert_eq!(
+                    ProcessRef::Name(process.definition.folder_name.clone())
+                        .resolve(&reloaded.process_list)
+                        .unwrap(),
+                    id
+                );
+                let summary = &reloaded.generation_summaries[&IntegrandGenerationSummaryKey {
+                    process_id: id,
+                    integrand_name: "default".into(),
+                }];
+                assert!(summary.reports.iter().all(|report| report.process_id == id));
+            }
+            if !reloaded.process_list.processes.is_empty() {
+                let selected_id = reloaded.process_list.processes.len() - 1;
+                let compiled = temp
+                    .path()
+                    .join(format!("compile-{}", reloaded.process_list.processes.len()));
+                reloaded
+                    .process_list
+                    .compile(&compiled, false, Some(selected_id), None, &pool)
+                    .unwrap();
+                for (id, process) in reloaded.process_list.processes.iter().enumerate() {
+                    let directory = match &process.collection {
+                        ProcessCollection::Amplitudes(_) => "amplitudes",
+                        ProcessCollection::CrossSections(_) => "cross_sections",
+                    };
+                    let output = compiled
+                        .join("processes")
+                        .join(directory)
+                        .join(&process.definition.folder_name);
+                    assert_eq!(
+                        output.is_dir(),
+                        id == selected_id,
+                        "compile selection for process ID {id}"
+                    );
+                }
+            }
+        }
+        assert!(State::load(temp.path().to_owned(), None, None)
+            .unwrap()
+            .process_list
+            .processes
+            .is_empty());
+    }
+
+    #[test]
+    fn saved_session_child_removal_saves_exact_membership_to_same_and_new_roots() {
+        let temp = tempdir().unwrap();
+        let saved = temp.path().join("saved");
+        let copied = temp.path().join("copied");
+        let mut state = build_scalar_bubble_diagram_state();
+        if let ProcessCollection::Amplitudes(amplitudes) =
+            &mut state.process_list.processes[0].collection
+        {
+            amplitudes.insert(
+                "second".into(),
+                Amplitude::from_graph_list("second", Vec::new()).unwrap(),
+            );
+        }
+        add_empty_process(&mut state, "cross", GenerationType::CrossSection);
+        if let ProcessCollection::CrossSections(cross_sections) =
+            &mut state.process_list.processes[1].collection
+        {
+            cross_sections.insert(
+                "second".into(),
+                CrossSection::from_graph_list("second".into(), Vec::new()).unwrap(),
+            );
+        }
+        let history = RunHistory::default();
+        let runtime = RuntimeSettings::default();
+        let cli = CLISettings::default();
+        let session = StateSaveContext {
+            run_history: &history,
+            default_runtime_settings: &runtime,
+            cli_settings: &cli,
+        };
+        state
+            .save(&saved, session, StateSaveMode::CreateNew)
+            .unwrap();
+        state
+            .remove_integrand(&ProcessRef::Id(0), "default")
+            .unwrap();
+        state.save(&saved, session, StateSaveMode::Replace).unwrap();
+        state
+            .save(&copied, session, StateSaveMode::CreateNew)
+            .unwrap();
+        for root in [&saved, &copied] {
+            let loaded = State::load(root.to_owned(), None, None).unwrap();
+            assert_eq!(
+                loaded.process_list.processes[0].get_integrand_names(),
+                vec!["second"]
+            );
+            assert_eq!(
+                loaded.process_list.processes[1].get_integrand_names(),
+                vec!["default", "second"]
+            );
+        }
+        state
+            .remove_integrand(&ProcessRef::Id(1), "second")
+            .unwrap();
+        state.save(&saved, session, StateSaveMode::Replace).unwrap();
+        assert_eq!(
+            State::load(saved.clone(), None, None)
+                .unwrap()
+                .process_list
+                .processes[1]
+                .get_integrand_names(),
+            vec!["default"]
+        );
+        state
+            .remove_selected_integrands(Some(&ProcessRef::Name("cross".into())), None)
+            .unwrap();
+        state.save(&saved, session, StateSaveMode::Replace).unwrap();
+        let loaded = State::load(saved.clone(), None, None).unwrap();
+        assert_eq!(loaded.process_list.processes.len(), 1);
+        assert_eq!(loaded.process_list.processes[0].definition.process_id, 0);
+        state
+            .remove_integrand(&ProcessRef::Id(0), "second")
+            .unwrap();
+        state.save(&saved, session, StateSaveMode::Replace).unwrap();
+        assert!(State::load(saved, None, None)
+            .unwrap()
+            .process_list
+            .processes
+            .is_empty());
+    }
+
+    #[test]
+    fn saved_session_rejects_corrupt_inventory_without_selecting_stray_generations() {
+        let temp = tempdir().unwrap();
+        let mut state = build_scalar_bubble_diagram_state();
+        state
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &RunHistory::default(),
+                    default_runtime_settings: &RuntimeSettings::default(),
+                    cli_settings: &CLISettings::default(),
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        let snapshot = ResolvedStateSnapshot::open(temp.path()).unwrap();
+        let original = fs::read(temp.path().join(STATE_MANIFEST_FILE)).unwrap();
+        for corruption in ["duplicate", "missing", "parent", "membership"] {
+            let mut manifest = snapshot.manifest.clone();
+            match corruption {
+                "duplicate" => manifest.files.push(manifest.files[0].clone()),
+                "missing" => manifest
+                    .files
+                    .retain(|path| path != Path::new("global_settings.toml")),
+                "parent" => manifest.files.push(PathBuf::from("../outside")),
+                "membership" => manifest.processes.processes[0].folder_name = "../outside".into(),
+                _ => unreachable!(),
+            }
+            manifest.files.sort();
+            fs::write(
+                temp.path().join(STATE_MANIFEST_FILE),
+                toml::to_string_pretty(&manifest).unwrap(),
+            )
+            .unwrap();
+            assert!(
+                ResolvedStateSnapshot::open(temp.path()).is_err(),
+                "{corruption}"
+            );
+        }
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), original).unwrap();
+        let stray = temp
+            .path()
+            .join("generations/gen-ffffffff-ffffffffffffffffffffffffffffffff-ffffffffffffffff");
+        fs::create_dir(&stray).unwrap();
+        fs::write(stray.join("model.json"), b"stray candidate").unwrap();
+        fs::remove_file(snapshot.payload_root().join("model.json")).unwrap();
+        fs::create_dir(snapshot.payload_root().join("model.json")).unwrap();
+        assert!(ResolvedStateSnapshot::open(temp.path()).is_err());
+    }
+
+    #[test]
+    fn saved_session_selected_startup_is_read_only_and_exports_exact_membership() {
+        let temp = tempdir().unwrap();
+        let saved = temp.path().join("saved");
+        let source = temp.path().join("read-only-source");
+        let mut state = build_scalar_bubble_diagram_state();
+        if let ProcessCollection::Amplitudes(amplitudes) =
+            &mut state.process_list.processes[0].collection
+        {
+            amplitudes.insert(
+                "other".into(),
+                Amplitude::from_graph_list("other", Vec::new()).unwrap(),
+            );
+        }
+        add_empty_process(&mut state, "excluded", GenerationType::Amplitude);
+        add_empty_process(&mut state, "cross", GenerationType::CrossSection);
+        let history = RunHistory::default();
+        let runtime = RuntimeSettings::default();
+        let cli = CLISettings::default();
+        state
+            .save(
+                &saved,
+                StateSaveContext {
+                    run_history: &history,
+                    default_runtime_settings: &runtime,
+                    cli_settings: &cli,
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        let snapshot = ResolvedStateSnapshot::open(&saved).unwrap();
+        // Copy a complete committed snapshot to a root which has never had a
+        // writer. Opening it must not create .snapshot.lock or any other file.
+        let payload = source
+            .join("generations")
+            .join(snapshot.manifest.generation.as_str());
+        for relative in &snapshot.manifest.files {
+            let destination = payload.join(relative);
+            fs::create_dir_all(destination.parent().unwrap()).unwrap();
+            fs::copy(snapshot.payload_root().join(relative), destination).unwrap();
+        }
+        fs::copy(
+            saved.join(STATE_MANIFEST_FILE),
+            source.join(STATE_MANIFEST_FILE),
+        )
+        .unwrap();
+        let before_files = StateManifest::collect_files(&source).unwrap();
+        let before_entries: BTreeSet<_> = WalkDir::new(&source)
+            .into_iter()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .strip_prefix(&source)
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect();
+        let before: BTreeMap<_, _> = before_files
+            .iter()
+            .map(|path| (path.clone(), fs::read(source.join(path)).unwrap()))
+            .collect();
+        let mut loaded = StateLoadOption {
+            state_folder: Some(source.clone()),
+            processes: Some(vec!["cross".into()]),
+            integrands: Some(vec!["scalar_bubble@default".into(), "other".into()]),
+            ..StateLoadOption::default()
+        }
+        .load()
+        .unwrap();
+        assert!(loaded.cli_settings.session.read_only_state);
+        assert_eq!(loaded.cli_settings.state.folder, source);
+        assert_eq!(loaded.state.process_list.processes.len(), 2);
+        assert_eq!(
+            loaded.state.process_list.processes[0].get_integrand_names(),
+            vec!["default", "other"]
+        );
+        assert_eq!(
+            loaded.state.process_list.processes[1]
+                .definition
+                .folder_name,
+            "cross"
+        );
+        assert_eq!(
+            loaded.state.process_list.processes[1].definition.process_id,
+            1
+        );
+        assert!(SaveState::default()
+            .save(
+                &mut loaded.state,
+                &loaded.run_history,
+                &loaded.default_runtime_settings,
+                &loaded.cli_settings
+            )
+            .is_err());
+        assert!(!source.join(".snapshot.lock").exists());
+        assert_eq!(StateManifest::collect_files(&source).unwrap(), before_files);
+        let after_entries: BTreeSet<_> = WalkDir::new(&source)
+            .into_iter()
+            .map(|entry| {
+                entry
+                    .unwrap()
+                    .path()
+                    .strip_prefix(&source)
+                    .unwrap()
+                    .to_owned()
+            })
+            .collect();
+        assert_eq!(after_entries, before_entries);
+        for (path, bytes) in &before {
+            assert_eq!(&fs::read(source.join(path)).unwrap(), bytes);
+        }
+        let exported = temp.path().join("selected-export");
+        loaded
+            .state
+            .save(
+                &exported,
+                StateSaveContext {
+                    run_history: &loaded.run_history,
+                    default_runtime_settings: &loaded.default_runtime_settings,
+                    cli_settings: &loaded.cli_settings,
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        assert_eq!(
+            State::load(exported, None, None)
+                .unwrap()
+                .process_list
+                .processes
+                .len(),
+            2
+        );
+        drop(loaded);
+        assert_eq!(
+            State::load_snapshot(
+                &ResolvedStateSnapshot::open(&source).unwrap(),
+                None,
+                None,
+                None
+            )
+            .unwrap()
+            .process_list
+            .processes
+            .len(),
+            3
+        );
+        assert!(!source.join(".snapshot.lock").exists());
+    }
+
+    #[test]
+    fn graph_import_errors_preserve_generated_target_and_summary() {
+        let temp = tempdir().unwrap();
+        let saved = temp.path().join("saved");
+        let mut state = build_scalar_bubble_diagram_state();
+        let mut settings = GlobalSettings::default();
+        settings.generation.evaluator.compile = false;
+        settings.generation.uv.subtract_uv = false;
+        settings.generation.uv.generate_integrated = false;
+        settings.generation.uv.softct = false;
+        settings.generation.threshold_subtraction.enable_thresholds = false;
+        let runtime = RuntimeSettings::default();
+        let generated = state
+            .generate_integrands(&settings, (&runtime).into())
+            .unwrap();
+        state.record_generation_summary(&generated.reports, generated.resources);
+        let history = RunHistory::default();
+        let cli = CLISettings::default();
+        let session = StateSaveContext {
+            run_history: &history,
+            default_runtime_settings: &runtime,
+            cli_settings: &cli,
+        };
+        state
+            .save(&saved, session, StateSaveMode::CreateNew)
+            .unwrap();
+        let committed = ResolvedStateSnapshot::open(&saved).unwrap();
+        let committed_bytes = snapshot_bytes(&committed);
+        let mut selected = State::load_snapshot(&committed, None, None, None).unwrap();
+        let selection = GraphGroupSelectionSpec::new()
+            .with_master_graph_names(vec![scalar_bubble_master_graph_name(&selected, "default")]);
+        assert!(selected
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Id(0)),
+                Some(&"default".to_owned()),
+                &selection,
+                &GraphGroupSelectionTarget::in_place(),
+                GraphGroupSelectionContext::new(&settings.generation, &saved, true),
+            )
+            .is_err());
+        assert!(selected.process_list.processes[0]
+            .get_integrand("default")
+            .unwrap()
+            .integrand
+            .is_some());
+        selected
+            .select_integrand_graph_groups(
+                Some(&ProcessRef::Id(0)),
+                Some(&"default".to_owned()),
+                &selection,
+                &GraphGroupSelectionTarget::in_place(),
+                GraphGroupSelectionContext::new(&settings.generation, &saved, false),
+            )
+            .unwrap();
+        assert_eq!(snapshot_bytes(&committed), committed_bytes);
+        assert!(selected.generation_summaries.is_empty());
+        let selected_root = temp.path().join("selected");
+        selected
+            .save(&selected_root, session, StateSaveMode::CreateNew)
+            .unwrap();
+        let selected_reload = State::load(selected_root, None, None).unwrap();
+        assert!(selected_reload.process_list.processes[0]
+            .get_integrand("default")
+            .unwrap()
+            .integrand
+            .is_none());
+        assert!(selected_reload.generation_summaries.is_empty());
+        let before = state.process_list.processes[0]
+            .get_integrand("default")
+            .unwrap()
+            .require_generated()
+            .unwrap()
+            .resume_fingerprint()
+            .unwrap();
+        let summary_key = IntegrandGenerationSummaryKey {
+            process_id: 0,
+            integrand_name: "default".into(),
+        };
+        let summary_before = serde_json::to_vec(&state.generation_summaries[&summary_key]).unwrap();
+        let options = GraphImportOptions {
+            process_id: Some(0),
+            process_name: None,
+            process_definition: None,
+            integrand_name: Some("default".into()),
+            overwrite: true,
+            append: false,
+        };
+        let mut incompatible = Graph::from_finalized_runtime_path(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+            &state.model,
+        )
+        .unwrap();
+        incompatible.extend(
+            Graph::from_finalized_runtime_path(
+                crate::test_workspace_root().join("tests/resources/graphs/scalar_box.dot"),
+                &state.model,
+            )
+            .unwrap(),
+        );
+        assert!(state.import_graphs(incompatible, options.clone()).is_err());
+        let cross_model = Model::from_json(include_str!(
+            "../../../assets/models/json/scalars/scalars_2p_3p.json"
+        ))
+        .unwrap();
+        for (name, overwrite, append) in [
+            ("fresh", false, false),
+            ("default", true, false),
+            ("default", false, true),
+        ] {
+            let graphs = Graph::import_dot(
+                include_str!(
+                    "../../../tests/resources/graphs/mass_approach_scalar_self_energy.dot"
+                ),
+                &cross_model,
+            )
+            .unwrap();
+            assert!(state
+                .import_graphs(
+                    graphs,
+                    GraphImportOptions {
+                        integrand_name: Some(name.into()),
+                        overwrite,
+                        append,
+                        ..options.clone()
+                    }
+                )
+                .is_err());
+        }
+        assert!(state
+            .import_graphs(
+                Vec::new(),
+                GraphImportOptions {
+                    append: true,
+                    ..options.clone()
+                }
+            )
+            .is_err());
+        assert_eq!(state.process_list.processes.len(), 1);
+        assert_eq!(
+            state.process_list.processes[0].get_integrand_names(),
+            vec!["default"]
+        );
+        assert_eq!(
+            state.process_list.processes[0]
+                .get_integrand("default")
+                .unwrap()
+                .require_generated()
+                .unwrap()
+                .resume_fingerprint()
+                .unwrap(),
+            before
+        );
+        assert_eq!(
+            serde_json::to_vec(&state.generation_summaries[&summary_key]).unwrap(),
+            summary_before
+        );
+        let append_graphs = Graph::from_finalized_runtime_path(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+            &state.model,
+        )
+        .unwrap();
+        state
+            .import_graphs(
+                append_graphs,
+                GraphImportOptions {
+                    overwrite: false,
+                    append: true,
+                    ..options.clone()
+                },
+            )
+            .unwrap();
+        assert!(state.generation_summaries.contains_key(&summary_key));
+        let appended_key = IntegrandGenerationSummaryKey {
+            process_id: 0,
+            integrand_name: "default_0".into(),
+        };
+        state.generation_summaries.insert(
+            appended_key.clone(),
+            IntegrandGenerationSummary {
+                peak_ram_bytes: 7,
+                reports: Vec::new(),
+            },
+        );
+        let graphs = Graph::from_finalized_runtime_path(
+            crate::test_workspace_root().join("tests/resources/graphs/scalar_bubble.dot"),
+            &state.model,
+        )
+        .unwrap();
+        state.import_graphs(graphs, options).unwrap();
+        assert!(state.process_list.processes[0]
+            .get_integrand("default")
+            .unwrap()
+            .integrand
+            .is_none());
+        assert!(!state.generation_summaries.contains_key(&summary_key));
+        assert!(state.generation_summaries.contains_key(&appended_key));
+        state.save(&saved, session, StateSaveMode::Replace).unwrap();
+        assert_eq!(snapshot_bytes(&committed), committed_bytes);
+        let previous = State::load_snapshot(&committed, None, None, None).unwrap();
+        assert!(previous.process_list.processes[0]
+            .get_integrand("default")
+            .unwrap()
+            .integrand
+            .is_some());
+        let replacement = State::load(saved, None, None).unwrap();
+        assert!(replacement.process_list.processes[0]
+            .get_integrand("default")
+            .unwrap()
+            .integrand
+            .is_none());
+        assert!(!replacement.generation_summaries.contains_key(&summary_key));
+    }
 
     #[cfg(target_os = "linux")]
     #[test]
@@ -3766,16 +4976,31 @@ mod tests {
         for label in ["Dd0E4", "1⦻2"] {
             let _ = SuBitGraph::symbol_from_label(label.to_owned());
         }
-        state.save(temp.path(), true, false).unwrap();
+        state
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &RunHistory::default(),
+                    default_runtime_settings: &RuntimeSettings::default(),
+                    cli_settings: &CLISettings::default(),
+                },
+                StateSaveMode::Replace,
+            )
+            .unwrap();
         let manifest = load_state_manifest(temp.path()).unwrap();
         assert!(manifest
             .ufo_print_symbols
             .contains(&"orphan_ufo_printer".to_owned()));
-        assert!(!fs::read_to_string(temp.path().join("model.json"))
-            .unwrap()
-            .contains("orphan_ufo_printer"));
+        assert!(!fs::read_to_string(
+            ResolvedStateSnapshot::open(temp.path())
+                .unwrap()
+                .payload_root()
+                .join("model.json")
+        )
+        .unwrap()
+        .contains("orphan_ufo_printer"));
 
-        let output = Command::new(std::env::current_exe().unwrap())
+        let output = Command::new(env::current_exe().unwrap())
             .arg(STATE_LOAD_ORDER_TEST)
             .arg("--exact")
             .arg("--nocapture")
@@ -4030,8 +5255,18 @@ mod tests {
                 }
                 if !loaded {
                     let saved = temp.path().join("saved");
-                    state.save(&saved, true, false)?;
-                    let history_path = saved
+                    state.save(
+                        &saved,
+                        StateSaveContext {
+                            run_history: &RunHistory::default(),
+                            default_runtime_settings: &RuntimeSettings::default(),
+                            cli_settings: &CLISettings::default(),
+                        },
+                        StateSaveMode::Replace,
+                    )?;
+                    let saved_snapshot = ResolvedStateSnapshot::open(&saved)?;
+                    let history_path = saved_snapshot
+                        .payload_root()
                         .join("processes")
                         .join(folder)
                         .join("named_export/settings_history.toml");
@@ -5056,7 +6291,17 @@ commands = ["quit -n"]
     #[test]
     fn state_manifest_roundtrip_current_version() {
         let temp = tempdir().unwrap();
-        save_state_manifest(temp.path()).unwrap();
+        State::new_test()
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &RunHistory::default(),
+                    default_runtime_settings: &RuntimeSettings::default(),
+                    cli_settings: &CLISettings::default(),
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
 
         let manifest = load_state_manifest(temp.path()).unwrap();
         assert_eq!(manifest.version, CURRENT_STATE_MANIFEST_VERSION);
@@ -5101,7 +6346,17 @@ commands = ["quit -n"]
             fs::write(&symbolica_state, b"legacy sentinel").unwrap();
             let mut state = State::new_test();
 
-            let err = state.save(temp.path(), true, false).unwrap_err();
+            let err = state
+                .save(
+                    temp.path(),
+                    StateSaveContext {
+                        run_history: &RunHistory::default(),
+                        default_runtime_settings: &RuntimeSettings::default(),
+                        cli_settings: &CLISettings::default(),
+                    },
+                    StateSaveMode::Replace,
+                )
+                .unwrap_err();
             assert!(err.to_string().contains("cannot be migrated"));
             assert_eq!(fs::read(symbolica_state).unwrap(), b"legacy sentinel");
             assert!(!temp.path().join("model.json").exists());
@@ -5111,13 +6366,9 @@ commands = ["quit -n"]
     #[test]
     fn state_manifest_rejects_future_versions() {
         let temp = tempdir().unwrap();
-        let future_manifest = StateManifest {
-            version: CURRENT_STATE_MANIFEST_VERSION + 1,
-            ..StateManifest::default()
-        };
         fs::write(
             temp.path().join(STATE_MANIFEST_FILE),
-            toml::to_string_pretty(&future_manifest).unwrap(),
+            format!("version = {}\n", CURRENT_STATE_MANIFEST_VERSION + 1),
         )
         .unwrap();
 
@@ -5128,16 +6379,7 @@ commands = ["quit -n"]
     #[test]
     fn state_manifest_rejects_pre_feynkit_unification_versions() {
         let temp = tempdir().unwrap();
-        let legacy_manifest = StateManifest {
-            version: 1,
-            ufo_print_symbols: Vec::new(),
-            linnet_subgraph_print_labels: Vec::new(),
-        };
-        fs::write(
-            temp.path().join(STATE_MANIFEST_FILE),
-            toml::to_string_pretty(&legacy_manifest).unwrap(),
-        )
-        .unwrap();
+        fs::write(temp.path().join(STATE_MANIFEST_FILE), "version = 1\n").unwrap();
 
         let err = load_state_manifest(temp.path()).unwrap_err();
         assert!(format!("{err}").contains("regenerate the saved state"));
@@ -5146,10 +6388,17 @@ commands = ["quit -n"]
     #[test]
     fn state_folder_classifies_saved_layout() {
         let temp = tempdir().unwrap();
-        save_state_manifest(temp.path()).unwrap();
-        fs::write(temp.path().join("model.json"), "{}").unwrap();
-        fs::write(temp.path().join("symbolica_state.bin"), []).unwrap();
-        fs::create_dir_all(temp.path().join("processes")).unwrap();
+        State::new_test()
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &RunHistory::default(),
+                    default_runtime_settings: &RuntimeSettings::default(),
+                    cli_settings: &CLISettings::default(),
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
 
         assert_eq!(
             classify_state_folder(temp.path()).unwrap(),
@@ -5396,7 +6645,15 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
         ] {
             let temp = tempdir()?;
             let saved = temp.path().join("saved");
-            state.save(&saved, true, false)?;
+            state.save(
+                &saved,
+                StateSaveContext {
+                    run_history: &RunHistory::default(),
+                    default_runtime_settings: &RuntimeSettings::default(),
+                    cli_settings: &CLISettings::default(),
+                },
+                StateSaveMode::Replace,
+            )?;
             let mut loaded = State::load(saved, None, None)?;
             loaded.activate_loaded_integrand_backends(false)?;
             let integrand = loaded.process_list.get_integrand_mut(0, "default")?;
@@ -5545,13 +6802,10 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                         use crate::commands::integrate::Integrate;
                         use gammalooprs::integrands::Integrand;
                         use gammalooprs::integrate::{
-                            havana_integrate, slot_workspace_path, workspace_manifest_path,
-                            workspace_state_path, HavanaIntegrateRequest, IntegrationSlot,
-                            IntegrationState, IntegrationStatusKind, IntegrationWorkspaceManifest,
-                            IterationBatchingSettings, SamplingCorrelationMode, SlotMeta,
-                            WorkspaceSnapshotControl,
+                            havana_integrate, HavanaIntegrateRequest, IntegrationSlot,
+                            IntegrationStatusKind, IterationBatchingSettings,
+                            SamplingCorrelationMode, SlotMeta, WorkspaceSnapshotControl,
                         };
-                        use gammalooprs::utils::serde_utils::SmartSerde;
                         use symbolica::numerical_integration::{Grid, MonteCarloRng};
 
                         let process = loaded.process_list.get_integrand_mut(0, "default")?;
@@ -5583,8 +6837,9 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                         let mut cli = CLISettings::default();
                         cli.state.folder = temp.path().join("saved");
                         cli.session.set_user_requested_read_only_state(true);
+                        let saved_snapshot = ResolvedStateSnapshot::open(&cli.state.folder)?;
                         let source_path = generated_integrand_artifact_path(
-                            &cli.state.folder,
+                            saved_snapshot.payload_root(),
                             &loaded.process_list.processes[0],
                             "default",
                         )
@@ -5609,10 +6864,8 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                             process_name: result.process.clone(),
                             integrand_name: result.integrand.clone(),
                         };
-                        let manifest = IntegrationWorkspaceManifest::from_file(
-                            workspace_manifest_path(&full.workspace_path),
-                            "reference manifest",
-                        )?;
+                        let full_checkpoint = IntegrationCheckpoint::open(&full.workspace_path)?;
+                        let manifest = full_checkpoint.manifest().workspace.clone();
                         assert_eq!(manifest.reference_gaussians, vec![Some(resolved.clone())]);
                         assert_eq!(
                             manifest.reference_observable_convention.as_deref(),
@@ -5622,15 +6875,7 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                         // Produce a completed first-iteration checkpoint using the same
                         // engine and interrupt hook, then resume it through the CLI owner.
                         let partial = temp.path().join("reference_resume");
-                        fs::create_dir_all(slot_workspace_path(&partial, &meta))?;
-                        fs::copy(
-                            workspace_manifest_path(&full.workspace_path),
-                            workspace_manifest_path(&partial),
-                        )?;
-                        fs::copy(
-                            slot_workspace_path(&full.workspace_path, &meta).join("settings.toml"),
-                            slot_workspace_path(&partial, &meta).join("settings.toml"),
-                        )?;
+                        let mut workspace = IntegrationWorkspace::acquire(&partial, manifest)?;
                         let process = loaded.process_list.get_integrand_mut(0, "default")?.clone();
                         let settings = process.get_settings().clone();
                         let mut slot = IntegrationSlot::new(
@@ -5647,7 +6892,7 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                                 sampling_correlation_mode: SamplingCorrelationMode::Correlated,
                                 n_cores: 2,
                                 state: None,
-                                workspace: Some(partial.clone()),
+                                workspace: Some(&mut workspace),
                                 output_control: WorkspaceSnapshotControl::default(),
                                 batching: IterationBatchingSettings {
                                     batch_size: Some(64),
@@ -5665,9 +6910,11 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                         );
                         gammalooprs::clear_interrupt_request();
                         stopped?;
-                        let bytes = fs::read(workspace_state_path(&partial))?;
-                        let (checkpoint, _): (IntegrationState, usize) =
-                            bincode::decode_from_slice(&bytes, bincode::config::standard())?;
+                        let checkpoint = workspace
+                            .checkpoint()?
+                            .expect("the first completed iteration committed")
+                            .read_state()?;
+                        drop(workspace);
                         assert_eq!(checkpoint.iter, 1);
                         assert_eq!(checkpoint.num_points, 256);
                         // A draw from the trained checkpoint proves that both observables
@@ -5725,7 +6972,9 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                             .seed = 19;
                         let mut physical = command.clone();
                         physical.reference_gaussian = None;
-                        let unchanged = fs::read(workspace_state_path(&partial))?;
+                        let committed = IntegrationCheckpoint::open(&partial)?;
+                        let unchanged = fs::read(committed.state_path())?;
+                        let unchanged_manifest = fs::read(partial.join("manifest.json"))?;
                         assert!(physical
                             .run(&mut loaded, &cli)
                             .unwrap_err()
@@ -5740,7 +6989,8 @@ radial_profile = { kind = "lu_h", approximation = "log_logistic", scale = 2.0, s
                                 .seed,
                             19
                         );
-                        assert_eq!(fs::read(workspace_state_path(&partial))?, unchanged);
+                        assert_eq!(fs::read(committed.state_path())?, unchanged);
+                        assert_eq!(fs::read(partial.join("manifest.json"))?, unchanged_manifest);
                         command.target = vec!["1,2".into()];
                         assert!(command
                             .run(&mut loaded, &cli)

@@ -1,17 +1,16 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
-    fs,
-    path::Path,
+    path::{Path, PathBuf},
 };
 
 // use bincode::{Decode, Encode};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
-use eyre::{Context, eyre};
+use eyre::eyre;
 use rayon::ThreadPool;
 use schemars::JsonSchema;
+use std::result::Result as SnapshotResult;
 use symbolica::evaluate::OptimizationSettings;
-use tracing::debug;
 
 use crate::{
     GammaLoopContext, GammaLoopContextContainer,
@@ -22,6 +21,12 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 use crate::model::Model;
+use feynkit_generator::GenerationType;
+
+mod output;
+pub use output::{OutputPath, OutputPathError};
+mod snapshot_error;
+pub use snapshot_error::ProcessSnapshotError;
 
 mod generation_report;
 pub use generation_report::{
@@ -352,77 +357,162 @@ mod process_load_selection_tests {
     }
 }
 
-fn validate_process_load_selection(
-    processes_root: &Path,
-    selection: &ProcessLoadSelection,
-) -> Result<()> {
-    let mut available: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-    for (directory, binary, kind) in [
-        ("amplitudes", "amp.bin", "amplitude"),
-        ("cross_sections", "cs.bin", "cross section"),
-    ] {
-        let root = processes_root.join(directory);
-        if !root.exists() {
-            continue;
+/// Exact, ordered membership of a saved process list; position is the process ID.
+/// Produced by [`ProcessList::write_snapshot`] and consumed by [`ProcessList::load`].
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessSnapshotIndex {
+    pub processes: Vec<ProcessSnapshotEntry>,
+}
+
+/// One process in [`ProcessSnapshotIndex`]. See [`ProcessList::write_snapshot`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ProcessSnapshotEntry {
+    pub kind: GenerationType,
+    pub folder_name: String,
+    pub children: Vec<IntegrandSnapshotEntry>,
+    pub settings_history: bool,
+}
+
+/// One child and its required generated-payload status in a process snapshot.
+/// See [`ProcessList::write_snapshot`].
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct IntegrandSnapshotEntry {
+    pub name: String,
+    pub generated: bool,
+}
+
+impl ProcessSnapshotEntry {
+    /// Storage category for this process. See [`ProcessList::write_snapshot`].
+    pub fn kind_directory(&self) -> &'static str {
+        match self.kind {
+            GenerationType::Amplitude => "amplitudes",
+            GenerationType::CrossSection => "cross_sections",
         }
-        for entry in
-            fs::read_dir(&root).with_context(|| format!("Error reading {}", root.display()))?
-        {
-            let entry = entry?;
-            if !entry.file_type()?.is_dir() {
-                continue;
-            }
-            let Some(process_name) = entry.file_name().to_str().map(str::to_owned) else {
-                continue;
-            };
-            let child_dirs = process::saved_child_dirs(&entry.path(), binary, kind)?;
-            let names = available.entry(process_name).or_default();
-            names.extend(child_dirs.into_iter().filter_map(|path| {
-                path.file_name()
-                    .and_then(|name| name.to_str())
-                    .map(str::to_owned)
+    }
+
+    /// Required paths relative to a complete state generation.
+    /// See [`ProcessList::write_snapshot`].
+    pub fn required_files(&self) -> Vec<PathBuf> {
+        let root = Path::new("processes")
+            .join(self.kind_directory())
+            .join(&self.folder_name);
+        let mut files = vec![root.join("def.bin")];
+        if self.settings_history {
+            files.push(root.join("settings_history.toml"));
+        }
+        for child in &self.children {
+            let child_root = root.join(&child.name);
+            files.push(child_root.join(match self.kind {
+                GenerationType::Amplitude => "amp.bin",
+                GenerationType::CrossSection => "cs.bin",
             }));
-        }
-    }
-
-    let mut errors = Vec::new();
-
-    for process_name in &selection.process_names {
-        if !available.contains_key(process_name) {
-            errors.push(format!("process '{process_name}' was not found"));
-        }
-    }
-    for selector in &selection.integrand_selectors {
-        match selector {
-            ProcessLoadIntegrandSelector::Name(integrand_name) => {
-                if !available.values().any(|names| names.contains(integrand_name)) {
-                    errors.push(format!("integrand '{integrand_name}' was not found"));
-                }
+            if child.generated {
+                files.push(child_root.join("integrand/integrand.bin"));
+                files.push(child_root.join("integrand/settings.toml"));
             }
-            ProcessLoadIntegrandSelector::Qualified {
-                process_name,
-                integrand_name,
-            } => match available.get(process_name) {
-                None => errors.push(format!(
-                    "process '{process_name}' in selector '{process_name}@{integrand_name}' was not found"
-                )),
-                Some(names) if !names.contains(integrand_name) => errors.push(format!(
-                    "integrand '{integrand_name}' was not found in process '{process_name}'"
-                )),
-                Some(_) => {}
-            },
         }
+        files
+    }
+}
+
+impl ProcessSnapshotIndex {
+    /// Validate unique process names and strictly ordered child names.
+    ///
+    /// # Errors
+    /// Returns a typed membership error or the original path validation error.
+    ///
+    /// ```
+    /// use feynkit_generator::GenerationType;
+    /// use gammalooprs::processes::{
+    ///     OutputPathError, ProcessSnapshotEntry, ProcessSnapshotError, ProcessSnapshotIndex,
+    /// };
+    /// let index = ProcessSnapshotIndex {
+    ///     processes: vec![ProcessSnapshotEntry {
+    ///         kind: GenerationType::Amplitude,
+    ///         folder_name: "../outside".into(),
+    ///         children: vec![],
+    ///         settings_history: false,
+    ///     }],
+    /// };
+    /// assert!(matches!(
+    ///     index.validate(),
+    ///     Err(ProcessSnapshotError::Output(OutputPathError::InvalidComponent(_)))
+    /// ));
+    /// ```
+    pub fn validate(&self) -> SnapshotResult<(), ProcessSnapshotError> {
+        let mut names = BTreeSet::new();
+        for entry in &self.processes {
+            OutputPath::validate_component(&entry.folder_name)?;
+            if !names.insert(&entry.folder_name) {
+                return Err(ProcessSnapshotError::DuplicateProcess {
+                    process: entry.folder_name.clone(),
+                });
+            }
+            let mut previous: Option<&str> = None;
+            for child in &entry.children {
+                OutputPath::validate_component(&child.name)?;
+                if let Some(previous) = previous.filter(|name| *name >= child.name.as_str()) {
+                    return Err(ProcessSnapshotError::InvalidChildOrder {
+                        process: entry.folder_name.clone(),
+                        previous: previous.to_owned(),
+                        child: child.name.clone(),
+                    });
+                }
+                previous = Some(&child.name);
+            }
+        }
+        Ok(())
     }
 
-    if errors.is_empty() {
-        return Ok(());
+    fn validate_selection(
+        &self,
+        selection: &ProcessLoadSelection,
+    ) -> SnapshotResult<(), ProcessSnapshotError> {
+        let available: BTreeMap<_, BTreeSet<_>> = self
+            .processes
+            .iter()
+            .map(|entry| {
+                (
+                    entry.folder_name.as_str(),
+                    entry
+                        .children
+                        .iter()
+                        .map(|child| child.name.as_str())
+                        .collect(),
+                )
+            })
+            .collect();
+        for name in &selection.process_names {
+            if !available.contains_key(name.as_str()) {
+                return Err(ProcessSnapshotError::UnknownProcess {
+                    process: name.clone(),
+                    available: available.keys().map(|name| (*name).to_owned()).collect(),
+                });
+            }
+        }
+        for selector in &selection.integrand_selectors {
+            let found = match selector {
+                ProcessLoadIntegrandSelector::Name(name) => available
+                    .values()
+                    .any(|names| names.contains(name.as_str())),
+                ProcessLoadIntegrandSelector::Qualified {
+                    process_name,
+                    integrand_name,
+                } => available
+                    .get(process_name.as_str())
+                    .is_some_and(|names| names.contains(integrand_name.as_str())),
+            };
+            if !found {
+                return Err(ProcessSnapshotError::UnknownIntegrand {
+                    selector: selector.clone(),
+                });
+            }
+        }
+        Ok(())
     }
-
-    Err(eyre!(
-        "Cannot load the requested process/integrand selection: {}. Available integrands by process: {:?}",
-        errors.join("; "),
-        available,
-    ))
 }
 
 /// Controls which graph details and algebraic transformations are included in DOT exports.
@@ -556,124 +646,121 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        Self::load_with_selection(path, context, None)
+    /// Load only indexed membership, ignoring stray directories.
+    /// See [`Self::write_snapshot`] for the matching serializer.
+    ///
+    /// # Errors
+    /// Distinguishes invalid membership and paths, unreadable or malformed
+    /// definitions/settings, and nested payload errors with their original sources.
+    pub fn load(
+        root: &Path,
+        index: &ProcessSnapshotIndex,
+        context: GammaLoopContextContainer<'_>,
+    ) -> SnapshotResult<Self, ProcessSnapshotError> {
+        Self::load_with_selection(root, index, context, None)
     }
 
+    /// Load the indexed union of selected processes and children, with dense IDs.
+    /// See [`Self::write_snapshot`] for the matching serializer.
+    ///
+    /// # Errors
+    /// Returns [`ProcessSnapshotError::UnknownProcess`] or
+    /// [`ProcessSnapshotError::UnknownIntegrand`] for unknown selectors, in
+    /// addition to the failures documented on [`Self::load`].
     pub fn load_with_selection(
-        path: impl AsRef<Path>,
-        context: GammaLoopContextContainer,
+        root: &Path,
+        index: &ProcessSnapshotIndex,
+        context: GammaLoopContextContainer<'_>,
         selection: Option<&ProcessLoadSelection>,
-    ) -> Result<Self> {
-        let mut process_list = Self::new();
+    ) -> SnapshotResult<Self, ProcessSnapshotError> {
+        index.validate()?;
         let selection = selection.filter(|selection| !selection.is_unrestricted());
-
-        let path = path.as_ref().join("processes");
         if let Some(selection) = selection {
-            validate_process_load_selection(&path, selection)?;
+            index.validate_selection(selection)?;
         }
-        let amplitudes_path = path.join("amplitudes");
-        if amplitudes_path.exists() {
-            debug!("Looking for amplitudes in {}", amplitudes_path.display());
-
-            for entry in fs::read_dir(amplitudes_path).context("Error reading dir")? {
-                let Ok(entry) = entry else {
-                    debug!("Skipping invalid entry");
-
-                    continue;
-                };
-                let path = entry.path();
-                let process_name = path.file_name().and_then(|name| name.to_str());
-                let process_selected = selection.is_some_and(|selection| {
-                    process_name.is_some_and(|name| selection.process_names.contains(name))
-                });
-                let selected_integrands = match (selection, process_name) {
-                    (Some(selection), Some(process_name)) => {
-                        let available = process::saved_child_dirs(&path, "amp.bin", "amplitude")?;
-                        Some(
-                            selection.selected_integrand_names(
-                                process_name,
-                                available.iter().filter_map(|path| {
-                                    path.file_name().and_then(|name| name.to_str())
-                                }),
-                            ),
-                        )
-                    }
-                    _ => None,
-                };
-                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
-                {
-                    continue;
-                }
-                let process = Process::load_amplitude(path, context, selected_integrands.as_ref())
-                    .context("Error loading amplitude")?;
-                process_list.processes.push(process);
+        let mut list = Self::new();
+        for (process_id, entry) in index.processes.iter().enumerate() {
+            let selected = selection.map(|selection| {
+                selection.selected_integrand_names(
+                    &entry.folder_name,
+                    entry.children.iter().map(|child| child.name.as_str()),
+                )
+            });
+            if selected.as_ref().is_some_and(BTreeSet::is_empty)
+                && !selection
+                    .is_some_and(|selection| selection.process_names.contains(&entry.folder_name))
+            {
+                continue;
             }
+            let process =
+                Process::load_snapshot(root, entry, process_id, context, selected.as_ref())?;
+            list.processes.push(process);
         }
-
-        let cross_sections_path = path.join("cross_sections");
-        if cross_sections_path.exists() {
-            debug!(
-                "Looking for cross sections in {}",
-                cross_sections_path.display()
-            );
-
-            for entry in fs::read_dir(cross_sections_path)? {
-                let entry = entry?;
-                let path = entry.path();
-                let process_name = path.file_name().and_then(|name| name.to_str());
-                let process_selected = selection.is_some_and(|selection| {
-                    process_name.is_some_and(|name| selection.process_names.contains(name))
-                });
-                let selected_integrands =
-                    match (selection, process_name) {
-                        (Some(selection), Some(process_name)) => {
-                            let available =
-                                process::saved_child_dirs(&path, "cs.bin", "cross section")?;
-                            Some(selection.selected_integrand_names(
-                                process_name,
-                                available.iter().filter_map(|path| {
-                                    path.file_name().and_then(|name| name.to_str())
-                                }),
-                            ))
-                        }
-                        _ => None,
-                    };
-                if selected_integrands.as_ref().is_some_and(BTreeSet::is_empty) && !process_selected
-                {
-                    continue;
-                }
-                let process =
-                    Process::load_cross_section(path, context, selected_integrands.as_ref())?;
-                process_list.processes.push(process);
-            }
-        }
-        process_list
-            .processes
-            .sort_by_key(|p| p.definition.process_id);
-
         if selection.is_some() {
-            for (process_id, process) in process_list.processes.iter_mut().enumerate() {
-                process.definition.process_id = process_id;
-            }
+            list.reindex_processes();
         }
-
-        Ok(process_list)
+        Ok(list)
     }
 
-    pub fn save(&mut self, folder: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let path = folder.as_ref().join("processes");
-
-        let r = fs::create_dir_all(&path);
-        if !override_existing {
-            r?;
+    /// Serialize into a fresh owned directory, never over an existing payload.
+    ///
+    /// This stages payloads only; the application publishes the complete session.
+    /// The returned index is the only source of load membership.
+    ///
+    /// # Errors
+    /// Validates membership before writing. Refuses existing payload directories;
+    /// path and nested serializer errors retain their original sources.
+    ///
+    /// ```no_run
+    /// # use gammalooprs::processes::ProcessList;
+    /// # use std::error::Error;
+    /// # use std::fs;
+    /// # use std::path::Path;
+    /// # fn main() -> Result<(), Box<dyn Error>> {
+    /// let stage = Path::new("fresh-stage");
+    /// fs::create_dir(stage)?;
+    /// let mut list = ProcessList::new();
+    /// let index = list.write_snapshot(stage)?;
+    /// assert!(index.processes.is_empty());
+    /// # Ok(()) }
+    /// ```
+    pub fn write_snapshot(
+        &mut self,
+        root: &Path,
+    ) -> SnapshotResult<ProcessSnapshotIndex, ProcessSnapshotError> {
+        let index = self.snapshot_index()?;
+        let path = OutputPath::new(root)?.join("processes")?;
+        path.create_directory()?;
+        path.join("amplitudes")?.create_directory()?;
+        path.join("cross_sections")?.create_directory()?;
+        for process in &mut self.processes {
+            process.write_snapshot(path.as_path()).map_err(|source| {
+                ProcessSnapshotError::payload(
+                    "write snapshot payload",
+                    &process.definition.folder_name,
+                    path.as_path(),
+                    source,
+                )
+            })?;
         }
+        Ok(index)
+    }
 
-        for p in self.processes.iter_mut() {
-            p.save(&path, override_existing)?;
+    fn snapshot_index(&self) -> SnapshotResult<ProcessSnapshotIndex, ProcessSnapshotError> {
+        let mut entries = Vec::new();
+        for (id, process) in self.processes.iter().enumerate() {
+            if process.definition.process_id != id {
+                return Err(ProcessSnapshotError::InvalidProcessId {
+                    process: process.definition.folder_name.clone(),
+                    expected: id,
+                    actual: process.definition.process_id,
+                });
+            }
+            entries.push(process.snapshot_entry()?);
         }
-
-        Ok(())
+        let index = ProcessSnapshotIndex { processes: entries };
+        index.validate()?;
+        Ok(index)
     }
 
     pub fn compile(
@@ -686,7 +773,7 @@ impl ProcessList {
     ) -> Result<Vec<GeneratedGraphReport>> {
         let path = folder.as_ref().join("processes");
 
-        let r = fs::create_dir_all(&path);
+        let r = OutputPath::new(&path)?.ensure_directory();
         if !override_existing {
             r?;
         }
@@ -739,7 +826,7 @@ impl ProcessList {
 
     pub fn export_dot(&self, path: impl AsRef<Path>, settings: &DotExportSettings) -> Result<()> {
         let path = path.as_ref().join("processes");
-        fs::create_dir_all(&path)?;
+        OutputPath::new(&path)?.ensure_directory()?;
 
         for p in self.processes.iter() {
             p.export_dot(&path, settings)?;
@@ -757,7 +844,7 @@ impl ProcessList {
         settings: &UVForestExportSettings,
     ) -> Result<()> {
         let path = path.as_ref().join("processes");
-        fs::create_dir_all(&path)?;
+        OutputPath::new(&path)?.ensure_directory()?;
         let process = self.processes.get(process_id).ok_or_else(|| {
             eyre!(
                 "Process id {} is out of range; there are {} processes",
@@ -774,7 +861,7 @@ impl ProcessList {
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
         let path = path.as_ref().join("processes");
-        fs::create_dir_all(&path)?;
+        OutputPath::new(&path)?.ensure_directory()?;
 
         for p in self.processes.iter() {
             p.export_standalone(&path, settings)?;
@@ -782,8 +869,34 @@ impl ProcessList {
         Ok(())
     }
 
-    pub fn add_process(&mut self, process: Process) {
+    pub fn add_process(&mut self, mut process: Process) {
+        process.definition.process_id = self.processes.len();
         self.processes.push(process);
+    }
+
+    /// Remove a process and restore dense positional IDs.
+    ///
+    /// # Errors
+    /// An out-of-range index leaves the list unchanged.
+    ///
+    /// ```
+    /// # use gammalooprs::processes::ProcessList;
+    /// let mut processes = ProcessList::new();
+    /// assert!(processes.remove_process(0).is_err());
+    /// ```
+    pub fn remove_process(&mut self, index: usize) -> Result<Process> {
+        if index >= self.processes.len() {
+            return Err(eyre!("Process ID {index} is out of range"));
+        }
+        let removed = self.processes.remove(index);
+        self.reindex_processes();
+        Ok(removed)
+    }
+
+    fn reindex_processes(&mut self) {
+        for (id, process) in self.processes.iter_mut().enumerate() {
+            process.definition.process_id = id;
+        }
     }
 
     ///preprocesses the process list according to the settings

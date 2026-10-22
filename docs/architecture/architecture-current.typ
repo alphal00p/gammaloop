@@ -1437,24 +1437,30 @@ and is validated against `fjcore` in tests.
 
 == Persistence and Runtime Artifacts
 <persistence-and-runtime-artifacts>
-Primary persisted state lives under `gammaloop_state/` (default):
+The logical state root is `gammaloop_state/` by default. Version 22
+`state_manifest.toml` is its commit pointer: it records the selected immutable
+`generations/<generation>/` directory, the exact ordered process/child membership,
+the payload file inventory and UFO/subgraph printer registrations. Each generation
+contains `model.json`, `model_parameters.json`, `symbolica_state.bin`,
+`processes/` (amplitudes/cross\_sections and integrands), `run.toml`,
+`default_runtime_settings.toml` and `global_settings.toml`, together with saved
+optional history and summaries named by the inventory. Loaders pin this one
+generation instead of discovering membership from mutable directories.
 
-- `state_manifest.toml` (state version and UFO/subgraph printer registrations)
-- `model.json`, `model_parameters.json`
-- `symbolica_state.bin`
-- `processes/` (amplitudes/cross\_sections + integrands)
-- `run.toml`
-- `default_runtime_settings.toml`
-- `global_settings.toml`
-- `logs/`
+The persistent `.snapshot.lock`, tracing `logs/`, integration workspaces and other
+mutable runtime artifacts stay at the logical root, outside saved generations.
+One writer lock and one atomic manifest switch publish a complete session;
+prior committed generations remain available. Failed saves leave the previous
+commit intact. Staging and application buffers are completed before publication;
+there is no directory-sync or power-loss durability guarantee.
 
 For local experimentation, prefer an isolated path such as
 `.local/scratch/<run>/gammaloop_state` to keep repository root output
 minimal.
 
-The persistence model is file-system based and intentionally
-human-editable for settings/run cards, mixed with binary artifacts for
-performance-heavy data.
+The persistence model combines serialized settings/run cards with binary payloads.
+Published generations are immutable: make settings changes through the live session
+or explicit external cards, then save a new generation.
 
 Runtime graph fragments and retained numerator definitions encode both their
 symbolic expression and logical indexed interface, including ranked zeros and
@@ -1464,16 +1470,22 @@ serialized. This changes the positional runtime payload from the former Atom
 fields. Earlier full GammaLoop states must be regenerated; canonical FeynKit model and
 source-recipe artifacts retain their raw-expression contract. Diagram
 DOT/JSON stores expression strings with optional logical-port metadata when
-the expression cannot recover it. Full state version 21 encodes explicit slots
-for runtime numerators, including global numerator/projector interfaces, and
-rejects unresolved ports. Standalone evaluator archives contain lowered scalar programs and
+the expression cannot recover it. Historically, full state version 21 introduced
+explicit slots for runtime numerators, including global numerator/projector
+interfaces, with rejection of unresolved ports. Standalone evaluator archives contain lowered scalar programs and
 neither runtime graphs nor retained tensor definitions, so this change leaves
 their amplitude version 12 and cross-section version 15 unchanged.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 21` currently).
-- Version 21 stores explicit indexed slots rather than partial-index wire tags.
+- State format is versioned with `state_manifest.toml` (`version = 22` currently).
+- Version 22 commits a complete session through one root pointer to an immutable
+  generation, including Symbolica state, exact process/child membership and file
+  inventory, run history and all saved settings. Missing referenced members are
+  corruption errors. The persistent writer lock and mutable logs/runtime outputs
+  remain outside generations at the logical root. Earlier layouts must be
+  regenerated; no legacy loader, dual layout or relabeling fallback is retained.
+- Version 21 introduced explicit indexed slots rather than partial-index wire tags.
   Earlier full states must be regenerated; source recipes are not relabeled
   binary archives. The logical layout and ranked-zero axes remain retained.
 - Version 20 also retains the tensor interfaces of global numerator prefactors
@@ -1518,19 +1530,41 @@ workspace. In a normal writable session its default is
 `<state.folder>/integration_workspace` (therefore normally inside
 `gammaloop_state/`); a read-only session defaults to
 `./integration_workspace[_<state-name>]`, and `--workspace-path`
-overrides the default. `manifest.json` records the selected
-process/integrand slots, targets, effective model parameters, integrand
-fingerprints, training and settings slots, and sampling-correlation
-mode. Authoritative completed-iteration state lives in
-`state/integration_state.bin`; per-slot settings live under
-`integrands/<process>@<integrand>/settings.toml`, and observable resume
-snapshots live under `state/observables/<process>@<integrand>/`.
-User-facing `integration_result.json` and observable files are derived
-snapshots, not the resume authority.
-Workspace manifest version 3 also retains the resolved Gaussian-reference request
-and the convention for physical absolute contributions at distinct channel points.
-Earlier checkpoints require a fresh run; resume verifies the reference request
-before restoring settings or completed-iteration state.
+overrides the default. Version 4 `manifest.json` is the only commit pointer: its
+workspace configuration records the ordered process/integrand slots, targets,
+effective model parameters, generated-integrand fingerprints, reference request,
+training and settings slots, and sampling-correlation mode. The commit envelope
+also names one immutable `generations/<generation>/` directory and binds its
+completed iteration, total point count and exact observable-slot membership.
+There is no old-layout fallback; earlier checkpoints require a fresh run.
+
+Each generation contains `integration_state.bin` with scalar accumulators and
+trained grids, ordered `slots/<index>/settings.toml` members, and
+`slots/<index>/observables.json` for declared observable slots. Settings and
+observable members retain their generation, completed iteration, count and slot
+identity. Resume, summary and returned results pin one descriptor and validate
+its referenced members. A missing declared member is corruption, not a fresh run.
+Existing fingerprint, model-parameter, reference and observable-layout checks
+remain in force before resumed evaluation.
+
+A writer holds an OS lock on the persistent `.snapshot.lock` for the entire run,
+including resume preparation and final result assembly. Contention fails
+immediately. Restart preserves the previous committed generation and lock inode
+until the replacement run publishes a completed iteration. Partial iterations
+and resumes with no new work publish nothing. Summary-only reads create no
+lockfiles, activate no integration worker and write nothing.
+
+Publication writes every internal member before atomically replacing the manifest.
+Older committed generations remain available to pinned readers. The guarantee
+covers cooperating writers and process interruption; it does not promise
+power-loss durability. User-facing `integration_result.json`, latest observable
+JSON/HwU and numerical-stability files, and optional iteration archives refresh
+after the internal checkpoint commits. These files never determine resume state;
+an output-refresh error identifies the iteration already committed so that resume
+continues after it. History settings do not control the internal resume protocol.
+Numerical-stability diagnostics from an interrupted partial iteration live in
+`interrupted/iteration_<index>/numerical_stability/`, leaving committed latest
+views intact. They are never selected for resume or counted as completed archives.
 
 == Configuration Architecture
 <configuration-architecture>

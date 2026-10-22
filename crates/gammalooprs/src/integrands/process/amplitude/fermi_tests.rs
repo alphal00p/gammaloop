@@ -1,3 +1,4 @@
+use crate as gammalooprs;
 use crate::model::ModelGammaLoopExt;
 use crate::utils::test_utils::ModelFixtureExt;
 use std::io::Cursor;
@@ -30,8 +31,7 @@ fn cold_dense_setup() -> Result<(
     test_initialise()?;
     let mut model = load_generic_model("sm");
     let mut card = crate::model::InputParamCard::from_file(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../assets/models/json/sm/restrict_thermal.json"),
+        gammalooprs::test_workspace_root().join("assets/models/json/sm/restrict_thermal.json"),
     )?;
     model.simplify(&mut card)?;
     let global: GlobalSettings = toml::from_str(

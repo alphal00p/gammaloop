@@ -1,6 +1,9 @@
 //! Emit one pyo3-stub-gen inventory as a deterministic checked-in stub.
 
-use std::{env, error::Error, fs, path::PathBuf};
+use std::env;
+use std::error::Error;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 #[cfg(any(
     feature = "feynkit",
@@ -71,22 +74,11 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join("\n");
     normalized.push('\n');
     let mut outputs = vec![output];
-    match component.as_str() {
-        "feynkit-community" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("../feynkit-py/python/symbolica/community/hepkit/__init__.pyi"),
-        ),
-        "linnet-graph" => outputs.extend([
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../linnet-py/python/symbolica/community/graph/__init__.pyi"),
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi"),
-        ]),
-        "spynso3" => outputs.push(
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
-                "../../examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi",
-            ),
-        ),
-        _ => {}
-    }
+    let start = match env::var_os("CARGO_MANIFEST_DIR") {
+        Some(directory) => PathBuf::from(directory),
+        None => env::current_dir()?,
+    };
+    outputs.extend(shared_stub_outputs(&component, &start)?);
     outputs.sort();
     outputs.dedup();
     for output in outputs {
@@ -115,6 +107,36 @@ fn main() -> Result<(), Box<dyn Error>> {
         }
     }
     Ok(())
+}
+
+// The explicit output stays caller-owned; paired package snapshots belong to this runtime workspace.
+fn shared_stub_outputs(component: &str, start: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+    let paths: &[&str] = match component {
+        "feynkit-community" => {
+            &["crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi"]
+        }
+        "linnet-graph" => &[
+            "crates/linnet-py/python/symbolica/community/graph/__init__.pyi",
+            "examples/notebooks/symbolica-host/python/symbolica/community/graph/__init__.pyi",
+        ],
+        "spynso3" => {
+            &["examples/notebooks/symbolica-host/python/symbolica/community/tensor/__init__.pyi"]
+        }
+        _ => return Ok(Vec::new()),
+    };
+    let root = start
+        .ancestors()
+        .find(|root| {
+            root.join("Cargo.toml").is_file()
+                && root.join("docs/products/registry.toml").is_file()
+        })
+        .ok_or_else(|| {
+            format!(
+                "no documentation workspace containing Cargo.toml and docs/products/registry.toml at or above {}",
+                start.display()
+            )
+        })?;
+    Ok(paths.iter().map(|path| root.join(path)).collect())
 }
 
 #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]

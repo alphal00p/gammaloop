@@ -12,10 +12,10 @@ mod provenance_tests;
 #[cfg(feature = "watch")]
 pub use watch::WatchRequest;
 
+use std::io::{ErrorKind, Result as IoResult, Write};
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     env, fs,
-    io::Write,
     ops::Range,
     path::{Component, Path, PathBuf},
     process::{Command, Stdio},
@@ -53,6 +53,9 @@ const TALKS_SCHEMA_VERSION: u32 = 1;
 const DEVELOPER_SCHEMA_VERSION: u32 = 3;
 const LEGACY_PROSE_SCHEMA_VERSION: u32 = 1;
 const PUBLICATION_SCHEMA_VERSION: u32 = 1;
+// This marker grants ownership of the entire output tree, including stale files.
+const GENERATED_OUTPUT_MARKER: &str = ".alphal00p-docs-output";
+const GENERATED_OUTPUT_SIGNATURE: &[u8] = b"alphal00p generated documentation output v1\n";
 const PUBLISHED_DOCS_ROOT: &str = "https://alphal00p.github.io/gammaloop";
 const STRICT_RUSTDOC_FLAGS: &str = "-D rustdoc::broken_intra_doc_links \
     -D rustdoc::invalid_html_tags -D rustdoc::bare_urls";
@@ -86,6 +89,9 @@ pub enum BuildChannel {
 pub struct BuildRequest {
     pub product: String,
     pub channel: BuildChannel,
+    /// New or empty destination, or a tree marked by a prior successful build.
+    /// The `.alphal00p-docs-output` marker grants ownership of the entire tree.
+    /// A nonempty unmarked directory is never taken over by a build.
     pub output: PathBuf,
     pub snapshot_tag: Option<String>,
     pub include_rustdoc: bool,
@@ -663,13 +669,47 @@ fn interface_guide_title(product_title: &str, surface: &str) -> String {
 }
 
 impl SiteBuilder {
+    /// Locate the documentation workspace from Cargo's runtime package directory or cwd.
+    ///
+    /// Direct repository invocations can run from the root or any descendant directory.
+    ///
+    /// ```no_run
+    /// use alphal00p_docs_builder::SiteBuilder;
+    /// # use eyre::Result;
+    /// # fn main() -> Result<()> {
+    /// let builder = SiteBuilder::discover()?;
+    /// builder.check()?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the runtime context has no documentation workspace, or its
+    /// configuration cannot be loaded.
     pub fn discover() -> Result<Self> {
-        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .context("documentation builder is not inside a workspace")?
-            .to_path_buf();
+        let start = match env::var_os("CARGO_MANIFEST_DIR") {
+            Some(directory) => PathBuf::from(directory),
+            None => env::current_dir().context("failed to read documentation builder cwd")?,
+        };
+        let root = Self::workspace_root(&start)?;
         Self::load(root)
+    }
+
+    fn workspace_root(start: &Path) -> Result<PathBuf> {
+        start
+            .ancestors()
+            .find(|root| {
+                root.join("Cargo.toml").is_file()
+                    && root.join("docs/products/registry.toml").is_file()
+            })
+            .map(Path::to_path_buf)
+            .with_context(|| {
+                format!(
+                    "no documentation workspace containing Cargo.toml and docs/products/registry.toml at or above {}",
+                    start.display()
+                )
+            })
     }
 
     fn load(root: PathBuf) -> Result<Self> {
@@ -1864,7 +1904,9 @@ impl SiteBuilder {
                 self.check_with_catalogs(ComponentCatalogSource::Generate(
                     generated_catalogs.path(),
                 ))?;
-                replace_cached_tree(generated_catalogs.path(), cache)?;
+                replace_staged_tree(generated_catalogs.path(), cache, |from, to| {
+                    fs::rename(from, to)
+                })?;
                 cache
             }
             ComponentCatalogCache::Reuse(cache) => {
@@ -1915,32 +1957,26 @@ impl SiteBuilder {
         let requested_output = absolute_from(&self.root, &request.output);
         let resolved_output = ensure_safe_output(&self.root, &requested_output)?;
         let snapshot_build = scope == BuildScope::FullSite && tag.is_some();
-        let isolated_work = if scope == BuildScope::ProductPreview || snapshot_build {
-            let target = self.root.join("target");
-            fs::create_dir_all(&target)?;
-            let work = TempDirBuilder::new()
-                .prefix(if scope == BuildScope::ProductPreview {
-                    "alphal00p-product-preview-"
-                } else {
-                    "alphal00p-snapshot-build-"
-                })
-                .tempdir_in(target)?;
-            let resolved_work = fs::canonicalize(work.path())?;
-            ensure!(
-                !resolved_work.starts_with(&resolved_output)
-                    && !resolved_output.starts_with(&resolved_work),
-                "documentation output overlaps isolated build workspace {}",
-                work.path().display()
-            );
-            Some(work)
+        let target = self.root.join("target");
+        fs::create_dir_all(&target)?;
+        let work = TempDirBuilder::new()
+            .prefix("alphal00p-site-build-")
+            .tempdir_in(target)?;
+        let resolved_work = fs::canonicalize(work.path())?;
+        ensure!(
+            !resolved_work.starts_with(&resolved_output)
+                && !resolved_output.starts_with(&resolved_work),
+            "documentation output overlaps isolated build workspace {}",
+            work.path().display()
+        );
+        let output = work.path().join("site");
+        // Latest builds retain existing immutable snapshots. Build and validate
+        // the complete candidate without modifying the last published tree.
+        if scope == BuildScope::FullSite && !snapshot_build && requested_output.exists() {
+            copy_tree(&requested_output, &output)?;
         } else {
-            None
-        };
-        let output = isolated_work
-            .as_ref()
-            .map_or_else(|| requested_output.clone(), |work| work.path().join("site"));
-        fs::create_dir_all(&output)
-            .wrap_err_with(|| format!("failed to create {}", output.display()))?;
+            fs::create_dir_all(&output)?;
+        }
         clear_stale_staging(&output)?;
 
         let options = ProductBuildOptions {
@@ -1985,9 +2021,7 @@ impl SiteBuilder {
         }
         clear_stale_staging(&output)?;
         self.validate_generated_links(&output, request.include_rustdoc, tag)?;
-        if scope == BuildScope::ProductPreview {
-            replace_generated_tree(&output, &requested_output)?;
-        } else if snapshot_build {
+        if snapshot_build {
             let tag = tag.expect("snapshot builds have a validated tag");
             for product in &selected {
                 let relative = Path::new("products")
@@ -2070,8 +2104,8 @@ impl SiteBuilder {
                     }
                 }
             }
-            replace_generated_tree(&output, &requested_output)?;
         }
+        replace_generated_tree(&self.root, &output, &requested_output)?;
         Ok(())
     }
 
@@ -2436,7 +2470,9 @@ impl SiteBuilder {
             "generated an incomplete reference-page cache for {}",
             product.id
         );
-        replace_cached_tree(staged.path(), &cache_root.join(&product.id))
+        replace_staged_tree(staged.path(), &cache_root.join(&product.id), |from, to| {
+            fs::rename(from, to)
+        })
     }
 
     fn generated_references(&self) -> Result<(GammaLoopReference, VakintReference)> {
@@ -2896,7 +2932,7 @@ impl SiteBuilder {
                 product.id
             );
             if let Some(cache) = &cache {
-                replace_cached_tree(&rustdoc, cache)?;
+                replace_staged_tree(&rustdoc, cache, |from, to| fs::rename(from, to))?;
                 cache.clone()
             } else {
                 rustdoc.clone()
@@ -4579,7 +4615,7 @@ impl SiteBuilder {
                 notes.len()
             ),
         )?;
-        replace_generated_tree(&developer_root, &output.join("developers"))?;
+        replace_generated_tree(&self.root, &developer_root, &output.join("developers"))?;
         Ok(())
     }
 
@@ -8145,6 +8181,41 @@ fn ensure_safe_output(root: &Path, output: &Path) -> Result<PathBuf> {
         resolved_output != canonical_root && !canonical_root.starts_with(&resolved_output),
         "documentation output cannot contain the workspace root"
     );
+    // An explicit --output is not permission to erase authored sources or an
+    // unrelated external directory. Only our marker owns a nonempty tree.
+    match fs::symlink_metadata(output) {
+        Ok(metadata) => {
+            ensure!(
+                metadata.is_dir() && !metadata.file_type().is_symlink(),
+                "documentation destination is not a directory: {}",
+                output.display()
+            );
+            if fs::read_dir(output)?.next().transpose()?.is_some() {
+                let marker = output.join(GENERATED_OUTPUT_MARKER);
+                let metadata = fs::symlink_metadata(&marker).wrap_err_with(|| {
+                    format!(
+                        "refusing nonempty documentation output {} without generated ownership ({GENERATED_OUTPUT_MARKER}); choose a new or empty directory",
+                        output.display()
+                    )
+                })?;
+                ensure!(
+                    metadata.is_file() && fs::read(&marker)? == GENERATED_OUTPUT_SIGNATURE,
+                    "invalid generated ownership marker in documentation output {}",
+                    output.display()
+                );
+            }
+            for entry in WalkDir::new(output) {
+                let entry = entry?;
+                ensure!(
+                    entry.file_type().is_dir() || entry.file_type().is_file(),
+                    "unsupported documentation artifact {}",
+                    entry.path().display()
+                );
+            }
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => {}
+        Err(error) => return Err(error.into()),
+    }
     Ok(resolved_output)
 }
 
@@ -9326,8 +9397,14 @@ fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
     Ok(())
 }
 
-fn replace_cached_tree(source: &Path, destination: &Path) -> Result<()> {
-    let parent = destination.parent().context("cached tree has no parent")?;
+fn replace_staged_tree(
+    source: &Path,
+    destination: &Path,
+    publish: impl FnOnce(&Path, &Path) -> IoResult<()>,
+) -> Result<()> {
+    let parent = destination
+        .parent()
+        .context("generated tree has no parent")?;
     fs::create_dir_all(parent)?;
     let staging = TempDirBuilder::new()
         .prefix(".alphal00p-cache-stage-")
@@ -9340,26 +9417,33 @@ fn replace_cached_tree(source: &Path, destination: &Path) -> Result<()> {
         .tempdir_in(parent)?;
     let backup_path = backup.path().to_path_buf();
     backup.close()?;
-    let had_destination = generated_path_exists(destination);
+    let had_destination = match fs::symlink_metadata(destination) {
+        Ok(_) => true,
+        Err(error) if error.kind() == ErrorKind::NotFound => false,
+        Err(error) => return Err(error.into()),
+    };
     if had_destination {
         fs::rename(destination, &backup_path)
-            .wrap_err_with(|| format!("failed to move cached tree {}", destination.display()))?;
+            .wrap_err_with(|| format!("failed to move generated tree {}", destination.display()))?;
     }
-    if let Err(error) = fs::rename(&staged, destination) {
+    if let Err(error) = publish(&staged, destination) {
         if had_destination {
-            let _ = fs::rename(&backup_path, destination);
+            fs::rename(&backup_path, destination).wrap_err_with(|| {
+                format!(
+                    "failed to restore {} after publication failed ({error}); previous tree retained at {}",
+                    destination.display(),
+                    backup_path.display()
+                )
+            })?;
         }
-        return Err(error)
-            .wrap_err_with(|| format!("failed to publish cache {}", destination.display()));
+        return Err(error).wrap_err_with(|| {
+            format!("failed to publish generated tree {}", destination.display())
+        });
     }
     if had_destination {
         remove_generated_path(&backup_path)?;
     }
     Ok(())
-}
-
-fn generated_path_exists(path: &Path) -> bool {
-    fs::symlink_metadata(path).is_ok()
 }
 
 fn remove_generated_path(path: &Path) -> Result<()> {
@@ -9378,7 +9462,7 @@ fn remove_generated_path(path: &Path) -> Result<()> {
     .wrap_err_with(|| format!("failed to remove generated path {}", path.display()))
 }
 
-fn replace_generated_tree(source: &Path, destination: &Path) -> Result<()> {
+fn replace_generated_tree(root: &Path, source: &Path, destination: &Path) -> Result<()> {
     let resolved_source = fs::canonicalize(source)
         .wrap_err_with(|| format!("failed to resolve {}", source.display()))?;
     let existing_destination = closest_existing_directory(destination)
@@ -9394,9 +9478,27 @@ fn replace_generated_tree(source: &Path, destination: &Path) -> Result<()> {
         source.display(),
         destination.display()
     );
-    remove_generated_path(destination)
-        .wrap_err_with(|| format!("failed to replace {}", destination.display()))?;
-    copy_tree(source, destination)
+    ensure_safe_output(root, destination)?;
+    ensure!(
+        fs::symlink_metadata(source)?.is_dir(),
+        "documentation source is not a directory: {}",
+        source.display()
+    );
+    // Sources are private generation candidates. Mark them only after destination
+    // validation; staging and copying must finish before publication can begin.
+    let marker = source.join(GENERATED_OUTPUT_MARKER);
+    match fs::symlink_metadata(&marker) {
+        Ok(metadata) => ensure!(
+            metadata.is_file() && fs::read(&marker)? == GENERATED_OUTPUT_SIGNATURE,
+            "invalid generated ownership marker in {}",
+            source.display()
+        ),
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            fs::write(marker, GENERATED_OUTPUT_SIGNATURE)?;
+        }
+        Err(error) => return Err(error.into()),
+    }
+    replace_staged_tree(source, destination, |from, to| fs::rename(from, to))
 }
 
 fn directory_files(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>> {
@@ -9738,7 +9840,42 @@ fn resolve_local_link(
 
 #[cfg(test)]
 mod tests {
+    use std::io::Error as IoError;
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
+
     use super::*;
+
+    #[test]
+    fn workspace_discovery_uses_runtime_package_and_repository_ancestry() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().join("relocated-workspace");
+        let package = root.join("crates/alphal00p-docs-builder");
+        fs::create_dir_all(&package).unwrap();
+        fs::create_dir_all(root.join("docs/products")).unwrap();
+        fs::write(root.join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::write(root.join("docs/products/registry.toml"), "").unwrap();
+
+        for start in [&root, &package, &root.join("docs/products")] {
+            assert_eq!(SiteBuilder::workspace_root(start).unwrap(), root);
+        }
+    }
+
+    #[test]
+    fn workspace_discovery_rejects_missing_repository_markers() {
+        let temporary = TempDir::new().unwrap();
+        let cargo_only = temporary.path().join("cargo-only");
+        let registry_only = temporary.path().join("registry-only");
+        fs::create_dir_all(&cargo_only).unwrap();
+        fs::write(cargo_only.join("Cargo.toml"), "[workspace]\n").unwrap();
+        fs::create_dir_all(registry_only.join("docs/products")).unwrap();
+        fs::write(registry_only.join("docs/products/registry.toml"), "").unwrap();
+
+        for start in [&cargo_only, &registry_only] {
+            let error = SiteBuilder::workspace_root(start).unwrap_err();
+            assert!(format!("{error:#}").contains("no documentation workspace"));
+        }
+    }
 
     fn write_test_portal(
         builder: &SiteBuilder,
@@ -10758,7 +10895,7 @@ mod tests {
         fs::write(source.join("current.html"), "current").unwrap();
         fs::write(cache.join("stale.html"), "stale").unwrap();
 
-        replace_cached_tree(&source, &cache).unwrap();
+        replace_staged_tree(&source, &cache, |from, to| fs::rename(from, to)).unwrap();
 
         assert_eq!(
             fs::read_to_string(cache.join("current.html")).unwrap(),
@@ -10913,7 +11050,7 @@ mod tests {
         fs::write(cache.join("previous.html"), "previous").unwrap();
         symlink(cache.join("previous.html"), source.join("unsupported-link")).unwrap();
 
-        assert!(replace_cached_tree(&source, &cache).is_err());
+        assert!(replace_staged_tree(&source, &cache, |from, to| fs::rename(from, to)).is_err());
         assert_eq!(
             fs::read_to_string(cache.join("previous.html")).unwrap(),
             "previous"
@@ -10941,11 +11078,13 @@ mod tests {
 
     #[test]
     fn persistent_rustdoc_targets_reject_workspace_and_arbitrary_roots() {
-        let workspace = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
-        let arbitrary = workspace
+        let temporary = TempDir::new().unwrap();
+        let workspace = temporary.path().join("workspace");
+        fs::create_dir_all(&workspace).unwrap();
+        let workspace = workspace.as_path();
+        // The arbitrary root must remain outside both allowed roots, including the OS temp dir.
+        let temporary_root = env::temp_dir();
+        let arbitrary = temporary_root
             .parent()
             .unwrap()
             .join("alphal00p-docs-unrelated-cache");
@@ -10961,17 +11100,13 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn persistent_rustdoc_target_rejects_symlink_escape() {
-        use std::os::unix::fs::symlink;
-
-        let temporary = tempfile::tempdir().unwrap();
+        let temporary = TempDir::new().unwrap();
         let workspace = temporary.path().join("workspace");
         fs::create_dir_all(workspace.join("target")).unwrap();
-        let repository = Path::new(env!("CARGO_MANIFEST_DIR"))
-            .ancestors()
-            .nth(2)
-            .unwrap();
+        let temporary_root = fs::canonicalize(env::temp_dir()).unwrap();
+        let outside_temporary_root = temporary_root.parent().unwrap();
         let escape = temporary.path().join("escape");
-        symlink(repository, &escape).unwrap();
+        unix_fs::symlink(outside_temporary_root, &escape).unwrap();
 
         let error =
             prepare_persistent_rustdoc_target(&workspace, &escape.join("cache")).unwrap_err();
@@ -12300,6 +12435,181 @@ mod tests {
     }
 
     #[test]
+    fn documentation_output_refuses_authored_and_unrelated_nonempty_trees() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().join("workspace");
+        let source = root.join("target/candidate");
+        let docs = root.join("docs");
+        let external = temporary.path().join("external");
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir_all(&docs).unwrap();
+        fs::create_dir_all(&external).unwrap();
+        fs::write(source.join("index.html"), "new generation").unwrap();
+        fs::write(docs.join("manual.typ"), "= Authored manual").unwrap();
+        fs::write(external.join("keep.txt"), "unrelated user data").unwrap();
+        // Ordinary site-looking files are not an ownership contract.
+        fs::write(external.join("index.html"), "unrelated site").unwrap();
+        fs::write(external.join(".nojekyll"), "").unwrap();
+
+        for destination in [&docs, &external] {
+            let before = directory_files(destination).unwrap();
+            let error = ensure_safe_output(&root, destination).unwrap_err();
+            assert!(format!("{error:#}").contains("without generated ownership"));
+            let error = replace_generated_tree(&root, &source, destination).unwrap_err();
+            assert!(format!("{error:#}").contains("without generated ownership"));
+            assert_eq!(directory_files(destination).unwrap(), before);
+        }
+        assert!(!source.join(GENERATED_OUTPUT_MARKER).exists());
+    }
+
+    #[test]
+    fn documentation_output_publishes_new_empty_and_owned_destinations() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().join("workspace");
+        fs::create_dir(&root).unwrap();
+        for relative in [
+            "workspace/target/docs-site",
+            "external-new",
+            "external-empty",
+        ] {
+            let source = TempDir::new_in(&root).unwrap();
+            let destination = temporary.path().join(relative);
+            if relative == "external-empty" {
+                fs::create_dir(&destination).unwrap();
+            }
+            fs::write(source.path().join("old.html"), "first generation").unwrap();
+
+            replace_generated_tree(&root, source.path(), &destination).unwrap();
+
+            assert_eq!(
+                fs::read(destination.join(GENERATED_OUTPUT_MARKER)).unwrap(),
+                GENERATED_OUTPUT_SIGNATURE
+            );
+            assert_eq!(
+                fs::read_to_string(destination.join("old.html")).unwrap(),
+                "first generation"
+            );
+            ensure_safe_output(&root, &destination).unwrap();
+            fs::remove_file(source.path().join("old.html")).unwrap();
+            fs::write(source.path().join("new.html"), "second generation").unwrap();
+
+            replace_generated_tree(&root, source.path(), &destination).unwrap();
+
+            assert!(!destination.join("old.html").exists());
+            assert_eq!(
+                directory_files(&destination).unwrap(),
+                directory_files(source.path()).unwrap()
+            );
+        }
+    }
+
+    #[test]
+    fn documentation_output_rejects_invalid_ownership_markers() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().join("workspace");
+        let destination = root.join("site");
+        fs::create_dir_all(&destination).unwrap();
+        fs::write(destination.join("keep.txt"), "keep").unwrap();
+        fs::write(destination.join(GENERATED_OUTPUT_MARKER), "another tool").unwrap();
+        let before = directory_files(&destination).unwrap();
+
+        let error = ensure_safe_output(&root, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("invalid generated ownership marker"));
+        assert_eq!(directory_files(&destination).unwrap(), before);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn documentation_output_rejects_symlink_aliases_and_markers() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().join("workspace");
+        let docs = root.join("docs");
+        let source = root.join("target/candidate");
+        let external = temporary.path().join("external");
+        let alias = temporary.path().join("alias");
+        let docs_alias = temporary.path().join("docs-alias");
+        fs::create_dir_all(&docs).unwrap();
+        fs::create_dir_all(&source).unwrap();
+        fs::create_dir(&external).unwrap();
+        fs::write(docs.join("manual.typ"), "= Keep authored source").unwrap();
+        fs::write(external.join("keep.txt"), "keep external data").unwrap();
+        fs::write(source.join("index.html"), "candidate").unwrap();
+        unix_fs::symlink(&root, &alias).unwrap();
+        unix_fs::symlink(&docs, &docs_alias).unwrap();
+
+        for destination in [&alias.join("docs"), &docs_alias] {
+            assert!(replace_generated_tree(&root, &source, destination).is_err());
+        }
+        let signature = temporary.path().join("signature");
+        fs::write(&signature, GENERATED_OUTPUT_SIGNATURE).unwrap();
+        unix_fs::symlink(&signature, external.join(GENERATED_OUTPUT_MARKER)).unwrap();
+        assert!(replace_generated_tree(&root, &source, &external).is_err());
+        assert_eq!(fs::read(signature).unwrap(), GENERATED_OUTPUT_SIGNATURE);
+        assert_eq!(
+            fs::read_to_string(docs.join("manual.typ")).unwrap(),
+            "= Keep authored source"
+        );
+        assert_eq!(
+            fs::read_to_string(external.join("keep.txt")).unwrap(),
+            "keep external data"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn documentation_output_failed_copy_preserves_the_complete_previous_tree() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().join("workspace");
+        let source = root.join("candidate");
+        let destination = root.join("site");
+        fs::create_dir_all(source.join("assets")).unwrap();
+        fs::write(source.join("index.html"), "previous generation").unwrap();
+        fs::write(source.join("assets/style.css"), "previous assets").unwrap();
+        replace_generated_tree(&root, &source, &destination).unwrap();
+        let before = directory_files(&destination).unwrap();
+        fs::write(source.join("index.html"), "incomplete candidate").unwrap();
+        unix_fs::symlink(source.join("index.html"), source.join("unsupported-link")).unwrap();
+
+        let error = replace_generated_tree(&root, &source, &destination).unwrap_err();
+
+        assert!(format!("{error:#}").contains("unsupported documentation artifact"));
+        assert_eq!(directory_files(&destination).unwrap(), before);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn documentation_output_failed_publication_restores_the_complete_previous_tree() {
+        let temporary = TempDir::new().unwrap();
+        let root = temporary.path().join("workspace");
+        let source = root.join("candidate");
+        let destination = root.join("site");
+        fs::create_dir_all(source.join("products/linnet/snapshots/v1")).unwrap();
+        fs::write(source.join("index.html"), "previous generation").unwrap();
+        fs::write(
+            source.join("products/linnet/snapshots/v1/index.html"),
+            "immutable snapshot",
+        )
+        .unwrap();
+        replace_generated_tree(&root, &source, &destination).unwrap();
+        let before = directory_files(&destination).unwrap();
+        fs::write(source.join("index.html"), "new generation").unwrap();
+
+        // Exercise the same publisher used by replace_generated_tree, failing
+        // after the candidate is copied and the complete old tree is backed up.
+        let error = replace_staged_tree(&source, &destination, |staged, output| {
+            assert!(staged.join("index.html").is_file());
+            assert!(!output.exists());
+            Err(IoError::other("injected publication failure"))
+        })
+        .unwrap_err();
+
+        assert!(format!("{error:#}").contains("injected publication failure"));
+        assert_eq!(directory_files(&destination).unwrap(), before);
+        assert_eq!(fs::read_dir(&root).unwrap().count(), 2);
+    }
+
+    #[test]
     fn replacing_generated_trees_rejects_overlapping_paths() {
         let temporary = tempfile::tempdir().unwrap();
         let destination = temporary.path().join("site");
@@ -12307,7 +12617,7 @@ mod tests {
         fs::create_dir_all(&source).unwrap();
         fs::write(destination.join("keep.html"), "keep").unwrap();
 
-        let error = replace_generated_tree(&source, &destination).unwrap_err();
+        let error = replace_generated_tree(temporary.path(), &source, &destination).unwrap_err();
 
         assert!(format!("{error:#}").contains("overlapping documentation trees"));
         assert_eq!(
@@ -12347,7 +12657,8 @@ mod tests {
         fs::write(source.join("keep.html"), "keep").unwrap();
         symlink(&work, &alias).unwrap();
 
-        let error = replace_generated_tree(&source, &alias.join("site")).unwrap_err();
+        let error =
+            replace_generated_tree(temporary.path(), &source, &alias.join("site")).unwrap_err();
 
         assert!(format!("{error:#}").contains("overlapping documentation trees"));
         assert_eq!(

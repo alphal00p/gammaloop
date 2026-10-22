@@ -46,14 +46,15 @@ collection keeps a 4–8 GiB free-space watermark; the producer checks for at le
 of temporary compiler/store usage.
 
 Automatic NixCI work covers tests, Clippy, doctests, formatting, graph validation,
-the full five-product documentation check, necessary producers and final success.
+the full six-product documentation check, necessary producers and final success.
 The documentation check validates generated references and examples, renders
 latest and snapshot sites, checks their HTML, and exercises publication behavior.
-It uses the existing licensed-check runner with `SYMBOLICA_LICENSE_SIGNED`; its
+It uses a runtime launcher with `SYMBOLICA_LICENSE_SIGNED`; its
 reusable Cargo artifacts are scheduled separately. `just ci-checks` selects the
 same documentation check; uploads select its launcher and compiled producers.
 Packaging, standalone Rustdoc, the persistent Typst renderer and WASM remain
-additional checks in `nix flake check --impure`.
+additional pure checks in `nix flake check`. That command builds archives and
+checks preparation; licensed runtime jobs execute through `just ci-checks`.
 
 Compilation stays per crate. Source filtering preserves unaffected packages;
 manifest and lockfile changes still invalidate broadly. Test dependencies avoid
@@ -117,25 +118,29 @@ The measured extended scalar matrix contributes 139 cases to this fast lane;
 the GL16 quartic case belongs to the long lane. A fast suite can still take
 longer than four minutes because the limit applies to each test.
 
-Every main push runs the supported full suite through `hydraJobsMain`.
+Every main push runs the supported full suite through `ci-runtime-jobs-main`.
 Non-integration package groups use `ci_full`. Integration runs its ordinary
 fast selection plus four disjoint `ci_slow` partitions, including all six
 mandatory soft-counterterm acceptance cases. These partitions reuse the
 existing optimized archives and do not introduce another feature set or
 compile each shard independently. Missing main-run license credentials fail
 the workflow rather than silently dropping licensed tests. Standard branch
-Nix jobs continue to use `hydraJobs` and do not select the long partitions.
+Nix jobs use `ci-runtime-jobs` and do not select the long partitions.
+`hydraJobs` and `hydraJobsMain` contain pure build checks only. Hestia may
+remove cached pure rows; the independent runtime matrix always runs its selected
+launchers, and the final Actions aggregate requires runtime success too.
 
 `ci_full` includes nonignored slow cases. Existing quarantines and manual
 external-backend checks remain explicit exclusions in the configuration;
 their absence from automatic coverage does not establish that they are
 unsupported. Ignored tests are not enabled wholesale.
 
-Each successful Nix runtime result retains per-package JUnit reports with
-individual case durations. GitHub Actions exports test names, statuses and
-durations to a CSV artifact. Captured test output, expressions and raw logs
-are excluded. A failed Nix derivation has no registered report output; the
-build still fails, even when there is no timing CSV to upload.
+Each runtime invocation writes available package JUnit reports and a runtime log
+to `--report-dir PATH`, defaulting to `target/ci-results/<runner-name>`.
+Reports survive failing execution and scratch cleanup. GitHub Actions exports
+test names, statuses and durations to a CSV artifact; expressions, raw logs and
+captured output stay out of that artifact. Reporting preserves the test exit
+status, including when no timing report could be produced.
 Nextest reservations continue to protect shared
 generated-state folders and large evaluator allocations. Four shards permit
 separate workers to run long cases concurrently; they do not remove these
@@ -150,13 +155,34 @@ test mocks Typst and checks the missing-optional-renderer behavior.
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
 writable extraction, Cargo fingerprints and epoch-1 timestamps must survive
 changes to archive handling. Stable publication outputs depend on the artifacts,
-not the commit. Lightweight test runners request the corresponding Nix check
-result before fetching compiler state or test binaries. NixCI launches a cached
-runner too, but a matching cached check result can avoid executing its tests.
-The local upload command selects static checks, runtime launchers and compiled
-producers, not runtime check results. Uncached runtime checks run in NixCI using
-those prepared inputs. An empty successful test output alone does not retain
-the necessary producers. Test groups are scheduled and reported independently.
+not the commit. Runtime launchers retain actual Nix references to source,
+artifacts, native libraries and a pure environment recording. They execute the
+Nextest/doctest or documentation bodies as ordinary user processes, without
+nested Nix builds or credential-bearing derivation fields. A cached launcher
+never substitutes for an execution result. The local upload command selects
+static checks, launchers and compiled producers; every selected runtime job
+executes after preparation. Test groups remain scheduled and reported
+independently.
+
+The lifecycle disables xtrace before loading an already exported nonempty
+`SYMBOLICA_LICENSE`, otherwise `SYMBOLICA_LICENSE_SIGNED`, otherwise the caller's
+`$XDG_CONFIG_HOME/symbolica/license` (default `~/.config/symbolica/license`).
+It reads that file before replacing HOME, keeps the value solely in the process
+environment, and fails without printing a value if no key is available. Each
+execution has a private writable source, HOME and temporary directory, cleaned
+on exit. Cargo restores artifacts with Crane's recursive inheritance hook and
+uses the pinned compiler/native environment and offline vendor configuration;
+relocation may still refresh fingerprints and require runtime compilation.
+
+`just doctest-nix` and `just test-nix-all` execute the runtime launchers.
+`just docs-check-nix` runs the complete generated-reference, example, isolated
+Python exporter, wheel/import, asset, six-product latest/snapshot and publication
+assertions. `just doc-nix` remains static Rustdoc. Pages builds the pure
+`alphal00p-docs-build` launcher, then executes it into a fresh runtime directory
+with `--channel latest|snapshot`, `--snapshot-tag TAG` and `--output PATH`.
+Historical native builds are accepted only after rejecting Nix sources that
+capture a license during evaluation. The old licensed Pages and snapshot result
+attributes are removed.
 
 The local upload command keeps all selected outputs rooted through temporary
 result links until cache publication finishes. The command removes those links

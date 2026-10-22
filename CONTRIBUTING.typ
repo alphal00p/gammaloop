@@ -773,20 +773,45 @@ just ci-checks
 ```
 
 This runs the selected Rust and Python tests, Clippy, doctests, formatting,
-workspace/CI graph checks, and the full five-product documentation check. The
+workspace/CI graph checks, and the full six-product documentation check. The
 documentation check validates generated inputs, renders latest and snapshot
 sites, checks their HTML, and exercises publication behavior. Licensed checks,
-including documentation, require `SYMBOLICA_LICENSE` in your local environment.
-An unchanged successful Nix check can be reused without executing its tests again.
-The separate `gammaloop-nextest-browser` check runs real Chromium/widget tests
-with pinned Nix browser and Python dependencies, plus native fixture producers.
-Run it explicitly with `nix build --impure .#checks.x86_64-linux.gammaloop-nextest-browser`.
-The ordinary Spynso suite includes paging even without AnyWidget; its live-widget
-case skips when the optional package is absent. See
-#link("docs/architecture/ci.typ")[the CI inventory] for browser coverage and inputs.
+including documentation, load a license only when their launcher executes:
+an exported nonempty `SYMBOLICA_LICENSE` takes precedence, followed by
+`SYMBOLICA_LICENSE_SIGNED` and then
+`$XDG_CONFIG_HOME/symbolica/license` (default `~/.config/symbolica/license`).
+No license is evaluated or serialized by Nix. Pure compilation and launcher
+preparation require no credential. Every runtime invocation executes its tests,
+including after a launcher cache hit; preparation is not a runtime pass.
+`nix flake check` builds pure checks and archive producers, including the CLI,
+standalone Rustdoc, persistent Typst renderer and WASM checks. It does not execute
+the licensed Nextest, doctest or full documentation suite.
 
-`nix flake check --impure` additionally builds the CLI, standalone Rustdoc,
-persistent Typst renderer and WASM checks exported by the flake.
+The separate browser runtime carries pinned Chromium, Playwright, AnyWidget and
+Marimo, generates the native fixtures including ignored fixture tests, and runs
+the existing browser probes. Run it explicitly with
+`nix run .#nix-ci-check-gammaloop-nextest-browser`. Narrow package/filter requests
+run their selected Rust tests; the downstream probes consume a complete group.
+
+Run an individual runtime job with, for example:
+
+```sh
+nix run .#nix-ci-check-gammaloop-nextest-feynkit -- \
+  --package feynkit-kinematics \
+  --filter 'test(=symbolic::tests::bilinear_momenta_use_symbolica_coefficients)' \
+  --report-dir target/ci-results/feynkit
+nix run .#nix-ci-check-gammaloop-doctest -- \
+  --package feynkit-cff --report-dir target/ci-results/doctest
+just docs-check-nix
+nix run .#alphal00p-docs-build -- --channel latest --output target/docs-preview
+```
+
+Runners copy immutable inputs into private scratch HOME/tmp directories and
+remove only their own scratch directory on exit. Reports default to
+`target/ci-results/<runner-name>`; `--report-dir PATH` retains logs and available
+package JUnit reports outside the store on success and failure. Use a fresh
+report directory for each attempt. A retry executes the job again using the
+same cached inputs. Narrow Nextest selections fail if no tests match.
 
 On `itphlies`, run the following before pushing CI-enabled work, including
 updates to a PR already in final review. The host's Nix daemon is configured to
@@ -850,9 +875,11 @@ benchmarks without publishing. Remote reuse also requires matching outputs: a ma
 for example, does not replace a Linux build.
 
 NixCI starts each selected runtime launcher even when that launcher is cached.
-The launcher requests the corresponding Nix test-result check; a matching cached
-result can skip test execution. Uploading compiled producers prepares the inputs
-for uncached runtime checks, rather than certifying their results locally.
+The launcher sources a pure prepared compiler/runtime environment and executes
+as the calling user, outside a Nix build sandbox. Uploads prepare its immutable
+source, archives, native libraries and environment; they do not certify runtime
+results. Actions selects runtime jobs independently of Hestia's pure build matrix
+through `ci-runtime-jobs` or `ci-runtime-jobs-main`, and requires both results.
 
 The flake retains NixCI's substituter and signing-key settings for downloads.
 On a shared daemon, an administrator must configure the cache's trust and access

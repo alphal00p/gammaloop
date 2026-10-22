@@ -218,8 +218,8 @@ impl<'a> CliSession<'a> {
                 .frozen_boot_settings_match(boot_run_history)
         {
             let warning = format!(
-                "Boot card settings differ from the frozen settings stored in {}. This session is forced into --read-only-state. Line up cli_settings.global and default_runtime_settings in the boot card with the frozen settings in run.toml if you want to boot this state without read-only mode.",
-                self.cli_settings.state.folder.join("run.toml").display()
+                "Boot card settings differ from the frozen settings stored in saved state {}. This session is forced into --read-only-state. Line up cli_settings.global and default_runtime_settings in the boot card with the frozen settings in run.toml if you want to boot this state without read-only mode.",
+                self.cli_settings.state.folder.display()
             );
             self.cli_settings
                 .session
@@ -246,9 +246,9 @@ impl<'a> CliSession<'a> {
                 .is_read_only_due_to_boot_settings_mismatch()
             {
                 let warning = format!(
-                    "{}. The boot card settings differ from the frozen settings stored in {}; this session remains in --read-only-state for reproducibility, but will use the boot card command block definitions for this process only.",
+                    "{}. The boot card settings differ from the frozen settings stored in saved state {}; this session remains in --read-only-state for reproducibility, but will use the boot card command block definitions for this process only.",
                     format_command_block_conflict_message(&conflicting_blocks),
-                    self.cli_settings.state.folder.join("run.toml").display()
+                    self.cli_settings.state.folder.display()
                 );
                 self.cli_settings
                     .session

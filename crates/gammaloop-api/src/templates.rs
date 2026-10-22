@@ -1,7 +1,8 @@
 use color_eyre::Result;
+use eyre::eyre;
+use gammalooprs::processes::OutputPath;
 use include_dir::Dir;
-use std::fs;
-use std::path::Path;
+use std::path::{Component, Path};
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
 const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
@@ -20,47 +21,70 @@ impl Assets {
 
     /// Extract all drawing templates to drawings/templates relative to target_dir.
     pub fn extract_templates<P: AsRef<Path>>(target_dir: P) -> Result<()> {
-        let target = target_dir.as_ref().join("drawings/templates");
-
-        fs::create_dir_all(&target)?;
-
-        extract_package(&GAMMALOOP_TEMPLATE_ASSETS, &target)?;
-        extract_package(&LINNEST_PACKAGE_ASSETS, &target.join(LINNEST_PACKAGE_DIR))?;
-        extract_package(&KURVST_PACKAGE_ASSETS, &target.join(KURVST_PACKAGE_DIR))?;
+        let target = OutputPath::new(target_dir.as_ref())?
+            .join("drawings")?
+            .join("templates")?;
+        target.ensure_directory()?;
+        Self::extract_package(&GAMMALOOP_TEMPLATE_ASSETS, &target)?;
+        Self::extract_package(
+            &LINNEST_PACKAGE_ASSETS,
+            &Self::asset_path(&target, Path::new(LINNEST_PACKAGE_DIR))?,
+        )?;
+        Self::extract_package(
+            &KURVST_PACKAGE_ASSETS,
+            &Self::asset_path(&target, Path::new(KURVST_PACKAGE_DIR))?,
+        )?;
 
         Ok(())
     }
 
     /// Extract the Justfile to the target directory
     pub fn extract_justfile<P: AsRef<Path>>(target_dir: P) -> Result<()> {
-        let justfile_path = target_dir.as_ref().join("justfile");
-
-        fs::write(
-            &justfile_path,
-            include_bytes!("../../../assets/embedded/drawing/justfile"),
-        )?;
-
+        let target = OutputPath::new(target_dir.as_ref())?;
+        let justfile = target.join("justfile")?;
+        target.ensure_directory()?;
+        justfile.write(include_bytes!("../../../assets/embedded/drawing/justfile"))?;
         Ok(())
     }
-}
 
-fn extract_package(assets: &Dir<'_>, target: &Path) -> Result<()> {
-    fs::create_dir_all(target)?;
-    for file in assets.files() {
-        let target_path = target.join(file.path());
-        if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent)?;
+    fn asset_path(root: &OutputPath, relative: &Path) -> Result<OutputPath> {
+        if relative.as_os_str().is_empty() {
+            return Err(eyre!("Embedded drawing asset has an empty path"));
         }
-        fs::write(&target_path, file.contents())?;
+        relative
+            .components()
+            .try_fold(root.clone(), |path, component| {
+                let Component::Normal(name) = component else {
+                    return Err(eyre!(
+                        "Embedded drawing asset has an invalid relative path: {}",
+                        relative.display()
+                    ));
+                };
+                let name = name
+                    .to_str()
+                    .ok_or_else(|| eyre!("Embedded drawing asset has a non UTF-8 path"))?;
+                Ok(path.join(name)?)
+            })
     }
 
-    Ok(())
+    fn extract_package(assets: &Dir<'_>, target: &OutputPath) -> Result<()> {
+        target.ensure_directory()?;
+        for file in assets.files() {
+            let target_path = Self::asset_path(target, file.path())?;
+            if let Some(parent) = target_path.as_path().parent() {
+                OutputPath::new(parent)?.ensure_directory()?;
+            }
+            target_path.write(file.contents())?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use gammalooprs::model::ModelGammaLoopExt;
+    use std::fs;
 
     #[test]
     fn extract_templates_uses_canonical_package_layout() -> Result<()> {

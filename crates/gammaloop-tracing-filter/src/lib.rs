@@ -630,6 +630,7 @@ fn is_valid_ident(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use std::env;
     use std::{
         collections::{BTreeMap, BTreeSet},
         fs,
@@ -689,14 +690,37 @@ mod tests {
 
     #[test]
     fn all_run_card_log_directives_parse() {
-        let run_cards_root =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/resources/run_cards");
+        let search_root = env::var_os("CARGO_MANIFEST_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| env::current_dir().expect("cannot read the current directory"));
+        let workspace = search_root
+            .ancestors()
+            .find(|root| root.join("crates/gammaloop-tracing-filter/Cargo.toml").is_file())
+            .unwrap_or_else(|| {
+                panic!(
+                    "cannot locate the GammaLoop workspace from {}; run under Cargo/Nextest or inside the workspace",
+                    search_root.display()
+                )
+            });
+        let run_cards_root = workspace.join("tests/resources/run_cards");
+        assert!(
+            run_cards_root.is_dir(),
+            "expected run-card fixtures at {}",
+            run_cards_root.display()
+        );
         let mut files = Vec::new();
         collect_toml_files(&run_cards_root, &mut files);
+        assert!(
+            !files.is_empty(),
+            "expected TOML run cards in {}",
+            run_cards_root.display()
+        );
 
+        let mut directive_count = 0;
         for path in files {
             let content = fs::read_to_string(&path).unwrap();
             for (key, spec) in extract_log_specs(&content) {
+                directive_count += 1;
                 assert!(
                     GammaLogFilter::parse(&spec).is_ok(),
                     "{key} in {} should parse: {spec}",
@@ -704,6 +728,11 @@ mod tests {
                 );
             }
         }
+        assert!(
+            directive_count > 0,
+            "expected display_directive or logfile_directive coverage in {}",
+            run_cards_root.display()
+        );
     }
 
     #[test]

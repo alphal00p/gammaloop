@@ -2,7 +2,8 @@
 <nixcrane-cargo-artifact-reuse>
 #quote(block: true)[
 #strong[Status:] Historical Rust CI investigation and current documentation
-cache record, reviewed 2026-09-14 against PR 108 and the documentation stack.
+cache record. Producer/watcher contracts were reviewed against PR 108; the
+licensed runtime migration was reconciled on 2026-10-22.
 
 The Rust CI experiments below are historical. Uses of “now” or “current”
 describe the surrounding experiment, not the final implementation. See
@@ -1446,7 +1447,7 @@ Python inventory exporter, the content-test dependency contexts, the
 documentation builder, the Linnet extension, Rustdoc, and a combined
 GammaLoop/Vakint reference-catalogue context. Stable dummy content
 primes the test dependencies without admitting prose into the producer
-key; the terminal derivation still compiles and runs the real
+key; the terminal runtime job still compiles and runs the real
 content-sensitive test targets. The combined context is last because
 Cargo retains only one active feature fingerprint for each workspace
 unit and it is also the terminal consumer\'s first context. The Python
@@ -1464,17 +1465,18 @@ documentation closures without changing the reusable producer partition.
 
 The producer is keyed only by Cargo manifests, Rust, Cargo
 configuration, and non-Cargo build inputs. It and its consumer use the
-same relative Cargo target, compile-time Symbolica setting and workspace-hack
-timestamp normalization. Native packages, test harnesses and documentation
+same relative Cargo target, pinned toolchain and workspace-hack timestamp
+normalization. Symbolica requires no compile-time user credential; the terminal
+process loads its user license at runtime. Native packages, test harnesses and documentation
 share the optimized `ci-optim` profile, compatible features and Python interpreter
 at compile time. Python extensions retain their separate ABI settings, and
 Rustdoc metadata still needs its own compilation. Documentation assets, Typst, CSS,
 prose, publication-catalogue, channel, tag, and commit metadata do not
 change the reusable Cargo artifact. Checks whose Rust source is
-generated from the manuals remain in the terminal Pages derivation so
+generated from the manuals remain in the terminal runtime validation so
 they still validate the content being published.
 
-The terminal documentation derivation builds the combined Community wheel from
+The terminal documentation runtime builds the combined Community wheel from
 `examples/notebooks/symbolica-host/Cargo.toml` and installs it with
 `--offline --no-deps` into an isolated Python environment before exercising the
 Linnet Python surface. The host owns the single Symbolica extension. Cargo and
@@ -1620,17 +1622,22 @@ and applies Clippy with warnings denied. Keeping this separate from the normal
 workspace and Pages artifacts tests the opt-in path without adding the watcher,
 server, or Typst compiler dependencies to release builds.
 
-The final Pages derivation remains terminal. Its identity includes all
-rendered documentation sources, the publication channel and optional
-snapshot tag, and the documented commit and timestamp. An exact rerun
-can substitute the complete static documentation site, while a content change rebuilds it
-on top of the stable workspace archive. The Pages workflow and the
-Nix producer workflow build the same reusable Nix artifact chain in
-separate Hestia cache namespaces. Hestia v3 action roots are scoped only
-by ref and system, so sharing a namespace across independent workflows
-would let either workflow replace the other\'s roots. Each workflow
-reuses the chain across its own runs; the Nix workflow realizes the raw
-documentation artifact before its consumer matrix is released.
+Pages now prepares the pure `alphal00p-docs-build` launcher, then executes it
+as an ordinary user process into an explicit output directory. Channel, tag,
+commit and timestamp are runtime arguments or environment inputs. Credentials
+are loaded only in that process; they never enter derivation fields or Nix
+cache identities. An exact rerun executes validation and rendering again.
+`nix-ci-check-alphal00p-docs` likewise executes latest and snapshot renders,
+HTML checks and publication-preservation assertions on every invocation.
+The snapshot fixture copies generated ownership markers from the preceding
+real latest publisher before seeding its stale-route test data.
+
+The pure Cargo producer, source, native libraries and prepared environment
+retain actual Nix references. The Pages and Nix workflows publish/reuse their
+compiled inputs in separate Hestia cache namespaces, retaining their existing
+producer upload barriers. A cached launcher or producer is preparation, never
+a documentation runtime pass. See #link("ci.typ")[CI maintenance and measurements]
+for the executable APIs, credential precedence, reports and retry contract.
 
 Rustdoc can emit unresolved pseudo-links inherited from dependency prose,
 such as Rust paths that are not navigable in a crate-only sidecar. Each copied
@@ -1640,7 +1647,7 @@ combined site. This ordering keeps a second build byte-identical to the first:
 the previously published snapshot and the fresh candidate are both already in
 their normalized form when immutability is checked.
 
-Revisions with live notebook support add a publication step after the Nix build. The Pages
+Revisions with live notebook support add a publication step after the runtime static render. The Pages
 workflow copies the static site into writable staging, then exports Marimo notebook assets
 with a Linnet Python WebAssembly wheel built from the documented revision. That wheel has a
 separate cache keyed by the exact source commit and pinned cibuildwheel version; the export
@@ -1655,10 +1662,16 @@ packages become `public/gammaloop-drawing.zip`. Browser Python passes edited DOT
 those Typst templates; model import runs only during export. This additional publication asset
 uses the existing GammaLoop package and does not change the documentation Cargo producer.
 
-Manual Pages dispatches with `publish=false` build and seed this cache
-without merging Pages history or configuring, uploading, or deploying
-GitHub Pages. A docs-only successor run can therefore validate cross-run
-reuse without changing the published site.
+Manual Pages dispatches with `publish=false` prepare cached inputs and execute
+the static render and notebook export without merging Pages history or
+configuring, uploading, or deploying GitHub Pages. A docs-only successor can
+validate compiled-input reuse without changing the published site. Its runtime
+validation/rendering still executes again.
+
+=== Historical terminal derivation measurements
+
+The following timings measured the former cached terminal derivations; they do
+not establish runtime execution or result-cache reuse under the current model.
 
 The first optimized cold seed, run `32041014452` at `4f955f5a029b`,
 built the single Cargo producer in 15 minutes 16 seconds and the
@@ -1783,11 +1796,12 @@ runner also provides the pinned Typst CLI, Git for provenance hashes, and
 Python for syntax-checking generated examples. The filtered test source has no
 `.git` directory, so the runner supplies stable, explicitly non-publishing
 commit and timestamp fixtures for generated-page tests. It also gives
-tempfile-based containment tests a dedicated `TMPDIR` below `target/` rather
-than exposing Nix's broad `/build` root as the persistent-cache namespace.
+tempfile-based containment tests a private scratch `TMPDIR`, alongside the
+private HOME/source lifecycle, rather than exposing a shared build root as a
+persistent-cache namespace.
 
-The latest Pages tree and the immutable snapshot fixture are now separate,
-independently cacheable terminal derivations over the same Cargo producer.
+At this stage, the latest Pages tree and immutable snapshot fixture were
+separate, independently cacheable terminal derivations over one Cargo producer.
 The lightweight full documentation check consumes both completed trees,
 installs them through the Pages history updater, and asserts the latest and
 snapshot routes for all six products together with the portal, developer
@@ -1796,7 +1810,7 @@ jobs after the shared documentation Cargo artifact and orders the merge check
 after both renders, preventing concurrent consumers from rebuilding the same
 producer.
 
-This separation is required by the hosted worker boundary rather than by a
+That historical separation addressed the hosted worker boundary rather than a
 source failure. The former monolithic check still exited after 13 minutes 14
 seconds immediately after completing its second all-product render, even
 after a third redundant render had been removed. Keeping each render in its
@@ -1804,11 +1818,11 @@ own derivation lets NixCI cache and schedule it independently, while the merge
 policy remains covered without rerendering either tree. Lower-level renderer
 tests retain deterministic-output and persistent-session coverage.
 
-The merge derivation provides Bash explicitly because the updater is a child
+The historical merge derivation provided Bash explicitly because the updater is a child
 shell process. Its first test intentionally captures an expected failure; if
 `bash` is absent from `PATH`, that command-not-found error is captured instead
-and the following message assertion fails without useful output. Shell tracing
-keeps future route-policy failures attributable to their exact assertion. Its
+and the following message assertion fails without useful output. The historical merge used shell tracing for assertion diagnostics. The current
+licensed runtime disables xtrace and retains its report log outside scratch. Its
 cross-project link assertion uses the relative URL emitted by a full-site build;
 only isolated product previews rewrite that URL to the absolute public origin.
 

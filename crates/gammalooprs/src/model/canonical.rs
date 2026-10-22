@@ -7,6 +7,7 @@ use std::{
     path::Path,
 };
 
+use crate::processes::{OutputPath, OutputPathError};
 use color_eyre::Report;
 use eyre::eyre;
 use idenso::{dirac::AGS, representations::Bispinor};
@@ -287,10 +288,15 @@ pub trait ModelGammaLoopExt {
         show_vertices: bool,
         show_couplings: bool,
     ) -> String;
+    /// Write model-specific drawing styles using the [`OutputPath`] contract.
+    ///
+    /// # Errors
+    /// Refuses symlinked parents/leaves and directory file targets; propagates
+    /// checked creation, write and flush failures. See [`OutputPath`] for an example.
     fn generate_edge_style_template(
         &self,
-        template_path: impl AsRef<std::path::Path>,
-    ) -> Result<(), std::io::Error>;
+        template_path: impl AsRef<Path>,
+    ) -> Result<(), OutputPathError>;
     fn is_empty(&self) -> bool;
 }
 
@@ -710,12 +716,11 @@ impl ModelGammaLoopExt for Model {
 
     fn generate_edge_style_template(
         &self,
-        template_path: impl AsRef<std::path::Path>,
-    ) -> Result<(), std::io::Error> {
-        use std::fs;
-
-        if let Some(parent) = template_path.as_ref().parent() {
-            fs::create_dir_all(parent)?;
+        template_path: impl AsRef<Path>,
+    ) -> Result<(), OutputPathError> {
+        let template_path = OutputPath::new(template_path.as_ref())?;
+        if let Some(parent) = template_path.as_path().parent() {
+            OutputPath::new(parent)?.ensure_directory()?;
         }
 
         let mut content = String::from(
@@ -761,7 +766,7 @@ impl ModelGammaLoopExt for Model {
 }
 "#,
         );
-        fs::write(template_path, content)
+        template_path.write(content.as_bytes())
     }
 
     fn is_empty(&self) -> bool {
