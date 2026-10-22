@@ -1,11 +1,11 @@
 //! Native drawing of a diagram: the physics scene `to_linnest` describes in
-//! Typst, laid out and painted by `linnest::svg`. Typst typesets only labels.
+//! Typst, laid out and painted by `linnest::svg`, with native MathML labels.
 use std::collections::{BTreeMap, BTreeSet};
 
 use feynkit_model::{LineKind, Model, Particle, ParticleId};
 use linnest::{
     TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
-    svg::{Config, Dash, Details, EdgeDrawing, NodeDrawing, Pattern, Scene, Stroke},
+    svg::{Config, Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Pattern, Scene, Stroke},
 };
 use linnet::half_edge::{
     EdgeAccessors,
@@ -153,7 +153,7 @@ impl FeynmanDiagram {
             .partition(|(_, ends, _)| ends.source.is_none());
         let place = !incoming.is_empty() && !outgoing.is_empty();
 
-        let mut pages: Vec<String> = Vec::new();
+        let mut pages: Vec<LabelSource> = Vec::new();
         let mut hedge = 0;
         let mut edges = Vec::new();
         for (id, ends, edge) in self.edges() {
@@ -231,11 +231,15 @@ impl FeynmanDiagram {
                 (options.show_particle || show_momentum || options.show_edge_index).then(|| {
                     let mut components = Vec::new();
                     if options.show_particle {
-                        components.push(particle.typst_label());
+                        // Typst metadata is executable source, not a MathML label.
+                        let mut label = LabelSource::text(&particle.name);
+                        label.typst = Some(particle.typst_label());
+                        components.push(label);
                     }
                     if show_momentum {
                         let (loops, external) = momentum.integer_coefficients();
                         let mut terms = Vec::new();
+                        let mut mathml = String::new();
                         for (head, coefficients) in [("k", loops), ("p", external)] {
                             for (index, coefficient) in coefficients.into_iter().enumerate() {
                                 if coefficient == 0 {
@@ -253,19 +257,60 @@ impl FeynmanDiagram {
                                 } else {
                                     coefficient.abs().to_string()
                                 };
+                                if !sign.is_empty() {
+                                    mathml.push_str(if coefficient < 0 {
+                                        "<mo>−</mo>"
+                                    } else {
+                                        "<mo>+</mo>"
+                                    });
+                                }
+                                if !factor.is_empty() {
+                                    mathml.push_str(&format!("<mn>{factor}</mn>"));
+                                }
+                                mathml.push_str(&format!(
+                                    "<msub><mi>{head}</mi><mn>{index}</mn></msub>"
+                                ));
                                 terms.push(format!("{sign}{factor} {head}_{index}"));
                             }
                         }
-                        components.push(if terms.is_empty() {
-                            "0".into()
+                        let typst = if terms.is_empty() {
+                            mathml.push_str("<mn>0</mn>");
+                            "0".to_owned()
                         } else {
                             terms.join(" ")
+                        };
+                        components.push(LabelSource {
+                            mathml: format!("<mrow>{mathml}</mrow>"),
+                            typst: Some(typst),
                         });
                     }
                     if options.show_edge_index {
-                        components.push(format!("upright(e)_{}", id.0));
+                        components.push(LabelSource {
+                            mathml: format!(
+                                "<msub><mi mathvariant=\"normal\">e</mi><mn>{}</mn></msub>",
+                                id.0
+                            ),
+                            typst: Some(format!("upright(e)_{}", id.0)),
+                        });
                     }
-                    let content = format!("[$ {} $]", components.join(" quad "));
+                    let content = LabelSource {
+                        mathml: format!(
+                            "<mrow>{}</mrow>",
+                            components
+                                .iter()
+                                .map(|label| label.mathml.as_str())
+                                .collect::<Vec<_>>()
+                                .join("<mspace width=\"1em\"/>")
+                        ),
+                        typst: Some(format!(
+                            "[$ {} $]",
+                            components
+                                .iter()
+                                .map(|label| label.typst.as_deref().expect("paired graph label"))
+                                .collect::<Vec<_>>()
+                                .join(" quad ")
+                        )),
+                    };
                     pages
                         .iter()
                         .position(|page| *page == content)
@@ -389,7 +434,12 @@ impl FeynmanDiagram {
         if options.show_node_index {
             for (index, node) in node_drawings.iter_mut().enumerate() {
                 node.label = Some(pages.len());
-                pages.push(format!("[$ upright(v)_{index} $]"));
+                pages.push(LabelSource {
+                    mathml: format!(
+                        "<msub><mi mathvariant=\"normal\">v</mi><mn>{index}</mn></msub>"
+                    ),
+                    typst: Some(format!("[$ upright(v)_{index} $]")),
+                });
             }
         }
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
@@ -577,9 +627,9 @@ impl SceneOptions {
                 let mut drawing = self.particle_drawing(particle, model, orientation);
                 if self.show_particle {
                     drawing.label = Some(scene.pages.len());
-                    scene
-                        .pages
-                        .push(format!("[$ {} $]", particle.typst_label()));
+                    let mut label = LabelSource::text(&particle.name);
+                    label.typst = Some(format!("[$ {} $]", particle.typst_label()));
+                    scene.pages.push(label);
                 }
                 drawing.details = [
                     ("particle", Value::from(particle.name.clone())),
@@ -668,13 +718,15 @@ mod tests {
             (None, None, false)
         );
         // Every edge shares one particle label; the name stays outside the SVG.
-        assert_eq!(scene.pages, ["[$ \"phi\" $]"]);
+        assert_eq!(scene.pages.len(), 1);
+        assert_eq!(scene.pages[0].mathml, "<mrow><mtext>phi</mtext></mrow>");
+        assert_eq!(scene.pages[0].typst.as_deref(), Some("[$ \"phi\" $]"));
         assert!(scene.edges.iter().all(|edge| edge.label == Some(0)));
         assert!(scene.title.is_none());
         // Half-edges are numbered in builder order, as Typst's `build` does.
         assert_eq!(scalar.details.get("source-hedge"), Some(&1.into()));
         assert_eq!(scalar.details.get("sink-hedge"), Some(&2.into()));
-        let document = scene.label_document();
+        let document = scene.label_document().unwrap();
         assert!(!document.contains("#import"));
         assert!(document.contains("[$ \"phi\" $]"));
     }
@@ -698,7 +750,12 @@ mod tests {
         assert_eq!(scene.pages.len(), 3);
         assert_eq!(scene.edges[0].label, scene.edges[3].label);
         let internal = &scene.pages[scene.edges[1].label.unwrap()];
-        assert!(internal.contains("k_0"));
+        assert!(internal.typst.as_deref().unwrap().contains("k_0"));
+        assert!(
+            internal
+                .mathml
+                .contains("<msub><mi>k</mi><mn>0</mn></msub>")
+        );
         // A selected half highlights its edge and vertex; the rest fades.
         assert_eq!(scene.edges[1].stroke.paint, HIGHLIGHT);
         assert_eq!(scene.edges[1].stroke.dash, Dash::Dashed(0.9, 4.05));
@@ -706,5 +763,80 @@ mod tests {
         assert_eq!(scene.edges[2].stroke.dash, Dash::Dotted);
         assert_eq!(scene.nodes[0].stroke.paint, HIGHLIGHT);
         assert_eq!(scene.nodes[1].stroke.paint, OUTSIDE);
+    }
+
+    #[test]
+    fn mathml_keeps_routing_signs_and_native_inspection_indices() {
+        let diagram = one_loop();
+        let scene = diagram
+            .to_scene(
+                None,
+                &BTreeSet::new(),
+                None,
+                &SceneOptions {
+                    show_particle: false,
+                    show_momentum: Some(true),
+                    show_edge_index: true,
+                    show_node_index: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        for ((id, _, _), edge) in diagram.edges().zip(&scene.edges) {
+            let label = &scene.pages[edge.label.unwrap()];
+            let momentum = diagram.loop_momentum_basis().edge_signatures[&id].format_momentum();
+            assert_eq!(
+                label.mathml.matches("<mo>−</mo>").count(),
+                momentum.matches('-').count()
+            );
+            assert_eq!(
+                label.mathml.matches("<mo>+</mo>").count(),
+                momentum.matches('+').count()
+            );
+            assert!(label.mathml.contains(&format!(
+                "<msub><mi mathvariant=\"normal\">e</mi><mn>{}</mn></msub>",
+                id.0
+            )));
+            assert!(!label.mathml.contains("<math"));
+        }
+        let external = &scene.pages[scene.edges[0].label.unwrap()];
+        assert!(
+            external
+                .mathml
+                .contains("<msub><mi>p</mi><mn>0</mn></msub>")
+        );
+        for (index, node) in scene.nodes.iter().enumerate() {
+            assert_eq!(
+                scene.pages[node.label.unwrap()].mathml,
+                format!("<msub><mi mathvariant=\"normal\">v</mi><mn>{index}</mn></msub>")
+            );
+        }
+    }
+
+    #[test]
+    fn process_mathml_escapes_names_and_keeps_custom_typst_vector_only() {
+        let diagram = one_loop();
+        let mut definition: serde_json::Value = serde_json::from_str(
+            &diagram
+                .model()
+                .to_json()
+                .unwrap()
+                .replace("\"phi\"", "\"p<&\""),
+        )
+        .unwrap();
+        definition["particles"][0]["typstname"] = "overline(phi)_\"custom\"".into();
+        let model = feynkit_model::Model::from_json(&definition.to_string()).unwrap();
+        let particle = model.particle_id("p<&").unwrap();
+        let scene = SceneOptions::default()
+            .process_scene(&model, &[particle], &[particle], &Default::default())
+            .unwrap();
+        assert_eq!(scene.pages.len(), 2);
+        for label in &scene.pages {
+            assert_eq!(label.mathml, "<mtext>p&lt;&amp;</mtext>");
+            assert_eq!(
+                label.typst.as_deref(),
+                Some("[$ overline(phi)_\"custom\" $]")
+            );
+        }
     }
 }

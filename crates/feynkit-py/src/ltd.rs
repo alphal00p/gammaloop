@@ -2,7 +2,7 @@ mod display;
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
 use feynkit_cff::generalized::{
@@ -10,6 +10,7 @@ use feynkit_cff::generalized::{
     generate_3d_expression, graph_io::EnergyEdgeIndexMap,
 };
 use feynkit_graph::FeynmanDiagram;
+use linnet_render_py::PyDiagramView;
 use pyo3::prelude::*;
 use spynso3::expression::TensorExpression;
 use symbolica::{
@@ -76,7 +77,6 @@ pub struct PyLtdRepresentation {
     indices: Arc<EnergyEdgeIndexMap>,
     diagram: Arc<FeynmanDiagram>,
     source: PyFeynmanDiagram,
-    drawing: Arc<OnceLock<String>>,
 }
 
 impl PyLtdRepresentation {
@@ -137,7 +137,6 @@ impl PyLtdRepresentation {
                 indices: Arc::new(indices),
                 diagram,
                 source,
-                drawing: Arc::new(OnceLock::new()),
             })
         })
     }
@@ -282,6 +281,17 @@ impl PyLtdRepresentation {
         )
     }
 
+    /// Prepare a browser-measured residue and surface-pair explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = ltd.render()
+    /// >>> view
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn render(&self, py: Python<'_>) -> PyResult<PyDiagramView> {
+        self.explorer_view(py, None)
+    }
+
     /// Explore native residues, surface pairs, and region-relative pole signs.
     ///
     /// Click cuts to navigate residues, tree edges to switch their pair, and
@@ -293,11 +303,39 @@ impl PyLtdRepresentation {
     ///
     /// >>> from IPython.display import display
     /// >>> display(ltd)
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.explorer_html(py, None)
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Embed the explorer in Marimo's script-enabled notebook frame.
+    /// Return Marimo MIME data for the browser-measured LTD explorer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in ``LtdRepresentation``:
+    ///
+    /// >>> view = ltd.render()
+    /// >>> view  # notebook display measures labels before mounting the explorer
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._mime_(py)
+    }
+
+    /// Return the browser-measured explorer widget.
     ///
     /// Examples
     /// --------
@@ -305,10 +343,8 @@ impl PyLtdRepresentation {
     ///
     /// >>> presentation = ltd._display_()
     fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(py
-            .import("marimo")?
-            .call_method1("iframe", (self.explorer_html(py, None)?,))?
-            .unbind())
+        let view = self.render(py)?;
+        view._display_(py)
     }
 }
 
@@ -555,13 +591,50 @@ impl PyLtdResidue {
             None,
         )
     }
+    /// Prepare this residue's explorer for notebook display or explicit measurement.
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = residue.render()
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn render(&self, py: Python<'_>) -> PyResult<PyDiagramView> {
+        self.parent.explorer_view(py, Some(self.id))
+    }
+
     /// Inspect this residue's expression, fixed cuts and surface pairs.
     ///
     /// Examples
     /// --------
-    /// >>> html = residue._repr_html_()
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.parent.explorer_html(py, Some(self.id))
+    /// >>> from IPython.display import display
+    /// >>> display(residue)
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._repr_mimebundle_(py, include, exclude)
+    }
+
+    /// Return Marimo MIME data for the browser-measured residue explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = residue.render()
+    /// >>> view  # notebook display measures labels before mounting the explorer
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._mime_(py)
     }
     /// Display this residue in Marimo.
     ///
@@ -569,10 +642,8 @@ impl PyLtdResidue {
     /// --------
     /// >>> view = residue._display_()
     fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(py
-            .import("marimo")?
-            .call_method1("iframe", (self._repr_html_(py)?,))?
-            .unbind())
+        let view = self.render(py)?;
+        view._display_(py)
     }
 }
 

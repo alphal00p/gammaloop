@@ -1,5 +1,6 @@
-"""Run with the installed Spenso extension and its embedded Typst renderer."""
+"""Exercise direct MathML print mappings and optional Typst SVG exports."""
 
+import importlib.util
 import re
 import unicodedata
 import unittest
@@ -20,13 +21,16 @@ from symbolica.community.tensor_native import _compile_typst
 
 
 def mathml(expression):
-    return "".join(
-        re.findall(
-            r"<math\b.*?</math>",
-            expression.to_html(settings=DisplaySettings(tensor_view="matrix")),
-            re.DOTALL,
-        )
+    sources = re.findall(
+        r"<math\b.*?</math>",
+        expression.to_html(settings=DisplaySettings(tensor_view="matrix")),
+        re.DOTALL,
     )
+    roots = [ET.fromstring(source) for source in sources]
+    for root in roots:
+        for node in root.iter():
+            node.tag = node.tag.rsplit("}", 1)[-1]
+    return "".join(ET.tostring(root, encoding="unicode") for root in roots)
 
 
 class TensorPrintTests(unittest.TestCase):
@@ -35,7 +39,7 @@ class TensorPrintTests(unittest.TestCase):
             "tensor_print_tests::ScalarEnergy",
             is_scalar=True,
             tags=["spenso::print-callback"],
-            print={"typst": "cal(E)"},
+            print={"typst": "cal(E)", "mathml": "<mi>ℰ</mi>"},
         )
         expression = TensorExpression(head(27) ** 2)
         before = expression.to_expression()
@@ -85,7 +89,7 @@ class TensorPrintTests(unittest.TestCase):
                 self.assertEqual(len(groups), expected_groups)
                 self.assertEqual(expression.to_expression(), original)
                 if "^" in source:
-                    self.assertIs(root.find(".//msup")[0], groups[0])
+                    self.assertIn(groups[0], root.find(".//msup")[0].iter())
 
     def test_pure_imaginary_factors_stay_compact(self):
         for source in ("1i*x", "-2i*x", "1i*x/2", "x-2i*y"):
@@ -109,7 +113,11 @@ class TensorPrintTests(unittest.TestCase):
     def test_head_mapping_keeps_arguments_coordinates_and_styles(self):
         name = TensorName(
             "tensor_print_tests::Jbar",
-            print={"typst": "macron(J)", "latex": r"\bar{J}"},
+            print={
+                "typst": "macron(J)",
+                "latex": r"\bar{J}",
+                "mathml": "<mover><mi>J</mi><mo>¯</mo></mover>",
+            },
         )
         x = S("tensor_print_tests::x")
         tensor = name(x, 7, Representation.euc(2), Representation.euc(2))
@@ -124,19 +132,26 @@ class TensorPrintTests(unittest.TestCase):
         self.assertEqual(array, "macron(J)(x,7) lr([0 comma 1])")
         self.assertIn("<mover", mathml(component))
         self.assertIn("<msup", mathml(component))
-        self.assertIn("<svg", component.to_svg())
         self.assertEqual(component.to_expression(), original)
         # Repeated notebook evaluation must accept the same mapping in any order.
         repeated = TensorName(
             "tensor_print_tests::Jbar",
-            print={"latex": r"\bar{J}", "typst": "macron(J)"},
+            print={
+                "latex": r"\bar{J}",
+                "typst": "macron(J)",
+                "mathml": "<mover><mi>J</mi><mo>¯</mo></mover>",
+            },
         )
         self.assertEqual(repeated.to_expression(), name.to_expression())
 
     def test_current_and_concrete_components_keep_the_custom_name(self):
         spinor = Representation.bis(4)
         jbar = TensorName(
-            "tensor_print_tests::CurrentJbar", print={"typst": "macron(J)"}
+            "tensor_print_tests::CurrentJbar",
+            print={
+                "typst": "macron(J)",
+                "mathml": "<mover><mi>J</mi><mo>¯</mo></mover>",
+            },
         )(spinor)
         j = TensorName("tensor_print_tests::J")(spinor)
         current = jbar("a") * TensorExpression.dirac_gamma(4)("a", "b", "mu") * j("b")
@@ -150,13 +165,14 @@ class TensorPrintTests(unittest.TestCase):
         self.assertIn("macron(J)", kernel.to_typst())
         self.assertIn("<mover", mathml(current))
         self.assertIn("<mover", mathml(kernel))
-        self.assertIn("<svg", kernel.to_svg())
         self.assertEqual(current.to_expression(), original)
 
     def test_callable_owns_the_display_and_none_uses_tensor_notation(self):
         def printer(expression, *, mode, **options):
             if mode == PrintMode.Typst:
                 return "cal(J)"
+            if mode == PrintMode.MathML:
+                return "<mi>𝒥</mi>"
             return None
 
         tensor = TensorName("tensor_print_tests::Callback", print=printer)(
@@ -186,14 +202,46 @@ class TensorPrintTests(unittest.TestCase):
 
     def test_vector_names_and_plain_mapping(self):
         vector = TensorName.vector(
-            "tensor_print_tests::Vector", print={"typst": "macron(p)", "plain": "pbar"}
+            "tensor_print_tests::Vector",
+            print={
+                "typst": "macron(p)",
+                "plain": "pbar",
+                "mathml": "<mover><mi>p</mi><mo>¯</mo></mover>",
+            },
         )(Representation.mink(4))
         component = vector.components()[0]
         self.assertEqual(format_tensor(component), "pbar^(0)")
         self.assertIn("macron(p)", dot(vector, vector).to_typst())
         self.assertIn("<mover", mathml(dot(vector, vector)))
 
-    def test_portable_custom_cancellation_retains_its_html_stroke(self):
+    def test_custom_mathml_cancellation_retains_its_html_stroke(self):
+        def printer(expression, *, mode, **options):
+            if mode == PrintMode.MathML:
+                return (
+                    '<mrow data-spenso-cancel="updiagonal" '
+                    'style="background-image:linear-gradient(to bottom right,transparent 49%,currentColor 50%,transparent 51%)">'
+                    "<mi>J</mi></mrow>"
+                )
+            return None
+
+        value = TensorName("tensor_print_tests::Cancelled", print=printer)(7)
+        original = bytes(value.__getstate__())
+        root = ET.fromstring(mathml(value))
+        strokes = [node for node in root.iter() if "data-spenso-cancel" in node.attrib]
+        self.assertEqual(len(strokes), 1)
+        self.assertEqual(strokes[0].attrib["data-spenso-cancel"], "updiagonal")
+        self.assertEqual(
+            unicodedata.normalize("NFKC", "".join(strokes[0].itertext())).strip(), "J"
+        )
+        self.assertIn("linear-gradient", strokes[0].attrib["style"])
+        self.assertIn("currentColor", strokes[0].attrib["style"])
+        self.assertEqual(bytes(value.__getstate__()), original)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("typst") is not None,
+        "optional real SVG export requires the typst package",
+    )
+    def test_portable_custom_cancellation_compiles_as_explicit_svg_source(self):
         assets = Path(__file__).resolve().parents[1] / "typst"
         # Exercise the portable custom-display AST independently of gamma's
         # specialized renderer, including Typst's lexical helper scope.
@@ -202,17 +250,29 @@ class TensorPrintTests(unittest.TestCase):
             + '\n#let custom-cancel() = _display-node(("math", "cancel", (("symbol", "J"),)))\n'
         )
         source = '#import "notation.typ": custom-cancel\n$ #custom-cancel() $'
-        document = bytes(_compile_typst(source, "html", notation)).decode()
         svg = bytes(_compile_typst(source, "svg", notation)).decode()
-        root = ET.fromstring(re.search(r"<math\b.*?</math>", document, re.DOTALL)[0])
-        strokes = [node for node in root.iter() if "data-spenso-cancel" in node.attrib]
-        self.assertEqual(len(strokes), 1)
-        self.assertEqual(strokes[0].attrib["data-spenso-cancel"], "updiagonal")
-        self.assertEqual(
-            unicodedata.normalize("NFKC", "".join(strokes[0].itertext())).strip(), "J"
-        )
         self.assertIn("<svg", svg)
         self.assertNotIn("data-spenso-cancel", svg)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("typst") is not None,
+        "optional real SVG export requires the typst package",
+    )
+    def test_custom_names_compile_in_symbolic_and_concrete_svg_exports(self):
+        spinor = Representation.bis(4)
+        jbar = TensorName("tensor_print_svg::Jbar", print={"typst": "macron(J)"})(
+            spinor
+        )
+        j = TensorName("tensor_print_svg::J")(spinor)
+        current = jbar("a") * TensorExpression.dirac_gamma(4)("a", "b", "mu") * j("b")
+        library = TensorLibrary.hep_lib_atom()
+        kernel = current.to_tensor(library)
+        component = TensorExpression(jbar.components()[0])
+        for value in (component, current, kernel):
+            with self.subTest(value=value):
+                self.assertIn("macron(J)", value.to_typst())
+                root = ET.fromstring(value.to_svg())
+                self.assertEqual(root.tag.rsplit("}", 1)[-1], "svg")
 
     def test_invalid_print_specifications(self):
         with self.assertRaisesRegex(ValueError, "mapping keys"):

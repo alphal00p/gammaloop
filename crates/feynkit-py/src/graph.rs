@@ -1,4 +1,4 @@
-use linnet_render_py::PyDiagramRender;
+use linnet_render_py::PyDiagramView;
 use linnet_render_py::PyRenderSettings;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -4411,10 +4411,11 @@ impl PyFeynmanDiagram {
         self.inner.to_dot().map_err(error::diagram)
     }
 
-    /// Export a self-contained Typst document embedding the rendered SVG.
+    /// Export a self-contained Typst document embedding an outlined SVG.
     ///
     /// Uses the same ``config``, ``momenta``, ``lmb`` and ``highlight`` settings
-    /// as ``render``. Labels are already typeset; compiling the exported source
+    /// as ``render``. This explicit vector export uses the optional Python
+    /// ``typst`` compiler to outline labels; compiling the exported source
     /// needs no Linnest, Kurvst, MiTeX, or model assets.
     ///
     /// Examples
@@ -4448,16 +4449,18 @@ impl PyFeynmanDiagram {
             &Bound<'_, PyAny>,
         >,
     ) -> PyResult<String> {
-        Ok(typst_renderer::Document::svg_source(
-            &self.render_svg(py, config, style, momenta, lmb, highlight)?,
-        ))
+        let view = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
+        let drawing = view.outlined(py)?;
+        let svg = drawing.to_svg()?;
+        Ok(linnet_render_py::typst_export::svg_source(&svg))
     }
 
-    /// Create a displayable snapshot using the shared physics renderer.
+    /// Prepare a browser-measured view using the shared physics renderer.
     ///
-    /// All graph geometry is drawn in Rust; the embedded Typst compiler typesets
-    /// labels and titles. ``LayoutSettings(impred_labels=True)`` refines the layout
-    /// around the drawn labels. No Python renderer or Typst graph package is needed.
+    /// The notebook browser measures MathML labels and titles, then Rust draws
+    /// graph geometry. ``LayoutSettings(impred_labels=True)`` refines the layout
+    /// around those measurements. Scripts must supply measurements or explicitly
+    /// select a browser with ``drawing.measured(browser="chromium")`` before export.
     ///
     /// Examples
     /// --------
@@ -4468,7 +4471,7 @@ impl PyFeynmanDiagram {
     /// ...     layouts=LayoutSettings(impred_steps=100))
     /// >>> drawing = diagram.render(momenta=True, config=settings, style=hep.DiagramStyle(show_particle=False))
     /// >>> drawing
-    /// >>> svg = drawing.to_svg()
+    /// >>> svg = drawing.measured(browser="chromium").to_svg()
     /// >>> drawing = diagram.render(lmb=next(iter(diagram.loop_momentum_bases())))
     ///
     /// Parameters
@@ -4500,21 +4503,20 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
             &Bound<'_, PyAny>,
         >,
-    ) -> PyResult<PyDiagramRender> {
+    ) -> PyResult<PyDiagramView> {
         let drawing = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
-        let html =
-            crate::display::render_diagram_html(&self.inner, &drawing.to_svg_pages()?.join("\n"));
+        let html = crate::display::render_diagram_html(&self.inner, "<!--linnet-svg-0-->");
         Ok(drawing.with_html(html))
     }
 
-    /// Render an HTML figure with the same options and hover information as ``render``.
+    /// Export a measured HTML figure with the same options as ``render``.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
     /// >>> import marimo as mo
-    /// >>> mo.iframe(diagram.to_html(momenta=True))
+    /// >>> mo.iframe(diagram.to_html(momenta=True, browser="chromium"))
     ///
     /// Parameters
     /// ----------
@@ -4528,7 +4530,12 @@ impl PyFeynmanDiagram {
     ///     Routing from this diagram; also enables momentum display.
     /// highlight : Subgraph or None, optional
     ///     Region to highlight in the complete diagram.
-    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
+    /// browser : {"chromium"} or None, optional
+    ///     Explicit headless browser for script exports; none is started implicitly.
+    ///     For notebook measurements, use ``render().measured().to_html()`` on
+    ///     the displayed view instead.
+    #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, browser=None))]
+    #[allow(clippy::too_many_arguments)]
     fn to_html(
         &self,
         py: Python<'_>,
@@ -4539,9 +4546,10 @@ impl PyFeynmanDiagram {
         #[gen_stub(override_type(type_repr = "Subgraph | None"))] highlight: Option<
             &Bound<'_, PyAny>,
         >,
+        browser: Option<&str>,
     ) -> PyResult<String> {
-        self.render(py, config, style, momenta, lmb, highlight)?
-            .to_html()
+        let view = self.render(py, config, style, momenta, lmb, highlight)?;
+        view.measured(py, None, browser)?.to_html()
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.
@@ -4552,20 +4560,36 @@ impl PyFeynmanDiagram {
     ///
     /// >>> from IPython.display import display
     /// >>> display(diagram)
-    pub(crate) fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_html(py, None, None, false, None, None)
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None, false, None, None)?;
+        view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Return the raw SVG representation used by rich notebook frontends.
+    /// Return Marimo MIME data for the browser-measured diagram view.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``FeynmanDiagram`` class example:
     ///
-    /// >>> from IPython.display import display
-    /// >>> display(diagram)
-    fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        self.render_svg(py, None, None, false, None, None)
+    /// >>> view = diagram.render(momenta=True)
+    /// >>> view  # notebook display measures labels before mounting the diagram
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None, false, None, None)?;
+        view._mime_(py)
     }
 
     /// Write a concise summary to an IPython pretty printer.
@@ -4976,20 +5000,6 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 impl PyFeynmanDiagram {
-    /// Draw graph geometry natively, compiling only the label and title pages.
-    fn render_svg(
-        &self,
-        py: Python<'_>,
-        config: Option<&PyRenderSettings>,
-        style: Option<&PyDiagramStyle>,
-        momenta: bool,
-        lmb: Option<&PyLoopMomentumBasis>,
-        highlight: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<String> {
-        self.render_drawing(py, config, style, momenta, lmb, highlight)?
-            .to_svg()
-    }
-
     fn render_drawing(
         &self,
         py: Python<'_>,
@@ -4998,7 +5008,7 @@ impl PyFeynmanDiagram {
         momenta: bool,
         lmb: Option<&PyLoopMomentumBasis>,
         highlight: Option<&Bound<'_, PyAny>>,
-    ) -> PyResult<PyDiagramRender> {
+    ) -> PyResult<PyDiagramView> {
         if let Some(basis) = lmb
             && !Arc::ptr_eq(&basis.owner, &self.owner)
         {
@@ -5020,7 +5030,7 @@ impl PyFeynmanDiagram {
                 &options,
             )
             .map_err(error::diagram)?;
-        PyDiagramRender::from_scene(py, scene, config)?.map_svg(crate::display::themed_svg)
+        PyDiagramView::from_scene(py, scene, config)?.map_svg(crate::display::themed_svg)
     }
 
     /// The highlighted region: the argument, or this subgraph's own region.

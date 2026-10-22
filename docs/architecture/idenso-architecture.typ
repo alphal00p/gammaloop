@@ -715,13 +715,31 @@ walk. Symbolica's official `MathMLViewer::expression` owns arithmetic, cursor
 caching, responsive layouts, paging and navigation. The pager has no CBOR render
 tree, Typst compilation or notation worker.
 
-`paged(notation_source=...)` rejects custom Typst source with `ValueError`.
-Explicit HTML/SVG exports retain custom Typst notation, and Typst source export
-remains available.
-`formatted(notation_source=...)` produces static output without an interactive
-viewer. `TensorName` head mappings accept `mathml` fragments, and callable
-printers must handle `PrintMode.MathML` to supply custom pager output.
-Typst-only printer sources remain available through static exports.
+Explicit expression `to_html()` emits complete direct MathML; it does not page,
+truncate or compile Typst. `formatted()`, `paged()` and `to_html()` reject
+`notation_source` with `ValueError`. `TensorName` head mappings accept `mathml`
+fragments, and callable printers handle `PrintMode.MathML` for both rich display
+and complete HTML exports. Typst source is never parsed into MathML.
+
+Bare `to_typst()` remains source-only.
+`to_typst_project(..., notation_source=...)` returns a `dict[str, bytes]`
+containing `main.typ`, `render.typ`, `notation.typ` and `tree.cbor`, without
+invoking a compiler.
+Expression `to_svg()` compiles that project through optional Python typst-py
+(distribution `typst`); the native extension contains no Rust Typst compiler.
+Custom Typst notation belongs to these project and vector exports.
+
+Tensor-network `render()` returns a shared Linnet `DiagramView`. Its live
+AnyWidget measures direct MathML labels in the notebook browser before the
+existing native `Scene::render` draws the geometry. `view.measured()` retrieves
+the completed immutable `DiagramRender`; SVG and HTML retain the measured boxes
+and embedded font. Scripts explicitly request `measured(browser="chromium")`
+with optional Playwright and Chromium, or return a receipt from the same view's
+`measurement_request()` to `measured(measurements=...)`. Pending measurement
+raises an error on export; there are no estimated bounds or automatic headless
+browser. Default graph SVG uses XHTML `foreignObject` MathML and targets browsers.
+For PDF, PNG or Typst SVG import, `view.outlined()` uses optional typst-py to
+produce vector labels.
 
 == Features and serialization
 

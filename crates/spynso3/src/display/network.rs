@@ -1,4 +1,4 @@
-//! Direct SVG network drawing; Typst typesets only node and port labels.
+//! Native SVG network drawing with direct MathML node and port labels.
 use super::{DisplaySettings, IndexAliases, TensorDisplayMode, format_atom_with_mode};
 use crate::{
     metadata::SpensoRepresentationName,
@@ -6,7 +6,7 @@ use crate::{
 };
 use linnest::{
     TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
-    svg::{Dash, Details, EdgeDrawing, NodeDrawing, Scene, Stroke},
+    svg::{Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Scene, Stroke},
 };
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
 use pyo3::{
@@ -29,24 +29,28 @@ use spenso::{
     tensors::{complex::RealOrComplexTensor, data::DataTensor, parametric::MixedTensor},
 };
 use std::collections::BTreeMap;
-use symbolica::atom::{Atom, FunctionBuilder, Symbol};
+use symbolica::{
+    atom::{Atom, FunctionBuilder, Symbol},
+    printer::PrintState,
+};
 
 /// Domain details feed Linnet's common hover and click inspector.
 struct NetworkLabel {
     kind: &'static str,
     title: String,
     value: String,
-    typst: Option<String>,
+    source: LabelSource,
     properties: Vec<(String, String)>,
 }
 
 impl NetworkLabel {
     fn new(kind: &'static str, title: impl Into<String>, value: impl Into<String>) -> Self {
+        let value = value.into();
         Self {
             kind,
             title: title.into(),
-            value: value.into(),
-            typst: None,
+            source: LabelSource::text(&value),
+            value,
             properties: Vec::new(),
         }
     }
@@ -55,12 +59,45 @@ impl NetworkLabel {
         self.properties.push((label.into(), value.to_string()));
     }
 
-    fn atom(&mut self, atom: &Atom) {
+    fn atom(&mut self, atom: &Atom, settings: &DisplaySettings, aliases: &IndexAliases) {
         self.value = format_atom_with_mode(atom, TensorDisplayMode::Plain, false);
-        self.typst = Some(format_atom_with_mode(atom, TensorDisplayMode::Typst, false));
+        let options = settings.mathml_options();
+        let mathml = spenso::network::tags::mathml::expression(
+            atom.as_view(),
+            &options,
+            &PrintState::new(),
+            &|representation, index| {
+                let key = (representation, index.to_owned());
+                aliases
+                    .entries
+                    .get(&key)
+                    .and_then(|(_, display)| display.to_mathml())
+                    .or_else(|| {
+                        let source = aliases.source_indices.get(&key)?;
+                        spenso::network::tags::mathml::expression(
+                            source.as_view(),
+                            &options,
+                            &PrintState::new(),
+                            &|_, _| None,
+                        )
+                    })
+            },
+        );
+        self.source = LabelSource {
+            mathml: mathml.unwrap_or_else(|| LabelSource::text(&self.value).mathml),
+            typst: Some(format!(
+                "${}$",
+                format_atom_with_mode(atom, TensorDisplayMode::Typst, false)
+            )),
+        };
     }
 
-    fn named(&mut self, named: &impl HasName<Name = Symbol, Args = Vec<Atom>>) {
+    fn named(
+        &mut self,
+        named: &impl HasName<Name = Symbol, Args = Vec<Atom>>,
+        settings: &DisplaySettings,
+        aliases: &IndexAliases,
+    ) {
         if let Some(name) = named.name() {
             let args = named.args().unwrap_or_default();
             let atom = if args.is_empty() {
@@ -68,7 +105,7 @@ impl NetworkLabel {
             } else {
                 FunctionBuilder::new(name).add_args(&args).finish()
             };
-            self.atom(&atom);
+            self.atom(&atom, settings, aliases);
             self.property("Tensor name", name.get_name());
             if !args.is_empty() {
                 self.property(
@@ -95,8 +132,10 @@ impl NetworkLabel {
         &mut self,
         tensor: &MixedTensor<f64, ShadowedStructure<AbstractIndex>>,
         index: usize,
+        settings: &DisplaySettings,
+        aliases: &IndexAliases,
     ) {
-        self.named(tensor);
+        self.named(tensor, settings, aliases);
         self.property("Store index", index);
         match tensor {
             MixedTensor::Param(data) => {
@@ -179,7 +218,13 @@ impl SpensoNet {
                             // The parenthesized dot denotes the incoming expression,
                             // without inventing a variable name for that subnetwork.
                             label.value = format!("(·)^{power}");
-                            label.typst = Some(format!("(dot.c)^({power})"));
+                            label.source = LabelSource {
+                                mathml: format!(
+                                    "<msup><mrow><mo>(</mo><mo>·</mo><mo>)</mo></mrow><mn>{}</mn></msup>",
+                                    super::escape_html(&power.to_string())
+                                ),
+                                typst: Some(format!("$(dot.c)^({power})$")),
+                            };
                             label.property("Exponent", power);
                         }
                         NetworkOp::Function(name) => label.property("Function", name.get_name()),
@@ -190,13 +235,13 @@ impl SpensoNet {
                 NetworkNode::Leaf(leaf) => match leaf {
                     NetworkLeaf::LibraryKey { key, .. } => {
                         let mut label = NetworkLabel::new("library", "Library tensor", "Tensor");
-                        label.named(key.canonical());
+                        label.named(key.canonical(), &settings, &aliases);
                         label.property("Resolution", "Library reference");
                         label
                     }
                     NetworkLeaf::LocalTensor(index) => {
                         let mut label = NetworkLabel::new("tensor", "Stored tensor", "Tensor");
-                        label.tensor(store.get_tensor(*index), *index);
+                        label.tensor(store.get_tensor(*index), *index, &settings, &aliases);
                         label
                     }
                     NetworkLeaf::TensorSum(indices) => {
@@ -211,7 +256,12 @@ impl SpensoNet {
                     }
                     NetworkLeaf::ScaledTensor(term) => {
                         let mut label = NetworkLabel::new("tensor", "Scaled tensor", "Tensor");
-                        label.tensor(store.get_tensor(term.tensor), term.tensor);
+                        label.tensor(
+                            store.get_tensor(term.tensor),
+                            term.tensor,
+                            &settings,
+                            &aliases,
+                        );
                         if let Some(scale) = term.scale {
                             label.property(
                                 "Coefficient",
@@ -240,7 +290,7 @@ impl SpensoNet {
                     NetworkLeaf::Scalar(scalar) => {
                         let mut label = NetworkLabel::new("scalar", "Scalar", "");
                         let scalar = store.get_scalar_ref(*scalar);
-                        label.atom(scalar);
+                        label.atom(scalar, &settings, &aliases);
                         label.property("Expression", scalar.to_plain_string());
                         label
                     }
@@ -276,7 +326,8 @@ impl SpensoNet {
             record.set_item("id", id.0)?;
             record.set_item("kind", label.kind)?;
             record.set_item("value", &label.value)?;
-            record.set_item("label-typst", &label.typst)?;
+            record.set_item("label-mathml", &label.source.mathml)?;
+            record.set_item("label-typst", &label.source.typst)?;
             record.set_item("inspection", label.inspection(py)?)?;
             nodes.append(record)?;
         }
@@ -316,17 +367,31 @@ impl SpensoNet {
                     }
                 },
             )?;
+            let port_source = match edge.data {
+                NetworkEdge::Head => None,
+                NetworkEdge::Slot(slot) | NetworkEdge::BoundPort { slot, .. } => {
+                    let slot = slot.rep().slot(PartialIndex::Explicit(slot.aind()));
+                    let (index, display) = aliases.port_display(slot, &settings);
+                    let mut label = NetworkLabel::new("slot", "Tensor port", "");
+                    label.atom(&index, &settings, &aliases);
+                    if let Some(display) = display {
+                        label.source.mathml = display.to_mathml().unwrap_or_else(|| {
+                            LabelSource::text(&display.to_native_string()).mathml
+                        });
+                    }
+                    label.source.typst = Some(format!("${}$", aliases.port_typst(slot, &settings)));
+                    Some(label.source)
+                }
+            };
+            record.set_item(
+                "label-mathml",
+                port_source.as_ref().map(|source| &source.mathml),
+            )?;
             record.set_item(
                 "label-typst",
-                match edge.data {
-                    NetworkEdge::Head => None,
-                    NetworkEdge::Slot(slot) | NetworkEdge::BoundPort { slot, .. } => {
-                        Some(aliases.port_typst(
-                            slot.rep().slot(PartialIndex::Explicit(slot.aind())),
-                            &settings,
-                        ))
-                    }
-                },
+                port_source
+                    .as_ref()
+                    .and_then(|source| source.typst.as_ref()),
             )?;
             let mut detail = match edge.data {
                 NetworkEdge::Head => NetworkLabel::new(
@@ -341,7 +406,7 @@ impl SpensoNet {
                 NetworkEdge::BoundPort { slot, value } => {
                     let mut detail =
                         NetworkLabel::new("binding", "Bound tensor port", slot.to_string());
-                    detail.atom(store.get_scalar_ref(*value));
+                    detail.atom(store.get_scalar_ref(*value), &settings, &aliases);
                     detail.property("Slot", slot.to_string());
                     detail
                 }
@@ -385,7 +450,7 @@ impl SpensoNet {
         &self,
         py: Python<'_>,
         config: Option<&linnet_render_py::PyRenderSettings>,
-    ) -> PyResult<linnet_render_py::PyDiagramRender> {
+    ) -> PyResult<linnet_render_py::PyDiagramView> {
         let json = py.import("json")?;
         let snapshot: Value = serde_json::from_str(
             &json
@@ -395,7 +460,7 @@ impl SpensoNet {
         .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
         let runtime = pyo3::exceptions::PyRuntimeError::new_err;
         let scene = Self::network_scene(&snapshot).map_err(runtime)?;
-        linnet_render_py::PyDiagramRender::from_scene(py, scene, config)
+        linnet_render_py::PyDiagramView::from_scene(py, scene, config)
     }
 
     fn network_scene(snapshot: &Value) -> Result<Scene, String> {
@@ -439,9 +504,12 @@ impl SpensoNet {
             let original = record["id"].as_u64().ok_or("invalid network node ID")? as usize;
             indices.insert(original, index);
             let page = scene.pages.len();
-            scene.pages.push(match record["label-typst"].as_str() {
-                Some(math) => format!("[$ {math} $]"),
-                None => format!("[#{:?}]", record["value"].as_str().unwrap_or("")),
+            scene.pages.push(LabelSource {
+                mathml: record["label-mathml"]
+                    .as_str()
+                    .ok_or("missing node MathML label")?
+                    .into(),
+                typst: record["label-typst"].as_str().map(str::to_owned),
             });
             let mut details: Details = record["inspection"]
                 .as_object()
@@ -450,8 +518,10 @@ impl SpensoNet {
                 .map(|(k, v)| (k.clone(), v.clone()))
                 .collect();
             details.insert("node", original);
-            if let Some(label) = record["label-typst"].as_str() {
-                details.insert("label-typst", label);
+            for field in ["label-mathml", "label-typst"] {
+                if let Some(label) = record[field].as_str() {
+                    details.insert(field, label);
+                }
             }
             let operator = record["kind"] == "operator";
             scene.graph.nodes.push(TypstNodeSpec {
@@ -523,8 +593,10 @@ impl SpensoNet {
                     record[endpoint].get(0).cloned().unwrap_or(Value::Null),
                 );
             }
-            if let Some(label) = record["label-typst"].as_str() {
-                details.insert("label-typst", label);
+            for field in ["label-mathml", "label-typst"] {
+                if let Some(label) = record[field].as_str() {
+                    details.insert(field, label);
+                }
             }
             details.insert(
                 "source-hedge",
@@ -534,9 +606,12 @@ impl SpensoNet {
                 "sink-hedge",
                 record["sink"].get(1).cloned().unwrap_or(Value::Null),
             );
-            let label = record["label-typst"].as_str().map(|math| {
+            let label = record["label-mathml"].as_str().map(|mathml| {
                 let page = scene.pages.len();
-                scene.pages.push(format!("[$ {math} $]"));
+                scene.pages.push(LabelSource {
+                    mathml: mathml.into(),
+                    typst: record["label-typst"].as_str().map(str::to_owned),
+                });
                 page
             });
             let orientation = record["orientation"].as_str().unwrap_or("default");
@@ -635,4 +710,151 @@ pub(crate) fn svg_theme(svg: &str) -> String {
     }
     svg.replacen("<svg ", "<svg class=\"spenso-network-svg\" ", 1)
         .replacen('>', &format!("><style>{css}</style>"), 1)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use spenso::{
+        network::tags::SPENSO_TAG,
+        structure::representation::{LibraryRep, Minkowski, RepName},
+    };
+    use symbolica::atom::{AtomCore, SymbolBuilder};
+
+    #[test]
+    fn network_labels_keep_literal_and_complete_expression_sources() {
+        let text = "<&>\" #import \"evil.typ\"";
+        let label = NetworkLabel::new("tensor", "Tensor", text);
+        assert_eq!(label.source, LabelSource::text(text));
+        let atom = Atom::num(2) + Atom::var(symbolica::symbol!("network_mathml_tests::x"));
+        let mut label = NetworkLabel::new("scalar", "Scalar", "");
+        label.atom(&atom, &DisplaySettings::default(), &IndexAliases::default());
+        assert!(
+            label.source.mathml.contains("<mo>+</mo>"),
+            "{}",
+            label.source.mathml
+        );
+        assert!(label.source.mathml.contains("<mn>2</mn>"));
+        assert!(label.source.typst.as_deref().unwrap().starts_with('$'));
+        assert!(!label.source.mathml.contains("<math"));
+
+        let large = Atom::var(
+            SymbolBuilder::new(symbolica::atom::NamespacedSymbol::parse(&format!(
+                "network_mathml_tests::{}",
+                "x".repeat(5000)
+            )))
+            .build()
+            .unwrap(),
+        );
+        label.atom(
+            &large,
+            &DisplaySettings::default(),
+            &IndexAliases::default(),
+        );
+        assert_eq!(label.source.mathml, LabelSource::text(&label.value).mathml);
+        assert!(label.source.typst.is_some());
+    }
+
+    #[test]
+    fn network_aliases_are_shared_without_rewriting_source_atoms() {
+        let head = SymbolBuilder::new(symbolica::wrap_symbol!("network_mathml_tests::hedge"))
+            .with_tags([SPENSO_TAG.index.clone()])
+            .build()
+            .unwrap();
+        let index = |edge| {
+            FunctionBuilder::new(head)
+                .add_arg(Atom::num(edge))
+                .add_arg(Atom::num(1))
+                .finish()
+        };
+        let rep = LibraryRep::from(Minkowski {});
+        let tensor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("network_mathml_tests::T"))
+            .add_arg(rep.to_symbolic([Atom::num(4), index(0)]))
+            .add_arg(rep.to_symbolic([Atom::num(4), index(1)]))
+            .finish();
+        let original = tensor.to_canonical_string();
+        let aliases = IndexAliases::for_atom(&tensor, "alphabet");
+        assert_eq!(aliases.entries.len(), 2);
+        let mut label = NetworkLabel::new("tensor", "Tensor", "");
+        label.atom(&tensor, &DisplaySettings::default(), &aliases);
+        for (_, display) in aliases.entries.values() {
+            assert!(
+                label.source.mathml.contains(&display.to_mathml().unwrap()),
+                "{}",
+                label.source.mathml
+            );
+        }
+        assert!(!label.source.mathml.contains("hedge"));
+        assert_eq!(tensor.to_canonical_string(), original);
+    }
+
+    #[test]
+    fn mathml_network_scene_preserves_topology_styles_and_inspection() {
+        let source = LabelSource::text("A <&>");
+        let snapshot = serde_json::json!({
+            "root": 19,
+            "nodes": [
+                {"id": 19, "kind": "operator", "label-mathml": "<mo>∏</mo>", "label-typst": "$product$", "inspection": {"title": "Product", "summary": "2 inputs"}},
+                {"id": 7, "kind": "tensor", "label-mathml": source.mathml, "label-typst": source.typst, "inspection": {"title": "Tensor", "properties": [["Rank", "1"]]}},
+            ],
+            "edges": [
+                {"id": 23, "source": [7, 31], "sink": [19, 47], "tree": true, "orientation": "default", "label-mathml": null, "label-typst": null, "inspection": {"title": "Dependency"}},
+                {"id": 41, "source": [7, 53], "sink": null, "tree": false, "orientation": "reversed", "label-mathml": "<mi>μ</mi>", "label-typst": "$mu$", "inspection": {"title": "Free tensor slot"}},
+            ],
+        });
+        let before = snapshot.clone();
+        let scene = SpensoNet::network_scene(&snapshot).unwrap();
+        assert_eq!(snapshot, before);
+        assert_eq!(
+            scene
+                .graph
+                .nodes
+                .iter()
+                .map(|node| node.name.as_deref())
+                .collect::<Vec<_>>(),
+            vec![Some("n19"), Some("n7")]
+        );
+        let edge = &scene.graph.edges[0];
+        assert_eq!(
+            (
+                edge.source.as_ref().unwrap().node,
+                edge.source.as_ref().unwrap().id
+            ),
+            (1, Some(31))
+        );
+        assert_eq!(
+            (
+                edge.sink.as_ref().unwrap().node,
+                edge.sink.as_ref().unwrap().id
+            ),
+            (0, Some(47))
+        );
+        assert_eq!(scene.graph.edges[1].source.as_ref().unwrap().id, Some(53));
+        assert!(scene.graph.edges[1].sink.is_none());
+        assert_eq!(scene.layout_edges, Some(vec![0]));
+        assert_eq!(scene.layout["layout-roots"], serde_json::json!([0]));
+        assert_eq!(scene.pages[1], source);
+        assert_eq!(scene.pages[2].mathml, "<mi>μ</mi>");
+        assert_eq!(scene.pages[2].typst.as_deref(), Some("$mu$"));
+        assert_eq!(scene.nodes[0].fill, "#f5f5f5");
+        assert_eq!(scene.nodes[1].fill, "#ffffff");
+        assert_eq!(scene.edges[0].stroke.paint, "#555555");
+        assert_eq!(scene.edges[1].stroke.paint, "#7f95b8");
+        assert_eq!(
+            scene.nodes[0].details.get("title"),
+            Some(&serde_json::json!("Product"))
+        );
+        assert_eq!(
+            scene.nodes[1].details.get("properties"),
+            Some(&serde_json::json!([["Rank", "1"]]))
+        );
+        assert_eq!(
+            scene.edges[1].details.get("edge"),
+            Some(&serde_json::json!(41))
+        );
+        assert_eq!(
+            scene.edges[1].details.get("source-hedge"),
+            Some(&serde_json::json!(53))
+        );
+    }
 }

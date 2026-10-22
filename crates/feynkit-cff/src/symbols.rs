@@ -26,6 +26,34 @@ fn print_energy(
     state: &PrintState,
     on_shell: bool,
 ) -> Option<String> {
+    if options.mode.is_mathml() {
+        let AtomView::Fun(function) = atom else {
+            return None;
+        };
+        if function.get_nargs() != 1 {
+            return None;
+        }
+        let index = function.iter().next()?;
+        if index.get_byte_size() > 1024 {
+            return None;
+        }
+        let id = spenso::network::tags::mathml::expression(
+            index,
+            options,
+            &PrintState::new(),
+            &|_, _| None,
+        )?;
+        let value = if on_shell {
+            format!("<msubsup><mi>E</mi><mrow>{id}</mrow><mtext>os</mtext></msubsup>")
+        } else {
+            format!("<msub><mi>E</mi><mrow>{id}</mrow></msub>")
+        };
+        return spenso::network::tags::mathml::fragment(if on_shell && state.in_exp_base {
+            format!("<mrow><mo>(</mo>{value}<mo>)</mo></mrow>")
+        } else {
+            value
+        });
+    }
     let backend = if options.mode.is_latex() {
         SpensoPrintBackend::Latex
     } else {

@@ -66,18 +66,24 @@ pub(crate) fn representation(rep: Representation<LibraryRep>) -> String {
 }
 
 impl IndexAliases {
-    fn port_display(
+    pub(super) fn port_display(
         &self,
         slot: spenso::structure::partial::PartialSlot,
-        settings: &DisplaySettings,
+        _settings: &DisplaySettings,
     ) -> (Atom, Option<IndexDisplay>) {
         let port = composition::port_atom(slot);
-        let port = self.presentation_atom(&port, &settings.index_style);
         let mut matcher = SlotMatcher::default();
         let SlotMatch::Explicit(view) = matcher.classify(port.as_view()) else {
             return (port, None);
         };
         let index = view.index();
+        let key = (slot.rep_name().symbol(), index.to_owned());
+        if let Some((_, display)) = self.entries.get(&key) {
+            return (index.to_owned(), Some(display.clone()));
+        }
+        if let Some(source) = self.source_indices.get(&key) {
+            return (source.clone(), None);
+        }
         let display = usize::try_from(index)
             .ok()
             .and_then(|position| slot.rep_name().metadata()?.index_palette.resolve(position))
@@ -128,15 +134,12 @@ impl IndexAliases {
             return Ok("?".into());
         }
         let (index, display) = self.port_display(slot, settings);
-        if display.is_none() {
-            return atom_to_svg(py, &index, settings, None);
+        if let Some(body) = display.and_then(|display| display.to_mathml()) {
+            return Ok(format!(
+                "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">{body}</math>"
+            ));
         }
-        let source = format!(
-            "#set page(width: auto, height: auto, margin: 4pt)\n#set text(font: \"STIX Two Math\")\n$ {} $",
-            self.port_typst(slot, settings)
-        );
-        String::from_utf8(compile_typst(py, &source, "svg", None, None)?)
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+        paging::atom_to_html(py, &index, settings)
     }
 }
 

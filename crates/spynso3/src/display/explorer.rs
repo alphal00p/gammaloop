@@ -21,7 +21,6 @@ fn payload_bytes(value: &AtomViewOrConcrete<'_, RealOrComplexRef<'_, f64>>) -> u
 struct Renderer<'a, 'py> {
     py: Python<'py>,
     settings: &'a DisplaySettings,
-    notation_source: Option<&'a str>,
     formulas: HashMap<Atom, String>,
 }
 
@@ -39,15 +38,18 @@ impl Renderer<'_, '_> {
             AtomViewOrConcrete::Atom(atom) => {
                 let atom = (*atom).to_owned();
                 if !self.formulas.contains_key(&atom) {
-                    let svg = atom_to_svg(self.py, &atom, self.settings, self.notation_source)?;
-                    self.formulas.insert(atom.clone(), svg);
+                    let html = atom_to_html(self.py, &atom, self.settings, None)?;
+                    self.formulas.insert(atom.clone(), html);
                 }
                 Some(self.formulas[&atom].clone())
             }
             AtomViewOrConcrete::Concrete(_) => None,
         };
+        let html = match formula {
+            Some(formula) => formula,
+            None => format_tensor_value_html(self.py, &value, self.settings)?,
+        };
         let plain = format_tensor_value(value, TensorDisplayMode::Plain, self.settings);
-        let html = formula.unwrap_or_else(|| format!("<code>{}</code>", escape_html(&plain)));
         Ok((bytes, plain, html))
     }
 }
@@ -96,7 +98,6 @@ pub(super) fn to_html(
     py: Python<'_>,
     tensor: &Spensor,
     settings: &DisplaySettings,
-    notation_source: Option<&str>,
 ) -> PyResult<String> {
     let view = ConcreteTensorView::new(tensor, TensorDisplayMode::Plain, settings)
         .ok_or_else(|| PyValueError::new_err("invalid tensor logical layout"))?;
@@ -104,7 +105,6 @@ pub(super) fn to_html(
     let mut renderer = Renderer {
         py,
         settings,
-        notation_source,
         formulas: HashMap::new(),
     };
     let default = tensor_sparse_default(tensor)
@@ -136,7 +136,7 @@ pub(super) fn to_html(
     payload.set_item("axes", view.axis_labels())?;
     let descriptor = tensor.descriptor.presentation_atom();
     let heading = if descriptor.as_view().get_byte_size() <= MAX_FORMULA_BYTES {
-        atom_to_svg(py, &descriptor, settings, notation_source)?
+        structured_to_html(py, &tensor.descriptor, settings, None)?
     } else {
         "<span>Tensor</span>".to_owned()
     };
@@ -152,7 +152,7 @@ pub(super) fn to_html(
             "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">",
             "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; ",
             "script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:;\">",
-            "<style>{STYLE}</style></head><body>",
+            "<style>{NOTEBOOK_STYLE}\n{STYLE}</style></head><body>",
             "<main id=\"spenso-explorer\"><div class=\"tensor-metadata\">",
             "<code class=\"python-type\">Tensor</code><span id=\"shape\"></span></div>",
             "<section aria-labelledby=\"expression-label\">",
@@ -166,6 +166,7 @@ pub(super) fn to_html(
             "<script>{SCRIPT}</script></body></html>"
         ),
         STYLE = STYLE,
+        NOTEBOOK_STYLE = NOTEBOOK_STYLE,
         SCRIPT = SCRIPT,
         heading = heading,
         json = json,

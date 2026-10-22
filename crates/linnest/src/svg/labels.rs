@@ -1,12 +1,120 @@
 //! Label pages typeset by the host, their placement candidates, and the
 //! annotation search `draw.typ` runs. Candidates and the search exchange the
 //! same records as the Typst renderer, so both route labels identically.
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap, fmt::Write as _};
 
 use kurbo::{BezPath, CubicBez, Point, Shape};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
-use super::{curves, marks, UNIT};
+use super::{curves, marks, output::xml_escape, UNIT};
+
+/// Label content shared by browser measurement and native SVG output.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LabelSource {
+    /// Complete MathML fragment, without a `math` root, XHTML, or host markers.
+    pub mathml: String,
+    /// Optional Typst content expression for vector exports.
+    pub typst: Option<String>,
+}
+
+impl LabelSource {
+    pub fn text(text: &str) -> Self {
+        Self {
+            mathml: format!("<mtext>{}</mtext>", xml_escape(text)),
+            typst: Some(Self::typst_text(text)),
+        }
+    }
+
+    /// A quoted Typst string expression, without a markup-mode `#` prefix.
+    pub fn typst_text(text: &str) -> String {
+        let mut literal = String::with_capacity(text.len() + 2);
+        literal.push('"');
+        for character in text.chars() {
+            match character {
+                '\\' => literal.push_str("\\\\"),
+                '"' => literal.push_str("\\\""),
+                '\n' => literal.push_str("\\n"),
+                '\r' => literal.push_str("\\r"),
+                '\t' => literal.push_str("\\t"),
+                character if character.is_control() => {
+                    write!(literal, "\\u{{{:x}}}", character as u32).unwrap();
+                }
+                character => literal.push(character),
+            }
+        }
+        literal.push('"');
+        literal
+    }
+
+    pub(super) fn typeset_mathml(&self, metrics: LabelMetrics) -> Result<LabelPage, String> {
+        metrics.validate()?;
+        let math = format!(
+            r#"<math xmlns="http://www.w3.org/1998/Math/MathML">{}</math>"#,
+            self.mathml
+        );
+        let document = roxmltree::Document::parse(&math)
+            .map_err(|error| format!("invalid MathML label fragment: {error}"))?;
+        if document.root_element().descendants().skip(1).any(|node| {
+            node.is_element()
+                && (node.tag_name().namespace() != Some("http://www.w3.org/1998/Math/MathML")
+                    || node.tag_name().name() == "math")
+        }) {
+            return Err(
+                "MathML label must be a fragment without a math root or foreign elements".into(),
+            );
+        }
+        // The outer SVG maps one user unit to one point. CSS px inside the
+        // foreignObject are user units, so 9px here renders as 9 physical points.
+        let body = format!(
+            r#"<foreignObject x="0" y="0" width="{}" height="{}"><div xmlns="http://www.w3.org/1999/xhtml" class="linnet-math-label" style="font-size:9px;line-height:1;width:max-content">{math}</div></foreignObject>"#,
+            metrics.width, metrics.height,
+        );
+        Ok(LabelPage { metrics, body })
+    }
+}
+
+/// Browser-measured label rectangle and distance from its top to the baseline.
+/// Every dimension is in points, matching the native SVG's user units.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LabelMetrics {
+    pub width: f64,
+    pub height: f64,
+    pub baseline: f64,
+}
+
+impl LabelMetrics {
+    pub fn validate(&self) -> Result<(), String> {
+        if [self.width, self.height, self.baseline]
+            .iter()
+            .any(|value| !value.is_finite() || *value < 0.0)
+            || self.baseline > self.height
+        {
+            return Err(
+                "label metrics must be finite and nonnegative, with baseline within height".into(),
+            );
+        }
+        Ok(())
+    }
+
+    /// CeTZ reports content width/height and one-line baseline/bounds heights.
+    /// Its actual box includes the bounds below that baseline; the last line's
+    /// baseline is the content height, including preceding lines.
+    fn from_cetz([width, height, baseline, bounds]: [f64; 4]) -> Result<Self, String> {
+        if [width, height, baseline, bounds]
+            .iter()
+            .any(|value| !value.is_finite() || *value < 0.0)
+        {
+            return Err("invalid CeTZ label measurements".into());
+        }
+        let metrics = Self {
+            width,
+            height: height + bounds - baseline,
+            baseline: height,
+        };
+        metrics.validate()?;
+        Ok(metrics)
+    }
+}
 
 /// Clearance between an external label and its free endpoint.
 const EXTERNAL_GAP: f64 = 0.25;
@@ -72,14 +180,11 @@ impl Bounds {
     }
 }
 
-/// One typeset page: its size and SVG body in points. Label pages also carry
-/// the content measurements CeTZ uses (width, height, line baseline, line bounds).
+/// One typeset label's actual rectangle/baseline and SVG body, in points.
 #[derive(Clone, Debug)]
 pub struct LabelPage {
-    pub width: f64,
-    pub height: f64,
+    pub metrics: LabelMetrics,
     pub body: String,
-    pub metrics: Option<[f64; 4]>,
 }
 
 /// A scene's typeset title and label pages, with their merged glyph definitions.
@@ -127,7 +232,7 @@ impl LabelPage {
             .ok_or_else(invalid)?;
         let mut body = svg[open..close].to_owned();
         let metrics = match body.find(&format!("<a href=\"{METRICS_LINK}")) {
-            None => None,
+            None => return Err("typeset label page has no measurements".into()),
             Some(start) => {
                 let end = start + body[start..].find("</a>").ok_or_else(invalid)? + "</a>".len();
                 let link: String = body.drain(start..end).collect();
@@ -142,9 +247,15 @@ impl LabelPage {
                 for metric in &mut metrics {
                     *metric = values.next().and_then(Result::ok).ok_or_else(invalid)?;
                 }
-                Some(metrics)
+                if values.next().is_some() {
+                    return Err(invalid());
+                }
+                LabelMetrics::from_cetz(metrics)?
             }
         };
+        if !width.is_finite() || !height.is_finite() || width < 0.0 || height < 0.0 {
+            return Err(invalid());
+        }
         if let (Some(start), Some(end)) = (svg.find("<defs"), svg.rfind("</defs>")) {
             let inner = &svg[start + svg[start..].find('>').ok_or_else(invalid)? + 1..end];
             for symbol in inner.split("<symbol").filter(|symbol| !symbol.is_empty()) {
@@ -157,12 +268,7 @@ impl LabelPage {
                     .or_insert_with(|| format!("<symbol{symbol}"));
             }
         }
-        Ok(Self {
-            width,
-            height,
-            body,
-            metrics,
-        })
+        Ok(Self { body, metrics })
     }
 }
 
@@ -319,11 +425,10 @@ pub(super) struct Placement {
     pub arrow_carriers: Option<Vec<BezPath>>,
 }
 
-/// CeTZ `content` corners (NW, NE, SW, SE) relative to the placement point.
-fn content_corners([width, height, baseline, bounds]: [f64; 4], anchor: Anchor) -> [[f64; 3]; 4] {
-    let measure = |pt: f64| (pt / UNIT).abs();
-    let w = measure(width) / 2.0;
-    let h = (measure(height) + measure(bounds) - measure(baseline)).abs() / 2.0;
+/// Actual rectangle corners (NW, NE, SW, SE) relative to the placement point.
+fn content_corners(metrics: LabelMetrics, anchor: Anchor) -> [[f64; 3]; 4] {
+    let w = metrics.width / UNIT / 2.0;
+    let h = metrics.height / UNIT / 2.0;
     let offset = match anchor {
         Anchor::East => [-w, 0.0],
         Anchor::West => [w, 0.0],
@@ -382,7 +487,7 @@ fn positions(total: f64, preferred: f64, low: f64, high: f64) -> Vec<f64> {
 /// interleaved by position.
 pub(super) fn carrier_candidates(
     path: &BezPath,
-    metrics: [f64; 4],
+    metrics: LabelMetrics,
     gap: f64,
 ) -> Result<Vec<Candidate>, String> {
     let total = curves::length(path);
@@ -421,7 +526,7 @@ pub(super) fn carrier_candidates(
 /// interleaved. Returns the candidates and the offset carriers.
 pub(super) fn momentum_candidates(
     path: &BezPath,
-    metrics: [f64; 4],
+    metrics: LabelMetrics,
     side: f64,
     offset: f64,
 ) -> Result<(Vec<Candidate>, Vec<BezPath>), String> {
@@ -489,7 +594,7 @@ pub(super) fn endpoint_candidates(
     at: [f64; 2],
     direction: [f64; 2],
     anchor: Anchor,
-    metrics: [f64; 4],
+    metrics: LabelMetrics,
 ) -> Result<Vec<Candidate>, String> {
     CandidateSpec {
         gap: EXTERNAL_GAP,
@@ -747,4 +852,41 @@ pub(super) fn overlaps(
         }
     }
     (overlapping, hits, pairs / 2)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn text_sources_escape_mathml_and_typst_at_the_shared_boundary() {
+        let text = "a<\"&\\b\n\t#[]";
+        let source = LabelSource::text(text);
+        assert_eq!(source.mathml, "<mtext>a&lt;&quot;&amp;\\b\n\t#[]</mtext>");
+        assert_eq!(source.typst.as_deref(), Some("\"a<\\\"&\\\\b\\n\\t#[]\""));
+        assert_eq!(LabelSource::typst_text("\0\r"), "\"\\u{0}\\r\"");
+        let encoded = serde_json::to_string(&source).unwrap();
+        assert_eq!(
+            serde_json::from_str::<LabelSource>(&encoded).unwrap(),
+            source
+        );
+    }
+
+    #[test]
+    fn cetz_import_normalizes_multiline_rectangle_and_baseline_once() {
+        let metrics = LabelMetrics::from_cetz([27.0, 19.0, 7.0, 10.0]).unwrap();
+        assert_eq!(
+            metrics,
+            LabelMetrics {
+                width: 27.0,
+                height: 22.0,
+                baseline: 19.0
+            }
+        );
+        let corners = content_corners(metrics, Anchor::Center);
+        assert_eq!(corners[0], [-1.0, 11.0 / UNIT, 0.0]);
+        assert_eq!(corners[3], [1.0, -11.0 / UNIT, 0.0]);
+        assert_eq!(content_corners(metrics, Anchor::West)[0][0], 0.0);
+        assert_eq!(content_corners(metrics, Anchor::North)[0][1], 0.0);
+    }
 }

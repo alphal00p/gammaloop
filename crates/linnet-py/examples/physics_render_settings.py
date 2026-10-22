@@ -3,6 +3,7 @@
 # dependencies = [
 #     "symbolica==3.0.1",
 #     "marimo==0.24.0",
+#     "anywidget>=0.9,<1",
 # ]
 # ///
 
@@ -16,16 +17,14 @@ app = marimo.App(width="medium", app_title="FeynKit DOT rendering")
 
 @app.cell
 def _():
-    import html
-
-    from symbolica.community import graph as lp
     import marimo as mo
     import symbolica.community.hepkit as fk
+    from symbolica.community import graph as lp
 
     # The Standard Model is embedded, so native and browser runs need no model file.
     # Native sessions and browser exports load identical model definitions.
     model = fk.Model.standard_model()
-    return fk, html, lp, mo, model
+    return fk, lp, mo, model
 
 
 @app.cell(hide_code=True)
@@ -34,12 +33,13 @@ def _(mo):
     # FeynKit DOT rendering
 
     Edit physics DOT to inspect a Standard Model diagram. FeynKit draws the graph
-    directly to SVG and typesets its labels with Typst. Incoming and outgoing legs,
+    with native SVG geometry after this browser measures its MathML labels.
+    Incoming and outgoing legs,
     particles, momentum labels, and interaction details come from the same diagram.
 
     ImPrEd layout runs the requested passes in order. A second pass continues from
-    the first drawing. Layered layout is also available. Portable Typst exports
-    embed the captured SVG, preserving the preview's geometry.
+    the first drawing. Layered layout is also available. Optional vector exports
+    use Python Typst only when you request them below.
     """)
     return
 
@@ -187,21 +187,18 @@ def _(
 
 @app.cell
 def _(diagram, diagram_style, fk, render_config):
-    rendered_html = None
-    typst_source = None
+    diagram_view = None
     render_error = None
     if diagram is not None:
         try:
-            drawing = diagram.render(config=render_config, style=diagram_style)
-            rendered_html = drawing.to_html()
-            typst_source = drawing.to_linnest()
+            diagram_view = diagram.render(config=render_config, style=diagram_style)
         except (fk.DiagramError, OSError, RuntimeError, TypeError, ValueError) as error:
             render_error = f"{type(error).__name__}: {error}"
-    return render_error, rendered_html, typst_source
+    return diagram_view, render_error
 
 
 @app.cell(hide_code=True)
-def _(html, mo, parse_error, render_error, rendered_html):
+def _(diagram_view, mo, parse_error, render_error):
     if parse_error is not None:
         _output = mo.callout(
             mo.md(f"`{parse_error}`"),
@@ -215,47 +212,88 @@ def _(html, mo, parse_error, render_error, rendered_html):
             title="FeynKit rendering failed",
         )
     else:
-        # The SVG manages iframe height; Marimo islands do not provide
-        # mo.iframe's global resize callback.
-        _output = mo.Html(
-            '<div data-notebook-ready="physics_render_settings">'
-            '<iframe title="Interactive FeynKit diagram" '
-            'sandbox="allow-scripts allow-same-origin" '
-            'style="width:100%;height:500px;border:0" '
-            f'srcdoc="{html.escape(rendered_html, quote=True)}"></iframe></div>'
-        )
+        _output = diagram_view
     _output
     return
 
 
 @app.cell(hide_code=True)
-def _(mo, typst_source):
-    if typst_source is None:
-        _source_panel = mo.md(
-            "Fix the DOT or rendering error to inspect the generated Typst."
-        )
-    else:
-        _source_panel = mo.accordion(
-            {
-                "Portable Typst export": mo.vstack(
-                    [
-                        mo.md(
-                            "Portable Typst source embeds the captured SVG. "
-                            "Graph layout and drawing have already run natively."
-                        ),
-                        mo.ui.code_editor(
-                            value=typst_source,
-                            language="text",
-                            disabled=True,
-                            min_height=320,
-                            max_height=700,
-                            label="Portable Typst (read-only)",
-                        ),
-                    ]
+def _(diagram_view, mo):
+    vector_export = mo.ui.run_button(
+        label="Prepare vector SVG and Typst downloads",
+        disabled=diagram_view is None,
+    )
+    mo.vstack(
+        [
+            mo.md(
+                "The live preview uses browser MathML. Click below to outline labels "
+                "for vector SVG and portable Typst downloads. This explicit export "
+                "requires Python `typst>=0.15`; install it in your environment first. "
+                "Changing the diagram or its controls resets this action."
+            ),
+            vector_export,
+        ]
+    )
+    return (vector_export,)
+
+
+@app.cell(hide_code=True)
+def _(diagram_view, mo, vector_export):
+    mo.stop(not vector_export.value or diagram_view is None)
+    try:
+        _snapshot = diagram_view.outlined()
+        _svg = _snapshot.to_svg()
+        _typst_source = _snapshot.to_linnest()
+    except (ImportError, OSError, RuntimeError, TypeError, ValueError) as _error:
+        mo.stop(
+            True,
+            mo.callout(
+                mo.md(
+                    f"**Vector export failed:** `{type(_error).__name__}: {_error}`\n\n"
+                    "Install `typst>=0.15` in this notebook's Python environment, "
+                    "then click prepare again. The live preview remains available."
                 ),
-            }
+                kind="warn",
+            ),
         )
-    _source_panel
+    mo.accordion(
+        {
+            "Vector downloads and portable Typst source": mo.vstack(
+                [
+                    mo.hstack(
+                        [
+                            mo.download(
+                                data=_svg.encode("utf-8"),
+                                filename="diagram.svg",
+                                mimetype="image/svg+xml",
+                                label="Download vector SVG",
+                            ),
+                            mo.download(
+                                data=_typst_source.encode("utf-8"),
+                                filename="diagram.typ",
+                                mimetype="text/plain",
+                                label="Download Typst",
+                            ),
+                        ],
+                        wrap=True,
+                    ),
+                    mo.md(
+                        "Portable Typst source embeds this outlined SVG, including "
+                        "its labels. Outlining runs the layout with Typst's measured "
+                        "label boxes; it does not change the live preview."
+                    ),
+                    mo.ui.code_editor(
+                        value=_typst_source,
+                        language="text",
+                        disabled=True,
+                        min_height=320,
+                        max_height=700,
+                        label="Portable Typst (read-only)",
+                    ),
+                ]
+            ),
+        }
+    )
     return
 
 

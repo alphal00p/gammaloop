@@ -1,12 +1,17 @@
 //! Local tensor notation for ordinary Symbolica expressions.
 //!
-//! These callbacks only replace bounded semantic leaves. Symbolica retains
-//! ownership of arithmetic, responsive layouts, paging, and unsupported calls.
+//! The interactive callbacks replace bounded semantic leaves, leaving arithmetic
+//! and paging to Symbolica. Static exports walk the complete expression through
+//! the same notation owner and decline when their explicit limits are exceeded.
 use super::*;
 use crate::structure::slot::{SlotMatch, SlotMatcher};
+use std::cell::Cell;
 use symbolica::printer::{AnsiHtmlFormatter, PrintMode, PrintUserData};
 
 const MAX_BYTES: usize = 4096;
+const MAX_EXPORT_NODES: usize = 1_000_000;
+const MAX_EXPORT_DEPTH: usize = 256;
+const MAX_EXPORT_BYTES: usize = 16 * 1024 * 1024;
 
 fn fits(atom: AtomView<'_>, remaining: &mut usize, depth: usize) -> bool {
     fn visit(atom: AtomView<'_>, remaining: &mut usize, bytes: &mut usize, depth: usize) -> bool {
@@ -39,10 +44,22 @@ fn source(atom: AtomView<'_>, options: &PrintOptions) -> Option<String> {
     if !fits(atom, &mut 256, 0) {
         return None;
     }
+    let atom = source_label(atom);
+    let native = atom
+        .printer(PrintOptions {
+            mode: PrintMode::MathML,
+            max_terms: Some(500),
+            ..options.clone()
+        })
+        .to_string();
+    fragment(native)
+}
+
+fn source_label(atom: AtomView<'_>) -> AtomView<'_> {
     // Reversible index symbols retain their original local label as Atom data.
     // Display simple payloads without renaming the index or inventing aliases.
     // Nested payloads remain opaque, avoiding recursive metadata expansion.
-    let atom = if let AtomView::Var(variable) = atom
+    if let AtomView::Var(variable) = atom
         && variable.get_symbol().has_tag(&SPENSO_TAG.index)
         && let symbolica::atom::UserData::Atom(payload) = variable.get_symbol().get_data()
         && let AtomView::Fun(label) = payload.as_view()
@@ -55,19 +72,12 @@ fn source(atom: AtomView<'_>, options: &PrintOptions) -> Option<String> {
                 symbolica::atom::UserData::None
             ),
             _ => false,
-        }) {
+        })
+    {
         payload.as_view()
     } else {
         atom
-    };
-    let native = atom
-        .printer(PrintOptions {
-            mode: PrintMode::MathML,
-            max_terms: Some(500),
-            ..options.clone()
-        })
-        .to_string();
-    fragment(native)
+    }
 }
 
 /// Prepare a complete, path-free MathML fragment for embedding in a semantic leaf.
@@ -76,8 +86,12 @@ fn source(atom: AtomView<'_>, options: &PrintOptions) -> Option<String> {
 /// `math` root or omission placeholder. Remove actual `data-symbolica-*`
 /// attributes while preserving token text and other attributes, including local
 /// visual slash and open-axis annotations. Malformed opening attributes decline.
-pub fn fragment(mut value: String) -> Option<String> {
-    if value.len() > MAX_BYTES || value.contains("<mtext>⋯</mtext>") || value.contains("<math") {
+pub fn fragment(value: String) -> Option<String> {
+    bounded_fragment(value, MAX_BYTES)
+}
+
+fn bounded_fragment(mut value: String, max_bytes: usize) -> Option<String> {
+    if value.len() > max_bytes || value.contains("<mtext>⋯</mtext>") || value.contains("<math") {
         return None;
     }
     let bytes = value.as_bytes();
@@ -161,7 +175,7 @@ pub fn fragment(mut value: String) -> Option<String> {
     value.trim_start().starts_with('<').then_some(value)
 }
 
-fn head(symbol: Symbol) -> Option<String> {
+fn head(symbol: Symbol, options: Option<&PrintOptions>) -> Option<String> {
     if let Some(source) = symbol.get_tags().iter().find_map(|tag| {
         tag.strip_prefix(TENSOR_PRINT_HEAD_PREFIX)?
             .strip_prefix("mathml:")
@@ -169,11 +183,24 @@ fn head(symbol: Symbol) -> Option<String> {
         return (source.len() + "<mrow></mrow>".len() <= MAX_BYTES)
             .then(|| format!("<mrow>{source}</mrow>"));
     }
+    if let Some(display) = IndexDisplay::from_symbol(symbol) {
+        return display.to_mathml();
+    }
     let label = symbol
         .get_tags()
         .iter()
         .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
-        .unwrap_or_else(|| symbol.get_stripped_name());
+        .unwrap_or_else(|| {
+            if options.is_some_and(|options| {
+                !options.hide_all_namespaces
+                    && options.hide_namespace.as_deref() != Some(symbol.get_namespace())
+                    && !symbolica::state::State::BUILTIN_SYMBOLS.contains(&symbol)
+            }) {
+                symbol.get_name()
+            } else {
+                symbol.get_stripped_name()
+            }
+        });
     (label.len() <= 1024).then(|| format!("<mi>{}</mi>", AnsiHtmlFormatter::escape_html(label)))
 }
 
@@ -196,7 +223,7 @@ fn labelled_head(
     labels: &[AtomView<'_>],
     options: &PrintOptions,
 ) -> Option<String> {
-    let head = head(symbol)?;
+    let head = head(symbol, None)?;
     if labels.is_empty() {
         return Some(head);
     }
@@ -220,7 +247,9 @@ pub(crate) fn tensor(
     }
     let symbol = atom.get_symbol()?;
     if let AtomView::Var(_) = atom {
-        return symbol.has_tag(&SPENSO_TAG.tensor).then(|| head(symbol))?;
+        return symbol
+            .has_tag(&SPENSO_TAG.tensor)
+            .then(|| head(symbol, None))?;
     }
     let AtomView::Fun(function) = atom else {
         return None;
@@ -479,6 +508,43 @@ pub fn render(
     })?)
 }
 
+/// Render a complete static MathML fragment using the interactive tensor notation.
+///
+/// No arithmetic or function argument is paged or replaced by an omission marker.
+/// `None` requires an export-limit error: the source is limited to 1,000,000 nodes
+/// and depth 256, and generated fragments share a 16 MiB rendering budget.
+/// Native numeric leaves retain their existing 4 KiB/precision bounds.
+/// The index resolver has the same contract as [`render`].
+pub fn expression(
+    atom: AtomView<'_>,
+    options: &PrintOptions,
+    state: &PrintState,
+    index: &dyn for<'a> Fn(Symbol, AtomView<'a>) -> Option<String>,
+) -> Option<String> {
+    let mut remaining = MAX_EXPORT_NODES;
+    if !Render::expression_fits(atom, &mut remaining, 0) {
+        return None;
+    }
+    let options = PrintOptions {
+        mode: PrintMode::MathML,
+        ..options.clone()
+    };
+    let mut context = Render::new(&options, index)?;
+    context.export = Some(Export {
+        remaining: Cell::new(MAX_EXPORT_BYTES),
+        state: Cell::new(*state),
+        failed: Cell::new(false),
+    });
+    let body = context.visual(atom, state)?;
+    bounded_fragment(body, MAX_EXPORT_BYTES)
+}
+
+struct Export {
+    remaining: Cell<usize>,
+    state: Cell<PrintState>,
+    failed: Cell<bool>,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Layout {
     Ports,
@@ -493,9 +559,54 @@ struct Render<'a> {
     layout: Layout,
     index_gap: String,
     factor_gap: String,
+    export: Option<Export>,
 }
 
 impl<'a> Render<'a> {
+    fn expression_fits(atom: AtomView<'_>, remaining: &mut usize, depth: usize) -> bool {
+        if *remaining == 0
+            || depth > MAX_EXPORT_DEPTH
+            || atom.get_byte_size() > MAX_EXPORT_BYTES
+            || atom
+                .get_symbol()
+                .is_some_and(|symbol| symbol.get_name().len() > MAX_BYTES)
+        {
+            return false;
+        }
+        *remaining -= 1;
+        atom.children()
+            .all(|child| Self::expression_fits(child, remaining, depth + 1))
+    }
+
+    fn fragment(&self, value: String) -> Option<String> {
+        let Some(export) = &self.export else {
+            return fragment(value);
+        };
+        let Some(remaining) = export.remaining.get().checked_sub(value.len()) else {
+            export.failed.set(true);
+            return None;
+        };
+        if export.failed.get() {
+            return None;
+        }
+        export.remaining.set(remaining);
+        bounded_fragment(value, MAX_EXPORT_BYTES)
+    }
+
+    fn child_state(&self) -> PrintState {
+        self.export.as_ref().map_or_else(PrintState::new, |export| {
+            let state = export.state.get();
+            PrintState {
+                in_sum: false,
+                in_product: false,
+                in_exp: false,
+                in_exp_base: false,
+                level: state.level.saturating_add(1),
+                ..state
+            }
+        })
+    }
+
     fn owns(&self, atom: AtomView<'_>) -> bool {
         atom.get_symbol().is_some_and(|symbol| {
             symbol.has_tag(&SPENSO_TAG.tensor)
@@ -548,6 +659,7 @@ impl<'a> Render<'a> {
             layout,
             index_gap: gap("spenso.index_gap", "0.08em")?,
             factor_gap: gap("spenso.factor_gap", "0.12em")?,
+            export: None,
         })
     }
 
@@ -564,26 +676,35 @@ impl<'a> Render<'a> {
             .get_tags()
             .iter()
             .any(|tag| tag.starts_with("spenso::print-head:mathml:"))
+            || IndexDisplay::from_symbol(symbol).is_some()
         {
-            return fragment(head(symbol)?);
+            return self.fragment(head(symbol, None)?);
         }
-        Some(match symbol.get_name() {
+        let body = match symbol.get_name() {
             "spenso::gamma" => "<mi>γ</mi>".to_owned(),
             "spenso::gamma0" => "<msub><mi>γ</mi><mn>0</mn></msub>".to_owned(),
             "spenso::gamma5" => "<msub><mi>γ</mi><mn>5</mn></msub>".to_owned(),
             "spenso::projp" => "<msup><mi>ℙ</mi><mo>+</mo></msup>".to_owned(),
             "spenso::projm" => "<msup><mi>ℙ</mi><mo>−</mo></msup>".to_owned(),
-            _ => head(symbol)?,
-        })
+            _ => head(symbol, None)?,
+        };
+        if self.export.is_some() {
+            self.fragment(body)
+        } else {
+            Some(body)
+        }
     }
 
     fn leaf(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
         let atom = unwrap_tensor_display(atom);
         let symbol = atom.get_symbol()?;
+        // Static scalar variables go straight to Symbol::format(), which owns
+        // both their callback and native name. A declined callback runs once.
         if symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
+            && !(self.export.is_some() && matches!(atom, AtomView::Var(_)) && !self.owns(atom))
             && let Some(custom) = tensor_custom_print(atom, self.options, state)
         {
-            if let Some(custom) = fragment(custom) {
+            if let Some(custom) = self.fragment(custom) {
                 return Some(custom);
             }
             if !symbol.has_tag(&SPENSO_TAG.tensor) {
@@ -625,7 +746,16 @@ impl<'a> Render<'a> {
         if let AtomView::Var(_) = atom {
             if symbol.has_tag(&SPENSO_TAG.index) {
                 return if let Some(display) = IndexDisplay::from_symbol(symbol) {
-                    fragment(display.to_mathml()?)
+                    self.fragment(display.to_mathml()?)
+                } else if self.export.is_some() {
+                    let label = source_label(atom);
+                    if label != atom {
+                        self.visual(label, state)
+                    } else {
+                        let mut body = String::new();
+                        symbol.format(self.options, *state, &mut body).ok()?;
+                        self.fragment(body)
+                    }
                 } else {
                     source(atom, self.options)
                 };
@@ -733,10 +863,28 @@ impl<'a> Render<'a> {
     }
 
     fn visual(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
+        let previous = self
+            .export
+            .as_ref()
+            .map(|export| export.state.replace(*state));
+        let body = self.visual_body(atom, state);
+        if let Some(export) = &self.export {
+            export.state.set(previous?);
+            if export.failed.get() {
+                return None;
+            }
+        }
+        body
+    }
+
+    fn visual_body(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
         let atom = unwrap_tensor_display(atom);
         let body = match atom {
             AtomView::Add(sum) => {
-                let body = self.arguments(&sum.iter().collect::<Vec<_>>(), "<mo>+</mo>")?;
+                let mut term_state = self.child_state();
+                term_state.in_sum = self.export.is_some();
+                let body =
+                    self.sequence(&sum.iter().collect::<Vec<_>>(), "<mo>+</mo>", &term_state)?;
                 if state.in_product || state.in_exp_base {
                     group(body)
                 } else {
@@ -753,13 +901,13 @@ impl<'a> Render<'a> {
                 // nonnegative integer is unambiguous, other numbers need fences.
                 let numeric_fence = matches!(base, AtomView::Num(number)
                     if !matches!(number.get_coeff_view(), CoefficientView::Natural(r, 1, 0, 1) if r >= 0));
-                let mut base_state = PrintState::new();
+                let mut base_state = self.child_state();
                 base_state.in_exp_base = true;
                 let mut base = self.visual(base, &base_state)?;
                 if numeric_fence {
                     base = group(base);
                 }
-                let mut exponent_state = PrintState::new();
+                let mut exponent_state = self.child_state();
                 exponent_state.in_exp = true;
                 let exponent = self.visual(exponent, &exponent_state)?;
                 let body = format!("<msup><mrow>{base}</mrow><mrow>{exponent}</mrow></msup>");
@@ -768,6 +916,8 @@ impl<'a> Render<'a> {
             _ => {
                 if let Some(body) = self.leaf(atom, state) {
                     body
+                } else if self.export.is_some() {
+                    self.structural(atom, state)?
                 } else if self.owns(atom) {
                     return None;
                 } else if let Some(custom) = atom
@@ -780,17 +930,130 @@ impl<'a> Render<'a> {
                 }
             }
         };
-        fragment(body)
+        self.fragment(body)
+    }
+
+    fn structural(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
+        match atom {
+            AtomView::Num(number) => {
+                if !fits(atom, &mut 256, 0)
+                    || self
+                        .options
+                        .precision
+                        .is_some_and(|precision| precision > MAX_BYTES)
+                {
+                    return None;
+                }
+                let polynomial = matches!(
+                    number.get_coeff_view(),
+                    CoefficientView::RationalPolynomial(_)
+                );
+                let body = if polynomial {
+                    // A Num root has no pageable children. Disable the separate
+                    // plain coefficient term limit too, so exotic numeric
+                    // domains either remain exact or fail the atomic byte cap.
+                    fragment(
+                        atom.printer(PrintOptions {
+                            max_terms: None,
+                            ..self.options.clone()
+                        })
+                        .to_string(),
+                    )?
+                } else {
+                    source(atom, self.options)?
+                };
+                Some(
+                    if state.in_product
+                        && (polynomial
+                            || !number.get_coeff_view().is_real()
+                            || number.get_coeff_view().to_owned().is_negative())
+                    {
+                        group(body)
+                    } else {
+                        body
+                    },
+                )
+            }
+            AtomView::Var(variable) if !self.owns(atom) => {
+                let mut body = String::new();
+                variable
+                    .get_symbol()
+                    .format(self.options, *state, &mut body)
+                    .ok()?;
+                self.fragment(body)
+            }
+            AtomView::Var(variable) => self.head(variable.get_symbol()),
+            AtomView::Fun(function) => {
+                let symbol = function.get_symbol();
+                // Semantic callbacks were already tried by leaf(). Ordinary
+                // callables receive the original Atom and surrounding state.
+                if !self.owns(atom)
+                    && !symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
+                    && let Some(custom) = symbol.get_print_function()
+                    && let Some(custom) = custom(atom, self.options, state)
+                    && let Some(custom) = self.fragment(custom)
+                {
+                    return Some(custom);
+                }
+                let arguments = function.iter().collect::<Vec<_>>();
+                let count = arguments.len();
+                if symbol == Symbol::DERIVATIVE
+                    && count >= 3
+                    && count % 2 == 1
+                    && arguments[count / 2].get_symbol().is_some()
+                {
+                    // Native der(d1,...,dn,f,x1,...,xn) notation, without its
+                    // paging limits. Recurse through the original head too:
+                    // a function-valued head must retain all its children.
+                    let count = count / 2;
+                    let mut head_state = self.child_state();
+                    head_state.in_exp_base = true;
+                    let head = self.visual(arguments[count], &head_state)?;
+                    let orders = self.arguments(&arguments[..count], "<mo>,</mo>")?;
+                    let arguments = self.arguments(&arguments[count + 1..], "<mo>,</mo>")?;
+                    let body = format!(
+                        "<mrow><msup><mrow>{head}</mrow>{}</msup><mo>&#x2061;</mo>{}</mrow>",
+                        group(orders),
+                        group(arguments)
+                    );
+                    return Some(if state.in_exp_base { group(body) } else { body });
+                }
+                let head = if !self.owns(atom) && symbol.get_print_function().is_none() {
+                    let mut head = String::new();
+                    symbol.format(self.options, *state, &mut head).ok()?;
+                    self.fragment(head)?
+                } else if !self.owns(atom) {
+                    // The function callback already declined. Keep its source
+                    // namespace through the bounded semantic head owner rather
+                    // than retrying the callback on a bare variable.
+                    self.fragment(head(symbol, Some(self.options))?)?
+                } else {
+                    self.head(symbol)?
+                };
+                let arguments = self.arguments(&arguments, "<mo>,</mo>")?;
+                Some(format!("<mrow>{head}{}</mrow>", group(arguments)))
+            }
+            _ => None,
+        }
     }
 
     fn arguments(&self, arguments: &[AtomView<'_>], separator: &str) -> Option<String> {
+        self.sequence(arguments, separator, &self.child_state())
+    }
+
+    fn sequence(
+        &self,
+        arguments: &[AtomView<'_>],
+        separator: &str,
+        state: &PrintState,
+    ) -> Option<String> {
         let mut output = String::new();
         for (position, argument) in arguments.iter().enumerate() {
             if position != 0 {
                 output.push_str(separator);
             }
-            output.push_str(&self.visual(*argument, &PrintState::new())?);
-            if output.len() > MAX_BYTES {
+            output.push_str(&self.visual(*argument, state)?);
+            if output.len() > self.export.as_ref().map_or(MAX_BYTES, |_| MAX_EXPORT_BYTES) {
                 return None;
             }
         }
@@ -798,39 +1061,30 @@ impl<'a> Render<'a> {
     }
 
     fn factors(&self, factors: &[AtomView<'_>]) -> Option<String> {
-        let mut state = PrintState::new();
+        let mut state = self.child_state();
         state.in_product = true;
-        let mut output = String::new();
-        for (position, factor) in factors.iter().enumerate() {
-            if position != 0 {
-                output.push_str(&Self::space(&self.factor_gap));
-            }
-            output.push_str(&self.visual(*factor, &state)?);
-            if output.len() > MAX_BYTES {
-                return None;
-            }
-        }
+        let output = self.sequence(factors, &Self::space(&self.factor_gap), &state)?;
         Some(format!("<mrow>{output}</mrow>"))
     }
 
     fn index(&self, symbol: Symbol, index: AtomView<'_>) -> Option<String> {
         if let Some(alias) = (self.index)(symbol, index) {
-            return fragment(alias);
+            return self.fragment(alias);
         }
         if let Some(index) = natural_index(index)
             && let Some(display) = RepresentationMetadata::from_symbol(symbol)?
                 .index_palette
                 .resolve(index)
         {
-            return fragment(display.to_mathml()?);
+            return self.fragment(display.to_mathml()?);
         }
         if let AtomView::Var(variable) = index
             && variable.get_symbol().has_tag(&SPENSO_TAG.index)
             && let Some(display) = IndexDisplay::from_symbol(variable.get_symbol())
         {
-            return fragment(display.to_mathml()?);
+            return self.fragment(display.to_mathml()?);
         }
-        self.visual(index, &PrintState::new())
+        self.visual(index, &self.child_state())
     }
 
     fn qualified(&self, source: String, symbol: Symbol, dimension: AtomView<'_>) -> Option<String> {
@@ -840,7 +1094,7 @@ impl<'a> Render<'a> {
         let label = RepresentationMetadata::from_symbol(symbol)?
             .label
             .to_mathml()?;
-        let dimension = self.visual(dimension, &PrintState::new())?;
+        let dimension = self.visual(dimension, &self.child_state())?;
         Some(format!(
             "<msup><mrow>{source}</mrow><msub><mrow>{label}</mrow><mrow>{dimension}</mrow></msub></msup>"
         ))
@@ -985,7 +1239,9 @@ impl<'a> Render<'a> {
             label = if self.settings.symbol_scripts {
                 let columns = labels
                     .iter()
-                    .map(|label| Some((self.visual(*label, &PrintState::new())?, IndexRow::Bottom)))
+                    .map(|label| {
+                        Some((self.visual(*label, &self.child_state())?, IndexRow::Bottom))
+                    })
                     .collect::<Option<Vec<_>>>()?;
                 self.attachment(label, &columns)
             } else {
@@ -1057,7 +1313,7 @@ impl<'a> Render<'a> {
                     }
                 }
             } else {
-                let source = self.visual(argument, &PrintState::new())?;
+                let source = self.visual(argument, &self.child_state())?;
                 if self.settings.symbol_scripts {
                     columns.push((source, IndexRow::Bottom));
                 } else {
@@ -1092,7 +1348,7 @@ impl<'a> Render<'a> {
         {
             base = group(base);
         }
-        fragment(base)
+        self.fragment(base)
     }
 
     fn ports(base: String, bras: &[String], kets: &[String]) -> String {
@@ -1127,7 +1383,7 @@ impl<'a> Render<'a> {
         let label = RepresentationMetadata::from_symbol(symbol)?
             .label
             .to_mathml()?;
-        let dimension = self.visual(dimension, &PrintState::new())?;
+        let dimension = self.visual(dimension, &self.child_state())?;
         let mut body = format!("<msub><mrow>{label}</mrow><mrow>{dimension}</mrow></msub>");
         let dual = matches!(unwrap_tensor_display(atom), AtomView::Fun(wrapper) if wrapper.get_symbol() == AIND_SYMBOLS.dind)
             && class == RepresentationClass::Dualizable;
@@ -1203,7 +1459,7 @@ impl<'a> Render<'a> {
                     slot.row,
                 ));
             } else {
-                labels[position] = Some(self.visual(endpoint, &PrintState::new())?);
+                labels[position] = Some(self.visual(endpoint, &self.child_state())?);
             }
         }
         body = self.attachment(body, &columns);
@@ -1237,7 +1493,7 @@ impl<'a> Render<'a> {
         if self.settings.with_dim {
             head = format!(
                 "<msub>{head}<mrow>{}</mrow></msub>",
-                self.visual(*representation, &PrintState::new())?
+                self.visual(*representation, &self.child_state())?
             );
         }
         if factors.is_empty() {
@@ -1269,6 +1525,507 @@ mod tests {
 
     fn scoped(atom: &Atom, options: &PrintOptions) -> String {
         render(atom.as_view(), options, &PrintState::new(), &|_, _| None).unwrap()
+    }
+
+    #[test]
+    fn static_expression_keeps_all_factors_past_native_arithmetic_and_page_limits() {
+        let head = crate::tensor_symbol!("static_mathml::Wide");
+        let index = symbol!("static_mathml::wide_index");
+        let mut value = Atom::num(1);
+        for label in 0..320 {
+            value *= function!(head, label, mink!(4, Atom::var(index)));
+        }
+        let original = value.as_view().get_data().to_vec();
+        let mut options = options();
+        options.max_terms = Some(1);
+        let html = expression(value.as_view(), &options, &PrintState::new(), &|_, _| {
+            Some("<mi mathcolor=\"red\">α</mi>".to_owned())
+        })
+        .unwrap();
+        assert_eq!(html.matches("<mi>Wide</mi>").count(), 320);
+        assert_eq!(html.matches("<mi mathcolor=\"red\">α</mi>").count(), 320);
+        for label in 0..320 {
+            assert!(
+                html.contains(&format!("<mn>{label}</mn>")),
+                "missing {label}"
+            );
+        }
+        assert!(html.len() > MAX_BYTES);
+        assert!(!html.contains('⋯') && !html.contains("data-symbolica-"));
+        assert_eq!(value.as_view().get_data(), original);
+        assert!(render(value.as_view(), &options, &PrintState::new(), &|_, _| None).is_none());
+    }
+
+    #[test]
+    fn static_expression_recurses_through_unsupported_calls_without_losing_tensors() {
+        let head = crate::tensor_symbol!("static_mathml::Nested");
+        let plain = symbol!("static_mathml::outer");
+        let tensor = function!(head, mink!(4, symbol!("static_mathml::mu")));
+        let mut value = FunctionBuilder::new(plain)
+            .add_arg(&tensor)
+            .add_args((0..80).map(Atom::num))
+            .finish();
+        for _ in 0..40 {
+            value = function!(plain, value);
+        }
+        let original = value.as_view().get_data().to_vec();
+        let html = expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
+            None
+        })
+        .unwrap();
+        assert_eq!(html.matches("<mi>outer</mi>").count(), 41);
+        assert!(html.contains("<mmultiscripts>") && html.contains("<mi>Nested</mi>"));
+        assert!(html.contains("<mi>mu</mi>"));
+        for label in 0..80 {
+            assert!(
+                html.contains(&format!("<mn>{label}</mn>")),
+                "missing {label}"
+            );
+        }
+        assert!(!html.contains('⋯') && !html.contains("data-symbolica-"));
+        assert_eq!(value.as_view().get_data(), original);
+
+        // Declined semantic calls use the same recursive structural fallback.
+        let malformed = function!(SPENSO_TAG.trace, mink!(4), &tensor, &tensor);
+        let html = expression(
+            malformed.as_view(),
+            &options(),
+            &PrintState::new(),
+            &|_, _| None,
+        )
+        .unwrap();
+        assert_eq!(html.matches("<mi>Nested</mi>").count(), 2);
+        assert!(html.contains("<mi>mink</mi>") && !html.contains('⋯'));
+    }
+
+    #[test]
+    fn static_expression_uses_native_single_and_multivariate_derivative_notation() {
+        let f = symbol!("static_mathml::DerivativeFunction");
+        let x = symbol!("static_mathml::derivative_x");
+        let y = symbol!("static_mathml::derivative_y");
+        let z = symbol!("static_mathml::derivative_z");
+        let single = function!(f, Atom::var(x)).derivative(x);
+        let multiple = function!(
+            Symbol::DERIVATIVE,
+            2,
+            0,
+            3,
+            Atom::var(f),
+            Atom::var(x),
+            Atom::var(y),
+            Atom::var(z)
+        );
+        for (value, orders, arguments) in [
+            (single, vec![1], vec![x]),
+            (multiple, vec![2, 0, 3], vec![x, y, z]),
+        ] {
+            assert_eq!(value.as_view().get_symbol(), Some(Symbol::DERIVATIVE));
+            let original = value.as_view().get_data().to_vec();
+            let html = expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
+                None
+            })
+            .unwrap();
+            assert!(
+                html.starts_with("<mrow><msup><mrow><mi>DerivativeFunction</mi></mrow>"),
+                "{html}"
+            );
+            let (script, arguments_html) = html.split_once("</msup><mo>&#x2061;</mo>").unwrap();
+            let order_positions = orders
+                .iter()
+                .map(|order| script.find(&format!("<mn>{order}</mn>")).unwrap())
+                .collect::<Vec<_>>();
+            let argument_positions = arguments
+                .iter()
+                .map(|argument| {
+                    arguments_html
+                        .find(&format!("<mi>{}</mi>", argument.get_stripped_name()))
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
+            assert!(
+                order_positions.windows(2).all(|pair| pair[0] < pair[1]),
+                "{html}"
+            );
+            assert!(
+                argument_positions.windows(2).all(|pair| pair[0] < pair[1]),
+                "{html}"
+            );
+            assert_eq!(script.matches("<mo>,</mo>").count(), orders.len() - 1);
+            assert_eq!(
+                arguments_html.matches("<mo>,</mo>").count(),
+                arguments.len() - 1
+            );
+            assert!(!html.contains("<mi>der</mi>") && !html.contains('⋯'));
+            assert_eq!(value.as_view().get_data(), original);
+            let mut state = PrintState::new();
+            state.in_exp_base = true;
+            assert_eq!(
+                expression(value.as_view(), &options(), &state, &|_, _| None),
+                Some(group(html))
+            );
+        }
+    }
+
+    #[test]
+    fn static_expression_derivatives_keep_rich_orders_heads_arguments_and_aliases() {
+        let head = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::DerivativeHead"))
+            .with_tags([
+                SPENSO_TAG.tensor.as_str(),
+                "spenso::print-head:mathml:<mi mathcolor=\"purple\">𝒜</mi>",
+            ])
+            .with_print_function(tensor_print)
+            .build()
+            .unwrap();
+        let tensor = crate::tensor_symbol!("static_mathml::DerivativeArgument");
+        let index = symbol!("static_mathml::derivative_index");
+        let rich = function!(tensor, mink!(4, Atom::var(index)));
+        // The native derivative shape admits any symbolic head. Its source
+        // children and non-scalar orders must also survive static rendering.
+        let value = function!(Symbol::DERIVATIVE, &rich, function!(head, &rich), &rich);
+        let original = value.as_view().get_data().to_vec();
+        let html = expression(
+            value.as_view(),
+            &options(),
+            &PrintState::new(),
+            &|_, original_index| {
+                assert_eq!(original_index, Atom::var(index).as_view());
+                Some("<mi mathcolor=\"orange\">α</mi>".to_owned())
+            },
+        )
+        .unwrap();
+        assert!(html.contains("<mi mathcolor=\"purple\">𝒜</mi>"), "{html}");
+        assert_eq!(html.matches("<mi>DerivativeArgument</mi>").count(), 3);
+        assert_eq!(html.matches("<mi mathcolor=\"orange\">α</mi>").count(), 3);
+        assert!(html.contains("<mmultiscripts>") && html.contains("<mo>&#x2061;</mo>"));
+        assert!(!html.contains('⋯') && !html.contains("data-symbolica-"));
+        assert_eq!(value.as_view().get_data(), original);
+    }
+
+    #[test]
+    fn static_expression_invalid_derivative_shapes_keep_structural_arguments() {
+        let f = symbol!("static_mathml::InvalidDerivativeFunction");
+        let same_name = symbol!("static_mathml::der");
+        let tensor = crate::tensor_symbol!("static_mathml::InvalidDerivativeArgument");
+        let rich = function!(
+            tensor,
+            mink!(4, symbol!("static_mathml::invalid_derivative_index"))
+        );
+        for (value, occurrences) in [
+            (function!(Symbol::DERIVATIVE), 0),
+            (function!(Symbol::DERIVATIVE, &rich), 1),
+            (function!(Symbol::DERIVATIVE, 1, &rich), 1),
+            (function!(Symbol::DERIVATIVE, 1, 2, &rich, &rich), 2),
+            (function!(Symbol::DERIVATIVE, 1, 7, &rich), 1),
+            (function!(same_name, 1, Atom::var(f), &rich), 1),
+        ] {
+            let original = value.as_view().get_data().to_vec();
+            let html = expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
+                None
+            })
+            .unwrap();
+            assert!(html.contains("<mi>der</mi>"), "{html}");
+            assert!(
+                !html.contains("<mo>&#x2061;</mo>") && !html.contains('⋯'),
+                "{html}"
+            );
+            assert_eq!(
+                html.matches("<mi>InvalidDerivativeArgument</mi>").count(),
+                occurrences
+            );
+            assert_eq!(value.as_view().get_data(), original);
+        }
+    }
+
+    #[test]
+    fn static_expression_keeps_numeric_signs_and_fences_products_and_power_bases() {
+        let options = options();
+        let exponent = Atom::var(symbol!("static_mathml::exponent"));
+        let factor = Atom::var(symbol!("static_mathml::factor"));
+        let large = Atom::num(2).pow(80);
+        for scalar in [
+            Atom::num(-2),
+            Atom::num((-2, 3)),
+            Atom::num(-0.5),
+            Atom::num((-2, 3)) + Atom::i() * Atom::num((5, 7)),
+            Atom::num((2, 3)) - Atom::i() * Atom::num((5, 7)),
+            Atom::num((-2, 3)) - Atom::i() * Atom::num((5, 7)),
+            -Atom::i(),
+            large - Atom::i() * Atom::num((11, 13)),
+        ] {
+            assert!(matches!(scalar.as_view(), AtomView::Num(_)));
+            let native = source(scalar.as_view(), &options).unwrap();
+            let html =
+                expression(scalar.as_view(), &options, &PrintState::new(), &|_, _| None).unwrap();
+            assert_eq!(html, native);
+            let product = &factor * &scalar;
+            let original = product.as_view().get_data().to_vec();
+            let html = expression(product.as_view(), &options, &PrintState::new(), &|_, _| {
+                None
+            })
+            .unwrap();
+            assert!(html.contains(&group(native.clone())), "{html}");
+            assert_eq!(product.as_view().get_data(), original);
+            let power = scalar.pow(&exponent);
+            let html =
+                expression(power.as_view(), &options, &PrintState::new(), &|_, _| None).unwrap();
+            assert!(
+                html.contains(&format!("<msup><mrow>{}</mrow>", group(native))),
+                "{html}"
+            );
+        }
+        let positive = Atom::num((1, 2)).pow(&exponent);
+        let html = expression(positive.as_view(), &options, &PrintState::new(), &|_, _| {
+            None
+        })
+        .unwrap();
+        assert!(html.contains(&group(
+            source(Atom::num((1, 2)).as_view(), &options).unwrap()
+        )));
+    }
+
+    #[test]
+    fn static_expression_preserves_callback_options_state_and_shared_leaf_notation() {
+        use std::sync::{Arc, Mutex};
+
+        let states = Arc::new(Mutex::new(Vec::new()));
+        let callback_states = Arc::clone(&states);
+        let callback = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::callback"))
+            .with_print_function(move |_, options, state| {
+                assert!(options.mode.is_mathml());
+                assert!(matches!(
+                    options.custom_print_mode.get("static-test"),
+                    Some(PrintUserData::Integer(17))
+                ));
+                callback_states.lock().unwrap().push(*state);
+                Some("<mi data-symbolica-path=\"hidden\">custom</mi>".to_owned())
+            })
+            .build()
+            .unwrap();
+        let mut options = options();
+        options
+            .custom_print_mode
+            .insert("static-test".to_owned(), PrintUserData::Integer(17));
+        let mut state = PrintState::new();
+        state.level = 17;
+        state.in_exp_base = true;
+        state.in_product = true;
+        let value = Atom::var(callback);
+        assert_eq!(
+            expression(value.as_view(), &options, &state, &|_, _| None).as_deref(),
+            Some("<mi>custom</mi>")
+        );
+        let seen = states.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].level, 17);
+        assert!(seen[0].in_exp_base && seen[0].in_product);
+        drop(seen);
+        states.lock().unwrap().clear();
+        let nested = function!(SPENSO_TAG.bracket, value.pow(2));
+        expression(nested.as_view(), &options, &state, &|_, _| None).unwrap();
+        let seen = states.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert_eq!(seen[0].level, 19);
+        assert!(seen[0].in_exp_base && !seen[0].in_product);
+        drop(seen);
+        states.lock().unwrap().clear();
+        let sum = &value + Atom::num(1);
+        expression(sum.as_view(), &options, &state, &|_, _| None).unwrap();
+        let seen = states.lock().unwrap();
+        assert_eq!(seen.len(), 1);
+        assert!(seen[0].in_sum && seen[0].level == 18);
+        drop(seen);
+
+        let head = crate::tensor_symbol!("static_mathml::Shared");
+        let value = function!(head, 3, mink!(4, symbol!("static_mathml::shared_index")));
+        for layout in ["ports", "schoonschip", "call"] {
+            options.custom_print_mode.insert(
+                "spenso.tensor_layout".to_owned(),
+                PrintUserData::String(layout.to_owned()),
+            );
+            assert_eq!(
+                expression(value.as_view(), &options, &state, &|_, _| None),
+                render(value.as_view(), &options, &state, &|_, _| None)
+            );
+        }
+    }
+
+    #[test]
+    fn static_expression_declined_scalar_callback_runs_once_per_render() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let callback_calls = Arc::clone(&calls);
+        let symbol = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::declined_scalar"))
+            .with_attributes(vec![SymbolAttribute::Scalar])
+            .with_tags([TENSOR_PRINT_CALLBACK_TAG])
+            .with_print_function(move |atom, options, state| {
+                assert!(matches!(atom, AtomView::Var(_)));
+                assert!(options.mode.is_mathml());
+                assert!(state.in_exp_base);
+                assert_eq!(state.level, 23);
+                (callback_calls.fetch_add(1, Ordering::SeqCst) != 0)
+                    .then(|| "<mi>later-render</mi>".to_owned())
+            })
+            .build()
+            .unwrap();
+        let value = Atom::var(symbol);
+        let original = value.as_view().get_data().to_vec();
+        let mut state = PrintState::new();
+        state.level = 23;
+        state.in_exp_base = true;
+        assert_eq!(
+            expression(value.as_view(), &options(), &state, &|_, _| None).as_deref(),
+            Some("<mi>declined_scalar</mi>")
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            expression(value.as_view(), &options(), &state, &|_, _| None).as_deref(),
+            Some("<mi>later-render</mi>")
+        );
+        assert_eq!(calls.load(Ordering::SeqCst), 2);
+        assert_eq!(value.as_view().get_data(), original);
+    }
+
+    #[test]
+    fn static_expression_declined_function_callbacks_keep_source_namespaces_once() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let symbols = [
+            ("static_mathml_declined_left::γ", true),
+            ("static_mathml_declined_right::γ", false),
+        ]
+        .map(|(name, tagged)| {
+            let calls = Arc::clone(&calls);
+            SymbolBuilder::new(NamespacedSymbol::parse(name))
+                .with_tags(if tagged {
+                    vec![TENSOR_PRINT_CALLBACK_TAG]
+                } else {
+                    Vec::new()
+                })
+                .with_print_function(move |atom, options, state| {
+                    assert!(matches!(atom, AtomView::Fun(function) if function.get_nargs() == 1));
+                    assert!(options.mode.is_mathml());
+                    assert_eq!(state.level, 19);
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    None
+                })
+                .build()
+                .unwrap()
+        });
+        let argument = Atom::var(symbol!("static_mathml::declined_function_argument"));
+        let mut state = PrintState::new();
+        state.level = 19;
+        for (hide_all_namespaces, hide_namespace) in [
+            (false, None),
+            (true, None),
+            (false, Some("static_mathml_declined_left")),
+            (false, Some("static_mathml_declined_right")),
+        ] {
+            let options = PrintOptions {
+                hide_all_namespaces,
+                hide_namespace: hide_namespace.map(Into::into),
+                ..options()
+            };
+            let rendered = symbols.map(|symbol| {
+                calls.store(0, Ordering::SeqCst);
+                let value = function!(symbol, &argument);
+                let original = value.as_view().get_data().to_vec();
+                let html = expression(value.as_view(), &options, &state, &|_, _| None).unwrap();
+                assert_eq!(calls.load(Ordering::SeqCst), 1);
+                let qualified =
+                    !hide_all_namespaces && hide_namespace != Some(symbol.get_namespace());
+                let label = if qualified {
+                    symbol.get_name()
+                } else {
+                    symbol.get_stripped_name()
+                };
+                assert!(html.contains(&format!("<mi>{label}</mi>")), "{html}");
+                assert!(
+                    html.contains("<mi>declined_function_argument</mi>"),
+                    "{html}"
+                );
+                assert_eq!(html.contains(symbol.get_namespace()), qualified, "{html}");
+                assert_eq!(value.as_view().get_data(), original);
+                html
+            });
+            if hide_all_namespaces {
+                assert_eq!(rendered[0], rendered[1]);
+            } else {
+                assert_ne!(rendered[0], rendered[1]);
+            }
+        }
+    }
+
+    #[test]
+    fn static_expression_keeps_native_greek_names_namespaces_and_numbers() {
+        for hide_all_namespaces in [false, true] {
+            let options = PrintOptions {
+                hide_all_namespaces,
+                ..options()
+            };
+            for value in [
+                Atom::var(symbol!("static_mathml::α")),
+                Atom::var(symbol!("static_mathml::γ")),
+                Atom::var(symbol!("static_mathml::native_scalar")),
+                Atom::var(Symbol::PI),
+                Atom::num(0),
+                Atom::num(-2),
+                Atom::num((1, 3)),
+                Atom::num(2.5),
+                Atom::num((2, 3)) - Atom::i() * Atom::num((5, 7)),
+            ] {
+                let native = source(value.as_view(), &options).unwrap();
+                assert_eq!(
+                    expression(value.as_view(), &options, &PrintState::new(), &|_, _| None),
+                    Some(native)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn static_expression_declines_limits_without_returning_partial_output() {
+        let plain = symbol!("static_mathml::depth");
+        let mut value = Atom::var(plain);
+        for _ in 0..=MAX_EXPORT_DEPTH {
+            value = function!(plain, value);
+        }
+        assert!(
+            expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
+                None
+            })
+            .is_none()
+        );
+        assert!(!Render::expression_fits(
+            function!(plain, 1, 2).as_view(),
+            &mut 2,
+            0
+        ));
+
+        let callback = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::oversized"))
+            .with_tags([SPENSO_TAG.tensor.as_str(), TENSOR_PRINT_CALLBACK_TAG])
+            .with_print_function(|_, _, _| {
+                Some(format!("<mtext>{}</mtext>", "x".repeat(MAX_EXPORT_BYTES)))
+            })
+            .build()
+            .unwrap();
+        let value = function!(callback, 1);
+        let original = value.as_view().get_data().to_vec();
+        assert!(
+            expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
+                None
+            })
+            .is_none()
+        );
+        assert_eq!(value.as_view().get_data(), original);
+        assert!(fragment(format!("<mtext>{}</mtext>", "x".repeat(MAX_BYTES))).is_none());
     }
 
     fn gamma() -> Symbol {
@@ -1863,14 +2620,64 @@ mod tests {
             SPENSO_TAG.rank1.as_str(),
             "spenso::print-head:mathml:<mi>A</mi><mo>′</mo>",
         ])
+        .with_user_data(
+            IndexDisplay::math("overline", vec![IndexDisplay::symbol("B").unwrap()])
+                .unwrap()
+                .symbol_user_data(),
+        )
         .with_print_function(tensor_print)
         .build()
         .unwrap();
         let value = function!(symbol, 7, mink!(4, symbol!("native_mathml_print::mu")));
-        let html = tensor(value.as_view(), &options(), &PrintState::new()).unwrap();
+        let original = value.as_view().get_data().to_vec();
+        let head = "<mrow><mi>A</mi><mo>′</mo></mrow>";
+        // The native printer subscripts the vector label; scoped and static
+        // notation give labels and representation slots their own columns.
+        for (html, prefix) in [
+            (
+                tensor(value.as_view(), &options(), &PrintState::new()).unwrap(),
+                "<mmultiscripts><msub>",
+            ),
+            (scoped(&value, &options()), "<mmultiscripts><mrow>"),
+            (
+                expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
+                    None
+                })
+                .unwrap(),
+                "<mmultiscripts><mrow>",
+            ),
+        ] {
+            assert!(html.starts_with(&format!("{prefix}{head}")), "{html}");
+            assert_eq!(html.matches(head).count(), 1, "{html}");
+            assert_eq!(html.matches("<mi>A</mi>").count(), 1, "{html}");
+            assert_eq!(html.matches("<mo>′</mo>").count(), 1, "{html}");
+            assert_eq!(html.matches("<mn>7</mn>").count(), 1, "{html}");
+            assert_eq!(html.matches("<mi>mu</mi>").count(), 1, "{html}");
+            assert!(!html.contains("<mi>B</mi>"), "{html}");
+        }
+        assert_eq!(value.as_view().get_data(), original);
+    }
+
+    #[test]
+    fn structured_tensor_heads_use_existing_mathml_bounds() {
+        let display = IndexDisplay::Sequence(vec![IndexDisplay::Symbol("<".repeat(128)); 10]);
+        let symbol = SymbolBuilder::new(symbolica::wrap_symbol!(
+            "native_mathml_print::bounded_structured_head"
+        ))
+        .with_tags([SPENSO_TAG.tensor.as_str()])
+        .with_user_data(display.symbol_user_data())
+        .build()
+        .unwrap();
+        assert_eq!(IndexDisplay::from_symbol(symbol), Some(display));
+        assert!(head(symbol, None).is_none());
         assert!(
-            html.starts_with("<mmultiscripts><msub><mrow><mi>A</mi><mo>′</mo></mrow>"),
-            "{html}"
+            render(
+                Atom::var(symbol).as_view(),
+                &options(),
+                &PrintState::new(),
+                &|_, _| None,
+            )
+            .is_none()
         );
     }
 

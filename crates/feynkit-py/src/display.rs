@@ -1,20 +1,19 @@
 use feynkit_graph::FeynmanDiagram;
 use feynkit_model::{Model, ParticleId};
-use linnest::svg::Scene;
 use linnet_render_py::PyRenderSettings;
 
 use crate::render_settings::PyDiagramStyle;
 use pyo3::prelude::*;
 use std::fmt::Write;
 
-use linnet_render_py::PyDiagramRender;
+use linnet_render_py::PyDiagramView;
 
 /// Energy representations reuse Linnet's layout with their own orientation marks.
-pub(crate) fn energy_graph_svg(
+pub(crate) fn energy_graph_view(
     py: Python<'_>,
     diagram: &FeynmanDiagram,
     style: &feynkit_graph::SceneOptions,
-) -> PyResult<String> {
+) -> PyResult<PyDiagramView> {
     let options = feynkit_graph::SceneOptions {
         show_particle: false,
         show_edge_index: true,
@@ -32,7 +31,7 @@ pub(crate) fn energy_graph_svg(
         edge.flow = None;
         edge.pattern = None;
     }
-    PyDiagramRender::from_scene(py, scene, None)?.to_svg()
+    PyDiagramView::from_scene(py, scene, None)?.map_svg(themed_svg)
 }
 
 pub(crate) fn escape_html(value: &str) -> String {
@@ -105,7 +104,7 @@ pub(crate) const PREVIEW_LIMIT: usize = 6;
 /// Compact collections share the graph renderer and Spenso's expression printer.
 /// SVG templates remain inert until a row or thumbnail is selected.
 #[allow(clippy::too_many_arguments)]
-pub(crate) fn collection_html(
+pub(crate) fn collection_view(
     py: Python<'_>,
     title: &str,
     subtitle: &str,
@@ -114,7 +113,7 @@ pub(crate) fn collection_html(
     config: Option<&PyRenderSettings>,
     style: Option<&PyDiagramStyle>,
     limit: usize,
-) -> PyResult<(String, Vec<PyDiagramRender>)> {
+) -> PyResult<PyDiagramView> {
     let count = diagrams.len();
     let mut html = format!(
         "<style>{}</style><section class=\"feynkit-collection\" data-feynkit-notebook data-linnet-frame-owner><header><strong>{}</strong><small>{}</small></header>",
@@ -129,8 +128,11 @@ pub(crate) fn collection_html(
     let mut drawings = Vec::new();
     for (index, diagram) in diagrams.take(limit).enumerate() {
         let drawing = diagram.render(py, config, style, false, None, None)?;
-        let svg = drawing.to_svg_pages()?.join("\n");
-        write!(templates, "<template>{svg}</template>").unwrap();
+        write!(
+            templates,
+            "<template data-feynkit-drawing><!--linnet-svg-{index}--></template>"
+        )
+        .unwrap();
         drawings.push(drawing);
         let label = format!("Diagram {}", index + 1);
         let mut caption = format!(
@@ -171,31 +173,30 @@ pub(crate) fn collection_html(
         include_str!("notebook.js")
     )
     .unwrap();
-    Ok((html, drawings))
+    PyDiagramView::from_views(drawings, Some(html))
 }
 
 /// Draw each process channel as a native star graph with a hatched interaction blob.
-pub(crate) fn process_svg(
+pub(crate) fn process_view(
+    py: Python<'_>,
     model: &Model,
     incoming: &[ParticleId],
     outgoing: &[Vec<ParticleId>],
     config: Option<&PyRenderSettings>,
     style: Option<&PyDiagramStyle>,
-) -> PyResult<String> {
+) -> PyResult<PyDiagramView> {
     let options = PyDiagramStyle::resolve(style, false);
-    let config = config.cloned().unwrap_or_default().config()?;
-    let mut figures = Vec::new();
-    for state in outgoing {
-        let scene = options
-            .process_scene(model, incoming, state, &config)
-            .map_err(pyo3::exceptions::PyValueError::new_err)?;
-        figures.push(Python::attach(|py| {
-            PyDiagramRender::from_scene(py, scene, None)?
-                .map_svg(themed_svg)?
-                .to_svg()
-        })?);
-    }
-    Scene::combine_svgs(&figures).map_err(pyo3::exceptions::PyRuntimeError::new_err)
+    let resolved_config = config.cloned().unwrap_or_default().config()?;
+    let scenes = outgoing
+        .iter()
+        .map(|state| {
+            options
+                .process_scene(model, incoming, state, &resolved_config)
+                .map_err(pyo3::exceptions::PyValueError::new_err)
+        })
+        .collect::<PyResult<Vec<_>>>()?;
+    // process_scene resolves these settings before pinning legs around the blob.
+    PyDiagramView::from_scenes(py, scenes, None)?.map_svg(themed_svg)
 }
 
 /// Values are escaped text or fragments from Symbolica's native expression printer.

@@ -30,6 +30,8 @@ dependencies = [
 
 [project.optional-dependencies]
 notebook-display = ["anywidget>=0.9,<1"]
+graph-export = ["playwright>=1.55,<2"]
+typst-export = ["typst>=0.15"]
 
 [project.urls]
 homepage = "https://alphaloop.ch"

@@ -130,10 +130,11 @@ assert type(spenso.formatted(expression, True)) is core.FormattedOutput
 for name in ("formatted", "to_html", "to_svg", "to_typst"):
     assert hasattr(tensor, name), name
 
-# Rendering is self-contained even when the unrelated PyPI Linnet and
-# typst-py cannot be imported. Trusted notation still crosses the real compiler.
+# Default HTML and project exports are independent of optional renderers.
+# Explicit SVG compilation uses typst-py only after the import block is restored.
 import builtins
 import sys
+import xml.etree.ElementTree as ET
 
 original_import = builtins.__import__
 def import_without_renderers(name, globals=None, locals=None, fromlist=(), level=0):
@@ -141,6 +142,11 @@ def import_without_renderers(name, globals=None, locals=None, fromlist=(), level
         raise ImportError(f"{name} deliberately unavailable in this test")
     return original_import(name, globals, locals, fromlist, level)
 
+custom_notation = '#panic("trusted-notation-sentinel")'
+svg_renderers = (
+    lambda **kwargs: tensor.to_svg(**kwargs),
+    lambda **kwargs: spenso.to_svg(expression, **kwargs),
+)
 builtins.__import__ = import_without_renderers
 try:
     html = spenso.to_html(expression)
@@ -148,17 +154,52 @@ try:
     assert "data:font" not in html
     assert len(html.encode()) < 10_000
     assert "<math" in tensor._repr_html_()
-    assert tensor.to_svg().startswith("<svg")
     assert type(spenso.formatted(expression, True)) is core.FormattedOutput
-    for render in (spenso.to_html, spenso.to_svg):
+    for project in (
+        tensor.to_typst_project(notation_source=custom_notation),
+        spenso.to_typst_project(expression, notation_source=custom_notation),
+    ):
+        assert {"main.typ", "render.typ", "notation.typ", "tree.cbor"} <= project.keys()
+        assert all(isinstance(value, bytes) and value for value in project.values())
+        assert project["notation.typ"] == custom_notation.encode()
+        assert b'"notation.typ"' in project["main.typ"]
+    # HTML rejects compiler-specific notation before attempting any import.
+    for render in (lambda **kwargs: tensor.to_html(**kwargs),
+                   lambda **kwargs: spenso.to_html(expression, **kwargs)):
         try:
-            render(expression, notation_source='#panic("trusted-notation-sentinel")')
+            render(notation_source=custom_notation)
+        except ValueError as error:
+            assert "direct MathML" in str(error) and "notation_source" in str(error)
+        else:
+            raise AssertionError("HTML accepted compiler-specific notation")
+    for render in svg_renderers:
+        for keywords in ({}, {"notation_source": custom_notation}):
+            try:
+                render(**keywords)
+            except ImportError as error:
+                assert "optional Python package 'typst'" in str(error), str(error)
+            else:
+                raise AssertionError("SVG compilation bypassed the blocked optional compiler")
+finally:
+    builtins.__import__ = original_import
+
+try:
+    import typst
+except ImportError:
+    pass
+else:
+    # The optional integration environment supplies the real Python compiler.
+    assert callable(typst.compile)
+    for render in svg_renderers:
+        svg = render()
+        assert svg.startswith("<svg")
+        assert ET.fromstring(svg).tag == "{http://www.w3.org/2000/svg}svg"
+        try:
+            render(notation_source=custom_notation)
         except RuntimeError as error:
             assert "trusted-notation-sentinel" in str(error), str(error)
         else:
             raise AssertionError("custom notation was not compiled")
-finally:
-    builtins.__import__ = original_import
 
 "##,
         )

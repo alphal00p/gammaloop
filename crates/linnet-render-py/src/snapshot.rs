@@ -76,10 +76,19 @@ impl PyDiagramRender {
         ))
     }
     fn to_linnest(&self) -> PyResult<String> {
+        if self
+            .pages()
+            .iter()
+            .any(|svg| svg.contains("class=\"linnet-math-label\""))
+        {
+            return Err(PyValueError::new_err(
+                "Typst SVG imports require outlined labels; call view.outlined() before exporting a Typst document",
+            ));
+        }
         Ok(self
             .pages()
             .iter()
-            .map(|svg| typst_renderer::Document::svg_source(svg))
+            .map(|svg| crate::typst_export::svg_source(svg))
             .collect::<Vec<_>>()
             .join("\n#pagebreak()\n"))
     }

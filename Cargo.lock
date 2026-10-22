@@ -2006,7 +2006,6 @@ dependencies = [
  "spynso3",
  "symbolica",
  "tempfile",
- "typst-renderer",
 ]
 
 [[package]]
@@ -3803,9 +3802,10 @@ dependencies = [
  "roxmltree 0.21.1",
  "serde",
  "serde_json",
+ "spenso",
  "symbolica",
+ "symbolica-data",
  "tempfile",
- "typst-renderer",
 ]
 
 [[package]]
@@ -6350,11 +6350,9 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
- "symbolica-data",
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
- "typst-renderer",
  "xpct",
 ]
 

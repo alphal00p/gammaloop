@@ -1,4 +1,4 @@
-//! Native graph drawing with Typst used only to typeset labels and titles.
+//! Resolve drawing settings once, before browser measurement or vector export.
 use crate::{PyDiagramRender, PyRenderSettings};
 use linnest::svg::Scene;
 use pyo3::{
@@ -6,7 +6,6 @@ use pyo3::{
     prelude::*,
     types::{PyDict, PyDictMethods, PyList},
 };
-use std::collections::BTreeMap;
 
 impl PyDiagramRender {
     pub fn with_html(mut self, html: String) -> Self {
@@ -15,14 +14,43 @@ impl PyDiagramRender {
     }
     pub fn map_svg(mut self, f: impl Fn(String) -> String) -> PyResult<Self> {
         let pages: Vec<String> = self.pages().iter().cloned().map(f).collect();
+        if let Some(html) = &mut self.html {
+            for (old, new) in self.pages.iter().zip(&pages) {
+                *html = html.replace(old, new);
+            }
+        }
         self.pages = std::sync::Arc::new(pages);
         Ok(self)
     }
+}
+
+impl crate::PyDiagramView {
     pub fn from_scene(
+        py: Python<'_>,
+        scene: Scene,
+        settings: Option<&PyRenderSettings>,
+    ) -> PyResult<Self> {
+        Self::from_scenes(py, vec![scene], settings)
+    }
+
+    /// Resolve each channel once; measurement later combines their native SVGs.
+    pub fn from_scenes(
+        py: Python<'_>,
+        scenes: Vec<Scene>,
+        settings: Option<&PyRenderSettings>,
+    ) -> PyResult<Self> {
+        let scenes = scenes
+            .into_iter()
+            .map(|scene| Self::resolve_scene(py, scene, settings))
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(Self::prepared(scenes))
+    }
+
+    fn resolve_scene(
         py: Python<'_>,
         mut scene: Scene,
         settings: Option<&PyRenderSettings>,
-    ) -> PyResult<Self> {
+    ) -> PyResult<Scene> {
         let settings = settings.cloned().unwrap_or_default();
         if settings.has_selectors() {
             let selector = SCENE_SELECTORS.get().ok_or_else(|| {
@@ -78,22 +106,7 @@ impl PyDiagramRender {
                 .apply(&mut scene)
                 .map_err(PyRuntimeError::new_err)?;
         }
-        let pages = if scene.pages.is_empty() && scene.title.is_none() {
-            vec![]
-        } else {
-            typst_renderer::Document::compile_sources(
-                &BTreeMap::from([("main.typ".into(), scene.label_document().into_bytes())]),
-                "svg",
-            )
-            .map_err(PyRuntimeError::new_err)?
-            .into_iter()
-            .map(|b| String::from_utf8(b).map_err(|e| PyRuntimeError::new_err(e.to_string())))
-            .collect::<PyResult<Vec<_>>>()?
-        };
-        let typeset = scene.typeset(&pages).map_err(PyRuntimeError::new_err)?;
-        let svg = Scene::interactive_svg(&scene.render(&typeset).map_err(PyRuntimeError::new_err)?)
-            .map_err(PyRuntimeError::new_err)?;
-        Ok(Self::new(svg.clone(), format!("<figure>{svg}</figure>")))
+        Ok(scene)
     }
 }
 

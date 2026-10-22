@@ -1,6 +1,6 @@
 (() => {
-  for (const root of document.querySelectorAll(".feynkit-ltd-result")) {
-    if (root.dataset.ready) continue;
+  function start(root) {
+    if (root.dataset.ready) return;
     root.dataset.ready = "true";
     const data = JSON.parse(
       root.querySelector("[data-ltd]").textContent,
@@ -8,7 +8,7 @@
     );
     const native = root
       .querySelector("[data-drawing]")
-      .content.querySelector("svg");
+      .content.querySelector("svg:not([data-ltd-labels])");
     data.graph = {
       paths: [...native.querySelectorAll("[data-linnet-carrier]")].map((a) => ({
         ...JSON.parse(a.dataset.linnetDetail),
@@ -39,7 +39,7 @@
           ];
         }),
     );
-    const navigation = native.querySelector("script").textContent;
+    const navigation = native.querySelector("script")?.textContent || "";
     const physicalScale =
       native.width.baseVal.value / native.viewBox.baseVal.width;
     const instance = "ltd-" + Math.random().toString(36).slice(2);
@@ -307,22 +307,13 @@
       scopeIds(svg, instance);
       const labels = root
         .querySelector("[data-drawing]")
-        .content.querySelector("[data-ltd-labels]")
-        .cloneNode(true);
-      scopeIds(labels, `${instance}-labels`);
-      // Glyphs live in SVG use shadow trees: inherit the label's theme color
-      // directly rather than relying on a descendant CSS selector crossing it.
-      labels.querySelectorAll("[fill]").forEach((glyph) => {
-        if (glyph.getAttribute("fill") !== "none")
-          glyph.setAttribute("fill", "currentColor");
-      });
+        .content.querySelector("[data-ltd-labels]");
       st.labels = new Map(
         [...labels.querySelectorAll("[data-label-key]")].map((label) => [
           label.dataset.labelKey,
           label,
         ]),
       );
-      svg.append(labels.querySelector("defs"));
       // Retain native geometry for Linnet's half-edge shader. Only the energy
       // annotations are painted; particle labels and inspector targets stay hidden.
       const reference = make(
@@ -368,12 +359,37 @@
         }),
       );
     }
+    function centerLabel(content) {
+      const page = content.parentElement,
+        transform = page.getScreenCTM();
+      if (!transform) return;
+      const bounds = content.getBoundingClientRect(),
+        width = bounds.width / Math.hypot(transform.a, transform.b),
+        height = bounds.height / Math.hypot(transform.c, transform.d);
+      if (![width, height].every((value) => Number.isFinite(value) && value > 0))
+        return;
+      page.setAttribute("width", width);
+      page.setAttribute("height", height);
+      page.setAttribute("x", -width / 2);
+      page.setAttribute("y", -height / 2);
+    }
+    const labelObserver = new ResizeObserver((entries) => {
+      for (const { target } of entries) centerLabel(target);
+    });
     function setLabel(st, label, key) {
-      const page = st.labels.get(key);
-      const use = label.querySelector("use") || make("use", {}, label);
-      use.setAttribute("href", `#${page.id}`);
-      use.setAttribute("x", -page.dataset.width / 2);
-      use.setAttribute("y", -page.dataset.height / 2);
+      if (label.dataset.labelKey === key) return;
+      const old = label.querySelector("foreignObject");
+      if (old) {
+        labelObserver.unobserve(old.firstElementChild);
+        old.remove();
+      }
+      // WebKit does not reliably lay out foreignObject MathML in a use shadow
+      // tree. Clone just the fragment into its visible, already laid-out slot.
+      const page = st.labels.get(key).firstElementChild.cloneNode(true);
+      label.append(page);
+      const content = page.firstElementChild;
+      centerLabel(content);
+      labelObserver.observe(content);
       label.dataset.labelKey = key;
     }
     function drawGraph(st) {
@@ -384,7 +400,11 @@
         part = partition(g, r, st.edge),
         scale = physicalScale;
       // Linnet owns the camera. Changing a residue replaces only this layer.
-      svg.querySelector("[data-ltd-drawing]")?.remove();
+      const previous = svg.querySelector("[data-ltd-drawing]");
+      previous?.querySelectorAll("foreignObject").forEach((page) => {
+        labelObserver.unobserve(page.firstElementChild);
+      });
+      previous?.remove();
       const viewport = svg.querySelector(".linnet-viewport");
       const layer = make("g", { "data-ltd-drawing": "" }, viewport);
       const bounds = native.viewBox.baseVal,
@@ -843,7 +863,7 @@
     const el = root.querySelector(".ltd-product");
     if (!data.residues.length) {
       el.textContent = "LtdRepresentation: no retained residues";
-      continue;
+      return;
     }
     const st = {
       el,
@@ -886,6 +906,7 @@
     const observer = new ResizeObserver(() => {
       if (!el.isConnected) {
         observer.disconnect();
+        labelObserver.disconnect();
         return;
       }
       if (el.clientWidth !== width) {
@@ -894,5 +915,24 @@
       }
     });
     observer.observe(el);
+  }
+  for (const root of document.querySelectorAll(".feynkit-ltd-result")) {
+    if (root.dataset.ready) continue;
+    const ready = () => {
+      if (!root.isConnected) {
+        document.removeEventListener("linnet:rendered", ready);
+        return;
+      }
+      // The view substitutes its measured snapshot into the inert template.
+      // Keep its navigation script inert until the one visible camera mounts.
+      const native = root
+        .querySelector("[data-drawing]")
+        .content.querySelector("svg:not([data-ltd-labels])");
+      if (!native) return;
+      document.removeEventListener("linnet:rendered", ready);
+      start(root);
+    };
+    document.addEventListener("linnet:rendered", ready);
+    ready();
   }
 })();

@@ -15,6 +15,7 @@ __all__ = [
     "Dash",
     "DebugLevel",
     "DiagramRender",
+    "DiagramView",
     "DrawOptions",
     "DrawingSelectors",
     "Fraction",
@@ -280,6 +281,41 @@ class DiagramRender:
     def _repr_html_(self) -> builtins.str: ...
     def _repr_svg_(self) -> typing.Optional[builtins.str]: ...
     def _mime_(self) -> tuple[builtins.str, builtins.str]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class DiagramView:
+    r"""
+    A resolved drawing awaiting its notebook browser's label measurements.
+    """
+    @property
+    def diagrams(self) -> builtins.list[DiagramView]:
+        r"""
+        Configured child views for a collection, retaining their original scenes.
+        """
+    def measurement_request(self) -> dict:
+        r"""
+        The exact ordered MathML probes, fixed font, and receipt identity.
+        """
+    def measured(self, measurements: typing.Optional[dict] = None, *, browser: typing.Optional[builtins.str] = None) -> DiagramRender:
+        r"""
+        Obtain a completed immutable snapshot, or explicitly measure using Chromium.
+        """
+    def outlined(self) -> DiagramRender:
+        r"""
+        Outline labels with the optional Python Typst compiler; no browser is used.
+        """
+    def to_svg(self) -> builtins.str: ...
+    def to_svg_pages(self) -> builtins.list[builtins.str]: ...
+    def to_html(self) -> builtins.str: ...
+    def save(self, output: builtins.str | os.PathLike | pathlib.Path) -> pathlib.Path: ...
+    def widget(self) -> typing.Any:
+        r"""
+        Optional notebook dependencies are imported only when displaying a view.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...
+    def _display_(self) -> typing.Any: ...
+    def _mime_(self) -> typing.Any: ...
     def __repr__(self) -> builtins.str: ...
 
 @typing.final

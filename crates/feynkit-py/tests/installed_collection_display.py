@@ -6,6 +6,20 @@ from pathlib import Path
 from symbolica.community import hepkit as fk
 
 
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 class Collection(HTMLParser):
     def __init__(self, source):
         super().__init__()
@@ -27,16 +41,22 @@ process = model.process(
 )
 amplitude = process.generate_amplitude(loops=0, max_vertices=1, progress=None)
 before = amplitude.expression()
-html = amplitude._repr_html_()
+view = amplitude.render()
+html = external_metrics_snapshot(view).to_html()
 parsed = Collection(html)
 assert parsed.rows == parsed.templates == len(amplitude.diagrams) == 1
 assert parsed.buttons == 0
 assert amplitude.terms[0]._repr_html_() in html
 assert amplitude.expression() == before
-assert "Conjugate amplitude" in amplitude.conjugate()._repr_html_()
+assert (
+    "Conjugate amplitude"
+    in external_metrics_snapshot(amplitude.conjugate().render()).to_html()
+)
 
 large = fk.Amplitude(amplitude.diagrams * 7)
-large_html = large._repr_html_()
+large_view = large.render()
+assert len(large_view.diagrams) == 6
+large_html = external_metrics_snapshot(large_view).to_html()
 assert Collection(large_html).rows == 6
 assert "Showing 6 of 7 diagrams" in large_html
 
@@ -44,7 +64,8 @@ cross_section = process.generate_cross_section(
     loops=1, max_vertices=2, allow_self_loops=True, progress=None
 )
 snapshots = [diagram.to_json() for diagram in cross_section.diagrams]
-html = cross_section._repr_html_()
+view = cross_section.render()
+html = external_metrics_snapshot(view).to_html()
 parsed = Collection(html)
 assert parsed.buttons == parsed.templates == len(cross_section.diagrams) > 0
 assert parsed.rows == 0
@@ -58,7 +79,8 @@ empty = process.generate_diagrams(
     filter=lambda diagram, completed_vertices: False,
     progress=None,
 )
-html = empty._repr_html_()
+view = empty.render()
+html = external_metrics_snapshot(view).to_html()
 assert Collection(html).templates == 0
 assert "No diagrams retained." in html
 assert "<strong>Generation result</strong>" in html

@@ -1274,8 +1274,10 @@ impl SiteBuilder {
         self.require_file(Path::new("docs/assets/showcase.js"))?;
         self.require_file(Path::new("docs/assets/showcase-hard-boiled.mp3"))?;
         self.require_file(Path::new("docs/assets/rustdoc.css"))?;
-        self.require_file(Path::new("crates/spynso3/typst/STIXTwoMath-Regular.woff2"))?;
-        self.require_file(Path::new("crates/spynso3/typst/STIX-Two-OFL.txt"))?;
+        self.require_file(Path::new(
+            "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
+        ))?;
+        self.require_file(Path::new("crates/linnet-render-py/fonts/STIX-Two-OFL.txt"))?;
         self.require_file(Path::new("scripts/render-docs-svg-assets.sh"))?;
         for source in [
             "docs/portal/main.typ",
@@ -2286,10 +2288,13 @@ impl SiteBuilder {
                 "showcase-hard-boiled.mp3",
             ),
             (
-                "crates/spynso3/typst/STIXTwoMath-Regular.woff2",
+                "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
                 "STIXTwoMath-Regular.woff2",
             ),
-            ("crates/spynso3/typst/STIX-Two-OFL.txt", "STIX-Two-OFL.txt"),
+            (
+                "crates/linnet-render-py/fonts/STIX-Two-OFL.txt",
+                "STIX-Two-OFL.txt",
+            ),
             (
                 "docs/assets/local-unitarity-light.svg",
                 "local-unitarity-light.svg",
@@ -12456,7 +12461,7 @@ mod tests {
             fs::read(
                 builder
                     .root
-                    .join("crates/spynso3/typst/STIXTwoMath-Regular.woff2")
+                    .join("crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2")
             )
             .unwrap()
         );

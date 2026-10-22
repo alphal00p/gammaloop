@@ -120,10 +120,10 @@
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
     (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
-    # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
-    # adding its source directory does not change the documentation cache boundaries.
+    # Tensor export sources and the shared browser font are documentation inputs.
     (workspaceRoot + "/crates/spynso3/typst")
-    (workspaceRoot + "/crates/spynso3/data.json")
+    (workspaceRoot + "/crates/linnet-render-py/data.json")
+    (workspaceRoot + "/crates/linnet-render-py/fonts")
     (workspaceRoot + "/crates/typst-renderer/fonts")
     (workspaceRoot + "/crates/typst-renderer/data.json")
     (workspaceRoot + "/crates/vakint/form_src")
@@ -485,8 +485,13 @@
       "crates/linnet-py/README.md"
       "crates/linnet-py/typst/subgraph.css"
     ];
-    "linnet-render-py" = [ ];
-    spynso3 = ["crates/spynso3/typst" "crates/spynso3/data.json"];
+    spynso3 = ["crates/spynso3/typst"];
+    "linnet-render-py" = [
+      "crates/linnet-render-py/fonts"
+      "crates/linnet-render-py/data.json"
+      "crates/linnet-render-py/src/view.py"
+      "crates/linnet-render-py/src/view.js"
+    ];
     "typst-renderer" = ["crates/typst-renderer/fonts" "crates/typst-renderer/data.json"];
     vakint = [
       "crates/vakint/form_src"
@@ -499,7 +504,14 @@
       "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
       "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
     ];
-    "linnet-py" = ["crates/linnet-py/tests/test_svg_interaction.py"];
+    "linnet-py" = [
+      "crates/linnet-py/tests/test_svg_interaction.py"
+      "crates/linnet-py/tests/rendering_metrics.py"
+    ];
+    "linnet-render-py" = [
+      "crates/linnet-render-py/tests/mathml_view_support.py"
+      "crates/linnet-render-py/tests/mathml_view_collections.py"
+    ];
     linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
     linnest = [
       "crates/linnest/layout/native/fixtures"
@@ -526,6 +538,7 @@
       "crates/feynkit-py/tests/installed_offline_rendering.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"
+      "crates/linnet-py/tests/rendering_metrics.py"
       "crates/linnet-py/python/symbolica/community/graph/__init__.py"
       "crates/linnet-render-py/python/symbolica/community/graph/__init__.py"
     ];
@@ -587,8 +600,8 @@
       "crates/spenso-macros/CHANGELOG.typ"
       "crates/spenso/CHANGELOG.typ"
       "crates/spynso3/CHANGELOG.typ"
-      "crates/spynso3/typst/STIX-Two-OFL.txt"
-      "crates/spynso3/typst/STIXTwoMath-Regular.woff2"
+      "crates/linnet-render-py/fonts/STIX-Two-OFL.txt"
+      "crates/linnet-render-py/fonts/STIXTwoMath-Regular.woff2"
       "docs"
       "examples/cli/aa_aa/2L/graphs"
       "examples/cli/gg_hhh/3L/3L_graph.dot"
@@ -677,7 +690,7 @@
     assets = lib.fileset.toSource {
       root = workspaceRoot;
       fileset = lib.fileset.unions
-        (workspacePackageExtraFilesetsForSourcePackages "production" ["typst-renderer" "spynso3"]);
+        (workspacePackageExtraFilesetsForSourcePackages "production" ["typst-renderer" "linnet-render-py"]);
     };
   in pkgs.runCommand "gammaloop-render-data" {
     nativeBuildInputs = [pkgs.python313];
@@ -688,7 +701,7 @@
     from pathlib import Path
     destination = Path(os.environ["out"])
     provider = Path("typst-assets-${locked.version}")
-    for consumer in ("typst-renderer", "spynso3"):
+    for consumer in ("typst-renderer", "linnet-render-py"):
         root = Path("${assets}") / "crates" / consumer
         for asset in json.loads((root / "data.json").read_text())["assets"]:
             name, path = Path(asset["name"]), Path(asset["path"])

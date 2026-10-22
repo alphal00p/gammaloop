@@ -3,6 +3,8 @@
      Use block comments because notebook iframe wrappers may flatten newlines. */
   for (const svg of document.querySelectorAll('svg[data-linnet-interactive]')) {
     if (svg.linnetSelection !== undefined) continue;
+    /* Composite channels own fixed viewports; only their parent controls size. */
+    const embedded = !!svg.parentElement?.closest('svg');
     const targets = [...svg.querySelectorAll('[data-linnet-kind]')];
     const selected = { node: new Set(), edge: new Set(), halfedge: new Set() };
     const edgeHighlights = new Map();
@@ -17,7 +19,7 @@
     /* SVG lengths resolve pt/mm to CSS pixels. Read the authored width before
        replacing it with the responsive viewer width: 100% keeps that physical
        scale, independently of the drawing bounds or notebook column width. */
-    const naturalScale = svg.width.baseVal.value / box.width;
+    const naturalScale = embedded ? 1 : svg.width.baseVal.value / box.width;
     let scale = 1;
     let fitted = true;
     let pinned = false;
@@ -179,23 +181,25 @@
     svg.append(panel);
     let layoutWidth = 0;
     const layout = () => {
-      const width = Math.max(1, svg.getBoundingClientRect().width);
-      layoutWidth = width;
-      const wide = width >= 600 && targets.length > 0;
+      const screenWidth = Math.max(1, svg.getBoundingClientRect().width);
+      const width = embedded ? box.width : screenWidth;
+      layoutWidth = screenWidth;
+      const wide = !embedded && width >= 600 && targets.length > 0;
       const fixedHeight = Number(svg.dataset.linnetViewportHeight) || 0;
-      const overlay = fixedHeight > 0;
+      const overlay = embedded || fixedHeight > 0;
       const panelWidth = overlay ? Math.min(300, width) : wide ? 260 : width;
       const graphWidth = overlay ? width : wide ? width - panelWidth - 16 : width;
       /* Grow vertically to show the whole drawing at its physical scale.
          Narrow columns and explicitly bounded previews may need a smaller
          fit, whose actual percentage is reported by the same camera. */
       const fitWidth = Math.min(1, graphWidth / (box.width * naturalScale));
-      const graphHeight = fixedHeight || Math.max(240, box.height * naturalScale * fitWidth);
+      const graphHeight = embedded ? box.height : fixedHeight || Math.max(240, box.height * naturalScale * fitWidth);
       const toolbarHeight = 40;
+      const graphTop = embedded ? 0 : toolbarHeight;
       toolbar.setAttribute('width', width);
       toolbar.setAttribute('height', toolbarHeight);
       viewport.setAttribute('x', 0);
-      viewport.setAttribute('y', toolbarHeight);
+      viewport.setAttribute('y', graphTop);
       viewport.setAttribute('width', graphWidth);
       viewport.setAttribute('height', graphHeight);
       const center = fitted
@@ -207,11 +211,11 @@
       camera.x = center.x - camera.width / 2;
       camera.y = center.y - camera.height / 2;
       paintCamera();
-      panSurface.setAttribute('y', toolbarHeight);
+      panSurface.setAttribute('y', graphTop);
       panSurface.setAttribute('width', graphWidth);
       panSurface.setAttribute('height', graphHeight);
       panel.setAttribute('x', overlay ? width - panelWidth : wide ? graphWidth + 16 : 0);
-      panel.setAttribute('y', overlay || wide ? toolbarHeight : toolbarHeight + graphHeight + 12);
+      panel.setAttribute('y', overlay || wide ? graphTop : toolbarHeight + graphHeight + 12);
       panel.setAttribute('width', panelWidth);
       const panelHeight = panel.style.display === 'none' ? 0 : content.offsetHeight;
       panel.setAttribute('height', overlay ? Math.min(panelHeight, graphHeight) : panelHeight);
@@ -219,9 +223,11 @@
       content.style.overflowY = overlay ? 'auto' : '';
       panel.style.pointerEvents = overlay && !pinned ? 'none' : '';
       const height = toolbarHeight + (overlay ? graphHeight : wide ? Math.max(graphHeight, panelHeight) : graphHeight + (panelHeight ? panelHeight + 12 : 0));
-      svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
-      svg.setAttribute('height', height);
-      svg.style.height = `${height}px`;
+      if (!embedded) {
+        svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        svg.setAttribute('height', height);
+        svg.style.height = `${height}px`;
+      }
       requestAnimationFrame(resizeFrame);
     };
     const close = () => {
@@ -230,8 +236,10 @@
       panel.style.display = 'none';
       layout();
     };
-    svg.style.width = '100%';
-    svg.style.maxWidth = '100%';
+    if (!embedded) {
+      svg.style.width = '100%';
+      svg.style.maxWidth = '100%';
+    }
     const layoutObserver = new ResizeObserver(() => {
       if (!svg.isConnected) { layoutObserver.disconnect(); return; }
       if (Math.abs(svg.getBoundingClientRect().width - layoutWidth) > .5) requestAnimationFrame(layout);

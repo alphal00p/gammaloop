@@ -1,6 +1,7 @@
 (() => {
-  for (const root of document.querySelectorAll(".feynkit-cff-result")) {
-    if (root.dataset.ready) continue;
+  const start = (root) => {
+    if (root.dataset.ready) return;
+    if (!root.querySelector("[data-drawing]")?.content.querySelector("svg")) return;
     root.dataset.ready = "true";
     const data = JSON.parse(
       root.querySelector("[data-cff]").textContent,
@@ -631,5 +632,8 @@
       empty.textContent = "C = 0 · No orientations retained.";
       root.append(empty);
     }
-  }
+  };
+  const startAll = () => document.querySelectorAll(".feynkit-cff-result").forEach(start);
+  document.addEventListener("linnet:rendered", startAll);
+  startAll();
 })();

@@ -6,6 +6,8 @@ from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
 
+from rendering_metrics import external_metrics_snapshot
+
 from symbolica import E
 from symbolica.community import graph, hepkit, tensor
 
@@ -30,7 +32,9 @@ class CommunityRenderingTests(unittest.TestCase):
                         ),
                     ),
                 )
-                result = owner.render(config=settings)
+                view = owner.render(config=settings)
+                self.assertIs(type(view), graph.DiagramView)
+                result = external_metrics_snapshot(view)
                 self.assertIs(type(result), graph.DiagramRender)
                 settings.drawing = graph.DrawOptions(node_fill=graph.Color("#abcdef"))
                 svg = result.to_svg()
@@ -78,7 +82,8 @@ class CommunityRenderingTests(unittest.TestCase):
                 layouts=graph.LayoutSettings(impred_steps=1).then(impred_steps=1)
             )
             results = [
-                (owner.render(config=settings), pages) for owner, pages in owners
+                (external_metrics_snapshot(owner.render(config=settings)), pages)
+                for owner, pages in owners
             ]
             for index, (result, count) in enumerate(results):
                 with self.subTest(owner=type(owners[index][0]).__name__):
@@ -95,12 +100,12 @@ class CommunityRenderingTests(unittest.TestCase):
                             result.to_svg()
                     output = root / str(index)
                     self.assertEqual(
-                        len(result.save_pages(output, format="png")), count
+                        len(result.save_pages(output, format="svg")), count
                     )
-                    result.save(output / "all.pdf")
-                    self.assertTrue(
-                        (output / "all.pdf").read_bytes().startswith(b"%PDF")
-                    )
+                    with self.assertRaisesRegex(RuntimeError, "outlined labels"):
+                        result.save(output / "all.pdf")
+                    with self.assertRaisesRegex(RuntimeError, "outlined labels"):
+                        result.save_pages(output, format="png")
             self.assertEqual(len(results[-1][0].diagrams), 2)
             self.assertTrue(
                 all(
@@ -134,6 +139,7 @@ class CommunityRenderingTests(unittest.TestCase):
             style=hepkit.DiagramStyle(show_momentum=True, momentum_arrows=True),
         )
         self.assertEqual(len(seen), len(diagram.edges))
+        result = external_metrics_snapshot(result)
         self.assertIn("#123456", result.to_svg())
         result.to_svg()
         self.assertEqual(len(seen), len(diagram.edges))

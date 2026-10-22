@@ -1,5 +1,6 @@
 """Color invariant notation agrees across source and notebook renderers."""
 
+import importlib.util
 import re
 import unicodedata
 import unittest
@@ -18,7 +19,10 @@ from symbolica.community.tensor_native import _compile_typst
 
 
 def mathml(document):
-    return ET.fromstring(re.search(r"<math\b.*?</math>", document, re.DOTALL).group())
+    root = ET.fromstring(re.search(r"<math\b.*?</math>", document, re.DOTALL).group())
+    for node in root.iter():
+        node.tag = node.tag.rsplit("}", 1)[-1]
+    return root
 
 
 def visible(node):
@@ -37,13 +41,15 @@ class InvariantDisplayTests(unittest.TestCase):
 
     def assert_renderers_agree(self, expression, expected, settings):
         source = to_typst(expression, settings=settings)
-        document = bytes(_compile_typst(f"$ {source} $", "html")).decode()
+        tensor = TensorExpression(expression)
+        original = bytes(tensor.__getstate__())
+        document = tensor.to_html(settings=settings)
         rich = to_html(expression, settings=settings)
         self.assertEqual(visible(mathml(document)), expected)
         self.assertEqual(visible(mathml(rich)), expected)
-        tensor = TensorExpression(expression)
         self.assertEqual(tensor.to_typst(settings=settings), source)
         self.assertEqual(tensor.to_expression(), expression)
+        self.assertEqual(bytes(tensor.__getstate__()), original)
         return mathml(rich)
 
     def test_compact_and_explicit_invariants_agree_across_renderers(self):
@@ -123,9 +129,36 @@ class InvariantDisplayTests(unittest.TestCase):
             self.assertIsNotNone(rendered)
             root = mathml(to_html(coefficient, settings=settings))
             self.assertTrue(list(root.iter("msup")) or list(root.iter("msubsup")))
-            ET.fromstring(to_svg(coefficient, settings=settings))
             self.assertEqual(tensor.to_expression(), before)
             self.assertEqual(tensor.structure.axes, slots)
+
+    @unittest.skipUnless(
+        importlib.util.find_spec("typst") is not None,
+        "optional real SVG export requires the typst package",
+    )
+    def test_invariant_sources_and_public_svg_compile_with_optional_typst(self):
+        f, a = self.fundamental, self.adjoint
+        for expression in (
+            f.casimir(),
+            a.casimir(),
+            f.dynkin_index(),
+            f.casimir(4),
+            f.gram(4, a),
+            f.dual().casimir(4),
+            f.casimir(S("k") + 1),
+            f.casimir() ** 2,
+        ):
+            for style in ("compact", "explicit"):
+                with self.subTest(expression=str(expression), style=style):
+                    settings = DisplaySettings(invariant_style=style)
+                    source = to_typst(expression, settings=settings)
+                    for svg in (
+                        bytes(_compile_typst(f"$ {source} $", "svg")).decode(),
+                        to_svg(expression, settings=settings),
+                    ):
+                        self.assertEqual(
+                            ET.fromstring(svg).tag.rsplit("}", 1)[-1], "svg"
+                        )
 
     def test_unrelated_functions_are_not_color_representations(self):
         expression = E("spenso::cas(2,invariant_display_tests::cof(3))")

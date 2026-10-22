@@ -4144,6 +4144,51 @@ impl TensorExpression {
         ))
     }
 
+    /// Export a customizable Typst project without running a compiler.
+    ///
+    /// Parameters
+    /// ----------
+    /// show_dimensions : bool, optional
+    ///     Override settings.show_dimensions for this call.
+    /// settings : DisplaySettings, optional
+    ///     Tensor notation, layout, and spacing choices.
+    /// notation_source : str, optional
+    ///     Replacement notation.typ source; defaults to the bundled notation.
+    ///
+    /// Returns
+    /// -------
+    /// dict[str, bytes]
+    ///     main.typ, render.typ, notation.typ, and the portable tree.cbor payload.
+    ///     Write each file's bytes beneath one project directory. Compile main.typ
+    ///     with that directory as the compiler root, for example using
+    ///     typst.compile(project_dir / "main.typ", root=project_dir).
+    ///
+    /// Notes
+    /// -----
+    /// All rich layouts are supported. The optional Python package typst is
+    /// needed only to compile the returned project.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community.tensor import TensorExpression
+    /// >>> project = TensorExpression(1).to_typst_project()
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn to_typst_project<'py>(
+        self_: PyRef<'py, Self>,
+        py: Python<'py>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::structured_to_typst_project(
+            py,
+            Self::structured(&self_),
+            &settings,
+            notation_source.as_deref(),
+        )
+    }
+
     /// Create a lazy rich display value for a notebook.
     ///
     /// Parameters
@@ -4154,8 +4199,8 @@ impl TensorExpression {
     /// settings : DisplaySettings, optional
     ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Custom Typst notation source used by the rich renderer. This is
-    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///     Unsupported for HTML and notebook output; raises ValueError.
+    ///     Use to_typst_project() or to_svg() for custom Typst notation.
     ///
     /// Returns
     /// -------
@@ -4181,16 +4226,17 @@ impl TensorExpression {
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
-    ) -> PythonFormattedOutput {
+    ) -> PyResult<PythonFormattedOutput> {
+        display::reject_html_notation(notation_source.as_deref())?;
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         let value = Arc::clone(&self_.value);
-        display::format_structured_output_rich(
+        Ok(display::format_structured_output_rich(
             self_.py(),
             self_.into_super().into(),
             value,
             settings,
             notation_source,
-        )
+        ))
     }
 
     /// Create a bounded, interactive MathML viewer in marimo or Jupyter.
@@ -4207,7 +4253,7 @@ impl TensorExpression {
     /// settings : DisplaySettings, optional
     ///     Tensor notation, index labels, and other presentation preferences.
     /// notation_source : str, optional
-    ///     Unsupported by the direct MathML pager. Use to_html() or to_svg()
+    ///     Unsupported by the direct MathML pager. Use to_typst_project() or to_svg()
     ///     for custom Typst notation; paging raises ValueError when supplied.
     ///
     /// Returns
@@ -4296,8 +4342,8 @@ impl TensorExpression {
     /// settings : DisplaySettings, optional
     ///     Tensor notation and display choices. Defaults to DisplaySettings().
     /// notation_source : str, optional
-    ///     Custom Typst notation source used by the rich renderer. This is
-    ///     Typst code, not a filename; omit it for the supplied tensor notation.
+    ///     Unsupported for HTML and notebook output; raises ValueError.
+    ///     Use to_typst_project() or to_svg() for custom Typst notation.
     ///
     /// Returns
     /// -------
@@ -4306,9 +4352,9 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the embedded Typst compiler. The returned
-    /// string is not automatically displayed; pass it to the notebook's HTML
-    /// or SVG display facility.
+    /// Mathematical rendering uses direct MathML and requires no Typst compiler.
+    /// The complete expression is exported; oversized output raises an error.
+    /// Pass the returned string to the notebook's HTML display facility.
     ///
     /// Examples
     /// --------
@@ -4353,9 +4399,8 @@ impl TensorExpression {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the embedded Typst compiler. The returned
-    /// string is not automatically displayed; pass it to the notebook's HTML
-    /// or SVG display facility.
+    /// SVG export uses the optional Python package typst (typst-py).
+    /// Pass the returned markup to the notebook's SVG display facility.
     ///
     /// Examples
     /// --------

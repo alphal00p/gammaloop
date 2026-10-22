@@ -39,8 +39,8 @@ forward their patch tables. The standalone repository and the nested `tydenso/`
 WASM workspace therefore each keep their own defaults. To align native and WASM
 builds, select the same versions and payload revision in both build roots and
 rebuild both artifacts.
-Changing a Cargo patch does not update an already compiled Typst plugin or its
-native SVG renderer and Typst label compiler.
+Changing a Cargo patch does not update an already compiled Typst plugin or
+native renderer. The notebook MathML path does not use the plugin.
 
 In the host's existing core module, after `create_symbolica_module(m)?`, use its registration
 macro:
@@ -59,15 +59,51 @@ Registration must not construct symbolic expressions: callers need to import Sym
 calling `set_license_key`. Keep expression-valued constants as static methods. After rebuilding
 the native host, run `python crates/feynkit-py/tests/installed_import.py` against that installation
 to check that importing `E` and `hepkit` defers the license banner until the first operation.
-Notebook figures use embedded Rust SVG rendering and Typst labels; no Python
-Linnet or Typst dependency is needed. The host supplies the verified font resources
-listed in `crates/typst-renderer/data.json` and `crates/spynso3/data.json` through
+Notebook figures use native Rust SVG geometry and direct MathML labels measured
+in the notebook browser by AnyWidget. The native extension embeds no Rust Typst
+compiler. Complete expression HTML also emits direct MathML; `formatted()`,
+`paged()` and expression `to_html()` reject custom `notation_source`.
+Bare `to_typst()` remains source-only;
+`to_typst_project(..., notation_source=...)` exports `main.typ`, `render.typ`,
+`notation.typ` and `tree.cbor` as a `dict[str, bytes]` without a compiler.
+Expression `to_svg()` and graph `view.outlined()` use optional Python typst-py
+(distribution `typst`).
+The host supplies the verified font resources
+listed in `crates/linnet-render-py/data.json` and `crates/spynso3/data.json` through
 `SYMBOLICA_DATA_DIRECTORY` before rendering. This directory contains the extracted
 `render/fonts/` assets; the renderer checks their compiled hashes.
 Register `linnet_render_py::GraphModule` to install the shared
 `symbolica.community.graph_native` module from `linnet-render-py`. Package
 `crates/linnet-render-py/python/symbolica/community/graph` alongside HepKit so
-`symbolica.community.graph` exposes its shared settings, snapshots, and type information. Include the UFO loader release documented in the #link("guides/showcases/ufo/")[UFO import example]
+`symbolica.community.graph` exposes its shared settings, views, snapshots and type information.
+
+GammaLoop and the isolated notebook host in this checkout declare optional
+`notebook-display` (`anywidget>=0.9,<1`), `graph-export`
+(`playwright>=1.55,<2`) and `typst-export` (`typst>=0.15`) extras. These extras
+are not currently released in the external Community assembly. Install the
+equivalent dependencies when integrating another host; headless export also
+requires installing Chromium:
+
+// docs-example: syntax
+```sh
+python -m pip install "anywidget>=0.9,<1" "playwright>=1.55,<2" "typst>=0.15"
+python -m playwright install chromium
+```
+
+`owner.render()` returns a `DiagramView` for generic and physics graphs,
+networks, processes, amplitudes, generation collections, CFF and LTD. Displaying
+it measures labels in the actual browser, then calls the existing native
+`Scene::render`. After completion, `view.measured()` returns an immutable
+snapshot whose `to_svg()`, `to_html()` and SVG/HTML `save()` retain the measured
+boxes and embedded font. Scripts opt in with `view.measured(browser="chromium")`,
+or obtain `view.measurement_request()` and return that same view's receipt to
+`view.measured(measurements=receipt)`. A fresh owner's `to_html(browser=None)`
+accepts no receipt and raises while measurement is pending; no browser is
+launched implicitly and no estimated label bounds are substituted.
+Default graph SVG contains XHTML `foreignObject` MathML for browser use.
+PDF, PNG and Typst SVG import require `view.outlined()` so labels become vectors.
+
+Include the UFO loader release documented in the #link("guides/showcases/ufo/")[UFO import example]
 when offering raw UFO import. Install it with `--no-deps` into the existing host environment:
 the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
 standalone Symbolica 3 kernel for GammaLoop development; do not sync that environment over a

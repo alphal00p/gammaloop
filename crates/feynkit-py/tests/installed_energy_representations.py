@@ -9,6 +9,21 @@ from symbolica import E, Replacement, S
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
 
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 FIXTURES = Path(__file__).parent / "fixtures"
 OSE, Q, K, P, CIND = S(
     "gammalooprs::OSE",
@@ -20,10 +35,12 @@ OSE, Q, K, P, CIND = S(
 
 
 def payload(obj, method):
+    view = obj.render()
+    source = external_metrics_snapshot(view).to_html()
     return json.loads(
         re.search(
             rf'<script type="application/json" data-{method}>(.*?)</script>',
-            obj._repr_html_(),
+            source,
         ).group(1)
     )
 

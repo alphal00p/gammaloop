@@ -7,6 +7,26 @@ from symbolica import E
 from symbolica.community import hepkit as hep
 from symbolica.community import tensor as spenso
 
+
+def check_optional_svg(expression):
+    project = expression.to_typst_project()
+    assert {"main.typ", "render.typ", "notation.typ", "tree.cbor"} <= project.keys()
+    assert all(isinstance(value, bytes) and value for value in project.values())
+    try:
+        import typst
+    except ImportError:
+        try:
+            expression.to_svg()
+        except ImportError as error:
+            assert "optional Python package 'typst'" in str(error)
+        else:
+            raise AssertionError("SVG export succeeded without its optional compiler")
+    else:
+        # The optional test environment supplies the real Python Typst compiler.
+        assert callable(typst.compile)
+        ET.fromstring(expression.to_svg())
+
+
 model = hep.Model.standard_model()
 mass = model.particle("e-").mass
 muon_mass = model.particle("mu-").mass
@@ -22,13 +42,13 @@ plain = expression.format_plain()
 assert E(plain) == expression
 assert "Me" in plain and "MM" in plain
 assert "m_e" in expression.to_latex() and r"m_{\mu}" in expression.to_latex()
-ET.fromstring(spenso.TensorExpression(expression).to_svg())
+check_optional_svg(spenso.TensorExpression(expression))
 assert "m_e" in spenso.TensorExpression(expression).to_latex()
 
 phi4 = hep.Model.phi4()
 assert "m" in phi4.parameter("mass").symbol.to_latex()
 assert r"\lambda" in phi4.parameter("lam").symbol.to_latex()
-ET.fromstring(spenso.TensorExpression(phi4.parameter("lam").symbol).to_svg())
+check_optional_svg(spenso.TensorExpression(phi4.parameter("lam").symbol))
 
 # A forward reference must receive its printer before any expressions are parsed.
 definition = {

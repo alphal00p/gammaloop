@@ -2,82 +2,70 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 
-use feynkit_cff::generalized::{HybridSurfaceID, LinearEnergyExpr, LinearSurfaceKind};
+use feynkit_cff::generalized::{
+    HybridSurfaceID, LinearEnergyExpr, LinearSurfaceKind,
+    graph_io::{EnergyEdgeIndexMap, ParsedGraphExternalEdge},
+};
 use linnet::half_edge::involution::EdgeIndex;
+use linnet_render_py::PyDiagramView;
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::prelude::*;
 use serde_json::{Value, json};
 use symbolica::{
     api::python::PythonExpression,
-    atom::{Atom, AtomCore, Symbol},
-    printer::PrintOptions,
+    atom::{Atom, Symbol},
+    printer::{PrintMode, PrintOptions, PrintState},
 };
 
 use super::PyLtdRepresentation;
-use crate::display::{energy_graph_svg, escape_html};
+use crate::display::{energy_graph_view, escape_html};
 
 impl PyLtdRepresentation {
-    fn graph_labels(&self) -> PyResult<String> {
+    fn graph_labels(
+        indices: &EnergyEdgeIndexMap,
+        external_edges: &[ParsedGraphExternalEdge],
+    ) -> PyResult<String> {
+        let options = PrintOptions {
+            mode: PrintMode::MathML,
+            ..PrintOptions::default()
+        };
+        let mathml = |atom: Atom| {
+            spenso::network::tags::mathml::render(
+                atom.as_view(),
+                &options,
+                &PrintState::new(),
+                &|_, _| None,
+            )
+            .ok_or_else(|| PyRuntimeError::new_err("LTD label exceeds native MathML limits"))
+        };
         let mut labels = Vec::new();
-        for edge in self.indices.internal.values() {
-            let momentum = feynkit_graph::symbols::momentum()
-                .call(*edge)
-                .printer(PrintOptions::typst())
-                .to_string();
-            let component = feynkit_cff::symbols::external_energy_atom(EdgeIndex(*edge))
-                .printer(PrintOptions::typst())
-                .to_string();
-            let energy = feynkit_cff::symbols::on_shell_atom(EdgeIndex(*edge))
-                .printer(PrintOptions::typst())
-                .to_string();
-            labels.push((format!("q-{edge}"), format!("[$ {momentum} $]")));
-            for (name, sign) in [("plus", "+"), ("minus", "-")] {
+        for edge in indices.internal.values() {
+            let momentum = mathml(feynkit_graph::symbols::momentum().call(*edge))?;
+            let component = mathml(feynkit_cff::symbols::external_energy_atom(EdgeIndex(*edge)))?;
+            let energy = mathml(feynkit_cff::symbols::on_shell_atom(EdgeIndex(*edge)))?;
+            labels.push((format!("q-{edge}"), momentum.clone()));
+            for (name, sign) in [("plus", "+"), ("minus", "−")] {
                 labels.push((
                     format!("q-{edge}-{name}"),
-                    format!("[$ {momentum} thin {sign} $]"),
+                    format!("<mrow>{momentum}<mspace width=\"0.167em\"/><mo>{sign}</mo></mrow>"),
                 ));
                 labels.push((
                     format!("pole-{edge}-{name}"),
-                    format!("align(center, stack(spacing: 2pt, box[$ {component} $], box[$ = {sign} {energy} $]))"),
+                    format!("<mtable rowspacing=\"2px\" columnalign=\"center\"><mtr><mtd>{component}</mtd></mtr><mtr><mtd><mrow><mo>=</mo><mo>{sign}</mo>{energy}</mrow></mtd></mtr></mtable>"),
                 ));
             }
         }
-        for edge in &self.parsed.external_edges {
-            let coordinate = edge.edge_id - self.indices.internal.len();
-            let physical = self.indices.external[&coordinate];
-            let momentum = feynkit_graph::symbols::external_momentum()
-                .call(coordinate)
-                .printer(PrintOptions::typst())
-                .to_string();
-            labels.push((format!("p-{physical}"), format!("[$ {momentum} $]")));
+        for edge in external_edges {
+            let coordinate = edge.edge_id - indices.internal.len();
+            let physical = indices.external[&coordinate];
+            let momentum = mathml(feynkit_graph::symbols::external_momentum().call(coordinate))?;
+            labels.push((format!("p-{physical}"), momentum));
         }
-        // Compile all states once with Linnet's label compiler and glyph merger.
-        // Hover and pair selection then only change a local SVG reference.
+        // Inert fragments share Symbolica/Spenso notation. The browser measures
+        // the selected fragment in its visible label slot, including pole rows.
         let mut svg = String::from("<svg data-ltd-labels><defs>");
-        if !labels.is_empty() {
-            let source = format!(
-                "#set page(width: auto, height: auto, margin: 0pt, fill: none)\n\
-                 #set text(size: 9pt)\n{}",
-                labels
-                    .iter()
-                    .map(|(_, source)| format!("#{source}"))
-                    .collect::<Vec<_>>()
-                    .join("\n#pagebreak()\n"),
-            );
-            let pages = typst_renderer::Document::compile_sources(
-                &BTreeMap::from([("main.typ".into(), source.into_bytes())]),
-                "svg",
-            )
-            .map_err(PyRuntimeError::new_err)?
-            .into_iter()
-            .map(|page| String::from_utf8(page).map_err(PyRuntimeError::new_err))
-            .collect::<PyResult<Vec<_>>>()?;
-            let typeset =
-                linnest::svg::Typeset::read(&pages, false).map_err(PyRuntimeError::new_err)?;
-            for ((key, _), page) in labels.iter().zip(&typeset.pages) {
-                write!(svg, "<g id=\"ltd-label-{key}\" data-label-key=\"{key}\" data-width=\"{}\" data-height=\"{}\">{}</g>", page.width, page.height, page.body).unwrap();
-            }
-            svg.push_str(&typeset.defs);
+        for (key, fragment) in labels {
+            write!(svg, "<g id=\"ltd-label-{key}\" data-label-key=\"{key}\"><foreignObject width=\"1\" height=\"1\" overflow=\"visible\" pointer-events=\"none\"><div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display:flex;font-size:9px;line-height:1;width:max-content;white-space:nowrap\"><math xmlns=\"http://www.w3.org/1998/Math/MathML\">{fragment}</math></div></foreignObject></g>").unwrap();
         }
         svg.push_str("</defs></svg>");
         Ok(svg)
@@ -194,33 +182,81 @@ impl PyLtdRepresentation {
         }))
     }
 
-    pub(super) fn explorer_html(&self, py: Python<'_>, residue: Option<usize>) -> PyResult<String> {
-        if self.drawing.get().is_none() {
-            let mut drawing = energy_graph_svg(
-                py,
-                &self.diagram,
-                &feynkit_graph::SceneOptions {
-                    momentum_arrows: true,
-                    // Leave room for the pole chevrons on the propagator itself.
-                    momentum_arrow_offset: 0.7,
-                    ..Default::default()
-                },
-            )?;
-            drawing.push_str(&self.graph_labels()?);
-            let _ = self.drawing.set(drawing);
-        }
+    pub(crate) fn explorer_view(
+        &self,
+        py: Python<'_>,
+        residue: Option<usize>,
+    ) -> PyResult<PyDiagramView> {
+        let drawing = energy_graph_view(
+            py,
+            &self.diagram,
+            &feynkit_graph::SceneOptions {
+                momentum_arrows: true,
+                // Leave room for the pole chevrons on the propagator itself.
+                momentum_arrow_offset: 0.7,
+                ..Default::default()
+            },
+        )?;
+        let labels = Self::graph_labels(&self.indices, &self.parsed.external_edges)?;
         let data = self.explorer_data(py, residue)?;
         let data = data.to_string().replace('<', "\\u003c");
-        Ok(format!(
-            "<style>{}{}{}</style><section class=\"feynkit-ltd-result feynkit-expression\" data-feynkit-notebook data-linnet-frame-owner aria-label=\"{} LTD\"><div class=\"ltd-product\"></div><template data-drawing>{}</template><script type=\"application/json\" data-ltd>{data}</script><noscript>Enable notebook JavaScript to inspect LTD residues, or use to_expression().</noscript></section><script>{}</script><script>{}</script><script>{}</script>",
+        Ok(drawing.with_html(format!(
+            "<style>{}{}{}</style><section class=\"feynkit-ltd-result feynkit-expression\" data-feynkit-notebook data-linnet-frame-owner aria-label=\"{} LTD\"><div class=\"ltd-product\"></div><template data-drawing><!--linnet-svg-0-->{labels}</template><script type=\"application/json\" data-ltd>{data}</script><noscript>Enable notebook JavaScript to inspect LTD residues, or use to_expression().</noscript></section><script>{}</script><script>{}</script><script>{}</script>",
             spynso3::display::NOTEBOOK_STYLE,
             include_str!("../expression.css"),
             include_str!("display.css"),
             escape_html(self.diagram.name()),
-            self.drawing.get().expect("rendered above"),
             include_str!("../expression.js"),
             include_str!("display.js"),
             include_str!("../notebook.js"),
-        ))
+        )))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use super::{EnergyEdgeIndexMap, ParsedGraphExternalEdge, PyLtdRepresentation};
+
+    #[test]
+    fn native_label_states_preserve_physical_ids_and_two_row_poles() {
+        let indices = EnergyEdgeIndexMap {
+            internal: BTreeMap::from([(0, 4)]),
+            external: BTreeMap::from([(0, 9)]),
+            orientation_edge_count: 10,
+        };
+        let external = ParsedGraphExternalEdge {
+            edge_id: 1,
+            source: None,
+            destination: Some(0),
+            label: "p0".into(),
+            external_coefficients: vec![1],
+        };
+        let labels = PyLtdRepresentation::graph_labels(&indices, &[external]).unwrap();
+        assert_eq!(labels.matches("data-label-key=").count(), 6);
+        assert_eq!(labels.matches("<mtable ").count(), 2);
+        assert_eq!(labels.matches("<mtr>").count(), 4);
+        for key in [
+            "q-4",
+            "q-4-plus",
+            "q-4-minus",
+            "pole-4-plus",
+            "pole-4-minus",
+            "p-9",
+        ] {
+            assert!(labels.contains(&format!("data-label-key=\"{key}\"")));
+        }
+        assert!(labels.contains("<mo>=</mo><mo>+</mo>"));
+        assert!(labels.contains("<mo>=</mo><mo>−</mo>"));
+        assert!(labels.contains("<mi>E</mi>"));
+        assert!(!labels.contains("data-symbolica-"));
+        assert!(!labels.contains("<path"));
+        assert!(!labels.contains("<use"));
+        // The external key is physical e9, while its displayed momentum uses
+        // external coordinate zero, independently of internal edge numbering.
+        let external = labels.split("data-label-key=\"p-9\"").nth(1).unwrap();
+        assert!(external.contains("<mn>0</mn>"));
+        assert!(!external.contains("<mn>9</mn>"));
     }
 }

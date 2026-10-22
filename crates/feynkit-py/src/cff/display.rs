@@ -1,6 +1,7 @@
 //! CFF presentation owns only inspection state; native trees and graph IDs own the data.
 use std::collections::BTreeMap;
 
+use linnet_render_py::PyDiagramView;
 use pyo3::prelude::*;
 use serde_json::{Value, json};
 use symbolica::{
@@ -9,7 +10,7 @@ use symbolica::{
 };
 
 use super::PyCffRepresentation;
-use crate::display::{energy_graph_svg, escape_html};
+use crate::display::{energy_graph_view, escape_html};
 
 #[derive(Clone, Copy)]
 pub(super) enum CffScope {
@@ -130,11 +131,8 @@ impl PyCffRepresentation {
         }))
     }
 
-    pub(super) fn explorer_html(&self, py: Python<'_>, scope: CffScope) -> PyResult<String> {
-        if self.drawing.get().is_none() {
-            let svg = energy_graph_svg(py, &self.diagram, &Default::default())?;
-            let _ = self.drawing.set(svg);
-        }
+    pub(super) fn explorer_view(&self, py: Python<'_>, scope: CffScope) -> PyResult<PyDiagramView> {
+        let view = energy_graph_view(py, &self.diagram, &Default::default())?;
         // JSON is inert data, but a literal closing script tag still ends an HTML
         // raw-text element. Escape '<' even in graph names supplied by the user.
         let data = self.explorer_data(py, scope)?;
@@ -144,17 +142,16 @@ impl PyCffRepresentation {
             CffScope::Family { .. } => "CrossFreeFamily",
         };
         let data = data.to_string().replace('<', "\\u003c");
-        Ok(format!(
-            "<style>{}{}{}</style><section class=\"feynkit-cff-result feynkit-expression\" aria-label=\"Cross-free family energy integration\" data-feynkit-notebook data-linnet-frame-owner><header class=\"hs-meta\"><code title=\"{}\">{kind}</code><span data-metadata></span></header>{}<template data-drawing>{}</template><script type=\"application/json\" data-cff>{data}</script><noscript>Enable notebook JavaScript to explore orientations and families. Use to_expression() for the symbolic expression.</noscript></section><script>{}</script><script>{}</script><script>{}</script>",
+        Ok(view.with_html(format!(
+            "<style>{}{}{}</style><section class=\"feynkit-cff-result feynkit-expression\" aria-label=\"Cross-free family energy integration\" data-feynkit-notebook data-linnet-frame-owner><header class=\"hs-meta\"><code title=\"{}\">{kind}</code><span data-metadata></span></header>{}<template data-drawing><!--linnet-svg-0--></template><script type=\"application/json\" data-cff>{data}</script><noscript>Enable notebook JavaScript to explore orientations and families. Use to_expression() for the symbolic expression.</noscript></section><script>{}</script><script>{}</script><script>{}</script>",
             spynso3::display::NOTEBOOK_STYLE,
             include_str!("../expression.css"),
             include_str!("display.css"),
             escape_html(self.diagram.name()),
             include_str!("display.html"),
-            self.drawing.get().expect("rendered above"),
             include_str!("../expression.js"),
             include_str!("display.js"),
             include_str!("../notebook.js"),
-        ))
+        )))
     }
 }

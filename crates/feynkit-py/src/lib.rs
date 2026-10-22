@@ -550,6 +550,19 @@ import sys
 assert "_gammaloop" not in sys.modules
 assert fk.__name__ == "symbolica.community.hepkit"
 
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(measurements={
+        "id": request["id"],
+        "metrics": [
+            {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+            for label in request["labels"]
+        ],
+    })
+
+
 model = fk.Model.from_json(MODEL_JSON)
 assert model.name == "scalars"
 scalar = model.particle("scalar_0")
@@ -573,7 +586,11 @@ generated = process.generate_diagrams(loops=(0, 1), **generation_arguments)
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
-generation_html = generated._repr_html_()
+generation_view = generated.render(max_diagrams=2)
+assert len(generation_view.diagrams) == min(2, len(generated))
+generation_html = external_metrics_snapshot(generation_view).to_html()
+assert generated.render(max_diagrams=0).diagrams == []
+assert len(generated.render(max_diagrams=None).diagrams) == len(generated)
 assert "Generation result" in generation_html
 assert "retained diagrams" in generated.report._repr_html_()
 assert "particles" in model._repr_html_()
@@ -592,11 +609,17 @@ assert denominator.rank == 0
 assert "ZERO" not in str(denominator)
 assert denominator != 1
 integrand = loop_diagram.numerator_expression() / denominator
-diagram_svg = loop_diagram.render().to_svg()
+diagram_view = loop_diagram.render()
+diagram_snapshot = external_metrics_snapshot(diagram_view)
+diagram_svg = diagram_snapshot.to_svg()
 assert diagram_svg.startswith("<svg")
-assert loop_diagram.to_html() == loop_diagram._repr_html_()
-assert "<svg" in loop_diagram._repr_svg_()
-assert "Feynman diagram" in loop_diagram._repr_html_()
+assert diagram_snapshot.to_html() == diagram_snapshot._repr_html_()
+assert diagram_snapshot._repr_svg_() == diagram_svg
+assert diagram_view.measured().to_svg() == diagram_svg
+assert "Feynman diagram" in diagram_snapshot.to_html()
+assert not hasattr(loop_diagram, "_repr_html_")
+assert not hasattr(loop_diagram, "_repr_svg_")
+assert "DiagramView" in loop_diagram._repr_mimebundle_(include=["text/plain"])["text/plain"]
 
 json_diagram = fk.FeynmanDiagram.from_json(model, loop_diagram.to_json())
 dot_diagram = fk.FeynmanDiagram.from_dot(model, loop_diagram.to_dot())
@@ -624,7 +647,7 @@ assert set(routed) == {edge.id for edge in json_diagram.edges}
 cff = json_diagram.integrate_energy(method="cff")
 assert len(cff) > 0
 expression = cff.to_expression()
-assert "Cross-free family" in cff._repr_html_()
+assert "Cross-free family" in external_metrics_snapshot(cff.render()).to_html()
 assert "candidate orientations" in cff.report._repr_html_()
 
 momentum = fk.ThreeMomentum(3.0, 4.0, 0.0)

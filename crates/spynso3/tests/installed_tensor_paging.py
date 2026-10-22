@@ -1,6 +1,7 @@
 """Exercise direct tensor MathML in the shared responsive expression viewer."""
 
 import builtins
+import importlib.util
 import itertools
 import re
 import sys
@@ -8,8 +9,10 @@ import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
 from contextlib import ExitStack
+from html.parser import HTMLParser
 from pathlib import Path
-from unittest.mock import patch
+from types import ModuleType
+from unittest.mock import Mock, patch
 
 from symbolica import E, MathMLViewer, PrintMode, S
 from symbolica.community.tensor import (
@@ -17,11 +20,60 @@ from symbolica.community.tensor import (
     DisplaySettings,
     Nc,
     Representation,
+    Tensor,
     TensorExpression,
     TensorName,
     dot,
+    formatted,
+    to_html,
+    to_svg,
+    to_typst,
+    to_typst_project,
     trace,
 )
+from symbolica.community.tensor_native import _compile_typst
+
+
+class TableCells(HTMLParser):
+    def __init__(self, document):
+        super().__init__()
+        self.rows = []
+        self.tables = 0
+        self.depth = 0
+        self.hidden = 0
+        self.row = None
+        self.cell = None
+        self.feed(document)
+        self.close()
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("style", "script", "mphantom", "annotation", "annotation-xml"):
+            self.hidden += 1
+        if tag == "table":
+            self.depth += 1
+            self.tables += self.depth == 1
+        if self.depth == 1:
+            if tag == "tr":
+                self.row = []
+            elif tag == "td":
+                self.cell = []
+
+    def handle_endtag(self, tag):
+        if tag in ("style", "script", "mphantom", "annotation", "annotation-xml"):
+            self.hidden -= 1
+        if self.depth == 1:
+            if tag == "td":
+                self.row.append("".join(self.cell).strip())
+                self.cell = None
+            elif tag == "tr":
+                self.rows.append(self.row)
+                self.row = None
+        if tag == "table":
+            self.depth -= 1
+
+    def handle_data(self, data):
+        if self.cell is not None and not self.hidden:
+            self.cell.append(data)
 
 
 class PagingAssertions(unittest.TestCase):
@@ -157,6 +209,119 @@ class DirectLeafPathTests(PagingAssertions):
                     self.assertRegex(message, r"to_html|to_svg|export")
             self.assertEqual(self.tensorState(value), original)
 
+    def test_complete_html_contains_every_term_beyond_the_native_page_size(self):
+        names = [f"leaf{i:03d}" for i in range(301)]
+        value = TensorExpression(sum(S(f"complete_html::{name}") for name in names))
+        original = self.tensorState(value)
+        viewer = value.paged()
+        self.addCleanup(viewer.close)
+        page = viewer._page()
+        self.assertEqual((page["start"], page["end"], page["total"]), (0, 25, 301))
+        self.assertPage(page)
+        for document in (value.to_html(), to_html(value.to_expression())):
+            root = ET.fromstring(
+                re.search(r"<math\b.*?</math>", document, re.DOTALL)[0]
+            )
+            text = self.visible(root)
+            self.assertCountEqual(re.findall(r"leaf\d{3}", text), names)
+            self.assertNotRegex(text, "[⋯…]")
+            self.assertFalse(
+                any("data-symbolica-marker" in n.attrib for n in root.iter())
+            )
+        self.assertEqual(self.tensorState(value), original)
+
+    def test_complete_html_walks_deep_and_wide_expression_children(self):
+        names = [f"leaf{i:03d}" for i in range(67)]
+        leaves = [S(f"complete_html_tree::{name}") for name in names]
+        call = S("complete_html_tree::wrap", is_scalar=True)
+        deep = sum(leaves)
+        for _ in range(48):
+            deep = call(deep)
+        cases = {
+            "product": E("1"),
+            "power": sum(leaves) ** 2,
+            "fraction": sum(leaves) / S("complete_html_tree::denominator"),
+            "wide-call": call(*leaves),
+            "deep-call": deep,
+        }
+        for leaf in leaves:
+            cases["product"] *= leaf
+        for name, expression in cases.items():
+            with self.subTest(name=name):
+                value = TensorExpression(expression)
+                original = self.tensorState(value)
+                document = value.to_html()
+                root = ET.fromstring(
+                    re.search(r"<math\b.*?</math>", document, re.DOTALL)[0]
+                )
+                text = self.visible(root)
+                self.assertCountEqual(re.findall(r"leaf\d{3}", text), names)
+                self.assertNotRegex(text, "[⋯…]")
+                if name == "deep-call":
+                    self.assertEqual(text.count("wrap"), 48)
+                if name == "wide-call":
+                    self.assertEqual(text.count(","), len(leaves) - 1)
+                self.assertEqual(self.tensorState(value), original)
+
+    def test_complete_html_preserves_custom_mathml_text_and_annotations(self):
+        modes = []
+        text = "  a b \t \u00a0\u2003"
+        fragment = (
+            '<semantics><mrow><mtext xml:space="preserve">' + text + "</mtext>"
+            "<mover><mi>J</mi><mo>¯</mo></mover></mrow>"
+            '<annotation encoding="text/plain">  tensor \t </annotation>'
+            '<annotation-xml encoding="application/xhtml+xml">'
+            '<span xmlns="http://www.w3.org/1999/xhtml">  label </span>'
+            "</annotation-xml></semantics>"
+        )
+
+        def printer(expression, *, mode, **options):
+            modes.append(mode)
+            if mode != PrintMode.MathML:
+                raise AssertionError("HTML requested a non-MathML printer")
+            return fragment
+
+        value = TensorName("complete_html::Annotated", print=printer)(7)
+        original = self.tensorState(value)
+        for document in (value.to_html(), value.formatted()._repr_html_()):
+            root = ET.fromstring(
+                re.search(r"<math\b.*?</math>", document, re.DOTALL)[0]
+            )
+            nodes = {n.tag.rsplit("}", 1)[-1]: n for n in root.iter()}
+            self.assertEqual(nodes["mtext"].text, text)
+            self.assertEqual(nodes["annotation"].text, "  tensor \t ")
+            self.assertEqual(nodes["span"].text, "  label ")
+            self.assertIn("mover", nodes)
+            self.assertNotIn("tensor", self.visible(root))
+        self.assertTrue(modes)
+        self.assertEqual(set(modes), {PrintMode.MathML})
+        self.assertEqual(self.tensorState(value), original)
+
+    def test_concrete_html_cells_follow_logical_axes_after_storage_permutation(self):
+        descriptor = TensorName("complete_html::Matrix")(
+            Representation.mink(2)("mu"), Representation.euc(3)("i")
+        )
+        tensor = Tensor.dense(descriptor, [1.0, 20.0, 300.0, 4000.0, 50.0, 6.0])
+        for value, expected in (
+            (tensor, [["1", "20", "300"], ["4000", "50", "6"]]),
+            (tensor.permute_axes([1, 0]), [["1", "4000"], ["20", "50"], ["300", "6"]]),
+        ):
+            with self.subTest(shape=value.shape):
+                original = (
+                    value[:],
+                    value.structure,
+                    value.expression().to_expression(),
+                )
+                document = value.to_html(settings=DisplaySettings(tensor_view="matrix"))
+                table = TableCells(document)
+                self.assertEqual(table.tables, 1)
+                self.assertEqual(table.rows, expected)
+                self.assertNotIn("<iframe", document)
+                self.assertEqual(
+                    (value[:], value.structure, value.expression().to_expression()),
+                    original,
+                )
+
     def test_oversized_callable_keeps_the_tensor_and_all_scalar_arguments(self):
         calls = []
 
@@ -205,6 +370,43 @@ class DirectLeafPathTests(PagingAssertions):
             self.assertIn("7", text)
             self.assertIn("2", text)
             self.assertNotIn("cooked_", text)
+
+    def test_cooked_raw_index_metadata_renders_the_source_without_proxy_symbols(self):
+        index = S("review_source::i")
+        vector = TensorName.vector("review_source::v")(Representation.euc(3))
+        raw = (
+            vector(index).to_expression().replace(index, S("review_source::edge")(7, 2))
+        )
+        value = TensorExpression(raw, intern="indices")
+        original = self.tensorState(value)
+        settings = DisplaySettings(index_style="raw")
+        document = value.structure.to_html(settings=settings)
+        roots = [
+            ET.fromstring(source)
+            for source in re.findall(r"<math\b.*?</math>", document, re.DOTALL)
+        ]
+        self.assertTrue(roots)
+        self.assertEqual([self.visible(root) for root in roots], ["edge(7,2)"])
+        for root in roots:
+            self.assertNotRegex(
+                ET.tostring(root, encoding="unicode"), r"display_source|cooked_"
+            )
+        self.assertEqual(self.tensorState(value), original)
+
+    def test_cooked_raw_index_source_exceeding_export_depth_raises_limit_error(self):
+        index = S("review_deep_source::i")
+        vector = TensorName.vector("review_deep_source::v")(Representation.euc(3))
+        edge = S("review_deep_source::edge")
+        label = S("review_deep_source::leaf")
+        for _ in range(257):
+            label = edge(label)
+        raw = vector(index).to_expression().replace(index, label)
+        value = TensorExpression(raw, intern="indices")
+        original = self.tensorState(value)
+        with self.assertRaisesRegex(ValueError, r"(?i)(export|resource).*limit"):
+            value.to_html(settings=DisplaySettings(index_style="raw"))
+        self.assertEqual(self.tensorState(value), original)
+        self.assertIn("<math", vector(index).to_html())
 
     def test_native_custom_mathml_preserves_annotations_and_significant_text(self):
         text = "  a b \t \u00a0\u2003"
@@ -810,6 +1012,41 @@ class TensorNotationTests(PagingAssertions):
                         self.assertIn("linear-gradient", node.get("style", ""))
                         self.assertIn("currentColor", node.get("style", ""))
 
+    def test_complete_html_keeps_the_full_notation_matrix_and_source_bytes(self):
+        for name, value, settings, expected, strokes in self.notationCases():
+            with self.subTest(name=name):
+                original = self.tensorState(value)
+                document = value.to_html(settings=settings)
+                root = ET.fromstring(
+                    re.search(r"<math\b.*?</math>", document, re.DOTALL)[0]
+                )
+                reference = self.notationRoots(value, settings)[0]
+                if name == "index-raw":
+                    # Raw disables generated aliases. The scoped leaf declines
+                    # bounded rendering, so paging retains native call syntax;
+                    # complete HTML can keep the tagged index's own notation.
+                    self.assertEqual(
+                        self.visible(reference),
+                        "Scoped(mink4index_scope(scope,hedge(2,1)))",
+                    )
+                    self.assertEqual(
+                        self.visible(root), "Scopedindex_scope(scope,h2.1)"
+                    )
+                else:
+                    self.assertEqual(self.visible(root), self.visible(reference))
+                if expected is not None:
+                    self.assertEqual(self.visible(root), expected)
+                cancelled = [
+                    n
+                    for n in self.visibleNodes(root)
+                    if n.get("data-spenso-cancel") == "updiagonal"
+                ]
+                self.assertEqual(len(cancelled), strokes)
+                for node in cancelled:
+                    self.assertIn("linear-gradient", node.get("style", ""))
+                    self.assertIn("currentColor", node.get("style", ""))
+                self.assertEqual(self.tensorState(value), original)
+
     def test_metrics_representations_and_permuted_logical_ports(self):
         mink, euc = Representation.mink(4), Representation.euc(3)
         dual = Representation("paging_metric::V", 5, is_self_dual=False)
@@ -1035,7 +1272,46 @@ class TensorNotationTests(PagingAssertions):
 
 
 class ExplicitNotationExportTests(PagingAssertions):
-    def test_custom_typst_notation_remains_complete_in_explicit_exports(self):
+    def setUp(self):
+        # This fake checks the Python compiler boundary, not Typst rendering.
+        self.typst = ModuleType("typst")
+        self.output = Mock(return_value=b'<svg xmlns="http://www.w3.org/2000/svg"/>')
+        self.staged = []
+
+        def compile_project(main, *, root, format):
+            self.assertIs(type(main), str)
+            self.assertIs(type(root), str)
+            main, root = Path(main), Path(root)
+            self.assertTrue(main.is_absolute())
+            self.assertTrue(root.is_absolute())
+            self.assertEqual(main, root / "main.typ")
+            self.assertTrue(main.is_file())
+            self.assertEqual(format, "svg")
+            files = {
+                path.relative_to(root).as_posix(): path.read_bytes()
+                for path in root.rglob("*")
+                if path.is_file()
+            }
+            self.staged.append((root, files))
+            return self.output()
+
+        self.typst.compile = Mock(side_effect=compile_project)
+        self.addCleanup(self.assertStagingRemoved)
+        self.enterContext(patch.dict(sys.modules, {"typst": self.typst}))
+
+    def assertStagingRemoved(self):
+        for root, _ in self.staged:
+            self.assertFalse(
+                root.exists(), f"compiler staging directory remains: {root}"
+            )
+
+    def assertCompilerFiles(self, project):
+        self.typst.compile.assert_called_once()
+        self.assertEqual(len(self.staged), 1)
+        self.assertEqual(self.staged[0][1], project)
+        self.assertStagingRemoved()
+
+    def test_custom_notation_is_raw_source_and_an_exact_svg_compiler_input(self):
         assets = Path(__file__).resolve().parents[1] / "typst"
         notation = (assets / "notation.typ").read_text() + (
             "\n#let default-notation(settings: (:)) = notation(settings: settings, "
@@ -1047,21 +1323,223 @@ class ExplicitNotationExportTests(PagingAssertions):
         )
         value = TensorExpression(sum(head(i) for i in range(35)))
         original = self.tensorState(value)
-        self.assertIn("macron(A)", value.to_typst())
-        html = value.to_html(notation_source=notation)
-        root = ET.fromstring(re.search(r"<math\b.*?</math>", html, re.DOTALL)[0])
-        self.assertEqual(self.visible(root).count("Z"), 35)
-        self.assertTrue(any(n.tag.rsplit("}", 1)[-1] == "mover" for n in root.iter()))
-        self.assertIn("<svg", value.to_svg(notation_source=notation))
-        formatted = value.formatted(notation_source=notation)
-        self.assertIsNone(formatted.mathml_viewer())
-        formatted_root = ET.fromstring(
-            re.search(r"<math\b.*?</math>", formatted._repr_html_(), re.DOTALL)[0]
+        bare = value.to_typst()
+        self.assertEqual(bare.count("macron(A)"), 35)
+        project = value.to_typst_project(notation_source=notation)
+        self.assertIs(type(project), dict)
+        self.assertEqual(
+            set(project), {"main.typ", "render.typ", "notation.typ", "tree.cbor"}
         )
-        self.assertEqual(self.visible(formatted_root).count("Z"), 35)
-        for render in (value.to_html, value.to_svg):
-            with self.assertRaisesRegex(RuntimeError, "explicit-notation-failure"):
-                render(notation_source='#panic("explicit-notation-failure")')
+        self.assertTrue(
+            all(
+                type(name) is str and type(data) is bytes
+                for name, data in project.items()
+            )
+        )
+        self.assertEqual(project["notation.typ"], notation.encode())
+        self.assertEqual(project["render.typ"], (assets / "render.typ").read_bytes())
+        self.assertIn(b'cbor(read("tree.cbor", encoding: none))', project["main.typ"])
+        self.assertTrue(project["tree.cbor"])
+        default_project = value.to_typst_project()
+        self.assertEqual(
+            default_project["notation.typ"], (assets / "notation.typ").read_bytes()
+        )
+        for name in ("main.typ", "render.typ", "tree.cbor"):
+            self.assertEqual(default_project[name], project[name])
+        self.typst.compile.assert_not_called()
+        svg = value.to_svg(notation_source=notation)
+        self.assertEqual(svg, self.output.return_value.decode())
+        self.assertCompilerFiles(project)
+        self.assertEqual(value.to_typst(), bare)
+        self.assertEqual(self.tensorState(value), original)
+
+    def test_raw_expression_and_concrete_exports_share_the_same_file_contract(self):
+        expression = E("portable_exports::x+1")
+        descriptor = TensorName("portable_exports::Matrix")(
+            Representation.mink(2)("mu"), Representation.euc(3)("i")
+        )
+        tensor = Tensor.dense(descriptor, [1.0, 20.0, 300.0, 4000.0, 50.0, 6.0])
+        notation = "// exact UTF-8: μ, λ\n#let default-notation(settings: (:)) = none\n"
+        for project_export, svg_export in (
+            (
+                lambda **kwargs: to_typst_project(expression, **kwargs),
+                lambda **kwargs: to_svg(expression, **kwargs),
+            ),
+            (tensor.to_typst_project, tensor.to_svg),
+        ):
+            with self.subTest(export=svg_export):
+                self.typst.compile.reset_mock()
+                self.staged.clear()
+                project = project_export(notation_source=notation)
+                self.assertEqual(
+                    set(project),
+                    {"main.typ", "render.typ", "notation.typ", "tree.cbor"},
+                )
+                self.assertTrue(all(type(data) is bytes for data in project.values()))
+                self.assertEqual(project["notation.typ"], notation.encode())
+                self.typst.compile.assert_not_called()
+                self.assertEqual(
+                    svg_export(notation_source=notation),
+                    self.output.return_value.decode(),
+                )
+                self.assertCompilerFiles(project)
+
+    def test_html_formatted_and_paged_reject_every_supplied_notation_source(self):
+        expression = E("explicit_rejection::x+1")
+        value = TensorExpression(expression)
+        tensor = Tensor.dense(
+            TensorName("explicit_rejection::A")(Representation.euc(2)), [1.0, 2.0]
+        )
+        original = self.tensorState(value)
+        for render in (
+            value.to_html,
+            value.formatted,
+            value.paged,
+            tensor.to_html,
+            tensor.formatted,
+            lambda **kwargs: to_html(expression, **kwargs),
+            lambda **kwargs: formatted(expression, **kwargs),
+        ):
+            for notation in ("", '#panic("must-not-compile")'):
+                with (
+                    self.subTest(render=render, notation=notation),
+                    self.assertRaisesRegex(ValueError, "notation_source"),
+                ):
+                    render(notation_source=notation)
+        self.typst.compile.assert_not_called()
+        self.assertEqual(self.tensorState(value), original)
+
+    def test_svg_accepts_bytes_or_one_page_and_rejects_other_page_counts(self):
+        value = TensorExpression(E("compiler_pages::x+1"))
+        for output in (b"<svg/>", [b"<svg/>"]):
+            with self.subTest(output=output):
+                self.output.return_value = output
+                self.assertEqual(value.to_svg(), "<svg/>")
+                self.assertStagingRemoved()
+        for pages in ([], [b"<svg/>", b"<svg/>"]):
+            with self.subTest(pages=len(pages)):
+                self.output.return_value = pages
+                with self.assertRaisesRegex(RuntimeError, "exactly one page"):
+                    value.to_svg()
+                self.assertStagingRemoved()
+
+    def test_svg_reports_compiler_diagnostics_and_invalid_output(self):
+        value = TensorExpression(E("compiler_errors::x+1"))
+        original = self.tensorState(value)
+        self.output.side_effect = ValueError("explicit-notation-failure")
+        with self.assertRaisesRegex(RuntimeError, "explicit-notation-failure"):
+            value.to_svg()
+        self.assertStagingRemoved()
+        self.output.side_effect = None
+        for output in ("<svg/>", ["<svg/>"]):
+            with self.subTest(output=output):
+                self.output.return_value = output
+                with self.assertRaises(TypeError):
+                    value.to_svg()
+                self.assertStagingRemoved()
+        self.output.return_value = b"\xff"
+        with self.assertRaisesRegex(RuntimeError, "invalid UTF-8"):
+            value.to_svg()
+        self.assertStagingRemoved()
+        self.output.return_value = b"<svg/>"
+        self.assertEqual(value.to_svg(), "<svg/>")
+        self.assertStagingRemoved()
+        self.assertEqual(self.tensorState(value), original)
+
+    def test_private_compiler_hook_is_svg_only_and_preserves_raw_source(self):
+        source, notation, tree = "$ x $", "// custom μ\n", b"\xa0"
+        for format in ("html", "pdf", "png", "unknown"):
+            with (
+                self.subTest(format=format),
+                self.assertRaisesRegex(ValueError, "SVG"),
+            ):
+                _compile_typst(source, format, notation, tree)
+        self.typst.compile.assert_not_called()
+        output = _compile_typst(source, "svg", notation, tree)
+        self.assertEqual(bytes(output), self.output.return_value)
+        self.typst.compile.assert_called_once()
+        files = self.staged[0][1]
+        self.assertEqual(
+            set(files), {"main.typ", "render.typ", "notation.typ", "tree.cbor"}
+        )
+        self.assertEqual(files["main.typ"], source.encode())
+        self.assertEqual(files["notation.typ"], notation.encode())
+        self.assertEqual(files["tree.cbor"], tree)
+        self.assertStagingRemoved()
+
+    def test_missing_optional_compiler_affects_only_explicit_svg(self):
+        expression = E("missing_compiler::x+1")
+        value = TensorExpression(expression)
+        tensor = Tensor.dense(
+            TensorName("missing_compiler::A")(Representation.euc(2)), [1.0, 2.0]
+        )
+        original = self.tensorState(value)
+        original_import = builtins.__import__
+        attempts = []
+
+        def without_typst(name, *args, **kwargs):
+            if name.split(".", 1)[0] == "typst":
+                attempts.append(name)
+                raise ModuleNotFoundError("No module named 'typst'", name="typst")
+            return original_import(name, *args, **kwargs)
+
+        with (
+            patch.dict(sys.modules, {"typst": None}),
+            patch("builtins.__import__", side_effect=without_typst),
+        ):
+            self.assertIn("<math", value.to_html())
+            self.assertIn("<math", value.formatted()._repr_html_())
+            self.assertIn("<math", to_html(expression))
+            self.assertIn("<math", formatted(expression)._repr_html_())
+            self.assertIn(
+                "<table", tensor.to_html(settings=DisplaySettings(tensor_view="matrix"))
+            )
+            self.assertEqual(to_typst(expression), value.to_typst())
+            for project in (
+                value.to_typst_project(),
+                to_typst_project(expression),
+                tensor.to_typst_project(),
+            ):
+                self.assertEqual(
+                    set(project),
+                    {"main.typ", "render.typ", "notation.typ", "tree.cbor"},
+                )
+            viewer = value.paged()
+            self.addCleanup(viewer.close)
+            self.assertPage(viewer._page())
+            self.assertEqual(attempts, [])
+            for render in (value.to_svg, lambda: to_svg(expression), tensor.to_svg):
+                with self.assertRaisesRegex(
+                    ImportError, r"(?s)typst.*pip install typst"
+                ):
+                    render()
+            self.assertIn("<math", value.to_html())
+            self.assertTrue(value.to_typst_project()["tree.cbor"])
+        self.typst.compile.assert_not_called()
+        self.assertEqual(self.tensorState(value), original)
+
+
+@unittest.skipUnless(
+    importlib.util.find_spec("typst") is not None,
+    "optional real SVG integration requires the typst package; compiler contracts run unconditionally",
+)
+class RealCompilerExportTests(PagingAssertions):
+    def test_custom_typst_notation_compiles_complete_real_svg_projects(self):
+        assets = Path(__file__).resolve().parents[1] / "typst"
+        notation = (assets / "notation.typ").read_text() + (
+            "\n#let default-notation(settings: (:)) = notation(settings: settings, "
+            'heads: ("real_exports::A": $macron(Z)$))\n'
+        )
+        head = TensorName(
+            "real_exports::A", print={"typst": "macron(A)", "mathml": "<mi>native</mi>"}
+        )
+        value = TensorExpression(sum(head(i) for i in range(35)))
+        original = self.tensorState(value)
+        self.assertEqual(value.to_typst().count("macron(A)"), 35)
+        svg = ET.fromstring(value.to_svg(notation_source=notation))
+        self.assertEqual(svg.tag.rsplit("}", 1)[-1], "svg")
+        with self.assertRaisesRegex(RuntimeError, "explicit-notation-failure"):
+            value.to_svg(notation_source='#panic("explicit-notation-failure")')
         self.assertEqual(self.tensorState(value), original)
 
 

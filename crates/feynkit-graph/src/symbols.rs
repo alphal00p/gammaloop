@@ -2,6 +2,7 @@
 use spenso::{
     network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG, TENSOR_PRINT_HEAD_PREFIX},
     shadowing::symbolica_utils::SpensoPrintSettings,
+    structure::representation::IndexDisplay,
     utils::{to_subscript, to_superscript},
 };
 use spenso::{spenso_print_scripted_indexed, symbolica_init::SymbolicaInitLazy};
@@ -218,14 +219,25 @@ pub fn epsilonbar() -> Symbol {
                 if opt.mode.is_mathml() {
                     return spenso::network::tags::tensor_print(a, opt, state);
                 }
-                spenso_print_scripted_indexed!(a, opt, "ϵ̅", "macron(epsilon.alt)")
+                spenso_print_scripted_indexed!(
+                    a,
+                    opt,
+                    if opt.mode.is_latex() {
+                        r"\bar{\epsilon}"
+                    } else {
+                        "ϵ̅"
+                    },
+                    "macron(epsilon.alt)"
+                )
             },
+            data = IndexDisplay::math("overline", vec![IndexDisplay::symbol("ϵ").unwrap()])
+                .unwrap()
+                .symbol_user_data(),
             tags = [
                 SPENSO_TAG.rank1.clone(),
                 SPENSO_TAG.tensor.clone(),
                 format!("{TENSOR_PRINT_HEAD_PREFIX}typst:macron(epsilon.alt)"),
-                format!(r"{TENSOR_PRINT_HEAD_PREFIX}latex:\bar{{\epsilon}}"),
-                format!("{TENSOR_PRINT_HEAD_PREFIX}mathml:<mover><mi>ϵ</mi><mo>¯</mo></mover>")
+                format!(r"{TENSOR_PRINT_HEAD_PREFIX}latex:\bar\epsilon")
             ]
         )
     });
@@ -236,7 +248,86 @@ pub fn epsilonbar() -> Symbol {
 mod tests {
     use super::*;
     use spenso::structure::abstract_index::AIND_SYMBOLS;
-    use symbolica::{atom::AtomCore, printer::PrintOptions};
+    use symbolica::{
+        atom::AtomCore,
+        printer::{PrintMode, PrintOptions, PrintState},
+    };
+
+    #[test]
+    fn epsilonbar_canonical_roundtrip_preserves_bar_and_open_axis() {
+        // Exercise the ordinary global initializer rather than registering a
+        // test-only replacement for the production symbol.
+        let original = symbolica::parse!("gammalooprs::ϵbar(7,spenso::mink(4))");
+        assert_eq!(original.as_view().get_symbol(), Some(epsilonbar()));
+        let bytes = original.as_view().get_data().to_vec();
+        let source = original.to_canonical_string();
+        let reparsed = Atom::parse(&source, "gammalooprs", Default::default()).unwrap();
+        assert_eq!(reparsed, original);
+        assert_eq!(reparsed.to_canonical_string(), source);
+        assert!(epsilonbar().has_tag(&SPENSO_TAG.rank1));
+        assert!(epsilonbar().has_tag(&SPENSO_TAG.tensor));
+
+        let options = PrintOptions {
+            mode: PrintMode::MathML,
+            hide_all_namespaces: true,
+            ..PrintOptions::new()
+        };
+        let native = reparsed.printer(options.clone()).to_string();
+        let html = spenso::network::tags::mathml::render(
+            reparsed.as_view(),
+            &options,
+            &PrintState::new(),
+            &|_, _| None,
+        )
+        .unwrap();
+        let exported = spenso::network::tags::mathml::expression(
+            reparsed.as_view(),
+            &options,
+            &PrintState::new(),
+            &|_, _| None,
+        )
+        .unwrap();
+        for rendered in [&native, &html, &exported] {
+            assert!(
+                rendered.contains("<mover accent=\"true\"><mi>ϵ</mi><mo>¯</mo></mover>"),
+                "{rendered}"
+            );
+            assert!(rendered.contains("<mmultiscripts>"), "{rendered}");
+            assert!(!rendered.contains("ϵbar"), "{rendered}");
+        }
+        for rendered in [&html, &exported] {
+            assert!(
+                rendered.contains("data-spenso-open-axis=\"0\""),
+                "{rendered}"
+            );
+            assert!(rendered.contains("Unresolved axis 0"), "{rendered}");
+        }
+        assert!(
+            spenso::network::tags::prepare_tensor_print(&reparsed)
+                .printer(PrintOptions::typst())
+                .to_string()
+                .contains("macron(epsilon.alt)")
+        );
+        let latex = PrintOptions {
+            custom_print_mode: SpensoPrintSettings::typst().into(),
+            ..PrintOptions::latex()
+        };
+        assert!(
+            reparsed
+                .printer(latex.clone())
+                .to_string()
+                .contains(r"\bar{\epsilon}")
+        );
+        assert!(
+            spenso::network::tags::prepare_tensor_print(&reparsed)
+                .printer(latex)
+                .to_string()
+                .contains(r"\bar\epsilon")
+        );
+        assert_eq!(original.as_view().get_data(), bytes);
+        assert_eq!(reparsed.as_view().get_data(), bytes);
+        assert_eq!(reparsed.to_canonical_string(), source);
+    }
 
     #[test]
     fn momentum_components_keep_object_indices() {

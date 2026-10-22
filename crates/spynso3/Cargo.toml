@@ -25,7 +25,6 @@ roxmltree = "0.21.1"
 ciborium = "0.2"
 linnet = { workspace = true }
 linnest = { workspace = true, features = ["svg"] }
-typst-renderer = { path = "../typst-renderer" }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 tabled = { workspace = true }
@@ -64,11 +63,3 @@ python_stubgen = [
 # [patch.crates-io]
 # pyo3-stub-gen = { git = "https://github.com/benruijl/pyo3-stub-gen", branch = "patched" }
 
-[package.metadata.symbolica-data]
-manifest = "data.json"
-
-[dependencies.symbolica-data]
-path = "../symbolica-data"
-
-[build-dependencies.symbolica-data]
-path = "../symbolica-data"

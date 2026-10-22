@@ -379,40 +379,54 @@ impl PySubgraph {
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
-    ) -> PyResult<crate::PyDiagramRender> {
-        crate::render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self))
+    ) -> PyResult<crate::PyDiagramView> {
+        crate::render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self)).and_then(
+            |view| {
+                view.map_svg(|svg| {
+                    svg.replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
+                        .replacen(
+                            '>',
+                            concat!(
+                                "> <style>",
+                                include_str!("../typst/subgraph.css"),
+                                "</style>"
+                            ),
+                            1,
+                        )
+                })
+            },
+        )
     }
 
     /// Render this selection in the context of the full graph, including isolated nodes.
-    #[pyo3(signature = (*, config=None))]
+    #[pyo3(signature = (*, config=None, browser=None))]
     fn to_svg(
         &self,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        browser: Option<&str>,
     ) -> PyResult<String> {
-        let svg = self.render(py, config)?.to_svg()?;
-        Ok(svg
-            .replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
-            .replacen(
-                '>',
-                concat!(
-                    "> <style>",
-                    include_str!("../typst/subgraph.css"),
-                    "</style>"
-                ),
-                1,
-            ))
+        self.render(py, config)?
+            .measured(py, None, browser)?
+            .to_svg()
     }
 
-    fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_svg(py, None)
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?._mime_(py)
     }
 
     /// Show the selected half-edges within their complete graph in notebook output.
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_svg(py, None)
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?
+            ._repr_mimebundle_(py, include, exclude)
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {

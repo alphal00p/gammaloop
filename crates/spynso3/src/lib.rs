@@ -1,6 +1,4 @@
-pub mod data_assets {
-    include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
-}
+pub use linnet_render_py::data_assets;
 
 #[macro_use]
 mod documentation;
@@ -263,7 +261,7 @@ define_spenso_python_surface! {
             "ReductionStatus",
         ],
         display => [
-            "DisplaySettings", "format_tensor", "to_typst", "to_html", "to_svg", "formatted",
+            "DisplaySettings", "format_tensor", "to_typst", "to_typst_project", "to_html", "to_svg", "formatted",
             "load_math_font",
         ],
         pattern => ["PortPattern", "TensorPattern"],
@@ -975,6 +973,20 @@ impl Spensor {
         Ok(display::concrete_tensor_to_typst(self, &settings))
     }
 
+    /// Return the source files of a complete Typst project without compiling it.
+    /// Custom notation is source code for `notation.typ` in the returned mapping.
+    #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
+    fn to_typst_project<'py>(
+        &self,
+        py: Python<'py>,
+        show_dimensions: Option<bool>,
+        settings: Option<PyRef<'_, display::DisplaySettings>>,
+        notation_source: Option<String>,
+    ) -> PyResult<Bound<'py, pyo3::types::PyDict>> {
+        let settings = display::resolved_settings(show_dimensions, settings.as_deref());
+        display::concrete_tensor_to_typst_project(py, self, &settings, notation_source.as_deref())
+    }
+
     /// Create a rich display value for a notebook.
     ///
     /// Parameters
@@ -1013,7 +1025,7 @@ impl Spensor {
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
-    ) -> PythonFormattedOutput {
+    ) -> PyResult<PythonFormattedOutput> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         display::format_concrete_tensor_output_rich(py, self, &settings, notation_source.as_deref())
     }

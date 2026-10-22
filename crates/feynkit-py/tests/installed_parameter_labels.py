@@ -11,6 +11,25 @@ from symbolica.community.hepkit import Model, UfoLoader
 from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 
+def check_optional_svg(expression):
+    project = expression.to_typst_project()
+    assert {"main.typ", "render.typ", "notation.typ", "tree.cbor"} <= project.keys()
+    assert all(isinstance(value, bytes) and value for value in project.values())
+    try:
+        import typst
+    except ImportError:
+        try:
+            expression.to_svg()
+        except ImportError as error:
+            assert "optional Python package 'typst'" in str(error)
+        else:
+            raise AssertionError("SVG export succeeded without its optional compiler")
+    else:
+        # The optional test environment supplies the real Python Typst compiler.
+        assert callable(typst.compile)
+        ET.fromstring(expression.to_svg())
+
+
 def visible_math(html: str) -> str:
     math = html[html.index("<math") : html.index("</math>") + len("</math>")]
     return unicodedata.normalize("NFKC", "".join(ET.fromstring(math).itertext()))
@@ -45,7 +64,7 @@ assert (
 )
 assert "<msub" in expression.to_html()
 assert "testmass" in visible_math(model.parameter("Me")._repr_html_())
-ET.fromstring(expression.to_svg())
+check_optional_svg(expression)
 assert "testmass" in source
 assert expression.to_expression() == before
 assert "ee" in str(expression)

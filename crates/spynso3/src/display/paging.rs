@@ -29,6 +29,88 @@ pub(crate) fn is_large(value: &SymbolicTensor<PartialStructure>) -> bool {
 
 type LeafCacheKey = (Atom, [u16; 10]);
 
+impl DisplaySettings {
+    /// Tensor presentation options shared by static exports and scoped paging.
+    pub(crate) fn mathml_options(&self) -> PrintOptions {
+        let mut options = display_options_with_settings(TensorDisplayMode::Typst, self);
+        options.mode = PrintMode::MathML;
+        for (key, value) in [
+            ("spenso.tensor_layout", &self.tensor_layout),
+            ("spenso.index_gap", &self.index_gap),
+            ("spenso.factor_gap", &self.factor_gap),
+        ] {
+            options
+                .custom_print_mode
+                .insert(key.into(), PrintUserData::String(value.clone()));
+        }
+        options
+    }
+}
+
+/// Complete export uses the same tensor notation and source-label owner as
+/// paging. Its explicit export cap reports an error rather than dropping terms.
+pub(crate) fn atom_to_html(
+    py: Python<'_>,
+    atom: &Atom,
+    settings: &DisplaySettings,
+) -> PyResult<String> {
+    let aliases = IndexAliases::for_atom(atom, &settings.index_style);
+    html(py, atom, settings, &aliases)
+}
+
+pub(crate) fn structured_to_html(
+    py: Python<'_>,
+    value: &SymbolicTensor<PartialStructure>,
+    settings: &DisplaySettings,
+) -> PyResult<String> {
+    let aliases = IndexAliases::for_descriptor(value, &settings.index_style);
+    html(py, &value.presentation_atom(), settings, &aliases)
+}
+
+fn html(
+    py: Python<'_>,
+    atom: &Atom,
+    settings: &DisplaySettings,
+    aliases: &IndexAliases,
+) -> PyResult<String> {
+    let options = settings.mathml_options();
+    let invalid_label = std::cell::Cell::new(false);
+    let body = spenso::network::tags::mathml::expression(
+        atom.as_view(),
+        &options,
+        &PrintState::new(),
+        &|representation, index| {
+            let key = (representation, index.to_owned());
+            if let Some((_, display)) = aliases.entries.get(&key) {
+                let rendered = display.to_mathml();
+                invalid_label.set(invalid_label.get() || rendered.is_none());
+                return rendered;
+            }
+            aliases.source_indices.get(&key).and_then(|source| {
+                let rendered = spenso::network::tags::mathml::expression(
+                    source.as_view(),
+                    &options,
+                    &PrintState::new(),
+                    &|_, _| None,
+                );
+                invalid_label.set(invalid_label.get() || rendered.is_none());
+                rendered
+            })
+        },
+    );
+    if let Some(error) = PyErr::take(py) {
+        return Err(error);
+    }
+    let body = body.filter(|_| !invalid_label.get()).ok_or_else(|| {
+        PyValueError::new_err(
+            "complete MathML export exceeds its resource limit or contains an unsupported label; use paged() to inspect it",
+        )
+    })?;
+    Ok(notebook_html_fragment(&format!(
+        "<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow>{body}</mrow></math>"
+    )))
+}
+
 struct TensorLeaves {
     settings: DisplaySettings,
     aliases: IndexAliases,
@@ -190,17 +272,7 @@ impl TensorLeaves {
                 aliases.entries.remove(&key);
             }
         }
-        let mut options = display_options_with_settings(TensorDisplayMode::Typst, &self.settings);
-        options.mode = PrintMode::MathML;
-        for (key, value) in [
-            ("spenso.tensor_layout", &self.settings.tensor_layout),
-            ("spenso.index_gap", &self.settings.index_gap),
-            ("spenso.factor_gap", &self.settings.factor_gap),
-        ] {
-            options
-                .custom_print_mode
-                .insert(key.into(), PrintUserData::String(value.clone()));
-        }
+        let options = self.settings.mathml_options();
         // Aliases remain borrowed viewer state, rather than serialized options
         // or symbols inserted into the expression being paged.
         let result = spenso::network::tags::mathml::render(
@@ -246,7 +318,7 @@ pub(crate) fn viewer(
 ) -> PyResult<Py<PyAny>> {
     if notation.is_some() {
         return Err(PyValueError::new_err(
-            "The direct MathML pager does not accept Typst notation_source; use to_html() or to_svg() for custom Typst exports",
+            "The direct MathML pager does not accept Typst notation_source; use to_typst_project() or to_svg() for custom Typst exports",
         ));
     }
     let mut leaves = TensorLeaves {

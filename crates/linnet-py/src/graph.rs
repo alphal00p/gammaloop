@@ -1606,30 +1606,36 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
-    ) -> PyResult<crate::PyDiagramRender> {
+    ) -> PyResult<crate::PyDiagramView> {
         crate::render::render_graph(py, &slf, config, None)
     }
 
-    #[pyo3(signature = (*, config=None))]
+    #[pyo3(signature = (*, config=None, browser=None))]
     fn to_svg(
         slf: Py<PyGraph>,
         py: Python<'_>,
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
+        browser: Option<&str>,
     ) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, config)
+        crate::render::render_graph(py, &slf, config, None)?
+            .measured(py, None, browser)?
+            .to_svg()
     }
 
-    #[pyo3(signature = ())]
-    fn _repr_svg_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, None)
+    fn _mime_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        crate::render::render_graph(py, &slf, None, None)?._mime_(py)
     }
 
-    /// Display the SVG with hover details and local interactive selection.
-    #[pyo3(signature = ())]
-    fn _repr_html_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<String> {
-        crate::render::graph_to_svg(py, &slf, None)
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        slf: Py<PyGraph>,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        crate::render::render_graph(py, &slf, None, None)?._repr_mimebundle_(py, include, exclude)
     }
 
     #[pyo3(name = "full_subgraph", signature = ())]

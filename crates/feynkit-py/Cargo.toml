@@ -28,7 +28,6 @@ feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", default-featur
 idenso = { workspace = true, default-features = false }
 spenso = { workspace = true, default-features = false, features = ["shadowing"] }
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
-typst-renderer = { path = "../typst-renderer" }
 linnest = { workspace = true, features = ["svg"] }
 serde_json = { workspace = true }
 linnet.workspace = true

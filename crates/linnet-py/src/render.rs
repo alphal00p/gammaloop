@@ -301,27 +301,12 @@ fn topology_spec(graph: &PyGraph) -> PyResult<Vec<u8>> {
     encode_graph_spec_bytes(&spec).map_err(PyRuntimeError::new_err)
 }
 
-pub(crate) fn graph_to_svg(
-    py: Python<'_>,
-    graph: &Py<PyGraph>,
-    config: Option<&Bound<'_, PyAny>>,
-) -> PyResult<String> {
-    let pages = render_graph(py, graph, config, None)?.to_svg_pages()?;
-    match pages.as_slice() {
-        [svg] => Ok(svg.clone()),
-        _ => Err(PyRuntimeError::new_err(format!(
-            "Typst SVG render produced {} pages; expected exactly one",
-            pages.len()
-        ))),
-    }
-}
-
 pub(crate) fn render_graph(
     py: Python<'_>,
     graph: &Py<PyGraph>,
     config: Option<&Bound<'_, PyAny>>,
     subgraph: Option<&PySubgraph>,
-) -> PyResult<crate::PyDiagramRender> {
+) -> PyResult<crate::PyDiagramView> {
     // Validate before callbacks and again after preparation of the graph records.
     if let Some(subgraph) = subgraph {
         subgraph.selection_for(py, graph, graph.borrow(py).revision()?)?;
@@ -350,7 +335,7 @@ pub(crate) fn render_graph(
     let envelope: linnest::TypstGraphSpecEnvelope = ciborium::from_reader(topology.as_slice())
         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
     let scene = transport.native_scene(envelope.graph, selection.as_ref(), None)?;
-    crate::PyDiagramRender::from_scene(py, scene, None)
+    crate::PyDiagramView::from_scene(py, scene, None)
 }
 
 /// Supply live generic graph views only when the optional Linnet bindings are registered.
@@ -445,7 +430,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compiled_graph_inspection_preserves_native_drawing() {
+    fn measured_graph_inspection_preserves_native_drawing() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
             let modules = py.import("sys")?.getattr("modules")?;
@@ -460,6 +445,15 @@ mod tests {
             py.import("sys")?
                 .getattr("modules")?
                 .set_item("symbolica.community.graph", &linnet)?;
+            let metrics_source =
+                std::ffi::CString::new(include_str!("../tests/rendering_metrics.py")).unwrap();
+            let metrics = PyModule::from_code(
+                py,
+                &metrics_source,
+                c"rendering_metrics.py",
+                c"rendering_metrics",
+            )?;
+            modules.set_item("rendering_metrics", &metrics)?;
             let source =
                 std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
             let fixture = PyModule::from_code(
@@ -471,7 +465,11 @@ mod tests {
             let case = fixture.getattr("SvgInteractionTests")?.call0()?;
             case.call_method0("setUp")?;
             let graph = case.getattr("graph")?.extract::<Py<PyGraph>>()?;
-            let drawing = render_graph(py, &graph, None, None)?;
+            let view = render_graph(py, &graph, None, None)?;
+            let drawing = metrics
+                .call_method1("external_metrics_snapshot", (Py::new(py, view)?,))?
+                .extract::<PyRef<'_, crate::PyDiagramRender>>()?
+                .clone();
             let pages = drawing.to_svg_pages()?;
             assert_eq!(pages.len(), 1);
             case.call_method1(

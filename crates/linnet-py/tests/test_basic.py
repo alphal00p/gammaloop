@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from rendering_metrics import external_metrics_snapshot
+
 from symbolica.community import graph as lp
 
 
@@ -2533,7 +2535,7 @@ class TestTypedTypstSurface(unittest.TestCase):
             config=lp.RenderSettings(selectors=lp.DrawingSelectors(node=select))
         )
         self.assertEqual([node.data.identifier for node in seen], ["left", "right"])
-        self.assertIn("<svg", result.to_svg())
+        self.assertIn("<svg", external_metrics_snapshot(result).to_svg())
         self.assertEqual(len(seen), 2)
         for selectors, message in (
             (
@@ -2865,7 +2867,9 @@ class TestTypedTypstSurface(unittest.TestCase):
                 external_pull=1.0,
             )
         )
-        self.assertIn("<svg", graph.render(config=config).to_svg())
+        self.assertIn(
+            "<svg", external_metrics_snapshot(graph.render(config=config)).to_svg()
+        )
 
     def test_external_pull_balance_is_validated_and_preserved_across_passes(self):
         layouts = (
@@ -2877,7 +2881,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         graph = lp.build(
             lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
         )
-        self.assertIn("<svg", graph.render().to_svg())
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
         for value in (-0.1, float("nan"), float("inf"), -float("inf")):
             with self.subTest(value=value):
                 with self.assertRaises((TypeError, ValueError)):
@@ -2892,7 +2896,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         graph = lp.build(
             lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
         )
-        self.assertIn("<svg", graph.render().to_svg())
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
         for constructor in (lp.LayoutSettings, lp.LayoutSettings.then):
             self.assertIn(
                 "impred_step_scale", inspect.signature(constructor).parameters
@@ -2911,7 +2915,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         graph = lp.build(
             lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
         )
-        self.assertIn("<svg", graph.render().to_svg())
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
         for constructor in (lp.LayoutSettings, lp.LayoutSettings.then):
             self.assertIn("impred_level", inspect.signature(constructor).parameters)
         for value in (1, 0.0, "true"):
@@ -2935,7 +2939,7 @@ class TestTypedTypstSurface(unittest.TestCase):
         graph = lp.build(
             lp.node("node"), render_config=lp.RenderSettings(layouts=layouts)
         )
-        self.assertIn("<svg", graph.render().to_svg())
+        self.assertIn("<svg", external_metrics_snapshot(graph.render()).to_svg())
         for value in (-0.1, float("nan"), float("inf"), -float("inf")):
             with self.subTest(value=value):
                 with self.assertRaises((TypeError, ValueError)):
@@ -3022,15 +3026,15 @@ class TestTypedTypstSurface(unittest.TestCase):
 
 
 class TestRendering(unittest.TestCase):
-    def test_subgraph_rendering_rejects_stale_selection_before_compilation(self):
+    def test_subgraph_rendering_rejects_stale_selection_before_measurement(self):
         graph, _, _, _ = sample_graph()
         selected = graph.full_subgraph()
         graph.add_node(lp.node("new"))
         for render in (
             selected.render,
             selected.to_svg,
-            selected._repr_svg_,
-            selected._repr_html_,
+            selected._repr_mimebundle_,
+            selected._mime_,
         ):
             with self.assertRaisesRegex(ReferenceError, "stale"):
                 render()

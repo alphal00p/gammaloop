@@ -20,6 +20,7 @@ __all__ = [
     "Dash",
     "DebugLevel",
     "DiagramRender",
+    "DiagramView",
     "DirectionBasis",
     "DotCodec",
     "DotEdgeData",
@@ -354,6 +355,41 @@ class DiagramRender:
     def __repr__(self) -> builtins.str: ...
 
 @typing.final
+class DiagramView:
+    r"""
+    A resolved drawing awaiting its notebook browser's label measurements.
+    """
+    @property
+    def diagrams(self) -> builtins.list[DiagramView]:
+        r"""
+        Configured child views for a collection, retaining their original scenes.
+        """
+    def measurement_request(self) -> dict:
+        r"""
+        The exact ordered MathML probes, fixed font, and receipt identity.
+        """
+    def measured(self, measurements: typing.Optional[dict] = None, *, browser: typing.Optional[builtins.str] = None) -> DiagramRender:
+        r"""
+        Obtain a completed immutable snapshot, or explicitly measure using Chromium.
+        """
+    def outlined(self) -> DiagramRender:
+        r"""
+        Outline labels with the optional Python Typst compiler; no browser is used.
+        """
+    def to_svg(self) -> builtins.str: ...
+    def to_svg_pages(self) -> builtins.list[builtins.str]: ...
+    def to_html(self) -> builtins.str: ...
+    def save(self, output: builtins.str | os.PathLike | pathlib.Path) -> pathlib.Path: ...
+    def widget(self) -> typing.Any:
+        r"""
+        Optional notebook dependencies are imported only when displaying a view.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...
+    def _display_(self) -> typing.Any: ...
+    def _mime_(self) -> typing.Any: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
 class DotCodec:
     r"""
     An explicit mapping between graph values and DOT-representable records.
@@ -557,16 +593,13 @@ class Graph:
     @classmethod
     def from_dot_file(cls, path: builtins.str | os.PathLike[builtins.str], codec: DotCodec, *, node_store: NodeStore = NodeStore.Vec) -> Graph: ...
     def to_dot(self, codec: typing.Optional[DotCodec] = None) -> builtins.str: ...
-    def render(self, *, config: RenderSettings | None = None) -> DiagramRender:
+    def render(self, *, config: RenderSettings | None = None) -> DiagramView:
         r"""
         Snapshot a drawing, using native SVG geometry for ordinary graph settings.
         """
-    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str: ...
-    def _repr_svg_(self) -> builtins.str: ...
-    def _repr_html_(self) -> builtins.str:
-        r"""
-        Display the SVG with hover details and local interactive selection.
-        """
+    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str: ...
+    def _mime_(self, slf: Graph) -> typing.Any: ...
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...
     def full_subgraph(self) -> Subgraph: ...
     def empty_subgraph(self) -> Subgraph: ...
     def subgraph(self, *, nodes: typing.Sequence[builtins.int | builtins.str] = ..., edges: typing.Sequence[builtins.int | builtins.str] = ..., half_edges: typing.Sequence[builtins.int] = ...) -> Subgraph: ...
@@ -1269,17 +1302,17 @@ class Subgraph:
     def __lt__(self, other: Subgraph) -> builtins.bool: ...
     def __ge__(self, other: Subgraph) -> builtins.bool: ...
     def __gt__(self, other: Subgraph) -> builtins.bool: ...
-    def render(self, *, config: RenderSettings | None = None) -> DiagramRender:
+    def render(self, *, config: RenderSettings | None = None) -> DiagramView:
         r"""
         Prepare the full owner graph with this selection highlighted and its complement dotted.
         The owner's layout, drawing configuration, and topology remain unchanged.
         """
-    def to_svg(self, *, config: RenderSettings | None = None) -> builtins.str:
+    def to_svg(self, *, config: RenderSettings | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Render this selection in the context of the full graph, including isolated nodes.
         """
-    def _repr_svg_(self) -> builtins.str: ...
-    def _repr_html_(self) -> builtins.str:
+    def _mime_(self) -> typing.Any: ...
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
         Show the selected half-edges within their complete graph in notebook output.
         """

@@ -4,7 +4,7 @@ use kernel::{CffKernel, CffOrientationData, CffTerm};
 
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, OnceLock},
+    sync::Arc,
 };
 
 use feynkit_cff::{
@@ -12,6 +12,7 @@ use feynkit_cff::{
     FeynmanDiagramCffExt, SurfaceId, SurfacePole,
 };
 use linnet::half_edge::{involution::HedgePair, subgraph::SuBitGraph};
+use linnet_render_py::PyDiagramView;
 use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
@@ -193,14 +194,51 @@ impl PyCffOrientation {
             None,
         )
     }
+    /// Prepare this orientation's explorer for display or explicit measurement.
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = orientation.render()
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn render(&self, py: Python<'_>) -> PyResult<PyDiagramView> {
+        self.parent
+            .explorer_view(py, display::CffScope::Orientation(self.id()))
+    }
+
     /// Inspect this orientation's family sum and fixed energy-flow graph.
     ///
     /// Examples
     /// --------
-    /// >>> html = orientation._repr_html_()
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.parent
-            .explorer_html(py, display::CffScope::Orientation(self.id()))
+    /// >>> from IPython.display import display
+    /// >>> display(orientation)
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._repr_mimebundle_(py, include, exclude)
+    }
+
+    /// Return Marimo MIME data for the browser-measured orientation explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = orientation.render()
+    /// >>> view  # notebook display measures labels before mounting the explorer
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._mime_(py)
     }
     /// Display this orientation in Marimo.
     ///
@@ -208,10 +246,8 @@ impl PyCffOrientation {
     /// --------
     /// >>> view = orientation._display_()
     fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(py
-            .import("marimo")?
-            .call_method1("iframe", (self._repr_html_(py)?,))?
-            .unbind())
+        let view = self.render(py)?;
+        view._display_(py)
     }
 }
 
@@ -373,13 +409,14 @@ impl PyCrossFreeFamily {
             None,
         )
     }
-    /// Inspect only this family's contribution and surface circlings.
+    /// Prepare this family's explorer for display or explicit measurement.
     ///
     /// Examples
     /// --------
-    /// >>> html = family._repr_html_()
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.parent.explorer_html(
+    /// >>> view = family.render()
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn render(&self, py: Python<'_>) -> PyResult<PyDiagramView> {
+        self.parent.explorer_view(
             py,
             display::CffScope::Family {
                 orientation: self.orientation,
@@ -387,16 +424,50 @@ impl PyCrossFreeFamily {
             },
         )
     }
+
+    /// Inspect only this family's contribution and surface circlings.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from IPython.display import display
+    /// >>> display(family)
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._repr_mimebundle_(py, include, exclude)
+    }
+
+    /// Return Marimo MIME data for the browser-measured family explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = family.render()
+    /// >>> view  # notebook display measures labels before mounting the explorer
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._mime_(py)
+    }
     /// Display this family in Marimo.
     ///
     /// Examples
     /// --------
     /// >>> view = family._display_()
     fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        Ok(py
-            .import("marimo")?
-            .call_method1("iframe", (self._repr_html_(py)?,))?
-            .unbind())
+        let view = self.render(py)?;
+        view._display_(py)
     }
 }
 
@@ -615,7 +686,6 @@ pub struct PyCffRepresentation {
     owner: Arc<()>,
     normalization: Atom,
     diagram: Arc<feynkit_graph::FeynmanDiagram>,
-    drawing: Arc<OnceLock<String>>,
     pole_order: Option<usize>,
 }
 
@@ -976,6 +1046,17 @@ impl PyCffRepresentation {
         }
     }
 
+    /// Prepare a browser-measured orientation, family and surface explorer.
+    ///
+    /// Examples
+    /// --------
+    /// >>> view = result.render()
+    /// >>> view
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn render(&self, py: Python<'_>) -> PyResult<PyDiagramView> {
+        self.explorer_view(py, display::CffScope::Representation)
+    }
+
     /// Explore orientations, factored families and surface regions on the native graph.
     ///
     /// Arrowhead clicks select another retained orientation; they never change the result.
@@ -988,14 +1069,41 @@ impl PyCffRepresentation {
     ///
     /// >>> from IPython.display import display
     /// >>> display(result)
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.explorer_html(py, display::CffScope::Representation)
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Return Marimo's interactive presentation in a script-enabled iframe.
+    /// Return Marimo MIME data for the browser-measured CFF explorer.
     ///
-    /// Marimo uses this hook automatically when displaying the result.
-    /// Other notebook frontends use ``_repr_html_`` without requiring Marimo.
+    /// Examples
+    /// --------
+    /// Using the setup in the ``CffRepresentation`` class example:
+    ///
+    /// >>> view = result.render()
+    /// >>> view  # notebook display measures labels before mounting the explorer
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py)?;
+        view._mime_(py)
+    }
+
+    /// Return the browser-measured explorer widget.
+    ///
+    /// Notebook MIME hooks use the same widget without requiring Marimo.
     ///
     /// Examples
     /// --------
@@ -1003,11 +1111,8 @@ impl PyCffRepresentation {
     ///
     /// >>> presentation = result._display_()
     fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let html = self.explorer_html(py, display::CffScope::Representation)?;
-        Ok(py
-            .import("marimo")?
-            .call_method1("iframe", (html,))?
-            .unbind())
+        let view = self.render(py)?;
+        view._display_(py)
     }
 
     /// Write a summary with Symbolica's native expression formatting.
@@ -1108,7 +1213,6 @@ impl PyCffRepresentation {
                     owner: Arc::new(()),
                     normalization,
                     diagram,
-                    drawing: Arc::new(OnceLock::new()),
                     pole_order: None,
                     numerator,
                     energy_degree_bounds,
@@ -1195,7 +1299,6 @@ impl PyCffRepresentation {
                 owner: Arc::new(()),
                 normalization,
                 diagram,
-                drawing: Arc::new(OnceLock::new()),
                 pole_order: None,
             })
         })

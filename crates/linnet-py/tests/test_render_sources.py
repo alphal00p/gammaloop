@@ -1,7 +1,9 @@
-"""The Python renderer accepts native graphs and typesets only their labels."""
+"""Native graph views expose MathML labels without compiling a document."""
 
 import unittest
 import xml.etree.ElementTree as ET
+from rendering_metrics import external_metrics_snapshot
+
 from symbolica.community import graph as ln
 
 
@@ -19,13 +21,19 @@ class RenderSourcesTests(unittest.TestCase):
             ):
                 ln.RenderSettings(**{name: value})
 
-    def test_labels_and_titles_are_typeset_without_packages(self):
+    def test_labels_and_titles_use_mathml_without_packages(self):
         graph = ln.build(ln.node("node", label=ln.MathSymbol("p", subscript=1)))
         rendered = graph.render(config=ln.RenderSettings(title=ln.TextLabel("A title")))
         self.assertFalse(hasattr(rendered, "typst_source"))
-        root = ET.fromstring(rendered.to_svg())
+        request = rendered.measurement_request()
+        self.assertEqual(len(request["labels"]), 2)
+        self.assertIn("A title", request["labels"][0]["mathml"])
+        self.assertIn("<msub>", request["labels"][1]["mathml"])
+        root = ET.fromstring(external_metrics_snapshot(rendered).to_svg())
         self.assertEqual(root.get("data-linnet-renderer"), "native")
-        self.assertTrue(any(element.tag.endswith("path") for element in root.iter()))
+        self.assertEqual(
+            len(root.findall(".//{http://www.w3.org/1998/Math/MathML}math")), 2
+        )
 
     def test_executable_style_is_rejected_without_typst_fallback(self):
         graph = ln.build(ln.node("node"))

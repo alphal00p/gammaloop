@@ -11,6 +11,9 @@ license-files = ["licenses/*"]
 
 [project.optional-dependencies]
 numpy = ["numpy"]
+notebook-display = ["anywidget>=0.9,<1"]
+graph-export = ["playwright>=1.55,<2"]
+typst-export = ["typst>=0.15"]
 
 [tool.maturin]
 module-name = "symbolica.core"

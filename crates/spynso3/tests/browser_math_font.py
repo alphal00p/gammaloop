@@ -21,7 +21,7 @@ def main():
     parser.add_argument(
         "--font",
         type=Path,
-        default=Path(__file__).parents[1] / "typst/STIXTwoMath-Regular.woff2",
+        default=Path(__file__).parents[2] / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
     )
     args = parser.parse_args()
     result = subprocess.run(

@@ -1,4 +1,4 @@
-use linnet_render_py::PyDiagramRender;
+use linnet_render_py::PyDiagramView;
 use std::{collections::BTreeMap, sync::Arc};
 
 use feynkit_amplitude::{Amplitude, AmplitudeLeg, AmplitudeOptions, SquaredAmplitude};
@@ -372,7 +372,7 @@ impl PyAmplitude {
             self.inner.is_conjugated()
         )
     }
-    /// Render a configurable snapshot of the amplitude's diagrams and weighted terms.
+    /// Prepare a browser-measured view of the amplitude's diagrams and weighted terms.
     ///
     /// Examples
     /// --------
@@ -380,7 +380,8 @@ impl PyAmplitude {
     ///
     /// >>> from symbolica.community.graph import RenderSettings, DrawOptions
     /// >>> drawing = amplitude.render(config=RenderSettings(drawing=DrawOptions(node_radius=5)), max_diagrams=2)
-    /// >>> html = drawing.to_html()
+    /// >>> snapshot = drawing.measured(browser="chromium")
+    /// >>> html = snapshot.to_html()
     ///
     /// Parameters
     /// ----------
@@ -402,7 +403,7 @@ impl PyAmplitude {
         style: Option<&crate::render_settings::PyDiagramStyle>,
         max_diagrams: Option<usize>,
         term_settings: Option<&spynso3::display::DisplaySettings>,
-    ) -> PyResult<PyDiagramRender> {
+    ) -> PyResult<PyDiagramView> {
         let limit = max_diagrams.unwrap_or(self.inner.diagrams().len());
         let kwargs = pyo3::types::PyDict::new(py);
         if let Some(settings) = term_settings {
@@ -420,7 +421,7 @@ impl PyAmplitude {
                     .extract::<String>()
             })
             .collect::<PyResult<Vec<_>>>()?;
-        let (html, diagrams) = crate::display::collection_html(
+        crate::display::collection_view(
             py,
             if self.inner.is_conjugated() {
                 "Conjugate amplitude"
@@ -440,8 +441,7 @@ impl PyAmplitude {
             config,
             style,
             limit,
-        )?;
-        PyDiagramRender::from_diagrams(diagrams, html)
+        )
     }
     /// Render compact diagram rows with weighted operators and expandable graphs.
     ///
@@ -451,9 +451,36 @@ impl PyAmplitude {
     ///
     /// >>> from IPython.display import display
     /// >>> display(amplitude)
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT), None)?
-            .to_html()
+    ///
+    /// Parameters
+    /// ----------
+    /// include : list[str] or None, optional
+    ///     MIME types requested by the frontend; None allows all available types.
+    /// exclude : list[str] or None, optional
+    ///     MIME types omitted from the frontend response.
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT), None)?;
+        view._repr_mimebundle_(py, include, exclude)
+    }
+
+    /// Return Marimo MIME data for the browser-measured amplitude view.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Amplitude`` class example:
+    ///
+    /// >>> view = amplitude.render()
+    /// >>> view  # notebook display measures labels before mounting diagrams
+    /// >>> snapshot = view.measured(browser="chromium")
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let view = self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT), None)?;
+        view._mime_(py)
     }
 }
 

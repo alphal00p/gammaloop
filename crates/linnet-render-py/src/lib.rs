@@ -1,18 +1,26 @@
 //! Shared graph presentation bindings, independent of Python graph construction.
+pub mod data_assets {
+    pub const STIX_TWO_MATH_LICENSE: &str = include_str!("../fonts/STIX-Two-OFL.txt");
+    include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
+}
 use pyo3::prelude::*;
 pub mod drawing;
 mod scene;
 mod snapshot;
 mod svg;
 pub mod typst;
+pub mod typst_export;
+mod view;
 pub use scene::register_scene_selectors;
 pub use snapshot::PyDiagramRender;
 pub use typst::{PyAuto as Auto, PyRenderSettings, PyRenderSettings as RenderSettings};
+pub use view::PyDiagramView;
 
 pub fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     drawing::register(module)?;
     typst::register_typst_api(module)?;
     module.add_class::<PyDiagramRender>()?;
+    module.add_class::<PyDiagramView>()?;
     Ok(())
 }
 
@@ -308,7 +316,7 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use linnest::svg::{Dash, Details, EdgeDrawing, NodeDrawing, Scene, Stroke};
+    use linnest::svg::{Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Scene, Stroke};
     use pyo3::types::{PyDict, PyType};
     use symbolica::api::python::SymbolicaCommunityModule;
 
@@ -320,6 +328,7 @@ mod tests {
             GraphModule::register_module(&module)?;
             for name in [
                 "DiagramRender",
+                "DiagramView",
                 "RenderSettings",
                 "LayoutSettings",
                 "Stroke",
@@ -391,14 +400,23 @@ mod tests {
             register(&module)?;
             let locals = PyDict::new(py);
             locals.set_item("graph", module)?;
-            py.run(cr#"
+            py.run(
+                cr#"
 config = graph.RenderSettings(
     layouts=graph.LayoutSettings(impred_steps=1).then(impred_steps=1),
 )
-"#, Some(&locals), Some(&locals))?;
+"#,
+                Some(&locals),
+                Some(&locals),
+            )?;
             let settings = locals.get_item("config")?.unwrap();
             let settings = settings.extract::<PyRef<'_, PyRenderSettings>>()?;
-            let stroke = Stroke { paint: "#246813".into(), width: 0.6, dash: Dash::Solid, round_cap: false };
+            let stroke = Stroke {
+                paint: "#246813".into(),
+                width: 0.6,
+                dash: Dash::Solid,
+                round_cap: false,
+            };
             let node = NodeDrawing {
                 radius: 0.2,
                 label_padding: None,
@@ -413,7 +431,10 @@ config = graph.RenderSettings(
                     "nodes": [{"index": 0}, {"index": 1}],
                     "edges": [{"id": 0, "source": {"node": 0, "id": 0}, "sink": {"node": 1, "id": 1}}],
                 })).unwrap(),
-                nodes: vec![NodeDrawing { label: Some(0), ..node.clone() }, node],
+                nodes: vec![
+                    NodeDrawing { label: Some(0), ..node.clone() },
+                    node,
+                ],
                 edges: vec![EdgeDrawing {
                     stroke,
                     pattern: None,
@@ -425,23 +446,95 @@ config = graph.RenderSettings(
                 }],
                 preamble: String::new(),
                 title: None,
-                pages: vec!["[$x$]".into()],
+                pages: vec![LabelSource {
+                    mathml: "<mi>x</mi>".into(),
+                    typst: Some("[$x$]".into()),
+                }],
                 layout: Default::default(),
                 layout_passes: Vec::new(),
                 layout_edges: None,
                 label_feedback: false,
             };
-            // The captured native geometry and labels also supply PDF export.
-            let result = PyDiagramRender::from_scene(py, scene, Some(&settings))?;
+            let view = PyDiagramView::from_scene(py, scene, Some(&settings))?;
+            let request = view.measurement_request(py)?;
+            locals.set_item("view", Py::new(py, view.clone())?)?;
+            locals.set_item("request", request)?;
+            // EXTERNAL METRICS FIXTURE in points; no browser or compiler ran.
+            py.run(
+                cr#"
+assert request["labels"] == [{"id": 0, "mathml": "<mi>x</mi>"}]
+receipt = {"id": request["id"], "metrics": [
+    {"id": 0, "width": 12.0, "height": 9.0, "baseline": 7.0},
+]}
+assert "awaiting browser measurement" in repr(view)
+"#,
+                Some(&locals),
+                Some(&locals),
+            )?;
+            let receipt = locals.get_item("receipt")?.unwrap().cast_into::<PyDict>()?;
+            match view.measured(py, None, None) {
+                Ok(_) => panic!("unmeasured labels produced a snapshot"),
+                Err(error) => assert!(error.to_string().contains("measurement is pending")),
+            }
+            let result = view.measured(py, Some(&receipt), None)?;
             let svg = result.to_svg()?;
-            for value in ["<svg", "#357913", "#246813", "particle"] {
+            for value in [
+                "<svg", "#357913", "#246813", "particle", "<mi>x</mi>", "foreignObject",
+            ] {
                 assert!(svg.contains(value), "missing scene data {value}");
             }
+            assert_eq!(view.measured(py, None, None)?.to_svg()?, svg);
             let output = tempfile::tempdir()?;
             let result = Py::new(py, result)?;
-            result.bind(py).call_method1("save", (output.path().join("scene.pdf"),))?;
-            assert!(std::fs::read(output.path().join("scene.pdf"))?.starts_with(b"%PDF"));
+            let error = result.bind(py)
+                .call_method1("save", (output.path().join("scene.pdf"),))
+                .unwrap_err();
+            assert!(error.is_instance_of::<pyo3::exceptions::PyRuntimeError>(py));
+            assert!(error.to_string().contains("require outlined labels"));
             Ok(())
-        }).unwrap();
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn captured_vector_svg_preserves_pdf_png_and_typst_exports() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            // A genuine vector path fixture, independent of label compilation.
+            let svg = r##"<svg xmlns="http://www.w3.org/2000/svg" width="24pt" height="18pt" viewBox="0 0 24 18"><path d="M2 2H22V16H2Z" fill="#357913"/></svg>"##;
+            let snapshot = PyDiagramRender::new(svg.into(), format!("<figure>{svg}</figure>"));
+            let collection = PyDiagramRender::from_diagrams(
+                vec![snapshot.clone(), snapshot.clone()],
+                format!("<figure>{svg}{svg}</figure>"),
+            )?;
+            assert_eq!(collection.to_svg_pages()?.len(), 2);
+            let result = Py::new(py, snapshot)?;
+            let output = tempfile::tempdir()?;
+            for suffix in ["pdf", "png", "typ"] {
+                let path = output.path().join(format!("vector.{suffix}"));
+                result.bind(py).call_method1("save", (&path,))?;
+                let bytes = std::fs::read(path)?;
+                match suffix {
+                    "pdf" => assert!(bytes.starts_with(b"%PDF")),
+                    "png" => assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n")),
+                    _ => assert!(String::from_utf8(bytes).unwrap().contains("#image(bytes(")),
+                }
+            }
+            let collection = Py::new(py, collection)?;
+            let pdf = output.path().join("collection.pdf");
+            collection.bind(py).call_method1("save", (&pdf,))?;
+            assert!(std::fs::read(pdf)?.starts_with(b"%PDF"));
+            let kwargs = PyDict::new(py);
+            kwargs.set_item("format", "png")?;
+            let pages = collection.bind(py)
+                .call_method("save_pages", (output.path().join("pages"),), Some(&kwargs))?
+                .extract::<Vec<std::path::PathBuf>>()?;
+            assert_eq!(pages.len(), 2);
+            for page in pages {
+                assert!(std::fs::read(page)?.starts_with(b"\x89PNG\r\n\x1a\n"));
+            }
+            Ok(())
+        })
+        .unwrap();
     }
 }

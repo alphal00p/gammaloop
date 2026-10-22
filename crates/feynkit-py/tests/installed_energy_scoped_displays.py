@@ -2,11 +2,26 @@
 
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import marimo as mo
 from symbolica import Expression
 from symbolica.community import hepkit as hep
 from symbolica.community.tensor import TensorExpression
+
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
 
 
 def check(directory):
@@ -56,9 +71,19 @@ def check(directory):
         "residue": residue,
     }.items():
         assert "object at" not in repr(value)
-        source = value._repr_html_()
+        view = value.render()
+        source = external_metrics_snapshot(view).to_html()
         (directory / f"{name}.html").write_text(source)
-        assert "iframe" in mo.as_html(value).text
+        assert callable(value._mime_) and callable(value._repr_mimebundle_)
+        with patch.object(mo.ui, "anywidget", wraps=mo.ui.anywidget) as adapter:
+            markup = mo.as_html(view).text
+        adapter.assert_called_once()
+        widget = adapter.call_args.args[0]
+        try:
+            assert "marimo-ui-element" in markup
+            assert widget.rendered["html"] == source
+        finally:
+            widget.close()
 
     records = {
         "surface": surface,
@@ -79,7 +104,8 @@ def check(directory):
         (directory / f"{name}.html").write_text(source)
     coefficient = cff.pole_coefficients(cff.raised_surface_groups()[0])[0]
     assert "pole coefficient, order 1" in repr(coefficient)
-    assert '"pole_order":1' in coefficient._repr_html_()
+    coefficient_view = coefficient.render()
+    assert '"pole_order":1' in external_metrics_snapshot(coefficient_view).to_html()
     print(
         "Scoped native displays, scalar tensor returns, reports and pole-coefficient provenance passed"
     )

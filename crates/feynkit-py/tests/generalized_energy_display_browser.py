@@ -71,7 +71,7 @@ def main(directory, ltd_directory, executable, engine="chromium"):
             "**/*STIXTwoMath-Regular.woff2",
             lambda route: route.fulfill(
                 path=Path(__file__).parents[2]
-                / "spynso3/typst/STIXTwoMath-Regular.woff2",
+                / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
                 content_type="font/woff2",
                 headers={"Access-Control-Allow-Origin": "*"},
             ),

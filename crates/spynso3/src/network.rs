@@ -1,4 +1,4 @@
-use linnet_render_py::{PyDiagramRender, PyRenderSettings};
+use linnet_render_py::{PyDiagramView, PyRenderSettings};
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 pub(crate) mod execution;
@@ -1473,7 +1473,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
     ///
     /// Examples
     /// --------
@@ -1487,8 +1487,8 @@ impl SpensoNet {
     /// >>> output = network.to_linnest()
     #[pyo3(signature = (*, config=None))]
     fn to_linnest(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
-        Ok(typst_renderer::Document::svg_source(
-            &self.render_graph(py, config)?.to_svg()?,
+        Ok(linnet_render_py::typst_export::svg_source(
+            &self.render_graph(py, config)?.outlined(py)?.to_svg()?,
         ))
     }
 
@@ -1508,7 +1508,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
     ///
     /// Examples
     /// --------
@@ -1521,15 +1521,11 @@ impl SpensoNet {
     /// >>> network = TensorNetwork(tensor)
     /// >>> output = network.render()
     #[pyo3(signature = (*, config=None))]
-    fn render(
-        &self,
-        py: Python<'_>,
-        config: Option<&PyRenderSettings>,
-    ) -> PyResult<PyDiagramRender> {
+    fn render(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<PyDiagramView> {
         let drawing = self
             .render_graph(py, config)?
             .map_svg(|svg| display::network::svg_theme(&svg))?;
-        let html = display::network::html(&drawing.to_svg_pages()?.join("\n"), &self.status());
+        let html = display::network::html("<!--linnet-svg-0-->", &self.status());
         Ok(drawing.with_html(html))
     }
 
@@ -1705,7 +1701,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
     ///
     /// Examples
     /// --------
@@ -1717,9 +1713,16 @@ impl SpensoNet {
     /// >>> from symbolica.community.tensor import TensorNetwork
     /// >>> network = TensorNetwork(tensor)
     /// >>> output = network.to_html()
-    #[pyo3(signature = (*, config=None))]
-    fn to_html(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
-        self.render(py, config)?.to_html()
+    #[pyo3(signature = (*, config=None, browser=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        config: Option<&PyRenderSettings>,
+        browser: Option<&str>,
+    ) -> PyResult<String> {
+        self.render(py, config)?
+            .measured(py, None, browser)?
+            .to_html()
     }
 
     /// Render static mathematical tensor notation to SVG.
@@ -1771,8 +1774,19 @@ impl SpensoNet {
         display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref())
     }
 
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_html(py, None)
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?._mime_(py)
+    }
+
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?
+            ._repr_mimebundle_(py, include, exclude)
     }
 
     /// Return the symbolic source computation of this network.
