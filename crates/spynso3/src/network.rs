@@ -1667,16 +1667,26 @@ impl SpensoNet {
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
+        py: Python<'_>,
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
-    ) -> PythonFormattedOutput {
+    ) -> PyResult<PythonFormattedOutput> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::format_structured_output_rich(
-            Arc::new(self.structure.clone()),
+        let value = Arc::new(self.structure.clone());
+        let expression = Py::new(
+            py,
+            PythonExpression {
+                expr: value.expression().clone(),
+            },
+        )?;
+        Ok(display::format_structured_output_rich(
+            py,
+            expression,
+            value,
             settings,
             notation_source,
-        )
+        ))
     }
 
     /// Display the current network graph and execution status.

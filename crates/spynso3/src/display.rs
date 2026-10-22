@@ -65,9 +65,6 @@ pub const NOTEBOOK_STYLE: &str = concat!(
     include_str!("../typst/notebook-font.css"),
     include_str!("../typst/notebook.css")
 );
-// The shared pager registers the font once in the document. Recreating font
-// faces inside its shadow root can leave WebKit's font loading pending.
-const NOTEBOOK_LAYOUT_STYLE: &str = include_str!("../typst/notebook.css");
 
 mod explorer;
 mod labels;
@@ -1230,10 +1227,13 @@ pub(crate) fn format_structured_backend(
 // Each backend is rendered on demand and cached by Symbolica's shared output
 // owner. The original immutable tensor remains shared, without materialization.
 pub(crate) fn format_structured_output_rich(
+    py: Python<'_>,
+    expression: Py<PythonExpression>,
     value: Arc<SymbolicTensor<PartialStructure>>,
     settings: DisplaySettings,
     notation_source: Option<String>,
 ) -> PythonFormattedOutput {
+    let notebook_expression = expression.clone_ref(py);
     let notebook_value = Arc::clone(&value);
     let notebook_settings = settings.clone();
     let notebook_notation = notation_source.clone();
@@ -1241,6 +1241,7 @@ pub(crate) fn format_structured_output_rich(
         PythonFormattedOutput::lazy(move |py, backend| match backend {
             FormattedOutputBackend::Html => paging::static_html(
                 py,
+                expression.clone_ref(py),
                 Arc::clone(&value),
                 settings.clone(),
                 notation_source.clone(),
@@ -1274,6 +1275,7 @@ pub(crate) fn format_structured_output_rich(
     formatted.with_notebook(move |py| {
         paging::viewer(
             py,
+            notebook_expression.clone_ref(py),
             Arc::clone(&notebook_value),
             notebook_settings.clone(),
             notebook_notation.clone(),
@@ -1319,7 +1321,11 @@ fn typst_settings_source(settings: &DisplaySettings, atom: &Atom) -> String {
     )
 }
 
-fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String> {
+fn typst_custom_print_source(
+    settings: &DisplaySettings,
+    atom: &Atom,
+    in_product: bool,
+) -> PyResult<String> {
     let options = display_options_with_settings(TensorDisplayMode::Typst, settings);
     let attachments = portable_attachments(atom).map_err(PyRuntimeError::new_err)?;
     let mut heads = labels::typst_heads(atom);
@@ -1344,14 +1350,16 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
         if !seen.insert(value.clone()) {
             return true;
         }
-        let normal = tensor_custom_print(view, &options, &PrintState::new());
+        let mut state = PrintState::new();
+        // Only the outer leaf inherits the surrounding arithmetic context.
+        state.in_product = in_product && view == atom.as_view();
+        let normal = tensor_custom_print(view, &options, &state);
         if matches!(view, AtomView::Var(_)) {
             if let Some(source) = normal {
                 heads.insert(symbol.get_name().to_owned(), source);
             }
             return true;
         }
-        let mut state = PrintState::new();
         state.in_exp_base = true;
         let power = tensor_custom_print(view, &options, &state);
         if normal.is_some() || power.is_some() {
@@ -1410,7 +1418,7 @@ fn typst_main_source(settings: &DisplaySettings, atom: &Atom) -> PyResult<String
             "$ #visual $\n"
         ),
         typst_settings_source(settings, atom),
-        typst_custom_print_source(settings, atom)?,
+        typst_custom_print_source(settings, atom, false)?,
     ))
 }
 
@@ -2395,7 +2403,7 @@ fn concrete_render_project(
             "$ #descriptor = {} $\n"
         ),
         typst_settings_source(settings, &descriptor),
-        typst_custom_print_source(settings, &descriptor)?,
+        typst_custom_print_source(settings, &descriptor, false)?,
         body,
     );
     Ok((source, tree))

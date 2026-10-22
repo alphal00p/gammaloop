@@ -13,6 +13,13 @@ from pathlib import Path
 
 MAX_HTML = 256 * 1024
 MAX_ELEMENTS = 1000
+CANCEL_STYLE = (
+    "background-image:linear-gradient(to bottom right,"
+    "transparent calc(50% - 0.025em),"
+    "currentColor calc(50% - 0.025em),"
+    "currentColor calc(50% + 0.025em),"
+    "transparent calc(50% + 0.025em))"
+)
 
 _MAIN = """#import "notation.typ" as n
 #set page(width: auto, height: auto, margin: 0pt)
@@ -67,11 +74,11 @@ def _stop_worker():
 def _read_reply(deadline):
     remaining = deadline - time.monotonic()
     if remaining <= 0:
-        raise TimeoutError("Tensor compiler exceeded the page deadline")
+        raise TimeoutError("Tensor compiler exceeded the leaf deadline")
     try:
         message = _worker_replies.get(timeout=remaining)
     except queue.Empty:
-        raise TimeoutError("Tensor compiler exceeded the page deadline") from None
+        raise TimeoutError("Tensor compiler exceeded the leaf deadline") from None
     if not message:
         _worker_errors.seek(0)
         detail = _worker_errors.read(2048).decode(errors="replace")
@@ -88,7 +95,7 @@ def _compile_native(root, timeout):
     deadline = time.monotonic() + min(float(timeout), 10.0)
     remaining = deadline - time.monotonic()
     if remaining <= 0 or not _worker_lock.acquire(timeout=remaining):
-        raise TimeoutError("Tensor compiler queue exceeded the page deadline")
+        raise TimeoutError("Tensor compiler queue exceeded the leaf deadline")
     try:
         try:
             if _worker is not None and _worker.poll() is not None:
@@ -205,6 +212,15 @@ def compile_leaf(payload):
                 if child.tail and not child.tail.strip(" \t\r\n"):
                     child.tail = None
         pending.extend((child, space) for child in node)
+    for node in math.iter():
+        # The enclosing native renderer owns paths and supplies the single
+        # expansion target for this atomic fragment.
+        node.attrib.pop("data-symbolica-path", None)
+        if node.get("data-spenso-cancel") == "updiagonal":
+            # The native viewer has no tensor-specific stylesheet or wrapper.
+            # Keep the slash visible in every layout and shadow-root viewer.
+            style = node.get("style", "").rstrip().rstrip(";")
+            node.set("style", f"{style};{CANCEL_STYLE}" if style else CANCEL_STYLE)
     # Symbolica owns outer MathML, arithmetic rows, paths and omissions.
     fragment = "".join(ET.tostring(child, encoding="unicode") for child in math)
     return fragment if len(fragment.encode()) <= 4096 else None
