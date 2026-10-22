@@ -12,6 +12,13 @@
 //! generates distinct monomials and is not relabelled; nor is a term whose
 //! relabelling would neither rename nor merge anything.
 
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+
+use symbolica::{
+    domains::{float::Complex, rational::Rational},
+    id::AliasedAtom,
+};
+
 use super::*;
 
 /// Monomials one generated term may be distributed into for merging.
@@ -66,35 +73,432 @@ impl ColorAlgebraSimplifier {
             .then(|| Atom::mul_many(common.into_iter().chain([merged.as_view()])))
     }
 
-    /// Distribute the exact number of each top-level `number * sum` term over
-    /// its sum of colour states; `None` when there is none. Spectator sums
-    /// and rounded numbers stay factored.
-    pub(super) fn merging_row_numbers(expression: AtomView<'_>) -> Option<Atom> {
-        let terms = match expression {
-            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
-            _ => vec![expression],
-        };
-        let mut distributed = false;
-        let mut merged = Vec::with_capacity(terms.len());
-        for term in terms {
-            if let AtomView::Mul(product) = term
-                && product.get_nargs() == 2
-                && let [AtomView::Num(number), AtomView::Add(sum)]
-                | [AtomView::Add(sum), AtomView::Num(number)] =
-                    product.iter().collect::<Vec<_>>().as_slice()
-                && matches!(
+    /// Complete the changed contribution before reconciling untouched arithmetic.
+    /// The source's colour-free additive contribution is an exact value, not a
+    /// set of coefficient spellings. Subtracting it in the protected arithmetic
+    /// accounts for row weights and cancellations before it can be reopened.
+    /// Nonnumeric coefficient products, function arguments, arithmetic power
+    /// payloads and unreached components remain opaque.
+    pub(super) fn merging_row_numbers(
+        expression: AtomView<'_>,
+        source: AtomView<'_>,
+        unreached: &[AtomView<'_>],
+    ) -> Option<Atom> {
+        if expression == source || !matches!(expression, AtomView::Add(_) | AtomView::Mul(_)) {
+            return None;
+        }
+        // Reuse the original product boundary before inspecting its changed
+        // child. These factors are immutable spectators, even when indexed.
+        let source_factors = multiplicative_factor_views(source);
+        let factors = multiplicative_factor_views(expression);
+        let common = source_factors
+            .iter()
+            .copied()
+            .filter(|factor| {
+                !matches!(factor, AtomView::Num(_))
+                    && !atom_contains_color_node(*factor)
+                    && factors.contains(factor)
+            })
+            .collect::<Vec<_>>();
+        if !common.is_empty() {
+            let child = Atom::mul_many(
+                factors
+                    .into_iter()
+                    .filter(|factor| !common.contains(factor)),
+            );
+            let before = Atom::mul_many(
+                source_factors
+                    .into_iter()
+                    .filter(|factor| !common.contains(factor)),
+            );
+            return Self::merging_row_numbers(child.as_view(), before.as_view(), unreached)
+                .map(|merged| Atom::mul_many(common.into_iter().chain([merged.as_view()])));
+        }
+        let mut exact = true;
+        source.visitor(&mut |node| {
+            if let AtomView::Num(number) = node {
+                exact &= matches!(
                     number.get_coeff_view(),
                     CoefficientView::Natural(..) | CoefficientView::Large(..)
-                )
-                && atom_contains_color_node(sum.as_view())
-            {
-                merged.extend(sum.iter().map(|state| state * number.as_view()));
-                distributed = true;
+                );
+            }
+            matches!(node, AtomView::Add(_) | AtomView::Mul(_))
+        });
+        if !exact {
+            return None;
+        }
+        // This projection follows the original Add/Mul tree, without distributing
+        // a product or entering a function/power. In x*(C+M), for example, the
+        // untouched contribution is x*M; in C*M it is zero. Thus equal M's in
+        // different additive contexts never share an ownership flag.
+        let untouched = source.replace_map(|node, _, out| {
+            if unreached.contains(&node) || !atom_contains_color_node(node) {
+                **out = node.to_owned();
+            } else if !matches!(node, AtomView::Add(_) | AtomView::Mul(_)) {
+                **out = Atom::Zero;
+            }
+        });
+        let mut has_sum = false;
+        let mut arithmetic = HashSet::new();
+        for value in [expression, untouched.as_view()] {
+            value.visitor(&mut |node| match node {
+                AtomView::Add(_) => {
+                    arithmetic.insert(node.to_owned());
+                    has_sum = true;
+                    true
+                }
+                AtomView::Mul(_) => {
+                    arithmetic.insert(node.to_owned());
+                    true
+                }
+                AtomView::Pow(power) => {
+                    // Arithmetic payloads need a whole-power mask. Powers of
+                    // leaves are already opaque to both arithmetic operations;
+                    // keeping them literal also lets x*x and x^2 share a key.
+                    let (base, exponent) = power.get_base_exp();
+                    if [base, exponent].into_iter().any(|part| {
+                        matches!(part, AtomView::Add(_) | AtomView::Mul(_) | AtomView::Pow(_))
+                    }) {
+                        arithmetic.insert(node.to_owned());
+                    }
+                    false
+                }
+                AtomView::Num(number) => {
+                    exact &= matches!(
+                        number.get_coeff_view(),
+                        CoefficientView::Natural(..) | CoefficientView::Large(..)
+                    );
+                    false
+                }
+                _ => false,
+            });
+        }
+        if !exact || !has_sum {
+            return None;
+        }
+        let mut retained = BTreeSet::new();
+        source.visitor(&mut |node| {
+            if matches!(node, AtomView::Add(_) | AtomView::Mul(_)) {
+                if arithmetic.contains(node.get_data())
+                    && (unreached.contains(&node) || !atom_contains_color_node(node))
+                {
+                    retained.insert(node.to_owned());
+                }
+                true
             } else {
-                merged.push(term.to_owned());
+                false
+            }
+        });
+        retained.extend(
+            arithmetic
+                .into_iter()
+                .filter(|node| matches!(node.as_view(), AtomView::Pow(_))),
+        );
+        let mut used = expression.get_all_symbols(true);
+        used.extend(source.get_all_symbols(true));
+        let mut aliases = HashMap::new();
+        let mut linear_aliases = HashSet::new();
+        let mut serial = 0;
+        for original in retained {
+            let alias = loop {
+                let symbol = symbolica::symbol!(format!("idenso::color::row_coefficient_{serial}"));
+                serial += 1;
+                if used.insert(symbol) {
+                    break Atom::var(symbol);
+                }
+            };
+            let linear_sum = matches!(original.as_view(), AtomView::Add(_))
+                || matches!(original.as_view(), AtomView::Mul(product)
+                    if product.get_nargs() == 2 && product.get_coefficient().is_some());
+            if linear_sum
+                && !unreached.contains(&original.as_view())
+                && !atom_contains_color_node(original.as_view())
+            {
+                linear_aliases.insert(alias.clone());
+            }
+            aliases.insert(original, alias);
+        }
+        let protect = |value: AtomView<'_>, generated_root: bool| {
+            value.replace_map(|node, _, out| {
+                if matches!(node, AtomView::Fun(_)) {
+                    **out = node.to_owned();
+                } else if (!generated_root || node != value || unreached.contains(&node))
+                    && let Some(alias) = aliases.get::<[u8]>(node.get_data())
+                {
+                    **out = alias.clone();
+                }
+            })
+        };
+        // A newly generated root is never an old coefficient occurrence, even
+        // if a vanished row had exactly that coefficient.
+        let mut protected = AliasedAtom::from(protect(expression, true));
+        // Mask original occurrences before evaluating the projection. A newly
+        // formed x*M must not acquire the mask of an unrelated source product.
+        let mut contexts = BTreeSet::new();
+        let untouched = source.replace_map(|node, _, out| {
+            if unreached.contains(&node) || !atom_contains_color_node(node) {
+                **out = protect(node, false);
+            } else if !matches!(node, AtomView::Add(_) | AtomView::Mul(_)) {
+                **out = Atom::Zero;
+            } else if let AtomView::Mul(product) = node
+                && product.iter().any(|factor| {
+                    matches!(factor, AtomView::Add(_)) && atom_contains_color_node(factor)
+                })
+            {
+                contexts.extend(
+                    product
+                        .iter()
+                        .filter(|factor| {
+                            !matches!(factor, AtomView::Num(_))
+                                && !atom_contains_color_node(*factor)
+                        })
+                        .map(|factor| protect(factor, false)),
+                );
+            }
+        });
+        let mut powered_contexts = BTreeSet::new();
+        untouched.visitor(&mut |node| {
+            if let AtomView::Pow(power) = node {
+                if contexts.contains(power.get_base().get_data()) {
+                    powered_contexts.insert(node.to_owned());
+                }
+                false
+            } else {
+                matches!(node, AtomView::Add(_) | AtomView::Mul(_))
+            }
+        });
+        contexts.extend(powered_contexts);
+        // Restore the source's factored sum contexts before entering their
+        // children. collect_factors only extracts factors shared by *all*
+        // summands; here 4+x*(4+M)-x*M must first group the two x terms.
+        // coefficient() extracts literal factors and never expands a product.
+        let collect_contexts = |value: &Atom| {
+            value.replace_map(|node, _, out| {
+                if matches!(node, AtomView::Fun(_) | AtomView::Pow(_)) {
+                    **out = node.to_owned();
+                    return;
+                }
+                let AtomView::Add(sum) = node else { return };
+                for factor in &contexts {
+                    let (inside, outside): (Vec<_>, Vec<_>) = sum.iter().partition(|term| {
+                        multiplicative_factor_views(*term).contains(&factor.as_view())
+                    });
+                    if inside.len() > 1 {
+                        let grouped = factor * node.coefficient(factor);
+                        **out = Atom::add_many(
+                            outside
+                                .into_iter()
+                                .map(|term| term.to_owned())
+                                .chain([grouped]),
+                        );
+                        return;
+                    }
+                }
+            })
+        };
+        for (original, alias) in &aliases {
+            // Descendant powers get whole aliases before descent is stopped;
+            // function arguments never see temporary symbols.
+            let body = original.replace_map(|node, _, out| {
+                if matches!(node, AtomView::Fun(_)) {
+                    **out = node.to_owned();
+                } else if node != original.as_view()
+                    && let Some(alias) = aliases.get::<[u8]>(node.get_data())
+                {
+                    **out = alias.clone();
+                } else if matches!(node, AtomView::Pow(_)) {
+                    **out = node.to_owned();
+                }
+            });
+            protected.register_alias(alias.clone(), body);
+        }
+        let linear = protected
+            .get_aliases()
+            .iter()
+            .filter(|(alias, _)| linear_aliases.contains(*alias))
+            .map(|(alias, body)| (alias.clone(), body.clone()))
+            .collect::<HashMap<_, _>>();
+        // A comparison form opens only sums and rational scaling. Every other
+        // factor is a single key, so this cannot form a Cartesian product.
+        let coefficients = |value: AtomView<'_>| -> Option<BTreeMap<Atom, Rational>> {
+            let mut terms = BTreeMap::new();
+            let mut pending = vec![(
+                value.to_owned(),
+                Complex::new(Rational::one(), Rational::zero()),
+            )];
+            while let Some((mut body, mut number)) = pending.pop() {
+                if let AtomView::Mul(product) = body.as_view()
+                    && let Some(coefficient) = product.get_coefficient()
+                {
+                    number *= Complex::<Rational>::try_from(coefficient).ok()?;
+                    body = body.as_view() / coefficient;
+                }
+                if let Some(sum) = linear.get(&body) {
+                    pending.push((sum.clone(), number));
+                } else if let AtomView::Add(sum) = body.as_view() {
+                    pending.extend(sum.iter().map(|term| (term.to_owned(), number.clone())));
+                } else {
+                    if matches!(body.as_view(), AtomView::Num(_)) {
+                        number *= Complex::<Rational>::try_from(body.as_view()).ok()?;
+                        body = Atom::one();
+                    }
+                    // Real and imaginary parts are independent exact rational
+                    // coordinates; the imaginary unit remains part of the key.
+                    if !number.re.is_zero() {
+                        *terms.entry(body.clone()).or_insert_with(Rational::zero) += number.re;
+                    }
+                    if !number.im.is_zero() {
+                        *terms.entry(Atom::i() * body).or_insert_with(Rational::zero) += number.im;
+                    }
+                }
+            }
+            terms.retain(|_, number| !number.is_zero());
+            Some(terms)
+        };
+        let colour_free = !atom_contains_color_node(expression);
+        let mut current = protected.get_root() - &untouched;
+        loop {
+            // Cancel the untouched projection while its scopes are still
+            // masked. In particular x*(4+M)-x*M becomes 4*x before M can open.
+            let factored = if colour_free {
+                collect_contexts(&current).collect_factors()
+            } else {
+                current.clone()
+            };
+            let next = factored
+                .replace_map(|node, _, out| {
+                    if matches!(node, AtomView::Fun(_) | AtomView::Pow(_)) {
+                        **out = node.to_owned();
+                        return;
+                    }
+                    if let AtomView::Mul(product) = node
+                        && product.iter().any(|factor| {
+                            coefficients(factor).is_some_and(|terms| terms.is_empty())
+                        })
+                    {
+                        **out = Atom::Zero;
+                        return;
+                    }
+                    let AtomView::Add(sum) = node else { return };
+                    let mut terms = BTreeMap::<Atom, Rational>::new();
+                    let mut cancelled = false;
+                    for term in sum {
+                        let Some(contribution) = coefficients(term) else {
+                            return;
+                        };
+                        cancelled |= contribution.is_empty();
+                        for (body, number) in contribution {
+                            let previous = terms.entry(body).or_insert_with(Rational::zero);
+                            cancelled |= !previous.is_zero()
+                                && previous.is_negative() != number.is_negative();
+                            *previous += number;
+                        }
+                    }
+                    // A completed child remains factored unless this very sum has
+                    // an opposite contribution. A cancellation elsewhere cannot
+                    // open the M in x*(4+M), nor an internally reducible spectator.
+                    if cancelled {
+                        **out = Atom::add_many(
+                            terms
+                                .into_iter()
+                                .map(|(body, number)| Atom::num(number) * body),
+                        );
+                    }
+                })
+                .replace_map(|node, _, out| {
+                    // Numeric distribution completes coefficient arithmetic,
+                    // not the kernel's factored colour decomposition. In an
+                    // isolated trace, pushing a Bernoulli coefficient into a
+                    // nested colour sum changes its certified arithmetic shape
+                    // without merging any states. Actual cancellations above
+                    // still change that shape and revoke the certificate.
+                    if matches!(node, AtomView::Fun(_) | AtomView::Pow(_)) {
+                        **out = node.to_owned();
+                    } else if colour_free || !atom_contains_color_port_or_work(node) {
+                        **out = node.expand_num();
+                    }
+                });
+            if next == current {
+                break;
+            }
+            current = next;
+        }
+        // Only surviving changed coefficients may consume an untouched scope.
+        // Compare each occurrence separately; an untouched internally zero
+        // expression is retained when nothing from the changed subtotal uses it.
+        let mut active = coefficients(current.as_view())?;
+        if active.is_empty() {
+            current = Atom::Zero;
+        }
+        let occurrences = match untouched.as_view() {
+            AtomView::Add(sum) => sum.iter().map(|term| term.to_owned()).collect::<Vec<_>>(),
+            _ => vec![untouched],
+        };
+        let mut retained = Vec::new();
+        let mut consumed = false;
+        for occurrence in occurrences {
+            let original = coefficients(occurrence.as_view())?;
+            let mut remainder = original.clone();
+            let mut touched = false;
+            for (body, number) in &mut remainder {
+                let Some(changed) = active.get_mut(body) else {
+                    continue;
+                };
+                if changed.is_zero() || changed.is_negative() == number.is_negative() {
+                    continue;
+                }
+                let amount = changed.abs().min(number.abs());
+                let amount = if number.is_negative() {
+                    -amount
+                } else {
+                    amount
+                };
+                *changed += &amount;
+                *number -= amount;
+                touched = true;
+            }
+            if !touched {
+                retained.push(occurrence);
+                continue;
+            }
+            consumed = true;
+            // A partial cancellation of a rational multiple still preserves
+            // the original scope when its remainder has one uniform scale.
+            let (body, number) = original.first_key_value().unwrap();
+            let scale = &remainder[body] / number;
+            if original
+                .iter()
+                .all(|(body, number)| remainder[body] == &scale * number)
+            {
+                retained.push(Atom::num(scale) * occurrence);
+            } else {
+                retained.push(Atom::add_many(
+                    remainder
+                        .into_iter()
+                        .map(|(body, number)| Atom::num(number) * body),
+                ));
             }
         }
-        distributed.then(|| Atom::add_many(merged))
+        if consumed {
+            current = Atom::add_many(
+                active
+                    .into_iter()
+                    .map(|(body, number)| Atom::num(number) * body),
+            );
+        }
+        retained.push(current);
+        let mut result = Atom::add_many(retained);
+        if colour_free {
+            loop {
+                let next = collect_contexts(&result).collect_factors().expand_num();
+                if next == result {
+                    break;
+                }
+                result = next;
+            }
+        }
+        let merged = protected.map_root(|_| result).into_inner();
+        (merged.as_view() != expression).then_some(merged)
     }
 }
 

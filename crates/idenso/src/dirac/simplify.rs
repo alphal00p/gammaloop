@@ -712,7 +712,7 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             self.collect_with_map(
                 crate::tensor::CollectionMode::Monomials,
-                Some(&mut |states, _| {
+                Some(&mut |states, _, _| {
                     if collect_coefficients {
                         collected.borrow_mut().collect(states)?;
                     }

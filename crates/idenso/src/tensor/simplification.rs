@@ -115,7 +115,7 @@ pub(crate) enum ReductionRequest<'a> {
 
 const STRUCTURE: u8 = 1;
 const GAMMA: u8 = 2;
-const COLOR: u8 = 4;
+pub(crate) const COLOR: u8 = 4;
 const EPSILON: u8 = 8;
 const DOTS: u8 = 16;
 
@@ -465,22 +465,14 @@ impl SymbolicTensor<PartialStructure> {
                     } else {
                         let observed = &plan.observed;
                         let prerequisites = before.contract_prerequisites(prerequisite_settings, |value| {
+                            if operation == COLOR {
+                                return settings.color.unwrap().selects_identity_seed(value, observed);
+                            }
                             // A metric is a prerequisite, not the identity's seed.
                             if matches!(value, AtomView::Fun(function) if function.get_symbol() == spenso::network::library::symbolic::ETS.metric) { return false; }
-                            // A retained symmetric trace has no terminal rule
-                            // when trace evaluation is disabled. Other colour
-                            // seeds can still request their incident connections.
-                            if operation == COLOR
-                                && settings.color.is_some_and(|color| !color.evaluate_traces)
-                                && let AtomView::Fun(function) = value
-                                && let Some((_, factors)) = spenso::shadowing::trace_parts(function)
-                                && matches!(factors.as_slice(), [AtomView::Fun(projector)]
-                                    if projector.get_symbol() == *spenso::shadowing::SYM)
-                            { return false; }
                             if let Some(region) = observed.region(value) { return region.identity_candidates() & operation != 0; }
                             match operation {
                                 GAMMA => spenso::shadowing::TensorCollectFilter::Reps([crate::representations::Bispinor {}.into()]).matches(value),
-                                COLOR => spenso::shadowing::TensorCollectFilter::Reps([crate::representations::ColorFundamental {}.into(), crate::representations::ColorAdjoint {}.into(), crate::representations::ColorSextet {}.into()]).matches(value),
                                 _ => matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
                             }
                         }, |representation| {

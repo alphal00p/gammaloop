@@ -32,7 +32,10 @@ use crate::{
 };
 
 use super::{CS, ColorSimplifier, ColorSimplifySettings};
-use crate::tensor::simplification::{ReductionStatus, observation::SettledRegions};
+use crate::tensor::simplification::{
+    COLOR, ReductionStatus,
+    observation::{DomainObservations, SettledRegions},
+};
 
 mod states;
 mod trace;
@@ -52,8 +55,6 @@ pub(crate) struct ColorAlgebraSimplifier {
     certificate: RowCertificate,
     /// Nesting of the term-local repeat, see [`Self::rewrite_terms_at`].
     repeat_depth: Cell<usize>,
-    /// Whether a row of this call received canonical states.
-    merged: Cell<bool>,
     /// Canonical forms of the states of this call, by first-occurrence
     /// labelling; see `states.rs`.
     canonical_cache: std::cell::RefCell<std::collections::HashMap<Atom, Atom>>,
@@ -165,6 +166,59 @@ impl ColourShape {
     }
 }
 
+impl ColorSimplifySettings {
+    /// Identity seeds authorize only their incident structural prerequisites.
+    /// The planner and colour rows use the same policy on their current value.
+    pub(crate) fn selects_identity_seed(
+        self,
+        value: AtomView<'_>,
+        observed: &DomainObservations,
+    ) -> bool {
+        if !self.evaluate_traces {
+            // Arithmetic containers are seeds only through their enabled factors.
+            // A sum or power must not re-enable a retained symmetric trace.
+            match value {
+                AtomView::Add(sum) => {
+                    return sum
+                        .iter()
+                        .any(|term| self.selects_identity_seed(term, observed));
+                }
+                AtomView::Mul(product) => {
+                    return product
+                        .iter()
+                        .any(|factor| self.selects_identity_seed(factor, observed));
+                }
+                AtomView::Pow(power) => {
+                    return self.selects_identity_seed(power.get_base(), observed);
+                }
+                _ => {}
+            }
+        }
+        if matches!(value, AtomView::Fun(function) if function.get_symbol() == ETS.metric) {
+            return false;
+        }
+        // A retained symmetric trace has no terminal rule when trace evaluation
+        // is disabled. Other seeds still authorize their own incident paths.
+        if !self.evaluate_traces
+            && let AtomView::Fun(function) = value
+            && let Some((_, factors)) = spenso::shadowing::trace_parts(function)
+            && matches!(factors.as_slice(), [AtomView::Fun(projector)]
+                if projector.get_symbol() == *spenso::shadowing::SYM)
+        {
+            return false;
+        }
+        if let Some(region) = observed.region(value) {
+            return region.identity_candidates() & COLOR != 0;
+        }
+        TensorCollectFilter::Reps([
+            ColorFundamental {}.into(),
+            ColorAdjoint {}.into(),
+            ColorSextet {}.into(),
+        ])
+        .matches(value)
+    }
+}
+
 impl SymbolicTensor<PartialStructure> {
     /// Also reports whether the result is certified to be a colour fixed
     /// point, so that the planner need not confirm it with a no-op round.
@@ -184,23 +238,28 @@ impl SymbolicTensor<PartialStructure> {
         );
         let simplifier = ColorAlgebraSimplifier::new(settings, Self::reserved_dummies([self]));
         let certify = settings.one_shot_traces;
-        // Foreign colour factors that no identity reaches are not colour
-        // work: they stay factors, outside every row and kernel step.
-        let foreign = foreign_colour_factors(self.expression.as_view());
+        // Factors that no enabled identity reaches, including disconnected
+        // disabled traces and their metrics, stay outside every colour row.
+        let (foreign, containers) = foreign_colour_factors(
+            self.expression.as_view(),
+            settings,
+            self.reduction_observations(),
+        );
+        let retained = [foreign.as_slice(), containers.as_slice()].concat();
         // Cache hits are completed, unchanged inputs and hence fixed points.
         let fixed_point = Cell::new(certify);
-        let mut row = |selected: Self, complete: bool| {
-            settled.run(selected, complete, |selected| {
-                simplifier.certificate.fixed.set(certify);
-                let expression =
-                    simplifier.step_beside(selected.expression.as_view(), complete, &foreign);
-                let expression = simplifier
-                    .certificate
-                    .unless_changed(expression, restore_explicit_su_n_generator_chains);
-                let rewritten = selected.with_identity_result(expression, None)?;
-                // A retained sum can include non-colour coefficients. Only
-                // colour connections are prerequisites of this identity;
-                // the shared contractor preserves the other representations.
+        // Whether any completed row changed its payload.
+        let changed = Cell::new(false);
+        let mut row = |selected: Self, complete: bool| -> Result<Self, TensorInferenceError> {
+            // Generated colour states need the whole selected product before
+            // their dummy indices can be canonicalized and equal terms merged.
+            // The factored kernel owns its local distribution; a partial
+            // collector frontier must not choose identities for that product.
+            if !complete {
+                return Ok(selected);
+            }
+            let input = selected.expression.clone();
+            let root = settled.run(selected, true, |selected| {
                 let contraction = crate::tensor::ContractSettings {
                     representations: Some(&[
                         ColorFundamental {}.into(),
@@ -211,10 +270,35 @@ impl SymbolicTensor<PartialStructure> {
                     collect_traces: false,
                     ..Default::default()
                 };
-                // The prerequisite contraction preceded this kernel and
-                // the identities emit no vectors. A row without a metric
-                // or identity line, or whose metrics join external ports
-                // only, has nothing to contract and needs no network.
+                // Metrics from the input or an earlier planner round can have
+                // ports that become internal only in this complete row.
+                // Close only paths incident to enabled seeds on this row;
+                // an independent disabled trace never authorizes its metric.
+                let (selected, prerequisite_status) =
+                    if selected.expression.contains_symbol(ETS.metric)
+                        && !selected.only_external_metric_sources(contraction)
+                    {
+                        let observed = selected.reduction_observations();
+                        let contracted = selected.contract_prerequisites(
+                            contraction,
+                            |value| settings.selects_identity_seed(value, observed),
+                            |_| true,
+                        )?;
+                        (contracted.root, contracted.status)
+                    } else {
+                        (selected, ReductionStatus::Complete)
+                    };
+                simplifier.certificate.fixed.set(certify);
+                let expression =
+                    simplifier.step_beside(selected.expression.as_view(), true, &foreign);
+                let expression = simplifier
+                    .certificate
+                    .unless_changed(expression, restore_explicit_su_n_generator_chains);
+                let rewritten = selected.with_identity_result(expression, None)?;
+                // A changed identity can consume its last seed and emit a
+                // metric into a foreign partner. Preserve that output closure.
+                // The identities emit no vectors. Rows without metrics, or
+                // whose metrics join external ports only, need no network.
                 let (mut root, status) = if rewritten.expression != selected.expression
                     && rewritten.expression.contains_symbol(ETS.metric)
                     && !rewritten.only_external_metric_sources(contraction)
@@ -226,13 +310,25 @@ impl SymbolicTensor<PartialStructure> {
                 } else {
                     (rewritten, selected.proofs.frontier)
                 };
+                // Output contraction can consume the last colour tensor while
+                // leaving exact linear combinations in its coefficients.
+                // Finish them while this row still has its source provenance.
+                if let Some(merged) = ColorAlgebraSimplifier::merging_row_numbers(
+                    root.expression.as_view(),
+                    input.as_view(),
+                    &retained,
+                ) {
+                    let expression = simplifier
+                        .certificate
+                        .unless_colour_shape_changed(root.expression.clone(), |_| merged);
+                    root = root.with_identity_result(expression, None)?;
+                }
+                let status = status.max(prerequisite_status);
                 root.proofs.frontier = status;
-                // Only rows with a complete frontier form the value; the
-                // others are intermediate states of the factor order. An
-                // unchanged row is trivially a fixed point, and so is a row
-                // left with group invariants only. Otherwise its
+                // An unchanged row is trivially a fixed point, and so is a
+                // row left with group invariants only. Otherwise its
                 // contraction acts only on certified decompositions.
-                if complete && fixed_point.get() {
+                if fixed_point.get() {
                     fixed_point.set(
                         status == ReductionStatus::Complete
                             && (simplifier.certificate.fixed.get()
@@ -241,7 +337,11 @@ impl SymbolicTensor<PartialStructure> {
                     );
                 }
                 Ok(root)
-            })
+            })?;
+            if root.expression != input {
+                changed.set(true);
+            }
+            Ok(root)
         };
         let value = match self.colour_term(&foreign) {
             // One product: its colour factors are a single complete row. The
@@ -262,22 +362,67 @@ impl SymbolicTensor<PartialStructure> {
                 }
             }
             None => self.collect_with_map(
-                crate::tensor::CollectionMode::Factored,
-                None,
+                // A selected sum containing an unreached component cannot be
+                // an opaque row: the collector opens only the sums and terms
+                // holding it and retains it as a coefficient before either
+                // kernel or output contraction.
+                crate::tensor::CollectionMode::Factored(&retained),
+                Some(&mut |states, _, origins| {
+                    if !changed.get() {
+                        return Ok(());
+                    }
+                    // Collection adds row weights and combines equal selected
+                    // outputs. Finish that arithmetic before its immutable
+                    // spectators are multiplied back into the result.
+                    let terms = states
+                        .iter()
+                        .map(|(selected, coefficient)| {
+                            Self::collection_product(&[selected.clone(), coefficient.clone()])
+                        })
+                        .collect::<Result<Vec<_>, _>>()?;
+                    let expression = Atom::add_many(terms.iter().map(|term| &term.expression));
+                    // These source contributions have the actual row weights
+                    // and exclude the same immutable spectators as the result.
+                    let source = Atom::add_many(
+                        origins
+                            .iter()
+                            .map(|(selected, coefficient)| selected * coefficient),
+                    );
+                    if let Some(first) = terms.first()
+                        && let Some(merged) = ColorAlgebraSimplifier::merging_row_numbers(
+                            expression.as_view(),
+                            source.as_view(),
+                            &retained,
+                        )
+                    {
+                        if atom_contains_color_port_or_work(merged.as_view())
+                            && ColourShape::of(merged.as_view())
+                                != ColourShape::of(expression.as_view())
+                        {
+                            fixed_point.set(false);
+                        }
+                        *states = vec![(
+                            first.with_identity_result(merged, None)?,
+                            Self::from_validated_parts(
+                                Atom::one(),
+                                PartialStructure::from_logical_slots([]),
+                            ),
+                        )];
+                    }
+                    Ok(())
+                }),
                 |value| atom_contains_color_node(value) && !foreign.contains(&value),
                 |selected, complete, _| row(selected, complete),
             )?,
         };
-        // The planner multiplies each row's states by the row's number.
-        // Distribute it, so that equal canonical states of different rows merge.
-        let value = if simplifier.merged.get()
-            && let Some(merged) =
-                ColorAlgebraSimplifier::merging_row_numbers(value.expression.as_view())
-        {
-            value.with_identity_result(merged, None)?
-        } else {
-            value
-        };
+        // Collection publishes rows as distributed terms. When no row changed,
+        // the input is the exact result, with the frontier of its rows.
+        if !changed.get() {
+            let mut unchanged = self.clone();
+            unchanged.proofs.frontier = value.proofs.frontier;
+            let certified = fixed_point.get() && value.proofs.frontier == ReductionStatus::Complete;
+            return Ok((unchanged, certified));
+        }
         let certified = fixed_point.get() && value.proofs.frontier == ReductionStatus::Complete;
         Ok((value, certified))
     }
@@ -333,7 +478,6 @@ impl ColorAlgebraSimplifier {
             dummies,
             certificate: RowCertificate::default(),
             repeat_depth: Cell::new(0),
-            merged: Cell::new(false),
             canonical_cache: Default::default(),
         }
     }
@@ -389,7 +533,6 @@ impl ColorAlgebraSimplifier {
             && rewritten != collected
             && let Some(canonical) = self.canonical_states(rewritten.as_view(), limit, beside)
         {
-            self.merged.set(true);
             canonical
         } else {
             rewritten
@@ -3918,45 +4061,90 @@ fn atom_contains_colour_algebra(expr: AtomView<'_>) -> bool {
     found
 }
 
-/// The factors with colour slots but no colour algebra, such as a foreign
-/// tensor V(coad(8,z)), that share no slot, directly or through other
-/// factors, with a factor holding colour algebra: in the product, in a term
-/// of a sum, or in a term of a colour sum factor whose other factors they do
-/// not meet either. No colour identity reaches them, so they are not part of
-/// any colour row: they stay factors as found, like scalar spectators.
+/// The factors with colour slots that no enabled identity reaches through
+/// shared slots: foreign tensors, disconnected disabled traces and metrics.
+/// Search each product, summand and colour sum factor beside its reached
+/// outer factors. Unreached factors stay outside colour rows as found, so
+/// neither kernel canonicalization nor output contraction can change them.
+/// Also report the sums and terms holding them inside sums with enabled
+/// colour work: the collector opens only those, so that the unreached
+/// factors become coefficients while unrelated colour sums stay whole.
 /// Unreadable slots connect everything.
-fn foreign_colour_factors(expression: AtomView<'_>) -> Vec<AtomView<'_>> {
-    let mut search = ForeignColourSearch::default();
-    search.visit(expression, &[]);
+fn foreign_colour_factors<'a>(
+    expression: AtomView<'a>,
+    settings: ColorSimplifySettings,
+    observed: &DomainObservations,
+) -> (Vec<AtomView<'a>>, Vec<AtomView<'a>>) {
+    let mut search = ForeignColourSearch {
+        settings,
+        ..Default::default()
+    };
+    search.visit(expression, &[], observed, None);
     // A factor spelled alike elsewhere must be unreachable there too.
     search
         .unreached
         .retain(|factor| !search.reached.contains(factor));
-    search.unreached
+    // A reached occurrence wins globally, including inside selected sums.
+    let mut containers = Vec::new();
+    for (factor, path) in &search.within_sums {
+        if search.unreached.contains(factor) {
+            for container in path {
+                if !containers.contains(container) {
+                    containers.push(*container);
+                }
+            }
+        }
+    }
+    (search.unreached, containers)
 }
 
 #[derive(Default)]
 struct ForeignColourSearch<'a> {
+    settings: ColorSimplifySettings,
     unreached: Vec<AtomView<'a>>,
     reached: Vec<AtomView<'a>>,
+    /// Unreached factors nested in a sum with enabled colour work, with the
+    /// sums and terms from that outermost sum down to the factor.
+    within_sums: Vec<(AtomView<'a>, Vec<AtomView<'a>>)>,
 }
 
 impl<'a> ForeignColourSearch<'a> {
-    /// `outside` holds the factors around `expression`: a factor meeting
-    /// them is reached through them.
-    fn visit(&mut self, expression: AtomView<'a>, outside: &[AtomView<'a>]) {
+    /// `outside` holds reached factors around `expression`: a factor meeting
+    /// them is reached through them, without letting disabled components seed
+    /// each other across a sum boundary. `containers` is the path from the
+    /// outermost enclosing sum with enabled colour work, if any.
+    fn visit(
+        &mut self,
+        expression: AtomView<'a>,
+        outside: &[AtomView<'a>],
+        observed: &DomainObservations,
+        containers: Option<&[AtomView<'a>]>,
+    ) {
+        let containers = match containers {
+            Some(path) => Some(path.iter().copied().chain([expression]).collect()),
+            None if matches!(expression, AtomView::Add(_))
+                && self.settings.selects_identity_seed(expression, observed) =>
+            {
+                Some(vec![expression])
+            }
+            None => None,
+        };
+        let containers = containers.as_deref();
         if let AtomView::Add(sum) = expression {
             for summand in sum.iter() {
-                self.visit(summand, outside);
+                self.visit(summand, outside, observed, containers);
             }
             return;
         }
         let factors = multiplicative_factor_views(expression);
+        let mut reached = factors
+            .iter()
+            .map(|&factor| self.settings.selects_identity_seed(factor, observed))
+            .collect::<Vec<_>>();
         let foreign = factors
             .iter()
-            .map(|&factor| {
-                atom_contains_color_node(factor) && !atom_contains_colour_algebra(factor)
-            })
+            .enumerate()
+            .map(|(index, &factor)| !reached[index] && atom_contains_color_node(factor))
             .collect::<Vec<_>>();
         if foreign.contains(&true) {
             let slots = factors
@@ -3965,13 +4153,9 @@ impl<'a> ForeignColourSearch<'a> {
                 .collect::<Vec<_>>();
             let around = SlotCounts::of_factors(outside.iter().copied());
             let opaque = around.opaque || slots.iter().any(|counts| counts.opaque);
-            let mut reached = (0..factors.len())
-                .map(|index| {
-                    opaque
-                        || (!foreign[index] && atom_contains_color_node(factors[index]))
-                        || slots[index].meets(&around)
-                })
-                .collect::<Vec<_>>();
+            for (index, reached) in reached.iter_mut().enumerate() {
+                *reached |= opaque || slots[index].meets(&around);
+            }
             let mut frontier = (0..factors.len())
                 .filter(|&index| reached[index])
                 .collect::<Vec<_>>();
@@ -3989,6 +4173,9 @@ impl<'a> ForeignColourSearch<'a> {
                         self.reached.push(factor);
                     } else {
                         self.unreached.push(factor);
+                        if let Some(path) = containers {
+                            self.within_sums.push((factor, path.to_vec()));
+                        }
                     }
                 }
             }
@@ -4003,11 +4190,11 @@ impl<'a> ForeignColourSearch<'a> {
                         factors
                             .iter()
                             .enumerate()
-                            .filter(|&(other, _)| other != index)
+                            .filter(|&(other, _)| other != index && reached[other])
                             .map(|(_, &other)| other),
                     )
                     .collect::<Vec<_>>();
-                self.visit(factor, &around);
+                self.visit(factor, &around, observed, containers);
             }
         }
     }
@@ -5432,10 +5619,9 @@ mod reconstruction_tests {
         assert!(states::colour_states_for_test(shadowed.as_view()).is_none());
     }
 
-    /// Foreign colour factors are the tensors with colour slots and no
-    /// colour algebra that no colour algebra reaches through shared slots:
-    /// in the product, in each term of a sum and in each term of a colour sum
-    /// factor beside its outer factors. A metric is colour algebra.
+    /// Foreign colour factors are those that no enabled colour identity
+    /// reaches through shared slots, including disconnected metrics and
+    /// disabled traces, also within colour sums beside their reached factors.
     #[test]
     fn foreign_colour_factors_are_unreached_by_colour_algebra() {
         crate::test_support::test_initialize();
@@ -5482,18 +5668,88 @@ mod reconstruction_tests {
                     * color_f!(&a, &b, &d),
                 vec![],
             ),
+            (
+                ETS.metric_literal(&z, &y) * &loop_,
+                vec![ETS.metric_literal(&z, &y)],
+            ),
             (&x * &loop_, vec![]),
         ];
         for (expression, expected) in cases {
-            let mut found = foreign_colour_factors(expression.as_view())
-                .into_iter()
-                .map(|factor| factor.to_owned())
-                .collect::<Vec<_>>();
+            let source = SymbolicTensor::infer(expression.clone()).unwrap();
+            let mut found = foreign_colour_factors(
+                expression.as_view(),
+                ColorSimplifySettings::default(),
+                source.reduction_observations(),
+            )
+            .0
+            .into_iter()
+            .map(|factor| factor.to_owned())
+            .collect::<Vec<_>>();
             found.sort();
             let mut expected = expected;
             expected.sort();
             assert_eq!(found, expected, "{expression}");
         }
+        let symmetric = CS.symmetric_generator_trace(fundamental_rep(Atom::num(3)), [&c, &y, &z]);
+        let metric = ETS.metric_literal(&y, &z);
+        let symmetric_sum = &symmetric * &x + &symmetric;
+        let ordinary = trace!(fundamental_rep(Atom::num(3)), color_t!(&c));
+        let disconnected = color_f!(&a, &b, &d);
+        let connected = color_f!(&a, &b, &c);
+        // Neither a product, sum nor closed power of disabled traces is a
+        // seed. A connected active identity still reaches the whole component.
+        let cases = [
+            (
+                &disconnected * &symmetric * &metric,
+                vec![symmetric.clone(), metric.clone()],
+            ),
+            (&connected * &symmetric * &metric, vec![]),
+            (
+                &disconnected * &metric * &symmetric_sum,
+                vec![symmetric_sum.clone(), symmetric.clone(), metric.clone()],
+            ),
+            (&disconnected * symmetric.pow(2), vec![symmetric.pow(2)]),
+            (
+                &disconnected * (&symmetric * &metric + &ordinary),
+                vec![symmetric.clone(), metric.clone()],
+            ),
+        ];
+        for (expression, expected) in cases {
+            let source = SymbolicTensor::infer(expression.clone()).unwrap();
+            let mut found = foreign_colour_factors(
+                expression.as_view(),
+                ColorSimplifySettings::default().without_trace_evaluation(),
+                source.reduction_observations(),
+            )
+            .0
+            .into_iter()
+            .map(|factor| factor.to_owned())
+            .collect::<Vec<_>>();
+            found.sort();
+            found.dedup();
+            let mut expected = expected;
+            expected.sort();
+            assert_eq!(found, expected, "{expression}");
+        }
+        // Only the sum holding the retained component, and its term, open.
+        let held = &symmetric * &metric + &ordinary;
+        let unrelated = &disconnected + &x * color_f!(&a, &d, &b);
+        let expression = &held * &unrelated;
+        assert!(!expression.is_zero());
+        let source = SymbolicTensor::infer(expression.clone()).unwrap();
+        let mut containers = foreign_colour_factors(
+            expression.as_view(),
+            ColorSimplifySettings::default().without_trace_evaluation(),
+            source.reduction_observations(),
+        )
+        .1
+        .into_iter()
+        .map(|container| container.to_owned())
+        .collect::<Vec<_>>();
+        containers.sort();
+        let mut expected = vec![held.clone(), &symmetric * &metric];
+        expected.sort();
+        assert_eq!(containers, expected, "{expression}");
     }
 
     /// A power of a tensor is a closed scope. A summand holding one beside a
