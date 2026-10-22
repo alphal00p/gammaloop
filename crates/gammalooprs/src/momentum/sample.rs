@@ -67,12 +67,6 @@ define_index!(
     pub struct ExternalIndex;
 );
 
-// define_indexed_vec!(
-//     EdgeIndex;
-
-//     pub struct ExternalThr;
-// );
-
 impl Display for LoopIndex {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -717,12 +711,7 @@ impl<T: FloatLike> Add<&LoopMomenta<F<T>>> for &LoopMomenta<F<T>> {
     }
 }
 
-// define_indexed_vec!(
-//     MyIdx;
-//     pub struct ExternalMomentumtwo<ThreeMomentum<T>>;
-// );
 pub type ExternalThreeMomenta<T> = TiVec<ExternalIndex, ThreeMomentum<T>>;
-// define_indexed_vec!()
 pub type ExternalFourMomenta<T> = TiVec<ExternalIndex, FourMomentum<T>>;
 // impl<T: Display> Display for ExternalFourMomenta<T> {
 //     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

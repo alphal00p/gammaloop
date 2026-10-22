@@ -756,7 +756,7 @@ impl Permutation {
     /// assert_eq!(data, vec![110, 220, 30]);
     /// ```
     pub fn iter_slice_mut<'a, T>(&'a self, slice: &'a mut [T]) -> PermutationMapIterMut<'a, T> {
-        PermutationMapIterMut::new(slice, &self.map)
+        PermutationMapIterMut::new(slice, self, PermutationDirection::Direct)
     }
 
     /// Returns a mutable iterator that yields mutable references to the elements of the slice
@@ -782,7 +782,7 @@ impl Permutation {
     /// assert_eq!(data, vec![210, 20, 130]);
     /// ```
     pub fn iter_slice_inv_mut<'a, T>(&'a self, slice: &'a mut [T]) -> PermutationMapIterMut<'a, T> {
-        PermutationMapIterMut::new(slice, &self.inv)
+        PermutationMapIterMut::new(slice, self, PermutationDirection::Inverse)
     }
 
     // --------------------------------------------------------------------------------------------
@@ -1126,43 +1126,57 @@ impl Display for Permutation {
 }
 
 impl Permutation {
+    fn cycle_domain_len(cycles: &[Vec<usize>]) -> Result<usize, PermutationError> {
+        cycles.iter().flatten().max().map_or(Ok(0), |&index| {
+            index
+                .checked_add(1)
+                .ok_or(PermutationError::CycleIndexOverflow { index })
+        })
+    }
+
     /// Creates a permutation from a set of disjoint cycles.
     /// Each cycle should be a `Vec<usize>` representing indices in the cycle.
     /// The cycles must be disjoint (no shared elements).
     ///
     /// # Errors
     ///
-    /// Returns an error if an index occurs more than once or cannot fit in a permutation.
+    /// Returns [`PermutationError::NonDisjointCycles`] for a repeated index (including
+    /// within one cycle), or [`PermutationError::CycleIndexOverflow`] if the largest
+    /// index cannot be incremented to form the permutation size.
     ///
     /// # Examples
     ///
     /// ```
-    /// # use linnet::permutation::Permutation;
+    /// use linnet::permutation::{Permutation, PermutationError};
     /// let cycles = vec![vec![0, 1, 2], vec![3, 4]];
-    /// let p = Permutation::from_disjoint_cycles(&cycles).unwrap();
+    /// let p = Permutation::from_disjoint_cycles(&cycles)?;
     /// assert_eq!(p.map(), &[1, 2, 0, 4, 3]);
     ///
     /// // Error if cycles are not disjoint
     /// let invalid = vec![vec![0, 1], vec![1, 2]];
-    /// assert!(Permutation::from_disjoint_cycles(&invalid).is_err());
+    /// assert_eq!(
+    ///     Permutation::from_disjoint_cycles(&invalid),
+    ///     Err(PermutationError::NonDisjointCycles {
+    ///         index: 1, first_cycle: 0, second_cycle: 1,
+    ///     })
+    /// );
+    /// # Ok::<(), PermutationError>(())
     /// ```
-    pub fn from_disjoint_cycles(cycles: &[Vec<usize>]) -> Result<Self, String> {
-        // Find the size of the permutation (maximum index + 1)
-        let n = cycles
-            .iter()
-            .flat_map(|cycle| cycle.iter())
-            .max()
-            .map_or(Some(0), |&max| max.checked_add(1))
-            .ok_or_else(|| "Cycle index exceeds the maximum permutation size".to_string())?;
+    pub fn from_disjoint_cycles(cycles: &[Vec<usize>]) -> Result<Self, PermutationError> {
+        let n = Self::cycle_domain_len(cycles)?;
 
         // Check for duplicates across cycles
-        let mut seen = vec![false; n];
-        for cycle in cycles {
-            for &idx in cycle {
-                if seen[idx] {
-                    return Err("Cycles are not disjoint".to_string());
+        let mut seen = vec![None; n];
+        for (cycle_index, cycle) in cycles.iter().enumerate() {
+            for &index in cycle {
+                if let Some(first_cycle) = seen[index] {
+                    return Err(PermutationError::NonDisjointCycles {
+                        index,
+                        first_cycle,
+                        second_cycle: cycle_index,
+                    });
                 }
-                seen[idx] = true;
+                seen[index] = Some(cycle_index);
             }
         }
 
@@ -1185,31 +1199,57 @@ impl Permutation {
     }
     /// Creates a permutation from cycles with specified reading order.
     /// Cycles may overlap, but each individual cycle must contain distinct indices.
-    /// See [`Self::from_disjoint_cycles`] for cycle notation examples.
+    /// See [`Self::try_from_cycles_ordered`] for a fallible alternative and examples.
     ///
     /// # Panics
     ///
     /// Panics if a cycle repeats an index or the largest index cannot be incremented.
     pub fn from_cycles_ordered(cycles: &[Vec<usize>], order: CycleOrder) -> Self {
-        // Find the size of the permutation
-        let n = cycles
-            .iter()
-            .flat_map(|cycle| cycle.iter())
-            .max()
-            .map_or(Some(0), |&max| max.checked_add(1))
-            .expect("cycle indices must fit in a permutation");
+        Self::try_from_cycles_ordered(cycles, order)
+            .expect("each cycle must contain distinct indices that fit in a permutation")
+    }
 
-        // Start with identity permutation
-        let mut result = Permutation::id(n);
+    /// Checks cycles and composes them in the specified order, fixing unlisted indices.
+    ///
+    /// Indices may be shared between cycles but must be distinct within each cycle.
+    /// Empty and singleton cycles do not move indices. The size is one more than the
+    /// largest index, or zero if all cycles are empty.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PermutationError::RepeatedCycleIndex`] if an index repeats within a
+    /// cycle, or [`PermutationError::CycleIndexOverflow`] if the largest index cannot
+    /// be incremented. Error cycle numbers refer to the original input order.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::permutation::{CycleOrder, Permutation, PermutationError};
+    ///
+    /// let cycles = [vec![0, 1], vec![1, 2]];
+    /// let right_first = Permutation::try_from_cycles_ordered(&cycles, CycleOrder::LastFirst)?;
+    /// let left_first = Permutation::try_from_cycles_ordered(&cycles, CycleOrder::FirstFirst)?;
+    /// assert_eq!(right_first.map(), &[1, 2, 0]);
+    /// assert_eq!(left_first.map(), &[2, 0, 1]);
+    /// assert_eq!(
+    ///     Permutation::try_from_cycles_ordered(&[vec![1, 1]], CycleOrder::FirstFirst),
+    ///     Err(PermutationError::RepeatedCycleIndex { cycle: 0, index: 1 })
+    /// );
+    /// # Ok::<(), PermutationError>(())
+    /// ```
+    pub fn try_from_cycles_ordered(
+        cycles: &[Vec<usize>],
+        order: CycleOrder,
+    ) -> Result<Self, PermutationError> {
+        let n = Self::cycle_domain_len(cycles)?;
+        let mut result = Self::id(n);
 
-        // Choose iteration order based on CycleOrder
-        let cycle_iter: Box<dyn Iterator<Item = &Vec<usize>>> = match order {
-            CycleOrder::LastFirst => Box::new(cycles.iter().rev()),
-            CycleOrder::FirstFirst => Box::new(cycles.iter()),
-        };
-
-        // Apply cycles in specified order
-        for cycle in cycle_iter {
+        for step in 0..cycles.len() {
+            let cycle_index = match order {
+                CycleOrder::LastFirst => cycles.len() - 1 - step,
+                CycleOrder::FirstFirst => step,
+            };
+            let cycle = &cycles[cycle_index];
             if cycle.len() <= 1 {
                 continue;
             }
@@ -1219,7 +1259,12 @@ impl Permutation {
             for i in 0..cycle.len() {
                 let from = cycle[i];
                 let to = cycle[(i + 1) % cycle.len()];
-                assert_eq!(cycle_map[from], n, "cycle repeats index {from}");
+                if cycle_map[from] != n {
+                    return Err(PermutationError::RepeatedCycleIndex {
+                        cycle: cycle_index,
+                        index: from,
+                    });
+                }
                 cycle_map[from] = to;
             }
             for (index, image) in cycle_map.iter_mut().enumerate() {
@@ -1231,7 +1276,7 @@ impl Permutation {
             result = cycle_perm.compose(&result);
         }
 
-        result
+        Ok(result)
     }
 
     /// Creates a permutation from cycles using right-to-left reading order (default).
@@ -1240,6 +1285,7 @@ impl Permutation {
     /// # Panics
     ///
     /// Panics if a cycle repeats an index or the largest index cannot be incremented.
+    /// See [`Self::try_from_cycles`] for a fallible alternative.
     ///
     /// # Examples
     ///
@@ -1250,7 +1296,35 @@ impl Permutation {
     /// assert_eq!(p.map(), &[1, 0, 2]);
     /// ```
     pub fn from_cycles(cycles: &[Vec<usize>]) -> Self {
-        Self::from_cycles_ordered(cycles, CycleOrder::LastFirst)
+        Self::try_from_cycles(cycles)
+            .expect("each cycle must contain distinct indices that fit in a permutation")
+    }
+
+    /// Checks cycles and composes them from right to left.
+    ///
+    /// Equivalent to [`Self::try_from_cycles_ordered`] with [`CycleOrder::LastFirst`].
+    ///
+    /// # Errors
+    ///
+    /// Returns [`PermutationError::RepeatedCycleIndex`] if an index repeats within a
+    /// cycle, or [`PermutationError::CycleIndexOverflow`] if the largest index cannot
+    /// be incremented. Overlap between different cycles is allowed.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use linnet::permutation::{Permutation, PermutationError};
+    ///
+    /// let p = Permutation::try_from_cycles(&[vec![0, 1, 2], vec![1, 2]])?;
+    /// assert_eq!(p.map(), &[1, 0, 2]);
+    /// assert_eq!(
+    ///     Permutation::try_from_cycles(&[vec![usize::MAX]]),
+    ///     Err(PermutationError::CycleIndexOverflow { index: usize::MAX })
+    /// );
+    /// # Ok::<(), PermutationError>(())
+    /// ```
+    pub fn try_from_cycles(cycles: &[Vec<usize>]) -> Result<Self, PermutationError> {
+        Self::try_from_cycles_ordered(cycles, CycleOrder::LastFirst)
     }
 
     pub fn length(&self) -> usize {
@@ -1301,7 +1375,7 @@ impl Permutation {
     }
 }
 
-/// Failures when checking a mapping or generating a permutation group.
+/// Failures when checking mappings or cycles, or generating a permutation group.
 ///
 /// See [`Permutation::try_from_map`] for checked-construction examples. Generated
 /// typed-vector conversions also report [`Self::MissingMapping`] for absent entries;
@@ -1326,7 +1400,8 @@ impl Permutation {
 /// }
 /// # }
 /// ```
-#[derive(Error, Debug, Clone, PartialEq, Eq)]
+#[derive(Error, Debug, Copy, Clone, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum PermutationError {
     /// An entry is outside the mapping's index domain. See [`Permutation::try_from_map`].
     #[error("Mapping entry {index} has image {value}, outside 0..{len}")]
@@ -1342,6 +1417,23 @@ pub enum PermutationError {
         value: usize,
         first_index: usize,
         second_index: usize,
+    },
+
+    /// An index cannot fit in the cycle domain. See [`Permutation::try_from_cycles`].
+    #[error("Cycle index {index} cannot be incremented to form a permutation size")]
+    CycleIndexOverflow { index: usize },
+
+    /// A cycle repeats an index. See [`Permutation::try_from_cycles_ordered`].
+    #[error("Cycle {cycle} repeats index {index}")]
+    RepeatedCycleIndex { cycle: usize, index: usize },
+
+    /// Disjoint cycles repeat an index. See [`Permutation::from_disjoint_cycles`].
+    /// The cycle numbers are equal when the repetition is within one cycle.
+    #[error("Index {index} occurs in both cycle {first_cycle} and cycle {second_cycle}")]
+    NonDisjointCycles {
+        index: usize,
+        first_cycle: usize,
+        second_cycle: usize,
     },
 
     /// Serialized mappings have different lengths. See [`PermutationError`].
@@ -1379,8 +1471,6 @@ pub trait HedgeGraphExt {
 }
 
 pub trait PermutationExt<Orderer: Ord = ()> {
-    // fn from_disjoint_cycles(cycles: &[Vec<usize>]) -> Result<Self, String>;
-    //
     type Output;
     type Edges;
 
@@ -1581,6 +1671,16 @@ impl<E, V, H, O: Ord> PermutationExt<O> for HedgeGraph<E, V, H> {
     }
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+enum PermutationDirection {
+    Direct,
+    Inverse,
+}
+
+/// An exclusive iterator over slice elements in direct or inverse permutation order.
+///
+/// See [`Permutation::iter_slice_mut`] and [`Permutation::iter_slice_inv_mut`] for
+/// construction examples. Yielded references may outlive the iterator.
 #[derive(Debug)]
 pub struct PermutationMapIterMut<'a, T: 'a> {
     ptr: NonNull<T>,
@@ -1591,16 +1691,21 @@ pub struct PermutationMapIterMut<'a, T: 'a> {
 }
 
 impl<'a, T: 'a> PermutationMapIterMut<'a, T> {
-    fn new(slice: &'a mut [T], map_indices: &'a [usize]) -> Self {
-        let slice_len = slice.len();
-        // Only iter_slice_mut / iter_slice_inv_mut call this private constructor, passing
-        // a checked Permutation's direct or inverse map. Both contain distinct indices.
-        // This separate check allows longer slices and rejects slices shorter than the map.
-        if let Some(max_index) = max_out_of_bounds_index(map_indices, slice_len) {
-            panic!(
-                "Slice length ({slice_len}) is too short for all indices in permutation map. Max index in map: Some({max_index})"
-            );
-        }
+    fn new(
+        slice: &'a mut [T],
+        permutation: &'a Permutation,
+        direction: PermutationDirection,
+    ) -> Self {
+        assert!(
+            slice.len() >= permutation.length(),
+            "Slice length ({}) is too short for permutation length ({})",
+            slice.len(),
+            permutation.length(),
+        );
+        let map_indices = match direction {
+            PermutationDirection::Direct => permutation.map(),
+            PermutationDirection::Inverse => permutation.inv(),
+        };
         PermutationMapIterMut {
             ptr: NonNull::new(slice.as_mut_ptr()).expect("Slice pointer cannot be null"),
             map_indices,
@@ -1622,10 +1727,10 @@ impl<'a, T> Iterator for PermutationMapIterMut<'a, T> {
             self.current_map_idx += 1;
             self.len -= 1;
             // SAFETY: `ptr` comes from the exclusively borrowed slice, which remains
-            // alive and inaccessible through other paths for 'a. `new` checks every
-            // index against the slice length. Its only callers pass the immutable map
-            // or inverse of a validated Permutation, so indices are unique. The cursor
-            // only advances, and the iterator cannot be cloned, hence each element is
+            // alive and inaccessible through other paths for 'a. `new` requires a
+            // validated Permutation and checks its length against the slice. Both its
+            // maps are bijections, so indices are unique and in bounds. The cursor only
+            // advances, and the iterator cannot be cloned, hence each element is
             // yielded at most once even when earlier references outlive the iterator.
             // This also holds for ZSTs: distinct indexed elements occupy no bytes.
             unsafe { Some(&mut *self.ptr.as_ptr().add(perm_idx)) }
@@ -2981,9 +3086,89 @@ mod admission_tests {
     }
 
     #[test]
-    #[should_panic(expected = "cycle repeats index")]
+    #[should_panic(expected = "each cycle must contain distinct indices")]
     fn ordered_cycles_reject_repeated_indices() {
         Permutation::from_cycles(&[vec![0, 1, 0, 1]]);
+    }
+
+    #[test]
+    fn checked_cycles_report_repetitions_in_input_order() {
+        for order in [CycleOrder::FirstFirst, CycleOrder::LastFirst] {
+            for repeated in [vec![2, 2], vec![2, 3, 2], vec![2, 3, 2, 3]] {
+                assert_eq!(
+                    Permutation::try_from_cycles_ordered(&[vec![], repeated], order),
+                    Err(PermutationError::RepeatedCycleIndex { cycle: 1, index: 2 })
+                );
+            }
+        }
+        assert_eq!(
+            Permutation::try_from_cycles(&[vec![0, 1, 0, 1]]),
+            Err(PermutationError::RepeatedCycleIndex { cycle: 0, index: 0 })
+        );
+        assert_eq!(
+            Permutation::from_disjoint_cycles(&[vec![0, 1], vec![1, 2]]),
+            Err(PermutationError::NonDisjointCycles {
+                index: 1,
+                first_cycle: 0,
+                second_cycle: 1,
+            })
+        );
+        assert_eq!(
+            Permutation::from_disjoint_cycles(&[vec![0, 1, 0]]),
+            Err(PermutationError::NonDisjointCycles {
+                index: 0,
+                first_cycle: 0,
+                second_cycle: 0,
+            })
+        );
+    }
+
+    #[test]
+    fn checked_cycles_reject_size_overflow_before_allocation() {
+        let cycles = [vec![usize::MAX]];
+        let error = Err(PermutationError::CycleIndexOverflow { index: usize::MAX });
+        assert_eq!(Permutation::from_disjoint_cycles(&cycles), error);
+        assert_eq!(Permutation::try_from_cycles(&cycles), error);
+        for order in [CycleOrder::FirstFirst, CycleOrder::LastFirst] {
+            assert_eq!(Permutation::try_from_cycles_ordered(&cycles, order), error);
+        }
+    }
+
+    #[test]
+    fn checked_cycles_preserve_empty_singleton_and_overlapping_cycles() {
+        for order in [CycleOrder::FirstFirst, CycleOrder::LastFirst] {
+            assert_eq!(
+                Permutation::try_from_cycles_ordered(&[], order).unwrap(),
+                Permutation::id(0)
+            );
+            assert_eq!(
+                Permutation::try_from_cycles_ordered(&[vec![], vec![3], vec![3]], order).unwrap(),
+                Permutation::id(4)
+            );
+            let p = Permutation::try_from_cycles_ordered(&[vec![0, 2], vec![2, 4]], order).unwrap();
+            assert_eq!(
+                p.map(),
+                match order {
+                    CycleOrder::LastFirst => &[2, 1, 4, 3, 0],
+                    CycleOrder::FirstFirst => &[4, 1, 0, 3, 2],
+                }
+            );
+            for i in 0..p.length() {
+                assert_eq!(p.inv()[p[i]], i);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "each cycle must contain distinct indices")]
+    fn explicitly_ordered_cycles_reject_repeated_indices() {
+        Permutation::from_cycles_ordered(&[vec![0, 0]], CycleOrder::FirstFirst);
+    }
+
+    #[test]
+    #[should_panic(expected = "CycleIndexOverflow")]
+    fn cycle_wrapper_rejects_size_overflow() {
+        Permutation::from_cycles(&[vec![usize::MAX]]);
     }
 
     #[test]
