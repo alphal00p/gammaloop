@@ -4183,7 +4183,14 @@ impl TensorExpression {
         notation_source: Option<String>,
     ) -> PythonFormattedOutput {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::format_structured_output_rich(Arc::clone(&self_.value), settings, notation_source)
+        let value = Arc::clone(&self_.value);
+        display::format_structured_output_rich(
+            self_.py(),
+            self_.into_super().into(),
+            value,
+            settings,
+            notation_source,
+        )
     }
 
     /// Create a bounded, interactive MathML viewer in marimo or Jupyter.
@@ -4220,9 +4227,11 @@ impl TensorExpression {
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PyResult<Py<PyAny>> {
+        let value = Arc::clone(&self_.value);
         display::paging::viewer(
             py,
-            Arc::clone(&self_.value),
+            self_.into_super().into(),
+            value,
             settings.as_deref().cloned().unwrap_or_default(),
             notation_source,
             page_size,
@@ -4236,8 +4245,11 @@ impl TensorExpression {
     /// object
     ///     Rich notebook output or an interactive viewer, using default settings.
     fn _display_(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        let value = Arc::clone(&self_.value);
         display::format_structured_output_rich(
-            Arc::clone(&self_.value),
+            py,
+            self_.into_super().into(),
+            value,
             display::DisplaySettings::default(),
             None,
         )
@@ -4262,8 +4274,11 @@ impl TensorExpression {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
+        let value = Arc::clone(&self_.value);
         display::format_structured_output_rich(
-            Arc::clone(&self_.value),
+            py,
+            self_.into_super().into(),
+            value,
             display::DisplaySettings::default(),
             None,
         )
@@ -4418,25 +4433,27 @@ impl TensorExpression {
         Ok(())
     }
 
-    fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> Option<String> {
+    fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Option<String>> {
         if display::paging::is_large(&self_.value) {
+            let value = Arc::clone(&self_.value);
             return display::paging::static_html(
                 py,
-                Arc::clone(&self_.value),
+                self_.into_super().into(),
+                value,
                 display::DisplaySettings::default(),
                 None,
             )
-            .ok();
+            .map(Some);
         }
         let settings = display::DisplaySettings::default();
-        display::format_structured_backend(
+        Ok(display::format_structured_backend(
             py,
             Self::structured(&self_),
             &settings,
             None,
             FormattedOutputBackend::Html,
         )
-        .ok()
+        .ok())
     }
 
     fn _repr_latex_(self_: PyRef<'_, Self>) -> PyResult<String> {

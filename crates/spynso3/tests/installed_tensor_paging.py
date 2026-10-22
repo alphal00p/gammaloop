@@ -8,7 +8,7 @@ import unittest
 import xml.etree.ElementTree as ET
 from unittest.mock import patch
 
-from symbolica import E, MathMLViewer, S
+from symbolica import E, MathMLViewer, PrintMode, S
 from symbolica.community.tensor import (
     DisplaySettings,
     Representation,
@@ -156,6 +156,26 @@ class LeafCompilationTests(unittest.TestCase):
                 fragment = self.paging.compile_leaf(self.payload)
                 self.assertEqual(fragment, compact if size <= 4096 else None)
 
+    def test_compaction_keeps_path_removal_slash_styles_and_errors(self):
+        self.document = (
+            '<math data-symbolica-path="0">\n<mrow data-symbolica-path="1">\n'
+            '<mi data-symbolica-path="2" data-spenso-cancel="updiagonal" '
+            'style="color:red;">p</mi>\n</mrow>\n</math>'
+        )
+        row = ET.fromstring(self.paging.compile_leaf(self.payload))
+        self.assertTrue(all("data-symbolica-path" not in n.attrib for n in row.iter()))
+        self.assertEqual(row[0].get("style"), f"color:red;{self.paging.CANCEL_STYLE}")
+        self.assertEqual(row[0].get("data-spenso-cancel"), "updiagonal")
+        self.document = "<html/>"
+        with self.assertRaisesRegex(RuntimeError, "Renderer returned no MathML"):
+            self.paging.compile_leaf(self.payload)
+        self.document = "<math><mi></math>"
+        with self.assertRaises(ET.ParseError):
+            self.paging.compile_leaf(self.payload)
+        self.compiler.side_effect = RuntimeError("bad notation")
+        with self.assertRaisesRegex(RuntimeError, "bad notation"):
+            self.paging.compile_leaf(self.payload)
+
 
 class BrowserPagingTests(unittest.TestCase):
     def setUp(self):
@@ -275,9 +295,15 @@ class BrowserPagingTests(unittest.TestCase):
     def test_small_tensor_pages_preserve_permuted_ports_and_custom_printers(self):
         rep = Representation.euc(3)
         value = TensorName("paging_ports::A", print={"typst": "macron(A)"})(
-            rep("i"), Representation.mink(4)("mu")
+            S("paging_ports::parameter"), 7, rep("i"), Representation.mink(4)("mu")
         ).permute_axes([1, 0])
         original, axes = value.to_expression(), value.axes
+        source = bytes(value.__getstate__())
+        structure, name, arguments = (
+            value.structure,
+            value.name.to_expression(),
+            value.arguments,
+        )
         pager = value.paged(page_size=7)
         self.addCleanup(pager.close)
         page = pager._page()
@@ -303,6 +329,81 @@ class BrowserPagingTests(unittest.TestCase):
             self.assertEqual(indices, ["mu", "i"])
         self.assertEqual(value.axes, axes)
         self.assertEqual(value.to_expression(), original)
+        self.assertEqual(bytes(value.__getstate__()), source)
+        self.assertEqual(value.structure, structure)
+        self.assertEqual(value.name.to_expression(), name)
+        self.assertEqual(value.arguments, arguments)
+
+    def test_paged_leaves_retain_rich_settings(self):
+        value = TensorName("paging_settings::A")(
+            Representation.euc(3)("i"), Representation.mink(4)("mu")
+        )
+        source, axes, structure = (
+            bytes(value.__getstate__()),
+            value.axes,
+            value.structure,
+        )
+        ports = value.paged(settings=DisplaySettings(tensor_layout="ports"))
+        call = value.paged(
+            settings=DisplaySettings(tensor_layout="call", show_dimensions=True)
+        )
+        self.addCleanup(ports.close)
+        self.addCleanup(call.close)
+        first = ports._page()
+        explicit = call._page()
+        first_text = "".join(self.assertPage(first)[0].itertext())
+        explicit_text = "".join(self.assertPage(explicit)[0].itertext())
+        self.assertNotEqual(first_text, explicit_text)
+        self.assertIn("3", explicit_text)
+        self.assertIn("4", explicit_text)
+        self.assertEqual(ports._page()["html"], first["html"])
+        self.assertEqual(bytes(value.__getstate__()), source)
+        self.assertEqual(value.axes, axes)
+        self.assertEqual(value.structure, structure)
+
+    def test_leaf_cache_distinguishes_product_and_power_contexts(self):
+        def printer(expression, *, mode, in_product, in_exp_base, **options):
+            if mode != PrintMode.Typst:
+                return None
+            label = "base" if in_exp_base else "factor" if in_product else "single"
+            return f'upright("{label}")'
+
+        head = S(
+            "paging_context::F",
+            is_scalar=True,
+            tags=["spenso::print-callback"],
+            print=printer,
+        )
+        leaf = head(1)
+        value = TensorExpression(leaf + S("paging_context::x") * leaf + leaf**2)
+        source = bytes(value.__getstate__())
+        viewer = value.paged()
+        self.addCleanup(viewer.close)
+        for layout in (0, 1):
+            text = "".join(self.assertPage(viewer._render_page(layout))[0].itertext())
+            for label in ("single", "factor", "base"):
+                self.assertIn(label, text)
+        self.assertEqual(bytes(value.__getstate__()), source)
+
+    def test_paged_slash_carries_its_own_style(self):
+        gamma = TensorExpression.dirac_gamma(4)
+        p = TensorName.vector("paging_slash::p")(Representation.mink(4))
+        value = (gamma("a", "b", "mu") * p("mu")).contract()
+        source, axes = bytes(value.__getstate__()), value.axes
+        viewer = value.paged()
+        self.addCleanup(viewer.close)
+        for layout in (0, 1):
+            root = self.assertPage(viewer._render_page(layout))[0]
+            strokes = [
+                node
+                for node in root.iter()
+                if node.get("data-spenso-cancel") == "updiagonal"
+            ]
+            self.assertEqual(len(strokes), 1)
+            self.assertIn("linear-gradient", strokes[0].get("style", ""))
+            self.assertIn("currentColor", strokes[0].get("style", ""))
+        self.assertEqual(bytes(value.__getstate__()), source)
+        self.assertEqual(value.axes, axes)
 
     def test_inline_expansion_keeps_tensor_notation_and_source(self):
         rep = Representation.mink(4)
@@ -363,7 +464,7 @@ class BrowserPagingTests(unittest.TestCase):
         self.assertEqual((page["kind"], page["unit"]), ("Function", "arguments"))
         self.assertEqual(value.to_expression(), original)
 
-    def test_renderer_errors_stay_in_the_bounded_preview(self):
+    def test_renderer_errors_propagate_from_the_bounded_preview(self):
         rep = Representation.mink(4)
         bootstrap = TensorName("wasm_errors::bootstrap")(rep("mu")).paged()
         bootstrap._page()
@@ -376,8 +477,8 @@ class BrowserPagingTests(unittest.TestCase):
         with patch.object(
             _spenso_paging, "compile_typst", side_effect=RuntimeError("bad notation")
         ):
-            page = pager._page()
-        self.assertIn("Page rendering failed: RuntimeError: bad notation", page["html"])
+            with self.assertRaisesRegex(RuntimeError, "bad notation"):
+                pager._page()
         self.assertEqual(self.value.to_expression(), self.original)
 
     def test_scalar_arithmetic_uses_identical_native_responsive_layouts(self):

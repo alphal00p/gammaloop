@@ -1,10 +1,7 @@
 //! Tensor notation leaves in Symbolica's responsive MathML renderer.
 use super::*;
 use std::{collections::VecDeque, ffi::CString, time::Instant};
-use symbolica::{
-    api::python::{MathMLMarker, MathMLPage, MathMLPageRequest, MathMLPageSource, MathMLViewer},
-    printer::mathml::{LAYOUTS, MathMlCursorCache},
-};
+use symbolica::api::python::MathMLViewer;
 
 pub(crate) const DEFAULT_PAGE_SIZE: usize = 25;
 const MAX_LEAF_NODES: usize = 256;
@@ -29,25 +26,12 @@ pub(crate) fn is_large(value: &SymbolicTensor<PartialStructure>) -> bool {
     !fits(value.expression().as_view(), &mut 1000, 0)
 }
 
-// Retain bounded native cursor bookmarks over the original immutable owner.
-self_cell::self_cell!(
-    struct CachedTensor {
-        owner: Arc<SymbolicTensor<PartialStructure>>,
-        #[covariant]
-        dependent: MathMlCursorCache,
-    }
-);
-
-struct PageSource {
-    tensor: CachedTensor,
-    leaves: TensorLeaves,
-}
 struct TensorLeaves {
     settings: DisplaySettings,
     notation: Option<String>,
     aliases: IndexAliases,
     // Responsive alternatives share compiled leaves, with bounded retention.
-    cache: VecDeque<((Atom, bool), Option<String>)>,
+    cache: VecDeque<((Atom, bool, bool), Option<String>)>,
 }
 
 impl TensorLeaves {
@@ -57,7 +41,6 @@ impl TensorLeaves {
         value: &SymbolicTensor<PartialStructure>,
         view: AtomView<'_>,
         state: &PrintState,
-        deadline: Instant,
     ) -> PyResult<Option<String>> {
         let Some(symbol) = view.get_symbol() else {
             return Ok(None);
@@ -99,7 +82,7 @@ impl TensorLeaves {
             return Ok(None);
         }
         let root = value.expression().as_view().get_data();
-        let key = (view.to_owned(), state.in_exp_base);
+        let key = (view.to_owned(), state.in_product, state.in_exp_base);
         if let Some(index) = self
             .cache
             .iter()
@@ -110,12 +93,16 @@ impl TensorLeaves {
             self.cache.push_back(entry);
             return Ok(result);
         }
-        let atom =
-            if view.get_data().as_ptr() == root.as_ptr() && view.get_byte_size() == root.len() {
-                value.presentation_atom()
-            } else {
-                value.presentation_fragment(view)
-            };
+        // The factory owns request boundaries. Bound each uncached leaf without
+        // guessing when its persistent callback starts another page or layout.
+        let deadline = Instant::now() + std::time::Duration::from_secs(10);
+        // The inherited Python expression may own a byte-for-byte Atom clone.
+        // Equality is bounded by fits above and does not scan a large root.
+        let atom = if view.get_data() == root {
+            value.presentation_atom()
+        } else {
+            value.presentation_fragment(view)
+        };
         let mut aliases = IndexAliases::for_atom(&atom, &self.settings.index_style);
         // Reserve the public free ports without walking the original expression.
         let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind)
@@ -196,7 +183,11 @@ impl TensorLeaves {
             "\n#let settings = (..settings, index-aliases: {})\n",
             aliases.typst_source(&self.settings.index_style)
         ));
-        settings.push_str(&typst_custom_print_source(&self.settings, &atom)?);
+        settings.push_str(&typst_custom_print_source(
+            &self.settings,
+            &atom,
+            state.in_product,
+        )?);
         let attachments = portable_attachments(&atom).map_err(PyRuntimeError::new_err)?;
         let tree = symbolica_typst_plugin::payload::atom_render_tree_value(&atom, &attachments)
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
@@ -213,7 +204,7 @@ impl TensorLeaves {
             .as_secs_f64();
         if remaining == 0.0 {
             return Err(PyRuntimeError::new_err(
-                "Tensor notation exceeded the 10-second deadline",
+                "Tensor notation exceeded the 10-second leaf deadline",
             ));
         }
         payload.set_item("timeout", remaining)?;
@@ -232,93 +223,6 @@ impl TensorLeaves {
     }
 }
 
-impl MathMLPageSource for PageSource {
-    fn page(&mut self, py: Python<'_>, request: MathMLPageRequest<'_>) -> PyResult<MathMLPage> {
-        if !(1..=500).contains(&request.size)
-            || request.layout >= LAYOUTS.len()
-            || request.path.len() > 64
-            || request
-                .expansions
-                .iter()
-                .any(|(path, size)| path.len() > 64 || !(1..=500).contains(size))
-        {
-            return Err(PyValueError::new_err("invalid tensor page request"));
-        }
-        let cursors = self.tensor.borrow_dependent();
-        let atom = cursors
-            .locate(request.path)
-            .ok_or_else(|| PyValueError::new_err("unknown subexpression"))?;
-        let deadline = Instant::now() + std::time::Duration::from_secs(10);
-        let mut error = None;
-        let mut leaf = |atom: AtomView<'_>, _options: &PrintOptions, state: &PrintState| {
-            if error.is_some() {
-                return None;
-            }
-            match self
-                .leaves
-                .render(py, self.tensor.borrow_owner(), atom, state, deadline)
-            {
-                Ok(fragment) => fragment,
-                Err(failure) => {
-                    error = Some(failure);
-                    None
-                }
-            }
-        };
-        let rendered = atom.render_mathml_layout_cached(
-            &PrintOptions::new()
-                .multiplication_operator('·')
-                .num_exp_as_superscript(true),
-            request.start,
-            request.size,
-            request.layout,
-            request.expansions,
-            cursors,
-            Some(&mut leaf),
-        );
-        let mut page = MathMLPage::new(
-            format!(
-                "<style>{NOTEBOOK_LAYOUT_STYLE}</style>{}",
-                rendered
-                    .html
-                    .replacen("<math ", "<math data-spenso-math=\"\" ", 1)
-            ),
-            rendered.start,
-            rendered.end,
-            rendered.total,
-        );
-        if let Some(error) = error {
-            page.html = format!(
-                "<p role=\"alert\">Page rendering failed: {}</p>",
-                AnsiHtmlFormatter::escape_html(
-                    &error.to_string().chars().take(2048).collect::<String>()
-                )
-            );
-            return Ok(page);
-        }
-        let (kind, unit) = match atom {
-            AtomView::Fun(_) if rendered.custom => ("Function", "expressions"),
-            AtomView::Add(_) => ("Sum", "terms"),
-            AtomView::Mul(_) => ("Product", "factors"),
-            AtomView::Fun(_) => ("Function", "arguments"),
-            AtomView::Pow(_) => ("Power", "expressions"),
-            _ => ("Value", "expressions"),
-        };
-        page.kind = kind.into();
-        page.unit = unit.into();
-        page.markers = rendered
-            .markers
-            .into_iter()
-            .map(|marker| {
-                let mut path = request.path.to_vec();
-                path.extend(marker.path);
-                MathMLMarker::new(path, marker.label, marker.start)
-            })
-            .collect();
-        Ok(page)
-    }
-}
-
 fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
     let modules = py.import("sys")?.getattr("modules")?;
     let name = "_spenso_paging";
@@ -334,36 +238,39 @@ fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
 
 pub(crate) fn viewer(
     py: Python<'_>,
+    expression: Py<PythonExpression>,
     value: Arc<SymbolicTensor<PartialStructure>>,
     settings: DisplaySettings,
     notation: Option<String>,
     size: usize,
 ) -> PyResult<Py<PyAny>> {
-    let source = PageSource {
-        tensor: CachedTensor::new(value, |value| {
-            MathMlCursorCache::new(value.expression().as_view())
-        }),
-        leaves: TensorLeaves {
-            settings,
-            notation,
-            aliases: IndexAliases::default(),
-            cache: VecDeque::new(),
-        },
+    let mut leaves = TensorLeaves {
+        settings,
+        notation,
+        aliases: IndexAliases::default(),
+        cache: VecDeque::new(),
     };
-    MathMLViewer::new(source)
-        .page_size(size)
-        .layout_count(LAYOUTS.len())
-        .supports_expansion(true)
-        .into_python(py)
+    MathMLViewer::expression(
+        expression,
+        PrintOptions::new()
+            .multiplication_operator('·')
+            .num_exp_as_superscript(true),
+        Some(Box::new(move |py, atom, _options, state| {
+            leaves.render(py, &value, atom, state)
+        })),
+    )
+    .page_size(size)
+    .into_python(py)
 }
 
 pub(crate) fn static_html(
     py: Python<'_>,
+    expression: Py<PythonExpression>,
     value: Arc<SymbolicTensor<PartialStructure>>,
     settings: DisplaySettings,
     notation: Option<String>,
 ) -> PyResult<String> {
-    viewer(py, value, settings, notation, DEFAULT_PAGE_SIZE)?
+    viewer(py, expression, value, settings, notation, DEFAULT_PAGE_SIZE)?
         .call_method0(py, "_repr_html_")?
         .extract(py)
 }
