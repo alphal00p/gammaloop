@@ -299,12 +299,17 @@ macro_rules! define_indexed_vec {
             }
         }
 
-        impl<$GenericParam> ::std::convert::TryFrom<$Vec<Option<$Idx>>> for linnet::permutation::Permutation where $Wrapper<$GenericParam>: From<Option<$Idx>> + TryInto<$Idx>, <$Wrapper<$GenericParam> as TryInto<$Idx>>::Error: std::fmt::Debug{
-            type Error = ();
+        impl ::std::convert::TryFrom<$Vec<Option<$Idx>>> for linnet::permutation::Permutation
+        where $Wrapper<Option<$Idx>>: ::std::convert::TryInto<$Idx> {
+            type Error = linnet::permutation::PermutationError;
             fn try_from(vec: $Vec<Option<$Idx>>) -> Result<Self, Self::Error> {
-                let new_vec:Vec<usize> = vec.into_iter().map(|(i,e)| e.ok_or(()).map(|e|(i,e))).collect::<Result<$Vec<$Idx>, ()>>()?.into_iter().map(|(_,x)| usize::from(x)).collect();
-
-                Ok(linnet::permutation::Permutation::from_map(new_vec))
+                let map = vec.into_iter().map(|(i, entry)| {
+                    let index: $Idx = entry.try_into().map_err(|_| {
+                        linnet::permutation::PermutationError::MissingMapping { index: i.0 }
+                    })?;
+                    Ok(usize::from(index))
+                }).collect::<Result<::std::vec::Vec<_>, Self::Error>>()?;
+                Self::try_from_map(map)
             }
         }
     };
@@ -565,11 +570,14 @@ macro_rules! define_indexed_vec {
         }
 
         impl ::std::convert::TryFrom<$Vec<Option<$Idx>>> for linnet::permutation::Permutation{
-            type Error = ();
+            type Error = linnet::permutation::PermutationError;
             fn try_from(vec: $Vec<Option<$Idx>>) -> Result<Self, Self::Error> {
-                let new_vec:Vec<usize> = vec.into_iter().map(|(i,e)| e.ok_or(()).map(|e|(i,e))).collect::<Result<$Vec<$Idx>, ()>>()?.into_iter().map(|(_,x)| usize::from(x)).collect();
-
-                Ok(linnet::permutation::Permutation::from_map(new_vec))
+                let map = vec.into_iter().map(|(i, entry)| {
+                    entry.map(usize::from).ok_or(
+                        linnet::permutation::PermutationError::MissingMapping { index: i.0 }
+                    )
+                }).collect::<Result<::std::vec::Vec<_>, _>>()?;
+                Self::try_from_map(map)
             }
         }
     };
