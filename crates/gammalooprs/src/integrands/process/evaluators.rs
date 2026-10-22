@@ -2369,8 +2369,7 @@ impl EvaluatorStack {
             numerator_definitions,
             settings,
             alias_symbol,
-            // Symbolica's hyperdual vectorizer requires inlined function bodies.
-            if dual_shape.is_some() || settings.inline_numerator_functions {
+            if settings.inline_numerator_functions {
                 InliningPolicy::Always
             } else {
                 InliningPolicy::Never
@@ -3634,7 +3633,6 @@ mod tests {
         for do_fn_map_replacements in [false, true] {
             let settings = EvaluatorSettings {
                 store_atom: true,
-                inline_numerator_functions: false,
                 do_fn_map_replacements,
                 ..Default::default()
             };
@@ -3703,6 +3701,7 @@ mod tests {
                 &EvaluatorSettings {
                     store_atom: true,
                     do_fn_map_replacements: false,
+                    inline_numerator_functions: true,
                     ..Default::default()
                 },
             )
@@ -3791,8 +3790,7 @@ mod tests {
             );
             assert_eq!(inline_arbitrary.im, zero);
         }
-        // The same production entry point keeps function bodies inlined for the
-        // hyperdual backend, which cannot vectorize retained sub-evaluators.
+        // Hyperdual differentiation retains shared bodies under the same policy.
         let (mut dual, _) = EvaluatorStack::new_explicit_sum_with_timings(
             &[source],
             &builder,
@@ -3800,7 +3798,6 @@ mod tests {
             Some(crate::utils::hyperdual_utils::simple_n_deriv_shape(1)),
             &EvaluatorSettings {
                 store_atom: true,
-                inline_numerator_functions: false,
                 ..Default::default()
             },
         )
@@ -3809,26 +3806,38 @@ mod tests {
             dual.single_parametric
                 .fn_map_entries
                 .iter()
-                .all(|entry| entry.inlining == InliningPolicy::Always)
+                .all(|entry| entry.inlining == InliningPolicy::Never)
         );
         assert!(
-            dual.single_parametric
+            !dual
+                .single_parametric
                 .f64_eager
                 .export_instructions()
                 .sub_evaluators
                 .is_empty()
         );
         let values = [1.0, 1.0, 2.0, 0.0].map(|v| Complex::new_re(F(v)));
-        let actual =
-            <f64 as GenericEvaluatorFloat>::get_evaluator(&mut dual.single_parametric)(&values);
-        let [DualOrNot::Dual(actual)] = actual.as_slice() else {
-            panic!("expected dual result")
-        };
         let derivative: f64 = (1..=32)
             .flat_map(|j| (1..=16).map(move |i| -1.0 / ((3 + i + j) as f64).powi(2)))
             .sum();
-        assert!((actual.values[0].re.0 - expected).abs() < 1e-12);
-        assert!((actual.values[1].re.0 - derivative).abs() < 1e-12);
+        for jit_direct_translation in [None, Some(false), Some(true)] {
+            if let Some(jit_direct_translation) = jit_direct_translation {
+                dual.single_parametric
+                    .activate_symjit(&CompilationOptionsSnapshot {
+                        optimization_level: CompilationOptimizationLevel::O2,
+                        jit_direct_translation,
+                        ..Default::default()
+                    })
+                    .unwrap();
+            }
+            let actual =
+                <f64 as GenericEvaluatorFloat>::get_evaluator(&mut dual.single_parametric)(&values);
+            let [DualOrNot::Dual(actual)] = actual.as_slice() else {
+                panic!("expected dual result")
+            };
+            assert!((actual.values[0].re.0 - expected).abs() < 1e-12);
+            assert!((actual.values[1].re.0 - derivative).abs() < 1e-12);
+        }
     }
 
     #[test]

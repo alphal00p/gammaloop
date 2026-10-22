@@ -10,12 +10,13 @@ This experiment covers the bubble-dressed double triangle in explicit 3D with
 ordinary MUV subtraction and the complete sum of 102 orientations.
 
 The experiment used `inline_numerator_functions = false` by default.
-The current default is `true`; setting it to `false` retains shared evaluator
-bodies. Inlining registers generated component and coefficient functions
+The default adopted after this experiment was `true`. The shared-body
+implementation now defaults to `false`, retaining shared evaluator bodies;
+explicit `true` still requests the inlining measured here. Inlining registers generated component and coefficient functions
 with Symbolica's `Always` inlining policy. Tensor contraction, compact energies,
 scalar-factor collection and root aliases retain their existing behavior.
 Function-map replacements remain disabled, so this introduces no earlier
-symbolic body expansion. Dual evaluators continue to inline unconditionally.
+symbolic body expansion. At the time of this experiment, dual evaluators inlined unconditionally.
 
 The experimental executable was built from commit
 `47f3432f2d6034b0b72f6b524e916ad2add26845`, based on the frozen retained-function

@@ -17864,9 +17864,9 @@
     {
       "path": "cli.global.generation.evaluator.inline_numerator_functions",
       "value_type": "boolean",
-      "description": "Inline generated numerator functions instead of retaining shared evaluator bodies.",
+      "description": "Inline generated numerator functions instead of retaining shared evaluator bodies.\nDefaults to false for faster generation; true can improve evaluation throughput.",
       "required": false,
-      "default": true,
+      "default": false,
       "possible_values": []
     },
     {

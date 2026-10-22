@@ -156,7 +156,7 @@
           "minimum": 0
         },
         "inline_numerator_functions": {
-          "description": "Inline generated numerator functions instead of retaining shared evaluator bodies.",
+          "description": "Inline generated numerator functions instead of retaining shared evaluator bodies.\nDefaults to false for faster generation; true can improve evaluation throughput.",
           "type": "boolean"
         },
         "iterative_orientation_optimization": {

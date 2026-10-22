@@ -127,3 +127,8 @@ opt-level = 3
 debug = true
 lto = "fat"
 
+# Shared-body differentiation and optimizer fixes: symbolica-dev/symbolica#110.
+[patch.crates-io]
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "928ae32412d062ff38e780884e83f786f65cfead" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "928ae32412d062ff38e780884e83f786f65cfead" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "928ae32412d062ff38e780884e83f786f65cfead" }

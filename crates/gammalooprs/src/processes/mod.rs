@@ -103,9 +103,10 @@ pub struct EvaluatorSettings {
     #[serde(default, skip_serializing_if = "is_false")]
     pub do_fn_map_replacements: bool,
     /// Inline generated numerator functions instead of retaining shared evaluator bodies.
+    /// Defaults to false for faster generation; true can improve evaluation throughput.
     #[serde(
         default = "evaluator_default_inline_numerator_functions",
-        skip_serializing_if = "is_true"
+        skip_serializing_if = "is_false"
     )]
     pub inline_numerator_functions: bool,
     /// Translate compatible symbolic expressions directly into Spenso networks.
@@ -177,7 +178,7 @@ const fn evaluator_default_direct_translation() -> bool {
 }
 
 const fn evaluator_default_inline_numerator_functions() -> bool {
-    true
+    false
 }
 
 const fn evaluator_default_horner_iterations() -> usize {
@@ -896,13 +897,13 @@ mod tests {
     use super::{AmplitudeGraph, EvaluatorSettings};
 
     #[test]
-    fn numerator_inlining_defaults_and_explicit_opt_out_round_trip() {
+    fn numerator_retention_defaults_and_explicit_inlining_round_trip() {
         use crate::utils::serde_utils::ShowDefaultsGuard;
 
-        assert!(EvaluatorSettings::default().inline_numerator_functions);
+        assert!(!EvaluatorSettings::default().inline_numerator_functions);
         for input in ["", "n_cores = 2"] {
             let settings: EvaluatorSettings = toml::from_str(input).unwrap();
-            assert!(settings.inline_numerator_functions);
+            assert!(!settings.inline_numerator_functions);
         }
 
         {
@@ -916,9 +917,9 @@ mod tests {
             );
 
             let settings: EvaluatorSettings =
-                toml::from_str("inline_numerator_functions = false").unwrap();
+                toml::from_str("inline_numerator_functions = true").unwrap();
             let serialized = toml::to_string(&settings).unwrap();
-            assert!(serialized.contains("inline_numerator_functions = false"));
+            assert!(serialized.contains("inline_numerator_functions = true"));
             assert_eq!(
                 toml::from_str::<EvaluatorSettings>(&serialized).unwrap(),
                 settings
@@ -927,7 +928,7 @@ mod tests {
 
         let _guard = ShowDefaultsGuard::new(true);
         let serialized = toml::to_string(&EvaluatorSettings::default()).unwrap();
-        assert!(serialized.contains("inline_numerator_functions = true"));
+        assert!(serialized.contains("inline_numerator_functions = false"));
     }
 
     #[test]

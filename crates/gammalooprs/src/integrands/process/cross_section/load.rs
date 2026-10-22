@@ -7,6 +7,11 @@
 //! serde_json = "1"
 //! serde = { version = "1.0", features = ["derive"] }
 //! symbolica = { version = "=3.0.1", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+//!
+//! [patch.crates-io]
+//! symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "928ae32412d062ff38e780884e83f786f65cfead" }
+//! numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "928ae32412d062ff38e780884e83f786f65cfead" }
+//! graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "928ae32412d062ff38e780884e83f786f65cfead" }
 //! ```
 
 #![allow(dead_code)]
@@ -28,7 +33,7 @@ use symbolica::{prelude::*, state::StateMap};
 
 // Reject archives from the combined row-program format before importing symbols.
 // This format stores independent native CFF and LTD evaluator payloads.
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 20;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 22;
 
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Encode, Decode, Serialize, Deserialize,
@@ -1814,7 +1819,7 @@ mod threshold_multiplier_tests {
 
     #[test]
     fn threshold_counterterm_metadata_archive_validates_ids_and_component_coverage() {
-        assert_eq!(STANDALONE_EVALUATORS_VERSION, 20);
+        assert_eq!(STANDALONE_EVALUATORS_VERSION, 22);
         let counterterms = vec![identity_counterterm()];
         let registry = identity_registry();
         validate_threshold_counterterm_metadata_archive(&registry, "graph", &counterterms).unwrap();

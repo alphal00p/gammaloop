@@ -824,8 +824,15 @@ retain their existing orientation catalogue and execution methods. LTD supplies 
 complete residue sum to the same generic evaluator constructor, with one execution
 slot. Requested `SingleParametric` and `SummedFunctionMap` programs are supported for
 LTD; either evaluates that complete sum. CFF numerator construction keeps its existing
-owner. Derivative programs retain the existing
-forced-inlining boundary required by the stock Symbolica vectorizer.
+owner. The existing `inline_numerator_functions` setting controls both ordinary
+and hyperdual generated numerator calls: the default `false` retains shared bodies
+through differentiation; `true` explicitly requests inlining. Symbolica PR 110 supplies the
+shared-body part of PR 82 and fixes from PRs 83, 87 and 88. Each unique retained
+body receives instruction CSE and budgeted CPE before stack allocation and sharing;
+shared-body differentiation uses the same optimization pipeline. Generation and runtime
+costs differ: retention favors generation, while explicit inlining can improve
+evaluation throughput. This generation-wide choice also applies to optional
+evaluator layouts built in the same run.
 
 Every evaluator receives the auxiliary numerator sampling scale `M` as an input, defaulting to one. Warm-up rejects a zero runtime scale for every amplitude or cross-section integrand, including evaluators that do not use `M`. No source-expression scan or serialized usage flag is needed. `M` is an auxiliary numerator-sampling coordinate, not an LMB energy; LTD arguments can additionally contain on-shell and external energies.
 
@@ -1237,7 +1244,9 @@ performance-heavy data.
 
 === Persistence Compatibility Contract
 <persistence-compatibility-contract>
-- State format is versioned with `state_manifest.toml` (`version = 19` currently).
+- State format is versioned with `state_manifest.toml` (`version = 21` currently).
+- Version 21 uses Symbolica's shared function-body archive format without the
+  row plans from PR 153. States from main and PR 153 require regeneration.
 - Version 19 stores ordered CFF/LTD representation payloads with the existing
   evaluator layout. Amplitude and cross-section graph terms retain each
   representation's source denominator catalogue. Earlier main and combined-feature
@@ -1272,7 +1281,7 @@ performance-heavy data.
   forward references retain the same callbacks. Symbolica cannot serialize the Rust
   callbacks themselves; version 9 and older states must be regenerated, not relabeled.
 - Version 9 combined Symbolica 3 evaluator/rational payloads with native sampling and threshold metadata. Version 7 stored exact CFF coefficients as native rationals. Version 6 removed obsolete deferred-integrand fields; version 5 added component-local generated-CFF ownership and prefactor metadata; version 4 added the typed global-prefactor sign.
-- Standalone amplitude and cross-section payload versions are 17 and 20,
+- Standalone amplitude and cross-section payload versions are 19 and 22,
   respectively. Older archives are rejected before importing symbolic state.
   JSON and binary archives retain the ordered mode list and
   representation-indexed programs; loaders validate both together. Binary loaders

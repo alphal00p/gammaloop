@@ -42,7 +42,7 @@ use crate::processes::{
 
 // Reject archives from the combined row-program format before importing symbols.
 // This format stores independent native CFF and LTD evaluator payloads.
-pub const STANDALONE_EVALUATORS_VERSION: u32 = 17;
+pub const STANDALONE_EVALUATORS_VERSION: u32 = 19;
 pub const STANDALONE_MODE_RUST: u8 = 0;
 
 #[derive(
