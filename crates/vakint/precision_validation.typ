@@ -1,8 +1,8 @@
 = Precision and inspection validation
 
-This report records completed checks for the precision-aware evaluation and
-constant/master inspection changes. The implementation is still being
-validated; the pending gates below have not been claimed as complete.
+This report records the implementation and completed numerical, graph, API,
+release and repository-wide validation of precision-aware evaluation and
+constant/master inspection.
 
 == Numerical contract
 
@@ -182,7 +182,7 @@ imaginary component is discarded.
 
 PR4fin and PR4dfin, together with their first epsilon coefficients, have
 independently validated 20,000-digit payloads. Separate 20,200-digit production
-inputs are preserved for the remaining period calculation. Their proof uses
+inputs are preserved for PR11d transport validation. Their proof uses
 independent Bessel-moment partitions, rigorous truncation bounds, independent
 exact rational reconstruction and Mathematica development references. A
 transparent additive receipt corrects the original reference-anchor inventory;
@@ -223,11 +223,36 @@ complex digits; their real central value agrees with the final period through
 AMFlow computation. Mathematica remains unnecessary for the build, required
 user tests, runtime and portable verifier.
 
-== Pending delivery gates
+== Delivery validation
 
-- Finish the repository-wide selected CI checks; publish only after native
-  and numerical compatibility pass.
-- Publish the complete immutable external-data release before updating
-  `data-latest`, then exercise actual downloads and offline reuse.
-- Push the coordinated Vakint changes directly to `vakint_rustred` after the
-  required final checks and upload.
+The repository-wide selected CI suite passes, including all 443 Vakint tests
+and all 108 integration tests. Core, documentation and Python test groups,
+Clippy, formatting, workspace/CI graph checks and doctests also pass. The first
+complete final-code run takes 1,309 seconds; publication preparation takes 334
+seconds and the successful cache upload takes 390 seconds. The required
+`just ci-checks-and-upload` command exits successfully and prints
+`CI upload completed`. Skipped tests remain explicitly reported; the separate
+20,000-digit acceptance gates above were run directly.
+
+The immutable
+#link("https://github.com/alphal00p/vakint-external-data/releases/tag/v0.1.1")[external-data v0.1.1 release]
+is published before the
+#link("https://github.com/alphal00p/vakint-external-data/releases/tag/data-latest")[data-latest alias]
+is updated. Two independent pack builds have identical checksums. The published
+release targets source commit `83cd193f9cfabebbe092c2452dc09a0961b9e1a2`;
+its downloaded manifest and payloads match the validated source.
+
+A fresh caller directory downloads 1L–4L through the default `latest` API,
+then requests explicit `v0.1.1` through 5L and reuses the lower packs. This online
+phase passes in 119.32 seconds and exposes all 1,020 master/terminal identities,
+including PR11dep0's 20,000-digit source capability. A separate process repeats
+cumulative explicit-version and `latest` loads with network syscalls denied.
+Its offline phase passes in 235.75 seconds, with zero attempted network
+syscalls after engine initialization and unchanged hashes and timestamps for
+all 11,260 authenticated payload files.
+
+Vakint is delivered directly on `vakint_rustred`. Numerical-only coefficients
+retain their recorded individual limits; the three improved primitive periods
+do not promote unrelated orders or declared, uncomputed terminals to available
+data. Existing saved GammaLoop evaluator trees require regeneration to adopt
+the corrected native pi evaluation described above.
