@@ -33,6 +33,11 @@ struct Completed {
     snapshot: PyDiagramRender,
 }
 
+struct FontResource {
+    css: String,
+    key: String,
+}
+
 /// A resolved drawing awaiting its notebook browser's label measurements.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
 #[pyclass(
@@ -185,10 +190,10 @@ impl PyDiagramView {
         }
     }
 
-    fn font_css(py: Python<'_>) -> PyResult<String> {
-        static CSS: OnceLock<String> = OnceLock::new();
-        if let Some(css) = CSS.get() {
-            return Ok(css.clone());
+    fn font_resource(py: Python<'_>) -> PyResult<&'static FontResource> {
+        static FONT: OnceLock<FontResource> = OnceLock::new();
+        if let Some(font) = FONT.get() {
+            return Ok(font);
         }
         let bytes = crate::data_assets::STIX_TWO_MATH
             .bytes()
@@ -202,8 +207,14 @@ impl PyDiagramView {
             "/* {} */\n@font-face{{font-family:\"Linnet Offline Math\";src:url(\"data:font/woff2;base64,{encoded}\") format(\"woff2\");font-display:block}}\n.linnet-math-label,.linnet-math-label math{{font-family:\"Linnet Offline Math\";font-weight:400;font-style:normal;letter-spacing:normal}}",
             crate::data_assets::STIX_TWO_MATH_LICENSE,
         );
-        let _ = CSS.set(css.clone());
-        Ok(css)
+        // Include the rules as well as the font bytes in browser cache identity.
+        let key = py
+            .import("hashlib")?
+            .call_method1("sha256", (PyBytes::new(py, css.as_bytes()),))?
+            .call_method0("hexdigest")?
+            .extract()?;
+        let _ = FONT.set(FontResource { css, key });
+        Ok(FONT.get().expect("font resource was initialized"))
     }
 
     fn python<'py>(py: Python<'py>) -> PyResult<Bound<'py, PyModule>> {
@@ -436,15 +447,16 @@ impl PyDiagramView {
             .enumerate()
             .map(|(id, source)| serde_json::json!({"id": id, "mathml": source.mathml}))
             .collect::<Vec<_>>();
-        let css = if labels.is_empty() {
-            String::new()
+        let font = if labels.is_empty() {
+            None
         } else {
-            Self::font_css(py)?
+            Some(Self::font_resource(py)?)
         };
         let request = serde_json::json!({
             "id": self.id,
             "labels": labels,
-            "font_css": css,
+            "font_css": font.map_or("", |font| font.css.as_str()),
+            "font_key": font.map_or("", |font| font.key.as_str()),
             "font_style": {"fontFamily": "Linnet Offline Math", "fontSize": "9px", "lineHeight": "1", "whiteSpace": "nowrap", "fontWeight": "400", "fontStyle": "normal", "letterSpacing": "normal"},
             "coordinate_system": "svg-user-units",
         });
@@ -491,7 +503,7 @@ impl PyDiagramView {
         let css = if metrics.is_empty() {
             String::new()
         } else {
-            Self::font_css(py)?
+            Self::font_resource(py)?.css.clone()
         };
         self.complete(py, &metrics, &css)
     }
@@ -528,12 +540,22 @@ impl PyDiagramView {
             .get()
             .map(|done| done.snapshot.to_html())
             .transpose()?;
+        let request = self.measurement_request(py)?;
+        // Captured children can already contain MathML without pending probes.
+        if completed
+            .as_ref()
+            .is_some_and(|html| html.contains("<style data-linnet-font=\"true\">"))
+        {
+            let font = Self::font_resource(py)?;
+            request.bind(py).set_item("font_css", &font.css)?;
+            request.bind(py).set_item("font_key", &font.key)?;
+        }
         Self::python(py)?
             .call_method1(
                 "widget",
                 (
                     Py::new(py, self.clone())?,
-                    self.measurement_request(py)?,
+                    request,
                     include_str!("view.js"),
                     completed,
                 ),
@@ -613,6 +635,78 @@ assert request['font_style']['lineHeight'] == '1'
 assert request['coordinate_system'] == 'svg-user-units'
 assert 'points_per_css_pixel' not in request
 assert request['labels'] == []
+assert request['font_css'] == request['font_key'] == ''
+"#,
+                Some(&locals),
+                Some(&locals),
+            )?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires the optional AnyWidget package and bundled font"]
+    fn notebook_transport_reuses_its_class_and_preserves_complete_exports() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let original = channel_view(py, 1)?;
+            let Source::Scenes(mut scenes) = Arc::try_unwrap(original.source).ok().unwrap() else {
+                unreachable!()
+            };
+            scenes[0].title = Some(LabelSource::text("transport <font>"));
+            let view = PyDiagramView::prepared(scenes);
+            let request = view.measurement_request(py)?;
+            let receipt = py.import("json")?.call_method1(
+                "loads",
+                (format!(
+                    r#"{{"id":"{}","metrics":[{{"id":0,"width":80,"height":10,"baseline":8}}]}}"#,
+                    view.id
+                ),),
+            )?;
+            let snapshot = view.measured(py, Some(receipt.cast()?), None)?;
+            let locals = PyDict::new(py);
+            locals.set_item("request", request)?;
+            locals.set_item("view", Py::new(py, view.clone())?)?;
+            locals.set_item("widget", view.widget(py)?)?;
+            locals.set_item("other", view.widget(py)?)?;
+            locals.set_item("svg", snapshot.to_svg()?)?;
+            locals.set_item("html", snapshot.to_html()?)?;
+            locals.set_item("receipt", receipt)?;
+            py.run(
+                cr#"
+import base64, hashlib, json
+try:
+    # AnyWidget adds an instance-specific trait subclass; its class owner is shared.
+    assert type(widget).__base__ is type(other).__base__
+    assert 'data:text/javascript;base64,' in widget._esm
+    assert len(json.dumps(widget.request)) < 4096
+    assert 'font_css' not in widget.request
+    assert request['font_key'] == hashlib.sha256(request['font_css'].encode()).hexdigest()
+    assert widget.font == other.font == {}
+    widget._receive(widget, {'action': 'font', 'key': 'wrong'}, [])
+    assert widget.font == {}
+    widget._receive(widget, {'action': 'font', 'key': request['font_key']}, [])
+    assert widget.font == {'key': request['font_key'], 'css': request['font_css']}
+    block = '<style data-linnet-font="true"><![CDATA[' + request['font_css'] + ']]></style>'
+    assert block in svg and block in html
+    assert widget.rendered['html'] == html.replace(block, '')
+    assert 'transport &lt;font&gt;' in widget.rendered['html']
+    widget._receive(widget, {'action':'measure', 'measurements':receipt}, [])
+    assert widget.rendered['html'] == html.replace(block, '')
+    assert view.to_svg() == svg and view.to_html() == html
+    # Exact owned-block removal preserves text and arbitrary other styles.
+    literal = '<mtext>data-linnet-font="true"</mtext><style>mtext{color:red}</style>'
+    assert widget._notebook_html(literal + block) == literal
+    owner, comm = widget._view, widget.comm
+    widget._receive(widget, {'action':'attach','view':'first'}, [])
+    widget._receive(widget, {'action':'dispose','view':'first'}, [])
+    assert widget._view is owner and widget.comm is comm
+    assert widget._receive in widget._msg_callbacks.callbacks
+finally:
+    widget.close()
+    other.close()
+assert widget._view is None and widget._font_css == ''
 "#,
                 Some(&locals),
                 Some(&locals),

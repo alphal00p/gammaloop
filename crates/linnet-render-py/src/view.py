@@ -1,7 +1,21 @@
 """Optional notebook and headless adapters for the native prepared scene."""
 
+from functools import lru_cache
+from threading import RLock
+
+_widget_lock = RLock()
+
 
 def widget(view, request, javascript, completed=None):
+    # Imports may release the GIL. lru_cache alone permits concurrent initial
+    # misses to construct separate classes for the same source.
+    with _widget_lock:
+        cls = _widget_class(javascript)
+    return cls(view, request, completed)
+
+
+@lru_cache(maxsize=1)
+def _widget_class(javascript):
     try:
         import anywidget
         import traitlets
@@ -12,17 +26,33 @@ def widget(view, request, javascript, completed=None):
             "Scripts can explicitly use measured(browser='chromium')."
         ) from error
 
+    import base64
+    import json
+
+    # AnyWidget loads each source through a fresh Blob URL. Importing a stable
+    # inner URL gives the browser one module owner for document-scoped caches.
+    module_url = "data:text/javascript;base64," + base64.b64encode(
+        javascript.encode("utf-8")
+    ).decode("ascii")
+    module = json.dumps(module_url)
+
     class DiagramWidget(anywidget.AnyWidget):
-        _esm = javascript
+        _esm = f"export {{ default, measure }} from {module};"
         request = traitlets.Dict().tag(sync=True)
         rendered = traitlets.Dict().tag(sync=True)
+        font = traitlets.Dict().tag(sync=True)
 
         def __init__(self, owner, initial, html):
+            initial = dict(initial)
+            self._font_css = initial.pop("font_css")
             super().__init__(request=initial)
             self._view = owner
             self._views = set()
             if html is not None:
-                self.rendered = {"id": self.request["id"], "html": html}
+                self.rendered = {
+                    "id": self.request["id"],
+                    "html": self._notebook_html(html),
+                }
             self.on_msg(self._receive)
 
         def _receive(self, widget, content, buffers):
@@ -32,23 +62,39 @@ def widget(view, request, javascript, completed=None):
             elif action == "dispose":
                 # Detaching a frontend does not close a retained widget's comm.
                 self._views.discard(content["view"])
+            elif action == "font" and self._view is not None:
+                if content.get("key") == self.request["font_key"]:
+                    self.font = {"key": self.request["font_key"], "css": self._font_css}
             elif action == "measure" and self._view is not None:
                 try:
                     snapshot = self._view.measured(measurements=content["measurements"])
                     self.rendered = {
                         "id": self.request["id"],
-                        "html": snapshot.to_html(),
+                        "html": self._notebook_html(snapshot.to_html()),
                     }
                 except Exception as error:  # noqa: BLE001 -- Report failures in the widget.
                     self.rendered = {"id": self.request["id"], "error": str(error)}
+
+        def _notebook_html(self, html):
+            # Only the exact block owned by native capture is transported as a
+            # separate resource. Immutable exports retain their embedded font.
+            if self._font_css:
+                html = html.replace(
+                    '<style data-linnet-font="true"><![CDATA['
+                    + self._font_css
+                    + "]]></style>",
+                    "",
+                )
+            return html
 
         def close(self):
             if getattr(self, "_view", None) is not None:
                 self.on_msg(self._receive, remove=True)
                 self._view = None
+                self._font_css = ""
             super().close()
 
-    return DiagramWidget(view, request, completed)
+    return DiagramWidget
 
 
 def headless(request, javascript):
