@@ -4207,7 +4207,8 @@ impl TensorExpression {
     /// settings : DisplaySettings, optional
     ///     Tensor notation, index labels, and other presentation preferences.
     /// notation_source : str, optional
-    ///     Custom Typst notation source, with the same meaning as in to_html().
+    ///     Unsupported by the direct MathML pager. Use to_html() or to_svg()
+    ///     for custom Typst notation; paging raises ValueError when supplied.
     ///
     /// Returns
     /// -------

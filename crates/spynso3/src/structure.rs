@@ -230,9 +230,9 @@ impl SpensoName {
         if let Ok(mapping) = print.bind(py).cast::<PyDict>() {
             let sources = mapping.extract::<std::collections::BTreeMap<String, String>>()?;
             for (backend, source) in &sources {
-                if !matches!(backend.as_str(), "plain" | "latex" | "typst") {
+                if !matches!(backend.as_str(), "plain" | "latex" | "typst" | "mathml") {
                     return Err(PyValueError::new_err(
-                        "print mapping keys must be 'plain', 'latex', or 'typst'",
+                        "print mapping keys must be 'plain', 'latex', 'typst', or 'mathml'",
                     ));
                 }
                 tags.push(format!("{TENSOR_PRINT_HEAD_PREFIX}{backend}:{source}"));
@@ -328,7 +328,7 @@ impl SpensoName {
     ///     Normalize a newly constructed call. A callable receives an Expression
     ///     and returns its normalized Expression; tensor interfaces must remain valid.
     /// print : dict of str to str or callable, optional
-    ///     A mapping with keys "plain", "latex", or "typst" changes just the
+    ///     A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
     ///     displayed tensor name. Values are source without math delimiters,
     ///     for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
     ///     A callable uses Symbolica's print callback convention and replaces
@@ -504,7 +504,7 @@ impl SpensoName {
     ///     Normalize a newly constructed call. A callable receives an Expression
     ///     and returns its normalized Expression; tensor interfaces must remain valid.
     /// print : dict of str to str or callable, optional
-    ///     A mapping with keys "plain", "latex", or "typst" changes just the
+    ///     A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
     ///     displayed tensor name. Values are source without math delimiters,
     ///     for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
     ///     A callable uses Symbolica's print callback convention and replaces

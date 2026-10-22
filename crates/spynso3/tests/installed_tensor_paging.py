@@ -1,198 +1,30 @@
-"""Exercise the browser pager with the embedded renderer and live widget messages."""
+"""Exercise direct tensor MathML in the shared responsive expression viewer."""
 
+import builtins
 import itertools
 import re
 import sys
 import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
+from contextlib import ExitStack
+from pathlib import Path
 from unittest.mock import patch
 
 from symbolica import E, MathMLViewer, PrintMode, S
 from symbolica.community.tensor import (
+    AUTO,
     DisplaySettings,
+    Nc,
     Representation,
     TensorExpression,
     TensorName,
+    dot,
+    trace,
 )
 
 
-@unittest.skipIf(sys.platform in ("emscripten", "wasi"), "native compiler mock")
-class LeafCompilationTests(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        bootstrap = TensorName("leaf_compilation::bootstrap")(
-            Representation.mink(4)("mu")
-        ).paged()
-        try:
-            bootstrap._page()
-        finally:
-            bootstrap.close()
-        import _spenso_paging
-
-        cls.paging = _spenso_paging
-
-    def setUp(self):
-        self.document = ""
-        self.payload = {
-            "tree": b"",
-            "notation": "",
-            "settings": "(:)",
-            "power_base": False,
-        }
-
-        def compile_native(root, timeout):
-            (root / "out.html").write_text(self.document)
-
-        self.compiler = self.enterContext(
-            patch.object(self.paging, "_compile_native", side_effect=compile_native)
-        )
-
-    def test_indented_leaf_matches_compact_math_with_phantoms_and_alignment(self):
-        compact = (
-            "<mrow><msubsup><mphantom><mi>A</mi></mphantom>"
-            '<mrow><maligngroup groupalign="left"/><mi>μ</mi>'
-            '<malignmark edge="left"/></mrow><mspace width="0.5em"/>'
-            "</msubsup></mrow>"
-        )
-        expected = ET.tostring(ET.fromstring(compact), encoding="unicode")
-        for indented in (False, True):
-            with self.subTest(indented=indented):
-                root = ET.fromstring(f"<math>{compact}</math>")
-                if indented:
-                    ET.indent(root)
-                self.document = ET.tostring(root, encoding="unicode")
-                self.assertEqual(self.paging.compile_leaf(self.payload), expected)
-
-    def test_token_text_and_non_xml_spaces_are_preserved(self):
-        for namespace in ("", ' xmlns="http://www.w3.org/1998/Math/MathML"'):
-            for text in (" \t\n ", "  a b \t ", "\u00a0", "\u2003"):
-                with self.subTest(namespace=namespace, text=text):
-                    self.document = (
-                        f"<math{namespace}>\n <mrow>\n"
-                        + "".join(
-                            f"<{tag}>{text}<malignmark/>{text}</{tag}>\n"
-                            for tag in ("mi", "mo", "mn", "mtext", "ms")
-                        )
-                        + '<annotation encoding="text/plain"> \t </annotation>\n'
-                        + "<mrow>\u00a0<mspace width='1em'/>\u2003</mrow>\n"
-                        + "</mrow>\n</math>"
-                    )
-                    fragment = self.paging.compile_leaf(self.payload)
-                    row = ET.fromstring(fragment)
-                    self.assertIsNone(row.text)
-                    self.assertIsNone(row.tail)
-                    for token in row[:5]:
-                        self.assertEqual(token.text, text)
-                        self.assertEqual(token[0].tail, text)
-                        self.assertIsNone(token.tail)
-                    self.assertEqual(row[5].text, " \t ")
-                    self.assertEqual(row[6].text, "\u00a0")
-                    self.assertEqual(row[6][0].tail, "\u2003")
-
-    def test_xml_space_inheritance_resets_and_parent_owned_tails(self):
-        self.document = (
-            "<math>\n<mrow>\n"
-            '<mrow xml:space="preserve">  <mrow> \t<mi>x</mi> \n</mrow> \t'
-            '<mrow xml:space="default"> \n<mi>y</mi> \t</mrow>  </mrow>\n'
-            '<mrow xml:space="preserve"> \n<mi>z</mi> \t</mrow>\n'
-            "</mrow>\n</math>"
-        )
-        row = ET.fromstring(self.paging.compile_leaf(self.payload))
-        self.assertIsNone(row.text)
-        self.assertIsNone(row.tail)
-        preserved, sibling = row
-        self.assertEqual(preserved.text, "  ")
-        self.assertIsNone(preserved.tail)
-        inherited, reset = preserved
-        self.assertEqual(inherited.text, " \t")
-        self.assertEqual(inherited[0].tail, " \n")
-        self.assertEqual(inherited.tail, " \t")
-        self.assertIsNone(reset.text)
-        self.assertIsNone(reset[0].tail)
-        self.assertEqual(reset.tail, "  ")
-        self.assertEqual(sibling.text, " \n")
-        self.assertEqual(sibling[0].tail, " \t")
-        self.assertIsNone(sibling.tail)
-        space = "{http://www.w3.org/XML/1998/namespace}space"
-        self.assertEqual(preserved.get(space), "preserve")
-        self.assertEqual(reset.get(space), "default")
-        self.document = (
-            '<math xml:space="preserve"><mrow> \n<mi>x</mi> \t</mrow> \n'
-            '<mrow xml:space="default"> \t<mi>y</mi> \n</mrow> \t</math>'
-        )
-        root = ET.fromstring(f"<math>{self.paging.compile_leaf(self.payload)}</math>")
-        self.assertEqual(root[0].text, " \n")
-        self.assertEqual(root[0][0].tail, " \t")
-        self.assertEqual(root[0].tail, " \n")
-        self.assertIsNone(root[1].text)
-        self.assertIsNone(root[1][0].tail)
-        self.assertEqual(root[1].tail, " \t")
-
-    def test_annotation_xml_content_is_preserved(self):
-        content = (
-            '<annotation-xml encoding="application/xhtml+xml"> \t'
-            '<div xmlns="http://www.w3.org/1999/xhtml"> \n<span/> \t</div> \n'
-            "</annotation-xml>"
-        )
-        self.document = f"<math>\n<mrow>\n<mi>x</mi>\n{content}\n</mrow>\n</math>"
-        row = ET.fromstring(self.paging.compile_leaf(self.payload))
-        self.assertIsNone(row.text)
-        self.assertIsNone(row[0].tail)
-        self.assertIsNone(row[1].tail)
-        self.assertEqual(
-            ET.tostring(row[1], encoding="unicode"),
-            ET.tostring(ET.fromstring(content), encoding="unicode"),
-        )
-
-    def test_fragment_budget_is_applied_after_compaction_in_utf8_bytes(self):
-        for size in (4095, 4096, 4097):
-            with self.subTest(bytes=size):
-                # μ occupies two bytes; significant token text must survive.
-                text = "μ" * 1000 + "x" * (size - 2028)
-                compact = f"<mrow><mtext>{text}</mtext></mrow>"
-                self.assertEqual(len(compact.encode()), size)
-                self.document = f"<math>\n{' ' * 5000}<mrow>\n  <mtext>{text}</mtext>\n</mrow>\n</math>"
-                fragment = self.paging.compile_leaf(self.payload)
-                self.assertEqual(fragment, compact if size <= 4096 else None)
-
-    def test_compaction_keeps_path_removal_slash_styles_and_errors(self):
-        self.document = (
-            '<math data-symbolica-path="0">\n<mrow data-symbolica-path="1">\n'
-            '<mi data-symbolica-path="2" data-spenso-cancel="updiagonal" '
-            'style="color:red;">p</mi>\n</mrow>\n</math>'
-        )
-        row = ET.fromstring(self.paging.compile_leaf(self.payload))
-        self.assertTrue(all("data-symbolica-path" not in n.attrib for n in row.iter()))
-        self.assertEqual(row[0].get("style"), f"color:red;{self.paging.CANCEL_STYLE}")
-        self.assertEqual(row[0].get("data-spenso-cancel"), "updiagonal")
-        self.document = "<html/>"
-        with self.assertRaisesRegex(RuntimeError, "Renderer returned no MathML"):
-            self.paging.compile_leaf(self.payload)
-        self.document = "<math><mi></math>"
-        with self.assertRaises(ET.ParseError):
-            self.paging.compile_leaf(self.payload)
-        self.compiler.side_effect = RuntimeError("bad notation")
-        with self.assertRaisesRegex(RuntimeError, "bad notation"):
-            self.paging.compile_leaf(self.payload)
-
-
-class BrowserPagingTests(unittest.TestCase):
-    def setUp(self):
-        self.value = TensorExpression(
-            E("+".join(f"{i + 1}*wasm_paging::x^{i}" for i in range(301)))
-        )
-        self.original = self.value.to_expression()
-        self.pager = self.value.paged()
-        self.addCleanup(self.pager.close)
-        self.assertIs(type(self.pager), MathMLViewer)
-        # Also exercise this path in native CI. Real Pyodide needs no emulation.
-        self.enterContext(patch.object(sys, "platform", "emscripten"))
-        self.enterContext(patch.dict(sys.modules, {"typst": None}))
-        self.enterContext(
-            patch("subprocess.run", side_effect=AssertionError("WASM has no processes"))
-        )
-
+class PagingAssertions(unittest.TestCase):
     def assertPage(self, page):
         self.assertNotIn("Page rendering failed", page["html"])
         self.assertLessEqual(len(page["html"].encode()), 256 * 1024)
@@ -210,6 +42,214 @@ class BrowserPagingTests(unittest.TestCase):
         for root in roots:
             root.attrib.pop("data-spenso-math", None)
         return roots
+
+    @staticmethod
+    def visibleNodes(node):
+        if node.tag.rsplit("}", 1)[-1] not in (
+            "mphantom",
+            "annotation",
+            "annotation-xml",
+        ):
+            yield node
+            for child in node:
+                yield from PagingAssertions.visibleNodes(child)
+
+    @staticmethod
+    def visible(node):
+        text = "".join(n.text or "" for n in PagingAssertions.visibleNodes(node))
+        normalized = unicodedata.normalize("NFKC", text).translate(
+            dict.fromkeys(map(ord, "\u2061\u2062\u2063\u2064"))
+        )
+        return "".join(normalized.split())
+
+    @staticmethod
+    def tensorState(value):
+        return (
+            bytes(value.__getstate__()),
+            value.to_expression(),
+            value.axes,
+            value.structure,
+            value.name.to_expression() if value.name else None,
+            value.arguments,
+            value.reduction_status,
+        )
+
+    def notationRoots(self, value, settings=None):
+        original = self.tensorState(value)
+        viewer = value.paged(settings=settings)
+        self.addCleanup(viewer.close)
+        roots = [self.assertPage(viewer._render_page(layout))[0] for layout in (0, 1)]
+        self.assertEqual(self.tensorState(value), original)
+        return roots
+
+
+class DirectLeafPathTests(PagingAssertions):
+    def setUp(self):
+        original_import = builtins.__import__
+
+        def import_direct(name, *args, **kwargs):
+            if name.split(".", 1)[0] in ("typst", "_spenso_paging"):
+                raise AssertionError(f"direct paging imported {name}")
+            return original_import(name, *args, **kwargs)
+
+        self.enterContext(patch("builtins.__import__", side_effect=import_direct))
+        for entry in ("subprocess.run", "subprocess.Popen"):
+            self.enterContext(
+                patch(entry, side_effect=AssertionError("paging spawned a process"))
+            )
+        self.compiler = self.enterContext(
+            patch(
+                "symbolica.community.tensor_native._compile_typst",
+                side_effect=AssertionError("paging invoked the Typst compiler"),
+            )
+        )
+
+    def test_native_and_browser_pages_need_no_typst_module_worker_or_compiler(self):
+        gamma = TensorExpression.dirac_gamma(4)
+        for platform in (sys.platform, "emscripten"):
+            with (
+                self.subTest(platform=platform),
+                patch.object(sys, "platform", platform),
+            ):
+                value = gamma("a", "b", AUTO)
+                viewer = value.paged()
+                self.addCleanup(viewer.close)
+                self.assertIs(type(viewer), MathMLViewer)
+                root = self.assertPage(viewer._page())[0]
+                self.assertEqual(self.visible(root), "γab□")
+                self.assertPage(viewer._action({"action": "size", "value": 7}))
+        self.compiler.assert_not_called()
+        self.assertNotIn("_spenso_paging", sys.modules)
+
+    def test_callable_notation_uses_mathml_without_requesting_typst(self):
+        modes = []
+
+        def printer(expression, *, mode, **options):
+            modes.append(mode)
+            if mode != PrintMode.MathML:
+                raise AssertionError("pager requested a non-MathML custom printer")
+            return "<mover><mi>J</mi><mo>¯</mo></mover>"
+
+        head = S(
+            "paging_direct::OnlyMathML",
+            is_scalar=True,
+            tags=["spenso::print-callback"],
+            print=printer,
+        )
+        value = TensorExpression(head(7))
+        for root in self.notationRoots(value):
+            self.assertIn("J", self.visible(root))
+            self.assertTrue(
+                any(n.tag.rsplit("}", 1)[-1] == "mover" for n in root.iter())
+            )
+        self.assertTrue(modes)
+        self.assertEqual(set(modes), {PrintMode.MathML})
+
+    def test_paging_rejects_every_non_none_custom_typst_notation(self):
+        for value in (TensorExpression(E("x+1")), TensorExpression.dirac_gamma(4)):
+            original = self.tensorState(value)
+            for notation in ("", '#panic("custom-notation-must-stay-explicit")'):
+                with self.subTest(notation=notation, rank=value.rank):
+                    with self.assertRaises(ValueError) as error:
+                        value.paged(notation_source=notation)
+                    message = str(error.exception)
+                    self.assertIn("notation_source", message)
+                    self.assertRegex(message, r"to_html|to_svg|export")
+            self.assertEqual(self.tensorState(value), original)
+
+    def test_oversized_callable_keeps_the_tensor_and_all_scalar_arguments(self):
+        calls = []
+
+        def printer(expression, *, mode, **options):
+            if mode == PrintMode.MathML:
+                calls.append(expression)
+                return "<mtext>" + "x" * 5000 + "</mtext>"
+            return None
+
+        value = TensorName("paging_direct::Fallback", print=printer)(1, 2)
+        for root in self.notationRoots(value):
+            text = self.visible(root)
+            self.assertIn("Fallback", text)
+            self.assertIn("1", text)
+            self.assertIn("2", text)
+            self.assertNotIn("⋯", text)
+            self.assertFalse(
+                any("data-symbolica-marker" in n.attrib for n in root.iter())
+            )
+        self.assertTrue(calls)
+
+    def test_leaf_cache_distinguishes_exponents_from_function_arguments(self):
+        def printer(expression, *, mode, in_exp, **options):
+            if mode == PrintMode.MathML:
+                return f"<mtext>{'exponent' if in_exp else 'ordinary'}</mtext>"
+            return None
+
+        leaf = TensorName("paging_exponent::F", print=printer)(1).to_expression()
+        function = S("paging_exponent::f", is_scalar=True)
+        value = TensorExpression(function(leaf) + S("paging_exponent::x") ** leaf)
+        for root in self.notationRoots(value):
+            text = self.visible(root)
+            self.assertIn("ordinary", text)
+            self.assertIn("exponent", text)
+
+    def test_cooked_function_indices_keep_their_public_source_labels(self):
+        index = S("paging_cooked::i")
+        vector = TensorName.vector("paging_cooked::v")(Representation.euc(3))
+        source = (
+            vector(index).to_expression().replace(index, S("paging_cooked::edge")(7, 2))
+        )
+        value = TensorExpression(source, intern="indices")
+        for root in self.notationRoots(value, DisplaySettings(index_style="raw")):
+            text = self.visible(root)
+            self.assertIn("edge", text)
+            self.assertIn("7", text)
+            self.assertIn("2", text)
+            self.assertNotIn("cooked_", text)
+
+    def test_native_custom_mathml_preserves_annotations_and_significant_text(self):
+        text = "  a b \t \u00a0\u2003"
+        fragment = (
+            '<semantics><mrow><mtext xml:space="preserve">' + text + "</mtext>"
+            "<msub><mi>v</mi><mi>mu</mi></msub></mrow>"
+            '<annotation encoding="text/plain">  tensor \t </annotation>'
+            '<annotation-xml encoding="application/xhtml+xml">'
+            '<span xmlns="http://www.w3.org/1999/xhtml">  label </span>'
+            "</annotation-xml></semantics>"
+        )
+
+        def printer(expression, *, mode, **options):
+            return fragment if mode == PrintMode.MathML else None
+
+        head = S(
+            "paging_direct::Annotated",
+            is_scalar=True,
+            tags=["spenso::print-callback"],
+            print=printer,
+        )
+        for root in self.notationRoots(TensorExpression(head(1))):
+            by_tag = {n.tag.rsplit("}", 1)[-1]: n for n in root.iter()}
+            self.assertEqual(by_tag["mtext"].text, text)
+            self.assertEqual(by_tag["annotation"].text, "  tensor \t ")
+            self.assertEqual(by_tag["span"].text, "  label ")
+            self.assertIn("msub", by_tag)
+            self.assertNotIn("tensor", self.visible(root))
+
+
+class BrowserPagingTests(PagingAssertions):
+    def setUp(self):
+        self.value = TensorExpression(
+            E("+".join(f"{i + 1}*wasm_paging::x^{i}" for i in range(301)))
+        )
+        self.original = self.value.to_expression()
+        self.pager = self.value.paged()
+        self.addCleanup(self.pager.close)
+        self.assertIs(type(self.pager), MathMLViewer)
+        # Also exercise this path in native CI. Real Pyodide needs no emulation.
+        self.enterContext(patch.object(sys, "platform", "emscripten"))
+        self.enterContext(patch.dict(sys.modules, {"typst": None}))
+        self.enterContext(
+            patch("subprocess.run", side_effect=AssertionError("WASM has no processes"))
+        )
 
     def test_embedded_pages_are_contiguous_and_reversible(self):
         pages = []
@@ -294,7 +334,13 @@ class BrowserPagingTests(unittest.TestCase):
 
     def test_small_tensor_pages_preserve_permuted_ports_and_custom_printers(self):
         rep = Representation.euc(3)
-        value = TensorName("paging_ports::A", print={"typst": "macron(A)"})(
+        value = TensorName(
+            "paging_ports::A",
+            print={
+                "typst": "macron(A)",
+                "mathml": "<mover><mi>A</mi><mo>¯</mo></mover>",
+            },
+        )(
             S("paging_ports::parameter"), 7, rep("i"), Representation.mink(4)("mu")
         ).permute_axes([1, 0])
         original, axes = value.to_expression(), value.axes
@@ -351,8 +397,8 @@ class BrowserPagingTests(unittest.TestCase):
         self.addCleanup(call.close)
         first = ports._page()
         explicit = call._page()
-        first_text = "".join(self.assertPage(first)[0].itertext())
-        explicit_text = "".join(self.assertPage(explicit)[0].itertext())
+        first_text = self.visible(self.assertPage(first)[0])
+        explicit_text = self.visible(self.assertPage(explicit)[0])
         self.assertNotEqual(first_text, explicit_text)
         self.assertIn("3", explicit_text)
         self.assertIn("4", explicit_text)
@@ -363,10 +409,10 @@ class BrowserPagingTests(unittest.TestCase):
 
     def test_leaf_cache_distinguishes_product_and_power_contexts(self):
         def printer(expression, *, mode, in_product, in_exp_base, **options):
-            if mode != PrintMode.Typst:
+            if mode != PrintMode.MathML:
                 return None
             label = "base" if in_exp_base else "factor" if in_product else "single"
-            return f'upright("{label}")'
+            return f"<mtext>{label}</mtext>"
 
         head = S(
             "paging_context::F",
@@ -380,7 +426,7 @@ class BrowserPagingTests(unittest.TestCase):
         viewer = value.paged()
         self.addCleanup(viewer.close)
         for layout in (0, 1):
-            text = "".join(self.assertPage(viewer._render_page(layout))[0].itertext())
+            text = self.visible(self.assertPage(viewer._render_page(layout))[0])
             for label in ("single", "factor", "base"):
                 self.assertIn(label, text)
         self.assertEqual(bytes(value.__getstate__()), source)
@@ -441,45 +487,44 @@ class BrowserPagingTests(unittest.TestCase):
         self.assertEqual(value.axes, axes)
 
     def test_oversized_tensor_output_defers_to_native_argument_layout(self):
-        rep = Representation.mink(4)
-        bootstrap = TensorName("wasm_paging::bootstrap")(rep("mu")).paged()
-        bootstrap._page()
-        bootstrap.close()
-        import _spenso_paging
-
-        value = TensorName("wasm_paging::oversized")(rep("mu"), rep("nu"))
-        original = value.to_expression()
-        pager = value.paged()
-        self.addCleanup(pager.close)
-        with patch.object(
-            _spenso_paging, "compile_typst", return_value=b"x" * (256 * 1024 + 1)
-        ):
-            page = pager._page()
+        value = TensorName(
+            "paging_direct::Oversized",
+            print={"mathml": "<mtext>" + "μ" * 3000 + "</mtext>"},
+        )(Representation.mink(4)("mu"), Representation.euc(3)("i"))
+        original = self.tensorState(value)
+        viewer = value.paged()
+        self.addCleanup(viewer.close)
+        page = viewer._page()
         self.assertPage(page)
-        native = original.mathml_viewer().page()
-        self.assertEqual(
-            [ET.tostring(root) for root in self.assertPage(page)],
-            [ET.tostring(root) for root in self.assertPage(native)],
-        )
         self.assertEqual((page["kind"], page["unit"]), ("Function", "arguments"))
-        self.assertEqual(value.to_expression(), original)
+        self.assertNotIn("μ" * 3000, page["html"])
+        self.assertEqual(self.tensorState(value), original)
 
-    def test_renderer_errors_propagate_from_the_bounded_preview(self):
-        rep = Representation.mink(4)
-        bootstrap = TensorName("wasm_errors::bootstrap")(rep("mu")).paged()
-        bootstrap._page()
-        bootstrap.close()
-        import _spenso_paging
+    def test_callable_errors_follow_the_native_symbolica_fallback(self):
+        def printer(expression, *, mode, **options):
+            if mode == PrintMode.MathML:
+                raise RuntimeError("intentional-native-notation-failure")
 
-        value = TensorName("wasm_errors::T")(rep("mu"))
-        pager = value.paged()
-        self.addCleanup(pager.close)
-        with patch.object(
-            _spenso_paging, "compile_typst", side_effect=RuntimeError("bad notation")
-        ):
-            with self.assertRaisesRegex(RuntimeError, "bad notation"):
-                pager._page()
-        self.assertEqual(self.value.to_expression(), self.original)
+        head = S(
+            "paging_direct::Broken",
+            is_scalar=True,
+            tags=["spenso::print-callback"],
+            print=printer,
+        )
+        value = TensorExpression(head(1))
+        original = self.tensorState(value)
+        viewer = value.paged()
+        self.addCleanup(viewer.close)
+        # Symbolica's registered Python callback contract logs exceptions and
+        # declines the override. The scoped pager preserves that native fallback.
+        native = value.to_expression().mathml_viewer()
+        self.addCleanup(native.close)
+        for layout in (0, 1):
+            page = viewer._render_page(layout)
+            expected = native._render_page(layout)
+            self.assertEqual(page["html"], expected["html"])
+            self.assertIn("Broken", self.visible(self.assertPage(page)[0]))
+        self.assertEqual(self.tensorState(value), original)
 
     def test_scalar_arithmetic_uses_identical_native_responsive_layouts(self):
         summands = "+".join(f"layout::a{i}" for i in range(10))
@@ -509,35 +554,32 @@ class BrowserPagingTests(unittest.TestCase):
                 self.assertEqual(value.to_expression(), original)
 
     def test_embedded_tensor_leaf_keeps_semantic_annotations(self):
-        rep = Representation.mink(4)
-        bootstrap = TensorName("wasm_annotation::bootstrap")(rep("mu")).paged()
-        bootstrap._page()
-        bootstrap.close()
-        import _spenso_paging
-
-        document = (
-            "<html><body><math><semantics><mstyle><mrow>"
-            "<mi>T</mi><msub><mi>v</mi><mi>mu</mi></msub>"
-            "</mrow></mstyle><annotation encoding='text/plain'>tensor</annotation>"
-            + "</semantics></math></body></html>"
+        fragment = (
+            "<semantics><mstyle><mrow><mi>T</mi>"
+            "<msub><mi>v</mi><mi>mu</mi></msub></mrow></mstyle>"
+            "<annotation encoding='text/plain'>tensor</annotation></semantics>"
         )
-        pager = TensorName("wasm_annotation::T")(rep("mu")).paged()
-        self.addCleanup(pager.close)
-        with patch.object(
-            _spenso_paging, "compile_typst", return_value=document.encode()
-        ):
-            page = pager._page()
-        self.assertPage(page)
-        root = ET.fromstring(
-            re.search(r"<math\b.*?</math>", page["html"], re.DOTALL).group()
-        )
-        annotations = [
-            n for n in root.iter() if n.tag.rsplit("}", 1)[-1] == "annotation"
-        ]
-        self.assertEqual([node.text for node in annotations], ["tensor"])
-        self.assertTrue(any(n.tag.rsplit("}", 1)[-1] == "msub" for n in root.iter()))
 
-    def test_generated_aliases_reserve_free_labels_and_keep_leaf_payloads_local(self):
+        def printer(expression, *, mode, **options):
+            return fragment if mode == PrintMode.MathML else None
+
+        head = S(
+            "paging_annotations::T",
+            is_scalar=True,
+            tags=["spenso::print-callback"],
+            print=printer,
+        )
+        for root in self.notationRoots(TensorExpression(head(1))):
+            annotations = [
+                n for n in root.iter() if n.tag.rsplit("}", 1)[-1] == "annotation"
+            ]
+            self.assertEqual([node.text for node in annotations], ["tensor"])
+            self.assertTrue(
+                any(n.tag.rsplit("}", 1)[-1] == "msub" for n in root.iter())
+            )
+            self.assertEqual(self.visible(root), "Tvmu")
+
+    def test_generated_aliases_reserve_free_labels_and_stay_viewer_local(self):
         rep = Representation.mink(4)
         for name in ("F", "v", "w"):
             TensorName(f"alias_history::{name}")
@@ -559,68 +601,551 @@ class BrowserPagingTests(unittest.TestCase):
         original = value.to_expression()
         viewer = value.paged(settings=DisplaySettings(index_style="alphabet"))
         self.addCleanup(viewer.close)
-        bootstrap = TensorName("alias_history::bootstrap")(rep("a")).paged()
-        bootstrap._page()
-        bootstrap.close()
-        import _spenso_paging
-
-        with patch.object(
-            _spenso_paging, "compile_leaf", wraps=_spenso_paging.compile_leaf
-        ) as render:
-            page = viewer._page()
-            first = page["html"]
-            while True:
-                roots = self.assertPage(page)
-                hidden = {
-                    child
-                    for root in roots
-                    for phantom in root.iter()
-                    if phantom.tag.rsplit("}", 1)[-1] == "mphantom"
-                    for child in phantom.iter()
-                }
-                numbered_aliases = {
-                    child
-                    for root in roots
-                    for subscript in root.iter()
-                    if subscript.tag.rsplit("}", 1)[-1] == "msub"
-                    and len(subscript) == 2
-                    and unicodedata.normalize("NFKC", subscript[0].text or "")
-                    in ("μ", "ν", "ρ", "σ")
-                    and subscript[1].tag.rsplit("}", 1)[-1] == "mn"
-                    for child in subscript.iter()
-                }
-                labels = [
-                    unicodedata.normalize("NFKC", node.text or "")
-                    for root in roots
-                    for node in root.iter()
-                    if node not in hidden
-                    and node not in numbered_aliases
-                    and node.tag.rsplit("}", 1)[-1] in ("mi", "mtext")
-                ]
-                # Every shown term owns one explicit μ and ρ. Generated labels
-                # skip both, including when advancing past an earlier alias ν.
-                self.assertEqual(labels.count("μ"), page["end"] - page["start"])
-                self.assertEqual(labels.count("ρ"), page["end"] - page["start"])
-                if page["start"] == 0:
-                    self.assertIn("ν", labels)
-                    self.assertIn("σ", labels)
-                if page["end"] >= 75 or page["next"] is None:
-                    break
-                page = viewer._action({"action": "next"})
-            self.assertGreaterEqual(page["end"], 75)
-            for call in render.call_args_list:
-                aliases = [
-                    line
-                    for line in call.args[0]["settings"].splitlines()
-                    if "index-aliases:" in line
-                ][-1]
-                self.assertLessEqual(aliases.count('"spenso::mink"'), 2)
-                self.assertLess(len(aliases.encode()), 1024)
-            while page["previous"]:
-                page = viewer._action({"action": "previous"})
-            self.assertEqual(page["html"], first)
+        page = viewer._page()
+        first = page["html"]
+        while True:
+            roots = self.assertPage(page)
+            hidden = {
+                child
+                for root in roots
+                for phantom in root.iter()
+                if phantom.tag.rsplit("}", 1)[-1] == "mphantom"
+                for child in phantom.iter()
+            }
+            numbered_aliases = {
+                child
+                for root in roots
+                for subscript in root.iter()
+                if subscript.tag.rsplit("}", 1)[-1] == "msub"
+                and len(subscript) == 2
+                and unicodedata.normalize("NFKC", subscript[0].text or "")
+                in ("μ", "ν", "ρ", "σ")
+                and subscript[1].tag.rsplit("}", 1)[-1] == "mn"
+                for child in subscript.iter()
+            }
+            labels = [
+                unicodedata.normalize("NFKC", node.text or "")
+                for root in roots
+                for node in root.iter()
+                if node not in hidden
+                and node not in numbered_aliases
+                and node.tag.rsplit("}", 1)[-1] in ("mi", "mtext")
+            ]
+            # Every shown term owns one explicit μ and ρ. Generated labels
+            # skip both, including when advancing past an earlier alias ν.
+            self.assertEqual(labels.count("μ"), page["end"] - page["start"])
+            self.assertEqual(labels.count("ρ"), page["end"] - page["start"])
+            if page["start"] == 0:
+                self.assertIn("ν", labels)
+                self.assertIn("σ", labels)
+            if page["end"] >= 75 or page["next"] is None:
+                break
+            page = viewer._action({"action": "next"})
+        self.assertGreaterEqual(page["end"], 75)
+        while page["previous"]:
+            page = viewer._action({"action": "previous"})
+        self.assertEqual(page["html"], first)
         self.assertEqual(value.to_expression(), original)
         self.assertEqual(value.structure, interface)
+        fresh = value.paged(settings=DisplaySettings(index_style="alphabet"))
+        self.addCleanup(fresh.close)
+        self.assertEqual(fresh._page()["html"], first)
+
+
+class TensorNotationTests(PagingAssertions):
+    @staticmethod
+    def notationCases():
+        mink, spin = Representation.mink(4), Representation.bis(4)
+        gamma = TensorExpression.dirac_gamma(4)
+        p, q = [
+            TensorName.vector(f"paging_matrix::{name}")(mink) for name in ("p", "q")
+        ]
+        left = (gamma(AUTO, AUTO, "mu") * p("mu")).contract()
+        right = (gamma(AUTO, AUTO, "nu") * q("nu")).contract()
+        dual = Representation("paging_matrix::V", 3, is_self_dual=False)
+        bra = TensorName.vector("paging_matrix::a")(dual.dual())
+        ket = TensorName.vector("paging_matrix::b")(dual)
+        matrix = TensorName("paging_matrix::M")
+        tensor = TensorName("paging_matrix::T")(mink, mink)
+        cases = [
+            ("gamma-indexed", gamma("a", "b", "mu"), None, "γabmu", 0),
+            ("gamma-open", gamma("a", "b", AUTO), None, "γab□", 0),
+            ("gamma-zero", TensorExpression.gamma0(4)("a", "b"), None, "γ0ab", 0),
+            ("gamma-five", TensorExpression.gamma5(4)("a", "b"), None, "γ5ab", 0),
+            ("projector-plus", TensorExpression.projp(4)("a", "b"), None, "P+ab", 0),
+            ("projector-minus", TensorExpression.projm(4)("a", "b"), None, "P−ab", 0),
+            ("slash-indexed", left("a", "b"), None, "pab", 1),
+            ("slash-open", left, None, "p□0□1", 1),
+            ("slash-chain", left * right, None, "[pq]□0□1", 2),
+            ("slash-trace", trace(spin, left, right), None, "Tr(pq)", 2),
+            ("gamma-chain", gamma * gamma, None, "[γ□γ□]□0□1", 0),
+            (
+                "bra-ket",
+                matrix(bra.to_expression(), ket.to_expression(), dual),
+                None,
+                "⟨a|M▶◀□|b⟩",
+                0,
+            ),
+            (
+                "supplied-port",
+                (tensor("mu", AUTO) * p("mu")).contract(),
+                None,
+                "⟨p|T■□",
+                0,
+            ),
+            (
+                "schoonschip",
+                (tensor("mu", AUTO) * p("mu")).contract(),
+                DisplaySettings.schoonschip(),
+                "Tp□",
+                0,
+            ),
+        ]
+        fundamental, adjoint = Representation.cof(3), Representation.coad(8)
+        for name, expression, settings in (
+            ("casimir-fundamental", fundamental.casimir(), None),
+            ("casimir-adjoint", adjoint.casimir(), None),
+            ("dynkin-index", fundamental.dynkin_index(), None),
+            ("color-gram", fundamental.gram(4, adjoint), None),
+            (
+                "color-dimensions",
+                fundamental.casimir(),
+                DisplaySettings(show_dimensions=True),
+            ),
+            (
+                "color-explicit",
+                fundamental.casimir(),
+                DisplaySettings(invariant_style="explicit"),
+            ),
+            ("color-unscripted", Nc(), DisplaySettings(symbol_scripts=False)),
+        ):
+            cases.append((name, TensorExpression(expression), settings, None, 0))
+        euc = Representation.euc(3)
+        indexed = TensorName("paging_matrix::A")(euc("i"), mink("mu"))
+        component = TensorExpression(
+            TensorName("paging_matrix::C")(euc, euc).components()[1]
+        )
+        custom = TensorName(
+            "paging_matrix::Custom",
+            print={
+                "mathml": "<mover><mi>A</mi><mo>¯</mo></mover>",
+                "typst": "macron(A)",
+            },
+        )(euc("i"))
+        graph_index = S(
+            "paging_indices::hedge",
+            tags=["spenso::index", "spenso::index-label:h"],
+        )
+        TensorName("paging_matrix::Scoped")
+        scoped_source = S("paging_matrix::Scoped")(
+            S("spenso::mink")(4, graph_index(2, 1))
+        )
+        scoped = TensorExpression(scoped_source).wrap_indices(S("paging_matrix::scope"))
+        cases.extend(
+            [
+                ("metric", TensorExpression.g(mink("i"), mink("j")), None, None, 0),
+                (
+                    "representation",
+                    TensorExpression(mink.to_expression()),
+                    None,
+                    None,
+                    0,
+                ),
+                ("layout-ports", indexed, DisplaySettings.ports(), None, 0),
+                ("layout-call", indexed, DisplaySettings.call(), None, 0),
+                (
+                    "layout-dimensions",
+                    indexed,
+                    DisplaySettings(show_dimensions=True),
+                    None,
+                    0,
+                ),
+                (
+                    "index-spacing",
+                    indexed,
+                    DisplaySettings(index_gap="0.37em"),
+                    None,
+                    0,
+                ),
+                (
+                    "factor-spacing",
+                    left * right,
+                    DisplaySettings(factor_gap="0.51em"),
+                    None,
+                    2,
+                ),
+                ("component-superscript", component, None, None, 0),
+                (
+                    "component-array",
+                    component,
+                    DisplaySettings(component_style="array"),
+                    None,
+                    0,
+                ),
+                ("custom-mathml-head", custom, None, None, 0),
+                ("power-grouping", dot(p, q) ** 2, None, None, 0),
+                ("typed-zero", 0 * indexed, None, "0", 0),
+            ]
+        )
+        for style in ("alphabet", "graph", "raw"):
+            cases.append(
+                (f"index-{style}", scoped, DisplaySettings(index_style=style), None, 0)
+            )
+        return cases
+
+    def test_full_notation_matrix_in_responsive_layouts(self):
+        for name, value, settings, expected, strokes in self.notationCases():
+            with self.subTest(name=name):
+                for root in self.notationRoots(value, settings):
+                    if expected is not None:
+                        self.assertEqual(self.visible(root), expected)
+                    self.assertTrue(self.visible(root))
+                    cancelled = [
+                        n
+                        for n in self.visibleNodes(root)
+                        if n.get("data-spenso-cancel") == "updiagonal"
+                    ]
+                    self.assertEqual(len(cancelled), strokes)
+                    for node in cancelled:
+                        self.assertIn("linear-gradient", node.get("style", ""))
+                        self.assertIn("currentColor", node.get("style", ""))
+
+    def test_metrics_representations_and_permuted_logical_ports(self):
+        mink, euc = Representation.mink(4), Representation.euc(3)
+        dual = Representation("paging_metric::V", 5, is_self_dual=False)
+        for rep in (mink, euc, dual):
+            paired = rep.dual() if rep == dual else rep
+            for first, second in ((rep("i"), paired("j")), (rep, paired)):
+                metric = TensorExpression.g(first, second)
+                for root in self.notationRoots(metric):
+                    text = self.visible(root)
+                    self.assertTrue("g" in text or "δ" in text, text)
+                    if first is rep:
+                        ports = [
+                            n
+                            for n in self.visibleNodes(root)
+                            if "data-spenso-open-axis" in n.attrib
+                        ]
+                        self.assertEqual(len(ports), 2)
+                    else:
+                        self.assertIn("i", text)
+                        self.assertIn("j", text)
+        # The factory retains AUTO ports; permutation materializes their
+        # assignments. The renderer follows each carrier's established metadata.
+        value = TensorExpression.dirac_gamma(4)
+        for root in self.notationRoots(value):
+            ports = [
+                n
+                for n in self.visibleNodes(root)
+                if "data-spenso-open-axis" in n.attrib
+            ]
+            self.assertCountEqual(
+                [n.get("data-spenso-open-axis") for n in ports], ["0", "1", "2"]
+            )
+            self.assertTrue(all("spenso::" in n.get("title", "") for n in ports))
+        permuted = value.permute_axes([2, 0, 1])
+        for root in self.notationRoots(permuted):
+            self.assertEqual(self.visible(root), "γμab")
+            self.assertFalse(
+                any("data-spenso-open-axis" in n.attrib for n in root.iter())
+            )
+        labelled = TensorName("paging_metric::Labelled")(
+            S("paging_metric::x"), 7, mink("mu"), euc("i")
+        )
+        for root in self.notationRoots(labelled.permute_axes([1, 0])):
+            self.assertIn("7", self.visible(root))
+        for rep, family, dimension in ((mink, "mink", "4"), (euc, "euc", "3")):
+            value = TensorExpression(rep.to_expression())
+            for root in self.notationRoots(value):
+                self.assertIn(family, self.visible(root))
+                self.assertIn(dimension, self.visible(root))
+
+    def test_color_invariants_keep_degree_representations_and_settings(self):
+        fundamental, adjoint = Representation.cof(3), Representation.coad(8)
+        cases = [
+            (fundamental.casimir(), None, "CF"),
+            (adjoint.casimir(), None, "CA"),
+            (fundamental.dynkin_index(), None, "TR"),
+            (Nc(), None, "Nc"),
+            (
+                fundamental.casimir(),
+                DisplaySettings(invariant_style="explicit"),
+                "C2(F)",
+            ),
+            (fundamental.casimir(4), None, "C4(F)"),
+            (fundamental.dynkin_index(4), None, "I4(F)"),
+            (fundamental.gram(4, adjoint), None, "G4(F,A)"),
+            (fundamental.casimir(), DisplaySettings(show_dimensions=True), "C2(F3)"),
+            (fundamental.casimir(), DisplaySettings(symbol_scripts=False), "CF"),
+        ]
+        for expression, settings, expected in cases:
+            with self.subTest(expected=expected, settings=settings):
+                for root in self.notationRoots(TensorExpression(expression), settings):
+                    self.assertEqual(self.visible(root), expected)
+
+    def test_layout_spacing_commas_dimensions_and_component_styles(self):
+        rep = Representation.euc(3)
+        value = TensorName("paging_layout::A")(rep("i"), rep("j"))
+        settings = DisplaySettings(
+            tensor_layout="call", commas=True, show_dimensions=True
+        )
+        for root in self.notationRoots(value, settings):
+            text = self.visible(root)
+            self.assertIn("(", text)
+            self.assertIn(",", text)
+            self.assertIn("3", text)
+        without = DisplaySettings(tensor_layout="call", commas=False)
+        for root in self.notationRoots(value, without):
+            self.assertNotIn(",", self.visible(root))
+        spaced = DisplaySettings(index_gap="0.37em", factor_gap="0.51em")
+        indexed = self.notationRoots(value, spaced)[0]
+        widths = [
+            n.get("width")
+            for n in indexed.iter()
+            if n.tag.rsplit("}", 1)[-1] == "mspace"
+        ]
+        self.assertIn("0.37em", widths)
+        p, q = [TensorName.vector(f"paging_layout::{name}")(rep) for name in ("p", "q")]
+        contraction = dot(p, q)
+        for root in self.notationRoots(contraction**2, spaced):
+            powers = [
+                n for n in self.visibleNodes(root) if n.tag.rsplit("}", 1)[-1] == "msup"
+            ]
+            self.assertEqual(len(powers), 1)
+            self.assertIn(self.visible(powers[0][0]), ("(p·q)", "(p⋅q)"))
+            self.assertEqual(self.visible(powers[0][1]), "2")
+        gamma = TensorExpression.dirac_gamma(4)
+        # Factor gaps apply inside semantic chains. Arithmetic between distinct
+        # scalar factors remains owned by Symbolica's native renderer.
+        product = gamma * gamma
+        for root in self.notationRoots(product, spaced):
+            widths = [
+                n.get("width")
+                for n in root.iter()
+                if n.tag.rsplit("}", 1)[-1] == "mspace"
+            ]
+            self.assertIn("0.51em", widths)
+        component = TensorExpression(value.components()[1])
+        superscript = self.notationRoots(component)[0]
+        array = self.notationRoots(component, DisplaySettings(component_style="array"))[
+            0
+        ]
+        self.assertTrue(
+            any(n.tag.rsplit("}", 1)[-1] == "msup" for n in superscript.iter())
+        )
+        self.assertIn("[", self.visible(array))
+        self.assertIn("0", self.visible(array))
+        self.assertIn("1", self.visible(array))
+
+    def test_index_styles_scopes_and_typed_zero_preserve_all_source_metadata(self):
+        TensorName("paging_scopes::T")
+        graph_index = S(
+            "paging_indices::hedge",
+            tags=["spenso::index", "spenso::index-label:h"],
+        )
+        value = TensorExpression(
+            S("paging_scopes::T")(
+                S("spenso::mink")(4, graph_index(2, 1)),
+                S("spenso::mink")(4, S("free")),
+            )
+        )
+        wrapped = value.wrap_indices(S("paging_scopes::scope"))
+        texts = {}
+        for style in ("alphabet", "graph", "raw"):
+            roots = self.notationRoots(wrapped, DisplaySettings(index_style=style))
+            texts[style] = self.visible(roots[0])
+            self.assertIn("free", texts[style])
+        self.assertIn("μ", texts["alphabet"])
+        self.assertIn("′", texts["alphabet"])
+        self.assertNotIn("hedge", texts["alphabet"])
+        self.assertIn("2", texts["graph"])
+        self.assertIn("1", texts["graph"])
+        self.assertNotEqual(texts["alphabet"], texts["raw"])
+        zero = (0 * value).with_name("paging_scopes::NamedZero")
+        for root in self.notationRoots(zero):
+            self.assertEqual(self.visible(root), "0")
+        self.assertEqual(zero.rank, 2)
+        self.assertEqual(zero.axes, value.axes)
+
+    def test_cached_fragments_are_path_neutral_and_reused_across_layouts(self):
+        fragment = '<mrow data-symbolica-path="97"><mi>A</mi><mo>′</mo></mrow>'
+        tensor = TensorName("paging_paths::T", print={"mathml": fragment})(
+            Representation.mink(4)("mu")
+        )
+        f, g = S("paging_paths::F", "paging_paths::G", is_scalar=True)
+        value = TensorExpression(f(tensor.to_expression()) + g(tensor.to_expression()))
+        viewer = value.paged()
+        self.addCleanup(viewer.close)
+        for layout in (0, 1, 0):
+            page = viewer._render_page(layout)
+            root = self.assertPage(page)[0]
+            self.assertEqual(self.visible(root).count("A"), 2)
+            self.assertNotIn("97", [n.get("data-symbolica-path") for n in root.iter()])
+
+    def test_multi_root_custom_head_stays_inside_component_power_base(self):
+        head = TensorName(
+            "paging_grouping::A", print={"mathml": "<mi>A</mi><mo>′</mo>"}
+        )
+        component = TensorExpression(head(Representation.euc(3)).components()[1])
+        for root in self.notationRoots(component**2):
+            powers = [
+                node
+                for node in self.visibleNodes(root)
+                if node.tag.rsplit("}", 1)[-1] == "msup"
+                and len(node) == 2
+                and self.visible(node[1]) == "2"
+            ]
+            self.assertEqual(len(powers), 1)
+            base = self.visible(powers[0][0])
+            self.assertIn("A′", base)
+            self.assertIn("1", base)
+            self.assertEqual(self.visible(root).count("′"), 1)
+
+    def test_native_leaf_cache_reuses_recent_entries_and_evicts_old_entries(self):
+        calls = {}
+
+        def printer(expression, *, mode, **options):
+            if mode != PrintMode.MathML:
+                return None
+            key = expression.format_plain()
+            calls[key] = calls.get(key, 0) + 1
+            return "<mi>leaf</mi>"
+
+        head = TensorName("paging_cache::F", print=printer)
+        value = TensorExpression(sum(head(i) for i in range(140)))
+        original = self.tensorState(value)
+        viewer = value.paged(page_size=1)
+        self.addCleanup(viewer.close)
+        first = viewer._render_page(0)
+        self.assertPage(first)
+        recent = dict(calls)
+        self.assertTrue(recent)
+        self.assertPage(viewer._render_page(0))
+        self.assertEqual(calls, recent)
+        page = viewer._page()
+        while page["next"] is not None:
+            page = viewer._action({"action": "next"})
+            self.assertPage(page)
+        self.assertGreaterEqual(len(calls), 140)
+        while page["previous"]:
+            page = viewer._action({"action": "previous"})
+        self.assertEqual(page["html"], first["html"])
+        self.assertTrue(any(calls[key] > count for key, count in recent.items()))
+        self.assertEqual(self.tensorState(value), original)
+
+
+class ExplicitNotationExportTests(PagingAssertions):
+    def test_custom_typst_notation_remains_complete_in_explicit_exports(self):
+        assets = Path(__file__).resolve().parents[1] / "typst"
+        notation = (assets / "notation.typ").read_text() + (
+            "\n#let default-notation(settings: (:)) = notation(settings: settings, "
+            'heads: ("paging_exports::A": $macron(Z)$))\n'
+        )
+        head = TensorName(
+            "paging_exports::A",
+            print={"typst": "macron(A)", "mathml": "<mi>native</mi>"},
+        )
+        value = TensorExpression(sum(head(i) for i in range(35)))
+        original = self.tensorState(value)
+        self.assertIn("macron(A)", value.to_typst())
+        html = value.to_html(notation_source=notation)
+        root = ET.fromstring(re.search(r"<math\b.*?</math>", html, re.DOTALL)[0])
+        self.assertEqual(self.visible(root).count("Z"), 35)
+        self.assertTrue(any(n.tag.rsplit("}", 1)[-1] == "mover" for n in root.iter()))
+        self.assertIn("<svg", value.to_svg(notation_source=notation))
+        formatted = value.formatted(notation_source=notation)
+        self.assertIsNone(formatted.mathml_viewer())
+        formatted_root = ET.fromstring(
+            re.search(r"<math\b.*?</math>", formatted._repr_html_(), re.DOTALL)[0]
+        )
+        self.assertEqual(self.visible(formatted_root).count("Z"), 35)
+        for render in (value.to_html, value.to_svg):
+            with self.assertRaisesRegex(RuntimeError, "explicit-notation-failure"):
+                render(notation_source='#panic("explicit-notation-failure")')
+        self.assertEqual(self.tensorState(value), original)
+
+
+def browser_fixtures():
+    """Capture fresh native pages and hover responses only when called explicitly."""
+    cases = []
+    with ExitStack() as cleanup:
+        for (
+            name,
+            value,
+            settings,
+            expected,
+            strokes,
+        ) in TensorNotationTests.notationCases():
+            original = PagingAssertions.tensorState(value)
+            viewer = value.paged(settings=settings)
+            cleanup.callback(viewer.close)
+            cases.append(
+                {
+                    "name": name,
+                    "page": viewer._page(),
+                    "expected": expected,
+                    "slash_count": strokes,
+                }
+            )
+            assert PagingAssertions.tensorState(value) == original
+
+        rep = Representation.mink(4)
+        value = (
+            TensorName("paging_browser::T")(rep("mu"), rep("nu"))
+            * (E("paging_browser::x+1") ** 300).expand()
+            * (E("paging_browser::y+1") ** 250).expand()
+        )
+        original = PagingAssertions.tensorState(value)
+        viewer = value.paged()
+        cleanup.callback(viewer.close)
+        page = viewer._page()
+        esm = viewer._get_widget()._esm
+        previews = {}
+        for layout in [page, *page["layouts"]]:
+            for (path, label), start in zip(layout["markers"], layout["marker_starts"]):
+                key = f"{layout['layout']}:{','.join(map(str, path))}:{start}"
+                field, hover = viewer._message(
+                    {"action": "preview", "value": path, "layout": layout["layout"]}
+                )
+                inspect_field, inspected = viewer._message(
+                    {
+                        "action": "preview",
+                        "value": path,
+                        "layout": layout["layout"],
+                        "popup": True,
+                        "size": page["page_size"],
+                    }
+                )
+                previews[key] = {
+                    "path": path,
+                    "start": start,
+                    "label": label,
+                    "layout": layout["layout"],
+                    "field": field,
+                    "page": hover,
+                    "inspect_field": inspect_field,
+                    "inspect_page": inspected,
+                }
+        compact = page["layouts"][-1]
+        target = next(path for path, label in compact["markers"] if "sum" in label)
+        opened = viewer._action(
+            {"action": "open", "value": target, "layout": compact["layout"]}
+        )
+        advanced = viewer._action({"action": "next"})
+        restored = viewer._action({"action": "back"})
+        assert restored["html"] == page["html"]
+        assert PagingAssertions.tensorState(value) == original
+        cases.append(
+            {
+                "name": "nested-pagination",
+                "page": page,
+                "previews": previews,
+                "opened": opened,
+                "next": advanced,
+                "back": restored,
+            }
+        )
+    return {"esm": esm, "cases": cases}
 
 
 if __name__ == "__main__":

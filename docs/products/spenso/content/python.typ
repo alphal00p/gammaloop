@@ -85,19 +85,22 @@ extension. Explicit rendering needs no Python compiler package.
 === Notebook expression display
 
 Interactive tensor output uses Symbolica's shared responsive MathML renderer
-and `MathMLViewer`. Arithmetic uses the same eight width-fitting layouts,
+and official `MathMLViewer::expression` factory. Symbolica owns arithmetic,
+cursor caching and navigation, with the same eight width-fitting layouts,
 nested omissions, inline expansion, hover previews, inspection, and keyboard
 zoom as `expression.to_expression()`. Spenso supplies only tensor notation
-leaves, retaining logical index order and custom printers without expanding
-or changing the expression.
+leaves through its bounded native Rust MathML printer. The viewer retains typed
+metadata, local index aliases and a bounded leaf cache while preserving logical
+index order and the source expression. Paging uses no CBOR render tree, Typst
+compiler or notation worker.
 
 Use `expression.paged(page_size=25)` to request the tensor viewer explicitly.
 `expression.to_expression().mathml_viewer()` opens the same viewer with
 native Symbolica notation. Page sizes range from 1 to 500; rendering budgets
-may shorten a page. Notebook
-display requires the Community assembly's `notebook-display` extra, which
-provides the widget. Native notation workers use the embedded Rust Typst
-compiler with a rendering deadline; no Python Typst package is required.
+may shorten a page. Supplying `notation_source` to `paged()` raises a
+`ValueError`; custom Typst notation is supported by static exports.
+Notebook display requires the Community assembly's `notebook-display` extra,
+which provides the widget.
 Explicit `to_html()` and `to_svg()` exports remain complete and use the
 embedded renderer.
 
@@ -727,9 +730,10 @@ sandboxed frame and requires no live Python callbacks or external assets.
 
 `TensorExpression` and `Tensor` expose semantic display methods. A network's
 `expression()` provides the same formula display separately from its graph.
-Symbolic notebook outputs render the complete expression in HTML, LaTeX, and
-pretty text, regardless of its size. Display preserves factorization and ordered
-ports without expanding or simplifying the calculation.
+Symbolic notebook outputs use the shared viewer for interactive presentation.
+Explicit HTML, LaTeX and pretty-text exports retain the complete expression.
+Display preserves factorization and ordered ports without expanding or
+simplifying the calculation.
 
 The notebook frontend can impose its own output limit. Marimo's
 `tool.marimo.runtime.output_max_bytes` setting in `pyproject.toml` controls that
@@ -741,12 +745,15 @@ backend until the notebook requests it and cache that representation. Their
 plain-text fallback also includes the complete expression. Settings are captured
 when creating the display value; custom printers run when a backend is first
 requested. Create a new formatted value to reflect later changes to printer rules.
+Supplying `notation_source` selects static output without an interactive viewer.
 The explicit `to_html()`, `to_svg()`, `to_latex()`, `to_typst()`, and
 `format_tensor()` methods provide the same complete expression in the requested
 format.
 
 `DisplaySettings` controls the ports, Schoonschip, and call layouts, dimensions, parentheses,
-commas, symbol scripts, component notation, and index/factor spacing. Positional calls such as `to_typst(True)`
+commas, symbol scripts, component notation, and index/factor spacing. In the pager,
+`factor_gap` controls spacing inside semantic tensor notation, such as chains and traces;
+Symbolica retains its own spacing between arithmetic factors. Positional calls such as `to_typst(True)`
 and `formatted(True)` still request dimensions. Rich Typst output collects inverse factors
 at the same product level into a single fraction, including rational coefficients.
 The default `ports` layout displays vectors inserted into tensors with bras and kets.
@@ -817,17 +824,24 @@ from symbolica.community.tensor import Representation, TensorName
 
 Jbar = TensorName(
     "Jbar",
-    print={"typst": "macron(J)", "latex": r"\bar{J}"},
+    print={
+        "typst": "macron(J)",
+        "latex": r"\bar{J}",
+        "mathml": "<mover><mi>J</mi><mo>¯</mo></mover>",
+    },
 )(Representation.bis(4))
 ```
 
 Mapping values are trusted backend source without math delimiters. Spenso adds ordinary
 arguments, abstract indices, and component coordinates, including inside concrete tensor
 matrices. An omitted backend keeps the ordinary name; `plain` can also be supplied.
+The `mathml` value is a fragment without a `<math>` root and supplies the head
+for interactive paging.
 A callable retains Symbolica's `print(expression, mode=..., **options)` signature and
 replaces the complete tensor display. Returning `None` selects standard tensor notation.
-Notebook rendering evaluates local callbacks before sending their visual output to Typst;
-the callable itself is not serialized into portable Atom payloads.
+For custom pager output it must handle `PrintMode.MathML` and return a MathML
+fragment. Typst-only sources apply to static exports. The callable itself is not
+serialized into portable Atom payloads.
 
 Concrete tensor components default to $A(x,7)^(0,1)$. Choose
 `DisplaySettings(component_style="array")` for $A(x,7)[0,1]$, or
@@ -854,10 +868,10 @@ graph_indices = numerator.formatted(settings=DisplaySettings(index_style="graph"
 raw_indices = numerator.formatted(settings=DisplaySettings(index_style="raw"))
 ```
 
-`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip, call, and
-custom-spacing settings require Tydenso's Typst notation layer; use HTML, SVG, or notebook
-display for those settings. Source-only methods reject unsupported settings rather than
-silently ignoring them.
+`to_typst` and `format_tensor` emit source using the ports layout. Schoonschip,
+call and custom-spacing settings are supported by native MathML paging and
+explicit HTML/SVG rendering. Source-only methods reject unsupported settings
+rather than silently ignoring them.
 
 A supplied rank-one tensor fills an argument position in the ports layout.
 A filled marker distinguishes it from an unresolved axis: inline-metric spaces
@@ -902,8 +916,8 @@ svg = trace.to_svg(settings=compact)
 rich = trace.formatted(settings=compact)
 ```
 
-Python uses the bundled Typst render/notation assets directly, without calling the Tydenso
-Wasm plugin. Explicit `to_html` and `to_svg` calls report compilation errors.
+Explicit HTML/SVG rendering uses the bundled Typst render/notation assets directly,
+without calling the Tydenso Wasm plugin. `to_html` and `to_svg` calls report compilation errors.
 Notebook `_repr_html_` and `formatted()` retain their LaTeX or text fallback on rendering errors. `TensorNetwork.__str__` prints the source formula and `to_dot()` returns
 the current graph. Its graph renderer uses Linnet's prepared-render pipeline and reports
 rendering errors directly. Use `to_expression().to_latex()` when raw Symbolica notation is
@@ -917,9 +931,11 @@ the base size; nested scripts retain their relative sizing.
 
 Idenso reductions return typed `TensorExpression` values with these display methods.
 Call `to_expression()` explicitly when an ordinary Symbolica expression is needed.
-HTML, SVG, and rich-display functions accept `notation_source` as a trusted, complete
-replacement for the bundled `notation.typ`, not a style fragment. Typst executes that source;
-it must implement the expected notation interface and must not come from untrusted input.
+Explicit HTML and SVG exports accept `notation_source` as a trusted,
+complete replacement for the bundled `notation.typ`. Typst executes that source;
+it must implement the expected notation interface. Passing it to `formatted()`
+selects static output without an interactive viewer; `paged()` rejects it with
+`ValueError`. Interactive custom printers instead supply MathML fragments.
 Display customization stays outside Atom payloads; portable representation and math-label
 declarations continue to travel with the expressions.
 

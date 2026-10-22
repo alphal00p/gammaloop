@@ -18,7 +18,7 @@ use symbolica::{
     printer::{PrintOptions, PrintState},
     symbol, tag,
 };
-pub(crate) mod mathml;
+pub mod mathml;
 
 /// Presentation-only tensor head sources, carried with the symbol's tags.
 pub const TENSOR_PRINT_HEAD_PREFIX: &str = "spenso::print-head:";

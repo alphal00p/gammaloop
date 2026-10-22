@@ -1,7 +1,8 @@
 //! Tensor notation leaves in Symbolica's responsive MathML renderer.
 use super::*;
-use std::{collections::VecDeque, ffi::CString, time::Instant};
+use std::collections::VecDeque;
 use symbolica::api::python::MathMLViewer;
+use symbolica::printer::{PrintMode, PrintUserData};
 
 pub(crate) const DEFAULT_PAGE_SIZE: usize = 25;
 const MAX_LEAF_NODES: usize = 256;
@@ -26,12 +27,13 @@ pub(crate) fn is_large(value: &SymbolicTensor<PartialStructure>) -> bool {
     !fits(value.expression().as_view(), &mut 1000, 0)
 }
 
+type LeafCacheKey = (Atom, [u16; 10]);
+
 struct TensorLeaves {
     settings: DisplaySettings,
-    notation: Option<String>,
     aliases: IndexAliases,
-    // Responsive alternatives share compiled leaves, with bounded retention.
-    cache: VecDeque<((Atom, bool, bool), Option<String>)>,
+    // Responsive alternatives share direct fragments, with bounded retention.
+    cache: VecDeque<(LeafCacheKey, Option<String>)>,
 }
 
 impl TensorLeaves {
@@ -49,9 +51,8 @@ impl TensorLeaves {
             return Ok(None);
         }
         // Arithmetic and ordinary calls belong to Symbolica. Only semantic
-        // tensor leaves, registered labels and custom notation enter Typst.
-        let semantic = self.notation.is_some()
-            || symbol.has_tag(&SPENSO_TAG.tensor)
+        // tensor leaves enter the scoped semantic printer.
+        let semantic = symbol.has_tag(&SPENSO_TAG.tensor)
             || symbol.has_tag("tensor")
             || symbol.has_tag(&SPENSO_TAG.index)
             || symbol.has_tag(&SPENSO_TAG.representation)
@@ -76,13 +77,27 @@ impl TensorLeaves {
                     | "spenso::trace"
                     | "spenso::Nc"
             );
-        let labelled =
-            matches!(view, AtomView::Var(_)) && !labels::typst_heads(&view.to_owned()).is_empty();
-        if !(semantic || labelled) {
+        if !semantic {
             return Ok(None);
         }
         let root = value.expression().as_view().get_data();
-        let key = (view.to_owned(), state.in_product, state.in_exp_base);
+        // Custom printers receive the complete state. Reusing a fragment must
+        // preserve every observable flag and level, including exponent context.
+        let key = (
+            view.to_owned(),
+            [
+                u16::from(state.in_sum),
+                u16::from(state.in_product),
+                u16::from(state.suppress_one),
+                u16::from(state.in_exp),
+                u16::from(state.in_exp_base),
+                u16::from(state.top_level_add_child),
+                u16::from(state.superscript),
+                state.level,
+                state.bracket_level,
+                state.indentation_level,
+            ],
+        );
         if let Some(index) = self
             .cache
             .iter()
@@ -93,9 +108,6 @@ impl TensorLeaves {
             self.cache.push_back(entry);
             return Ok(result);
         }
-        // The factory owns request boundaries. Bound each uncached leaf without
-        // guessing when its persistent callback starts another page or layout.
-        let deadline = Instant::now() + std::time::Duration::from_secs(10);
         // The inherited Python expression may own a byte-for-byte Atom clone.
         // Equality is bounded by fits above and does not scan a large root.
         let atom = if view.get_data() == root {
@@ -178,40 +190,41 @@ impl TensorLeaves {
                 aliases.entries.remove(&key);
             }
         }
-        let mut settings = typst_settings_source(&self.settings, &Atom::zero());
-        settings.push_str(&format!(
-            "\n#let settings = (..settings, index-aliases: {})\n",
-            aliases.typst_source(&self.settings.index_style)
-        ));
-        settings.push_str(&typst_custom_print_source(
-            &self.settings,
-            &atom,
-            state.in_product,
-        )?);
-        let attachments = portable_attachments(&atom).map_err(PyRuntimeError::new_err)?;
-        let tree = symbolica_typst_plugin::payload::atom_render_tree_value(&atom, &attachments)
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        let mut bytes = Vec::new();
-        ciborium::into_writer(&tree, &mut bytes)
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-        let payload = PyDict::new(py);
-        payload.set_item("tree", PyBytes::new(py, &bytes))?;
-        payload.set_item("settings", settings)?;
-        payload.set_item("notation", self.notation.as_deref().unwrap_or(NOTATION_TYP))?;
-        payload.set_item("power_base", state.in_exp_base)?;
-        let remaining = deadline
-            .saturating_duration_since(Instant::now())
-            .as_secs_f64();
-        if remaining == 0.0 {
-            return Err(PyRuntimeError::new_err(
-                "Tensor notation exceeded the 10-second leaf deadline",
-            ));
+        let mut options = display_options_with_settings(TensorDisplayMode::Typst, &self.settings);
+        options.mode = PrintMode::MathML;
+        for (key, value) in [
+            ("spenso.tensor_layout", &self.settings.tensor_layout),
+            ("spenso.index_gap", &self.settings.index_gap),
+            ("spenso.factor_gap", &self.settings.factor_gap),
+        ] {
+            options
+                .custom_print_mode
+                .insert(key.into(), PrintUserData::String(value.clone()));
         }
-        payload.set_item("timeout", remaining)?;
-        let result: Option<String> = module(py)?
-            .getattr("compile_leaf")?
-            .call1((payload,))?
-            .extract()?;
+        // Aliases remain borrowed viewer state, rather than serialized options
+        // or symbols inserted into the expression being paged.
+        let result = spenso::network::tags::mathml::render(
+            atom.as_view(),
+            &options,
+            state,
+            &|representation, index| {
+                let key = (representation, index.to_owned());
+                aliases
+                    .entries
+                    .get(&key)
+                    .and_then(|(_, display)| display.to_mathml())
+                    .or_else(|| {
+                        let source = aliases.source_indices.get(&key)?;
+                        if !fits(source.as_view(), &mut { MAX_LEAF_NODES }, 0) {
+                            return None;
+                        }
+                        Some(source.printer(options.clone()).to_string())
+                    })
+            },
+        );
+        if let Some(error) = PyErr::take(py) {
+            return Err(error);
+        }
         // Oversized calls defer to structural rendering so their arguments can
         // still be paged and inspected, rather than becoming an atomic loop.
         let result = result.filter(|html| html.len() <= MAX_LEAF_BYTES);
@@ -223,19 +236,6 @@ impl TensorLeaves {
     }
 }
 
-fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    let modules = py.import("sys")?.getattr("modules")?;
-    let name = "_spenso_paging";
-    if let Ok(module) = modules.get_item(name) {
-        return Ok(module.cast_into::<PyModule>()?);
-    }
-    let code = CString::new(include_str!("../../typst/paging.py")).unwrap();
-    let module = PyModule::from_code(py, &code, c"spenso_paging.py", c"_spenso_paging")?;
-    module.add_function(wrap_pyfunction!(compile_typst, &module)?)?;
-    modules.set_item(name, &module)?;
-    Ok(module)
-}
-
 pub(crate) fn viewer(
     py: Python<'_>,
     expression: Py<PythonExpression>,
@@ -244,9 +244,13 @@ pub(crate) fn viewer(
     notation: Option<String>,
     size: usize,
 ) -> PyResult<Py<PyAny>> {
+    if notation.is_some() {
+        return Err(PyValueError::new_err(
+            "The direct MathML pager does not accept Typst notation_source; use to_html() or to_svg() for custom Typst exports",
+        ));
+    }
     let mut leaves = TensorLeaves {
         settings,
-        notation,
         aliases: IndexAliases::default(),
         cache: VecDeque::new(),
     };

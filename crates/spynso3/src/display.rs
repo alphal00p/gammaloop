@@ -78,8 +78,9 @@ pub(crate) mod paging;
 ///
 /// Formatting does not change indices, tensor algebra, or component order.
 /// The defaults use representation-specific index alphabets and an interactive
-/// component explorer. Typst/plain source supports ports layout; alternative
-/// layouts and custom spacing require a rich HTML or SVG renderer.
+/// component explorer. The direct MathML pager supports rich layouts and gaps;
+/// static Typst/plain source supports ports layout. HTML/SVG exports retain
+/// the complete Typst notation backend.
 ///
 /// Examples
 /// --------
@@ -220,12 +221,12 @@ pub struct DisplaySettings {
     /// >>> value = DisplaySettings().symbol_scripts
     #[pyo3(get)]
     symbol_scripts: bool,
-    /// Spacing between rendered indices, as a finite Typst length using
+    /// Spacing between rendered indices, as a finite length using
     ///
     /// Returns
     /// -------
     /// str
-    ///     Spacing between rendered indices, as a finite Typst length using
+    ///     Spacing between rendered indices, as a finite length using
     ///     pt, mm, cm, in, em, or %.
     ///
     /// Examples
@@ -304,7 +305,7 @@ impl DisplaySettings {
     /// symbol_scripts : bool, default True
     ///     Render index and component information using symbol scripts where supported.
     /// index_gap : str, default "0.08em"
-    ///     Spacing between rendered indices, as a finite Typst length using
+    ///     Spacing between rendered indices, as a finite length using
     ///     pt, mm, cm, in, em, or %.
     /// factor_gap : str, default "0.12em"
     ///     Spacing between rendered factors, using the same length units as index_gap.
@@ -1237,7 +1238,8 @@ pub(crate) fn format_structured_output_rich(
     let notebook_value = Arc::clone(&value);
     let notebook_settings = settings.clone();
     let notebook_notation = notation_source.clone();
-    let formatted = if paging::is_large(&value) {
+    let custom_notation = notation_source.is_some();
+    let formatted = if !custom_notation && paging::is_large(&value) {
         PythonFormattedOutput::lazy(move |py, backend| match backend {
             FormattedOutputBackend::Html => paging::static_html(
                 py,
@@ -1270,6 +1272,11 @@ pub(crate) fn format_structured_output_rich(
             }
         })
     };
+    // Custom Typst documents remain explicit static exports. They cannot be
+    // interpreted by the direct MathML pager.
+    if custom_notation {
+        return formatted;
+    }
     // Small notebook expressions share the same zoom and inspection controls.
     // Static representations above retain their existing complete exports.
     formatted.with_notebook(move |py| {

@@ -699,6 +699,30 @@ with trace equal to its dimension, independent of the dummy labels.
 The shared concrete syntax and which crate owns each rewrite are specified in the
 #link("spenso-symbolica-syntax-and-rewrites.typ")[Spenso/Idenso Symbolica syntax note].
 
+== Notebook presentation
+
+Spenso's existing `network::tags::mathml` printer emits bounded semantic leaves
+directly as MathML, reusing the tensor, slot, representation and chain
+recognizers. Gamma and slash notation, ordered chains and traces, bra/ket ports,
+color invariants and display settings use native MathML. Idenso retains ownership
+of color-invariant semantics. Presentation preserves the source Atom bytes and
+the typed logical interface; it does not rewrite tensor algebra.
+
+Spynso's viewer adapter retains typed metadata, display-local index aliases and
+a bounded cache of leaf fragments. Alias resolution is scoped to the viewer and
+supplied to the printer for each bounded leaf; it requires no complete-source
+walk. Symbolica's official `MathMLViewer::expression` owns arithmetic, cursor
+caching, responsive layouts, paging and navigation. The pager has no CBOR render
+tree, Typst compilation or notation worker.
+
+`paged(notation_source=...)` rejects custom Typst source with `ValueError`.
+Explicit HTML/SVG exports retain custom Typst notation, and Typst source export
+remains available.
+`formatted(notation_source=...)` produces static output without an interactive
+viewer. `TensorName` head mappings accept `mathml` fragments, and callable
+printers must handle `PrintMode.MathML` to supply custom pager output.
+Typst-only printer sources remain available through static exports.
+
 == Features and serialization
 
 Idenso defaults to `native`, forwarding GMP/MPFR support; `wasm` selects the Wasm backend with
