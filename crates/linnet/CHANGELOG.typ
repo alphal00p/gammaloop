@@ -10,8 +10,36 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 === Fixed
 
 - Enforce bijective permutation mappings at construction and serde/bincode decoding,
-  preventing aliased mutable slice iteration. Add checked map/inverse constructors
-  and report typed errors from indexed-vector permutation conversions.
+  preventing aliased mutable slice iteration. Serialized `map`/`inv` fields and their
+  wire format are unchanged; invalid or inconsistent stored mappings are now rejected.
+- Rank the empty permutation as zero in both Myrvold–Ruskey ranking methods.
+- Reject nonempty constraints passed to `from_mappings` or `from_prefix_sources`
+  with size zero, instead of silently returning the empty permutation.
+
+=== Added
+
+- Add `Permutation::try_from_map`, `try_from_inv`, `try_from_cycles`, and
+  `try_from_cycles_ordered` for fallible construction with `PermutationError`.
+- Add `TryFrom<Vec<usize>>` for `Permutation`, with `PermutationError` as its error type.
+- Add `Copy` and `Hash` implementations for `PermutationError`.
+
+=== Other
+
+- *Breaking:* indexed-vector permutation conversions now return `PermutationError`
+  instead of `()`. `from_disjoint_cycles` returns `PermutationError` instead of `String`.
+- *Breaking:* extend `PermutationError` with `IndexOutOfRange`, `DuplicateImage`,
+  `InverseLengthMismatch`, `InconsistentInverse`, `MissingMapping`,
+  `CycleIndexOverflow`, `RepeatedCycleIndex`, and `NonDisjointCycles`, carrying
+  the offending values. Mark this public error enum `#[non_exhaustive]` so external
+  matches must allow future validation errors.
+- *Breaking:* add the `source: PermutationError` field to
+  `DotParseError::InvalidExplicitIdPermutation { kind, source }`, preserving the
+  underlying error when explicit DOT IDs are invalid.
+- *Behaviour:* `from_map` and `from_inv` now panic on duplicate or out-of-range
+  images. `from_cycles` and `from_cycles_ordered` now panic on repeated indices
+  within one cycle or an index whose successor overflows. Use the new `try_*`
+  constructors for untrusted input. Overlap between distinct cycles remains valid
+  for the composing constructors; `from_disjoint_cycles` rejects all repetitions.
 
 == #link("https://github.com/alphal00p/linnet/compare/linnet-v0.16.1...linnet-v0.17.0")[0.17.0] - 2026-01-28
 
