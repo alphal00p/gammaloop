@@ -22,6 +22,17 @@ Before creating any new jj change, always ask the user which author name and
 email to use, and wait for their answer. Set that identity explicitly when
 creating the change.
 
+Use the Nix-backed development commands from the first build, check, or test:
+`direnv exec .. nix develop -c just test -p PACKAGE -E 'test(NAME)'`,
+or replace `just test ...` with `just build-cli`, `just check`, or `just clippy`.
+They capture current working files and retain selected compiled artifacts and
+incremental state. Entering
+`nix develop` supplies tools; direct Cargo commands use a separate artifact path.
+Use the explicit release, ABI, WASM, or guarded Cargo recipes only when the task
+needs that compilation context or a cap covering compilation itself. Record the
+reason in the handoff; ordinary development uses the Nix-backed commands. See
+[CONTRIBUTING.typ](CONTRIBUTING.typ#development-cache) for selection and retention.
+
 Use descriptive branch names without an agent prefix, for example
 `ci-final-review-readiness`. Do not add `codex/` unless explicitly requested.
 

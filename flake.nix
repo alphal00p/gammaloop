@@ -237,6 +237,8 @@
             RUSTFLAGS = rustFlags;
           });
     in {
+      lib.development = workspace.development;
+
       checks = allChecks;
 
       hydraJobs = hestiaChecks;
@@ -289,6 +291,14 @@
         };
 
       apps = {
+        dev = flake-utils.lib.mkApp {
+          drv = pkgs.writeShellApplication {
+            name = "gammaloop-dev";
+            runtimeInputs = [pkgs.python313 pkgs.nix pkgs.gitMinimal pkgs.jujutsu];
+            # The frontend discovers its workspace from its own location.
+            text = ''exec python3 scripts/dev.py "$@"'';
+          };
+        };
         ci-report = flake-utils.lib.mkApp {
           drv = pkgs.writeShellApplication {
             name = "ci-report";

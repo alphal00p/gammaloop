@@ -389,6 +389,7 @@
       "checks.${system}.gammaloop-clippy"
       "checks.${system}.gammaloop-fmt"
       "checks.${system}.gammaloop-guppy-workspace-graph"
+      "checks.${system}.gammaloop-development-tools"
       "packages.${system}.nix-ci-check-alphal00p-docs"
       "packages.${system}.nix-ci-check-gammaloop-doctest"
       "packages.${system}.nix-ci-passed"
