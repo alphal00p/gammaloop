@@ -827,7 +827,9 @@ LTD; either evaluates that complete sum. CFF numerator construction keeps its ex
 owner. The existing `inline_numerator_functions` setting controls both ordinary
 and hyperdual generated numerator calls: the default `false` retains shared bodies
 through differentiation; `true` explicitly requests inlining. Symbolica PR 110 supplies the
-shared-body part of PR 82 and fixes from PRs 83, 87 and 88. Generation and runtime
+shared-body part of PR 82 and fixes from PRs 83, 87 and 88. Each unique retained
+body receives instruction CSE and budgeted CPE before stack allocation and sharing;
+shared-body differentiation uses the same optimization pipeline. Generation and runtime
 costs differ: retention favors generation, while explicit inlining can improve
 evaluation throughput. This generation-wide choice also applies to optional
 evaluator layouts built in the same run.

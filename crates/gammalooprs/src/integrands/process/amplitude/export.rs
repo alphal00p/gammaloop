@@ -566,7 +566,7 @@ mod tests {
         assert!(script.contains("[patch.crates-io]"));
         for dependency in ["symbolica", "numerica", "graphica"] {
             assert!(script.contains(&format!(
-                "{dependency} = {{ git = \"https://github.com/ValentinHirschi/symbolica\", rev = \"208fe85beaa7048ebf388511979677531bdd590f\" }}"
+                "{dependency} = {{ git = \"https://github.com/ValentinHirschi/symbolica\", rev = \"e6e5843fd41405271bd012a9548b866698b52a21\" }}"
             )));
         }
         assert!(script.contains(&format!(
