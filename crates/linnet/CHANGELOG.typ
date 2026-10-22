@@ -7,6 +7,12 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
+=== Fixed
+
+- Enforce bijective permutation mappings at construction and serde/bincode decoding,
+  preventing aliased mutable slice iteration. Add checked map/inverse constructors
+  and report typed errors from indexed-vector permutation conversions.
+
 == #link("https://github.com/alphal00p/linnet/compare/linnet-v0.16.1...linnet-v0.17.0")[0.17.0] - 2026-01-28
 
 === Other

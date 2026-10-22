@@ -3,6 +3,8 @@ use std::fmt::Display;
 use dot_parser::ast::{GraphFromFileError, PestError};
 use thiserror::Error;
 
+use crate::permutation::PermutationError;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExplicitIdKind {
     Node,
@@ -51,8 +53,12 @@ pub enum DotParseError {
         len: usize,
     },
 
-    #[error("failed to construct the explicit {kind} ID permutation")]
-    InvalidExplicitIdPermutation { kind: ExplicitIdKind },
+    /// Invalid completed ID mapping; see [`PermutationError`] for checked conversion examples.
+    #[error("failed to construct the explicit {kind} ID permutation: {source}")]
+    InvalidExplicitIdPermutation {
+        kind: ExplicitIdKind,
+        source: PermutationError,
+    },
 }
 
 #[derive(Debug, Error)]
