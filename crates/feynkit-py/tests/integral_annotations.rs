@@ -1,18 +1,22 @@
-use pyo3::{prelude::*, types::PyDict};
-use symbolica::api::python::{SymbolicaCommunityModule, create_symbolica_module};
+use feynkit_py::FeynkitModule;
+use pyo3::types::{PyDict, PyDictMethods, PyModule};
+use pyo3::{PyResult, Python};
+use spynso3::SpensoModule;
+use symbolica::api::python;
+use symbolica::api::python::SymbolicaCommunityModule;
 
 #[test]
 fn propagator_annotations_keep_native_wrapper_and_denominator_semantics() {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {
         let core = PyModule::new(py, "annotation_core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         let hep = PyModule::new(py, "annotation_hep")?;
-        feynkit_py::FeynkitModule::register_module(&hep)?;
-        feynkit_py::FeynkitModule::initialize(py)?;
+        FeynkitModule::register_module(&hep)?;
+        FeynkitModule::initialize(py)?;
         let tensor = PyModule::new(py, "annotation_tensor")?;
-        spynso3::SpensoModule::register_module(&tensor)?;
-        spynso3::SpensoModule::initialize(py)?;
+        SpensoModule::register_module(&tensor)?;
+        SpensoModule::initialize(py)?;
         let locals = PyDict::new(py);
         locals.set_item("core", core)?;
         locals.set_item("hep", hep)?;
