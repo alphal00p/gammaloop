@@ -14,7 +14,8 @@ use linnet::half_edge::{
 };
 use serde_json::{Map, Value};
 
-use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
+use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis, NumeratorInterface};
+use symbolica::atom::AtomCore;
 
 /// The physics palette of `physics-edge-style.typ` and the highlight paints.
 const INK: &str = "#3d2645";
@@ -231,7 +232,12 @@ impl FeynmanDiagram {
                 (options.show_particle || show_momentum || options.show_edge_index).then(|| {
                     let mut components = Vec::new();
                     if options.show_particle {
-                        components.push(particle.typst_label());
+                        let label = particle.typst_label();
+                        components.push(if edge.propagator_power == 1 {
+                            label
+                        } else {
+                            format!("({label})^({})", edge.propagator_power)
+                        });
                     }
                     if show_momentum {
                         let (loops, external) = momentum.integer_coefficients();
@@ -292,6 +298,22 @@ impl FeynmanDiagram {
                 ),
                 ("particle", particle.name.clone().into()),
                 ("pdg", particle.pdg_code.into()),
+                ("propagator-power", edge.propagator_power.into()),
+                (
+                    "lmb-id",
+                    basis
+                        .loop_edges
+                        .iter()
+                        .position(|candidate| *candidate == id)
+                        .map_or(Value::Null, Value::from),
+                ),
+                (
+                    "numerator",
+                    NumeratorInterface::export(&edge.numerator)
+                        .0
+                        .to_canonical_string()
+                        .into(),
+                ),
             ]
             .into_iter()
             .collect();
@@ -406,14 +428,40 @@ impl FeynmanDiagram {
             nodes: node_drawings,
             edges: edge_drawings,
             preamble: format!("#set text(size: 9pt, fill: rgb({INK:?}))"),
-            // Notebook captions carry the name; callers can request an SVG title.
-            title: None,
+            // The notebook caption already carries the graph name. Keep a
+            // nontrivial master numerator visible without overwhelming labels.
+            title: self.integral_numerator_annotation(),
             pages,
             layout: options.layout.clone(),
             layout_passes: Vec::new(),
             layout_edges: None,
             label_feedback: options.label_feedback,
         })
+    }
+
+    fn integral_numerator_annotation(&self) -> Option<String> {
+        let numerator = NumeratorInterface::export(self.numerator()).0;
+        let prefactor = NumeratorInterface::export(self.numerator_prefactor()).0;
+        if numerator.is_one() && prefactor.is_one() {
+            return None;
+        }
+        let expression = if numerator.is_one() {
+            prefactor.to_canonical_string()
+        } else if prefactor.is_one() {
+            numerator.to_canonical_string()
+        } else {
+            format!(
+                "({}) * ({})",
+                numerator.to_canonical_string(),
+                prefactor.to_canonical_string()
+            )
+        };
+        let mut characters = expression.chars();
+        let mut preview = characters.by_ref().take(140).collect::<String>();
+        if characters.next().is_some() {
+            preview.push('…');
+        }
+        Some(format!("Numerator: {preview}"))
     }
 
     /// The faded, dotted stroke of everything outside a highlighted region.

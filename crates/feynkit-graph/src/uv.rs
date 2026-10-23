@@ -26,7 +26,7 @@ impl FeynmanDiagram {
     /// The result uses edge momenta and tagged `denom` propagators, as does
     /// `denominator_of`. Negate it for an additive local counterterm. A supplied
     /// numerator replaces the selected local numerator and must use edge momenta.
-    /// Signed `edge_powers` override internal propagator powers, defaulting to one;
+    /// Signed `edge_powers` override the stored internal propagator powers;
     /// zero omits a denominator and negative powers move it to the numerator.
     /// Powers do not change the selected region or its independent loop momenta.
     /// Entries outside the selected internal edges are ignored, as in `denominator_of`.
@@ -108,7 +108,12 @@ impl FeynmanDiagram {
                     quadratic,
                 ]) / &scale_squared)
             },
-            |edge, _| edge_powers.get(&EdgeId(edge.0)).copied().unwrap_or(1),
+            |edge, data| {
+                edge_powers
+                    .get(&EdgeId(edge.0))
+                    .copied()
+                    .unwrap_or(data.propagator_power as isize)
+            },
         )?;
         let measured = rescale(numerator) / denominator
             * Atom::var(scale).pow(-i64::from(dimension) * basis.loop_edges.len() as i64);
