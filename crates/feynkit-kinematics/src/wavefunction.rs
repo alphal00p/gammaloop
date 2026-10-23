@@ -10,6 +10,8 @@ use thiserror::Error;
 use crate::{FourMomentum, Helicity, KinematicScalar, Sign};
 
 #[cfg(test)]
+mod chart_tests;
+#[cfg(test)]
 mod tests;
 
 /// The existing scalar, vector and fermion external-state conventions.
@@ -88,6 +90,8 @@ pub enum WavefunctionError {
     },
     #[error("external momentum or wavefunction components are not finite")]
     NonFinite,
+    #[error("external-state chart needs more than {bits} working bits: {reason}")]
+    InsufficientPrecision { bits: u32, reason: &'static str },
     #[error("{0} does not admit the requested helicity")]
     Helicity(WavefunctionKind),
     #[error(
@@ -158,10 +162,20 @@ impl<T: KinematicScalar> FourMomentum<T> {
     ///
     /// The beam-axis branches and phases are inherited from its HELAS/MadGraph
     /// implementation. This basis also fixes the convention at zero momentum.
-    pub fn transverse_basis(&self) -> [[T; 4]; 2] {
-        let pt = self.pt();
-        let p = self.spatial.norm();
+    /// A nonzero direction lost by arithmetic is an error, never an axis choice.
+    pub fn transverse_basis(&self) -> Result<[[T; 4]; 2], WavefunctionError> {
+        let pt = self.spatial.px.hypot(&self.spatial.py);
+        let p = pt.hypot(&self.spatial.pz);
+        if !pt.is_finite() || !p.is_finite() {
+            return Err(WavefunctionError::NonFinite);
+        }
         let zero = pt.zero();
+        if pt == zero && (self.spatial.px != zero || self.spatial.py != zero) {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero transverse momentum lost its norm",
+            });
+        }
         let (a, b) = if pt == zero {
             (
                 [zero.clone(), pt.one(), zero.clone(), zero.clone()],
@@ -180,55 +194,117 @@ impl<T: KinematicScalar> FourMomentum<T> {
             (
                 [
                     zero.clone(),
-                    self.spatial.px.clone() * self.spatial.pz.clone() / (pt.clone() * p.clone()),
-                    self.spatial.py.clone() * self.spatial.pz.clone() / (pt.clone() * p.clone()),
+                    (self.spatial.px.clone() / pt.clone()) * (self.spatial.pz.clone() / p.clone()),
+                    (self.spatial.py.clone() / pt.clone()) * (self.spatial.pz.clone() / p.clone()),
                     -(pt.clone() / p),
                 ],
                 [
                     zero.clone(),
                     -(self.spatial.py.clone() / pt.clone()),
-                    self.spatial.px.clone() / pt,
+                    self.spatial.px.clone() / pt.clone(),
                     zero,
                 ],
             )
         };
-        [a, b]
+        if a.iter().chain(&b).any(|component| !component.is_finite()) {
+            return Err(WavefunctionError::NonFinite);
+        }
+        if pt != pt.zero()
+            && ((self.spatial.px != pt.zero() && self.spatial.pz != pt.zero() && a[1] == pt.zero())
+                || (self.spatial.py != pt.zero()
+                    && self.spatial.pz != pt.zero()
+                    && a[2] == pt.zero())
+                || a[3] == pt.zero()
+                || (self.spatial.py != pt.zero() && b[1] == pt.zero())
+                || (self.spatial.px != pt.zero() && b[2] == pt.zero()))
+        {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero transverse chart component underflowed",
+            });
+        }
+        Ok([a, b])
     }
 
     /// The two-component helicity spinor used by both `u` and `v`.
-    pub fn helicity_spinor(&self, helicity: Sign) -> [Complex<T>; 2] {
-        let p = self.spatial.norm();
+    /// The south-axis convention requires both transverse components to vanish.
+    /// A rounded `pz == -|p|` with a nonzero transverse direction is not that
+    /// axis and must be reconstructed at higher precision.
+    pub fn helicity_spinor(&self, helicity: Sign) -> Result<[Complex<T>; 2], WavefunctionError> {
+        let p = self
+            .spatial
+            .px
+            .hypot(&self.spatial.py)
+            .hypot(&self.spatial.pz);
+        if !p.is_finite() {
+            return Err(WavefunctionError::NonFinite);
+        }
         let zero = self.temporal.value.zero();
-        if (self.spatial.pz < zero && self.spatial.py == zero && self.spatial.px == zero)
-            || self.spatial.pz == -p.clone()
-        {
+        if self.spatial.pz <= zero && self.spatial.py == zero && self.spatial.px == zero {
             let z = Complex::new(zero.clone(), zero);
             let one = z.one();
-            return match helicity {
+            return Ok(match helicity {
                 Sign::Positive => [z, -one],
                 Sign::Negative => [one, z],
-            };
+            });
         }
-        let factor = (p.from_usize(2) * p.clone() * (p.clone() + self.spatial.pz.clone()))
-            .sqrt()
-            .inv();
+        if p <= zero {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero spatial momentum lost its norm",
+            });
+        }
+        // Work with dimensionless ratios so a uniformly tiny or huge physical
+        // momentum does not underflow or overflow the spinor normalization.
+        let plus = p.one() + self.spatial.pz.clone() / p.clone();
+        if plus <= zero {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonaxis helicity chart denominator rounded to zero",
+            });
+        }
+        let factor = (p.from_usize(2) * plus.clone()).sqrt().inv();
+        if !factor.is_finite() {
+            return Err(WavefunctionError::NonFinite);
+        }
         let mut xi = [
-            Complex::new(factor.clone() * (p + self.spatial.pz.clone()), zero),
+            Complex::new(factor.clone() * plus, zero),
             Complex::new(
-                self.spatial.px.clone() * factor.clone(),
-                self.spatial.py.clone() * factor,
+                (self.spatial.px.clone() / p.clone()) * factor.clone(),
+                (self.spatial.py.clone() / p) * factor,
             ),
         ];
+        if xi
+            .iter()
+            .any(|component| !component.re.is_finite() || !component.im.is_finite())
+        {
+            return Err(WavefunctionError::NonFinite);
+        }
+        if xi[0].re == self.temporal.value.zero()
+            || (self.spatial.px != self.temporal.value.zero()
+                && xi[1].re == self.temporal.value.zero())
+            || (self.spatial.py != self.temporal.value.zero()
+                && xi[1].im == self.temporal.value.zero())
+        {
+            return Err(WavefunctionError::InsufficientPrecision {
+                bits: self.temporal.value.get_precision(),
+                reason: "nonzero helicity chart component underflowed",
+            });
+        }
         if helicity == Sign::Negative {
             xi.swap(0, 1);
             xi[0].re = -xi[0].re.clone();
         }
-        xi
+        Ok(xi)
     }
 
     /// GammaLoop's principal square root of `E ± |p|`.
     pub fn spinor_energy_factor(&self, sign: Sign) -> Complex<T> {
-        let p = self.spatial.norm();
+        let p = self
+            .spatial
+            .px
+            .hypot(&self.spatial.py)
+            .hypot(&self.spatial.pz);
         let value = self.temporal.value.clone() + if sign == Sign::Positive { p } else { -p };
         if value > value.zero() {
             Complex::new(value.sqrt(), value.zero())
@@ -293,7 +369,7 @@ impl<T: KinematicScalar> FourMomentum<T> {
                 .collect()
             }
             WavefunctionKind::Epsilon => {
-                let [a, b] = self.transverse_basis();
+                let [a, b] = self.transverse_basis()?;
                 let scale = self.temporal.value.from_usize(2).sqrt().inv();
                 a.into_iter()
                     .zip(b)
@@ -317,7 +393,7 @@ impl<T: KinematicScalar> FourMomentum<T> {
                     sign
                 } else {
                     -sign
-                });
+                })?;
                 let (lower, upper) = if kind == WavefunctionKind::U {
                     (
                         self.spinor_energy_factor(-sign),
