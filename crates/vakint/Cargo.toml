@@ -56,6 +56,7 @@ features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
 idenso = { workspace = true, default-features = false }
+linnet = { workspace = true }
 feynkit-generator = { workspace = true }
 test-log = "0.2.19"
 

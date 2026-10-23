@@ -349,7 +349,10 @@ impl VakintExpression {
                 ));
             }
         }
-        scalar = scalar.expand().replace_multiple(&products);
+        // Scalar-product replacements also traverse sums, products and powers.
+        // Keeping the complete numerator factored avoids materializing a large
+        // polynomial merely to rename its already contracted scalar products.
+        scalar = scalar.replace_multiple(&products);
         if !scalar_symbols(&scalar) {
             return Err(invalid(
                 "numerator contains unconverted momentum/tensor notation; use declared scalar products",
