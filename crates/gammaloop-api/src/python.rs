@@ -31,9 +31,10 @@ use linnet::parser::{set::DotGraphSet, DotGraph};
 use numpy::{PyReadonlyArray1, PyReadonlyArray2};
 
 use crate::{
+    CLISettings, LoadedState, StateLoadOption,
     commands::{
-        evaluate_samples::EvaluateSamples, import::model::ImportModel, integrate::Integrate,
-        Evaluate,
+        Evaluate, evaluate_samples::EvaluateSamples, import::model::ImportModel,
+        integrate::Integrate,
     },
     integrand_info::{
         IntegrandActiveThresholdCutInfo, IntegrandCutInfo, IntegrandCutThresholdInfo,
@@ -42,10 +43,9 @@ use crate::{
         IntegrandThresholdEsurfaceInfo,
     },
     render_smart_toml,
-    session::{display_command, CliSession, CliSessionState},
+    session::{CliSession, CliSessionState, display_command},
     settings_tree::{json_type_name, serialize_settings_with_defaults, value_at_path},
     state::{GraphImportOptions, ProcessListExt, ProcessRef, RunHistory, State},
-    CLISettings, LoadedState, StateLoadOption,
 };
 use ahash::{HashMap, HashMapExt};
 use clap::ValueEnum;
@@ -71,13 +71,13 @@ use symbolica::{atom::AtomCore, parse, printer::PrintOptions};
 
 #[allow(unused)]
 use pyo3::{
-    exceptions,
+    FromPyObject, PyRef, Python, exceptions,
     prelude::*,
     pyclass,
     pyclass::CompareOp,
     pyfunction, pymethods, pymodule,
     types::{PyAny, PyComplex, PyComplexMethods, PyDict, PyList, PyModule, PyTuple, PyType},
-    wrap_pyfunction, FromPyObject, PyRef, Python,
+    wrap_pyfunction,
 };
 
 /// Evaluate a graph's symbolic overall factor and return its canonical form.
@@ -595,6 +595,23 @@ mod settings_wrapper_tests {
     use pyo3::types::PyAnyMethods;
 
     #[test]
+    fn histogram_bin_wrapper_preserves_centered_error() {
+        let base = (1u64 << 27) as f64;
+        let bin = PyHistogramBinSnapshot {
+            x_min: Some(0.0),
+            x_max: Some(1.0),
+            bin_id: None,
+            label: None,
+            entry_count: 2,
+            sum_weights: base + (base + 1.0),
+            sum_weights_squared: base * base + (base + 1.0) * (base + 1.0),
+            centered_sum_weights_squared: Some(0.5),
+            mitigated_fill_count: 0,
+        };
+        assert!((bin.error(2) - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
     fn runtime_settings_wrapper_exposes_nested_values() {
         Python::initialize();
 
@@ -609,19 +626,23 @@ mod settings_wrapper_tests {
 
         Python::attach(|py| {
             let subtraction = wrapped.get(py, "subtraction").unwrap();
-            assert!(subtraction
-                .getattr("disable_threshold_subtraction")
-                .unwrap()
-                .extract::<bool>()
-                .unwrap());
+            assert!(
+                subtraction
+                    .getattr("disable_threshold_subtraction")
+                    .unwrap()
+                    .extract::<bool>()
+                    .unwrap()
+            );
 
             let settings_dict = wrapped.to_dict(py).unwrap();
             let general = settings_dict.get_item("general").unwrap();
-            assert!(general
-                .get_item("generate_events")
-                .unwrap()
-                .extract::<bool>()
-                .unwrap());
+            assert!(
+                general
+                    .get_item("generate_events")
+                    .unwrap()
+                    .extract::<bool>()
+                    .unwrap()
+            );
         });
     }
 
@@ -669,11 +690,13 @@ mod settings_wrapper_tests {
                 .unwrap();
         Python::attach(|py| {
             let sampling = wrapped.get(py, "sampling").unwrap();
-            assert!(sampling
-                .getattr("sampling_multichanneling")
-                .unwrap()
-                .extract::<bool>()
-                .unwrap());
+            assert!(
+                sampling
+                    .getattr("sampling_multichanneling")
+                    .unwrap()
+                    .extract::<bool>()
+                    .unwrap()
+            );
             assert_eq!(
                 sampling
                     .getattr("sampling_channel_weight")
@@ -1446,8 +1469,8 @@ impl PyHistogramAccumulator {
     /// ----------
     /// factor : float
     ///     Scale applied to weight sums; squared-weight sums use its square.
-    fn rescale(&mut self, factor: f64) {
-        self.inner.rescale(factor);
+    fn rescale(&mut self, factor: f64) -> PyResult<()> {
+        self.inner.rescale(factor).map_err(to_py_value_error)
     }
 
     /// Change the display ordering of a discrete histogram.
@@ -1526,6 +1549,8 @@ pub struct PyHistogramBinSnapshot {
     pub sum_weights: f64,
     /// Sum of squared per-sample projected weights for this bin.
     pub sum_weights_squared: f64,
+    /// Optional centered M2 across all histogram samples, including implicit zeros.
+    pub centered_sum_weights_squared: Option<f64>,
     /// Number of fills produced by paired boundary-misbinning mitigation.
     pub mitigated_fill_count: usize,
 }
@@ -1766,19 +1791,21 @@ impl PyHistogramBinSnapshot {
     /// Returns
     /// -------
     /// float
-    ///     Sample-mean standard error, or zero when it cannot be estimated reliably.
+    ///     Sample-mean standard error. Supplied centered moments are preferred;
+    ///     invalid centered moments return NaN. Absent moments retain legacy behavior.
     fn error(&self, sample_count: usize) -> f64 {
-        if sample_count <= 1 {
-            return 0.0;
+        gammalooprs::observables::HistogramBinSnapshot {
+            x_min: self.x_min,
+            x_max: self.x_max,
+            bin_id: self.bin_id,
+            label: self.label.clone(),
+            entry_count: self.entry_count,
+            sum_weights: self.sum_weights,
+            sum_weights_squared: self.sum_weights_squared,
+            centered_sum_weights_squared: self.centered_sum_weights_squared,
+            mitigated_fill_count: self.mitigated_fill_count,
         }
-        let n = sample_count as f64;
-        let variance_numerator =
-            self.sum_weights_squared - (self.sum_weights * self.sum_weights) / n;
-        if !variance_numerator.is_finite() || variance_numerator <= 0.0 {
-            0.0
-        } else {
-            (variance_numerator / (n * (n - 1.0))).sqrt()
-        }
+        .error(sample_count)
     }
 }
 
@@ -2584,6 +2611,7 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
                 entry_count: bin.entry_count,
                 sum_weights: bin.sum_weights,
                 sum_weights_squared: bin.sum_weights_squared,
+                centered_sum_weights_squared: bin.centered_sum_weights_squared,
                 mitigated_fill_count: bin.mitigated_fill_count,
             })
             .collect(),
@@ -2595,6 +2623,7 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
             entry_count: snapshot.underflow_bin.entry_count,
             sum_weights: snapshot.underflow_bin.sum_weights,
             sum_weights_squared: snapshot.underflow_bin.sum_weights_squared,
+            centered_sum_weights_squared: snapshot.underflow_bin.centered_sum_weights_squared,
             mitigated_fill_count: snapshot.underflow_bin.mitigated_fill_count,
         },
         overflow_bin: PyHistogramBinSnapshot {
@@ -2605,6 +2634,7 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
             entry_count: snapshot.overflow_bin.entry_count,
             sum_weights: snapshot.overflow_bin.sum_weights,
             sum_weights_squared: snapshot.overflow_bin.sum_weights_squared,
+            centered_sum_weights_squared: snapshot.overflow_bin.centered_sum_weights_squared,
             mitigated_fill_count: snapshot.overflow_bin.mitigated_fill_count,
         },
         statistics: py_histogram_statistics_from_snapshot(snapshot.statistics),

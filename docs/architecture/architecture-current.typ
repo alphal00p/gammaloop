@@ -1381,6 +1381,7 @@ Histogram accumulation is based on:
   - `entry_count`
   - `sum_weights`
   - `sum_weights_squared`
+  - optional snapshot `centered_sum_weights_squared` (M2)
   - `mitigated_fill_count`
 - `HistogramAccumulatorState` / `ObservableAccumulatorBundle` for
   mergeable runtime state
@@ -1397,6 +1398,31 @@ API exposes `merge(...)`, `merge_in_place(...)`, and `rebin(...)`.
 Restoring an unlabeled continuous histogram keeps the same empty label
 metadata as a fresh worker. Explicit labels and discrete-bin metadata
 remain intact, and the merge compatibility checks still reject mismatches.
+
+Snapshots can carry M2, the sum of squared deviations from the per-sample
+mean over the full histogram `sample_count`, including implicit zero samples.
+When present, the standard error is computed as
+`sqrt(M2) / sqrt(N) / sqrt(N - 1)`; invalid centered data yields NaN rather
+than a successful zero error. Independent snapshot merges use Chan's formula
+with both histogram counts. An empty snapshot is an identity; merging a
+nonempty raw-only snapshot makes M2 unavailable. Missing M2 retains the legacy
+raw-moment error calculation and is never interpreted as zero variance.
+These optional moments remain binary64 statistics. Reconstructing batch means
+from rounded sums can still make a few-ulp spread depend on partitioning; this
+path is not an exact variance accumulator or a rigorous uncertainty bound.
+
+Restoration and rescaling preserve imported M2 while its sample set is
+unchanged. The live sampler currently records only raw moments: appending
+samples, including untouched-bin zeros, makes the imported M2 unavailable.
+Use snapshot merging to preserve centered moments across independent batches.
+Extending live centered accumulation requires whole-sample bin sums and sparse
+zero accounting; counting individual entry fills is insufficient.
+
+Rescaling is fallible and transactional if a nonzero moment cannot be
+represented in binary64. Coarsening continuous bins with M2 is rejected:
+their within-sample cross-bin covariance is not stored. Factor-one and
+discrete-bin copies preserve M2. Raw-only rebinning retains its historical
+sum-of-squares convention, which is not a general correlated-bin variance.
 
 Current built-in quantities include:
 
