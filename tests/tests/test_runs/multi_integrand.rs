@@ -1,6 +1,6 @@
 use super::utils::*;
 use super::*;
-use gammalooprs::integrate::IntegrationCheckpoint;
+use gammalooprs::integrate::{IntegrationCheckpoint, SlotIndex};
 
 #[test]
 fn test_multi_integrand() -> Result<()> {
@@ -107,7 +107,7 @@ fn test_multi_integrand() -> Result<()> {
             .iter()
             .position(|slot| slot.key() == key)
             .expect("correlated slot must have persisted settings");
-        triangle_box_checkpoint.read_slot_settings(slot)?;
+        triangle_box_checkpoint.read_slot_settings(SlotIndex::from(slot))?;
     }
 
     cli.run_command(
@@ -178,7 +178,7 @@ fn test_multi_integrand() -> Result<()> {
             .iter()
             .position(|slot| slot.key() == key)
             .expect("correlated slot must have persisted settings");
-        box_pair_checkpoint.read_slot_settings(slot)?;
+        box_pair_checkpoint.read_slot_settings(SlotIndex::from(slot))?;
     }
 
     clean_test(&cli.cli_settings.state.folder);

@@ -630,7 +630,7 @@ fn is_valid_ident(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use alphal00p_workspace::{WorkspaceMarker, WorkspaceRoot};
     use std::{
         collections::{BTreeMap, BTreeSet},
         fs,
@@ -690,19 +690,14 @@ mod tests {
 
     #[test]
     fn all_run_card_log_directives_parse() {
-        let search_root = env::var_os("CARGO_MANIFEST_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| env::current_dir().expect("cannot read the current directory"));
-        let workspace = search_root
-            .ancestors()
-            .find(|root| root.join("crates/gammaloop-tracing-filter/Cargo.toml").is_file())
-            .unwrap_or_else(|| {
-                panic!(
-                    "cannot locate the GammaLoop workspace from {}; run under Cargo/Nextest or inside the workspace",
-                    search_root.display()
-                )
-            });
-        let run_cards_root = workspace.join("tests/resources/run_cards");
+        let workspace = WorkspaceRoot::discover_runtime(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[WorkspaceMarker::File(
+                "crates/gammaloop-tracing-filter/Cargo.toml",
+            )],
+        )
+        .expect("log directive tests require a runtime GammaLoop workspace");
+        let run_cards_root = workspace.as_path().join("tests/resources/run_cards");
         assert!(
             run_cards_root.is_dir(),
             "expected run-card fixtures at {}",

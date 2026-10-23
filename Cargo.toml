@@ -8,6 +8,9 @@ default-members = ["crates/gammaloop-api"]
 edition = "2024"
 
 [workspace.dependencies]
+tempfile = "3.8"
+alphal00p-workspace = { path = "crates/alphal00p-workspace/" }
+alphal00p-persistence = { path = "crates/alphal00p-persistence/" }
 serde_repr = "0.1.20"
 ahash = "0.8.12"
 alphal00p-docs-macros = { path = "crates/alphal00p-docs-macros/" }

@@ -3745,8 +3745,11 @@ impl GammaLoopAPI {
     /// settings_runtime_defaults_path : path-like, optional
     ///     TOML file overriding the default runtime settings loaded at startup.
     /// clean_state : bool, default=False
-    ///     Remove the resolved state path before startup. This is destructive and
-    ///     cannot be combined with ``read_only_state=True``.
+    ///     Lock the state and existing nested writers, then rename and delete the state
+    ///     before startup. If a writer is busy, wait for it to finish and retry. Unlocked
+    ///     leftovers from an interrupted deletion of this state are removed on retry,
+    ///     even if the state path is missing. Symlinked roots are only unlinked; their
+    ///     targets are preserved. Cannot be combined with ``read_only_state=True``.
     ///
     /// Returns
     /// -------

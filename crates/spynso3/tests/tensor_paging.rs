@@ -37,9 +37,11 @@ fn direct_tensor_paging() {
             modules.set_item("symbolica.community.tensor_native", &tensor)?;
 
             let code = CString::new(include_str!("installed_tensor_paging.py")).unwrap();
-            let filename = CString::new(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/installed_tensor_paging.py"
+            // Nextest remaps the runtime crate directory for relocated archives.
+            let filename = CString::new(format!(
+                "{}/tests/installed_tensor_paging.py",
+                env::var("CARGO_MANIFEST_DIR")
+                    .expect("Cargo and Nextest provide the runtime crate directory")
             ))
             .unwrap();
             let tests = PyModule::from_code(py, &code, &filename, c"installed_tensor_paging")?;

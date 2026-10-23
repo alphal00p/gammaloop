@@ -1,190 +1,23 @@
-//! Filesystem boundaries for process payloads and exports.
+//! Test fault injection for process payloads and exports.
 
-use std::fs::{self, File};
-use std::io::{Error as IoError, ErrorKind, Write};
-use std::path::{Component, Path, PathBuf};
-
-#[cfg(test)]
-use color_eyre::Result as ReportResult;
-#[cfg(test)]
 use std::cell::Cell;
-#[cfg(test)]
+use std::fs;
+use std::path::Path;
 use std::thread_local;
-use thiserror::Error;
 
-/// A rejected process output path. See [`OutputPath`] for the filesystem contract.
-#[derive(Debug, Error)]
-pub enum OutputPathError {
-    #[error("Invalid output component {0:?}: expected one nonempty filename")]
-    InvalidComponent(String),
-    #[error("Refusing symlink in process output path {0}")]
-    Symlink(PathBuf),
-    #[error("Expected a regular file at {0}")]
-    NotFile(PathBuf),
-    #[error("Process output I/O at {path}: {source}")]
-    Io {
-        path: PathBuf,
-        #[source]
-        source: IoError,
-    },
-}
+use std::io::Result as IoResult;
 
-/// An output path whose existing ancestors contain no symlinks.
-///
-/// Names are preserved verbatim and must be single components; this never applies
-/// a lossy slug conversion. Existing symlinks, including ancestors of the supplied
-/// root, are refused. The caller must exclude concurrent hostile filesystem changes;
-/// these checks do not provide descriptor-relative protection against symlink races.
-///
-/// ```no_run
-/// # use gammalooprs::processes::OutputPath;
-/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
-/// let root = OutputPath::new("export".as_ref())?;
-/// root.ensure_directory()?;
-/// let child = root.join("process")?;
-/// child.create_directory()?;
-/// child.join("graph.dot")?.create_file()?;
-/// child.join("template.typ")?.write(b"complete template")?;
-/// # Ok(()) }
-/// ```
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct OutputPath(PathBuf);
-
-impl OutputPath {
-    /// Check a root without creating it. See the example on [`Self`].
-    pub fn new(path: &Path) -> Result<Self, OutputPathError> {
-        let output = Self(path.to_path_buf());
-        output.check()?;
-        Ok(output)
-    }
-
-    /// Reject separators, absolute paths, dot components and empty names.
-    /// See the example on [`Self`].
-    pub fn validate_component(name: &str) -> Result<(), OutputPathError> {
-        if name.is_empty()
-            || name.contains(['/', '\\', '\0'])
-            || !matches!(
-                Path::new(name).components().next(),
-                Some(Component::Normal(_))
-            )
-            || Path::new(name).components().count() != 1
-        {
-            return Err(OutputPathError::InvalidComponent(name.to_owned()));
-        }
-        Ok(())
-    }
-
-    /// Append one validated, unchanged component. See the example on [`Self`].
-    pub fn join(&self, name: &str) -> Result<Self, OutputPathError> {
-        Self::validate_component(name)?;
-        Self::new(&self.0.join(name))
-    }
-
-    /// Borrow the checked path. See the example on [`Self`].
-    pub fn as_path(&self) -> &Path {
-        &self.0
-    }
-
-    /// Recheck all existing ancestors, without writing. See the example on [`Self`].
-    pub fn check(&self) -> Result<(), OutputPathError> {
-        for path in self.0.ancestors() {
-            if path.as_os_str().is_empty() {
-                continue;
-            }
-            match fs::symlink_metadata(path) {
-                Ok(metadata) if metadata.file_type().is_symlink() => {
-                    return Err(OutputPathError::Symlink(path.to_owned()));
-                }
-                Ok(_) => {}
-                Err(error) if error.kind() == ErrorKind::NotFound => {}
-                Err(source) => return Err(Self::io(path, source)),
-            }
-        }
-        Ok(())
-    }
-
-    // Lower compiler/export serializers own their filenames. Refuse symlinks in
-    // their existing subtree before handing them a mutable output directory.
-    pub(super) fn check_tree(&self) -> Result<(), OutputPathError> {
-        self.check()?;
-        let mut pending = vec![self.0.clone()];
-        while let Some(path) = pending.pop() {
-            let metadata = match fs::symlink_metadata(&path) {
-                Ok(metadata) => metadata,
-                Err(error) if error.kind() == ErrorKind::NotFound => continue,
-                Err(source) => return Err(Self::io(&path, source)),
-            };
-            if metadata.file_type().is_symlink() {
-                return Err(OutputPathError::Symlink(path));
-            }
-            if metadata.is_dir() {
-                for entry in fs::read_dir(&path).map_err(|source| Self::io(&path, source))? {
-                    pending.push(entry.map_err(|source| Self::io(&path, source))?.path());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    /// Create directories, refusing existing symlinked parents. See [`Self`].
-    pub fn ensure_directory(&self) -> Result<(), OutputPathError> {
-        self.check()?;
-        fs::create_dir_all(&self.0).map_err(|source| Self::io(&self.0, source))
-    }
-
-    /// Exclusively create a staging directory. See the example on [`Self`].
-    pub fn create_directory(&self) -> Result<(), OutputPathError> {
-        self.check()?;
-        fs::create_dir(&self.0).map_err(|source| Self::io(&self.0, source))
-    }
-
-    /// Create a fresh file, replacing a regular-file entry; never remove a directory.
-    /// Existing hard links keep their contents. See [`Self`].
-    pub fn create_file(&self) -> Result<File, OutputPathError> {
-        self.check()?;
-        match fs::symlink_metadata(&self.0) {
-            Ok(metadata) if !metadata.is_file() => {
-                return Err(OutputPathError::NotFile(self.0.clone()));
-            }
-            Ok(_) => {
-                fs::remove_file(&self.0).map_err(|source| Self::io(&self.0, source))?;
-            }
-            Err(error) if error.kind() == ErrorKind::NotFound => {}
-            Err(source) => return Err(Self::io(&self.0, source)),
-        }
-        File::create_new(&self.0).map_err(|source| Self::io(&self.0, source))
-    }
-
-    /// Write and flush a checked regular-file target. See the example on [`Self`].
-    pub fn write(&self, contents: &[u8]) -> Result<(), OutputPathError> {
-        let mut file = self.create_file()?;
-        file.write_all(contents)
-            .map_err(|source| Self::io(&self.0, source))?;
-        file.flush().map_err(|source| Self::io(&self.0, source))
-    }
-
-    fn io(path: &Path, source: IoError) -> OutputPathError {
-        OutputPathError::Io {
-            path: path.to_owned(),
-            source,
-        }
-    }
-}
-
-#[cfg(test)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum SaveStep {
     Integrand,
     Metadata,
 }
 
-#[cfg(test)]
 thread_local! {
     static SAVE_FAULT: Cell<Option<SaveStep>> = const { Cell::new(None) };
 }
 
-#[cfg(test)]
-pub(super) fn save_step(step: SaveStep, path: &Path) -> ReportResult<()> {
+pub(super) fn save_step(step: SaveStep, path: &Path) -> IoResult<()> {
     if SAVE_FAULT.get() == Some(step) {
         match step {
             SaveStep::Integrand => fs::write(path, b"test-only integrand write obstruction")?,
@@ -194,10 +27,8 @@ pub(super) fn save_step(step: SaveStep, path: &Path) -> ReportResult<()> {
     Ok(())
 }
 
-#[cfg(test)]
 pub(super) struct SaveFaultGuard;
 
-#[cfg(test)]
 impl SaveFaultGuard {
     pub(super) fn new(step: SaveStep) -> Self {
         assert!(SAVE_FAULT.replace(Some(step)).is_none());
@@ -205,22 +36,22 @@ impl SaveFaultGuard {
     }
 }
 
-#[cfg(test)]
 impl Drop for SaveFaultGuard {
     fn drop(&mut self) {
         SAVE_FAULT.set(None);
     }
 }
 
-#[cfg(test)]
 mod tests {
     use super::*;
 
+    use alphal00p_persistence::{OutputPath, OutputPathError};
     use std::env;
     use std::error::Error as StdError;
-    use std::io::Cursor;
+    use std::io::{Cursor, Error as IoError, ErrorKind};
     #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
+    use std::path::PathBuf;
     use std::process;
     use std::sync::atomic::{AtomicU64, Ordering};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -228,17 +59,25 @@ mod tests {
     use crate::GammaLoopContextContainer;
     use crate::graph::Graph;
     use crate::initialisation::test_initialise;
+    use crate::integrands::process::ProcessIntegrand;
     use crate::model::Model;
     use crate::processes::{
-        DotExportSettings, IntegrandSnapshotEntry, Process, ProcessCollection, ProcessDefinition,
-        ProcessList, ProcessLoadIntegrandSelector, ProcessLoadSelection, ProcessSnapshotError,
+        DotExportSettings, INTEGRAND_BINARY_FILE, INTEGRAND_SETTINGS_FILE, IntegrandPayload,
+        IntegrandSnapshotEntry, PROCESSES_DIRECTORY, Process, ProcessCollection, ProcessDefinition,
+        ProcessList, ProcessLoadIntegrandSelector, ProcessLoadSelection, ProcessPayloadError,
+        ProcessSnapshotError,
     };
     use crate::settings::{GlobalSettings, RuntimeSettings};
     use crate::utils;
+    use crate::utils::serde_utils::{ShowDefaultsGuard, SmartSerde};
+    use bincode::config;
     use bincode::error::DecodeError;
     use feynkit_generator::GenerationType;
     use rayon::ThreadPoolBuilder;
+    use symbolica::evaluate::FunctionMap;
     use symbolica::state::State as SymbolicaState;
+    use toml::Value;
+    use toml::de::Error as SettingsDecodeError;
 
     static NEXT_ROOT: AtomicU64 = AtomicU64::new(0);
 
@@ -301,6 +140,37 @@ mod tests {
         (model, list)
     }
 
+    // ParamBuilder::fn_map is reconstructed on decode; its recorded `reps` remain
+    // part of this comparison. Do not normalize any other persisted field.
+    fn persisted_data_without_rebuilt_maps(integrand: &mut ProcessIntegrand) -> Vec<u8> {
+        match integrand {
+            ProcessIntegrand::Amplitude(integrand) => {
+                for term in &mut integrand.data.graph_terms {
+                    for builder in [
+                        &mut term.param_builder,
+                        &mut term.graph.param_builder,
+                        &mut term.multi_channeling_setup.graph.param_builder,
+                    ] {
+                        builder.fn_map = FunctionMap::new();
+                    }
+                }
+                bincode::encode_to_vec(&integrand.data, config::standard()).unwrap()
+            }
+            ProcessIntegrand::CrossSection(integrand) => {
+                for term in &mut integrand.data.graph_terms {
+                    for builder in [
+                        &mut term.param_builder,
+                        &mut term.graph.param_builder,
+                        &mut term.multi_channeling_setup.graph.param_builder,
+                    ] {
+                        builder.fn_map = FunctionMap::new();
+                    }
+                }
+                bincode::encode_to_vec(&integrand.data, config::standard()).unwrap()
+            }
+        }
+    }
+
     #[test]
     fn process_snapshot_write_failures_retain_generated_integrands() {
         for kind in [GenerationType::Amplitude, GenerationType::CrossSection] {
@@ -335,8 +205,9 @@ mod tests {
             .unwrap();
             for step in [SaveStep::Integrand, SaveStep::Metadata] {
                 let root = TestRoot::new();
+                let output = OutputPath::new(&root.0).unwrap();
                 let fault = SaveFaultGuard::new(step);
-                let error = list.write_snapshot(&root.0).err().unwrap();
+                let error = list.write_snapshot(&output).err().unwrap();
                 assert!(
                     matches!(error, ProcessSnapshotError::Payload { .. }),
                     "{kind}/{step:?}: {error:?}"
@@ -362,16 +233,137 @@ mod tests {
                 );
             }
             let root = TestRoot::new();
-            let index = list.write_snapshot(&root.0).unwrap();
-            assert!(index.processes[0].children[0].generated);
+            let output = OutputPath::new(&root.0).unwrap();
+            let index = list.write_snapshot(&output).unwrap();
+            assert_eq!(
+                index.processes[0].children[0].payload,
+                IntegrandPayload::Generated
+            );
             let definition_path = root
                 .0
-                .join("processes")
+                .join(PROCESSES_DIRECTORY)
                 .join(index.processes[0].kind_directory())
                 .join("process/def.bin");
             let old_definition = fs::read(&definition_path).unwrap();
-            assert!(list.write_snapshot(&root.0).is_err());
+            assert!(list.write_snapshot(&output).is_err());
             assert_eq!(fs::read(definition_path).unwrap(), old_definition);
+
+            let child = output
+                .join(PROCESSES_DIRECTORY)
+                .unwrap()
+                .join(index.processes[0].kind_directory())
+                .unwrap()
+                .join("process")
+                .unwrap()
+                .join("child")
+                .unwrap();
+            let settings_path = child
+                .join_relative(Path::new(INTEGRAND_SETTINGS_FILE))
+                .unwrap();
+            let settings_text = fs::read_to_string(settings_path.as_path()).unwrap();
+            let schema = runtime.schema_path().unwrap();
+            assert_eq!(
+                settings_text.lines().next().unwrap(),
+                format!("#:schema {}", schema.display())
+            );
+            let integrand = list.get_integrand(0, "child").unwrap();
+            let settings = integrand.require_generated().unwrap().get_settings();
+            let expected_settings = {
+                let _guard = ShowDefaultsGuard::new(true);
+                Value::try_from(settings).unwrap()
+            };
+            let persisted_settings: Value = toml::from_str(&settings_text).unwrap();
+            assert_eq!(persisted_settings, expected_settings);
+            let required_files = index.processes[0].required_files();
+            assert!(!required_files.is_empty());
+            for relative in required_files {
+                assert!(root.0.join(relative).is_file());
+            }
+
+            let mut symbols = Vec::new();
+            SymbolicaState::export(&mut symbols).unwrap();
+            let state_map = SymbolicaState::import(&mut Cursor::new(symbols), None).unwrap();
+            let context = GammaLoopContextContainer {
+                model: &model,
+                state_map: &state_map,
+            };
+            let mut loaded = ProcessList::load(&output, &index, context).unwrap();
+            assert_eq!(loaded.processes.len(), list.processes.len());
+            for (actual, expected) in loaded.processes.iter().zip(&list.processes) {
+                assert_eq!(actual.definition, expected.definition);
+                assert_eq!(
+                    actual.snapshot_entry().unwrap(),
+                    expected.snapshot_entry().unwrap(),
+                );
+            }
+            let original = list.get_integrand(0, "child").unwrap();
+            let original = original.require_generated().unwrap();
+            let restored = loaded.get_integrand(0, "child").unwrap();
+            let restored = restored.require_generated().unwrap();
+            let restored_settings = {
+                let _guard = ShowDefaultsGuard::new(true);
+                Value::try_from(restored.get_settings()).unwrap()
+            };
+            assert_eq!(restored_settings, expected_settings);
+            assert_eq!(restored.graph_count(), original.graph_count());
+            assert_eq!(restored.graph_group_count(), original.graph_group_count());
+            assert_eq!(
+                restored.graph_group_master_names(),
+                original.graph_group_master_names(),
+            );
+
+            // These test-owned integrands are no longer used after this comparison.
+            // Compare the complete wire payload, including private and future fields,
+            // while excluding only the hash-ordered maps rebuilt from recorded entries.
+            let original = list.get_integrand_mut(0, "child").unwrap();
+            let restored = loaded.get_integrand_mut(0, "child").unwrap();
+            assert_eq!(
+                restored.kind_name(),
+                original.kind_name(),
+                "saved {kind} integrand changed its process kind",
+            );
+            assert_eq!(
+                persisted_data_without_rebuilt_maps(restored),
+                persisted_data_without_rebuilt_maps(original),
+                "saved {kind} integrand changed its persisted fields",
+            );
+
+            fs::remove_file(settings_path.as_path()).unwrap();
+            let error = ProcessList::load(&output, &index, context).err().unwrap();
+            let ProcessSnapshotError::Payload(failure) = error else {
+                panic!("expected a missing-settings payload failure: {error:?}");
+            };
+            assert!(matches!(
+                &failure.source,
+                ProcessPayloadError::Read { path, source }
+                    if path == settings_path.as_path() && source.kind() == ErrorKind::NotFound
+            ));
+            assert!(failure.source.source().unwrap().is::<IoError>());
+
+            fs::write(settings_path.as_path(), "[invalid").unwrap();
+            let error = ProcessList::load(&output, &index, context).err().unwrap();
+            let ProcessSnapshotError::Payload(failure) = error else {
+                panic!("expected malformed-settings payload failure: {error:?}");
+            };
+            assert!(matches!(
+                &failure.source,
+                ProcessPayloadError::SettingsDecode { path, .. } if path == settings_path.as_path()
+            ));
+            assert!(failure.source.source().unwrap().is::<SettingsDecodeError>());
+
+            let binary_path = child
+                .join_relative(Path::new(INTEGRAND_BINARY_FILE))
+                .unwrap();
+            fs::write(binary_path.as_path(), []).unwrap();
+            let error = ProcessList::load(&output, &index, context).err().unwrap();
+            let ProcessSnapshotError::Payload(failure) = error else {
+                panic!("expected malformed-binary payload failure: {error:?}");
+            };
+            assert!(matches!(
+                &failure.source,
+                ProcessPayloadError::Decode { path, .. } if path == binary_path.as_path()
+            ));
+            assert!(failure.source.source().unwrap().is::<DecodeError>());
         }
     }
 
@@ -382,6 +374,7 @@ mod tests {
         fs::create_dir(&outside).unwrap();
         fs::write(outside.join("sentinel"), b"preserve").unwrap();
         let root = temporary.0.join("output");
+        let output = OutputPath::new(&root).unwrap();
         fs::create_dir(&root).unwrap();
         for bad in [
             "",
@@ -395,7 +388,7 @@ mod tests {
             let (_, mut list) = fixture(GenerationType::Amplitude);
             list.processes[0].definition.folder_name = bad.into();
             assert!(
-                list.export_dot(&root, &DotExportSettings::default())
+                list.export_dot(&output, &DotExportSettings::default())
                     .is_err(),
                 "process {bad:?}"
             );
@@ -404,7 +397,7 @@ mod tests {
                 amplitudes.get_mut("child").unwrap().name = bad.into();
             }
             assert!(
-                list.export_dot(&root, &DotExportSettings::default())
+                list.export_dot(&output, &DotExportSettings::default())
                     .is_err(),
                 "child {bad:?}"
             );
@@ -413,7 +406,7 @@ mod tests {
                 amplitudes.get_mut("child").unwrap().graphs[0].graph.name = bad.into();
             }
             assert!(
-                list.export_dot(&root, &DotExportSettings::default())
+                list.export_dot(&output, &DotExportSettings::default())
                     .is_err(),
                 "graph {bad:?}"
             );
@@ -423,11 +416,13 @@ mod tests {
         if let ProcessCollection::Amplitudes(amplitudes) = &mut list.processes[0].collection {
             amplitudes.get_mut("child").unwrap().graphs[0].graph.name = "victim".into();
         }
-        let target = root.join("processes/amplitudes/process/child/victim.dot");
+        let target = root
+            .join(PROCESSES_DIRECTORY)
+            .join("amplitudes/process/child/victim.dot");
         fs::create_dir_all(&target).unwrap();
         fs::write(target.join("sentinel"), b"preserve directory").unwrap();
         assert!(
-            list.export_dot(&root, &DotExportSettings::default())
+            list.export_dot(&output, &DotExportSettings::default())
                 .is_err()
         );
         assert_eq!(
@@ -446,7 +441,7 @@ mod tests {
                 amplitudes.get_mut("child").unwrap().graphs[0].graph.name = escaped_graph;
             }
             assert!(
-                list.export_dot(&root, &DotExportSettings::default())
+                list.export_dot(&output, &DotExportSettings::default())
                     .is_err()
             );
             assert_eq!(
@@ -464,17 +459,21 @@ mod tests {
         fs::create_dir(&outside).unwrap();
         fs::write(outside.join("sentinel"), b"preserve").unwrap();
         let root = temporary.0.join("output");
+        let output = OutputPath::new(&root).unwrap();
         fs::create_dir(&root).unwrap();
-        unix_fs::symlink(&outside, root.join("processes")).unwrap();
+        unix_fs::symlink(&outside, root.join(PROCESSES_DIRECTORY)).unwrap();
         let (_, list) = fixture(GenerationType::Amplitude);
         assert!(
-            list.export_dot(&root, &DotExportSettings::default())
+            list.export_dot(&output, &DotExportSettings::default())
                 .is_err()
         );
-        fs::remove_file(root.join("processes")).unwrap();
+        fs::remove_file(root.join(PROCESSES_DIRECTORY)).unwrap();
         let link = root.join("file.dot");
         unix_fs::symlink(outside.join("sentinel"), &link).unwrap();
-        assert!(OutputPath::new(&link).is_err());
+        assert!(matches!(
+            output.join("file.dot"),
+            Err(OutputPathError::Symlink(_))
+        ));
         assert_eq!(fs::read(outside.join("sentinel")).unwrap(), b"preserve");
         assert_eq!(fs::read_dir(&outside).unwrap().count(), 1);
     }
@@ -482,10 +481,11 @@ mod tests {
     #[test]
     fn process_snapshot_rejects_inconsistent_ids_and_names_before_writing() {
         let root = TestRoot::new();
+        let output = OutputPath::new(&root.0).unwrap();
         let (_, mut list) = fixture(GenerationType::Amplitude);
         list.processes[0].definition.process_id = 7;
         assert!(matches!(
-            list.write_snapshot(&root.0),
+            list.write_snapshot(&output),
             Err(ProcessSnapshotError::InvalidProcessId {
                 expected: 0,
                 actual: 7,
@@ -497,30 +497,38 @@ mod tests {
         if let ProcessCollection::Amplitudes(amplitudes) = &mut list.processes[0].collection {
             amplitudes.get_mut("child").unwrap().name = "other".into();
         }
-        assert!(
-            matches!(list.write_snapshot(&root.0), Err(ProcessSnapshotError::ChildNameMismatch { expected, actual, .. }) if expected == "child" && actual == "other")
-        );
+        let error = list.write_snapshot(&output).unwrap_err();
+        assert!(matches!(
+            error,
+            ProcessSnapshotError::ChildNameMismatch { expected, actual, .. }
+                if expected == "child" && actual == "other"
+        ));
         assert_eq!(fs::read_dir(&root.0).unwrap().count(), 0);
     }
 
     #[test]
     fn process_snapshot_errors_distinguish_membership_and_preserve_decode_sources() {
         let root = TestRoot::new();
+        let output = OutputPath::new(&root.0).unwrap();
         let (model, mut list) = fixture(GenerationType::Amplitude);
-        let index = list.write_snapshot(&root.0).unwrap();
+        let index = list.write_snapshot(&output).unwrap();
         let mut invalid = index.clone();
         invalid.processes.push(invalid.processes[0].clone());
-        assert!(
-            matches!(invalid.validate(), Err(ProcessSnapshotError::DuplicateProcess { process }) if process == "process")
-        );
+        let error = invalid.validate().unwrap_err();
+        assert!(matches!(
+            error,
+            ProcessSnapshotError::DuplicateProcess { process } if process == "process"
+        ));
         invalid = index.clone();
         invalid.processes[0].children.push(IntegrandSnapshotEntry {
             name: "child".into(),
-            generated: false,
+            payload: IntegrandPayload::MetadataOnly,
         });
-        assert!(
-            matches!(invalid.validate(), Err(ProcessSnapshotError::InvalidChildOrder { previous, child, .. }) if previous == child)
-        );
+        let error = invalid.validate().unwrap_err();
+        assert!(matches!(
+            error,
+            ProcessSnapshotError::InvalidChildOrder { previous, child, .. } if previous == child
+        ));
         invalid = index.clone();
         invalid.processes[0].folder_name = "../outside".into();
         assert!(matches!(
@@ -539,30 +547,38 @@ mod tests {
         };
         let mut selection = ProcessLoadSelection::default();
         selection.process_names.insert("missing".into());
-        assert!(
-            matches!(ProcessList::load_with_selection(&root.0, &index, context, Some(&selection)), Err(ProcessSnapshotError::UnknownProcess { process, available }) if process == "missing" && available == ["process"])
-        );
+        let error = ProcessList::load_with_selection(&output, &index, context, Some(&selection))
+            .err()
+            .unwrap();
+        assert!(matches!(
+            error,
+            ProcessSnapshotError::UnknownProcess { process, available }
+                if process == "missing" && available == ["process"]
+        ));
         selection.process_names.clear();
         selection
             .integrand_selectors
             .push(ProcessLoadIntegrandSelector::Name("missing".into()));
         assert!(matches!(
-            ProcessList::load_with_selection(&root.0, &index, context, Some(&selection)),
+            ProcessList::load_with_selection(&output, &index, context, Some(&selection)),
             Err(ProcessSnapshotError::UnknownIntegrand { .. })
         ));
 
         let definition = root.0.join("processes/amplitudes/process/def.bin");
         fs::write(&definition, []).unwrap();
-        let error = ProcessList::load(&root.0, &index, context).err().unwrap();
-        assert!(
-            matches!(&error, ProcessSnapshotError::DefinitionDecode { path, .. } if path == &definition)
-        );
+        let error = ProcessList::load(&output, &index, context).err().unwrap();
+        assert!(matches!(
+            &error,
+            ProcessSnapshotError::DefinitionDecode { path, .. } if path == &definition
+        ));
         assert!(error.source().unwrap().is::<DecodeError>());
         fs::remove_file(&definition).unwrap();
-        let error = ProcessList::load(&root.0, &index, context).err().unwrap();
-        assert!(
-            matches!(&error, ProcessSnapshotError::Read { path, source } if path == &definition && source.kind() == ErrorKind::NotFound)
-        );
+        let error = ProcessList::load(&output, &index, context).err().unwrap();
+        assert!(matches!(
+            &error,
+            ProcessSnapshotError::Read { path, source }
+                if path == &definition && source.kind() == ErrorKind::NotFound
+        ));
         assert!(error.source().unwrap().is::<IoError>());
     }
 

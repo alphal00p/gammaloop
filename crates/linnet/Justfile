@@ -13,10 +13,10 @@ default: wasm
 
 # Build WASM target for linnest through the workspace Nix package
 wasm:
-    cd "{{ justfile_directory() }}/../.." && nix build .#linnest-wasm --print-build-logs
+    cd "{{ source_directory() }}/../.." && just nix-build linnest-wasm --print-build-logs
 
 prepare-templates:
-    cd "{{ justfile_directory() }}/../.." && just sync-drawing-assets
+    cd "{{ source_directory() }}/../.." && just sync-drawing-assets
 
 # Build all packages
 build:

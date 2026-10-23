@@ -1623,20 +1623,15 @@ workspace and Pages artifacts tests the opt-in path without adding the watcher,
 server, or Typst compiler dependencies to release builds.
 
 Pages now prepares the pure `alphal00p-docs-build` launcher, then executes it
-as an ordinary user process into an explicit output directory. Channel, tag,
-commit and timestamp are runtime arguments or environment inputs. Credentials
-are loaded only in that process; they never enter derivation fields or Nix
-cache identities. An exact rerun executes validation and rendering again.
-`nix-ci-check-alphal00p-docs` likewise executes latest and snapshot renders,
-HTML checks and publication-preservation assertions on every invocation.
-The snapshot fixture copies generated ownership markers from the preceding
-real latest publisher before seeding its stale-route test data.
+outside the Nix sandbox into an explicit output directory. Channel, tag, commit,
+timestamp and credentials are runtime inputs. Every invocation validates and
+renders again, including the latest/snapshot and publication checks in
+`nix-ci-check-alphal00p-docs`.
 
-The pure Cargo producer, source, native libraries and prepared environment
-retain actual Nix references. The Pages and Nix workflows publish/reuse their
-compiled inputs in separate Hestia cache namespaces, retaining their existing
-producer upload barriers. A cached launcher or producer is preparation, never
-a documentation runtime pass. See #link("ci.typ")[CI maintenance and measurements]
+The launcher retains Nix references to the pure Cargo producer, source, native
+libraries and prepared environment. Pages and Nix workflows reuse compiled
+inputs in separate Hestia cache namespaces with producer upload barriers.
+See #link("ci.typ")[CI maintenance and measurements]
 for the executable APIs, credential precedence, reports and retry contract.
 
 Rustdoc can emit unresolved pseudo-links inherited from dependency prose,
@@ -1818,22 +1813,21 @@ own derivation lets NixCI cache and schedule it independently, while the merge
 policy remains covered without rerendering either tree. Lower-level renderer
 tests retain deterministic-output and persistent-session coverage.
 
-The historical merge derivation provided Bash explicitly because the updater is a child
-shell process. Its first test intentionally captures an expected failure; if
-`bash` is absent from `PATH`, that command-not-found error is captured instead
-and the following message assertion fails without useful output. The historical merge used shell tracing for assertion diagnostics. The current
-licensed runtime disables xtrace and retains its report log outside scratch. Its
-cross-project link assertion uses the relative URL emitted by a full-site build;
-only isolated product previews rewrite that URL to the absolute public origin.
+The historical merge derivation supplied Bash for the updater and used shell
+tracing for assertion diagnostics. Without Bash, its expected-failure test
+captured command-not-found instead of the intended publication error. The current
+licensed runtime disables tracing and retains its report log outside scratch.
+The cross-project assertion uses full-site relative URLs; isolated product
+previews use the absolute public origin.
 
 The static graph and derivation shapes can be checked without building
 the cold Cargo closure:
 
 ```bash
-nix eval --json --file nix-ci.nix
-nix flake check --impure --no-build 'path:.'
-nix derivation show \
-  'path:.#checks.x86_64-linux.gammaloop-nextest-binaries-spenso'
+env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED nix eval --json --file nix-ci.nix
+just nix-flake-check --impure --no-build
+env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED nix derivation show \
+  "$(just nix-source)#checks.x86_64-linux.gammaloop-nextest-binaries-spenso"
 ```
 
 A fresh NixCI run is still required to measure cross-worker execution

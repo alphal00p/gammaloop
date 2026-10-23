@@ -1,46 +1,38 @@
-use ahash::HashSet;
-use linnet::half_edge::involution::Flow;
-use linnet::half_edge::involution::HedgePair;
-use linnet::half_edge::involution::Orientation;
-use rayon::ThreadPool;
-use std::result::Result as SnapshotResult;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fs::{self, File},
-    io::Write,
-    path::Path,
+use super::{
+    Amplitude, CrossSection, DotExportSettings, GeneratedGraphReport, GenerationProcessKind,
+    GenerationProgressPhase, IntegrandPayload, IntegrandSnapshotEntry, NamedGraphGenerationReport,
+    PROCESS_DEFINITION_FILE, PROCESSES_DIRECTORY, ProcessPayloadError, ProcessSnapshotEntry,
+    ProcessSnapshotError, StandaloneExportSettings, generation_progress,
 };
-use tracing::warn;
-// use bincode::{Decode, Encode};
+use crate::graph::Graph;
+use crate::graph::edge::PossibleParticle;
+use crate::integrands::process::ProcessIntegrand;
+use crate::model::Model;
+use crate::settings::global::GenerationSettings;
+use crate::settings::runtime::LockedRuntimeSettings;
+use crate::settings::{GlobalSettings, RuntimeSettings};
+use crate::utils::serde_utils::ShowDefaultsGuard;
+use crate::uv::export::UVForestExportSettings;
+use crate::{GammaLoopContext, GammaLoopContextContainer};
+use ahash::HashSet;
+use alphal00p_persistence::OutputPath;
+use bincode::config;
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Help, Result};
-use itertools::Itertools;
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use tracing::debug;
-
-use crate::graph::edge::PossibleParticle;
-use crate::processes::DotExportSettings;
-
-use crate::processes::StandaloneExportSettings;
-use crate::{
-    GammaLoopContext, GammaLoopContextContainer,
-    integrands::process::ProcessIntegrand,
-    settings::{GlobalSettings, RuntimeSettings, runtime::LockedRuntimeSettings},
-    uv::export::UVForestExportSettings,
-};
 use eyre::{Context, eyre};
 use feynkit_generator::{
     FilterScope, GenerationOptions, GenerationType, Process as GenerationProcess,
 };
-
-use crate::{graph::Graph, model::Model, settings::global::GenerationSettings};
-
-use super::{
-    Amplitude, CrossSection, GeneratedGraphReport, GenerationProcessKind, GenerationProgressPhase,
-    IntegrandSnapshotEntry, NamedGraphGenerationReport, OutputPath, ProcessSnapshotEntry,
-    ProcessSnapshotError, generation_progress,
-};
+use itertools::Itertools;
+use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
+use rayon::ThreadPool;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::fs::{self, File};
+use std::io::Write;
+use std::result::Result as StdResult;
+use tracing::{debug, warn};
 
 const SETTINGS_HISTORY_TOML: &str = "settings_history.toml";
 
@@ -64,11 +56,11 @@ impl<'a> ResolvedIntegrandRef<'a> {
     }
 }
 
-fn create_overwriting_file(path: &Path, file_kind: &str) -> Result<File> {
-    OutputPath::new(path)?.create_file().with_context(|| {
+fn create_overwriting_file(path: &OutputPath, file_kind: &str) -> Result<File> {
+    path.create_file().with_context(|| {
         format!(
             "Trying to create file to export {file_kind} {}",
-            path.display()
+            path.as_path().display()
         )
     })
 }
@@ -442,8 +434,8 @@ impl Process {
 }
 
 impl Process {
-    fn load_settings_history(path: &Path) -> SnapshotResult<GlobalSettings, ProcessSnapshotError> {
-        let path = path.join(SETTINGS_HISTORY_TOML);
+    fn load_settings_history(path: &OutputPath) -> StdResult<GlobalSettings, ProcessSnapshotError> {
+        let path = path.join(SETTINGS_HISTORY_TOML)?.as_path().to_owned();
         let source = fs::read_to_string(&path).map_err(|source| ProcessSnapshotError::Read {
             path: path.clone(),
             source,
@@ -452,9 +444,7 @@ impl Process {
             .map_err(|source| ProcessSnapshotError::SettingsDecode { path, source })
     }
 
-    pub(super) fn snapshot_entry(
-        &self,
-    ) -> SnapshotResult<ProcessSnapshotEntry, ProcessSnapshotError> {
+    pub(super) fn snapshot_entry(&self) -> StdResult<ProcessSnapshotEntry, ProcessSnapshotError> {
         let mut children = Vec::new();
         let kind = match &self.collection {
             ProcessCollection::Amplitudes(amplitudes) => {
@@ -466,12 +456,22 @@ impl Process {
                             actual: amplitude.name.clone(),
                         });
                     }
-                    if amplitude.integrand.as_ref().is_some_and(|integrand| !matches!(integrand, ProcessIntegrand::Amplitude(value) if value.data.name == *name)) {
-                        return Err(ProcessSnapshotError::GeneratedChildMismatch { process: self.definition.folder_name.clone(), child: name.clone(), kind: GenerationType::Amplitude });
+                    if amplitude.integrand.as_ref().is_some_and(|integrand| {
+                        !matches!(integrand, ProcessIntegrand::Amplitude(value)
+                            if value.data.name == *name)
+                    }) {
+                        return Err(ProcessSnapshotError::GeneratedChildMismatch {
+                            process: self.definition.folder_name.clone(),
+                            child: name.clone(),
+                            kind: GenerationType::Amplitude,
+                        });
                     }
                     children.push(IntegrandSnapshotEntry {
                         name: name.clone(),
-                        generated: amplitude.integrand.is_some(),
+                        payload: match amplitude.integrand {
+                            Some(_) => IntegrandPayload::Generated,
+                            None => IntegrandPayload::MetadataOnly,
+                        },
                     });
                 }
                 GenerationType::Amplitude
@@ -485,12 +485,22 @@ impl Process {
                             actual: cross_section.name.clone(),
                         });
                     }
-                    if cross_section.integrand.as_ref().is_some_and(|integrand| !matches!(integrand, ProcessIntegrand::CrossSection(value) if value.data.name == *name)) {
-                        return Err(ProcessSnapshotError::GeneratedChildMismatch { process: self.definition.folder_name.clone(), child: name.clone(), kind: GenerationType::CrossSection });
+                    if cross_section.integrand.as_ref().is_some_and(|integrand| {
+                        !matches!(integrand, ProcessIntegrand::CrossSection(value)
+                            if value.data.name == *name)
+                    }) {
+                        return Err(ProcessSnapshotError::GeneratedChildMismatch {
+                            process: self.definition.folder_name.clone(),
+                            child: name.clone(),
+                            kind: GenerationType::CrossSection,
+                        });
                     }
                     children.push(IntegrandSnapshotEntry {
                         name: name.clone(),
-                        generated: cross_section.integrand.is_some(),
+                        payload: match cross_section.integrand {
+                            Some(_) => IntegrandPayload::Generated,
+                            None => IntegrandPayload::MetadataOnly,
+                        },
                     });
                 }
                 GenerationType::CrossSection
@@ -512,28 +522,28 @@ impl Process {
     }
 
     pub(super) fn load_snapshot(
-        root: &Path,
+        root: &OutputPath,
         entry: &ProcessSnapshotEntry,
         process_id: usize,
         context: GammaLoopContextContainer<'_>,
         selected: Option<&BTreeSet<String>>,
-    ) -> SnapshotResult<Self, ProcessSnapshotError> {
-        let path = OutputPath::new(root)?
-            .join("processes")?
+    ) -> StdResult<Self, ProcessSnapshotError> {
+        let path = root
+            .join(PROCESSES_DIRECTORY)?
             .join(entry.kind_directory())?
             .join(&entry.folder_name)?;
-        let path = path.as_path();
-        let definition_path = path.join("def.bin");
+        let definition_path = path.join(PROCESS_DEFINITION_FILE)?.as_path().to_owned();
         let binary = fs::read(&definition_path).map_err(|source| ProcessSnapshotError::Read {
             path: definition_path.clone(),
             source,
         })?;
         let (definition, _): (ProcessDefinition, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)
-                .map_err(|source| ProcessSnapshotError::DefinitionDecode {
+            bincode::decode_from_slice_with_context(&binary, config::standard(), context).map_err(
+                |source| ProcessSnapshotError::DefinitionDecode {
                     path: definition_path,
                     source,
-                })?;
+                },
+            )?;
         if definition.process_id != process_id {
             return Err(ProcessSnapshotError::InvalidProcessId {
                 process: entry.folder_name.clone(),
@@ -562,11 +572,11 @@ impl Process {
             if selected.is_some_and(|names| !names.contains(&child.name)) {
                 continue;
             }
-            let child_path = OutputPath::new(path)?.join(&child.name)?;
+            let child_path = path.join(&child.name)?;
             match &mut collection {
                 ProcessCollection::Amplitudes(amplitudes) => {
-                    let amplitude = Amplitude::load(child_path.as_path(), context, child.generated)
-                        .map_err(|source| {
+                    let amplitude =
+                        Amplitude::load(&child_path, context, child.payload).map_err(|source| {
                             ProcessSnapshotError::payload(
                                 "load amplitude payload",
                                 &entry.folder_name,
@@ -584,16 +594,15 @@ impl Process {
                     amplitudes.insert(child.name.clone(), amplitude);
                 }
                 ProcessCollection::CrossSections(cross_sections) => {
-                    let cross_section =
-                        CrossSection::load(child_path.as_path(), context, child.generated)
-                            .map_err(|source| {
-                                ProcessSnapshotError::payload(
-                                    "load cross-section payload",
-                                    &entry.folder_name,
-                                    child_path.as_path(),
-                                    source,
-                                )
-                            })?;
+                    let cross_section = CrossSection::load(&child_path, context, child.payload)
+                        .map_err(|source| {
+                            ProcessSnapshotError::payload(
+                                "load cross-section payload",
+                                &entry.folder_name,
+                                child_path.as_path(),
+                                source,
+                            )
+                        })?;
                     if cross_section.name != child.name {
                         return Err(ProcessSnapshotError::ChildNameMismatch {
                             process: entry.folder_name.clone(),
@@ -609,68 +618,99 @@ impl Process {
             definition,
             collection,
             settings_history: if entry.settings_history {
-                Some(Self::load_settings_history(path)?)
+                Some(Self::load_settings_history(&path)?)
             } else {
                 None
             },
         })
     }
 
-    pub(super) fn write_snapshot(&mut self, processes_root: &Path) -> Result<()> {
+    pub(super) fn write_snapshot(
+        &mut self,
+        processes_root: &OutputPath,
+    ) -> StdResult<(), ProcessSnapshotError> {
         let entry = self.snapshot_entry()?;
-        let path = OutputPath::new(processes_root)?
+        let path = processes_root
             .join(entry.kind_directory())?
             .join(&entry.folder_name)?;
         path.create_directory()?;
-        let path = path.as_path();
-        let binary = bincode::encode_to_vec(&self.definition, bincode::config::standard())?;
-        fs::write(path.join("def.bin"), binary)?;
-        if let Some(settings) = &self.settings_history {
-            fs::write(
-                path.join(SETTINGS_HISTORY_TOML),
-                toml::to_string_pretty(settings)?,
-            )?;
-        }
-        match &mut self.collection {
-            ProcessCollection::Amplitudes(amplitudes) => {
-                for amplitude in amplitudes.values_mut() {
-                    amplitude.write_snapshot(path)?;
+        let result = (|| -> StdResult<(), ProcessPayloadError> {
+            let definition_path = path.join(PROCESS_DEFINITION_FILE)?.as_path().to_owned();
+            let binary =
+                bincode::encode_to_vec(&self.definition, config::standard()).map_err(|source| {
+                    ProcessPayloadError::Encode {
+                        path: definition_path.clone(),
+                        source,
+                    }
+                })?;
+            fs::write(&definition_path, binary).map_err(|source| ProcessPayloadError::Write {
+                path: definition_path,
+                source,
+            })?;
+            if let Some(settings) = &self.settings_history {
+                let settings_path = path.join(SETTINGS_HISTORY_TOML)?.as_path().to_owned();
+                let encoded = {
+                    let _guard = ShowDefaultsGuard::new(true);
+                    toml::to_string_pretty(settings)
+                }
+                .map_err(|source| ProcessPayloadError::SettingsEncode {
+                    path: settings_path.clone(),
+                    source,
+                })?;
+                fs::write(&settings_path, encoded).map_err(|source| {
+                    ProcessPayloadError::Write {
+                        path: settings_path,
+                        source,
+                    }
+                })?;
+            }
+            match &mut self.collection {
+                ProcessCollection::Amplitudes(amplitudes) => {
+                    for amplitude in amplitudes.values_mut() {
+                        amplitude.write_snapshot(&path)?;
+                    }
+                }
+                ProcessCollection::CrossSections(cross_sections) => {
+                    for cross_section in cross_sections.values_mut() {
+                        cross_section.write_snapshot(&path)?;
+                    }
                 }
             }
-            ProcessCollection::CrossSections(cross_sections) => {
-                for cross_section in cross_sections.values_mut() {
-                    cross_section.write_snapshot(path)?;
-                }
-            }
-        }
-        Ok(())
+            Ok(())
+        })();
+        result.map_err(|source| {
+            ProcessSnapshotError::payload(
+                "write snapshot payload",
+                &entry.folder_name,
+                path.as_path(),
+                source,
+            )
+        })
     }
 
+    /// Compile this process's integrands into validated artifact directories.
+    ///
+    /// See [`super::ProcessList::compile`] for an example.
+    ///
+    /// # Errors
+    /// Returns path, directory creation, or evaluator compilation failures.
     pub fn compile(
         &mut self,
-        path: impl AsRef<Path>,
-        override_existing: bool,
+        path: &OutputPath,
         integrand_name: Option<String>,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<GeneratedGraphReport>> {
+        let directory = self.collection.kind_directory();
         match &mut self.collection {
             ProcessCollection::Amplitudes(a) => {
-                let p = path.as_ref().join("amplitudes");
-                OutputPath::new(&p)?.ensure_directory()?;
-                let p = OutputPath::new(&p)?
-                    .join(&self.definition.folder_name)?
-                    .as_path()
-                    .to_owned();
+                let p = path.join(directory)?.join(&self.definition.folder_name)?;
 
-                let r = OutputPath::new(&p)?.ensure_directory().with_context(|| {
+                p.ensure_directory().with_context(|| {
                     format!(
-                        "Trying to create directory to export amplitude dot {}",
-                        p.display()
+                        "Trying to create directory to compile amplitude process {}",
+                        p.as_path().display()
                     )
-                });
-                if override_existing {
-                    r?;
-                }
+                })?;
 
                 let mut reports = Vec::new();
                 for amp in a.values_mut() {
@@ -680,27 +720,19 @@ impl Process {
                         continue;
                     }
 
-                    reports.extend(amp.compile(&p, override_existing, thread_pool)?);
+                    reports.extend(amp.compile(&p, thread_pool)?);
                 }
                 Ok(self.attach_process_id(reports))
             }
             ProcessCollection::CrossSections(cs) => {
-                let p = path.as_ref().join("cross_sections");
-                OutputPath::new(&p)?.ensure_directory()?;
-                let p = OutputPath::new(&p)?
-                    .join(&self.definition.folder_name)?
-                    .as_path()
-                    .to_owned();
+                let p = path.join(directory)?.join(&self.definition.folder_name)?;
 
-                let r = OutputPath::new(&p)?.ensure_directory().with_context(|| {
+                p.ensure_directory().with_context(|| {
                     format!(
-                        "Trying to create directory to export cross section dot {}",
-                        p.display()
+                        "Trying to create directory to compile cross-section process {}",
+                        p.as_path().display()
                     )
-                });
-                if override_existing {
-                    r?;
-                }
+                })?;
 
                 let mut reports = Vec::new();
                 for cs in cs.values_mut() {
@@ -710,7 +742,7 @@ impl Process {
                         continue;
                     }
 
-                    reports.extend(cs.compile(&p, override_existing, thread_pool)?);
+                    reports.extend(cs.compile(&p, thread_pool)?);
                 }
                 Ok(self.attach_process_id(reports))
             }
@@ -779,56 +811,42 @@ impl Process {
 
     pub(crate) fn export_standalone(
         &self,
-        path: impl AsRef<Path>,
+        path: &OutputPath,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
+        let directory = self.collection.kind_directory();
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
-                let p = path.as_ref().join("amplitudes");
-                let path = OutputPath::new(&p)?
-                    .join(&self.definition.folder_name)?
-                    .as_path()
-                    .to_owned();
-                OutputPath::new(&path)?.ensure_directory()?;
+                let path = path.join(directory)?.join(&self.definition.folder_name)?;
+                path.ensure_directory()?;
                 for amp in a.values() {
                     // Create a folder for each amplitude
-                    let amp_path = OutputPath::new(&path)?
-                        .join(&amp.name)?
-                        .as_path()
-                        .to_owned();
-                    OutputPath::new(&amp_path)?
-                        .ensure_directory()
-                        .with_context(|| {
-                            format!(
-                                "Trying to create directory for amplitude {}",
-                                amp_path.display()
-                            )
-                        })?;
+                    let amp_path = path.join(&amp.name)?;
+                    amp_path.ensure_directory().with_context(|| {
+                        format!(
+                            "Trying to create directory for amplitude {}",
+                            amp_path.as_path().display()
+                        )
+                    })?;
 
-                    OutputPath::new(&amp_path)?.check_tree()?;
+                    amp_path.check_tree()?;
                     amp.export_standalone(&amp_path, settings)?;
                 }
             }
             ProcessCollection::CrossSections(cs) => {
-                let p = path.as_ref().join("cross_sections");
-                let path = OutputPath::new(&p)?
-                    .join(&self.definition.folder_name)?
-                    .as_path()
-                    .to_owned();
-                OutputPath::new(&path)?.ensure_directory()?;
+                let path = path.join(directory)?.join(&self.definition.folder_name)?;
+                path.ensure_directory()?;
                 for cs in cs.values() {
                     // Create a folder for each cross section
-                    let cs_path = OutputPath::new(&path)?.join(&cs.name)?.as_path().to_owned();
-                    OutputPath::new(&cs_path)?
-                        .ensure_directory()
-                        .with_context(|| {
-                            format!(
-                                "Trying to create directory for cross section {}",
-                                cs_path.display()
-                            )
-                        })?;
+                    let cs_path = path.join(&cs.name)?;
+                    cs_path.ensure_directory().with_context(|| {
+                        format!(
+                            "Trying to create directory for cross section {}",
+                            cs_path.as_path().display()
+                        )
+                    })?;
 
-                    OutputPath::new(&cs_path)?.check_tree()?;
+                    cs_path.check_tree()?;
                     cs.export_standalone(&cs_path, settings)?;
                 }
             }
@@ -836,38 +854,26 @@ impl Process {
         Ok(())
     }
 
-    pub(crate) fn export_dot(
-        &self,
-        path: impl AsRef<Path>,
-        settings: &DotExportSettings,
-    ) -> Result<()> {
+    pub(crate) fn export_dot(&self, path: &OutputPath, settings: &DotExportSettings) -> Result<()> {
+        let directory = self.collection.kind_directory();
         match &self.collection {
             ProcessCollection::Amplitudes(a) => {
-                let p = path.as_ref().join("amplitudes");
-                let path = OutputPath::new(&p)?
-                    .join(&self.definition.folder_name)?
-                    .as_path()
-                    .to_owned();
-                OutputPath::new(&path)?.ensure_directory()?;
+                let path = path.join(directory)?.join(&self.definition.folder_name)?;
+                path.ensure_directory()?;
                 for (amp_name, amp) in a {
                     // Create a folder for each amplitude
-                    let amp_path = OutputPath::new(&path)?
-                        .join(&amp.name)?
-                        .as_path()
-                        .to_owned();
-                    OutputPath::new(&amp_path)?
-                        .ensure_directory()
-                        .with_context(|| {
-                            format!(
-                                "Trying to create directory for amplitude {}",
-                                amp_path.display()
-                            )
-                        })?;
+                    let amp_path = path.join(&amp.name)?;
+                    amp_path.ensure_directory().with_context(|| {
+                        format!(
+                            "Trying to create directory for amplitude {}",
+                            amp_path.as_path().display()
+                        )
+                    })?;
 
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
                         OutputPath::validate_component(amp_name)?;
-                        let output_path = amp_path.join(format!("{amp_name}_graphs.dot"));
+                        let output_path = amp_path.join(&format!("{amp_name}_graphs.dot"))?;
                         let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
                         for graph in amp.graphs.iter() {
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
@@ -876,7 +882,8 @@ impl Process {
                         // Save each graph in its own file
                         for graph in amp.graphs.iter() {
                             OutputPath::validate_component(&graph.graph.name)?;
-                            let output_path = amp_path.join(format!("{}.dot", graph.graph.name));
+                            let output_path =
+                                amp_path.join(&format!("{}.dot", graph.graph.name))?;
                             let mut dot = create_overwriting_file(&output_path, "amplitude graph")?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
                         }
@@ -884,28 +891,22 @@ impl Process {
                 }
             }
             ProcessCollection::CrossSections(cs) => {
-                let p = path.as_ref().join("cross_sections");
-                let path = OutputPath::new(&p)?
-                    .join(&self.definition.folder_name)?
-                    .as_path()
-                    .to_owned();
-                OutputPath::new(&path)?.ensure_directory()?;
+                let path = path.join(directory)?.join(&self.definition.folder_name)?;
+                path.ensure_directory()?;
                 for (xs_name, cs) in cs {
                     // Create a folder for each cross section
-                    let cs_path = OutputPath::new(&path)?.join(&cs.name)?.as_path().to_owned();
-                    OutputPath::new(&cs_path)?
-                        .ensure_directory()
-                        .with_context(|| {
-                            format!(
-                                "Trying to create directory for cross section {}",
-                                cs_path.display()
-                            )
-                        })?;
+                    let cs_path = path.join(&cs.name)?;
+                    cs_path.ensure_directory().with_context(|| {
+                        format!(
+                            "Trying to create directory for cross section {}",
+                            cs_path.as_path().display()
+                        )
+                    })?;
 
                     if settings.combine_diagrams {
                         // Save all graphs combined in one file
                         OutputPath::validate_component(xs_name)?;
-                        let output_path = cs_path.join(format!("{xs_name}_graphs.dot"));
+                        let output_path = cs_path.join(&format!("{xs_name}_graphs.dot"))?;
                         let mut dot = create_overwriting_file(&output_path, "cross section graph")?;
                         for graph in cs.supergraphs.iter() {
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
@@ -914,7 +915,7 @@ impl Process {
                         // Save each supergraph in its own file
                         for graph in cs.supergraphs.iter() {
                             OutputPath::validate_component(&graph.graph.name)?;
-                            let output_path = cs_path.join(format!("{}.dot", graph.graph.name));
+                            let output_path = cs_path.join(&format!("{}.dot", graph.graph.name))?;
                             let mut dot =
                                 create_overwriting_file(&output_path, "cross section graph")?;
                             graph.graph.dot_serialize_io(&mut dot, settings)?;
@@ -929,46 +930,41 @@ impl Process {
     pub(crate) fn export_uv_forests(
         &self,
         model: &Model,
-        path: impl AsRef<Path>,
+        path: &OutputPath,
         integrand_name: &str,
         graph_ids: &[usize],
         settings: &UVForestExportSettings,
     ) -> Result<()> {
+        path.check()?;
         let resolved = self.get_integrand(integrand_name)?;
         resolved.require_generated()?;
-        let directory = match &self.collection {
-            ProcessCollection::Amplitudes(_) => "amplitudes",
-            ProcessCollection::CrossSections(_) => "cross_sections",
-        };
-        let integrand_path = OutputPath::new(path.as_ref())?
+        let directory = self.collection.kind_directory();
+        let integrand_path = path
             .join(directory)?
             .join(&self.definition.folder_name)?
             .join(&resolved.canonical_name)?;
         integrand_path.ensure_directory()?;
-        let integrand_path = integrand_path.as_path();
 
         for &graph_id in graph_ids {
             let export = self.export_uv_forest_graph(model, integrand_name, graph_id, settings)?;
             OutputPath::validate_component(&export.graph_name)?;
             let graph_name = &export.graph_name;
-            let forest_path = integrand_path.join(format!("{graph_name}.forest.dot"));
+            let forest_path = integrand_path.join(&format!("{graph_name}.forest.dot"))?;
             let mut forest_file = create_overwriting_file(&forest_path, "UV forest")?;
             forest_file.write_all(export.forest_dot.as_bytes())?;
 
             for term in export.node_terms {
                 let node_dir = integrand_path
-                    .join(format!("{graph_name}_nodes"))
-                    .join(format!("forest_{:03}", term.forest_index));
-                OutputPath::new(&node_dir)?
-                    .ensure_directory()
-                    .with_context(|| {
-                        format!(
-                            "Trying to create directory for UV forest node graph {}",
-                            node_dir.display()
-                        )
-                    })?;
+                    .join(&format!("{graph_name}_nodes"))?
+                    .join(&format!("forest_{:03}", term.forest_index))?;
+                node_dir.ensure_directory().with_context(|| {
+                    format!(
+                        "Trying to create directory for UV forest node graph {}",
+                        node_dir.as_path().display()
+                    )
+                })?;
                 let mut dot = create_overwriting_file(
-                    &node_dir.join(term.file_name()),
+                    &node_dir.join(&term.file_name())?,
                     "UV forest node graph",
                 )?;
                 dot.write_all(term.dot.as_bytes())?;
@@ -1062,6 +1058,30 @@ pub enum ProcessCollection {
 }
 
 impl ProcessCollection {
+    /// Directory used for this collection in saved states and process exports.
+    ///
+    /// ```
+    /// use gammalooprs::processes::ProcessCollection;
+    /// let amplitudes = ProcessCollection::Amplitudes(Default::default());
+    /// assert_eq!(amplitudes.kind_directory(), "amplitudes");
+    /// let cross_sections = ProcessCollection::CrossSections(Default::default());
+    /// assert_eq!(cross_sections.kind_directory(), "cross_sections");
+    /// ```
+    pub fn kind_directory(&self) -> &'static str {
+        let kind = match self {
+            Self::Amplitudes(_) => GenerationType::Amplitude,
+            Self::CrossSections(_) => GenerationType::CrossSection,
+        };
+        Self::directory_for_kind(kind)
+    }
+
+    pub(super) fn directory_for_kind(kind: GenerationType) -> &'static str {
+        match kind {
+            GenerationType::Amplitude => "amplitudes",
+            GenerationType::CrossSection => "cross_sections",
+        }
+    }
+
     fn new_amplitude() -> Self {
         Self::Amplitudes(BTreeMap::new())
     }
@@ -1304,6 +1324,23 @@ impl ProcessCollection {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use crate::model::Model;
+    use crate::processes::{Amplitude, CrossSection, PROCESSES_DIRECTORY, ProcessList};
+    #[cfg(unix)]
+    use crate::processes::{
+        DotExportSettings, Process, ProcessCollection, ProcessDefinition, ProcessSnapshotError,
+        StandaloneExportSettings,
+    };
+    #[cfg(unix)]
+    use crate::uv::export::UVForestExportSettings;
+    use alphal00p_persistence::OutputPath;
+    #[cfg(unix)]
+    use alphal00p_persistence::OutputPathError;
+    use color_eyre::Result;
+    use rayon::ThreadPoolBuilder;
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
     use std::{
         fs,
         path::PathBuf,
@@ -1328,6 +1365,155 @@ mod tests {
     }
 
     #[test]
+    fn compilation_rejects_directory_obstructions_without_generated_integrands() {
+        let root = fresh_temp_dir("compile-directory-obstructions");
+        let output = OutputPath::new(&root).unwrap();
+        let pool = ThreadPoolBuilder::new().num_threads(1).build().unwrap();
+        for name in [PROCESSES_DIRECTORY, "amplitude", "cross_section"] {
+            fs::write(root.join(name), b"preserve this file").unwrap();
+        }
+
+        assert!(
+            ProcessList::new()
+                .compile(&output, None, None, &pool)
+                .is_err()
+        );
+        assert!(Amplitude::new("amplitude").compile(&output, &pool).is_err());
+        assert!(
+            CrossSection::new("cross_section".into())
+                .compile(&output, &pool)
+                .is_err()
+        );
+
+        for name in [PROCESSES_DIRECTORY, "amplitude", "cross_section"] {
+            assert_eq!(fs::read(root.join(name)).unwrap(), b"preserve this file");
+        }
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn process_outputs_accept_root_aliases_and_reject_descendant_symlinks() -> Result<()> {
+        let root = fresh_temp_dir("process-output-root-symlinks");
+        let outside = root.join("outside");
+        fs::create_dir(&outside)?;
+        fs::write(outside.join("sentinel"), b"unchanged")?;
+        let alias = root.join("alias");
+        unix_fs::symlink(&outside, &alias)?;
+        let output = OutputPath::new(&alias)?;
+        let pool = ThreadPoolBuilder::new().num_threads(1).build()?;
+        let model = Model::empty("path-test");
+        let mut list = ProcessList::new();
+        let dot = DotExportSettings::default();
+        let standalone = StandaloneExportSettings::default();
+        let uv = UVForestExportSettings { computed: false };
+
+        list.compile(&output, None, None, &pool)?;
+        list.export_dot(&output, &dot)?;
+        list.export_standalone(&output, &standalone)?;
+        assert!(outside.join(PROCESSES_DIRECTORY).is_dir());
+        let snapshot = output.join("snapshot")?;
+        snapshot.create_directory()?;
+        list.write_snapshot(&snapshot)?;
+        assert!(outside.join("snapshot/processes").is_dir());
+
+        // An alias above a distinct managed root is also resolved once.
+        for (operation, result) in [
+            (
+                "compile",
+                list.compile(&OutputPath::new(&alias.join("compile"))?, None, None, &pool)
+                    .map(|_| ()),
+            ),
+            (
+                "dot",
+                list.export_dot(&OutputPath::new(&alias.join("dot"))?, &dot),
+            ),
+            (
+                "standalone",
+                list.export_standalone(&OutputPath::new(&alias.join("standalone"))?, &standalone),
+            ),
+        ] {
+            result?;
+            assert!(outside.join(operation).join(PROCESSES_DIRECTORY).is_dir());
+        }
+
+        // Descendants keep the original boundary even if replaced after joining.
+        let managed = output.join("managed")?;
+        managed.create_directory()?;
+        fs::remove_dir(managed.as_path())?;
+        unix_fs::symlink(&outside, managed.as_path())?;
+        let outside_entries = fs::read_dir(&outside)?.count();
+        for (operation, result) in [
+            (
+                "compile",
+                list.compile(&managed, None, None, &pool).map(|_| ()),
+            ),
+            ("DOT", list.export_dot(&managed, &dot)),
+            ("standalone", list.export_standalone(&managed, &standalone)),
+            (
+                "UV",
+                list.export_uv_forests(&model, &managed, 0, "child", &[], &uv),
+            ),
+        ] {
+            let error = result.unwrap_err();
+            assert!(
+                matches!(
+                    error.downcast_ref::<OutputPathError>(),
+                    Some(OutputPathError::Symlink(_))
+                ),
+                "process-list {operation}: {error:?}"
+            );
+        }
+        assert!(matches!(
+            list.write_snapshot(&managed),
+            Err(ProcessSnapshotError::Output(OutputPathError::Symlink(_)))
+        ));
+        for kind in [GenerationType::Amplitude, GenerationType::CrossSection] {
+            let mut process = Process {
+                definition: ProcessDefinition {
+                    generation_type: kind,
+                    folder_name: "process".into(),
+                    ..ProcessDefinition::default()
+                },
+                collection: match kind {
+                    GenerationType::Amplitude => ProcessCollection::new_amplitude(),
+                    GenerationType::CrossSection => ProcessCollection::new_cross_section(),
+                },
+                settings_history: None,
+            };
+            for (operation, result) in [
+                (
+                    "compile",
+                    process.compile(&managed, None, &pool).map(|_| ()),
+                ),
+                ("DOT", process.export_dot(&managed, &dot)),
+                (
+                    "standalone",
+                    process.export_standalone(&managed, &standalone),
+                ),
+                (
+                    "UV",
+                    process.export_uv_forests(&model, &managed, "child", &[], &uv),
+                ),
+            ] {
+                let error = result.unwrap_err();
+                assert!(
+                    matches!(
+                        error.downcast_ref::<OutputPathError>(),
+                        Some(OutputPathError::Symlink(_))
+                    ),
+                    "{kind} {operation}: {error:?}"
+                );
+            }
+        }
+        assert_eq!(fs::read_dir(&outside)?.count(), outside_entries);
+        assert_eq!(fs::read(outside.join("sentinel"))?, b"unchanged");
+        assert!(fs::symlink_metadata(&alias)?.file_type().is_symlink());
+        fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
+    #[test]
     fn computed_uv_forest_process_export_uses_stored_sources_in_all_routes()
     -> color_eyre::Result<()> {
         use crate::{
@@ -1348,6 +1534,7 @@ mod tests {
         let pool = rayon::ThreadPoolBuilder::new().num_threads(1).build()?;
         let runtime = RuntimeSettings::default();
         let directory = fresh_temp_dir("computed-uv-process-export");
+        let output = OutputPath::new(&directory)?;
         for (kind, folder, source, model) in [
             (
                 GenerationType::Amplitude,
@@ -1456,7 +1643,8 @@ mod tests {
                         }
                     };
                     assert!(!expected_by_graph.is_empty());
-                    let case_dir = directory.join(format!("{folder}-{orchestrator}-{mode}"));
+                    let case_output = output.join(&format!("{folder}-{orchestrator}-{mode}"))?;
+                    let case_dir = case_output.as_path();
                     let source_expression =
                         |graph: &Graph,
                          source: &three_dimensional_reps::GeneratedThreeDExpression<
@@ -1615,17 +1803,18 @@ mod tests {
                         } else {
                             production_expression = Some(expression);
                         }
-                        let export_dir = case_dir.join(phase);
+                        let export_output = case_output.join(phase)?;
+                        let export_dir = export_output.as_path();
                         processes.export_uv_forests(
                             &model,
-                            &export_dir,
+                            &export_output,
                             0,
                             "default",
                             &[0],
                             &UVForestExportSettings { computed: true },
                         )?;
                         let graph_dir = export_dir
-                            .join("processes")
+                            .join(PROCESSES_DIRECTORY)
                             .join(folder)
                             .join("export_fixture/default");
                         assert!(graph_dir.join(format!("{graph_name}.forest.dot")).is_file());
@@ -1710,9 +1899,54 @@ mod tests {
                         } else {
                             expected_exported_expressions = Some(exported_expressions);
                         }
+                        #[cfg(unix)]
+                        if phase == "generated"
+                            && mode == "direct_keyed"
+                            && orchestrator == UVOrchestrator::LegacyDagForest
+                        {
+                            // Reuse the real computed node tree: neither the graph-level
+                            // nor forest-level directory may redirect a repeated export.
+                            let node_root = graph_dir.join(format!("{graph_name}_nodes"));
+                            let forest = fs::read_dir(&node_root)?
+                                .next()
+                                .expect("computed export must contain a forest directory")?;
+                            for (index, link) in [node_root, forest.path()].into_iter().enumerate()
+                            {
+                                let retained = case_dir.join(format!("retained-nodes-{index}"));
+                                let outside = case_dir.join(format!("outside-nodes-{index}"));
+                                fs::create_dir(&outside)?;
+                                fs::write(outside.join("sentinel"), b"unchanged")?;
+                                fs::rename(&link, &retained)?;
+                                unix_fs::symlink(&outside, &link)?;
+
+                                let error = processes
+                                    .export_uv_forests(
+                                        &model,
+                                        &export_output,
+                                        0,
+                                        "default",
+                                        &[0],
+                                        &UVForestExportSettings { computed: true },
+                                    )
+                                    .unwrap_err();
+                                assert!(
+                                    matches!(
+                                        error.downcast_ref::<OutputPathError>(),
+                                        Some(OutputPathError::Symlink(path))
+                                            if path.file_name() == link.file_name()
+                                    ),
+                                    "{folder} node export: {error:?}"
+                                );
+                                assert_eq!(fs::read_dir(&outside)?.count(), 1);
+                                assert_eq!(fs::read(outside.join("sentinel"))?, b"unchanged");
+                                assert!(fs::symlink_metadata(&link)?.file_type().is_symlink());
+                                fs::remove_file(&link)?;
+                                fs::rename(retained, link)?;
+                            }
+                        }
                         if phase == "generated" {
-                            let saved = case_dir.join("saved");
-                            fs::create_dir_all(&saved)?;
+                            let saved = case_output.join("saved")?;
+                            saved.create_directory()?;
                             let saved_index = processes.write_snapshot(&saved)?;
                             let mut symbols = Vec::new();
                             symbolica::state::State::export(&mut symbols)?;
@@ -1741,7 +1975,7 @@ mod tests {
                     let error = processes
                         .export_uv_forests(
                             &model,
-                            case_dir.join("mismatch"),
+                            &case_output.join("mismatch")?,
                             0,
                             "default",
                             &[0],
@@ -1763,17 +1997,18 @@ mod tests {
                         }
                     };
                     *source = None;
-                    let topology_dir = case_dir.join("topology_without_source");
+                    let topology = case_output.join("topology_without_source")?;
+                    let topology_dir = topology.as_path();
                     processes.export_uv_forests(
                         &model,
-                        &topology_dir,
+                        &topology,
                         0,
                         "default",
                         &[0],
                         &UVForestExportSettings { computed: false },
                     )?;
                     let topology_graph_dir = topology_dir
-                        .join("processes")
+                        .join(PROCESSES_DIRECTORY)
                         .join(folder)
                         .join("export_fixture/default");
                     assert!(
@@ -1789,7 +2024,7 @@ mod tests {
                     let error = processes
                         .export_uv_forests(
                             &model,
-                            case_dir.join("missing_source"),
+                            &case_output.join("missing_source")?,
                             0,
                             "default",
                             &[0],

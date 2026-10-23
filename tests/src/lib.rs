@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
 
+use alphal00p_workspace as workspace;
 use color_eyre::Result;
 
 use gammaloop_api::{
@@ -15,13 +16,11 @@ use gammaloop_api::{
 use gammalooprs::{
     initialisation::initialise, integrands::HasIntegrand, utils::load_generic_model,
 };
-use std::{
-    env,
-    ffi::OsString,
-    ops::{ControlFlow, Deref, DerefMut},
-    path::{Path, PathBuf},
-    sync::{Once, OnceLock},
-};
+use std::env;
+use std::ffi::OsString;
+use std::ops::{ControlFlow, Deref, DerefMut};
+use std::path::{Path, PathBuf};
+use std::sync::Once;
 use tracing::{debug, warn};
 
 /// Serialize tests within one harness, retaining nested locking and panic recovery.
@@ -30,46 +29,9 @@ pub static SERIAL_TEST_LOCK: parking_lot::ReentrantMutex<()> =
     parking_lot::const_reentrant_mutex(());
 
 static SET_WORKSPACE_CWD: Once = Once::new();
-static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
-
-fn is_workspace_root(path: &Path) -> bool {
-    path.join("Cargo.toml").is_file()
-        && path.join("tests/resources").is_dir()
-        && path.join("examples/cli").is_dir()
-}
-
-fn find_workspace_root_from(start: &Path) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .find(|candidate| is_workspace_root(candidate))
-        .map(Path::to_path_buf)
-}
 
 pub fn workspace_root() -> PathBuf {
-    WORKSPACE_ROOT
-        .get_or_init(|| {
-            let mut candidates = Vec::new();
-            if let Ok(current_dir) = env::current_dir() {
-                candidates.push(current_dir);
-            }
-            if let Ok(current_exe) = env::current_exe() {
-                candidates.push(current_exe);
-            }
-            candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")));
-
-            candidates
-                .into_iter()
-                .find_map(|candidate| find_workspace_root_from(&candidate))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Failed to locate workspace root from current dir '{:?}', current exe '{:?}', or manifest dir '{}'",
-                        env::current_dir().ok(),
-                        env::current_exe().ok(),
-                        env!("CARGO_MANIFEST_DIR")
-                    )
-                })
-        })
-        .clone()
+    workspace::test_workspace_root(Path::new(env!("CARGO_MANIFEST_DIR"))).to_path_buf()
 }
 
 fn ensure_workspace_cwd() {

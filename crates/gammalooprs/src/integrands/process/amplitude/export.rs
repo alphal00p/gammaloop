@@ -1,3 +1,4 @@
+use alphal00p_persistence::OutputPath;
 use std::{
     collections::BTreeMap,
     fs::{self},
@@ -469,25 +470,23 @@ impl AmplitudeIntegrand {
 
     pub(crate) fn export_standalone(
         &self,
-        path: impl AsRef<Path>,
+        path: &OutputPath,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
         let mut symbolica_state = Vec::new();
         State::export(&mut symbolica_state)
             .with_context(|| "Failed to export Symbolica state for standalone evaluators")?;
 
-        let mut standalone_path = path.as_ref().join(STANDALONE_DATA_FILE);
-
         match settings.format {
             StandaloneDataFormat::Binary => {
                 let standalone: StandaloneEvaluatorArchive<Vec<u8>, Vec<u8>> =
                     self.create_archive(symbolica_state, settings.precision)?;
                 let binary = bincode::encode_to_vec(&standalone, bincode::config::standard())?;
-                standalone_path.add_extension("bin");
-                fs::write(&standalone_path, binary).with_context(|| {
+                let standalone_path = path.join(&format!("{STANDALONE_DATA_FILE}.bin"))?;
+                fs::write(standalone_path.as_path(), binary).with_context(|| {
                     format!(
                         "Failed writing standalone evaluator binary to {}",
-                        standalone_path.display()
+                        standalone_path.as_path().display()
                     )
                 })?;
             }
@@ -495,11 +494,11 @@ impl AmplitudeIntegrand {
                 let standalone: StandaloneEvaluatorArchive<(), String> =
                     self.create_archive((), settings.precision)?;
                 let json = serde_json::to_vec_pretty(&standalone)?;
-                standalone_path.add_extension("json");
-                fs::write(&standalone_path, json).with_context(|| {
+                let standalone_path = path.join(&format!("{STANDALONE_DATA_FILE}.json"))?;
+                fs::write(standalone_path.as_path(), json).with_context(|| {
                     format!(
                         "Failed writing standalone evaluator JSON to {}",
-                        standalone_path.display()
+                        standalone_path.as_path().display()
                     )
                 })?
             }
@@ -511,14 +510,14 @@ impl AmplitudeIntegrand {
             }
             StandaloneExportMode::Rust => {
                 let script = standalone_rust_script();
-                let script_path = path.as_ref().join(STANDALONE_RUST_SCRIPT_FILE);
-                fs::write(&script_path, script).with_context(|| {
+                let script_path = path.join(STANDALONE_RUST_SCRIPT_FILE)?;
+                fs::write(script_path.as_path(), script).with_context(|| {
                     format!(
                         "Failed writing standalone rust-script loader to {}",
-                        script_path.display()
+                        script_path.as_path().display()
                     )
                 })?;
-                make_script_executable(&script_path)?;
+                make_script_executable(script_path.as_path())?;
             }
         }
 

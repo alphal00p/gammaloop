@@ -21,6 +21,7 @@ path = "src/cli.rs"
 required-features = ["cli"]
 
 [dependencies]
+alphal00p-persistence.workspace = true
 ahash = { workspace = true, features = ["serde"] }
 bincode = { workspace = true, features = ["serde"] }
 chrono = { workspace = true, features = ["serde"] }
@@ -125,6 +126,7 @@ features = [
   "serde-alloc",
 ]
 [dev-dependencies]
+alphal00p-workspace.workspace = true
 tempfile = "3.8"
 
 [build-dependencies]

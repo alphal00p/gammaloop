@@ -1,7 +1,10 @@
-use super::OutputPath;
 #[cfg(test)]
-use super::output::{self, SaveStep};
+use super::output_tests::{self, SaveStep};
+use super::{AMPLITUDE_PAYLOAD_FILE, INTEGRAND_DIRECTORY, IntegrandPayload, ProcessPayloadError};
+use alphal00p_persistence::OutputPath;
+use bincode::config;
 use feynkit_generator::GenerationType;
+use std::result::Result as StdResult;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt,
@@ -251,13 +254,34 @@ impl Amplitude {
         Ok(())
     }
 
+    /// Export this amplitude's generated integrand and standalone loader.
+    ///
+    /// Pass an existing directory derived from the checked user-selected export
+    /// root. [`ProcessList::export_standalone`](super::ProcessList::export_standalone)
+    /// creates the process hierarchy when exporting a complete list.
+    ///
+    /// # Errors
+    /// Returns an error if the integrand is ungenerated, the output tree contains
+    /// symlinks or unsupported file types, export settings are unsupported, or
+    /// serialization or filesystem operations fail.
+    ///
+    /// ```no_run
+    /// use alphal00p_persistence::OutputPath;
+    /// use eyre::Result;
+    /// use gammalooprs::processes::{Amplitude, StandaloneExportSettings};
+    /// # fn export(amplitude: &Amplitude, settings: &StandaloneExportSettings) -> Result<()> {
+    /// let root = OutputPath::new("exports".as_ref())?;
+    /// let output = root.join(&amplitude.name)?;
+    /// output.ensure_directory()?;
+    /// amplitude.export_standalone(&output, settings)?;
+    /// # Ok(()) }
+    /// ```
     pub fn export_standalone(
         &self,
-        path: impl AsRef<Path>,
+        path: &OutputPath,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
-        let output = OutputPath::new(path.as_ref())?;
-        output.check_tree()?;
+        path.check_tree()?;
         if let Some(integrand) = &self.integrand {
             integrand.export_standalone(path, settings)?
         } else {
@@ -290,36 +314,56 @@ impl Amplitude {
     #[instrument(
           skip_all,
           fields(
-              path = %path.as_ref().display(),
+              path = %path.as_path().display(),
           )
     )]
     pub(crate) fn load(
-        path: impl AsRef<Path>,
+        path: &OutputPath,
         context: GammaLoopContextContainer,
-        generated: bool,
-    ) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("amp.bin"))?;
+        payload: IntegrandPayload,
+    ) -> StdResult<Self, ProcessPayloadError> {
+        let metadata_path = path.join(AMPLITUDE_PAYLOAD_FILE)?.as_path().to_owned();
+        let binary = fs::read(&metadata_path).map_err(|source| ProcessPayloadError::Read {
+            path: metadata_path.clone(),
+            source,
+        })?;
         let (mut amp, _): (Self, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+            bincode::decode_from_slice_with_context(&binary, config::standard(), context).map_err(
+                |source| ProcessPayloadError::Decode {
+                    path: metadata_path.clone(),
+                    source,
+                },
+            )?;
 
         if amp.integrand.is_some() {
-            return Err(eyre!(
-                "Saved amplitude metadata unexpectedly contains an integrand"
-            ));
+            return Err(ProcessPayloadError::MetadataIntegrand {
+                path: metadata_path,
+            });
         }
-        if generated {
-            let integrand = AmplitudeIntegrand::load(path.as_ref().join("integrand"), context)?;
-            if integrand.data.name != amp.name {
-                return Err(eyre!(
-                    "Saved generated payload name disagrees with its child metadata"
-                ));
+        match payload {
+            IntegrandPayload::Generated => {
+                let integrand = AmplitudeIntegrand::load(path, context)?;
+                if integrand.data.name != amp.name {
+                    return Err(ProcessPayloadError::GeneratedNameMismatch {
+                        path: path.join(INTEGRAND_DIRECTORY)?.as_path().to_owned(),
+                        expected: amp.name,
+                        actual: integrand.data.name,
+                    });
+                }
+                amp.integrand = Some(ProcessIntegrand::Amplitude(integrand));
             }
-            amp.integrand = Some(ProcessIntegrand::Amplitude(integrand));
+            IntegrandPayload::MetadataOnly => {}
         }
 
         Ok(amp)
     }
 
+    /// Compile this amplitude's generated integrand into checked artifact directories.
+    ///
+    /// See [`super::ProcessList::compile`] for an example.
+    ///
+    /// # Errors
+    /// Returns path, directory creation, or evaluator compilation failures.
     #[instrument(
           skip_all,
           fields(
@@ -328,27 +372,20 @@ impl Amplitude {
     )]
     pub fn compile(
         &mut self,
-        path: impl AsRef<Path>,
-        override_existing: bool,
+        path: &OutputPath,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         info!("Compiling amplitude {}", self.name);
-        let p = OutputPath::new(path.as_ref())?
-            .join(&self.name)?
-            .as_path()
-            .to_owned();
+        let p = path.join(&self.name)?;
 
-        let r = OutputPath::new(&p)?.ensure_directory().with_context(|| {
+        p.ensure_directory().with_context(|| {
             format!(
-                "Trying to create directory to save amplitude {}",
-                p.display()
+                "Trying to create directory to compile amplitude {}",
+                p.as_path().display()
             )
-        });
-        if override_existing {
-            r?;
-        }
+        })?;
         if let Some(integrand) = &mut self.integrand {
-            let root = OutputPath::new(&p)?.join("integrand")?;
+            let root = p.join(INTEGRAND_DIRECTORY)?;
             root.check_tree()?;
             for id in 0..integrand.graph_count() {
                 let name = integrand
@@ -356,7 +393,7 @@ impl Amplitude {
                     .ok_or_else(|| eyre!("Missing graph name for compile graph ID {id}"))?;
                 root.join(name)?;
             }
-            let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
+            let compile_times = integrand.compile(&p, thread_pool)?;
             return Ok(compile_times
                 .into_iter()
                 .map(|(graph_name, duration)| NamedGraphGenerationReport {
@@ -377,28 +414,57 @@ impl Amplitude {
           skip_all,
           fields(
               amplitude.name = %self.name,
-              path = %path.display(),
+              path = %path.as_path().display(),
           )
     )]
-    pub(super) fn write_snapshot(&mut self, path: &Path) -> Result<()> {
-        let p = OutputPath::new(path)?.join(&self.name)?;
+    pub(super) fn write_snapshot(
+        &mut self,
+        path: &OutputPath,
+    ) -> StdResult<(), ProcessPayloadError> {
+        let p = path.join(&self.name)?;
         p.create_directory()?;
-        let p = p.as_path();
         let integrand = self.integrand.take();
         // Metadata encodes an absent integrand; restore the live owner on every
         // ordinary serialization/write failure, without copying evaluators.
-        let result = (|| -> Result<()> {
+        let result = (|| -> StdResult<(), ProcessPayloadError> {
             #[cfg(test)]
-            output::save_step(SaveStep::Integrand, &p.join("integrand"))?;
-            if let Some(integrand) = &integrand {
-                integrand.save(p, false)?;
+            {
+                let integrand_path = p.join(INTEGRAND_DIRECTORY)?;
+                output_tests::save_step(SaveStep::Integrand, integrand_path.as_path()).map_err(
+                    |source| ProcessPayloadError::Write {
+                        path: integrand_path.as_path().to_owned(),
+                        source,
+                    },
+                )?;
             }
+            if let Some(integrand) = &integrand {
+                integrand.save(&p)?;
+            }
+            let metadata_path = p.join(AMPLITUDE_PAYLOAD_FILE)?.as_path().to_owned();
             #[cfg(test)]
-            output::save_step(SaveStep::Metadata, &p.join("amp.bin"))?;
-            let binary = bincode::encode_to_vec(&*self, bincode::config::standard())?;
-            let mut file = File::create_new(p.join("amp.bin"))?;
-            file.write_all(&binary)?;
-            file.flush()?;
+            output_tests::save_step(SaveStep::Metadata, &metadata_path).map_err(|source| {
+                ProcessPayloadError::Write {
+                    path: metadata_path.clone(),
+                    source,
+                }
+            })?;
+            let binary = bincode::encode_to_vec(&*self, config::standard()).map_err(|source| {
+                ProcessPayloadError::Encode {
+                    path: metadata_path.clone(),
+                    source,
+                }
+            })?;
+            let mut file =
+                File::create_new(&metadata_path).map_err(|source| ProcessPayloadError::Write {
+                    path: metadata_path.clone(),
+                    source,
+                })?;
+            file.write_all(&binary)
+                .and_then(|()| file.flush())
+                .map_err(|source| ProcessPayloadError::Write {
+                    path: metadata_path,
+                    source,
+                })?;
             Ok(())
         })();
         self.integrand = integrand;
@@ -2827,6 +2893,8 @@ pub(crate) fn threshold_counterterm_recording_helper(
 
 #[cfg(test)]
 pub mod test {
+    use crate::processes::IntegrandPayload;
+    use alphal00p_persistence::OutputPath;
 
     use crate as gammalooprs;
     use std::{
@@ -4623,7 +4691,8 @@ pub mod test {
                     std::process::id(),
                 ));
                 fs::create_dir_all(&save_root).unwrap();
-                amplitude.write_snapshot(&save_root).unwrap();
+                let output = OutputPath::new(&save_root).unwrap();
+                amplitude.write_snapshot(&output).unwrap();
                 let mut state_bytes = Vec::new();
                 State::export(&mut state_bytes).unwrap();
                 let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
@@ -4632,9 +4701,9 @@ pub mod test {
                     state_map: &state_map,
                 };
                 let mut loaded = super::Amplitude::load(
-                    save_root.join("grouped_threshold_ownership"),
+                    &output.join("grouped_threshold_ownership").unwrap(),
                     context,
-                    true,
+                    IntegrandPayload::Generated,
                 )
                 .unwrap();
                 let loaded_integrand = loaded.integrand.as_mut().unwrap();
@@ -5057,7 +5126,8 @@ pub mod test {
                     std::process::id(),
                 ));
                 fs::create_dir_all(&save_root).unwrap();
-                amplitude.write_snapshot(&save_root).unwrap();
+                let output = OutputPath::new(&save_root).unwrap();
+                amplitude.write_snapshot(&output).unwrap();
                 let mut state_bytes = Vec::new();
                 State::export(&mut state_bytes).unwrap();
                 let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
@@ -5066,8 +5136,9 @@ pub mod test {
                     state_map: &state_map,
                 };
                 let mut loaded = super::Amplitude::load(
-                    save_root.join("generalized_raised_amplitude_threshold"),
-                    context, true,
+                    &output.join("generalized_raised_amplitude_threshold").unwrap(),
+                    context,
+                    IntegrandPayload::Generated,
                 )
                 .unwrap();
                 let loaded_integrand = loaded.integrand.as_mut().unwrap();

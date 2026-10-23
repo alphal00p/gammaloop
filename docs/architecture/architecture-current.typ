@@ -1437,6 +1437,20 @@ and is validated against `fjcore` in tests.
 
 == Persistence and Runtime Artifacts
 <persistence-and-runtime-artifacts>
+The internal `alphal00p-persistence` crate owns checked output paths, writer
+locks, generation publication and pruning, and directory replacement for runtime
+and documentation callers. Domain owners supply payloads, validate manifests
+and authorize destinations. A managed root resolves its ancestor directories
+once, including a symlink at the user-selected root and aliases such as macOS `/tmp`.
+Every managed descendant rejects symlinks. Descendant joins preserve that boundary. This protects
+cooperating writers, not concurrent hostile directory replacement.
+
+Documentation directory publishers hold a lock for their destination before reading
+or copying the previous site. Acquisition restores an unambiguous stale backup
+for that destination or refuses with its recovery path; this preserves immutable
+product snapshots across a crash between publication renames. The transaction
+retains its lock through staging and final replacement.
+
 The logical state root is `gammaloop_state/` by default. Version 22
 `state_manifest.toml` is its commit pointer: it records the selected immutable
 `generations/<generation>/` directory, the exact ordered process/child membership,
@@ -1450,9 +1464,30 @@ generation instead of discovering membership from mutable directories.
 The persistent `.snapshot.lock`, tracing `logs/`, integration workspaces and other
 mutable runtime artifacts stay at the logical root, outside saved generations.
 One writer lock and one atomic manifest switch publish a complete session;
-prior committed generations remain available. Failed saves leave the previous
-commit intact. Staging and application buffers are completed before publication;
-there is no directory-sync or power-loss durability guarantee.
+failures before the switch leave the previous commit intact. Publication checks
+payload and manifest synchronization; Unix durable initialization synchronizes
+directories created by that call plus the managed root. Root initialization retries
+the immediate parent's synchronization on every acquisition, tolerating permission
+and unsupported-operation errors at that parent; its entry durability then depends
+on the caller. Other I/O failures remain errors on retry. It never opens pre-existing
+higher ancestors. Ordinary exports and presentation writes
+create checked directories without synchronizing an ancestor chain. A synchronization
+failure after the switch reports the
+committed generation and preserves its payload. Other platforms provide atomic
+visibility without a directory durability guarantee.
+
+This bounded initialization contract does not establish durability for a newly
+created ancestor's entry in a higher, pre-existing directory. Saved states and
+integration workspaces must use separate roots: state saves and cleanup reject
+an integration manifest, including a root containing both manifest types.
+`--clean-state` acquires the state writer lock and tries existing nested writer locks
+before renaming the root to a unique hidden sibling and deleting it while retaining
+the locks. A busy writer causes an actionable refusal to retry after it finishes.
+Callers must prevent new nested workspaces from starting concurrently with cleanup.
+A later `--clean-state` sweeps unlocked detached siblings for that specific state,
+even if the live path is missing. Removal does not follow descendant symlinks;
+a selected root symlink is only unlinked, preserving its target. Writer acquisition
+rejects stale lock handles whose path was replaced during cleanup.
 
 For local experimentation, prefer an isolated path such as
 `.local/scratch/<run>/gammaloop_state` to keep repository root output
@@ -1550,14 +1585,22 @@ remain in force before resumed evaluation.
 A writer holds an OS lock on the persistent `.snapshot.lock` for the entire run,
 including resume preparation and final result assembly. Contention fails
 immediately. Restart preserves the previous committed generation and lock inode
-until the replacement run publishes a completed iteration. Partial iterations
-and resumes with no new work publish nothing. Summary-only reads create no
-lockfiles, activate no integration worker and write nothing.
+until the replacement run durably publishes its first completed iteration. It
+then deletes the previous run's outputs and generations before exposing the new
+run's views. Until then, new diagnostics stay in private staging so a failed
+attempt leaves the old views intact. Partial iterations and resumes with no new
+work publish nothing. Summary-only reads create no lockfiles, activate no
+integration worker and write nothing.
 
 Publication writes every internal member before atomically replacing the manifest.
-Older committed generations remain available to pinned readers. The guarantee
-covers cooperating writers and process interruption; it does not promise
-power-loss durability. User-facing `integration_result.json`, latest observable
+Ordinary publication retains all generations. Pinned readers remain valid across
+later publications. The explicit `cleanup state` and `cleanup integration` CLI
+commands prune superseded generations under the writer lock after validating the
+current snapshot. They ignore unrelated generation-directory entries, and report
+what they remove. Readers must coordinate with explicit cleanup or restart.
+Restart cleanup waits for successful synchronization, including Unix directory
+synchronization, and preserves the old run if durability is uncertain.
+User-facing `integration_result.json`, latest observable
 JSON/HwU and numerical-stability files, and optional iteration archives refresh
 after the internal checkpoint commits. These files never determine resume state;
 an output-refresh error identifies the iteration already committed so that resume

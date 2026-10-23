@@ -23,16 +23,14 @@ pub mod settings;
 pub mod subtraction;
 pub mod utils;
 pub mod uv;
+#[cfg(test)]
+use alphal00p_workspace as workspace;
 pub use gammaloop_tracing_filter::LogMessage;
 use integrands::*;
 use model::Model;
 use momentum::signature::ExternalSignature;
 #[cfg(test)]
-use std::env;
-#[cfg(test)]
-use std::path::{Path, PathBuf};
-#[cfg(test)]
-use std::sync::OnceLock;
+use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use symbolica::state::HasStateMap;
 use symbolica::state::StateMap;
@@ -45,45 +43,18 @@ pub static ITERATION_ABORT_REQUESTED: AtomicBool = AtomicBool::new(false);
 pub const GAMMALOOP_NAMESPACE: &str = "GL";
 pub const MAX_CORES: usize = 1000;
 
+/// Saved-state commit pointer at a GammaLoop managed root.
+/// See the saved-state workflow in the GammaLoop user manual.
+pub const STATE_MANIFEST_FILE: &str = "state_manifest.toml";
+/// Completed-iteration commit pointer at an integration workspace root.
+/// See [`integrate::IntegrationWorkspace`] for the checkpoint lifecycle.
+pub const INTEGRATION_MANIFEST_FILE: &str = "manifest.json";
+/// Mutable tracing output directory outside immutable saved generations.
+pub const LOGS_DIRECTORY: &str = "logs";
+
 #[cfg(test)]
 pub(crate) fn test_workspace_root() -> &'static Path {
-    static WORKSPACE_ROOT: OnceLock<PathBuf> = OnceLock::new();
-
-    WORKSPACE_ROOT
-        .get_or_init(|| {
-            let current_dir = env::current_dir().ok();
-            let current_exe = env::current_exe().ok();
-            // Cargo and Nextest remap this at runtime; direct binaries retain the native fallback.
-            let manifest_dir = env::var_os("CARGO_MANIFEST_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")));
-
-            let mut candidates = Vec::new();
-            if let Some(dir) = current_dir.as_deref() {
-                candidates.extend(dir.ancestors().map(Path::to_path_buf));
-            }
-            if let Some(exe) = current_exe.as_deref() {
-                candidates.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
-            }
-            candidates.extend(manifest_dir.ancestors().map(Path::to_path_buf));
-
-            candidates
-                .into_iter()
-                .find(|path| {
-                    path.join("Cargo.toml").is_file()
-                        && path.join("tests/resources").is_dir()
-                        && path.join("examples/cli").is_dir()
-                })
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Failed to locate workspace root from current dir '{:?}', current exe '{:?}', or manifest dir '{}'",
-                        current_dir,
-                        current_exe,
-                        manifest_dir.display()
-                    )
-                })
-        })
-        .as_path()
+    workspace::test_workspace_root(Path::new(env!("CARGO_MANIFEST_DIR")))
 }
 
 pub trait GammaLoopContext: HasStateMap + HasModel {}

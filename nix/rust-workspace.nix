@@ -2969,7 +2969,8 @@
     setup ? "",
     body,
   }: let
-    script = pkgs.writeText "${name}-runtime.sh" (''
+    # writeShellScript checks the generated body with bash -n during its build.
+    script = pkgs.writeShellScript "${name}-runtime.sh" (''
         runtime_name=${lib.escapeShellArg name}
       ''
       + builtins.readFile (workspaceRoot + "/scripts/ci-runtime.sh")
@@ -3043,11 +3044,11 @@
     '';
   };
 
-  nextestCheckFor = {
+  nextestRunnerFor = {
     target,
-    profile ? nextestProfile,
-    partition ? null,
-    name ? "gammaloop-nextest-${target.name}",
+    profile,
+    partition,
+    name,
   }: let
     junitPath = "target/nextest/${profile}/junit.xml";
     runFilter =
@@ -3090,12 +3091,13 @@
           export MATHML_CHROMIUM_VERSION=${lib.escapeShellArg pkgs.chromium.version}
           export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 LINNET_MATHML_BROWSER_ENGINES=chromium
           export FONTCONFIG_FILE=${pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];}}
-      export XDG_CACHE_HOME="$TMPDIR/browser-cache"
-      export XDG_CONFIG_HOME="$TMPDIR/browser-config"
-      mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
-      export SPENSO_MATHML_BROWSER_FIXTURES="$PWD/tensor-browser.json"
-      export CFF_DISPLAY_TEST_OUTPUT="$PWD/cff-browser"
-      export FEYNKIT_BROWSER_FIXTURES="$PWD/feynkit-browser"
+          export XDG_CACHE_HOME="$TMPDIR/browser-cache"
+          export XDG_CONFIG_HOME="$TMPDIR/browser-config"
+          mkdir -p "$XDG_CACHE_HOME" "$XDG_CONFIG_HOME"
+          export SPENSO_MATHML_BROWSER_FIXTURES="$PWD/tensor-browser.json"
+          export CFF_DISPLAY_TEST_OUTPUT="$PWD/cff-browser"
+          export FEYNKIT_BROWSER_FIXTURES="$PWD/feynkit-browser"
+          export LINNET_MATHML_BROWSER_ROOT="$PWD/.local/graph-mathml-labels/browser"
         ''
         + lib.optionalString (target.name == "docs") ''
           export ALPHAL00P_DOCS_GIT_COMMIT=0000000000000000000000000000000000000000
@@ -3115,7 +3117,7 @@
           # Nextest runs with the workspace root as cwd, while some insta
           # snapshots are stored under each crate src. Mirror those snapshot
           # directories into the workspace-level src tree in the disposable
-          # Nix build directory so insta can find them.
+          # runtime source directory so insta can find them.
           if [ -d crates ]; then
             while IFS= read -r snapshots; do
               rel="''${snapshots#crates/*/src/}"
@@ -3124,7 +3126,7 @@
             done < <(find crates -type d -name snapshots | sort)
           fi
 
-          # Respect the sandbox's CPU budget while retaining the CI profile's
+          # Respect the caller's CPU budget while retaining the CI profile's
           # 16-process cap on large hosts. Test-internal worker reservations remain
           # accounted for by nextest's existing threads-required settings.
           export NEXTEST_TEST_THREADS="$runtime_cores"
@@ -3132,8 +3134,8 @@
         ''
         + lib.optionalString (profile == "ci_slow") ''
           # These archive runners replace the separate soft-CT acceptance jobs.
-          # Preserve their stack allowance and retain failed generated states in
-          # the build tree, while keeping internal Rayon work within this budget.
+          # Preserve their stack allowance and keep failed generated states until
+          # runtime scratch cleanup, with internal Rayon work within this budget.
           export RUST_MIN_STACK=134217728
           export RAYON_NUM_THREADS="$NEXTEST_TEST_THREADS"
           export GAMMALOOP_TESTS_NO_CLEAN_STATE=1
@@ -3183,21 +3185,23 @@
             '')
             target.packages}
         ''
+        # Downstream browser probes require the full group fixture set.
         + lib.optionalString (target.runtimeBrowser or false) ''
-      if [ "$status" -eq 0 ] && [[ -z "$runtime_package$runtime_filter" ]]; then
-        python3 crates/spynso3/tests/browser_math_font.py \
-          --fixtures tensor-browser.json --chromium "$LINNET_TEST_CHROMIUM" \
-          --font "$SYMBOLICA_DATA_DIRECTORY/render/fonts/STIXTwoMath-Regular.woff2" || status=$?
-        python3 crates/spynso3/tests/browser_tensor_explorer.py \
-          --fixtures tensor-browser.json --chromium "$LINNET_TEST_CHROMIUM" || status=$?
-        python3 crates/feynkit-py/tests/cff_display_browser.py cff-browser "$LINNET_TEST_CHROMIUM" chromium || status=$?
-        python3 crates/feynkit-py/tests/ltd_display_browser.py feynkit-browser/ltd "$LINNET_TEST_CHROMIUM" chromium || status=$?
-        python3 crates/feynkit-py/tests/energy_scoped_display_browser.py feynkit-browser/scoped "$LINNET_TEST_CHROMIUM" chromium || status=$?
-        python3 crates/feynkit-py/tests/generalized_energy_display_browser.py feynkit-browser/generalized feynkit-browser/ltd "$LINNET_TEST_CHROMIUM" chromium || status=$?
-        python3 ${./browser-check.py} \
-          ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target "linnet-render-py"} || status=$?
-        cp -R .local/graph-mathml-labels/browser "$runtime_reports/browser"
-      fi
+          if [ "$status" -eq 0 ] && [[ -z "$runtime_package$runtime_filter" ]]; then
+            python3 crates/spynso3/tests/browser_math_font.py \
+              --fixtures tensor-browser.json --chromium "$LINNET_TEST_CHROMIUM" \
+              --font "$SYMBOLICA_DATA_DIRECTORY/render/fonts/STIXTwoMath-Regular.woff2" || status=$?
+            python3 crates/spynso3/tests/browser_tensor_explorer.py \
+              --fixtures tensor-browser.json --chromium "$LINNET_TEST_CHROMIUM" || status=$?
+            python3 crates/feynkit-py/tests/cff_display_browser.py cff-browser "$LINNET_TEST_CHROMIUM" chromium || status=$?
+            python3 crates/feynkit-py/tests/ltd_display_browser.py feynkit-browser/ltd "$LINNET_TEST_CHROMIUM" chromium || status=$?
+            python3 crates/feynkit-py/tests/energy_scoped_display_browser.py feynkit-browser/scoped "$LINNET_TEST_CHROMIUM" chromium || status=$?
+            python3 crates/feynkit-py/tests/generalized_energy_display_browser.py feynkit-browser/generalized feynkit-browser/ltd "$LINNET_TEST_CHROMIUM" chromium || status=$?
+            python3 ${./browser-check.py} \
+              ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target "linnet-render-py"} || status=$?
+            mkdir -p "$runtime_reports/browser"
+            cp -R .local/graph-mathml-labels/browser/. "$runtime_reports/browser/"
+          fi
         ''
         + ''
           [ "$status" -eq 0 ] || exit "$status"
@@ -3205,41 +3209,22 @@
         '';
     };
 
-  nextestRuntimePackages = lib.listToAttrs (map (target: {
-      name = "nix-ci-check-gammaloop-nextest-${target.name}";
-      value = nextestCheckFor {inherit target;};
-    })
-    checkedNextestPackageGroups);
-  mainRuntimePackages =
-    lib.listToAttrs (map (target: {
-      name = "nix-ci-check-gammaloop-nextest-${target.name}-full";
-      value = nextestCheckFor {
-        inherit target;
-        profile = "ci_full";
-        name = "gammaloop-nextest-${target.name}-full";
-      };
-    }) (lib.filter (target: target.name != "integration") checkedNextestPackageGroups))
-    // lib.listToAttrs (map (index: let
-      name = "gammaloop-nextest-long-${toString index}";
-    in {
-      name = "nix-ci-check-${name}";
-      value = nextestCheckFor {
-        inherit name;
-        target =
-          lib.findFirst (target: target.name == "integration")
-          (throw "main test partitions require the integration group")
+  nextestRuntimeJobs = lib.filter (job: job.group != null);
+  nextestRuntimePackages = lib.listToAttrs (map (job: {
+      name = job.package;
+      value = nextestRunnerFor {
+        inherit (job) name profile partition;
+        target = lib.findFirst (target: target.name == job.group)
+          (throw "runtime job ${job.name} requires group ${job.group}")
           checkedNextestPackageGroups;
-        profile = "ci_slow";
-        partition = "hash:${toString index}/4";
       };
-    }) [1 2 3 4]);
+    }) (nextestRuntimeJobs (runtimeJobs ++ mainRuntimeJobs)));
 
   documentationRuntimeSetup =
     runtimeCargoSetup documentation.alphal00pDocsCargoArtifacts documentation.alphal00pDocsCargoTarget
     + documentation.runtimeSetup;
   runtimeCheckPackages =
     nextestRuntimePackages
-    // mainRuntimePackages
     // {
       nix-ci-check-gammaloop-doctest = doctestRunner;
       nix-ci-check-alphal00p-docs = runtimeCheckFor {
@@ -3280,17 +3265,56 @@
             exit 2
           fi
           status=0
-          ${lib.concatMapStringsSep "\n" (target: ''
-              ${nextestRuntimePackages.${"nix-ci-check-gammaloop-nextest-${target.name}"}}/bin/nix-ci-check-gammaloop-nextest-${target.name} \
-                --report-dir "$report_root/${target.name}" || { group_status=$?; [[ "$status" -ne 0 ]] || status=$group_status; }
+          ${lib.concatMapStringsSep "\n" (job: ''
+              ${nextestRuntimePackages.${job.package}}/bin/${job.package} \
+                --report-dir "$report_root/${job.group}" || { group_status=$?; [[ "$status" -ne 0 ]] || status=$group_status; }
             '')
-            checkedNextestPackageGroups}
+            (nextestRuntimeJobs runtimeJobs)}
           exit "$status"
         '';
       };
     };
   runtimeJobs = ci.runtimeJobs;
   mainRuntimeJobs = ci.mainRuntimeJobs;
+
+  ciRuntimeLicenseBoundary = pkgs.writeShellApplication {
+    name = "ci-runtime-license-boundary";
+    runtimeInputs = [pkgs.nix pkgs.python313];
+    text = ''
+      exec python3 ${runtimeGuardSrc}/scripts/check-runtime-license-boundary.py "$@"
+    '';
+  };
+
+  runtimeGuardSrc = lib.fileset.toSource {
+    root = workspaceRoot;
+    fileset = lib.fileset.unions (map (path: workspaceRoot + path) [
+      "/scripts/tracked_source.py"
+      "/just/ci.just"
+      "/crates/linnet/Justfile"
+      "/scripts/test-tracked-source-recipes.py"
+      "/scripts/check-runtime-license-boundary.py"
+      "/scripts/test-ci-runtime.py"
+      "/scripts/test-ci-runtime-workflow.py"
+      "/.github/workflows/nix.yml"
+      "/.github/workflows/docs-pages.yml"
+    ]);
+  };
+  runtimeGuardCheck = pkgs.runCommand "gammaloop-ci-runtime" {
+    nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.jq pkgs.just (pkgs.python313.withPackages (p: [p.pyyaml]))];
+  } ''
+    export HOME="$TMPDIR/home" PYTHONDONTWRITEBYTECODE=1
+    mkdir -p "$HOME" "$out"
+    cp -R ${runtimeGuardSrc}/. .
+    python3 scripts/tracked_source.py --self-test
+    python3 scripts/test-tracked-source-recipes.py
+    python3 -O scripts/check-runtime-license-boundary.py --self-test
+    python3 scripts/test-ci-runtime.py \
+      ${runtimeCheckPackages.nix-ci-check-runtime-fixture}/bin/nix-ci-check-runtime-fixture \
+      --report-dir "$out/lifecycle"
+    python3 scripts/test-ci-runtime-workflow.py \
+      ${runtimeCheckPackages.nix-ci-check-runtime-fixture}/bin/nix-ci-check-runtime-fixture \
+      --report-dir "$out/workflow"
+  '';
 
   nixCiPassed = pkgs.writeShellApplication {
     name = "nix-ci-passed";
@@ -3318,6 +3342,7 @@
       };
 
       gammaloop-guppy-workspace-graph = guppyWorkspaceGraphCheck;
+      gammaloop-ci-runtime = runtimeGuardCheck;
 
       linnest-wasm =
         pkgs.runCommand "linnest-wasm-check" {
@@ -3345,10 +3370,10 @@
     // {gammaloop-nextest-binaries = nextestBinarySetAggregate;} // nextestBinarySets;
 
   hestiaChecks = builtins.removeAttrs allChecks (
-    ["gammaloop-nextest-binaries"]
+    # The dedicated Actions runtime-guards job builds this check once.
+    ["gammaloop-nextest-binaries" "gammaloop-ci-runtime"]
     ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
   );
-  mainTestChecks = hestiaChecks;
 in {
   inherit
     (documentation)
@@ -3364,7 +3389,6 @@ in {
     cranePythonBuildArtifacts
     allChecks
     hestiaChecks
-    mainTestChecks
     gammaloop-cli
     clinnet-cli
     gammaloop-python-module
@@ -3388,6 +3412,7 @@ in {
     runtimeCheckPackages
     ciRuntimeShell
     ciRuntimeEnvironment
+    ciRuntimeLicenseBoundary
     runtimeJobs
     mainRuntimeJobs
     doctestArtifacts

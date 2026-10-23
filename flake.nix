@@ -110,7 +110,6 @@
         alphal00pDocsCargoArtifacts
         allChecks
         hestiaChecks
-        mainTestChecks
         gammaloop-cli
         clinnet-cli
         gammaloop-python-module
@@ -134,6 +133,7 @@
         runtimeCheckPackages
         ciRuntimeShell
         ciRuntimeEnvironment
+        ciRuntimeLicenseBoundary
         runtimeJobs
         mainRuntimeJobs
         doctestArtifacts
@@ -244,8 +244,6 @@
 
       hydraJobs = hestiaChecks;
 
-      hydraJobsMain = mainTestChecks;
-
       packages =
         {
           default = gammaloop-cli;
@@ -257,6 +255,7 @@
           "gammaloop-render-data" = symbolicaRenderData;
           "alphal00p-docs-cargo-artifacts" = alphal00pDocsCargoArtifacts;
           "ci-runtime-environment" = ciRuntimeEnvironment;
+          "ci-runtime-license-boundary" = ciRuntimeLicenseBoundary;
           "ci-doctest-artifacts" = doctestArtifacts;
           "ci-runtime-jobs" = pkgs.writeText "ci-runtime-jobs.json" (builtins.toJSON {include = runtimeJobs;});
           "ci-runtime-jobs-main" = pkgs.writeText "ci-runtime-jobs-main.json" (builtins.toJSON {include = mainRuntimeJobs;});

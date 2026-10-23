@@ -626,13 +626,21 @@ const GAMMALOOP_API: &[RustExampleSpec] = &[
     example!(
         "ImportModel::run",
         "rust",
-        "fn import(request: &gammaloop_api::commands::import::model::ImportModel, state: &mut gammaloop_api::state::State) -> eyre::Result<()> { request.run(state) }"
+        "fn import(\
+            request: &gammaloop_api::commands::import::model::ImportModel, \
+            state: &mut gammaloop_api::state::State\
+        ) -> eyre::Result<()> { request.run(state) }"
     ),
     example!("Generate", "rust", "use gammaloop_api::commands::Generate;"),
     example!(
         "Generate::run",
         "rust",
-        "fn generate(request: &gammaloop_api::commands::Generate, state: &mut gammaloop_api::state::State, global: &gammalooprs::settings::GlobalSettings, runtime: &gammalooprs::settings::RuntimeSettings) -> eyre::Result<()> { request.run(state, \"compiled\", false, global, runtime) }"
+        "fn generate(\
+            request: &gammaloop_api::commands::Generate, \
+            state: &mut gammaloop_api::state::State, \
+            global: &gammalooprs::settings::GlobalSettings, \
+            runtime: &gammalooprs::settings::RuntimeSettings\
+        ) -> eyre::Result<()> { request.run(state, \"compiled\", global, runtime) }"
     ),
     example!(
         "Integrate",
@@ -1144,23 +1152,17 @@ pub fn resolve_stub(workspace_root: &Path, component: &str) -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use alphal00p_workspace::{WorkspaceMarker, WorkspaceRoot};
 
     use super::*;
 
     pub(crate) fn workspace_root() -> PathBuf {
-        let start = match env::var_os("CARGO_MANIFEST_DIR") {
-            Some(directory) => PathBuf::from(directory),
-            None => env::current_dir().expect("catalog tests require a current directory"),
-        };
-        start
-            .ancestors()
-            .find(|root| {
-                root.join("Cargo.toml").is_file()
-                    && root.join("docs/products/registry.toml").is_file()
-            })
-            .expect("catalog tests require a documentation workspace at the runtime manifest directory or cwd")
-            .to_path_buf()
+        WorkspaceRoot::discover_runtime(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[WorkspaceMarker::File("docs/products/registry.toml")],
+        )
+        .expect("catalog tests require a runtime documentation workspace")
+        .into_path_buf()
     }
 
     #[test]
