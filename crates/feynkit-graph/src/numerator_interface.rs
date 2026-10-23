@@ -547,8 +547,8 @@ mod tests {
     fn reversible_labels_remain_supported_and_can_transport_to_native_indices() {
         let head = tensor_symbol!("feynkit_graph::encoded_source_ports");
         let rep = Minkowski {}.new_rep(4);
-        let source_index = function!(symbols::hedge_index(), 1, 0);
-        let target_index = function!(symbols::hedge_index(), 9, 0);
+        let source_index = function!(symbols::hedge_index(), 1);
+        let target_index = function!(symbols::hedge_index(), 9);
         let opaque = symbol!("feynkit_graph::opaque_source_label");
         let translate = |atom: &Atom| {
             Ok(atom
@@ -603,11 +603,11 @@ mod tests {
         let scope = symbol!("feynkit_graph::encoded_transport_scope");
         let original = function!(
             symbol!("feynkit_graph::scoped_opaque_label"),
-            function!(symbols::hedge_index(), 1, 0)
+            function!(symbols::hedge_index(), 1)
         );
         let translated = original
-            .replace(function!(symbols::hedge_index(), 1, 0).to_pattern())
-            .with(function!(symbols::hedge_index(), 9, 0));
+            .replace(function!(symbols::hedge_index(), 1).to_pattern())
+            .with(function!(symbols::hedge_index(), 9));
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let encoded = cooking
             .cook_function(original.as_fun_view().unwrap())
@@ -640,8 +640,8 @@ mod tests {
                     .unwrap();
                 let mapped = NumeratorInterface::translate(&value, |atom| {
                     Ok(atom
-                        .replace(function!(symbols::hedge_index(), 1, 0).to_pattern())
-                        .with(function!(symbols::hedge_index(), 9, 0)))
+                        .replace(function!(symbols::hedge_index(), 1).to_pattern())
+                        .with(function!(symbols::hedge_index(), 9)))
                 })
                 .unwrap();
                 assert!(mapped.same_value(&expected));
@@ -657,7 +657,7 @@ mod tests {
     fn native_and_encoded_indices_cannot_capture_each_other() {
         let head = tensor_symbol!("feynkit_graph::mixed_identity_collision");
         let rep = Minkowski {}.new_rep(4);
-        let native = function!(symbols::edge_index(), 2, 0);
+        let native = function!(symbols::edge_index(), 2);
         let opaque = function!(symbol!("feynkit_graph::collision_label"), 7);
         let source = NumeratorInterface::admit(
             function!(
@@ -687,7 +687,7 @@ mod tests {
     fn native_transport_keeps_internal_contractions_and_rejects_capture() {
         let rep = Minkowski {}.new_rep(4);
         let [dummy, external, new_dummy, new_external] =
-            [1, 2, 7, 8].map(|owner| function!(symbols::hedge_index(), owner, 0));
+            [1, 2, 7, 8].map(|owner| function!(symbols::hedge_index(), owner));
         let left = tensor_symbol!("feynkit_graph::contracted_left");
         let right = tensor_symbol!("feynkit_graph::contracted_right");
         let input = function!(left, rep.to_symbolic([dummy.clone()]))
@@ -720,8 +720,8 @@ mod tests {
 
     #[test]
     fn native_transport_checks_callback_port_loss_without_replaying_normalization() {
-        let source_index = function!(symbols::edge_index(), 1, 0);
-        let target_index = function!(symbols::edge_index(), 2, 0);
+        let source_index = function!(symbols::edge_index(), 1);
+        let target_index = function!(symbols::edge_index(), 2);
         let rep = Minkowski {}.new_rep(4);
         let target = rep.to_symbolic([target_index.clone()]);
         let calls = Arc::new(AtomicUsize::new(0));

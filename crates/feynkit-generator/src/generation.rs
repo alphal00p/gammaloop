@@ -1331,7 +1331,11 @@ impl NumeratorInstantiation<'_> {
     fn index(&self, leg: NumeratorHalfEdge, shift: i64) -> Result<Atom, GenerationError> {
         let hedge = i64::try_from(leg.hedge)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic half-edge identifier"))?;
-        Ok(symbols::hedge_index().call((hedge, shift)))
+        Ok(if shift == 0 {
+            symbols::hedge_index().call((hedge,))
+        } else {
+            symbols::hedge_index().call((hedge, shift))
+        })
     }
 
     fn dummy(&self, local: usize) -> Result<Atom, GenerationError> {
@@ -1343,7 +1347,11 @@ impl NumeratorInstantiation<'_> {
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic numerator owner"))?;
         let local = i64::try_from(local)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic dummy index"))?;
-        Ok(symbol.call((owner, local)))
+        Ok(if local == 0 {
+            symbol.call((owner,))
+        } else {
+            symbol.call((owner, local))
+        })
     }
 
     fn momentum(

@@ -820,7 +820,7 @@ pub mod test {
         let bis = LibraryRep::from(Bispinor {}).new_rep(4);
         let raw = function!(
             matrix,
-            bis.to_symbolic([function!(label, 3, 0)]),
+            bis.to_symbolic([function!(label, 3)]),
             bis.to_symbolic([function!(label, 3, 1)])
         );
         let cooking = CookSettings::indices()

@@ -230,13 +230,28 @@ mod test {
             );
         }
         for atom in [
-            function!(source, 7),
+            function!(source),
+            function!(source, -1),
+            function!(source, (1, 2)),
+            function!(source, 7, (1, 2)),
             function!(source, 7, -1),
             function!(source, 7, 0, 1),
             function!(symbol!("index_test::untagged"), 7, 0),
         ] {
             assert!(AbstractIndex::try_from(atom.as_view()).is_err());
         }
+    }
+
+    #[test]
+    fn named_local_zero_has_one_canonical_argument() {
+        let head = symbol!("index_test::local_zero", tags = [SPENSO_TAG.index.clone()]);
+        let short = function!(head, 17);
+        let long = function!(head, 17, 0);
+        let index = AbstractIndex::Named(head.into(), 17, 0);
+        assert_eq!(AbstractIndex::try_from(short.as_view()).unwrap(), index);
+        assert_eq!(AbstractIndex::try_from(long.as_view()).unwrap(), index);
+        assert_eq!(index.to_atom(), short);
+        assert_eq!(index.to_string(), short.to_string());
     }
 
     #[test]
@@ -588,7 +603,8 @@ pub enum AbstractIndex {
         owner: usize,
         axis: usize,
     },
-    /// A tagged index call with an owner and a local index, preserving its head.
+    /// A tagged index call with a natural owner and local index, preserving its head.
+    /// Local zero is written as `head(owner)`; `head(owner, 0)` parses identically.
     #[cfg(feature = "shadowing")]
     Named(SerializableSymbol, usize, usize),
     /// An index in an independent copy of a tensor, retaining its original identity.
@@ -760,6 +776,8 @@ impl std::fmt::Display for AbstractIndex {
                 }
             }
             #[cfg(feature = "shadowing")]
+            AbstractIndex::Named(name, owner, 0) => write!(f, "{name}({owner})"),
+            #[cfg(feature = "shadowing")]
             AbstractIndex::Named(name, owner, local) => write!(f, "{name}({owner},{local})"),
             #[cfg(feature = "shadowing")]
             AbstractIndex::Scoped(index) => write!(f, "{}({})", index.scope(), index.index()),
@@ -786,6 +804,9 @@ impl From<AbstractIndex> for Atom {
                 Atom::var(symbol!(format!("d_{}", v), tag = DUMMY_INDEX_TAG))
             }
             AbstractIndex::Symbol(v) => Atom::var(v.into()),
+            AbstractIndex::Named(name, owner, 0) => {
+                symbolica::function!(Symbol::from(name), Atom::num(owner))
+            }
             AbstractIndex::Named(name, owner, local) => {
                 symbolica::function!(Symbol::from(name), Atom::num(owner), Atom::num(local))
             }
@@ -928,15 +949,20 @@ impl TryFrom<AtomView<'_>> for AbstractIndex {
             }
             AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.index) => {
                 let args = function.iter().collect::<Vec<_>>();
-                let [owner, local] = args.as_slice() else {
-                    return Err(AbstractIndexError::NotIndex(view.to_string()));
+                let (owner, local) = match args.as_slice() {
+                    [owner] => (*owner, 0),
+                    [owner, local] => (
+                        *owner,
+                        usize::try_from(*local)
+                            .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                    ),
+                    _ => return Err(AbstractIndexError::NotIndex(view.to_string())),
                 };
                 Ok(AbstractIndex::Named(
                     function.get_symbol().into(),
-                    usize::try_from(*owner)
+                    usize::try_from(owner)
                         .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
-                    usize::try_from(*local)
-                        .map_err(|_| AbstractIndexError::NotIndex(view.to_string()))?,
+                    local,
                 ))
             }
             _ => Err(AbstractIndexError::NotIndex(view.to_string())),

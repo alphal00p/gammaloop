@@ -550,11 +550,11 @@ assert "q_{1}" in indexed._repr_latex_()
 assert "Momentum" not in indexed.to_typst()
 # Raw index notation exposes the graph provenance under the alphabetic display default.
 raw_indices = spenso.DisplaySettings(index_style="raw")
-for label in ("e₇.₀", "v₇.₀"):
+for label in ("e₇", "v₇"):
     assert label in indexed.format_tensor(settings=raw_indices)
 for label in ("e", "v"):
-    assert f"{label}_{{7.0}}" in indexed.to_latex(settings=raw_indices)
-    assert f"attach({label},b:(7.0))" in indexed.to_typst(settings=raw_indices)
+    assert f"{label}_{{7}}" in indexed.to_latex(settings=raw_indices)
+    assert f"attach({label},b:(7))" in indexed.to_typst(settings=raw_indices)
 for vertex in indexed_diagram.vertices:
     assert isinstance(vertex.numerator_expression(), spenso.TensorExpression)
 for edge in indexed_diagram.edges:

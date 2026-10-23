@@ -198,7 +198,9 @@ anchor = "pub fn generate("
 # generation, filtering, cancellation and explicit threads(1) ownership remain.
 # Reviewed 2026-10-23: Template admission runs outside write guards; concurrent publication retains one shared template. Cache poisoning remains a failure. See the updated generation ownership note.
 # No-impact attestation 2026-10-23: boxed error sources preserve numerator-template admission and error propagation.
-digest = "afc14afe676856db301121a6e0ee24294922092f"
+# Reviewed 2026-10-23: native label writers omit local zero; template binding
+# preserves that spelling. Numerator ownership and caching are unchanged.
+digest = "672732ee50bec4d09f0453e34cb7220c3ddd3535"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -414,7 +416,9 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # Reviewed 2026-10-18: The UV note records validated physical fixed-selector
 # admissibility after original unfiltered scope validation. Formal D/epsilon,
 # tensor factorization, genuine summed contractions and selector bounds remain guarded.
-digest = "aa86a2bcf483dc539fbddb34f6983a095d192fde"
+# Reviewed 2026-10-23: Vakint restoration canonicalizes uvterm local zero before
+# typed admission; backend dummy/public-port separation and UV algorithms remain.
+digest = "52239c3b024703396d4e60480fd22ecf04761d32"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -673,7 +677,9 @@ anchor = "pub trait IndexTooling {"
 # parsing, dual wrappers and factorized chain cleanup. The syntax note now
 # distinguishes authoritative typed index/dimension transport from arbitrary
 # callback replacements; typed history is not recovered from normalized text.
-digest = "3fe5aa2de801a2dc4e3d7f02425b0744cf52f1dd"
+# No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
+# local-zero spelling; its logical-axis and component assertions are unchanged.
+digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -823,7 +829,9 @@ anchor = "pub trait IndexTooling {"
 # dualizing their logical interface and uses checked declared-result admission;
 # raw canonicalization retains source validation and factorized reconstruction.
 # These boundaries agree with the Idenso note's authoritative typed-metadata model.
-digest = "3fe5aa2de801a2dc4e3d7f02425b0744cf52f1dd"
+# No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
+# local-zero spelling; its logical-axis and component assertions are unchanged.
+digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -848,7 +856,10 @@ anchor = "pub struct CookSettings {"
 # Reviewed 2026-10-23: Third-party tagged calls that AbstractIndex cannot parse
 # retain opaque-label interning; malformed Spenso-owned Open/scope calls still
 # fail. The architecture note records this split; native forms remain preserved.
-digest = "2383d20301522c27142980b05d6342154e7ba933"
+# Reviewed 2026-10-23: one-argument native labels are retained and explicit-zero
+# aliases use AbstractIndex serialization. Opaque malformed labels and Open/scope
+# validation remain; Idenso architecture and Spenso syntax document the policy.
+digest = "b7327c174d55a96e27a015c5f74ddc0b4061b1b5"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
@@ -1627,7 +1638,9 @@ anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
 # Reviewed 2026-10-19: exact preparation collects existing numerical content and scalar factors before its single index canonicalization. The added chiral-cycle control is red before this reorder and green afterward, preserves dummy/order variants and rejects a distinct matrix; no graph expansion or reference change.
 # No-impact attestation 2026-10-23: boxed comparison errors preserve grouping, numerator comparison and source chains.
-digest = "6623f73ac140e9e0ff094154df76293a80fd05d0"
+# Reviewed 2026-10-23: GroupingIndex emits named labels through AbstractIndex's
+# canonical serializer; grouping identities and comparison rules are unchanged.
+digest = "729f281b9b3dc7014aa4878b6acee1e0e2bc3be5"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

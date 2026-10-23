@@ -497,8 +497,8 @@ impl CookSettings {
                 return;
             };
 
-            match self.cook_function_symbol(f, filter, CookContext::Function) {
-                Ok(Some(cooked)) => **out = Atom::var(cooked),
+            match self.cook_function_atom(f, filter, CookContext::Function) {
+                Ok(Some(cooked)) => **out = cooked,
                 Ok(None) => {}
                 Err(e) => error.set_once(e),
             }
@@ -607,8 +607,8 @@ impl CookSettings {
             CookSourceFilter::RepresentationPayload { indices: true, .. } => CookContext::Index,
             _ => CookContext::Function,
         };
-        self.cook_function_symbol(fun, self.source.index_payload_filter(), context)
-            .map(|symbol| symbol.map_or_else(|| fun.as_view().to_owned(), Atom::var))
+        self.cook_function_atom(fun, self.source.index_payload_filter(), context)
+            .map(|atom| atom.unwrap_or_else(|| fun.as_view().to_owned()))
     }
 
     fn cook_representation_payloads(
@@ -648,10 +648,10 @@ impl CookSettings {
             let cooked_index = if indices && let Some(AtomView::Fun(index)) = index {
                 match cooked_indices
                     .entry(index.as_view().to_owned())
-                    .or_insert_with(|| self.cook_function_symbol(index, filter, CookContext::Index))
+                    .or_insert_with(|| self.cook_function_atom(index, filter, CookContext::Index))
                     .clone()
                 {
-                    Ok(value) => value.map(Atom::var),
+                    Ok(value) => value,
                     Err(e) => {
                         error.set_once(e);
                         return;
@@ -762,12 +762,12 @@ impl CookSettings {
         Self::portable_dimension(atom.as_view()).then_some(atom)
     }
 
-    fn cook_function_symbol(
+    fn cook_function_atom(
         &self,
         fun: FunView<'_>,
         filter: Option<&CookTagFilter>,
         context: CookContext,
-    ) -> Result<Option<Symbol>, CookingError> {
+    ) -> Result<Option<Atom>, CookingError> {
         let explicit_output_tags = self.output_tags.explicit_tags();
         if filter.is_some_and(|filter| !filter.matches(fun.get_symbol(), explicit_output_tags)) {
             return Ok(None);
@@ -776,11 +776,12 @@ impl CookSettings {
         let head = fun.get_symbol();
         if matches!(context, CookContext::Index) {
             if head == AIND_SYMBOLS.openind || head == AbstractIndex::scope_symbol() {
-                AbstractIndex::try_from(fun.as_view())?;
-                return Ok(None);
+                return Ok(Some(Atom::from(AbstractIndex::try_from(fun.as_view())?)));
             }
-            if head.has_tag(&SPENSO_TAG.index) && AbstractIndex::try_from(fun.as_view()).is_ok() {
-                return Ok(None);
+            if head.has_tag(&SPENSO_TAG.index)
+                && let Ok(index) = AbstractIndex::try_from(fun.as_view())
+            {
+                return Ok(Some(Atom::from(index)));
             }
         }
 
@@ -788,7 +789,8 @@ impl CookSettings {
         match self.mode {
             CookMode::FlattenedSymbol => {
                 let name = CookFunctionName::from_fun(fun)?;
-                self.build_symbol(name, None, &output_tags).map(Some)
+                self.build_symbol(name, None, &output_tags)
+                    .map(|symbol| Some(Atom::var(symbol)))
             }
             CookMode::ReversibleEncoding => self
                 .build_symbol(
@@ -796,7 +798,7 @@ impl CookSettings {
                     Some(fun.as_view().to_owned()),
                     &output_tags,
                 )
-                .map(Some),
+                .map(|symbol| Some(Atom::var(symbol))),
         }
     }
 
@@ -1197,14 +1199,13 @@ mod tests {
         // Register GammaLoop-style heads before cooking, as in a shared process.
         let dummy = index_symbol!("idenso::cooking_gammaloop::dummy");
         let hedge = index_symbol!("idenso::cooking_gammaloop::hedge");
-        let opaque = [
+        let opaque = [function!(head, 17, -1), function!(head, 17, 2, 3)];
+        let native = [
             function!(head, 17),
-            function!(head, 17, -1),
-            function!(head, 17, 2, 3),
+            function!(head, 17, 2),
             function!(dummy, 1),
             function!(hedge, 3),
         ];
-        let native = function!(head, 17, 2);
         for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
             let settings = CookSettings::indices().with_mode(mode);
             for index in &opaque {
@@ -1235,14 +1236,39 @@ mod tests {
                     assert_eq!(settings.uncook(cooked.as_view()), *index);
                 }
             }
+            for native in &native {
+                assert_eq!(
+                    settings
+                        .cook_function(native.as_fun_view().unwrap())
+                        .unwrap(),
+                    *native
+                );
+                let slot = mink!(4, native.clone());
+                assert_eq!(settings.try_cook_indices(slot.as_view()).unwrap(), slot);
+            }
+        }
+    }
+
+    #[test]
+    fn index_cooking_canonicalizes_local_zero_aliases() {
+        test_support::test_initialize();
+        let head = index_symbol!("idenso::cooking_local_zero");
+        let canonical = function!(head, 17);
+        let alias = function!(head, 17, 0);
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
             assert_eq!(
                 settings
-                    .cook_function(native.as_fun_view().unwrap())
+                    .cook_function(alias.as_fun_view().unwrap())
                     .unwrap(),
-                native
+                canonical
             );
-            let slot = mink!(4, native.clone());
-            assert_eq!(settings.try_cook_indices(slot.as_view()).unwrap(), slot);
+            let mixed = mink!(4, canonical.clone()) * mink!(4, alias.clone());
+            let expected = mink!(4, canonical.clone()).pow(2);
+            assert_eq!(
+                settings.try_cook_indices(mixed.as_view()).unwrap(),
+                expected
+            );
         }
     }
 

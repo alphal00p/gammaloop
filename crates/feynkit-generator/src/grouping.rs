@@ -7,6 +7,7 @@ use std::{
     },
 };
 
+use feynkit_graph::symbols;
 use feynkit_graph::{
     DiagramEndpoint, DiagramError, DiagramHalfEdge, EdgeId, ExternalLeg, ExternalState,
     FeynmanDiagram, VertexId, expressions::evaluate_overall_factor,
@@ -24,6 +25,7 @@ use idenso::{
         inference::{InterfaceInference, TensorInferenceError},
     },
 };
+use spenso::structure::abstract_index::AbstractIndex;
 use spenso::{
     network::{
         MinResultRank, Network, Sequential,
@@ -261,25 +263,13 @@ impl From<GroupingIndex> for Atom {
             GroupingIndex::Normal(index) => Atom::num(index as i64),
             GroupingIndex::Symbol(symbol) => Atom::var(symbol),
             GroupingIndex::Hedge(owner, local) => {
-                function!(
-                    feynkit_graph::symbols::hedge_index(),
-                    owner as i64,
-                    local as i64
-                )
+                AbstractIndex::Named(symbols::hedge_index().into(), owner, local).to_atom()
             }
             GroupingIndex::Vertex(owner, local) => {
-                function!(
-                    feynkit_graph::symbols::vertex_index(),
-                    owner as i64,
-                    local as i64
-                )
+                AbstractIndex::Named(symbols::vertex_index().into(), owner, local).to_atom()
             }
             GroupingIndex::Edge(owner, local) => {
-                function!(
-                    feynkit_graph::symbols::edge_index(),
-                    owner as i64,
-                    local as i64
-                )
+                AbstractIndex::Named(symbols::edge_index().into(), owner, local).to_atom()
             }
             GroupingIndex::Dummy(index) => {
                 function!(symbol!("FeynKit::DummyIndex"), index as i64)

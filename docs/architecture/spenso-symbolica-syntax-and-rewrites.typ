@@ -43,6 +43,13 @@ representation:
 mink(D)
 ```
 
+A head tagged `spenso::index` accepts natural `head(owner)` and
+`head(owner, local)` named indices. The one-argument form has local zero;
+`head(owner, 0)` is an accepted alias. Serialization writes local zero only as
+`head(owner)`. Negative, fractional, empty and longer argument lists are not
+native named indices. Spenso-owned Open and scoped forms keep their separate
+syntax and validation.
+
 Tensor leaves are functions whose head is the tensor symbol and whose structural
 arguments are representation slots.
 

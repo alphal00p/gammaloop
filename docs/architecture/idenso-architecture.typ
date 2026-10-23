@@ -780,7 +780,10 @@ existing registry-dependent behavior; construction and cooking remain separate
 from reduction.
 
 Index-only cooking preserves validated native named, Open and scoped index forms
-in both flattened and reversible modes. It interns opaque function-valued labels
+in both flattened and reversible modes. Tagged named heads accept `head(owner)`
+for local zero and `head(owner, local)` for natural owner/local values. Native
+serialization and index cooking canonicalize local zero to `head(owner)`;
+`head(owner, 0)` parses to the same index. It interns opaque function-valued labels
 with expression-local reuse, retaining their shared identity across representation
 kinds. Tagged third-party heads that do not parse as native indices are interned
 as opaque labels. Malformed Spenso-owned Open and scope forms remain errors.

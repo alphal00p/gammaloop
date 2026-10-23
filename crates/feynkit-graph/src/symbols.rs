@@ -66,7 +66,8 @@ pub fn vertex_index() -> Symbol {
     *SymbolicaInitLazy::new(&SYMBOL)
 }
 
-/// Half-edge-owned abstract indices `hedge(owner, local_index)`.
+/// Half-edge-owned abstract indices `hedge(owner, local_index)`, or `hedge(owner)`
+/// for local zero.
 /// See the polarization example in [`crate::symbols`].
 pub fn hedge_index() -> Symbol {
     static SYMBOL: LazyLock<Symbol> = LazyLock::new(|| {
