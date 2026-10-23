@@ -9,6 +9,14 @@ separate packages: they provide derives, concrete physics tensors, and a Python 
 than a second tensor engine.
 ]
 
+== Shared display notation
+
+`symbolica-notation` owns `IndexDisplay`, its validation, escaped rendering and
+existing `spenso::index-display-v1` encoding. It depends only on Symbolica and
+`thiserror` and is shared with graph presentation without a Spenso dependency.
+Representation metadata, palettes, classes and row placement remain in Spenso.
+The extraction preserves rendered bytes and portable math-display attachments.
+
 == Boundaries
 
 Spenso is an in-process, generic tensor and tensor-network library. Its implementation is split

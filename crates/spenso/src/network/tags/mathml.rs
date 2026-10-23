@@ -16,16 +16,15 @@ use crate::network::tags;
 use crate::shadowing::symbolica_utils::SpensoPrintSettings;
 use crate::shadowing::{CYCLIC, SYM};
 use crate::structure::abstract_index::AIND_SYMBOLS;
-use crate::structure::representation::{
-    IndexDisplay, IndexRow, RepresentationClass, RepresentationMetadata,
-};
+use crate::structure::representation::{IndexRow, RepresentationClass, RepresentationMetadata};
 use crate::structure::slot::{SlotMatch, SlotMatcher};
 use std::cell::Cell;
 use std::num::ParseFloatError;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, UserData};
 use symbolica::coefficient::CoefficientView;
-use symbolica::printer::{AnsiHtmlFormatter, PrintMode, PrintOptions, PrintState, PrintUserData};
+use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
 use symbolica::state::State;
+use symbolica_notation::{IndexDisplay, MathMl};
 use thiserror::Error;
 
 const MAX_BYTES: usize = 4096;
@@ -116,92 +115,7 @@ fn source_label(atom: AtomView<'_>) -> AtomView<'_> {
 /// assert_eq!(mathml::fragment(native).as_deref(), Some("<mi>x</mi>"));
 /// ```
 pub fn fragment(value: String) -> Option<String> {
-    bounded_fragment(value, MAX_BYTES)
-}
-
-fn bounded_fragment(mut value: String, max_bytes: usize) -> Option<String> {
-    if value.len() > max_bytes || value.contains("<mtext>⋯</mtext>") || value.contains("<math") {
-        return None;
-    }
-    let bytes = value.as_bytes();
-    let mut cursor = 0;
-    let mut attributes = Vec::new();
-    while let Some(start) = value[cursor..].find('<').map(|offset| cursor + offset) {
-        let tail = &value[start..];
-        if tail.starts_with("<!--") {
-            cursor = start + tail.find("-->")? + 3;
-            continue;
-        }
-        if tail.starts_with("<![CDATA[") {
-            cursor = start + tail.find("]]>")? + 3;
-            continue;
-        }
-        if tail.starts_with("<?") {
-            cursor = start + tail.find("?>")? + 2;
-            continue;
-        }
-        cursor = start + 1;
-        if matches!(bytes.get(cursor), Some(b'/' | b'!')) {
-            cursor = start + tail.find('>')? + 1;
-            continue;
-        }
-        // Token text is opaque. Only names at opening-tag attribute boundaries
-        // can own viewer metadata; quoted values may themselves contain `>`.
-        while let Some(byte) = bytes.get(cursor)
-            && !byte.is_ascii_whitespace()
-            && !matches!(byte, b'/' | b'>')
-        {
-            cursor += 1;
-        }
-        loop {
-            let whitespace = cursor;
-            while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-                cursor += 1;
-            }
-            if bytes.get(cursor) == Some(&b'>') {
-                cursor += 1;
-                break;
-            }
-            if bytes.get(cursor..cursor + 2) == Some(b"/>".as_slice()) {
-                cursor += 2;
-                break;
-            }
-            let name = cursor;
-            while let Some(byte) = bytes.get(cursor)
-                && !byte.is_ascii_whitespace()
-                && !matches!(byte, b'=' | b'/' | b'>')
-            {
-                cursor += 1;
-            }
-            if cursor == name {
-                return None;
-            }
-            let symbolic = value[name..cursor].starts_with("data-symbolica-");
-            while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-                cursor += 1;
-            }
-            if bytes.get(cursor) != Some(&b'=') {
-                return None;
-            }
-            cursor += 1;
-            while bytes.get(cursor).is_some_and(u8::is_ascii_whitespace) {
-                cursor += 1;
-            }
-            let quote = *bytes.get(cursor)?;
-            if !matches!(quote, b'\'' | b'"') {
-                return None;
-            }
-            cursor += 1;
-            cursor += value[cursor..].find(char::from(quote))? + 1;
-            if symbolic {
-                attributes.push(whitespace..cursor);
-            }
-        }
-    }
-    for attribute in attributes.into_iter().rev() {
-        value.replace_range(attribute, "");
-    }
-    value.trim_start().starts_with('<').then_some(value)
+    MathMl::fragment(value, MAX_BYTES)
 }
 
 fn head(symbol: Symbol, options: Option<&PrintOptions>) -> Option<String> {
@@ -230,7 +144,7 @@ fn head(symbol: Symbol, options: Option<&PrintOptions>) -> Option<String> {
                 symbol.get_stripped_name()
             }
         });
-    (label.len() <= 1024).then(|| format!("<mi>{}</mi>", AnsiHtmlFormatter::escape_html(label)))
+    (label.len() <= 1024).then(|| format!("<mi>{}</mi>", MathMl::escape(label)))
 }
 
 fn group(body: String) -> String {
@@ -312,7 +226,7 @@ pub(crate) fn tensor(
         };
         let body = format!(
             "<msub><mi>{}</mi><mrow>{}</mrow></msub>",
-            AnsiHtmlFormatter::escape_html(label),
+            MathMl::escape(label),
             arguments(values, options)?
         );
         return (body.len() <= MAX_BYTES).then_some(body);
@@ -610,7 +524,7 @@ pub fn expression(
     let body = context
         .visual(atom, state)
         .ok_or(ExportError::IncompleteOutput)?;
-    bounded_fragment(body, MAX_EXPORT_BYTES).ok_or(ExportError::IncompleteOutput)
+    MathMl::fragment(body, MAX_EXPORT_BYTES).ok_or(ExportError::IncompleteOutput)
 }
 
 /// Why a complete MathML export could not be produced.
@@ -690,7 +604,7 @@ impl<'a> Render<'a> {
             return None;
         }
         export.remaining.set(remaining);
-        bounded_fragment(value, MAX_EXPORT_BYTES)
+        MathMl::fragment(value, MAX_EXPORT_BYTES)
     }
 
     fn child_state(&self) -> PrintState {
@@ -903,7 +817,7 @@ impl<'a> Render<'a> {
             };
             return Some(format!(
                 "<msub><mi>{}</mi><mrow>{}</mrow></msub>",
-                AnsiHtmlFormatter::escape_html(label),
+                MathMl::escape(label),
                 self.arguments(arguments, "<mo>.</mo>")?
             ));
         }
@@ -1264,7 +1178,7 @@ impl<'a> Render<'a> {
                     symbol.get_name(),
                     if dual { " · dual" } else { "" },
                 );
-                let title = AnsiHtmlFormatter::escape_html(&title);
+                let title = MathMl::escape(&title);
                 Some(Some((
                     format!("<mrow title=\"{title}\" data-spenso-open-axis=\"{position}\">{source}</mrow>"),
                     row,

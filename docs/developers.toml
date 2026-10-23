@@ -694,7 +694,7 @@ reviewed_at = "2026-10-06"
 review_ref = "15f0aba87c360abf0123a41a6e347a1583b2f13a"
 products = ["spenso"]
 topics = ["tensor structure", "contraction", "tensor network", "parallelism", "parsing", "serialization"]
-review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
+review_triggers = ["crates/symbolica-notation/**", "crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
 
 [[section.note.scope]]
 path = "crates/spenso/src/structure.rs"

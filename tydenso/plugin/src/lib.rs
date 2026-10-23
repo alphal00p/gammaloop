@@ -1,6 +1,7 @@
 //! Tydenso tensor construction, printing, inspection, and Idenso transforms.
 
 use std::{io::Cursor, sync::Once};
+use symbolica_notation::IndexDisplay;
 
 use ciborium::value::Value;
 use idenso::color::ColorSimplifySettings;
@@ -16,9 +17,7 @@ use spenso::portable_payload::{
 };
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::representation::{
-    IndexDisplay, IndexPalette, IndexRow, LibraryRep, RepName,
-};
+use spenso::structure::representation::{IndexPalette, IndexRow, LibraryRep, RepName};
 use symbolica::atom::{
     Atom, AtomCore, AtomView, DefaultNamespace, NamespacedSymbol, Symbol, SymbolAttribute,
     SymbolBuilder,

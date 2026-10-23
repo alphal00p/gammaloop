@@ -15,10 +15,10 @@ path = "src/bin/stubgen.rs"
 required-features = ["python_stubgen"]
 
 [dependencies]
+symbolica-notation = { workspace = true }
 symbolica = { workspace = true, features = ["python_export"] }
 linnet = { workspace = true }
 linnest = { workspace = true, features = ["svg"] }
-spenso = { workspace = true, default-features = false }
 pyo3 = { workspace = true, features = ["multiple-pymethods"] }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true, default-features = false }

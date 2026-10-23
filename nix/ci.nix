@@ -87,6 +87,7 @@
         "spenso-hep-lib"
         "spenso-macros"
         "spynso3"
+        "symbolica-notation"
         "symbolica-utils"
         "symbolica-data"
       ];

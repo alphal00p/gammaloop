@@ -5,6 +5,7 @@ use super::{
         BaseRepName, LibraryRep, LibrarySlot, RepName, Representation, RepresentationError,
     },
 };
+
 use crate::structure::dimension::Dimension;
 #[cfg(feature = "shadowing")]
 use crate::{
@@ -892,15 +893,15 @@ mod shadowing_tests {
         atom::{Atom, AtomCore, NamespacedSymbol, SymbolBuilder},
         function, parse, symbol,
     };
+    use symbolica_notation::IndexDisplay;
 
     use crate::{
         network::tags::SPENSO_TAG,
         structure::{
             abstract_index::{AIND_SYMBOLS, AbstractIndex},
             representation::{
-                DualLorentz, IndexDisplay, IndexPalette, IndexRow, LibraryRep, Lorentz, Minkowski,
-                RepName, Representation, RepresentationClass, RepresentationError,
-                RepresentationMetadata,
+                DualLorentz, IndexPalette, IndexRow, LibraryRep, Lorentz, Minkowski, RepName,
+                Representation, RepresentationClass, RepresentationError, RepresentationMetadata,
             },
             slot::{DualSlotTo, IsAbstractSlot, Slot, SlotError, SlotMatch, SlotMatcher},
         },

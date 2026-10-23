@@ -70,6 +70,7 @@ smartstring = "1.0.1"
 spenso = { path = "crates/spenso/", default-features = false }
 spenso-hep-lib = { path = "crates/spenso-hep-lib/", default-features = false }
 spenso-macros = { path = "crates/spenso-macros/", default-features = false }
+symbolica-notation = { path = "crates/symbolica-notation/" }
 symbolica-utils = { path = "crates/symbolica-utils/", default-features = false }
 symbolica = { version = "3.0.1", default-features = false }
 sysinfo = { version = "0.33.1", default-features = false, features = ["system"] }

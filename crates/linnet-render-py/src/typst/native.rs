@@ -8,7 +8,8 @@ use linnest::TypstGraphSpec;
 use pyo3::exceptions::PyValueError;
 use pyo3::{PyErr, PyResult, Python};
 use serde_json::{Error as JsonError, Value};
-use spenso::structure::representation::IndexDisplay;
+use symbolica_notation::IndexDisplay;
+
 use std::collections::BTreeMap;
 use std::mem;
 use std::num::TryFromIntError;

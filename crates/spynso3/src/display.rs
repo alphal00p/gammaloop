@@ -8,6 +8,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fmt::Write;
 use std::sync::Arc;
+use symbolica_notation::IndexDisplay;
 
 use linnet_render_py::data_assets::STIX_TWO_MATH_LICENSE;
 use linnet_render_py::typst_export;
@@ -26,9 +27,7 @@ use spenso::portable_payload;
 use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 use spenso::structure::TensorDataLayout;
 use spenso::structure::partial::PartialStructureExt;
-use spenso::structure::representation::{
-    IndexDisplay, IndexPalette, IndexRow, RepName, RepresentationMetadata,
-};
+use spenso::structure::representation::{IndexPalette, IndexRow, RepName, RepresentationMetadata};
 use spenso::structure::slot::IsAbstractSlot;
 use spenso::tensors::complex::RealOrComplexTensor;
 use spenso::tensors::data::{DataTensor, GetTensorData};

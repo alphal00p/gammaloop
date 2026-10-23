@@ -5,7 +5,7 @@ use crate::{
     },
     structure::{
         abstract_index::AIND_SYMBOLS,
-        representation::{IndexDisplay, IndexRow, RepresentationClass, RepresentationMetadata},
+        representation::{IndexRow, RepresentationClass, RepresentationMetadata},
     },
 };
 use symbolica::{
@@ -18,6 +18,7 @@ use symbolica::{
     printer::{PrintOptions, PrintState},
     symbol, tag,
 };
+use symbolica_notation::IndexDisplay;
 pub mod mathml;
 
 /// Presentation-only tensor head sources, carried with the symbol's tags.
@@ -2150,11 +2151,12 @@ mod tests {
         printer::{PrintOptions, PrintState},
         symbol, wrap_symbol,
     };
+    use symbolica_notation::IndexDisplay;
 
     use crate::{
         cyclic, dind, lor, mink,
         shadowing::symbolica_utils::SpensoPrintSettings,
-        structure::representation::{IndexDisplay, IndexPalette, IndexRow, LibraryRep},
+        structure::representation::{IndexPalette, IndexRow, LibraryRep},
     };
 
     use super::{

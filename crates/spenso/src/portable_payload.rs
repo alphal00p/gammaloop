@@ -7,13 +7,14 @@
 //! `spenso.math-display`.
 
 use std::{collections::BTreeMap, fmt, io::Cursor, str};
+use symbolica_notation::IndexDisplay;
 
 use ciborium::value::Value;
 use spenso::{
     network::tags::SPENSO_TAG,
     structure::representation::{
-        IndexDisplay, IndexPalette, IndexRow, LibraryRep, RepName, RepresentationClass,
-        RepresentationMetadata, initialize as initialize_representations,
+        IndexPalette, IndexRow, LibraryRep, RepName, RepresentationClass, RepresentationMetadata,
+        initialize as initialize_representations,
     },
 };
 use symbolica::atom::{Atom, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};

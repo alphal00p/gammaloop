@@ -7,6 +7,7 @@ license = "MIT"
 repository = "https://github.com/alphal00p/gammaloop"
 
 [dependencies]
+symbolica-notation = { workspace = true }
 linnet-render-py = { path = "../linnet-render-py", default-features = false }
 ahash = { workspace = true, features = ["serde"] }
 idenso = { workspace = true }

@@ -1,5 +1,6 @@
 #[cfg(test)]
 use std::sync::LazyLock;
+use symbolica_notation::IndexDisplay;
 
 use spenso::network::library::symbolic::ExplicitKey;
 use spenso::network::tags;
@@ -8,7 +9,7 @@ use spenso::shadowing::IntoAtom;
 use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use spenso::structure::dimension::Dimension;
-use spenso::structure::representation::{IndexDisplay, RepName, RepresentationMetadata};
+use spenso::structure::representation::{RepName, RepresentationMetadata};
 use spenso::structure::slot::AbsInd;
 use spenso::structure::{Canonicalized, TensorStructure};
 use spenso::tensor_symbol;

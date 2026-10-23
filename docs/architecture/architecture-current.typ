@@ -187,6 +187,13 @@ spenso, idenso ------> feynkit-tensor
 focused crates -> feynkit / feynkit-py
 ```
 
+`symbolica-notation` owns the small structured `IndexDisplay` tree and its
+bounded MathML/Typst/plain rendering and existing portable user-data encoding.
+It depends only on Symbolica and `thiserror`, below both Spenso and
+`linnet-render-py`; graph presentation no longer needs Spenso for these labels.
+This extraction preserves rendering and the `spenso.math-display` attachment
+format. Representation palettes, classes and rows remain owned by Spenso.
+
 No FeynKit crate depends on `gammalooprs`, `gammaloop-api`,
 `GlobalSettings`, or GammaLoop `State`. Generation receives explicit
 `GenerationOptions`, and progress/cancellation are callback- and

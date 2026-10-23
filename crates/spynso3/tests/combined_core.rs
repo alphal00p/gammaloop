@@ -9,12 +9,13 @@ use spenso::portable_payload::{
     PortableRepresentationClass, REPRESENTATION_ATTACHMENT_SCHEMA, RepresentationDeclaration,
     RepresentationDeclarations,
 };
-use spenso::structure::representation::{IndexDisplay, IndexPalette, IndexRow, LibraryRep};
+use spenso::structure::representation::{IndexPalette, IndexRow, LibraryRep};
 use spynso3::SpensoModule;
 use symbolica::api::python;
 use symbolica::api::python::SymbolicaCommunityModule;
 use symbolica::atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder};
 use symbolica::parse;
+use symbolica_notation::IndexDisplay;
 use symbolica_typst_plugin::payload;
 
 const SPENSO_WRAPPER: &str = r#"

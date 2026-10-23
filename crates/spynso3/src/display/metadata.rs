@@ -1,6 +1,7 @@
 //! Compact metadata inspectors. Native radio inputs keep slot selection usable
 //! in notebook HTML without scripts, frames, or a widget runtime.
 use std::sync::atomic::{AtomicU64, Ordering};
+use symbolica_notation::IndexDisplay;
 
 use spenso::structure::TensorStructure;
 use spenso::structure::dimension::Dimension;
@@ -15,7 +16,7 @@ use idenso::tensor::composition;
 use pyo3::{PyResult, Python};
 use spenso::structure::abstract_index::AIND_SYMBOLS;
 use spenso::structure::partial::PartialSlot;
-use spenso::structure::representation::{IndexDisplay, IndexRow, RepName, RepresentationClass};
+use spenso::structure::representation::{IndexRow, RepName, RepresentationClass};
 use spenso::structure::slot::IsAbstractSlot;
 use symbolica::atom::{Atom, AtomView, FunctionBuilder};
 

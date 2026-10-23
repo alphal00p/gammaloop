@@ -20,7 +20,8 @@ use spenso::network::tags;
 use spenso::network::tags::{COMPONENT_LABELS_SUBSCRIPT_TAG, SPENSO_TAG, TENSOR_PRINT_HEAD_PREFIX};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::spenso_print_scripted_indexed;
-use spenso::structure::representation::IndexDisplay;
+use symbolica_notation::IndexDisplay;
+
 use spenso::symbolica_init::SymbolicaInitLazy;
 use spenso::utils;
 use std::sync::LazyLock;

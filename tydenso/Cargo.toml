@@ -8,6 +8,7 @@ license = "MIT"
 version = "0.1.0"
 
 [workspace.dependencies]
+symbolica-notation = { path = "../crates/symbolica-notation" }
 idenso = { path = "../crates/idenso", default-features = false, features = ["wasm"] }
 spenso = { path = "../crates/spenso", default-features = false, features = ["portable-payload", "shadowing", "wasm"] }
 symbolica = { version = "3.0.1", default-features = false, features = ["wasm"] }
