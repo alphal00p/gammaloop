@@ -3,47 +3,18 @@
 //! The containing extension registers its linked backend without a dependency
 //! from FeynKit to FastSecDec or any Python module namespace.
 
-use std::sync::OnceLock;
-
-use pyo3::{exceptions::PyImportError, prelude::*, types::PyDict};
+use pyo3::{prelude::*, types::PyDict};
+use symbolica::api::python::{ExtensionPoint, PythonExtensionFunction};
 
 use crate::{graph::PyFeynmanDiagram, integrals::PyIntegralFamily};
 
-/// A linked backend's binding entry point, retaining its keyword validation.
-pub type SectorDecomposeFn =
-    for<'py> fn(Bound<'py, PyAny>, Option<&Bound<'py, PyDict>>) -> PyResult<Py<PyAny>>;
-
-static SECTOR_DECOMPOSE: OnceLock<SectorDecomposeFn> = OnceLock::new();
-
-/// Install the optional backend when initializing the containing extension.
+/// Optional sector decomposition supplied by a backend linked into the same host.
 ///
-/// The backend must call its linked Rust implementation without importing a
-/// canonical Python module. Re-registering the same function is harmless;
-/// replacing it with a different implementation is rejected.
-pub fn set_sector_decomposition_function(function: SectorDecomposeFn) -> Result<(), &'static str> {
-    if SECTOR_DECOMPOSE.set(function).is_ok() {
-        return Ok(());
-    }
-
-    let installed = SECTOR_DECOMPOSE
-        .get()
-        .expect("the sector decomposition function was initialized by another caller");
-    if std::ptr::fn_addr_eq(*installed, function) {
-        Ok(())
-    } else {
-        Err("a different sector decomposition function has already been installed")
-    }
-}
-
-fn forward(input: Bound<'_, PyAny>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Py<PyAny>> {
-    let backend = SECTOR_DECOMPOSE.get().ok_or_else(|| {
-        PyImportError::new_err(
-            "Sector decomposition requires a backend registered by the containing extension; \
-             initialize a module with sector-decomposition support",
-        )
-    })?;
-    backend(input, kwargs)
-}
+/// Register a static `ExtensionImplementation<PythonExtensionFunction>` during
+/// host initialization. The backend retains ownership of argument validation,
+/// defaults, and scientific computation; no Python module lookup is performed.
+pub static SECTOR_DECOMPOSE: ExtensionPoint<PythonExtensionFunction> =
+    ExtensionPoint::new("hepkit.sector_decompose");
 
 #[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
@@ -83,7 +54,7 @@ impl PyFeynmanDiagram {
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let py = slf.py();
-        forward(slf.into_pyobject(py)?.into_any(), kwargs)
+        SECTOR_DECOMPOSE.call(py, (slf,), kwargs)
     }
 }
 
@@ -119,7 +90,7 @@ impl PyIntegralFamily {
         kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         let py = slf.py();
-        forward(slf.into_pyobject(py)?.into_any(), kwargs)
+        SECTOR_DECOMPOSE.call(py, (slf,), kwargs)
     }
 }
 
@@ -271,25 +242,37 @@ mod tests {
     use feynkit_graph::FeynmanDiagram;
     use feynkit_kinematics::Kinematics;
     use feynkit_model::Model;
-    use pyo3::{exceptions::PyRuntimeError, types::PyCFunction};
+    use pyo3::{
+        exceptions::PyRuntimeError,
+        types::{PyCFunction, PyTuple},
+    };
     use std::ffi::CString;
+    use symbolica::api::python::ExtensionImplementation;
 
-    fn observe(input: Bound<'_, PyAny>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Py<PyAny>> {
+    fn observe(
+        args: &Bound<'_, PyTuple>,
+        kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
         let kwargs = kwargs.expect("the test supplies keyword arguments");
         let observer = kwargs
             .get_item("observer")?
             .expect("the test supplies an observer");
-        Ok(observer.call((input,), Some(kwargs))?.unbind())
+        Ok(observer.call(args, Some(kwargs))?.unbind())
     }
 
     fn conflicting_backend(
-        _input: Bound<'_, PyAny>,
+        _args: &Bound<'_, PyTuple>,
         _kwargs: Option<&Bound<'_, PyDict>>,
     ) -> PyResult<Py<PyAny>> {
         Err(PyRuntimeError::new_err(
             "this backend must not be installed",
         ))
     }
+
+    static OBSERVER: ExtensionImplementation<PythonExtensionFunction> =
+        ExtensionImplementation::new("observer", observe);
+    static CONFLICTING: ExtensionImplementation<PythonExtensionFunction> =
+        ExtensionImplementation::new("conflicting", conflicting_backend);
 
     #[test]
     fn forwards_existing_owner_and_keyword_identities_and_exceptions() {
@@ -318,9 +301,8 @@ mod tests {
                 .set_item(
                     "install_backend",
                     PyCFunction::new_closure(py, None, None, |_, _| {
-                        set_sector_decomposition_function(observe)
-                            .map_err(PyRuntimeError::new_err)?;
-                        assert!(set_sector_decomposition_function(conflicting_backend).is_err());
+                        SECTOR_DECOMPOSE.register(&OBSERVER)?;
+                        assert!(SECTOR_DECOMPOSE.register(&CONFLICTING).is_err());
                         Ok::<_, PyErr>(())
                     })
                     .unwrap(),
@@ -347,7 +329,7 @@ try:
         try:
             input.sector_decompose(regulator=regulator)
         except ImportError as caught:
-            assert 'backend registered by the containing extension' in str(caught)
+            assert 'hepkit.sector_decompose' in str(caught)
             assert caught.__cause__ is None
         else:
             raise AssertionError('missing optional backend was accepted')
