@@ -3073,6 +3073,8 @@
           }
           export PATH=${lib.makeBinPath (target.runtimeTools or [])}:"$PATH"
               export NEXTEST_SHOW_PROGRESS=counter RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
+              # Insta macros retain the producer manifest path; snapshot I/O belongs here.
+              export INSTA_WORKSPACE_ROOT="$PWD"
               ${lib.optionalString (target.runtimeRenderData or false) ''
             export SYMBOLICA_DATA_DIRECTORY=${symbolicaRenderData}
           ''}

@@ -60,7 +60,15 @@ anchor = "let snapshot = ResolvedStateSnapshot::open(&save_path)?;"
 # records the actual generation reports/resources before persistence, matching
 # the graph-summary publication contract. The pinned-reader/load implementation
 # and version22 boundary are unchanged.
-digest = "62fe0cff164c3a716626ea33889681222b725ed2"
+# Reviewed 2026-10-23 production guard/default-rendering correction: State::save
+# owns the non-reentrant ShowDefaultsGuard across the complete payload phase;
+# SaveState retains command-string mode ownership and delegates without reacquiring.
+# Process settings and run-history TOML now receive explicit defaults as well as
+# runtime/CLI settings. The guard is released before Symbolica state export and
+# restores the prior rendering flag on failure/return. This changes production
+# default-rendering coverage and closes the command self-deadlock; snapshot
+# version22, manifest-last publication and pinned-reader ordering are unchanged.
+digest = "0a83a5ea28d6d2dcd27b50fe5db3385d30c730b8"
 
 [[section.note.scope]]
 path = "crates/gammaloop-api/src/commands/integrate.rs"
@@ -1975,6 +1983,12 @@ anchor = "nextestRuntimeSrcFor ="
 end_anchor = "nextestFeatureArgsFor ="
 # Reviewed 2026-10-15: Runtime source selection retains the producer/runtime split.
 # Reconciliation does not add feature-branch performance triggers.
+# Reviewed 2026-10-23 runtime relocation correction: this fileset range is
+# unchanged. The companion nextestCheckFor body now exports INSTA_WORKSPACE_ROOT
+# from the copied workspace so archived Insta macros read staged snapshots rather
+# than their baked producer directory. Existing snapshot bytes/mirroring, package
+# selections, profiles and compiled producer inputs are retained. The override is
+# a public process-runtime path; no user credential enters Nix or cache identity.
 digest = "e70efccc2a78b7ab7b002facfefa375418e590f0"
 
 [[section.note.scope]]
