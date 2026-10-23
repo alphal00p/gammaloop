@@ -356,19 +356,19 @@ impl PyDiagramEdge {
     ///
     /// Parameters
     /// ----------
-    /// power : int, optional
-    ///     Signed propagator power; defaults to one.
+    /// power : int or None, optional
+    ///     Signed power override; None preserves the stored propagator power.
     /// dimension : Expression or int or None, optional
     ///     Lorentz dimension; defaults to the shared symbolic dimension.
     /// in_lmb : bool, optional
     ///     Route through the diagram's stored loop-momentum basis.
     /// lmb : LoopMomentumBasis or None, optional
     ///     Explicit basis from this diagram, overriding ``in_lmb``.
-    #[pyo3(signature = (*, power=1, dimension=None, in_lmb=false, lmb=None))]
+    #[pyo3(signature = (*, power=None, dimension=None, in_lmb=false, lmb=None))]
     fn denominator_expression(
         &self,
         py: Python<'_>,
-        power: isize,
+        power: Option<isize>,
         dimension: Option<ConvertibleToExpression>,
         in_lmb: bool,
         lmb: Option<&PyLoopMomentumBasis>,
@@ -403,11 +403,25 @@ impl PyDiagramEdge {
         };
         region.denominator_expression(
             py,
-            Some(BTreeMap::from([(self.id, power)])),
+            power.map(|power| BTreeMap::from([(self.id, power)])),
             dimension,
             in_lmb,
             lmb,
         )
+    }
+
+    /// Return the stored positive propagator power from the diagram's integral annotations.
+    ///
+    /// Absent lines are contracted and irreducible numerator factors remain in the numerator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``DiagramEdge`` class example:
+    ///
+    /// >>> powers = {line.id: line.propagator_power for line in diagram.internal_edges}
+    #[getter]
+    fn propagator_power(&self) -> i32 {
+        self.inner.propagator_power
     }
 
     /// Return this physical edge's symbolic energy component before momentum routing.
@@ -3373,7 +3387,7 @@ impl PyFeynmanDiagram {
     /// ----------
     /// A complete diagram defaults to internal propagators; a Subgraph uses its region.
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
     /// dimension : Expression or int or None, optional
     ///     Lorentz dimension; defaults to the shared symbolic dimension.
     /// in_lmb : bool, optional
@@ -3600,7 +3614,7 @@ impl PyFeynmanDiagram {
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
     ///     Zero omits the denominator; negative powers put it in the numerator.
     ///     Entries outside the selected internal edges are ignored.
     #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None, edge_powers=None))]
@@ -3672,7 +3686,7 @@ impl PyFeynmanDiagram {
     /// numerator : Expression or TensorExpression or None, optional
     ///     Prepared numerator in edge momenta; None uses the selected local numerator.
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Signed propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
     ///     Zero omits the denominator; negative powers put it in the numerator.
     ///     Entries outside the selected internal edges are ignored.
     #[pyo3(signature = (uv_mass, *, dimension=4, numerator=None, edge_powers=None))]
@@ -4529,7 +4543,7 @@ impl PyFeynmanDiagram {
     /// highlight : Subgraph or None, optional
     ///     Region to highlight in the complete diagram.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None))]
-    fn to_html(
+    pub fn to_html(
         &self,
         py: Python<'_>,
         config: Option<&PyRenderSettings>,
