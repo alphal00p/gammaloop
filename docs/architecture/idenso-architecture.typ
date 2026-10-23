@@ -782,7 +782,8 @@ from reduction.
 Index-only cooking preserves validated native named, Open and scoped index forms
 in both flattened and reversible modes. It interns opaque function-valued labels
 with expression-local reuse, retaining their shared identity across representation
-kinds. Malformed native index forms fail instead of becoming opaque symbols.
+kinds. Tagged third-party heads that do not parse as native indices are interned
+as opaque labels. Malformed Spenso-owned Open and scope forms remain errors.
 The separate all-function cooking mode retains its own source/tag policy.
 
 == Ownership and error boundaries

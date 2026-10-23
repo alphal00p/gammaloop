@@ -774,13 +774,14 @@ impl CookSettings {
         }
 
         let head = fun.get_symbol();
-        if matches!(context, CookContext::Index)
-            && (head.has_tag(&SPENSO_TAG.index)
-                || head == AIND_SYMBOLS.openind
-                || head == AbstractIndex::scope_symbol())
-        {
-            AbstractIndex::try_from(fun.as_view())?;
-            return Ok(None);
+        if matches!(context, CookContext::Index) {
+            if head == AIND_SYMBOLS.openind || head == AbstractIndex::scope_symbol() {
+                AbstractIndex::try_from(fun.as_view())?;
+                return Ok(None);
+            }
+            if head.has_tag(&SPENSO_TAG.index) && AbstractIndex::try_from(fun.as_view()).is_ok() {
+                return Ok(None);
+            }
         }
 
         let output_tags = self.output_tags.tags_for(fun.get_symbol(), filter);
@@ -1190,13 +1191,65 @@ mod tests {
     }
 
     #[test]
-    fn interning_rejects_malformed_native_index_calls() {
+    fn interning_accepts_opaque_tagged_heads_and_preserves_native_calls() {
         test_support::test_initialize();
         let head = index_symbol!("idenso::malformed_native_index");
-        let invalid = [
+        // Register GammaLoop-style heads before cooking, as in a shared process.
+        let dummy = index_symbol!("idenso::cooking_gammaloop::dummy");
+        let hedge = index_symbol!("idenso::cooking_gammaloop::hedge");
+        let opaque = [
             function!(head, 17),
             function!(head, 17, -1),
             function!(head, 17, 2, 3),
+            function!(dummy, 1),
+            function!(hedge, 3),
+        ];
+        let native = function!(head, 17, 2);
+        for mode in [CookMode::FlattenedSymbol, CookMode::ReversibleEncoding] {
+            let settings = CookSettings::indices().with_mode(mode);
+            for index in &opaque {
+                if mode == CookMode::FlattenedSymbol && *index == function!(head, 17, -1) {
+                    // Base flattened naming contains a literal minus sign, which
+                    // Symbolica rejects. Preserve that symbol-creation error.
+                    assert!(matches!(
+                        settings.cook_function(index.as_fun_view().unwrap()),
+                        Err(CookingError::Symbolica(_))
+                    ));
+                    assert!(matches!(
+                        settings.try_cook_indices(mink!(4, index.clone()).as_view()),
+                        Err(CookingError::Symbolica(_))
+                    ));
+                    continue;
+                }
+                let cooked = settings
+                    .cook_function(index.as_fun_view().unwrap())
+                    .unwrap();
+                assert!(matches!(cooked.as_view(), AtomView::Var(_)));
+                assert_eq!(
+                    settings
+                        .try_cook_indices(mink!(4, index.clone()).as_view())
+                        .unwrap(),
+                    mink!(4, cooked.clone())
+                );
+                if mode == CookMode::ReversibleEncoding {
+                    assert_eq!(settings.uncook(cooked.as_view()), *index);
+                }
+            }
+            assert_eq!(
+                settings
+                    .cook_function(native.as_fun_view().unwrap())
+                    .unwrap(),
+                native
+            );
+            let slot = mink!(4, native.clone());
+            assert_eq!(settings.try_cook_indices(slot.as_view()).unwrap(), slot);
+        }
+    }
+
+    #[test]
+    fn interning_rejects_malformed_spenso_owned_index_calls() {
+        test_support::test_initialize();
+        let invalid = [
             function!(AbstractIndex::scope_symbol(), 17, 2),
             function!(AIND_SYMBOLS.openind, 17, -1),
         ];

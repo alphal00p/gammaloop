@@ -845,7 +845,10 @@ anchor = "pub struct CookSettings {"
 # opaque-label interning. Portable dimensions and generic function cooking keep
 # their separate owners; reversible Open inspection remains metadata-only.
 # Reviewed 2026-10-23: Native index validation retains AbstractIndexError as its source; reversible cooking and accepted source forms are unchanged.
-digest = "19ef721be6fee9232ba0b93d4e13bde5014a84ea"
+# Reviewed 2026-10-23: Third-party tagged calls that AbstractIndex cannot parse
+# retain opaque-label interning; malformed Spenso-owned Open/scope calls still
+# fail. The architecture note records this split; native forms remain preserved.
+digest = "2383d20301522c27142980b05d6342154e7ba933"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
