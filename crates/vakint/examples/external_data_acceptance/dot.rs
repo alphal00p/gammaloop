@@ -337,6 +337,13 @@ fn validate_one(root: &Path, master: &Value, family: &Value, model: Arc<Model>) 
         witness.map_powers(&positive_powers)? == edge_powers,
         "edge powers differ after routing",
     )?;
+    check(
+        edges
+            .iter()
+            .map(|(_, _, edge)| edge.propagator_power)
+            .eq(edge_powers.iter().copied()),
+        "native DOT parser did not preserve physical propagator powers",
+    )?;
     for (source_index, target_index) in witness.denominator_map().iter().enumerate() {
         let id = edges[*target_index].0;
         let slot: usize = edge_attrs[&id.0]
@@ -429,7 +436,7 @@ fn validate_one(root: &Path, master: &Value, family: &Value, model: Arc<Model>) 
         &expected,
         "Vakint ingress changed numerator, mass, powers or routing",
     )?;
-    // Native DOT omits caller metadata/powers; explicitly retain those options.
+    // Check both explicit caller powers and the native graph-power defaults.
     eprintln!(
         "DOT {name}: native roundtrip ({:.3}s)",
         started.elapsed().as_secs_f64()
@@ -447,6 +454,17 @@ fn validate_one(root: &Path, master: &Value, family: &Value, model: Arc<Model>) 
         &expected,
         "native DOT round-trip changed the integral",
     )?;
+    let default_expression = VakintExpression::from_diagram(
+        &roundtrip,
+        &roundtrip_family,
+        roundtrip.numerator().expression(),
+        &DiagramIntegralOptions::default(),
+    )?;
+    equal(
+        &Atom::from(default_expression),
+        &expected,
+        "native DOT power defaults changed the integral",
+    )?;
     Ok(json!({
         "name": string(master, "name")?,
         "loop_count": loop_count,
@@ -456,6 +474,7 @@ fn validate_one(root: &Path, master: &Value, family: &Value, model: Arc<Model>) 
         "numerator_rank": powers.iter().filter(|power| **power < 0).map(|power| -i64::from(*power)).sum::<i64>(),
         "lmb_zero_present": lmb_slots.contains_key(&0),
         "exact_mapping_and_ingress": true,
+        "native_graph_power_defaults": true,
         "seconds": started.elapsed().as_secs_f64(),
     }))
 }
