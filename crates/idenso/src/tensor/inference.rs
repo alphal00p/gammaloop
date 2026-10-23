@@ -1105,7 +1105,7 @@ impl SymbolicTensor<PartialStructure> {
                 let compact = representation.rep.to_symbolic([mapped]);
                 let compact = cooking
                     .try_cook(compact.as_view())
-                    .map_err(|error| TensorInferenceError::MappedDimensionEncoding(error))?;
+                    .map_err(TensorInferenceError::MappedDimensionEncoding)?;
                 let dimension = Representation::<LibraryRep>::try_from(compact.as_view())
                     .map_err(|error| TensorInferenceError::Slot {
                         operation: "invalid mapped dimension",

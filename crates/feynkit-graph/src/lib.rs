@@ -531,21 +531,21 @@ pub enum DiagramError {
     TensorCooking {
         operation: &'static str,
         #[source]
-        source: CookingError,
+        source: Box<CookingError>,
     },
     /// A declared source port is not a supported tensor slot.
     #[error("{operation}: {source}")]
     TensorSlot {
         operation: &'static str,
         #[source]
-        source: SlotError,
+        source: Box<SlotError>,
     },
     /// A transported tensor label is not a valid abstract index.
     #[error("{operation}: {source}")]
     TensorIndex {
         operation: &'static str,
         #[source]
-        source: AbstractIndexError,
+        source: Box<AbstractIndexError>,
     },
     #[error("invalid diagram tensor: {0}")]
     Tensor(#[from] TensorInferenceError),

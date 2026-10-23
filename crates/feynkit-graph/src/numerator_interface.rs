@@ -83,7 +83,7 @@ impl NumeratorInterface {
                 .try_cook(value.as_view())
                 .map_err(|error| DiagramError::TensorCooking {
                     operation: "admitting tensor source notation",
-                    source: error,
+                    source: Box::new(error),
                 })
         };
         let expression = cook(&expression)?;
@@ -98,7 +98,7 @@ impl NumeratorInterface {
                 let port = cook(&port)?;
                 let invalid = |source| DiagramError::TensorSlot {
                     operation: "admitting tensor source interface",
-                    source,
+                    source: Box::new(source),
                 };
                 if matcher.compact_representation(port.as_view()).is_some() {
                     Ok(matcher
@@ -121,7 +121,6 @@ impl NumeratorInterface {
 
     /// Export source notation, retaining metadata whenever syntax loses ports.
     /// See the round trip in [`NumeratorInterface`].
-    #[must_use]
     pub fn export<A>(
         tensor: &SymbolicTensor<Canonicalized<OrderedStructure<LibraryRep, A>>>,
     ) -> (Atom, Option<Self>)
@@ -186,7 +185,7 @@ impl NumeratorInterface {
                         Err(source) => {
                             failure = Some(DiagramError::TensorIndex {
                                 operation: "collecting transported tensor indices",
-                                source,
+                                source: Box::new(source),
                             })
                         }
                     }
@@ -235,7 +234,7 @@ impl NumeratorInterface {
                     cooking.cook_function(function).map_err(|source| {
                         DiagramError::TensorCooking {
                             operation: "encoding transported tensor indices",
-                            source,
+                            source: Box::new(source),
                         }
                     })?
                 } else {
@@ -245,7 +244,7 @@ impl NumeratorInterface {
                     AbstractIndex::try_from(mapped.as_view()).map_err(|source| {
                         DiagramError::TensorIndex {
                             operation: "parsing transported tensor indices",
-                            source,
+                            source: Box::new(source),
                         }
                     })?,
                     |index, scope| index.scoped(scope),

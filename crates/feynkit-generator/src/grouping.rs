@@ -110,7 +110,7 @@ pub enum GroupingError {
         candidate: String,
         master: String,
         #[source]
-        source: TensorInferenceError,
+        source: Box<TensorInferenceError>,
     },
     #[error("failed to simplify numerator color for diagram '{diagram}': {message}")]
     ColorSimplification { diagram: String, message: String },
@@ -772,7 +772,7 @@ pub(crate) fn group_diagrams(
                 .map_err(|source| GroupingError::NumeratorComparison {
                     candidate: retained[diagram].name().to_owned(),
                     master: retained[group.master].name().to_owned(),
-                    source,
+                    source: Box::new(source),
                 })? {
                     matching_group = Some((group_index, ratio));
                     break;

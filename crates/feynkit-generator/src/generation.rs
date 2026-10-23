@@ -1592,7 +1592,7 @@ impl NumeratorTemplate {
                     mapped = cooking.cook_function(function).map_err(|source| {
                         DiagramError::TensorCooking {
                             operation: "instantiating an admitted numerator template",
-                            source,
+                            source: Box::new(source),
                         }
                     })?;
                 }
@@ -1600,7 +1600,7 @@ impl NumeratorTemplate {
                     AbstractIndex::try_from(mapped.as_view()).map_err(|source| {
                         DiagramError::TensorIndex {
                             operation: "instantiating an admitted numerator template",
-                            source,
+                            source: Box::new(source),
                         }
                     })?,
                     |index, scope| index.scoped(scope),

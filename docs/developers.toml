@@ -197,7 +197,8 @@ anchor = "pub fn generate("
 # occurrence-order restoration. Dynamic rules still enter at their actual owner;
 # generation, filtering, cancellation and explicit threads(1) ownership remain.
 # Reviewed 2026-10-23: Template admission runs outside write guards; concurrent publication retains one shared template. Cache poisoning remains a failure. See the updated generation ownership note.
-digest = "bcbbedc715ccab9e66c7295163886cac615ee909"
+# No-impact attestation 2026-10-23: boxed error sources preserve numerator-template admission and error propagation.
+digest = "afc14afe676856db301121a6e0ee24294922092f"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -260,7 +261,8 @@ anchor = "pub struct FeynmanDiagram {"
 # distinguishes typed Python wrapping from source admission; native metadata
 # validation, prefactor replacement and topology/routing ownership are retained.
 # Reviewed 2026-10-23: Cooking, index and slot causes remain typed in DiagramError; scene configuration has a distinct diagnostic. Retained tensor and serialization ownership remain unchanged.
-digest = "ed3e4fb522c6f9aeb7584e4e641e58f3cda1e596"
+# No-impact attestation 2026-10-23: boxed tensor error sources preserve graph ownership and error semantics.
+digest = "2cbc7e6e672b92c090ee9052f5bf062fbf3f8bfa"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -891,7 +893,8 @@ end_anchor = "    /// Scope explicit indices"
 # note now requires unchanged usage as well as payload and layout before reusing
 # cached facts; mapped results are not re-admitted from normalized Atom syntax.
 # Reviewed 2026-10-23: Cooking and slot failures retain typed causes through mapped metadata operations. The syntax observer and authoritative admission boundaries remain unchanged.
-digest = "ce79cb08498dbef2f3c7d5d40d34d08578b54177"
+# No-impact attestation 2026-10-23: direct error-constructor mapping preserves representation-dimension inference.
+digest = "ef4c76753e299b2aefa9ab93c042e5930a9466da"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
@@ -1620,7 +1623,8 @@ anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
 # Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
 # Reviewed 2026-10-19: exact preparation collects existing numerical content and scalar factors before its single index canonicalization. The added chiral-cycle control is red before this reorder and green afterward, preserves dummy/order variants and rejects a distinct matrix; no graph expansion or reference change.
-digest = "fc33f3fc768c2d69937c7c65535713b2f90df5de"
+# No-impact attestation 2026-10-23: boxed comparison errors preserve grouping, numerator comparison and source chains.
+digest = "6623f73ac140e9e0ff094154df76293a80fd05d0"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
