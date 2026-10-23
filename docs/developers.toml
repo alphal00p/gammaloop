@@ -1791,7 +1791,8 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Package-specific embedded Python fixtures and documentation font/license inputs
 # remain in their compile-test/runtime owners; compiler partitioning is unchanged.
 # Reviewed 2026-10-23: Compile-time source ownership includes the shared native-forwarding and symbolic-preview fixtures; production and runtime cache boundaries remain separate.
-digest = "52e4624aa6faa0ac04110c8694ee4dc904636acc"
+# Reviewed 2026-10-23: Global build sources include the shared graph Python/JavaScript assets; compile-time Spynso sources include the embedded paging fixture. Build algorithms and test selection are unchanged.
+digest = "5c805aec9bbb8a7bb178087e0c4d58c9dacc5268"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

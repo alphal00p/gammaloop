@@ -124,6 +124,8 @@
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/linnet-render-py/data.json")
     (workspaceRoot + "/crates/linnet-render-py/fonts")
+    (workspaceRoot + "/crates/linnet-render-py/src/view.py")
+    (workspaceRoot + "/crates/linnet-render-py/src/view.js")
     (workspaceRoot + "/crates/typst-renderer/fonts")
     (workspaceRoot + "/crates/typst-renderer/data.json")
     (workspaceRoot + "/crates/vakint/form_src")
@@ -500,7 +502,10 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
-    spynso3 = ["crates/spynso3/tests/installed_symbolic_preview.py"];
+    spynso3 = [
+      "crates/spynso3/tests/installed_symbolic_preview.py"
+      "crates/spynso3/tests/installed_tensor_paging.py"
+    ];
     idenso = [
       "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
       "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
