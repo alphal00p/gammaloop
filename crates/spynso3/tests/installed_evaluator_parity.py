@@ -1,6 +1,7 @@
 """Expression/tensor evaluator parity and logical-layout regressions."""
 
 import inspect
+import itertools
 import unittest
 
 import numpy as np
@@ -60,7 +61,7 @@ class EvaluatorParityTests(unittest.TestCase):
         for sparse in (False, True):
             source = tensor.to_sparse() if sparse else tensor
             for jit in (False, True):
-                for direct in (False, True):
+                for direct, horner_use_cpe in itertools.product((False, True), repeat=2):
                     options = {
                         "functions": [definition],
                         "jit_compile": jit,
@@ -71,6 +72,7 @@ class EvaluatorParityTests(unittest.TestCase):
                         "max_horner_scheme_variables": 20,
                         "max_common_pair_cache_entries": 100,
                         "max_common_pair_distance": 10,
+                        "horner_use_cpe": horner_use_cpe,
                     }
                     evaluator = source.evaluator([x], **options)
                     scalar = Expression.evaluator_multiple(source[:], [x], **options)
