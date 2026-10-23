@@ -25,6 +25,33 @@ fn sunset() -> (FeynmanDiagram, IntegralFamily) {
 }
 
 #[test]
+fn native_graph_ingress_preserves_high_rank_factored_numerator() {
+    let (diagram, family) = sunset();
+    let first = &family.denominators()[0] + &family.denominators()[1];
+    let second = &family.denominators()[1] - &family.denominators()[2];
+    let convert = |numerator: &Atom| {
+        VakintExpression::from_diagram(
+            &diagram,
+            &family,
+            numerator,
+            &DiagramIntegralOptions::default(),
+        )
+        .unwrap()
+    };
+    let first_mapped = convert(&first);
+    let second_mapped = convert(&second);
+    let complete = convert(&(first.pow(8) * second.pow(9)));
+    assert_eq!(complete.0.len(), 1);
+    assert_eq!(complete.0[0].integral, first_mapped.0[0].integral);
+    assert_eq!(complete.0[0].integral, second_mapped.0[0].integral);
+    assert_eq!(
+        complete.0[0].numerator,
+        first_mapped.0[0].numerator.pow(8) * second_mapped.0[0].numerator.pow(9),
+        "native scalar-product conversion must preserve exact numerator factors and powers",
+    );
+}
+
+#[test]
 fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
     let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
         "digraph repeated { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> a [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();

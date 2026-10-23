@@ -5502,7 +5502,7 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=a666e705a92b06ae640a0d9e69b2dfe5bbe748ef#a666e705a92b06ae640a0d9e69b2dfe5bbe748ef"
+source = "git+https://github.com/alphal00p/rustred?rev=52c7463686b4b716fa1e9051d5093b7586c5da27#52c7463686b4b716fa1e9051d5093b7586c5da27"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5515,7 +5515,7 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=a666e705a92b06ae640a0d9e69b2dfe5bbe748ef#a666e705a92b06ae640a0d9e69b2dfe5bbe748ef"
+source = "git+https://github.com/alphal00p/rustred?rev=52c7463686b4b716fa1e9051d5093b7586c5da27#52c7463686b4b716fa1e9051d5093b7586c5da27"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5531,7 +5531,7 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=a666e705a92b06ae640a0d9e69b2dfe5bbe748ef#a666e705a92b06ae640a0d9e69b2dfe5bbe748ef"
+source = "git+https://github.com/alphal00p/rustred?rev=52c7463686b4b716fa1e9051d5093b7586c5da27#52c7463686b4b716fa1e9051d5093b7586c5da27"
 
 [[package]]
 name = "rustversion"
@@ -7785,6 +7785,7 @@ dependencies = [
  "feynkit-tensor",
  "flate2",
  "idenso",
+ "linnet",
  "log",
  "phf 0.13.1",
  "pyo3",

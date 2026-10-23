@@ -122,8 +122,95 @@ Median seconds over #data.protocol.repetitions fresh processes per backend and c
 
 #v(0.5em)
 #set text(8.5pt, fill: luma(100))
-Measured source: #raw(data.protocol.source_commit.slice(0, 12)).
+Historical measurements, unchanged. Source: #raw(data.protocol.source_commit.slice(0, 12)).
 #if data.protocol.source_dirty [Modified source tree.]
 Data: #raw(data.protocol.data_version).
 Samples and provenance: #raw("data/results.json").
 Refresh instructions: #raw("../../AGENTS.md").
+
+#pagebreak()
+#let ingress = data.five_loop_dot_ingress_acceptance
+#assert(ingress.validation_passed, message: "Five-loop ingress checks must pass")
+#set text(font: "Libertinus Serif", size: 10.5pt, fill: black)
+
+#align(center)[
+  #text(22pt, weight: "bold", fill: navy)[Five-loop DOT ingress acceptance]
+  #v(0.2em)
+  #text(12pt, fill: luma(80))[640 unevaluated masters · debug verification]
+  #v(0.2em)
+  #text(9.5pt, fill: luma(110))[
+    #ingress.completed_utc.split("T").first() · #ingress.protocol.cpu_model
+  ]
+]
+
+#v(0.65em)
+#block(fill: pale, inset: 11pt, radius: 4pt, width: 100%)[
+  *Measurement boundary.* This is one sequential verification pass through all
+  published five-loop master graphs, using the native FeynKit parser and
+  Vakint input conversion. It is a debug build with exact assertions enabled.
+  It does not time package loading, IBP reduction, master evaluation or cache
+  preparation. The release/FMFT comparison on page 1 retains its original
+  date, source revision and measurements.
+]
+
+#v(0.65em)
+#{
+  set text(font: "DejaVu Sans", size: 9.5pt)
+  set par(justify: false)
+  table(
+    columns: (2.1fr, 1fr),
+    inset: (x: 11pt, y: 9pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else if calc.rem(y, 2) == 0 { pale } else { none },
+    table.header(
+      text(fill: white, weight: "bold")[Validation workload],
+      text(fill: white, weight: "bold")[Result],
+    ),
+    [Master graphs checked], [#ingress.graphs.masters_checked / 640],
+    [Graphs with dotted propagators], [#ingress.graphs.dotted_masters],
+    [Graphs with numerator factors], [#ingress.graphs.numerator_masters],
+    [Exact routing and complete numerator checks], [Passed],
+    [Native DOT round trips and Vakint ingress], [Passed],
+    [Five-loop numerical values / prepared cache], [Absent / absent],
+  )
+}
+
+#v(0.65em)
+#block(fill: pale, inset: 12pt, radius: 4pt, width: 100%)[
+  #text(17pt, weight: "bold", fill: navy)[
+    #timing(ingress.graphs.elapsed_seconds) s
+  ]
+  #h(8pt) complete graph-validation pass
+  #linebreak()
+  #text(9.5pt)[
+    Per graph: #timing(ingress.graphs.minimum_seconds)–#timing(ingress.graphs.maximum_seconds) s;
+    median #timing(ingress.graphs.median_seconds) s.
+    One observed run; no statistical performance claim.
+  ]
+]
+
+#v(0.55em)
+*What was checked.* Each stored family and signed index tuple is mapped exactly
+to the graph's physical propagators, powers, mass terms and complete numerator.
+Loop-basis annotations, including slot zero, and the integration-variable
+Jacobian are verified. The same integral is then reconstructed through native
+Vakint ingress and a FeynKit DOT round trip. These checks establish the graph
+definitions; they do not claim linear independence of the 640 retained masters.
+
+#v(0.4em)
+*Implementation relevant to this pass.* Vakint now substitutes contracted
+scalar products directly inside factored numerators. FeynKit accepts identical
+stored numerator expressions before attempting expanded comparison. Both
+changes avoid unnecessary expansion while retaining exact fallback checks.
+Earlier interrupted checks are not a completed timing baseline, so no speedup
+factor is inferred from them.
+
+#v(0.5em)
+#set text(8.5pt, fill: luma(100))
+Consumer base: #raw(ingress.protocol.source_commit.slice(0, 12)) (modified source;
+exact patch and executable digests recorded in JSON).
+RustRed: #raw(ingress.protocol.rustred_commit.slice(0, 12));
+Symbolica: #raw(ingress.protocol.symbolica_commit.slice(0, 12)).
+Build: #ingress.protocol.build_profile.
+Measured receipt and data manifest digests:
+#raw("data/results.json → five_loop_dot_ingress_acceptance").

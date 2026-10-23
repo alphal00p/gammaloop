@@ -1761,7 +1761,9 @@ impl FeynmanDiagram {
                 });
             }
         }
-        if fragment_numerator.expand() != self.numerator.expand() {
+        if fragment_numerator != self.numerator
+            && fragment_numerator.expand() != self.numerator.expand()
+        {
             return Err(DiagramError::NumeratorFragmentMismatch);
         }
         self.loop_momentum_basis.validate(self)?;
