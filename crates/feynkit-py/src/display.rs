@@ -217,10 +217,7 @@ pub(crate) fn expression_html(
     py: Python<'_>,
     expression: symbolica::api::python::PythonExpression,
 ) -> PyResult<String> {
-    py.import("symbolica.community.tensor")?
-        .getattr("to_html")?
-        .call1((expression,))?
-        .extract()
+    spynso3::display::to_html(py, &expression, None, None, None)
 }
 
 #[cfg(test)]

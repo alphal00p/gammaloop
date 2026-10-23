@@ -1,37 +1,48 @@
 //! Optional sector-decomposition entry points on the existing HEPKit owners.
 //!
-//! Resolve the backend at call time: FeynKit does not depend on FastSecDec.
+//! The containing extension registers its linked backend without a dependency
+//! from FeynKit to FastSecDec or any Python module namespace.
 
-use pyo3::{
-    exceptions::{PyImportError, PyModuleNotFoundError},
-    prelude::*,
-    types::PyDict,
-};
+use std::sync::OnceLock;
+
+use pyo3::{exceptions::PyImportError, prelude::*, types::PyDict};
 
 use crate::{graph::PyFeynmanDiagram, integrals::PyIntegralFamily};
 
-const MODULE: &str = "symbolica.community.hepkit.sector_decomposition";
+/// A linked backend's binding entry point, retaining its keyword validation.
+pub type SectorDecomposeFn =
+    for<'py> fn(Bound<'py, PyAny>, Option<&Bound<'py, PyDict>>) -> PyResult<Py<PyAny>>;
+
+static SECTOR_DECOMPOSE: OnceLock<SectorDecomposeFn> = OnceLock::new();
+
+/// Install the optional backend when initializing the containing extension.
+///
+/// The backend must call its linked Rust implementation without importing a
+/// canonical Python module. Re-registering the same function is harmless;
+/// replacing it with a different implementation is rejected.
+pub fn set_sector_decomposition_function(function: SectorDecomposeFn) -> Result<(), &'static str> {
+    if SECTOR_DECOMPOSE.set(function).is_ok() {
+        return Ok(());
+    }
+
+    let installed = SECTOR_DECOMPOSE
+        .get()
+        .expect("the sector decomposition function was initialized by another caller");
+    if std::ptr::fn_addr_eq(*installed, function) {
+        Ok(())
+    } else {
+        Err("a different sector decomposition function has already been installed")
+    }
+}
 
 fn forward(input: Bound<'_, PyAny>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Py<PyAny>> {
-    let py = input.py();
-    let backend = py.import(MODULE).map_err(|error| {
-        let missing = error.is_instance_of::<PyModuleNotFoundError>(py)
-            && error.value(py).getattr("name").ok().and_then(|name| name.extract::<String>().ok())
-                .is_some_and(|name| name == MODULE || MODULE.starts_with(&(name + ".")));
-        if missing {
-            let unavailable = PyImportError::new_err(
-                "Sector decomposition requires a community wheel built with experimental-fastsecdec",
-            );
-            unavailable.set_cause(py, Some(error));
-            unavailable
-        } else {
-            error
-        }
+    let backend = SECTOR_DECOMPOSE.get().ok_or_else(|| {
+        PyImportError::new_err(
+            "Sector decomposition requires a backend registered by the containing extension; \
+             initialize a module with sector-decomposition support",
+        )
     })?;
-    Ok(backend
-        .getattr("sector_decompose")?
-        .call((input,), kwargs)?
-        .unbind())
+    backend(input, kwargs)
 }
 
 #[spenso_macros::track_usage(crate::record_usage)]
@@ -260,7 +271,25 @@ mod tests {
     use feynkit_graph::FeynmanDiagram;
     use feynkit_kinematics::Kinematics;
     use feynkit_model::Model;
+    use pyo3::{exceptions::PyRuntimeError, types::PyCFunction};
     use std::ffi::CString;
+
+    fn observe(input: Bound<'_, PyAny>, kwargs: Option<&Bound<'_, PyDict>>) -> PyResult<Py<PyAny>> {
+        let kwargs = kwargs.expect("the test supplies keyword arguments");
+        let observer = kwargs
+            .get_item("observer")?
+            .expect("the test supplies an observer");
+        Ok(observer.call((input,), Some(kwargs))?.unbind())
+    }
+
+    fn conflicting_backend(
+        _input: Bound<'_, PyAny>,
+        _kwargs: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Py<PyAny>> {
+        Err(PyRuntimeError::new_err(
+            "this backend must not be installed",
+        ))
+    }
 
     #[test]
     fn forwards_existing_owner_and_keyword_identities_and_exceptions() {
@@ -285,31 +314,45 @@ mod tests {
                     Py::new(py, PyIntegralFamily { inner: family }).unwrap(),
                 )
                 .unwrap();
-            locals.set_item("backend_name", MODULE).unwrap();
+            locals
+                .set_item(
+                    "install_backend",
+                    PyCFunction::new_closure(py, None, None, |_, _| {
+                        set_sector_decomposition_function(observe)
+                            .map_err(PyRuntimeError::new_err)?;
+                        assert!(set_sector_decomposition_function(conflicting_backend).is_err());
+                        Ok::<_, PyErr>(())
+                    })
+                    .unwrap(),
+                )
+                .unwrap();
             let script = CString::new(r#"
+import builtins
 import inspect
-import sys
-import types
 
-absent = object()
-previous = sys.modules.get(backend_name, absent)
-parents = {}
-parts = backend_name.split(".")
-for length in range(1, len(parts)):
-    name = ".".join(parts[:length])
-    parents[name] = sys.modules.get(name, absent)
-    package = types.ModuleType(name)
-    package.__path__ = []
-    sys.modules[name] = package
-backend = types.ModuleType(backend_name)
+original_import = builtins.__import__
+def reject_symbolica_import(name, *args, **kwargs):
+    if name == 'symbolica' or name.startswith('symbolica.'):
+        raise AssertionError('canonical Symbolica namespace was imported: ' + name)
+    return original_import(name, *args, **kwargs)
+
 calls = []
-answer, regulator, observer, powers, progress = (object() for _ in range(5))
-def capture(input, **kwargs):
+answer, regulator, powers, progress = (object() for _ in range(4))
+def observer(input, **kwargs):
     calls.append((input, kwargs))
     return answer
-backend.sector_decompose = capture
-sys.modules[backend_name] = backend
+builtins.__import__ = reject_symbolica_import
 try:
+    for input in (diagram, family):
+        try:
+            input.sector_decompose(regulator=regulator)
+        except ImportError as caught:
+            assert 'backend registered by the containing extension' in str(caught)
+            assert caught.__cause__ is None
+        else:
+            raise AssertionError('missing optional backend was accepted')
+    install_backend()
+    install_backend()  # Repeated initialization may register the same function.
     for input in (diagram, family):
         assert input.sector_decompose(regulator=regulator, powers=powers, observer=observer, progress=progress) is answer
         actual, kwargs = calls.pop()
@@ -323,32 +366,15 @@ try:
     failure = ValueError('backend input or observer failure')
     def fail(*args, **kwargs):
         raise failure
-    backend.sector_decompose = fail
     for input in (diagram, family):
         try:
-            input.sector_decompose(regulator=regulator)
+            input.sector_decompose(regulator=regulator, observer=fail)
         except ValueError as caught:
             assert caught is failure
         else:
             raise AssertionError('backend failure was swallowed')
-    sys.modules[backend_name] = None
-    try:
-        family.sector_decompose(regulator=regulator)
-    except ImportError as caught:
-        assert 'experimental-fastsecdec' in str(caught)
-        assert isinstance(caught.__cause__, ModuleNotFoundError)
-    else:
-        raise AssertionError('missing optional backend was accepted')
 finally:
-    for name, original in parents.items():
-        if original is absent:
-            del sys.modules[name]
-        else:
-            sys.modules[name] = original
-    if previous is absent:
-        del sys.modules[backend_name]
-    else:
-        sys.modules[backend_name] = previous
+    builtins.__import__ = original_import
 "#).unwrap();
             py.run(&script, Some(&locals), Some(&locals)).unwrap();
         });
