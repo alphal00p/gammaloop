@@ -673,6 +673,11 @@ from the rendered PDF.
 - `crates/gammaloop-api/` is the workspace member for the Rust API and Python
   bindings (`crates/gammaloop-api/src` and
   `crates/gammaloop-api/python/gammaloop`).
+- `crates/alphal00p-persistence/` owns checked output paths, snapshot publication
+  and directory replacement shared by runtime and documentation tools. It is an
+  internal, unpublished crate.
+- `crates/alphal00p-workspace/` supplies read-only root discovery for repository
+  tools and relocated tests. It is also internal and unpublished.
 - `tests/` contains the integration-test crate and shared fixtures.
 - `examples/` includes command cards and notebooks for end-to-end runs.
 - `bin/` contains the process-tree memory watchdog used by guarded test runs.
@@ -763,8 +768,36 @@ locally and upload compiled runtime producers when cache credentials are availab
 NixCI runs the selected runtime suite after the push.
 Ordinary development pushes require checks relevant to the change, not the full
 suite and upload cycle.
-Work from the repository root; enter `nix develop` if you need the pinned Just
-and build tools. Stage newly added files first so the Git-backed flake sees them.
+Work from the repository root. Use `just nix-develop` for the pinned development
+tools, or bootstrap without Just using the tracked-source exporter:
+
+```sh
+flake=$(python3 scripts/tracked_source.py --print-source) && \
+  env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED nix develop "$flake"
+```
+
+The exporter requires Python 3 and the checkout's version-control tool: Jujutsu
+for `.jj` workspaces, Git otherwise. `--print-source` copies only tracked files
+into an immutable Nix-store snapshot and prints its `path:` flake reference.
+Stage new Git files first; the exporter runs `jj file list` in Jujutsu workspaces,
+which snapshots new nonignored files into the working-copy commit `@`.
+Never pass the raw checkout to Nix in a non-colocated Jujutsu workspace: a
+`path:` import includes ignored files such as `.envrc`. The `just nix-develop`,
+`nix-run`, `nix-build`, and `nix-flake-check` wrappers use the exporter and remove
+license environment variables before invoking Nix. `nix-develop` restores the
+caller's environment only after preparing the shell, preserving an exported
+license for runtime commands. Otherwise load a license privately inside that
+shell, or use the licensed runtime launchers below.
+
+`CI_FLAKE_SOURCE` explicitly pins `just nix-source`, `nix-build`, and `nix-run`
+to an existing immutable tracked-source snapshot. Its value must name a Nix-store
+directory containing `flake.nix` (optionally prefixed with `path:`); validation
+does not compare it with the current checkout. Unset it to include later edits.
+`ci-checks` always exports fresh source and shares that snapshot with its child
+recipes. A bare `just ci-runtime-check` also always exports fresh source; only
+its optional `SOURCE` argument reuses a snapshot, as in
+`just ci-runtime-check "$CI_FLAKE_SOURCE"`. The development-shell and flake-check
+wrappers also export fresh source regardless of this variable.
 
 `just check` runs Cargo checking only. For the selected CI suite without uploading:
 
@@ -772,7 +805,8 @@ and build tools. Stage newly added files first so the Git-backed flake sees them
 just ci-checks
 ```
 
-This runs the selected Rust and Python tests, Clippy, doctests, formatting,
+This runs the runtime-launcher/workflow guards and a dummy-credential license-boundary
+probe, then the selected Rust and Python tests, Clippy, doctests, formatting,
 workspace/CI graph checks, and the full six-product documentation check. The
 documentation check validates generated inputs, renders latest and snapshot
 sites, checks their HTML, and exercises publication behavior. Licensed checks,
@@ -783,21 +817,21 @@ an exported nonempty `SYMBOLICA_LICENSE` takes precedence, followed by
 No license is evaluated or serialized by Nix. Pure compilation and launcher
 preparation require no credential. Every runtime invocation executes its tests,
 including after a launcher cache hit; preparation is not a runtime pass.
-`nix flake check` builds pure checks and archive producers, including the CLI,
+`just nix-flake-check` builds pure checks and archive producers, including the CLI,
 standalone Rustdoc, persistent Typst renderer and WASM checks. It does not execute
 the licensed Nextest, doctest or full documentation suite.
 
 Run an individual runtime job with, for example:
 
 ```sh
-nix run .#nix-ci-check-gammaloop-nextest-feynkit -- \
+just nix-run nix-ci-check-gammaloop-nextest-feynkit \
   --package feynkit-kinematics \
   --filter 'test(=symbolic::tests::bilinear_momenta_use_symbolica_coefficients)' \
   --report-dir target/ci-results/feynkit
-nix run .#nix-ci-check-gammaloop-doctest -- \
+just nix-run nix-ci-check-gammaloop-doctest \
   --package feynkit-cff --report-dir target/ci-results/doctest
 just docs-check-nix
-nix run .#alphal00p-docs-build -- --channel latest --output target/docs-preview
+just nix-run alphal00p-docs-build --channel latest --output target/docs-preview
 ```
 
 Runners copy immutable inputs into private scratch HOME/tmp directories and
@@ -823,7 +857,9 @@ cache credentials are available:
 just ci-checks-and-upload
 ```
 
-This runs static checks and compiles runtime producers without running Rust or
+This runs the dummy-credential boundary probe first, then builds the runtime guards
+alongside other static checks and compiles runtime producers. All must pass before upload.
+It does so without running Rust or
 Python tests, doctests or the documentation publication suite. Use `just ci-checks`
 explicitly when you also want to run that suite locally.
 Wait for the command to succeed and print `CI upload completed` before pushing.
@@ -833,7 +869,7 @@ in your handoff or PR that the artifacts were not uploaded. NixCI builds any
 missing artifacts before running its tests.
 
 After changing dependencies or features, run `cargo hakari generate` and
-`cargo hakari verify` in `nix develop`. Commit the updated workspace-hack manifest
+`cargo hakari verify` through `just nix-develop`. Commit the updated workspace-hack manifest
 and lockfile. After changing workspace manifests or test groups, run
 `just ci-update` before the checks and commit the regenerated
 `nix/ci-workspace-graph.json` and `nix-ci.nix` with the change.
@@ -873,7 +909,8 @@ The launcher sources a pure prepared compiler/runtime environment and executes
 as the calling user, outside a Nix build sandbox. Uploads prepare its immutable
 source, archives, native libraries and environment; they do not certify runtime
 results. Actions selects runtime jobs independently of Hestia's pure build matrix
-through `ci-runtime-jobs` or `ci-runtime-jobs-main`, and requires both results.
+through `ci-runtime-jobs` or `ci-runtime-jobs-main`. The Actions aggregate requires
+pure builds, runtime tests, and `runtime-guards` to succeed.
 
 The flake retains NixCI's substituter and signing-key settings for downloads.
 On a shared daemon, an administrator must configure the cache's trust and access
@@ -1059,9 +1096,9 @@ preferences; they protect behavior that has been easy to regress.
 
 === State And CLI
 
-- Treat saved-state detection as manifest-based only. Empty folders or folders
-  containing only transient runtime artifacts such as `logs/` are scratch state,
-  not legacy state, and must be treated as blank state.
+- Treat saved-state detection as manifest-based only. The shared persistence
+  classifier recognizes permitted scratch artifacts, including interrupted first
+  saves. An invalid existing manifest is an error, never blank state.
 - Do not introduce writes into the state folder outside explicit `save state` /
   `quit -o`, except for logfile tracing when that logger is actually enabled.
 - Honor `--read-only-state` consistently. When it is enabled, do not write into
@@ -1076,6 +1113,11 @@ preferences; they protect behavior that has been easy to regress.
 - Treat workspace snapshots as completed-iteration checkpoints only: do not
   persist partial-iteration state, and keep user-facing latest snapshots plus
   optional `_iter_0001` history separate from the internal resume state.
+- Retain every saved-state and ordinary integration generation until explicit
+  `cleanup state` or `cleanup integration` removes superseded generations under
+  the writer lock. Coordinate cleanup with pinned readers. A restart
+  preserves the old run until its first durable checkpoint, then removes the old
+  run's outputs and generations before publishing replacement views.
 - CLI runs create a `gammaloop_state/` directory by default; keep it out of
   commits unless intentionally sharing a reproducible state.
 - Use `./gammaloop -s <state_dir>` for isolated experiments.

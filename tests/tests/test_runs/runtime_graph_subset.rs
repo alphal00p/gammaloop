@@ -4,7 +4,7 @@ use gammalooprs::graph::GroupId;
 use gammalooprs::integrands::HasIntegrand;
 use gammalooprs::integrands::evaluation::EvaluationResult;
 use gammalooprs::integrands::process::ProcessIntegrand;
-use gammalooprs::integrate::IntegrationCheckpoint;
+use gammalooprs::integrate::{IntegrationCheckpoint, SlotIndex};
 use std::collections::BTreeSet;
 use std::slice;
 use symbolica::numerical_integration::{Grid, Sample};
@@ -331,7 +331,7 @@ fn cross_section_runtime_graph_subset_is_compact_normalized_and_event_safe() -> 
         slice::from_ref(&warmed_source_fingerprint)
     );
     assert_ne!(warmed_source_fingerprint, source_fingerprint);
-    let workspace_settings = checkpoint.read_slot_settings(0)?;
+    let workspace_settings = checkpoint.read_slot_settings(SlotIndex::from(0))?;
     assert_eq!(
         workspace_settings.sampling.selected_graph_names(),
         slice::from_ref(persisted_master_name)

@@ -1,5 +1,6 @@
 use std::{fs, path::PathBuf};
 
+use alphal00p_persistence::OutputPath;
 use clap::{Args, Subcommand};
 use color_eyre::{
     eyre::{eyre, Context},
@@ -9,8 +10,8 @@ use color_eyre::{
 use gammalooprs::{
     model::ModelGammaLoopExt,
     processes::{
-        DotExportSettings, OutputPath, StandaloneDataFormat, StandaloneExportMode,
-        StandaloneExportSettings, StandaloneNumericTarget,
+        DotExportSettings, StandaloneDataFormat, StandaloneExportMode, StandaloneExportSettings,
+        StandaloneNumericTarget,
     },
     settings::RuntimeSettings,
     uv::export::UVForestExportSettings,
@@ -179,9 +180,10 @@ impl Save {
                 let graph_ids =
                     resolve_uv_forest_graph_ids(state, process_id, &integrand_name, &graph)?;
                 let settings = UVForestExportSettings { computed };
+                let target = OutputPath::new(&target_dir)?;
                 state.process_list.export_uv_forests(
                     &state.model,
-                    &target_dir,
+                    &target,
                     process_id,
                     &integrand_name,
                     &graph_ids,
@@ -230,7 +232,8 @@ impl Save {
                     format,
                     precision,
                 };
-                state.process_list.export_standalone(&target_dir, &settings)
+                let target = OutputPath::new(&target_dir)?;
+                state.process_list.export_standalone(&target, &settings)
             }
 
             Save::Schema {} => write_schemas(),
@@ -335,7 +338,8 @@ impl SaveState {
                 .ensure_write_target_outside_active_state(&selected_root_folder, "save state")?;
             if self.strict.unwrap_or(false) && fs::symlink_metadata(&selected_root_folder).is_ok() {
                 return Err(eyre!(
-                    "Export root already exists, please choose a different path or remove the existing directory"
+                    "Export root already exists, please choose a different path \
+                     or remove the existing directory"
                 ));
             }
             let kind = classify_state_folder(&selected_root_folder)?;
@@ -343,8 +347,7 @@ impl SaveState {
                 StateFolderKind::Missing | StateFolderKind::Scratch => {
                     break StateSaveMode::CreateNew;
                 }
-                StateFolderKind::Invalid(reason) => return Err(eyre!(reason)),
-                StateFolderKind::Saved | StateFolderKind::Unmanifested => {}
+                StateFolderKind::Saved(_) | StateFolderKind::Unmanifested => {}
             }
             if self
                 .override_state
@@ -353,7 +356,8 @@ impl SaveState {
                 break StateSaveMode::Replace;
             }
             eprint!(
-                "Gammaloop export root {} already exists. Specify '{}' for overwriting, '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
+                "Gammaloop export root {} already exists. Specify '{}' for overwriting, \
+                 '{}' for not saving, or '{}' to specify where to save current state to:\n > ",
                 selected_root_folder.display().to_string().green(),
                 "o".red().bold(),
                 "n".blue().bold(),

@@ -103,10 +103,9 @@ export function parseLog(ndjson, job = {}) {
   for (const event of transferTimeouts) incidents.push({ kind: 'transfer-timeout', ...event, cause: 'unknown', observation: 'transfer failed its reported low-speed threshold' });
   for (const event of transferErrors) incidents.push({ ...event, cause: 'unknown', observation: event.kind === 'http2-transfer-error'
     ? 'transfer reported an HTTP/2 stream or framing error' : 'cache transfer reported a failure' });
-  const resultName = job.attribute?.split('.').at(-1).replace(/^nix-ci-check-/, '');
   const testExecution = job.type !== 'test' ? 'not-applicable'
     : testSummaries.length || tests.some(test => test.status !== 'SKIP') ? 'executed'
-    : job.status === 'cached' || downloads.some(event => event.name === resultName) ? 'reused' : 'unknown';
+    : job.status === 'cached' ? 'reused' : 'unknown';
   return {
     records: records.length, workerStartedAt: first.utc_time, workerCompletedAt: last.utc_time, workerSeconds,
     downloadCount: downloads.length, downloadReportedBytes: sum(downloads, 'reportedBytes'),
@@ -131,7 +130,7 @@ export function summarizeSuite(spec, suite, checks, jobs) {
   const wanted = jobs.filter(job => spec.requiredAttributes
     ? spec.requiredAttributes.includes(job.attribute)
       && (!/^packages\.[^.]+\.nix-ci-check-/.test(job.attribute ?? '') || job.type === 'test')
-    : job.type === 'test' || /^checks\.[^.]+\.gammaloop-(clippy|fmt|guppy-workspace-graph)$/.test(job.attribute ?? ''));
+    : job.type === 'test' || /^checks\.[^.]+\.gammaloop-(clippy|fmt|guppy-workspace-graph|ci-runtime)$/.test(job.attribute ?? ''));
   // A failed earlier attempt remains in resource totals; latest attempt owns the result.
   const latestWanted = [...new Map(wanted.toSorted((a, b) => (a.attempt ?? 1) - (b.attempt ?? 1)
     || (timestamp(a.checkStartedAt) ?? 0) - (timestamp(b.checkStartedAt) ?? 0))

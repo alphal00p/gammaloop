@@ -175,26 +175,22 @@ jobs:
           build_started=$SECONDS
           ALPHAL00P_DOCS_GIT_COMMIT="$(git rev-parse HEAD)"
           ALPHAL00P_DOCS_GIT_TIMESTAMP="$(git log -1 --format=%ct)"
-          ALPHAL00P_DOCS_CHANNEL=$CHANNEL
-          ALPHAL00P_DOCS_SNAPSHOT_TAG=$SNAPSHOT_TAG
           export \
-            ALPHAL00P_DOCS_CHANNEL \
             ALPHAL00P_DOCS_GIT_COMMIT \
-            ALPHAL00P_DOCS_GIT_TIMESTAMP \
-            ALPHAL00P_DOCS_SNAPSHOT_TAG
+            ALPHAL00P_DOCS_GIT_TIMESTAMP
 
           docs_path="$RUNNER_TEMP/alphal00p-docs"
           # Inspect only the package name, never a historical licensed Pages
           # derivation. The launcher is composed through runtimeCheckPackages.
-          has_runtime_builder=$(nix eval --raw .#packages.x86_64-linux \
+          has_runtime_builder=$(env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED nix eval --raw .#packages.x86_64-linux \
             --apply 'p: if p ? alphal00p-docs-build then "yes" else "no"')
           if [ "$has_runtime_builder" = yes ]; then
             nix_log=$RUNNER_TEMP/alphal00p-docs-nix.log
-            nix build --out-link "$RUNNER_TEMP/alphal00p-docs-launcher" \
+            env -u SYMBOLICA_LICENSE -u SYMBOLICA_LICENSE_SIGNED nix build --out-link "$RUNNER_TEMP/alphal00p-docs-launcher" \
               --print-build-logs .#alphal00p-docs-build 2> >(tee "$nix_log" >&2)
             docs_args=(--channel "$CHANNEL" --output "$docs_path" \
               --report-dir "$RUNNER_TEMP/alphal00p-docs-reports")
-            if [ -n "$SNAPSHOT_TAG" ]; then
+            if [ "$CHANNEL" = snapshot ]; then
               docs_args+=(--snapshot-tag "$SNAPSHOT_TAG")
             fi
             "$RUNNER_TEMP/alphal00p-docs-launcher/bin/alphal00p-docs-build" "${docs_args[@]}"

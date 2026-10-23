@@ -6,7 +6,7 @@ use crate::utils::serde_utils::{
 };
 use crate::utils::{F, FloatLike};
 use bincode_trait_derive::{Decode, Encode};
-use eyre::{Result, eyre};
+use eyre::{Context, Result, eyre};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use smallvec::{SmallVec, smallvec};
@@ -2965,9 +2965,15 @@ impl ObservableSnapshotBundle {
     }
 
     pub fn to_json_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let mut writer = BufWriter::new(File::create(path.as_ref())?);
-        serde_json::to_writer_pretty(&mut writer, self)?;
-        writer.flush()?;
+        let path = path.as_ref();
+        let file = File::create(path)
+            .wrap_err_with(|| format!("Creating observable snapshot {}", path.display()))?;
+        let mut writer = BufWriter::new(file);
+        serde_json::to_writer_pretty(&mut writer, self)
+            .wrap_err_with(|| format!("Writing observable snapshot {}", path.display()))?;
+        writer
+            .flush()
+            .wrap_err_with(|| format!("Flushing observable snapshot {}", path.display()))?;
         Ok(())
     }
 
@@ -2977,11 +2983,18 @@ impl ObservableSnapshotBundle {
     }
 
     pub fn write_hwu_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let mut writer = BufWriter::new(File::create(path.as_ref())?);
+        let path = path.as_ref();
+        let file = File::create(path)
+            .wrap_err_with(|| format!("Creating observable HwU snapshot {}", path.display()))?;
+        let mut writer = BufWriter::new(file);
         for histogram in self.histograms.values() {
-            histogram.write_hwu_block(&mut writer)?;
+            histogram
+                .write_hwu_block(&mut writer)
+                .wrap_err_with(|| format!("Writing observable HwU snapshot {}", path.display()))?;
         }
-        writer.flush()?;
+        writer
+            .flush()
+            .wrap_err_with(|| format!("Flushing observable HwU snapshot {}", path.display()))?;
         Ok(())
     }
 

@@ -10,14 +10,15 @@ mod display;
 
 pub use checkpoint::{
     IntegrationCheckpoint, IntegrationCheckpointError, IntegrationCheckpointManifest,
-    IntegrationWorkspace,
+    IntegrationCheckpointRecovery, IntegrationWorkspace, LoadedIntegrationCheckpoint,
+    LoadedIntegrationSlot, SlotIndex,
 };
 mod render_ratatui;
 mod render_tabled;
 mod status_update;
 
 use crate::integrands::process::EvaluationTarget;
-use crate::processes::OutputPath;
+use alphal00p_persistence::{OutputPath, OutputPathError};
 use bincode::Decode;
 use bincode::Encode;
 use color_eyre::{Report, Result};
@@ -40,7 +41,6 @@ use symbolica::numerical_integration::{
     DiscreteGrid, Grid, MonteCarloRng, Sample, StatisticsAccumulator,
 };
 
-use crate::Integrand;
 use crate::graph::GroupId;
 use crate::integrands::HasIntegrand;
 use crate::integrands::evaluation::StatisticsCounter;
@@ -62,7 +62,8 @@ use crate::settings::runtime::{
 use crate::utils;
 use crate::utils::F;
 use crate::{
-    clear_iteration_abort_request, is_interrupted, is_iteration_abort_requested, set_interrupted,
+    INTEGRATION_MANIFEST_FILE, Integrand, clear_iteration_abort_request, is_interrupted,
+    is_iteration_abort_requested, set_interrupted,
 };
 use rayon::prelude::*;
 pub use render_ratatui::RatatuiDashboardState;
@@ -177,47 +178,69 @@ impl SlotMeta {
     }
 }
 
+/// Run configuration serialized inside an integration checkpoint envelope.
+/// Slot-indexed vectors follow `slots`; validation occurs when acquiring a workspace or loading
+/// a checkpoint. See [`IntegrationWorkspace`] for a complete publication example.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct IntegrationWorkspaceManifest {
+    /// The on-disk format version; an absent serialized tag decodes to unsupported version zero.
     #[serde(default)]
     pub version: u32,
+    /// Unique integration slots in their persisted numeric order.
     pub slots: Vec<SlotMeta>,
+    /// Optional complex comparison targets, one per slot.
     pub targets: Vec<Option<Complex<F<f64>>>>,
+    /// Effective shared and per-integrand model parameters used by each slot.
     pub effective_model_parameters: Vec<SerializableInputParamCard<F<f64>>>,
+    /// Generated-source fingerprints in slot order.
     pub integrand_fingerprints: Vec<String>,
     /// Empty for physical workspaces; otherwise one resolved descriptor per slot.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reference_gaussians: Vec<Option<GaussianReferenceFunction>>,
+    /// The reporting convention attached to reference integration, when enabled.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_observable_convention: Option<String>,
-    pub training_slot: usize,
-    pub integrator_settings_slot: usize,
+    /// The ordered slot whose integrand trains the shared sampling grid.
+    pub training_slot: SlotIndex,
+    /// The ordered slot providing the integration settings.
+    pub integrator_settings_slot: SlotIndex,
+    /// Whether slots share samples and a grid or use independent sampling states.
     pub sampling_correlation_mode: SamplingCorrelationMode,
 }
 
 impl IntegrationWorkspaceManifest {
-    // Version 4 commits scalar/grid state, settings and observables as one immutable generation.
+    /// Version 4 commits scalar/grid state, settings and observables as one immutable generation.
+    /// See the [`IntegrationWorkspace`] example.
     pub const CURRENT_VERSION: u32 = 4;
 
     /// A missing descriptor requests physics. Resume never silently changes that
     /// request into acceptance, and an unknown reporting convention cannot reuse grids.
+    ///
+    /// # Errors
+    /// Returns a typed reference-layout, descriptor, or configuration error.
+    /// See [`IntegrationWorkspace`] for a checkpoint example.
     pub fn validate_reference_config(
         &self,
         requested: &[Option<GaussianReferenceFunction>],
-    ) -> Result<()> {
+    ) -> Result<(), IntegrationCheckpointError> {
         if !self.reference_gaussians.is_empty()
             && self.reference_gaussians.len() != self.slots.len()
         {
-            return Err(Report::msg(
-                "Workspace reference descriptors must match its slots",
-            ));
+            return Err(IntegrationCheckpointError::ReferenceSlots {
+                slots: self.slots.len(),
+            });
         }
-        for reference in self.reference_gaussians.iter().flatten() {
+        for (index, reference) in self
+            .reference_gaussians
+            .iter()
+            .enumerate()
+            .filter_map(|(index, reference)| reference.as_ref().map(|reference| (index, reference)))
+        {
             let scale = reference.expected_second_moment::<f64>().0;
             if reference.center().is_empty() || !scale.is_finite() || scale <= 0.0 {
-                return Err(Report::msg(
-                    "Workspace reference descriptor must contain a resolved center and finite positive moment scale",
-                ));
+                return Err(IntegrationCheckpointError::ReferenceDescriptor {
+                    slot: SlotIndex::from(index),
+                });
             }
         }
         let has_reference = requested.iter().any(Option::is_some);
@@ -229,30 +252,25 @@ impl IntegrationWorkspaceManifest {
             self.reference_gaussians == requested
         };
         if !same_config || self.reference_observable_convention.as_deref() != expected_convention {
-            return Err(Report::msg(format!(
-                "Workspace physical/reference configuration does not match the request. Repeat the same --reference-gaussian descriptor to resume acceptance, or use --restart for a different target. Saved descriptors: {}",
-                serde_json::to_string(&self.reference_gaussians)?
-            )));
+            return Err(IntegrationCheckpointError::ReferenceConfiguration);
         }
         Ok(())
     }
 
-    pub fn validate_version(&self) -> Result<()> {
+    /// Accept only the implemented checkpoint layout.
+    ///
+    /// # Errors
+    /// Returns [`IntegrationCheckpointError::UnsupportedVersion`] for older, newer, or absent
+    /// version tags. See [`IntegrationWorkspace`] for a checkpoint example.
+    pub fn validate_version(&self) -> Result<(), IntegrationCheckpointError> {
         if self.version == Self::CURRENT_VERSION {
             return Ok(());
         }
 
-        let reason = if self.version == 0 {
-            "is unversioned".to_string()
-        } else if self.version < Self::CURRENT_VERSION {
-            format!("uses the older format version {}", self.version)
-        } else {
-            format!("uses the newer format version {}", self.version)
-        };
-        Err(Report::msg(format!(
-            "Integration workspace {reason} and cannot be resumed by this GammaLoop build (supported version {}); use --restart to create a new workspace",
-            Self::CURRENT_VERSION
-        )))
+        Err(IntegrationCheckpointError::UnsupportedVersion {
+            found: self.version,
+            expected: Self::CURRENT_VERSION,
+        })
     }
 }
 
@@ -279,20 +297,20 @@ impl SamplingCorrelationMode {
     }
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode, Clone)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode, Clone)]
 pub(crate) struct DiscreteGridAccumulatorSummary {
     #[bincode(with_serde)]
     pub(crate) bins: Vec<DiscreteGridBinAccumulatorSummary>,
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode, Clone)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode, Clone)]
 pub(crate) struct DiscreteGridBinAccumulatorSummary {
     #[bincode(with_serde)]
     pub(crate) accumulator: StatisticsAccumulator<F<f64>>,
     pub(crate) sub_summary: Option<Box<DiscreteGridAccumulatorSummary>>,
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode, Clone, Default)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode, Clone, Default)]
 struct PersistedDiscreteBreakdownMetadata {
     axis_label: String,
     #[bincode(with_serde)]
@@ -300,7 +318,7 @@ struct PersistedDiscreteBreakdownMetadata {
     bin_labels: Vec<String>,
 }
 
-#[derive(Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 struct SamplingSlotState {
     #[bincode(with_serde)]
     grid: Grid<F<f64>>,
@@ -356,7 +374,7 @@ pub struct IntegralResult {
     pdf: String,
 }
 
-#[derive(Serialize, Deserialize, Encode, Decode, Clone)]
+#[derive(Debug, Serialize, Deserialize, Encode, Decode, Clone)]
 pub struct ComplexAccumulator {
     #[bincode(with_serde)]
     pub re: StatisticsAccumulator<F<f64>>,
@@ -1874,7 +1892,7 @@ fn max_eval_entry(accumulator: &StatisticsAccumulator<F<f64>>, positive: bool) -
 
 /// struct to keep track of state, used in the havana_integrate function
 /// the idea is to save this to disk after each iteration, so that the integration can be resumed
-#[derive(Clone, Serialize, Deserialize, Encode, Decode)]
+#[derive(Debug, Clone, Serialize, Deserialize, Encode, Decode)]
 pub struct IntegrationState {
     pub num_points: usize,
     #[bincode(with_serde)]
@@ -2358,20 +2376,22 @@ impl CoreIterationState {
 
     fn write_failed_samples(
         &mut self,
-        workspace: Option<&Path>,
+        path: Option<&OutputPath>,
         slots: &[SlotMeta],
         iteration: usize,
     ) -> Result<()> {
         if self.failed_samples.is_empty() {
             return Ok(());
         }
-        if let Some(workspace) = workspace {
-            let directory = OutputPath::new(workspace)?.join("numerical_stability")?;
-            directory.ensure_directory()?;
+        if let Some(path) = path {
+            path.check_tree()?;
             let mut file = fs::OpenOptions::new()
                 .create(true)
                 .append(true)
-                .open(directory.join("failed_samples.jsonl")?.as_path())?;
+                .open(path.as_path())
+                .wrap_err_with(|| {
+                    format!("Failed to open failure log {}", path.as_path().display())
+                })?;
             for (slot_index, sample, metadata) in &self.failed_samples {
                 serde_json::to_writer(
                     &mut file,
@@ -2382,10 +2402,17 @@ impl CoreIterationState {
                         "sample": sample,
                         "evaluation_metadata": metadata,
                     }),
-                )?;
-                file.write_all(b"\n")?;
+                )
+                .wrap_err_with(|| {
+                    format!("Failed to write failure log {}", path.as_path().display())
+                })?;
+                file.write_all(b"\n").wrap_err_with(|| {
+                    format!("Failed to write failure log {}", path.as_path().display())
+                })?;
             }
-            file.flush()?;
+            file.flush().wrap_err_with(|| {
+                format!("Failed to flush failure log {}", path.as_path().display())
+            })?;
         }
         self.failed_samples.clear();
         Ok(())
@@ -2641,7 +2668,7 @@ fn build_preview_integration_state(
 }
 
 fn write_interrupted_numerical_stability_outputs(
-    workspace: Option<&Path>,
+    workspace: Option<&OutputPath>,
     integration_state: &IntegrationState,
     slots: &[IntegrationSlot],
     cores: usize,
@@ -2649,7 +2676,10 @@ fn write_interrupted_numerical_stability_outputs(
     elapsed_seconds: f64,
     core_states: &[CoreIterationState],
 ) -> Result<Vec<PathBuf>> {
-    if workspace.is_none() || completed_points == 0 {
+    let Some(workspace) = workspace else {
+        return Ok(Vec::new());
+    };
+    if completed_points == 0 {
         return Ok(Vec::new());
     }
 
@@ -2663,17 +2693,12 @@ fn write_interrupted_numerical_stability_outputs(
     );
     // Preserve partial-iteration diagnostics without replacing a committed iteration's latest
     // presentation. This subtree is never a resume source or a completed-iteration archive.
-    let interrupted_root = workspace.map(|root| {
-        root.join("interrupted")
-            .join(format!("iteration_{:04}", integration_state.iter + 1))
-    });
-    write_numerical_stability_outputs(
-        interrupted_root.as_deref(),
-        &preview_state,
-        WorkspaceSnapshotControl {
-            write_iteration_archives: false,
-        },
-    )
+    let directory = workspace
+        .join(INTERRUPTED_DIRECTORY)?
+        .join(&format!("iteration_{:04}", integration_state.iter + 1))?
+        .join(NUMERICAL_STABILITY_DIRECTORY)?;
+    directory.ensure_directory()?;
+    write_numerical_stability_snapshot_set(&directory, &preview_state, None)
 }
 
 /// Integrate function used for local runs
@@ -2973,6 +2998,11 @@ where
                 )
             })
             .collect_vec();
+        let output_root = workspace
+            .as_deref()
+            .map(IntegrationWorkspace::output_root)
+            .transpose()?;
+        let mut failed_samples_path = None;
         while total_remaining_points(&worker_states) > 0 {
             let round_started_at = Instant::now();
             let processed_per_core: Vec<Result<usize>> = {
@@ -3006,8 +3036,16 @@ where
             // checkpoints, including rounds interrupted or aborted afterward.
             // Only this coordinator writes, so worker records cannot interleave.
             for worker_state in &mut worker_states {
+                if !worker_state.failed_samples.is_empty()
+                    && failed_samples_path.is_none()
+                    && let Some(root) = output_root
+                {
+                    let directory = root.join(NUMERICAL_STABILITY_DIRECTORY)?;
+                    directory.ensure_directory()?;
+                    failed_samples_path = Some(directory.join("failed_samples.jsonl")?);
+                }
                 worker_state.write_failed_samples(
-                    workspace.as_deref().map(IntegrationWorkspace::root),
+                    failed_samples_path.as_ref(),
                     &integration_state.slot_metas,
                     integration_state.iter + 1,
                 )?;
@@ -3066,7 +3104,7 @@ where
                 warn!("{}", "Integration interrupted by user".yellow());
                 emitted_latest_numerical_stability_paths =
                     write_interrupted_numerical_stability_outputs(
-                        workspace.as_deref().map(IntegrationWorkspace::root),
+                        output_root,
                         &integration_state,
                         &slots,
                         cores,
@@ -3094,7 +3132,7 @@ where
             warn!("{}", "Integration interrupted by user".yellow());
             emitted_latest_numerical_stability_paths =
                 write_interrupted_numerical_stability_outputs(
-                    workspace.as_deref().map(IntegrationWorkspace::root),
+                    output_root,
                     &integration_state,
                     &slots,
                     cores,
@@ -3163,15 +3201,21 @@ where
         }
         // Publication above is authoritative. Presentation failures must not replay this iteration.
         let mut refresh = || -> Result<()> {
-            let Some(root) = workspace.as_deref().map(IntegrationWorkspace::root) else {
+            let Some(root) = workspace
+                .as_deref()
+                .map(IntegrationWorkspace::output_root)
+                .transpose()?
+            else {
                 return Ok(());
             };
             let result = build_integration_result(&integration_state, &targets);
-            write_atomic_json(&workspace_result_snapshot_path(root), &result)?;
-            emitted_latest_numerical_stability_paths = write_numerical_stability_outputs(
-                Some(root),
+            write_atomic_json(root, Path::new(INTEGRATION_RESULT_FILE), &result)?;
+            let numerical_directory = root.join(NUMERICAL_STABILITY_DIRECTORY)?;
+            numerical_directory.ensure_directory()?;
+            emitted_latest_numerical_stability_paths = write_numerical_stability_snapshot_set(
+                &numerical_directory,
                 &integration_state,
-                WorkspaceSnapshotControl::default(),
+                None,
             )?;
             for (slot_index, slot) in slots.iter().enumerate() {
                 let path = slot_workspace_path(root, &integration_state.slot_metas[slot_index])?;
@@ -3180,12 +3224,15 @@ where
             }
             // Optional history can fail only after every latest view has been refreshed.
             if output_control.write_iteration_archives {
+                let results_directory = root.join(RESULTS_DIRECTORY)?;
+                results_directory.ensure_directory()?;
                 write_atomic_json(
-                    &workspace_result_archive_path(root, integration_state.iter),
+                    &results_directory,
+                    Path::new(&workspace_result_archive_name(integration_state.iter)),
                     &result,
                 )?;
                 write_numerical_stability_snapshot_set(
-                    root,
+                    &numerical_directory,
                     &integration_state,
                     Some(integration_state.iter),
                 )?;
@@ -3203,12 +3250,16 @@ where
             Ok(())
         };
         refresh().wrap_err_with(|| {
-                if workspace.is_some() {
-                    format!("Iteration {} checkpoint committed; output refresh failed. Resume starts after this iteration", integration_state.iter)
-                } else {
-                    format!("Iteration {} output refresh failed", integration_state.iter)
-                }
-            })?;
+            if workspace.is_some() {
+                format!(
+                    "Iteration {} checkpoint committed; output refresh failed. \
+                     Resume starts after this iteration",
+                    integration_state.iter
+                )
+            } else {
+                format!("Iteration {} output refresh failed", integration_state.iter)
+            }
+        })?;
 
         status_emitter(build_status_update(StatusUpdateBuildRequest {
             kind: IntegrationStatusKind::Iteration,
@@ -3284,7 +3335,11 @@ where
 
     if !slots.is_empty() {
         emit_results_output_summary(
-            workspace.as_deref().map(IntegrationWorkspace::root),
+            workspace
+                .as_deref()
+                .map(IntegrationWorkspace::output_root)
+                .transpose()?
+                .map(OutputPath::as_path),
             &slots,
             &emitted_latest_observable_paths,
             &emitted_latest_numerical_stability_paths,
@@ -3433,27 +3488,48 @@ fn generate_event_output(
     }
 }
 
-pub fn slot_workspace_path(workspace: &Path, slot_meta: &SlotMeta) -> Result<PathBuf> {
+/// Resolve a slot's presentation directory within an integration workspace.
+///
+/// # Errors
+/// Rejects invalid process/integrand components and symlinks below the workspace boundary.
+/// ```no_run
+/// # use alphal00p_persistence::OutputPath;
+/// # use gammalooprs::integrate::{self, SlotMeta};
+/// # use std::error::Error;
+/// # use std::path::Path;
+/// # fn main() -> Result<(), Box<dyn Error>> {
+/// let slot = SlotMeta { process_name: "process".into(), integrand_name: "default".into() };
+/// let root = OutputPath::new(Path::new("integration"))?;
+/// let path = integrate::slot_workspace_path(&root, &slot)?;
+/// assert!(path.as_path().ends_with("integrands/process@default"));
+/// # Ok(())
+/// # }
+/// ```
+pub fn slot_workspace_path(
+    workspace: &OutputPath,
+    slot_meta: &SlotMeta,
+) -> Result<OutputPath, OutputPathError> {
     OutputPath::validate_component(&slot_meta.process_name)?;
     OutputPath::validate_component(&slot_meta.integrand_name)?;
-    let path = OutputPath::new(workspace)?
-        .join("integrands")?
-        .join(&slot_meta.key())?;
-    Ok(path.as_path().to_owned())
+    workspace.join(INTEGRANDS_DIRECTORY)?.join(&slot_meta.key())
 }
 
 pub fn workspace_manifest_path(workspace: &Path) -> PathBuf {
-    workspace.join("manifest.json")
+    workspace.join(INTEGRATION_MANIFEST_FILE)
 }
 
 pub fn workspace_result_snapshot_path(workspace: &Path) -> PathBuf {
-    workspace.join("integration_result.json")
+    workspace.join(INTEGRATION_RESULT_FILE)
 }
 
 pub fn workspace_result_archive_path(workspace: &Path, iter: usize) -> PathBuf {
     workspace
-        .join("results")
-        .join(format!("integration_result_iter_{iter:04}.json"))
+        .join(RESULTS_DIRECTORY)
+        .join(workspace_result_archive_name(iter))
+}
+
+fn workspace_result_archive_name(iter: usize) -> String {
+    format!("integration_result_iter_{iter:04}.json")
 }
 
 fn observable_output_extension(format: ObservableFileFormat) -> Option<&'static str> {
@@ -3464,20 +3540,16 @@ fn observable_output_extension(format: ObservableFileFormat) -> Option<&'static 
     }
 }
 
-fn latest_observable_output_path(workspace: &Path, format: ObservableFileFormat) -> PathBuf {
+fn latest_observable_output_path(format: ObservableFileFormat) -> PathBuf {
     let extension = observable_output_extension(format)
         .expect("user-facing observable outputs must use a real file format");
-    workspace.join(format!("observables_final.{extension}"))
+    PathBuf::from(format!("observables_final.{extension}"))
 }
 
-fn archived_observable_output_path(
-    workspace: &Path,
-    format: ObservableFileFormat,
-    iter: usize,
-) -> PathBuf {
+fn archived_observable_output_path(format: ObservableFileFormat, iter: usize) -> PathBuf {
     let extension = observable_output_extension(format)
         .expect("user-facing observable outputs must use a real file format");
-    workspace.join(format!("observables_final_iter_{iter:04}.{extension}"))
+    PathBuf::from(format!("observables_final_iter_{iter:04}.{extension}"))
 }
 
 fn numerical_stability_output_extension(format: ObservableFileFormat) -> Option<&'static str> {
@@ -3496,14 +3568,13 @@ fn numerical_stability_scope_file_stem(scope: &str, iter: Option<usize>) -> Stri
 }
 
 fn numerical_stability_output_path(
-    workspace: &Path,
     scope: &str,
     format: ObservableFileFormat,
     iter: Option<usize>,
 ) -> PathBuf {
     let extension = numerical_stability_output_extension(format)
         .expect("numerical stability outputs must use a real file format");
-    workspace.join("numerical_stability").join(format!(
+    PathBuf::from(format!(
         "{}.{extension}",
         numerical_stability_scope_file_stem(scope, iter)
     ))
@@ -3546,46 +3617,91 @@ fn user_facing_observables_output_enabled(integrand: &Integrand) -> bool {
         .is_empty()
 }
 
+const INTEGRATION_RESULT_FILE: &str = "integration_result.json";
+const RESULTS_DIRECTORY: &str = "results";
+const INTEGRANDS_DIRECTORY: &str = "integrands";
+const NUMERICAL_STABILITY_DIRECTORY: &str = "numerical_stability";
+const INTERRUPTED_DIRECTORY: &str = "interrupted";
+const PRESENTATION_TEMP_PREFIX: &str = ".gammaloop-output-";
+const PRESENTATION_TEMP_SUFFIX: &str = ".tmp";
 static NEXT_PRESENTATION_TEMP: AtomicU64 = AtomicU64::new(0);
 
-fn write_atomic_output(path: &Path, write: impl FnOnce(&Path) -> Result<()>) -> Result<()> {
-    let target = OutputPath::new(path)?;
-    let parent = path
+// Callers prepare each output directory once before writing its presentation files.
+fn write_atomic_output(
+    root: &OutputPath,
+    relative: &Path,
+    write: impl FnOnce(&Path) -> Result<()>,
+) -> Result<()> {
+    let target = root.join_relative(relative)?;
+    let parent = relative
         .parent()
-        .ok_or_else(|| Report::msg("Output target has no parent"))?;
-    let parent = OutputPath::new(parent)?;
-    parent.ensure_directory()?;
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .map(|parent| root.join_relative(parent))
+        .transpose()?;
+    let parent = parent.as_ref().unwrap_or(root);
     let temp = loop {
         let sequence = NEXT_PRESENTATION_TEMP.fetch_add(1, Ordering::Relaxed);
         let temp = parent.join(&format!(
-            ".gammaloop-output-{}-{sequence:x}.tmp",
+            "{PRESENTATION_TEMP_PREFIX}{}-{sequence:x}{PRESENTATION_TEMP_SUFFIX}",
             process::id()
         ))?;
         match File::create_new(temp.as_path()) {
             Ok(_) => break temp,
             Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
-            Err(error) => return Err(error.into()),
+            Err(error) => {
+                return Err(error).wrap_err_with(|| {
+                    format!(
+                        "Failed to create temporary output {}",
+                        temp.as_path().display()
+                    )
+                });
+            }
         }
     };
     let result = (|| {
-        write(temp.as_path())?;
+        write(temp.as_path()).wrap_err_with(|| {
+            format!(
+                "Failed to write output {} via {}",
+                target.as_path().display(),
+                temp.as_path().display()
+            )
+        })?;
         // Each serializer must flush its own buffers. Check delayed filesystem errors before
         // replacing a presentation file, independently of the internal generation publisher.
         File::options()
             .write(true)
-            .open(temp.as_path())?
-            .sync_all()?;
+            .open(temp.as_path())
+            .and_then(|file| file.sync_all())
+            .wrap_err_with(|| {
+                format!(
+                    "Failed to sync temporary output {}",
+                    temp.as_path().display()
+                )
+            })?;
         target.check()?;
         // Refuse directories (and symlinks) without removing the previous output.
-        if let Ok(metadata) = fs::symlink_metadata(path)
-            && !metadata.is_file()
-        {
-            return Err(Report::msg(format!(
-                "Output target {} is not a regular file",
-                path.display()
-            )));
+        match fs::symlink_metadata(target.as_path()) {
+            Ok(metadata) if !metadata.is_file() => {
+                return Err(Report::msg(format!(
+                    "Output target {} is not a regular file",
+                    target.as_path().display()
+                )));
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(error).wrap_err_with(|| {
+                    format!("Failed to inspect output {}", target.as_path().display())
+                });
+            }
         }
-        fs::rename(temp.as_path(), path)?;
+        fs::rename(temp.as_path(), target.as_path()).wrap_err_with(|| {
+            format!(
+                "Failed to publish output {} from {}",
+                target.as_path().display(),
+                temp.as_path().display()
+            )
+        })?;
         Ok(())
     })();
     if result.is_err() {
@@ -3594,22 +3710,28 @@ fn write_atomic_output(path: &Path, write: impl FnOnce(&Path) -> Result<()>) -> 
     result
 }
 
-fn write_atomic_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
-    write_atomic_output(path, |temp| {
-        let mut file = File::options().write(true).truncate(true).open(temp)?;
-        file.write_all(bytes)?;
-        file.flush()?;
+fn write_atomic_bytes(root: &OutputPath, relative: &Path, bytes: &[u8]) -> Result<()> {
+    write_atomic_output(root, relative, |temp| {
+        let mut file = File::options()
+            .write(true)
+            .truncate(true)
+            .open(temp)
+            .wrap_err_with(|| format!("Failed to open temporary output {}", temp.display()))?;
+        file.write_all(bytes)
+            .wrap_err_with(|| format!("Failed to write temporary output {}", temp.display()))?;
+        file.flush()
+            .wrap_err_with(|| format!("Failed to flush temporary output {}", temp.display()))?;
         Ok(())
     })
 }
 
-fn write_atomic_json<T: Serialize>(path: &Path, value: &T) -> Result<()> {
-    write_atomic_bytes(path, &serde_json::to_vec_pretty(value)?)
+fn write_atomic_json<T: Serialize>(root: &OutputPath, relative: &Path, value: &T) -> Result<()> {
+    write_atomic_bytes(root, relative, &serde_json::to_vec_pretty(value)?)
 }
 
 fn write_observable_snapshot_archive(
     integrand: &Integrand,
-    workspace: Option<&Path>,
+    workspace: Option<&OutputPath>,
     iter: usize,
     output_control: WorkspaceSnapshotControl,
 ) -> Result<()> {
@@ -3623,9 +3745,10 @@ fn write_observable_snapshot_archive(
         return Ok(());
     };
 
+    workspace.ensure_directory()?;
     for format in user_facing_observables_output_formats(integrand) {
-        let path = archived_observable_output_path(workspace, format, iter);
-        write_atomic_output(&path, |temp| {
+        let path = archived_observable_output_path(format, iter);
+        write_atomic_output(workspace, &path, |temp| {
             integrand.write_observable_snapshots(temp, format)
         })?;
     }
@@ -3635,7 +3758,7 @@ fn write_observable_snapshot_archive(
 
 fn write_latest_observables_output(
     integrand: &Integrand,
-    workspace: Option<&Path>,
+    workspace: Option<&OutputPath>,
 ) -> Result<Vec<PathBuf>> {
     if !user_facing_observables_output_enabled(integrand) {
         return Ok(Vec::new());
@@ -3644,13 +3767,14 @@ fn write_latest_observables_output(
         return Ok(Vec::new());
     };
 
+    workspace.ensure_directory()?;
     let mut emitted_paths = Vec::new();
     for format in user_facing_observables_output_formats(integrand) {
-        let path = latest_observable_output_path(workspace, format);
-        write_atomic_output(&path, |temp| {
+        let path = latest_observable_output_path(format);
+        write_atomic_output(workspace, &path, |temp| {
             integrand.write_observable_snapshots(temp, format)
         })?;
-        emitted_paths.push(path);
+        emitted_paths.push(workspace.as_path().join(path));
     }
 
     Ok(emitted_paths)
@@ -3658,37 +3782,21 @@ fn write_latest_observables_output(
 
 fn write_numerical_stability_snapshot(
     bundle: &ObservableSnapshotBundle,
+    directory: &OutputPath,
     path: &Path,
     format: ObservableFileFormat,
 ) -> Result<()> {
     match format {
         ObservableFileFormat::None => Ok(()),
-        ObservableFileFormat::Json => write_atomic_json(path, bundle),
-        ObservableFileFormat::Hwu => write_atomic_output(path, |temp| bundle.write_hwu_file(temp)),
+        ObservableFileFormat::Json => write_atomic_json(directory, path, bundle),
+        ObservableFileFormat::Hwu => {
+            write_atomic_output(directory, path, |temp| bundle.write_hwu_file(temp))
+        }
     }
-}
-
-fn write_numerical_stability_outputs(
-    workspace: Option<&Path>,
-    integration_state: &IntegrationState,
-    output_control: WorkspaceSnapshotControl,
-) -> Result<Vec<PathBuf>> {
-    let Some(workspace) = workspace else {
-        return Ok(Vec::new());
-    };
-    let latest = write_numerical_stability_snapshot_set(workspace, integration_state, None)?;
-    if output_control.write_iteration_archives {
-        write_numerical_stability_snapshot_set(
-            workspace,
-            integration_state,
-            Some(integration_state.iter),
-        )?;
-    }
-    Ok(latest)
 }
 
 fn write_numerical_stability_snapshot_set(
-    workspace: &Path,
+    directory: &OutputPath,
     state: &IntegrationState,
     iteration: Option<usize>,
 ) -> Result<Vec<PathBuf>> {
@@ -3706,9 +3814,9 @@ fn write_numerical_stability_snapshot_set(
             .numerical_stability_snapshot()
             .as_observable_snapshot_bundle();
         for format in [ObservableFileFormat::Json, ObservableFileFormat::Hwu] {
-            let path = numerical_stability_output_path(workspace, &scope, format, iteration);
-            write_numerical_stability_snapshot(&bundle, &path, format)?;
-            paths.push(path);
+            let path = numerical_stability_output_path(&scope, format, iteration);
+            write_numerical_stability_snapshot(&bundle, directory, &path, format)?;
+            paths.push(directory.as_path().join(path));
         }
     }
     Ok(paths)
@@ -3752,10 +3860,13 @@ fn render_results_output_summary_table(
             "workspace path".to_string(),
             workspace.display().to_string(),
         ));
-        summary_rows.push((
-            "results".to_string(),
-            workspace_relative_display_path(workspace, &workspace_result_snapshot_path(workspace)),
-        ));
+        let result_path = workspace_result_snapshot_path(workspace);
+        if result_path.is_file() {
+            summary_rows.push((
+                "results".to_string(),
+                workspace_relative_display_path(workspace, &result_path),
+            ));
+        }
     }
 
     for (slot, slot_emitted_paths) in slots.iter().zip(emitted_paths.iter()) {
@@ -4419,9 +4530,17 @@ mod tests {
     use super::checkpoint::CheckpointTestDirectory;
     use super::*;
     use crate::integrands::TestProbeIntegrand;
+    use crate::integrands::evaluation::{StabilityResult, StabilityStatus};
+    use crate::settings::runtime::Precision;
+    use alphal00p_persistence::GENERATIONS_DIRECTORY;
     use colored::control;
     use ratatui::{Terminal, backend::TestBackend};
     use std::fs;
+    use std::io::Error as IoError;
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
+    #[cfg(unix)]
+    use std::os::unix::net::UnixListener;
     use symbolica::numerical_integration::ContinuousGrid;
 
     fn integration_workspace_manifest(version: Option<u32>) -> IntegrationWorkspaceManifest {
@@ -4448,19 +4567,25 @@ mod tests {
 
         let unversioned = integration_workspace_manifest(None);
         assert_eq!(unversioned.version, 0);
-        let unversioned_error = unversioned.validate_version().unwrap_err().to_string();
-        assert!(unversioned_error.contains("unversioned"));
-        assert!(unversioned_error.contains("--restart"));
+        assert!(matches!(
+            unversioned.validate_version(),
+            Err(IntegrationCheckpointError::UnsupportedVersion { found: 0, .. })
+        ));
 
         let previous = integration_workspace_manifest(Some(2));
-        let previous_error = previous.validate_version().unwrap_err().to_string();
-        assert!(previous_error.contains("--restart"));
+        assert!(matches!(
+            previous.validate_version(),
+            Err(IntegrationCheckpointError::UnsupportedVersion { found: 2, .. })
+        ));
 
         let future =
             integration_workspace_manifest(Some(IntegrationWorkspaceManifest::CURRENT_VERSION + 1));
-        let future_error = future.validate_version().unwrap_err().to_string();
-        assert!(future_error.contains("newer format version"));
-        assert!(future_error.contains("--restart"));
+        let future_error = future.validate_version().unwrap_err();
+        assert!(matches!(
+            future_error,
+            IntegrationCheckpointError::UnsupportedVersion { found, expected }
+                if found == expected + 1
+        ));
     }
 
     fn make_accumulator(
@@ -4851,16 +4976,11 @@ mod tests {
 
     #[test]
     fn failed_sample_records_preserve_replay_and_append_across_iterations() {
-        use crate::integrands::evaluation::{StabilityResult, StabilityStatus};
-        use crate::settings::runtime::Precision;
-
-        let directory = std::env::temp_dir().join(format!(
-            "gammaloop_failed_sample_records_{}",
-            std::process::id()
-        ));
-        if directory.exists() {
-            fs::remove_dir_all(&directory).unwrap();
-        }
+        let root = CheckpointTestDirectory::new();
+        let directory = OutputPath::new(root.path())
+            .unwrap()
+            .join("numerical_stability")
+            .unwrap();
         let state = make_integration_state();
         let mut worker = make_preview_test_core_state(&state);
         let sample = Sample::Discrete(
@@ -4887,27 +5007,29 @@ mod tests {
                 total_time: Duration::ZERO,
             });
         }
-        let path = directory.join("numerical_stability/failed_samples.jsonl");
+        let path = directory.join("failed_samples.jsonl").unwrap();
         worker
-            .write_failed_samples(Some(&directory), &state.slot_metas, 1)
+            .write_failed_samples(Some(&path), &state.slot_metas, 1)
             .unwrap();
         assert!(
-            !path.exists(),
+            !path.as_path().exists(),
             "successful batches should not create a failure log"
         );
+        assert!(!directory.as_path().exists());
+        directory.ensure_directory().unwrap();
         for iteration in [1, 2] {
             worker
                 .failed_samples
                 .push((1, sample.clone(), metadata.clone()));
             worker
-                .write_failed_samples(Some(&directory), &state.slot_metas, iteration)
+                .write_failed_samples(Some(&path), &state.slot_metas, iteration)
                 .unwrap();
             assert!(worker.failed_samples.is_empty());
             worker
-                .write_failed_samples(Some(&directory), &state.slot_metas, iteration)
+                .write_failed_samples(Some(&path), &state.slot_metas, iteration)
                 .unwrap();
         }
-        let records = fs::read_to_string(path).unwrap();
+        let records = fs::read_to_string(path.as_path()).unwrap();
         assert_eq!(
             records.lines().count(),
             2,
@@ -4938,7 +5060,60 @@ mod tests {
                 serde_json::to_value(&sample).unwrap()
             );
         }
-        fs::remove_dir_all(directory).unwrap();
+    }
+
+    #[test]
+    fn failed_sample_write_error_preserves_records_and_path_context() {
+        let root = CheckpointTestDirectory::new();
+        let output = OutputPath::new(root.path()).unwrap();
+        let directory = output.join("numerical_stability").unwrap();
+        directory.ensure_directory().unwrap();
+        let path = directory.join("failed_samples.jsonl").unwrap();
+        path.create_directory().unwrap();
+        let state = make_integration_state();
+        let mut worker = make_preview_test_core_state(&state);
+        worker.failed_samples.push((
+            0,
+            Sample::Continuous(F(1.0), vec![F(0.5)]),
+            EvaluationMetaData::new_empty(),
+        ));
+
+        let error = worker
+            .write_failed_samples(Some(&path), &state.slot_metas, 1)
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains(&path.as_path().display().to_string())
+        );
+        assert!(error.downcast_ref::<IoError>().is_some(), "{error:?}");
+        assert_eq!(worker.failed_samples.len(), 1);
+        assert!(path.as_path().is_dir());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_sample_write_rejects_special_output_before_opening() {
+        let root = CheckpointTestDirectory::new();
+        let output = OutputPath::new(root.path()).unwrap();
+        let path = output.join("failed_samples.jsonl").unwrap();
+        let _socket = UnixListener::bind(path.as_path()).unwrap();
+        let state = make_integration_state();
+        let mut worker = make_preview_test_core_state(&state);
+        worker.failed_samples.push((
+            0,
+            Sample::Continuous(F(1.0), vec![F(0.5)]),
+            EvaluationMetaData::new_empty(),
+        ));
+
+        let error = worker
+            .write_failed_samples(Some(&path), &state.slot_metas, 1)
+            .unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<OutputPathError>(),
+            Some(OutputPathError::SpecialEntry(found)) if found == path.as_path()
+        ));
+        assert_eq!(worker.failed_samples.len(), 1);
     }
 
     fn make_discrete_integration_state() -> IntegrationState {
@@ -6087,7 +6262,9 @@ mod tests {
 
     #[test]
     fn results_output_summary_renders_tabled_workspace_rows() {
-        let workspace = Path::new("/tmp/gl_workspace");
+        let directory = CheckpointTestDirectory::new();
+        let workspace = directory.path();
+        fs::write(workspace_result_snapshot_path(workspace), b"{}").unwrap();
         let rendered = render_results_output_summary_table(Some(workspace), &[], &[], &[])
             .expect("workspace summary should render");
 
@@ -6098,7 +6275,10 @@ mod tests {
         assert!(rendered.contains("type"), "{rendered}");
         assert!(rendered.contains("path"), "{rendered}");
         assert!(rendered.contains("workspace path"), "{rendered}");
-        assert!(rendered.contains("/tmp/gl_workspace"), "{rendered}");
+        assert!(
+            rendered.contains(&workspace.display().to_string()),
+            "{rendered}"
+        );
         assert!(rendered.contains("results"), "{rendered}");
         assert!(rendered.contains("integration_result.json"), "{rendered}");
         assert!(rendered.contains("├"), "{rendered}");
@@ -7336,7 +7516,7 @@ mod tests {
         run(&mut workspace, None, first).unwrap();
         let first = IntegrationCheckpoint::open(root.path()).unwrap();
         assert_eq!(first.read_state().unwrap().num_points, 8);
-        let pointer = fs::read(root.path().join("manifest.json")).unwrap();
+        let pointer = fs::read(workspace_manifest_path(root.path())).unwrap();
         let latest_stability =
             fs::read(root.path().join("numerical_stability/global.json")).unwrap();
         let partial: fn(StatusUpdate) -> Result<()> = |status| {
@@ -7356,7 +7536,7 @@ mod tests {
                 .is_file()
         );
         assert_eq!(
-            fs::read(root.path().join("manifest.json")).unwrap(),
+            fs::read(workspace_manifest_path(root.path())).unwrap(),
             pointer
         );
         assert_eq!(
@@ -7371,8 +7551,11 @@ mod tests {
         run(&mut workspace, Some(first.read_state().unwrap()), finish).unwrap();
         let completed = IntegrationCheckpoint::open(root.path()).unwrap();
         assert_eq!(completed.read_state().unwrap().num_points, 24);
-        let pointer = fs::read(root.path().join("manifest.json")).unwrap();
-        let count = fs::read_dir(root.path().join("generations"))
+        let pointer = fs::read(workspace_manifest_path(root.path())).unwrap();
+        let completed_result = fs::read(workspace_result_snapshot_path(root.path())).unwrap();
+        let completed_stability =
+            fs::read(root.path().join("numerical_stability/global.json")).unwrap();
+        let count = fs::read_dir(root.path().join(GENERATIONS_DIRECTORY))
             .unwrap()
             .count();
         run(
@@ -7382,15 +7565,228 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            fs::read(root.path().join("manifest.json")).unwrap(),
+            fs::read(workspace_manifest_path(root.path())).unwrap(),
             pointer
         );
         assert_eq!(
-            fs::read_dir(root.path().join("generations"))
+            fs::read_dir(root.path().join(GENERATIONS_DIRECTORY))
                 .unwrap()
                 .count(),
             count
         );
+        assert_eq!(
+            fs::read(workspace_result_snapshot_path(root.path())).unwrap(),
+            completed_result
+        );
+        assert_eq!(
+            fs::read(root.path().join("numerical_stability/global.json")).unwrap(),
+            completed_stability
+        );
+
+        let interrupted = root
+            .path()
+            .join("interrupted/iteration_0001/numerical_stability/global.json");
+        fs::create_dir_all(interrupted.parent().unwrap()).unwrap();
+        fs::write(&interrupted, b"previous attempt diagnostics").unwrap();
+        let failed_samples = root.path().join("numerical_stability/failed_samples.jsonl");
+        fs::write(&failed_samples, b"previous run failures\n").unwrap();
+        let old_paths = [
+            workspace_result_snapshot_path(root.path()),
+            root.path().join("numerical_stability/global.json"),
+            root.path()
+                .join("results/integration_result_iter_0003.json"),
+            interrupted,
+            failed_samples,
+        ];
+        let old_bytes = old_paths
+            .iter()
+            .map(|path| fs::read(path).unwrap())
+            .collect_vec();
+        drop(workspace);
+        let mut restart =
+            IntegrationWorkspace::acquire(root.path(), checkpoint_probe_manifest()).unwrap();
+        restart.prepare_restart().unwrap();
+        run(&mut restart, None, partial).unwrap();
+        assert!(restart.committed_checkpoint().is_none());
+        assert_eq!(
+            fs::read(workspace_manifest_path(root.path())).unwrap(),
+            pointer
+        );
+        for (path, bytes) in old_paths.iter().zip(old_bytes) {
+            assert_eq!(fs::read(path).unwrap(), bytes);
+        }
+        assert!(
+            restart
+                .output_root()
+                .unwrap()
+                .join_relative(Path::new(
+                    "interrupted/iteration_0001/numerical_stability/global.json"
+                ))
+                .unwrap()
+                .as_path()
+                .is_file()
+        );
+        assert_eq!(
+            IntegrationCheckpoint::open(root.path())
+                .unwrap()
+                .read_state()
+                .unwrap()
+                .num_points,
+            24
+        );
+    }
+
+    #[test]
+    fn checkpoint_runtime_restart_replaces_old_run_only_after_commit() {
+        let root = CheckpointTestDirectory::new();
+        let mut workspace =
+            IntegrationWorkspace::acquire(root.path(), checkpoint_probe_manifest()).unwrap();
+        havana_integrate(
+            HavanaIntegrateRequest {
+                slots: checkpoint_probe_slots(),
+                sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                n_cores: 1,
+                state: None,
+                workspace: Some(&mut workspace),
+                output_control: WorkspaceSnapshotControl {
+                    write_iteration_archives: true,
+                },
+                batching: IterationBatchingSettings::default(),
+                view_options: default_view_options(),
+            },
+            |_| Ok(()),
+        )
+        .unwrap();
+        let pointer = fs::read(workspace_manifest_path(root.path())).unwrap();
+        let result_path = workspace_result_snapshot_path(root.path());
+        let previous_result = fs::read(&result_path).unwrap();
+        let old_archive = workspace_result_archive_path(root.path(), 3);
+        let previous_archive = fs::read(&old_archive).unwrap();
+        let failed_samples = root.path().join("numerical_stability/failed_samples.jsonl");
+        fs::write(&failed_samples, b"previous run failures\n").unwrap();
+        let old_generations = fs::read_dir(root.path().join(GENERATIONS_DIRECTORY))
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect_vec();
+        assert_eq!(old_generations.len(), 3);
+        drop(workspace);
+
+        let mut restart =
+            IntegrationWorkspace::acquire(root.path(), checkpoint_probe_manifest()).unwrap();
+        restart.prepare_restart().unwrap();
+        let staged_directory = restart
+            .output_root()
+            .unwrap()
+            .join("numerical_stability")
+            .unwrap();
+        staged_directory.ensure_directory().unwrap();
+        staged_directory
+            .join("failed_samples.jsonl")
+            .unwrap()
+            .write(b"new run failures\n")
+            .unwrap();
+        let mut slots = checkpoint_probe_slots();
+        slots[0].settings.integrator.n_max = 8;
+        let mut saw_live_status = false;
+        let mut saw_committed_status = false;
+        havana_integrate(
+            HavanaIntegrateRequest {
+                slots,
+                sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                n_cores: 1,
+                state: None,
+                workspace: Some(&mut restart),
+                output_control: WorkspaceSnapshotControl {
+                    write_iteration_archives: true,
+                },
+                batching: IterationBatchingSettings {
+                    batch_size: Some(2),
+                    ..Default::default()
+                },
+                view_options: default_view_options(),
+            },
+            |status| {
+                match status.kind() {
+                    IntegrationStatusKind::Live => {
+                        saw_live_status = true;
+                        assert_eq!(
+                            fs::read(workspace_manifest_path(root.path())).unwrap(),
+                            pointer
+                        );
+                        assert_eq!(fs::read(&result_path).unwrap(), previous_result);
+                        assert_eq!(fs::read(&old_archive).unwrap(), previous_archive);
+                        assert_eq!(
+                            fs::read(&failed_samples).unwrap(),
+                            b"previous run failures\n"
+                        );
+                        assert!(old_generations.iter().all(|path| path.is_dir()));
+                    }
+                    IntegrationStatusKind::Iteration => {
+                        saw_committed_status = true;
+                        let checkpoint = IntegrationCheckpoint::open(root.path()).unwrap();
+                        let state = checkpoint.read_state().unwrap();
+                        assert_eq!(state.iter, 1);
+                        assert_eq!(state.num_points, 8);
+                        assert_ne!(fs::read(&result_path).unwrap(), previous_result);
+                        assert!(!old_archive.exists());
+                        assert!(old_generations.iter().all(|path| !path.exists()));
+                        assert_eq!(fs::read(&failed_samples).unwrap(), b"new run failures\n");
+                        assert_eq!(
+                            fs::read_dir(root.path().join(GENERATIONS_DIRECTORY))
+                                .unwrap()
+                                .count(),
+                            1
+                        );
+                    }
+                    _ => {}
+                }
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert!(saw_live_status);
+        assert!(saw_committed_status);
+        assert!(workspace_result_archive_path(root.path(), 1).is_file());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn checkpoint_runtime_does_not_scan_unused_presentation_subtrees() {
+        let root = CheckpointTestDirectory::new();
+        let outside = CheckpointTestDirectory::new();
+        let mut workspace =
+            IntegrationWorkspace::acquire(root.path(), checkpoint_probe_manifest()).unwrap();
+        let archive_directory = root.path().join("results");
+        fs::create_dir(&archive_directory).unwrap();
+        let unrelated_link = archive_directory.join("unused");
+        unix_fs::symlink(outside.path(), &unrelated_link).unwrap();
+
+        havana_integrate(
+            HavanaIntegrateRequest {
+                slots: checkpoint_probe_slots(),
+                sampling_correlation_mode: SamplingCorrelationMode::Correlated,
+                n_cores: 1,
+                state: None,
+                workspace: Some(&mut workspace),
+                output_control: WorkspaceSnapshotControl::default(),
+                batching: IterationBatchingSettings {
+                    batch_size: Some(2),
+                    ..Default::default()
+                },
+                view_options: default_view_options(),
+            },
+            |_| Ok(()),
+        )
+        .unwrap();
+
+        let state = IntegrationCheckpoint::open(root.path())
+            .unwrap()
+            .read_state()
+            .unwrap();
+        assert_eq!(state.num_points, 24);
+        assert!(unrelated_link.is_symlink());
+        assert_eq!(fs::read_dir(outside.path()).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(archive_directory).unwrap().count(), 1);
     }
 
     #[test]
@@ -7437,26 +7833,94 @@ mod tests {
     #[test]
     fn checkpoint_presentation_paths_reject_escape_and_keep_unique_temporaries() {
         let root = CheckpointTestDirectory::new();
+        let checked_root = OutputPath::new(root.path()).unwrap();
         let escaped = SlotMeta {
             process_name: "../outside".into(),
             integrand_name: "default".into(),
         };
-        assert!(slot_workspace_path(root.path(), &escaped).is_err());
+        assert!(slot_workspace_path(&checked_root, &escaped).is_err());
         let output = root.path().join("result.json");
         let sequence = NEXT_PRESENTATION_TEMP.load(Ordering::Relaxed);
         let other = root.path().join(format!(
-            ".gammaloop-output-{}-{sequence:x}.tmp",
+            "{PRESENTATION_TEMP_PREFIX}{}-{sequence:x}{PRESENTATION_TEMP_SUFFIX}",
             process::id()
         ));
         fs::write(&other, b"owned by another writer").unwrap();
-        write_atomic_bytes(&output, b"complete output").unwrap();
+        write_atomic_bytes(&checked_root, Path::new("result.json"), b"complete output").unwrap();
         assert_eq!(fs::read(&other).unwrap(), b"owned by another writer");
         assert_eq!(fs::read(&output).unwrap(), b"complete output");
+        let error = write_atomic_output(&checked_root, Path::new("result.json"), |_| {
+            Err(Report::msg("serialization failed"))
+        })
+        .unwrap_err();
+        assert!(error.to_string().contains(&output.display().to_string()));
         assert!(
-            write_atomic_output(&output, |_| Err(Report::msg("serialization failed"))).is_err()
+            error
+                .chain()
+                .any(|cause| cause.to_string() == "serialization failed")
         );
+        let error = write_atomic_bytes(
+            &checked_root,
+            Path::new("../escaped.json"),
+            b"must not escape",
+        )
+        .unwrap_err();
+        assert!(error.downcast_ref::<OutputPathError>().is_some());
         assert_eq!(fs::read(&output).unwrap(), b"complete output");
         assert_eq!(fs::read_dir(root.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn checkpoint_atomic_sync_error_preserves_output_and_io_context() {
+        let root = CheckpointTestDirectory::new();
+        let checked_root = OutputPath::new(root.path()).unwrap();
+        let output = root.path().join("result.json");
+        fs::write(&output, b"previous output").unwrap();
+
+        let error = write_atomic_output(&checked_root, Path::new("result.json"), |temp| {
+            fs::remove_file(temp)?;
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("Failed to sync temporary output")
+        );
+        assert!(
+            error
+                .to_string()
+                .contains(&root.path().display().to_string())
+        );
+        assert_eq!(
+            error.downcast_ref::<IoError>().unwrap().kind(),
+            ErrorKind::NotFound
+        );
+        assert_eq!(fs::read(output).unwrap(), b"previous output");
+        assert_eq!(fs::read_dir(root.path()).unwrap().count(), 1);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn checkpoint_atomic_output_rejects_replaced_checked_descendant() {
+        let root = CheckpointTestDirectory::new();
+        let outside = CheckpointTestDirectory::new();
+        let checked_root = OutputPath::new(root.path()).unwrap();
+        let directory = checked_root.join("results").unwrap();
+        directory.create_directory().unwrap();
+        fs::remove_dir(directory.as_path()).unwrap();
+        unix_fs::symlink(outside.path(), directory.as_path()).unwrap();
+        let outside_file = outside.path().join("result.json");
+        fs::write(&outside_file, b"unmanaged output").unwrap();
+
+        let error =
+            write_atomic_bytes(&directory, Path::new("result.json"), b"replacement").unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<OutputPathError>(),
+            Some(OutputPathError::Symlink(path)) if path == directory.as_path()
+        ));
+        assert_eq!(fs::read(outside_file).unwrap(), b"unmanaged output");
+        assert_eq!(fs::read_dir(outside.path()).unwrap().count(), 1);
     }
 }
 

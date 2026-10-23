@@ -1,12 +1,22 @@
+use alphal00p_persistence::OutputPath;
 use color_eyre::Result;
-use eyre::eyre;
-use gammalooprs::processes::OutputPath;
 use include_dir::Dir;
-use std::path::{Component, Path};
+use std::path::Path;
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
 const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
 
+/// Embedded drawing assets written beneath a caller-selected output root.
+///
+/// ```no_run
+/// use gammaloop_api::templates::Assets;
+/// # use color_eyre::Result;
+/// # fn main() -> Result<()> {
+/// Assets::extract_templates("drawing-export")?;
+/// Assets::extract_justfile("drawing-export")?;
+/// assert!(Assets::template_paths().any(|name| name == "figure.typ"));
+/// # Ok(()) }
+/// ```
 pub struct Assets;
 
 include!(concat!(env!("OUT_DIR"), "/embedded_assets.rs"));
@@ -20,6 +30,11 @@ impl Assets {
     }
 
     /// Extract all drawing templates to drawings/templates relative to target_dir.
+    /// See [`Assets`] for an example.
+    ///
+    /// # Errors
+    /// Rejects invalid embedded names and symlinks inside the selected root, and
+    /// propagates directory creation and checked file-write failures.
     pub fn extract_templates<P: AsRef<Path>>(target_dir: P) -> Result<()> {
         let target = OutputPath::new(target_dir.as_ref())?
             .join("drawings")?
@@ -28,17 +43,20 @@ impl Assets {
         Self::extract_package(&GAMMALOOP_TEMPLATE_ASSETS, &target)?;
         Self::extract_package(
             &LINNEST_PACKAGE_ASSETS,
-            &Self::asset_path(&target, Path::new(LINNEST_PACKAGE_DIR))?,
+            &target.join_relative(Path::new(LINNEST_PACKAGE_DIR))?,
         )?;
         Self::extract_package(
             &KURVST_PACKAGE_ASSETS,
-            &Self::asset_path(&target, Path::new(KURVST_PACKAGE_DIR))?,
+            &target.join_relative(Path::new(KURVST_PACKAGE_DIR))?,
         )?;
 
         Ok(())
     }
 
-    /// Extract the Justfile to the target directory
+    /// Extract the Justfile to the target directory. See [`Assets`] for an example.
+    ///
+    /// # Errors
+    /// Rejects symlinks inside the selected root and propagates creation and write failures.
     pub fn extract_justfile<P: AsRef<Path>>(target_dir: P) -> Result<()> {
         let target = OutputPath::new(target_dir.as_ref())?;
         let justfile = target.join("justfile")?;
@@ -47,32 +65,16 @@ impl Assets {
         Ok(())
     }
 
-    fn asset_path(root: &OutputPath, relative: &Path) -> Result<OutputPath> {
-        if relative.as_os_str().is_empty() {
-            return Err(eyre!("Embedded drawing asset has an empty path"));
-        }
-        relative
-            .components()
-            .try_fold(root.clone(), |path, component| {
-                let Component::Normal(name) = component else {
-                    return Err(eyre!(
-                        "Embedded drawing asset has an invalid relative path: {}",
-                        relative.display()
-                    ));
-                };
-                let name = name
-                    .to_str()
-                    .ok_or_else(|| eyre!("Embedded drawing asset has a non UTF-8 path"))?;
-                Ok(path.join(name)?)
-            })
-    }
-
     fn extract_package(assets: &Dir<'_>, target: &OutputPath) -> Result<()> {
         target.ensure_directory()?;
         for file in assets.files() {
-            let target_path = Self::asset_path(target, file.path())?;
-            if let Some(parent) = target_path.as_path().parent() {
-                OutputPath::new(parent)?.ensure_directory()?;
+            let target_path = target.join_relative(file.path())?;
+            if let Some(parent) = file
+                .path()
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+            {
+                target.join_relative(parent)?.ensure_directory()?;
             }
             target_path.write(file.contents())?;
         }

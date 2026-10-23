@@ -5,7 +5,7 @@ use std::{
     env, fs,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard, OnceLock},
+    sync::{Mutex, MutexGuard},
 };
 
 use color_eyre::Result;
@@ -21,21 +21,24 @@ use gammalooprs::{
     settings::{RuntimeSettings, global::GenerationSettings},
 };
 
-static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
+static CLI_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-struct SharedCli<'a>(MutexGuard<'a, CLIState>);
+struct SharedCli<'a> {
+    cli: CLIState,
+    _guard: MutexGuard<'a, ()>,
+}
 
 impl Deref for SharedCli<'_> {
     type Target = CLIState;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.cli
     }
 }
 
 impl DerefMut for SharedCli<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.cli
     }
 }
 
@@ -80,16 +83,12 @@ impl Drop for CurrentDirGuard {
 }
 
 fn new_cli(name: &str) -> Result<SharedCli<'static>> {
-    let template = TEMPLATE_CLI.get_or_init(|| {
-        Mutex::new(
-            get_test_cli(None, cli_state_path("_template"), None, true)
-                .expect("template CLI should initialize"),
-        )
-    });
-    let mut cli = SharedCli(template.lock().unwrap());
+    // Serialize cwd changes under libtest without sharing a persisted template
+    // between the independent processes used by Nextest.
+    let guard = CLI_TEST_LOCK.lock().unwrap();
     let state_folder = cli_state_path(name);
-    *cli = get_test_cli(None, &state_folder, None, true)?;
-    Ok(cli)
+    let cli = get_test_cli(None, &state_folder, None, true)?;
+    Ok(SharedCli { cli, _guard: guard })
 }
 
 fn command(raw: &str) -> CommandHistory {

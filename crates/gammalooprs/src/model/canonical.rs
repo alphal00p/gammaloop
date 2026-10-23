@@ -7,7 +7,7 @@ use std::{
     path::Path,
 };
 
-use crate::processes::{OutputPath, OutputPathError};
+use alphal00p_persistence::{OutputPath, OutputPathError};
 use color_eyre::Report;
 use eyre::eyre;
 use idenso::{dirac::AGS, representations::Bispinor};
@@ -291,7 +291,7 @@ pub trait ModelGammaLoopExt {
     /// Write model-specific drawing styles using the [`OutputPath`] contract.
     ///
     /// # Errors
-    /// Refuses symlinked parents/leaves and directory file targets; propagates
+    /// Resolves user-selected ancestors and refuses a symlinked file target; propagates
     /// checked creation, write and flush failures. See [`OutputPath`] for an example.
     fn generate_edge_style_template(
         &self,

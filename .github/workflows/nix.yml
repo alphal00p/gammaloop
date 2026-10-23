@@ -23,6 +23,23 @@ env:
   RUST_BACKTRACE: "1"
 
 jobs:
+  runtime-guards:
+    name: Runtime guard self-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nix-ci-cache
+        with:
+          netrc: ${{ secrets.NIXCI_NETRC }}
+      - name: Check lifecycle, workflow and credential boundary without a license
+        run: |
+          flake=$(python3 scripts/tracked_source.py --print-source)
+          nix build "$flake#checks.x86_64-linux.gammaloop-ci-runtime" --print-build-logs
+          nix run "$flake#ci-runtime-license-boundary" -- --flake-source "$flake" --report-dir target/ci-results/license-boundary
+      - name: Remove cache credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/nixci.netrc"
+
   # Publish shared roots here so consumers wait on their manifest before
   # running in parallel.
   prepare:
@@ -127,9 +144,6 @@ jobs:
         run: |
           set -euo pipefail
           check_collection=hydraJobs.x86_64-linux
-          if [ "${{ github.ref }}" = refs/heads/main ]; then
-            check_collection=hydraJobsMain.x86_64-linux
-          fi
           "$HESTIA_BIN" matrix \
             --flake ".#$check_collection" \
             --socket "$HESTIA_SOCKET" \
@@ -310,19 +324,21 @@ jobs:
 
   flake-checks:
     name: Flake checks
-    needs: [prepare, build, runtime]
+    needs: [prepare, build, runtime, runtime-guards]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Confirm matrix result
         env:
           PREPARE_RESULT: ${{ needs.prepare.result }}
+          GUARDS_RESULT: ${{ needs.runtime-guards.result }}
           BUILD_RESULT: ${{ needs.build.result }}
           RUNTIME_RESULT: ${{ needs.runtime.result }}
           ANY_RUNTIME_JOBS: ${{ needs.prepare.outputs.any-runtime-jobs }}
           ANY_JOBS: ${{ needs.prepare.outputs.any-jobs }}
         run: |
           test "$PREPARE_RESULT" = success
+          test "$GUARDS_RESULT" = success
           if [ "$ANY_JOBS" = true ]; then
             test "$BUILD_RESULT" = success
           else

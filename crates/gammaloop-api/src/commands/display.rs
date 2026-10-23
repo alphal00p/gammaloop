@@ -1,53 +1,50 @@
+use alphal00p_persistence::OutputPath;
 use clap::{Args, Subcommand, ValueEnum};
 use colored::Colorize;
 use itertools::Itertools;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
-use std::{
-    ffi::OsStr,
-    fs,
-    io::{self, Write},
-    path::{Path, PathBuf},
-};
-use tabled::{
-    builder::Builder,
-    settings::{style::HorizontalLine, themes::Theme, Style},
-    Tabled,
-};
+use std::ffi::OsStr;
+use std::fs;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use tabled::builder::Builder;
+use tabled::settings::style::HorizontalLine;
+use tabled::settings::themes::Theme;
+use tabled::settings::Style;
+use tabled::Tabled;
 use tracing::info;
 use walkdir::WalkDir;
 
 use color_eyre::Result;
 use eyre::{eyre, Context};
-use gammalooprs::{
-    model::ModelGammaLoopExt,
-    processes::{
-        Amplitude, CrossSection, OutputPath, Process, ProcessCollection, ThresholdCountertermSide,
-    },
-    settings::RuntimeSettings,
+use gammalooprs::model::ModelGammaLoopExt;
+use gammalooprs::processes::{
+    Amplitude, CrossSection, Process, ProcessCollection, ThresholdCountertermSide,
+    PROCESSES_DIRECTORY,
 };
+use gammalooprs::settings::RuntimeSettings;
 
-use crate::{
-    commands::generate::{render_generation_summary, ProcessArgs},
-    commands::process_settings::{
-        observable_kind, quantity_kind, selector_kind, serialize_runtime_named_settings,
-        summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
-    },
-    commands::CliArgumentMetadataExt,
-    completion::CompletionArgExt,
-    integrand_info::{
-        IntegrandCutThresholdInfo, IntegrandEsurfaceClassification, IntegrandGraphGroupInfo,
-        IntegrandInfo, IntegrandKind,
-    },
-    session::display_command,
-    settings_tree::{serialize_settings_with_defaults, value_at_path},
-    state::{
-        resolve_state_folder, CommandsBlock, IntegrandGenerationSummary, ProcessRef,
-        ResolvedStateSnapshot, RunHistory, State, StateFolderKind,
-    },
-    CLISettings,
+use crate::commands::generate::{render_generation_summary, ProcessArgs};
+use crate::commands::process_settings::{
+    observable_kind, quantity_kind, selector_kind, serialize_runtime_named_settings,
+    summarize_observable, summarize_quantity, summarize_selector, NamedProcessSettingKind,
 };
+use crate::commands::CliArgumentMetadataExt;
+use crate::completion::CompletionArgExt;
+use crate::integrand_info::{
+    IntegrandCutThresholdInfo, IntegrandEsurfaceClassification, IntegrandGraphGroupInfo,
+    IntegrandInfo, IntegrandKind,
+};
+use crate::session::display_command;
+use crate::settings_tree::{serialize_settings_with_defaults, value_at_path};
+use crate::state;
+use crate::state::{
+    CommandsBlock, IntegrandGenerationSummary, ProcessRef, ResolvedStateSnapshot, RunHistory,
+    State, StateFolderKind,
+};
+use crate::CLISettings;
 
 mod sampling_metadata;
 mod threshold_metadata;
@@ -1314,7 +1311,7 @@ fn render_integrand_detail_from_info(
     Ok(())
 }
 
-fn render_processes_table(state: &State, artifacts: &IntegrandArtifacts<'_>) -> Result<()> {
+fn render_processes_table(state: &State, artifacts: &IntegrandArtifacts) -> Result<()> {
     if state.process_list.processes.is_empty() {
         info!("{}", "No processes generated yet.".yellow());
         return Ok(());
@@ -1367,7 +1364,7 @@ fn render_processes_table(state: &State, artifacts: &IntegrandArtifacts<'_>) -> 
 
 fn render_integrands_table(
     state: &State,
-    artifacts: &IntegrandArtifacts<'_>,
+    artifacts: &IntegrandArtifacts,
     process_filter: Option<usize>,
 ) -> Result<()> {
     if state.process_list.processes.is_empty() {
@@ -1453,7 +1450,7 @@ fn render_integrands_table(
 }
 
 fn collect_integrand_metrics(
-    artifacts: &IntegrandArtifacts<'_>,
+    artifacts: &IntegrandArtifacts,
     process: &Process,
 ) -> Result<Vec<IntegrandMetrics>> {
     match &process.collection {
@@ -1471,7 +1468,7 @@ fn collect_integrand_metrics(
 }
 
 fn integrand_metrics_from_amplitude(
-    artifacts: &IntegrandArtifacts<'_>,
+    artifacts: &IntegrandArtifacts,
     process: &Process,
     amplitude: &Amplitude,
 ) -> Result<IntegrandMetrics> {
@@ -1486,7 +1483,7 @@ fn integrand_metrics_from_amplitude(
 }
 
 fn integrand_metrics_from_cross_section(
-    artifacts: &IntegrandArtifacts<'_>,
+    artifacts: &IntegrandArtifacts,
     process: &Process,
     cross_section: &CrossSection,
 ) -> Result<IntegrandMetrics> {
@@ -1500,19 +1497,19 @@ fn integrand_metrics_from_cross_section(
     })
 }
 
-struct IntegrandArtifacts<'a> {
-    mutable_root: &'a Path,
+struct IntegrandArtifacts {
+    mutable_root: OutputPath,
     snapshot: Option<ResolvedStateSnapshot>,
 }
 
-impl<'a> IntegrandArtifacts<'a> {
-    fn open(root: &'a Path) -> Result<Self> {
-        let (kind, snapshot) = resolve_state_folder(root)?;
-        if let StateFolderKind::Invalid(reason) = kind {
-            return Err(eyre!(reason));
-        }
+impl IntegrandArtifacts {
+    fn open(root: &Path) -> Result<Self> {
+        let snapshot = match state::classify_state_folder(root)? {
+            StateFolderKind::Saved(snapshot) => Some(snapshot),
+            _ => None,
+        };
         Ok(Self {
-            mutable_root: root,
+            mutable_root: OutputPath::new(root)?,
             snapshot,
         })
     }
@@ -1542,13 +1539,10 @@ impl<'a> IntegrandArtifacts<'a> {
     }
 
     fn mutable_integrand_root(&self, process: &Process, name: &str) -> Result<PathBuf> {
-        let directory = match &process.collection {
-            ProcessCollection::Amplitudes(_) => "amplitudes",
-            ProcessCollection::CrossSections(_) => "cross_sections",
-        };
-        Ok(OutputPath::new(self.mutable_root)?
-            .join("processes")?
-            .join(directory)?
+        Ok(self
+            .mutable_root
+            .join(PROCESSES_DIRECTORY)?
+            .join(process.collection.kind_directory())?
             .join(&process.definition.folder_name)?
             .join(name)?
             .as_path()

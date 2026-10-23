@@ -746,7 +746,7 @@ impl TypstRenderer {
 
 #[cfg(test)]
 mod tests {
-    use std::env;
+    use alphal00p_workspace::{WorkspaceMarker, WorkspaceRoot};
 
     use super::*;
 
@@ -1296,18 +1296,12 @@ mod tests {
             .compile_template(&assertions, base.join("generic-assertions.pdf"), &[])
             .unwrap();
 
-        let search_root = env::var_os("CARGO_MANIFEST_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| env::current_dir().expect("cannot read the current directory"));
-        let repository = search_root
-            .ancestors()
-            .find(|root| root.join("crates/clinnet/Cargo.toml").is_file())
-            .unwrap_or_else(|| {
-                panic!(
-                    "cannot locate the clinnet workspace from {}; run under Cargo/Nextest or inside the workspace",
-                    search_root.display()
-                )
-            });
+        let workspace = WorkspaceRoot::discover_runtime(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[WorkspaceMarker::File("crates/clinnet/Cargo.toml")],
+        )
+        .expect("rendering tests require a runtime clinnet workspace");
+        let repository = workspace.as_path();
         let resources = repository.join("crates/clinnet/tests/resources");
         let gamma_assertions = resources.join("gamma-style-behavior.typ");
         renderer

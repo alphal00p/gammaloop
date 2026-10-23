@@ -1,4 +1,6 @@
 use crate::integrands::process::EvaluationTarget;
+use crate::processes::IntegrandPayload;
+use alphal00p_persistence::OutputPath;
 use feynkit_generator::GenerationType;
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -892,7 +894,8 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
             }
 
             let save_root = TemporaryDirectory::new("raised-cross-section");
-            cross_section.write_snapshot(&save_root.0).unwrap();
+            let output = OutputPath::new(&save_root.0).unwrap();
+            cross_section.write_snapshot(&output).unwrap();
             let mut state_bytes = Vec::new();
             State::export(&mut state_bytes).unwrap();
             let state_map = State::import(&mut Cursor::new(state_bytes), None).unwrap();
@@ -900,9 +903,12 @@ fn generalized_raised_cross_section_covers_derivative_components_and_roundtrips(
                 model: &model,
                 state_map: &state_map,
             };
-            let mut loaded =
-                CrossSection::load(save_root.0.join("raised_cross_section"), context, true)
-                    .unwrap();
+            let mut loaded = CrossSection::load(
+                &output.join("raised_cross_section").unwrap(),
+                context,
+                IntegrandPayload::Generated,
+            )
+            .unwrap();
             let loaded_integrand = loaded.integrand.as_mut().unwrap();
             let ProcessIntegrand::CrossSection(loaded_cross_section) = &*loaded_integrand else {
                 unreachable!("the saved synthetic topology is a cross section")

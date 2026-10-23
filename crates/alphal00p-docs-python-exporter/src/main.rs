@@ -1,9 +1,10 @@
 //! Emit one pyo3-stub-gen inventory as a deterministic checked-in stub.
 
+use alphal00p_workspace::{WorkspaceError, WorkspaceMarker, WorkspaceRoot};
 use std::env;
 use std::error::Error;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[cfg(any(
     feature = "feynkit",
@@ -74,11 +75,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         .join("\n");
     normalized.push('\n');
     let mut outputs = vec![output];
-    let start = match env::var_os("CARGO_MANIFEST_DIR") {
-        Some(directory) => PathBuf::from(directory),
-        None => env::current_dir()?,
-    };
-    outputs.extend(shared_stub_outputs(&component, &start)?);
+    outputs.extend(shared_stub_outputs(&component)?);
     outputs.sort();
     outputs.dedup();
     for output in outputs {
@@ -109,8 +106,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-// The explicit output stays caller-owned; paired package snapshots belong to this runtime workspace.
-fn shared_stub_outputs(component: &str, start: &Path) -> Result<Vec<PathBuf>, Box<dyn Error>> {
+// The explicit output stays caller-owned; paired package snapshots belong to this
+// runtime workspace.
+fn shared_stub_outputs(component: &str) -> Result<Vec<PathBuf>, WorkspaceError> {
     let paths: &[&str] = match component {
         "feynkit-community" => {
             &["crates/feynkit-py/python/symbolica/community/hepkit/__init__.pyi"]
@@ -124,19 +122,10 @@ fn shared_stub_outputs(component: &str, start: &Path) -> Result<Vec<PathBuf>, Bo
         }
         _ => return Ok(Vec::new()),
     };
-    let root = start
-        .ancestors()
-        .find(|root| {
-            root.join("Cargo.toml").is_file()
-                && root.join("docs/products/registry.toml").is_file()
-        })
-        .ok_or_else(|| {
-            format!(
-                "no documentation workspace containing Cargo.toml and docs/products/registry.toml at or above {}",
-                start.display()
-            )
-        })?;
-    Ok(paths.iter().map(|path| root.join(path)).collect())
+    let root = WorkspaceRoot::discover_from_manifest_or_cwd(&[WorkspaceMarker::File(
+        "docs/products/registry.toml",
+    )])?;
+    Ok(paths.iter().map(|path| root.as_path().join(path)).collect())
 }
 
 #[cfg(any(feature = "feynkit", feature = "gammaloop", feature = "linnet"))]

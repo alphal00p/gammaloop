@@ -14,8 +14,7 @@
 use super::{EsurfaceRay, SamplingCatalogueEntry};
 use crate::model::ModelGammaLoopExt;
 use crate::model::UFOSymbol;
-use crate::processes::{OutputPath, ProcessSnapshotIndex};
-use crate::utils::snapshot::GenerationId;
+use crate::processes::ProcessSnapshotIndex;
 use crate::{
     GammaLoopContextContainer,
     graph::FeynmanGraph,
@@ -32,6 +31,7 @@ use crate::{
     processes::ProcessList,
     utils::{ArbPrec, F, f128, newton_solver::RadialRootIdentity},
 };
+use alphal00p_persistence::{GENERATIONS_DIRECTORY, GenerationId, OutputPath};
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
 use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use serde::Deserialize;
@@ -161,7 +161,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
         agrees(left, right, &absolute, &relative, scale)
     };
 
-    OutputPath::new(state)?;
+    let state_root = OutputPath::new(state)?;
     let manifest: SamplingStateManifest =
         toml::from_str(&fs::read_to_string(state.join("state_manifest.toml"))?)?;
     ensure!(
@@ -169,11 +169,10 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
         "the sampling gate requires saved-state version 22"
     );
     manifest.processes.validate()?;
-    let payload_root = state
-        .canonicalize()?
-        .join("generations")
-        .join(manifest.generation.as_str());
-    OutputPath::new(&payload_root)?;
+    let payload = state_root
+        .join(GENERATIONS_DIRECTORY)?
+        .join(manifest.generation.as_str())?;
+    let payload_root = payload.as_path();
     initialise()?;
     // Preserve State::load's owner ordering, especially model parameter values
     // and custom UFO symbol printers before the Symbolica ID remapping.
@@ -192,7 +191,7 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
         None,
     )?;
     let mut processes = ProcessList::load(
-        &payload_root,
+        &payload,
         &manifest.processes,
         GammaLoopContextContainer {
             state_map: &state_map,

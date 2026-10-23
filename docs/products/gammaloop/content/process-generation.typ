@@ -213,6 +213,10 @@ selectors, renderers, batching controls, and allowed values.
 == Resume or replace an integration workspace
 
 An integration workspace is a completed-iteration checkpoint, not a second GammaLoop state.
+Dedicate this directory to GammaLoop. Restart removes its managed presentation directories,
+including user files placed inside them. Before starting workers, restart refuses symlinks or
+special files anywhere under the workspace root. A user-selected symlink to the workspace root
+is resolved once and supported.
 Without `--workspace-path`, writable sessions use `STATE_FOLDER/integration_workspace`;
 read-only sessions use `./integration_workspace_STATE_NAME` (or `./integration_workspace`) so
 they do not write into the active state.
@@ -221,20 +225,85 @@ they do not write into the active state.
   checkpoint. Slots, shared-versus-uncorrelated sampling, effective model parameters, and
   generated-integrand fingerprints must match. Saved targets and non-model runtime settings win
   over changed values and produce a warning.
-- With `--restart`, GammaLoop removes that specific workspace and starts the integration from
-  scratch. Use it when changing slots, sampling correlation, generated integrands, or settings
-  that should take effect. It does not mean “resume”.
+- With `--restart`, GammaLoop starts a fresh integration while retaining the previous checkpoint
+  and all its output files. New failure samples and interrupted-iteration diagnostics are staged
+  separately. Only after the first new completed iteration is durably committed does GammaLoop
+  remove the replaced run's generations and outputs, including obsolete slots, output formats,
+  and iteration archives. An earlier failure or interruption leaves the old run resumable.
+  Use restart when changing slots, sampling correlation, generated integrands, or settings that
+  should take effect.
 - `--show-summary-only` reads the last completed result without evaluating more samples and
   cannot be combined with `--restart`.
 
-The workspace root contains `manifest.json`, the latest user-facing `integration_result.json`,
-per-slot settings and results under `integrands/`, and the internal resume checkpoint under
-`state/integration_state.bin`. Observable resume snapshots live at
-`state/observables/<process@integrand>/latest.json`. Configured user-facing output is written per
+Restart requires a fully readable checkpoint. If the manifest uses an older layout or an
+unsupported version, or its referenced payloads cannot be decoded, GammaLoop refuses restart.
+Delete the workspace folder explicitly or choose a new `--workspace-path`. The same refusal
+applies when old results, failure samples, observables, or interrupted diagnostics exist without
+a committed manifest: a new attempt must never append to an earlier attempt's output files.
+New failure samples are staged separately only when replacing a validated checkpoint.
+
+The workspace root contains `manifest.json`, which selects an immutable directory under
+`generations/<generation>/`. That generation contains `integration_state.bin`,
+`slots/<index>/settings.toml`, and the declared `slots/<index>/observables.json` payloads. Slot
+indices follow the manifest's ordered slot list. Scalar moments, trained grids, settings, and
+observable accumulators therefore refer to the same completed iteration.
+
+Each ordinary commit retains all generations, so a reader pinned to an older generation may
+finish after later publications. Explicit cleanup and a successful restart can remove those
+generations; coordinate those operations with readers or copy a quiescent workspace for
+long-lived analysis. The persistent `.snapshot.lock` excludes
+concurrent writers, including throughout restart preparation and final result assembly.
+On Unix, durable initialization synchronizes directories it creates plus the managed root.
+It retries synchronization of the root's parent on every acquisition. Permission and
+unsupported-operation errors on that parent are tolerated, allowing search-only parents and
+filesystem mount boundaries; parent-entry durability then depends on the caller. Other I/O
+errors still fail acquisition. Higher pre-existing ancestors are never opened for synchronization.
+Ordinary output-directory creation does not synchronize ancestor directories.
+This does not establish durability of a new ancestor's directory entry in a higher,
+pre-existing directory.
+
+The latest user-facing result is `integration_result.json`. Configured output is written per
 slot as `integrands/<process@integrand>/observables_final.json` or
 `integrands/<process@integrand>/observables_final.hwu`. `--write-results-for-each-iteration`
-additionally retains numbered result and observable history at the corresponding root or slot
-boundary.
+additionally retains numbered result history under `results/` and observable history within each
+slot directory. Numerical diagnostics live under `numerical_stability/`; partial-iteration
+diagnostics live under `interrupted/` and are never resume data. Restart's private
+`.restart-output/` journal allows a later writer to finish interrupted postcommit cleanup before
+writing new outputs. After cleanup, pruning, and staged-output promotion, it is atomically
+renamed to `.restart-complete/` before its temporary files are removed. When an uncommitted
+restart is abandoned, GammaLoop reports the staged diagnostic path; the next writer removes
+that staging tree before proceeding. Copy diagnostics you need before reopening the workspace.
+Summary-only reads never create locks or refresh presentation files, and warn if the committed
+replacement still has pending output cleanup.
+
+== Reclaim superseded generations
+
+Saved states and ordinary integration checkpoints keep every immutable generation. Reclaim
+older generations explicitly after readers have finished:
+
+// docs-example: syntax
+```text
+cleanup state --path STATE_FOLDER
+cleanup integration --workspace-path WORKSPACE_FOLDER
+```
+
+`cleanup state` defaults to the active state folder. `cleanup integration` accepts
+`-w/--workspace-path` and uses the same default workspace as `integrate`. Both commands acquire the writer lock,
+validate the current committed snapshot, and keep that generation. They refuse while another
+writer owns the folder, leave presentation files and unrelated entries such as `.DS_Store`
+alone, and report every removed generation and the total. A read-only session refuses cleanup
+within its active state. Cleanup removes only verified generation trees; symlinks and special
+files within those trees are errors.
+Direct cleanup commands and cleanup supplied inline with `run -c` are omitted from saved
+history. A cleanup command inside a named block runs whenever that block runs, including
+when a saved card replays the block.
+Keep saved states and integration workspaces in separate folders; state saves and cleanup
+refuse a root containing an integration manifest.
+
+State-folder roots may also be symlink aliases, resolved once at entry. Symlinks below the
+managed root remain forbidden. Persisted `run.toml`, `default_runtime_settings.toml`, and
+integrand `settings.toml` retain their editor `#:schema` headers. Persisted settings include
+default values as well as overrides so a saved configuration remains explicit.
 
 #callout("Archive the right boundary", [
   `integration_result.json` is a presentation snapshot, not the authoritative resume state.

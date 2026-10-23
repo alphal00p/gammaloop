@@ -40,3 +40,6 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tempfile = "3.8"
 walkdir = { version = "2.5", optional = true }
+
+[dev-dependencies]
+alphal00p-workspace.workspace = true

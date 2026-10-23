@@ -20,7 +20,9 @@ watch = [
 
 [dependencies]
 alphal00p-docs-schema = { path = "../alphal00p-docs-schema" }
-clap = { workspace = true, features = ["derive", "env"] }
+alphal00p-persistence.workspace = true
+alphal00p-workspace = { workspace = true }
+clap = { workspace = true, features = ["derive"] }
 chrono.workspace = true
 comemo = { version = "=0.5.1", optional = true }
 eyre.workspace = true

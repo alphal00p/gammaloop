@@ -223,7 +223,6 @@ docs-site PRODUCT="all" CHANNEL="latest" SNAPSHOT_TAG="" OUTPUT="target/alphal00
             ;;
     esac
 
-    unset GITHUB_REF_NAME
     just docs-check
     cargo run --locked -p alphal00p-docs-builder -- "${args[@]}"
 
@@ -256,7 +255,7 @@ notebook-ufo-wheel OUTPUT="target/notebook-ufo-wheel":
 notebook-wheel OUTPUT="target/notebook-wheels":
     #!/usr/bin/env bash
     set -euo pipefail
-    notebook_toolchain=$(nix build --no-link --print-out-paths .#notebook-wasm-toolchain)
+    notebook_toolchain=$(just nix-build notebook-wasm-toolchain --no-link --print-out-paths)
     export PATH="$notebook_toolchain/bin:$PATH"
     export RUSTC="$notebook_toolchain/bin/rustc"
     export CARGO="$notebook_toolchain/bin/cargo"
