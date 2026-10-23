@@ -7,25 +7,41 @@ use feynkit_model::{
     ParameterType, Particle, ParticleId, Propagator, PropagatorId, VertexRule, VertexRuleId,
 };
 use pyo3::{
+    exceptions::PyValueError,
     prelude::*,
-    types::{PyAny, PyComplex, PyModule},
+    types::{PyAny, PyComplex, PyDict, PyModule},
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
+use pyo3_stub_gen::{
+    derive::{
+        gen_methods_from_python, gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods,
+    },
+    inventory::submit,
+};
 
 use crate::{
-    display::escape_html,
+    display::{escape_html, expression_html, record_html},
     error,
-    generation::{
-        LoopOrderInput, PyGenerationOptions, PyGenerationResult, SelectorInput,
-        generate_diagrams_for_model,
-    },
+    generation::{PyProcess, SelectorInput, VertexInput},
 };
-use symbolica::api::python::PythonExpression;
+use spynso3::{display::DisplaySettings, expression::TensorExpression};
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::{Atom, AtomCore, AtomView},
+    symbol,
+};
 
 fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComplex> {
     PyComplex::from_doubles(py, value.re, value.im)
+}
+
+fn display_value(value: Option<ComplexValue>) -> String {
+    match value {
+        Some(v) if v.im == 0.0 => v.re.to_string(),
+        Some(v) => format!("{} {:+}i", v.re, v.im),
+        None => "not evaluated".to_owned(),
+    }
 }
 
 /// A particle species in a loaded interaction model.
@@ -36,13 +52,15 @@ fn complex_value<'py>(py: Python<'py>, value: ComplexValue) -> Bound<'py, PyComp
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
 /// >>> electron = model.particle_by_pdg(11)
-/// >>> electron.name
-/// 'e-'
+/// >>> assert electron.name == "e-"
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Particle",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -53,7 +71,7 @@ pub struct PyParticle {
 }
 
 impl PyParticle {
-    fn new(id: ParticleId, model: Arc<Model>) -> Self {
+    pub(crate) fn new(id: ParticleId, model: Arc<Model>) -> Self {
         Self { id, model }
     }
 
@@ -67,15 +85,289 @@ impl PyParticle {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyParticle {
+    /// Construct the identity on this particle's color space.
+    ///
+    /// The bare ``left`` index carries the particle representation; ``right``
+    /// carries its dual. Antiquarks and antisextets reverse the dual orientation.
+    /// Supports UFO singlet, fundamental, sextet and adjoint representations.
+    /// ``average=True`` divides by the number of color states (1, 3, 6 or 8).
+    /// This sums color only; spin sums and color-algebra simplification remain
+    /// separate operations. To close an existing tensor, use indices whose
+    /// slots are dual to the open color slots of that tensor.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> from symbolica import S
+    /// >>> i, j = S("i", "j")
+    /// >>> color_projector = model.particle_by_pdg(5).color_sum(i, j, average=True)
+    /// >>> model.particle_by_pdg(11).color_sum(i, j) == 1
+    /// True
+    ///
+    /// Parameters
+    /// ----------
+    /// left : Expression
+    ///     Bare index in the particle's color representation.
+    /// right : Expression
+    ///     Bare index in its dual representation.
+    /// average : bool, optional
+    ///     Divide by the number of color states. Defaults to ``False``.
+    ///
+    /// Returns
+    /// -------
+    /// Expression
+    ///     Spenso color identity, or one for a color singlet.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If the particle's UFO color representation is unsupported.
+    #[pyo3(signature = (left, right, *, average=false))]
+    fn color_sum(
+        &self,
+        left: &PythonExpression,
+        right: &PythonExpression,
+        average: bool,
+    ) -> PyResult<PythonExpression> {
+        let sum = feynkit_amplitude::ColorSum::new(self.inner())
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .averaged(average);
+        Ok(PythonExpression {
+            expr: sum.expression([left.expr.clone(), right.expr.clone()]),
+        })
+    }
+
+    /// Construct this particle's external-state spin or polarization sum.
+    ///
+    /// Return an ordinary Symbolica expression using Spenso gamma matrices
+    /// and metrics. Indices are bare symbols; momentum and reference are
+    /// unindexed symbols or labeled calls such as ``Q(1)``. The calculation
+    /// defaults to four-dimensional external states. ``dimension`` changes the
+    /// Lorentz dimension while Dirac spinor slots retain dimension four.
+    /// Massive vectors use the Proca
+    /// projector. For massless vectors, supply a reference for a physical
+    /// axial sum, or omit it for the covariant sum of a gauge-invariant
+    /// amplitude. Subsequent kinematic substitutions must enforce on-shell
+    /// conditions and a nonzero momentum-reference scalar product.
+    ///
+    /// For a massive Dirac particle, ``spin_vector`` selects one physical spin
+    /// state instead of summing states. Supply a dimensionless unindexed vector
+    /// satisfying ``p.s = 0`` and ``s.s = -1``: the rest-frame spin direction,
+    /// boosted with the particle. The same projector sign applies to fermions
+    /// and antifermions; do not reverse this vector for an antiparticle.
+    /// This option requires ``average=False`` and four Lorentz dimensions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> from symbolica import S
+    /// >>> p, i, j = S("p", "i", "j")
+    /// >>> projector = model.particle("e-").spin_sum(p, i, j, average=True)
+    /// >>> polarized = model.particle("ta-").spin_sum(p, i, j, spin_vector=S("s"))
+    /// >>> dimensional = model.particle("g").spin_sum(p, i, j, dimension=S("D"))
+    /// >>> six_dimensional = model.particle("g").spin_sum(p, i, j, dimension=6)
+    ///
+    /// Parameters
+    /// ----------
+    /// momentum : Expression
+    ///     Unindexed external momentum.
+    /// left : Expression
+    ///     Open index on the amplitude.
+    /// right : Expression
+    ///     Open index on the conjugate amplitude.
+    /// average : bool
+    ///     Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
+    ///     for massive vectors. Scalars have one state.
+    /// dimension : Expression | int | None
+    ///     Integer or symbolic Lorentz dimension; defaults to four. Dirac
+    ///     spinor slots and their trace dimension stay four. To use a fixed
+    ///     two-state vector average at symbolic D, leave average=False and
+    ///     divide the result by two.
+    /// reference : Expression | None
+    ///     Axial reference momentum for a massless vector; need not be null.
+    /// covariant : bool
+    ///     Use the Feynman-gauge vector numerator even for a massive vector.
+    /// spin_vector : Expression | None
+    ///     Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+    ///     ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If ``spin_vector`` is used with averaging, a massless particle, or
+    ///     a particle other than a Dirac fermion, non-four-dimensional Lorentz
+    ///     slots, or is not an unindexed name. Also raised for an invalid
+    ///     dimension or a concrete dimension with no physical vector states.
+    #[pyo3(signature = (momentum, left, right, *, average=false, reference=None, covariant=false, spin_vector=None, dimension=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn spin_sum(
+        &self,
+        momentum: &PythonExpression,
+        left: &PythonExpression,
+        right: &PythonExpression,
+        average: bool,
+        reference: Option<&PythonExpression>,
+        covariant: bool,
+        spin_vector: Option<&PythonExpression>,
+        dimension: Option<ConvertibleToExpression>,
+    ) -> PyResult<PythonExpression> {
+        let sum = feynkit_amplitude::SpinSum::new(self.inner(), &self.model)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .with_dimension(
+                &dimension
+                    .map_or_else(|| symbolica::atom::Atom::num(4), |d| d.to_expression().expr),
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .averaged(average)
+            .covariant(covariant);
+        sum.expression(
+            &momentum.expr,
+            [left.expr.clone(), right.expr.clone()],
+            reference.map(|reference| &reference.expr),
+            spin_vector.map(|spin_vector| &spin_vector.expr),
+        )
+        .map(|expr| PythonExpression { expr })
+        .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    /// Sum paired generated external wavefunctions for one edge.
+    ///
+    /// Replace this particle's wavefunction and its adjoint using the same
+    /// completeness relation as ``spin_sum``. The expression may be a sewn
+    /// diagram's ``projector_expression()`` or a squared amplitude. Only pairs
+    /// with the supplied edge label are replaced; unpaired wavefunctions stay
+    /// unchanged. Scalar particles have no external wavefunction factors.
+    /// Vector wavefunction slots must use the requested Lorentz dimension.
+    /// External states default to four dimensions; reference and gauge conventions
+    /// are those of ``spin_sum``. For a massive Dirac particle, ``spin_vector``
+    /// selects the same physical spin state as in ``spin_sum``, including for
+    /// antiparticles. This does not sum color, conjugate amplitudes, or apply
+    /// graph symmetry factors.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.standard_model()
+    /// >>> diagram = model.process(["e-", "e+"], ["mu-", "mu+"]).generate_diagrams().diagrams[0]
+    /// >>> electron = model.particle("e-")
+    /// >>> projector = diagram.projector_expression()
+    /// >>> spin_summed = electron.sum_spins(projector, S("gammalooprs::P")(1), edge=1)
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression
+    ///     Projector or squared expression containing paired wavefunctions.
+    /// momentum : Expression
+    ///     Unindexed external momentum in the physical particle direction.
+    /// edge : int
+    ///     Generated edge label of the pair to replace.
+    /// average : bool
+    ///     Divide by two for Dirac fermions, D-2 for massless vectors, or D-1
+    ///     for massive vectors. Scalars have one state.
+    /// dimension : Expression | int | None
+    ///     Integer or symbolic Lorentz dimension; defaults to four. Dirac
+    ///     spinor slots and their trace dimension stay four. To use a fixed
+    ///     two-state vector average at symbolic D, leave average=False and
+    ///     divide the result by two.
+    /// reference : Expression | None
+    ///     Axial reference for a massless vector; need not be null.
+    /// covariant : bool
+    ///     Use the Feynman-gauge vector numerator even for a massive vector.
+    /// spin_vector : Expression | None
+    ///     Physical spin vector of a massive Dirac state, with ``p.s = 0`` and
+    ///     ``s.s = -1``. Requires ``average=False``; ``None`` sums both states.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If ``spin_vector`` is used with averaging, a massless particle, or
+    ///     a particle other than a Dirac fermion, non-four-dimensional Lorentz
+    ///     slots, or is not an unindexed name. Also raised for an invalid
+    ///     dimension or a concrete dimension with no physical vector states.
+    #[pyo3(signature = (expression, momentum, *, edge, average=false, reference=None, covariant=false, spin_vector=None, dimension=None))]
+    #[allow(clippy::too_many_arguments)]
+    fn sum_spins(
+        &self,
+        expression: &PythonExpression,
+        momentum: &PythonExpression,
+        edge: usize,
+        average: bool,
+        reference: Option<&PythonExpression>,
+        covariant: bool,
+        spin_vector: Option<&PythonExpression>,
+        dimension: Option<ConvertibleToExpression>,
+    ) -> PyResult<PythonExpression> {
+        feynkit_amplitude::SpinSum::new(self.inner(), &self.model)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .with_dimension(
+                &dimension
+                    .map_or_else(|| symbolica::atom::Atom::num(4), |d| d.to_expression().expr),
+            )
+            .map_err(|error| PyValueError::new_err(error.to_string()))?
+            .averaged(average)
+            .covariant(covariant)
+            .apply(
+                &expression.expr,
+                &momentum.expr,
+                edge,
+                reference.map(|reference| &reference.expr),
+                spin_vector.map(|spin_vector| &spin_vector.expr),
+            )
+            .map(|expr| PythonExpression { expr })
+            .map_err(|error| PyValueError::new_err(error.to_string()))
+    }
+
+    /// Native Typst math label, without dollar delimiters.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> hep.Model.qcd().particle("g").typstname
+    /// 'g'
+    #[getter]
+    fn typstname(&self) -> Option<&str> {
+        self.inner().typstname.as_deref()
+    }
+
+    /// Native Typst math label of the antiparticle, without dollar delimiters.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> hep.Model.qcd().particle("u").antitypstname
+    /// 'overline(u)'
+    #[getter]
+    fn antitypstname(&self) -> Option<&str> {
+        self.inner().antitypstname.as_deref()
+    }
+
     /// Return the particle name used by the model.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> assert electron.name == "e-"
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
     }
 
     /// Return the name of the corresponding antiparticle.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> assert electron.antiname == "e+"
     #[getter]
     fn antiname(&self) -> &str {
         &self
@@ -91,12 +383,13 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> electron = model.particle_by_pdg(11)
     /// >>> electron.antiparticle.name
     /// 'e+'
     /// >>> model.particle_by_pdg(22).antiparticle.name  # the photon is self-conjugate
     /// 'a'
-    ///
     #[getter]
     fn antiparticle(&self) -> PyResult<PyParticle> {
         Ok(Self::new(
@@ -109,9 +402,10 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> model.particle("e-").pdg_code
     /// 11
-    ///
     #[getter]
     fn pdg_code(&self) -> i64 {
         self.inner().pdg_code
@@ -121,9 +415,10 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> model.particle_by_pdg(11).spin  # spin-1/2 electron
     /// 2
-    ///
     #[getter]
     fn spin(&self) -> i64 {
         self.inner().spin
@@ -133,9 +428,10 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> model.particle_by_pdg(11).color  # color-singlet electron
     /// 1
-    ///
     #[getter]
     fn color(&self) -> i64 {
         self.inner().color
@@ -145,9 +441,10 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> particle = model.particle_by_pdg(13)
     /// >>> mass = model.parameter(particle.mass_parameter)
-    ///
     #[getter]
     fn mass_parameter(&self) -> &str {
         &self.model.parameter_by_id(self.inner().mass).unwrap().name
@@ -157,33 +454,132 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> particle = model.particle_by_pdg(23)
     /// >>> width = model.parameter(particle.width_parameter)
-    ///
     #[getter]
     fn width_parameter(&self) -> &str {
         &self.model.parameter_by_id(self.inner().width).unwrap().name
     }
 
-    /// Return the particle's electric charge.
+    /// Exact symbolic mass, with the UFO ZERO parameter represented as zero.
+    /// Other parameters remain symbolic, even when their current value is zero.
     ///
     /// Examples
     /// --------
-    /// >>> model.particle_by_pdg(11).charge
-    /// -1.0
+    /// Using the setup in the ``Particle`` class example:
     ///
+    /// >>> model.particle("c").mass
     #[getter]
-    fn charge(&self) -> f64 {
-        self.inner().charge
+    fn mass(&self) -> PythonExpression {
+        self.inner().symbolic_mass(&self.model).into()
+    }
+
+    /// Signed symbolic electric charge Q e, including the model's coupling.
+    /// An electron has charge ``-e`` and a positron ``+e``. Neutral particles
+    /// return exact zero. Use ``charge`` for the dimensionless charge Q.
+    /// The unit charge is inferred from minimal photon (PDG 22) interactions
+    /// with fermions or scalars, including their Lorentz normalization; no
+    /// parameter name is assumed. Use ``-electron.electric_charge`` for positive e.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> qed_model = hep.Model.qed()
+    /// >>> electron = qed_model.particle("e-")
+    /// >>> mass, charge = electron.mass, electron.electric_charge
+    /// >>> assert electron.antiparticle.electric_charge == -charge
+    /// >>> assert qed_model.particle("a").electric_charge == 0
+    ///
+    /// Raises
+    /// ------
+    /// ModelError
+    ///     If a charged particle's model has no supported minimal photon vertex,
+    ///     or its photon vertices imply inconsistent unit charges.
+    #[getter]
+    fn electric_charge(&self) -> PyResult<PythonExpression> {
+        self.inner()
+            .electric_charge(&self.model)
+            .map(Into::into)
+            .map_err(error::model)
+    }
+
+    /// Electric charge in units of e, as an exact Symbolica expression.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> model.particle("c").charge
+    #[getter]
+    fn charge(&self) -> PythonExpression {
+        Atom::num(self.inner().charge.clone()).into()
+    }
+
+    /// Hypercharge in Q = T3 + Y/2; left-handed for fermions.
+    /// None means absent, undefined, or unspecified, rather than zero.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> model.particle("c").y_charge
+    #[getter]
+    fn y_charge(&self) -> Option<PythonExpression> {
+        self.inner().y_charge.clone().map(|y| Atom::num(y).into())
+    }
+
+    /// Right-handed fermion hypercharge in Q = T3 + Y/2, if specified.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> model.particle("c").y_charge_right
+    #[getter]
+    fn y_charge_right(&self) -> Option<PythonExpression> {
+        self.inner()
+            .y_charge_right
+            .clone()
+            .map(|y| Atom::num(y).into())
+    }
+
+    /// Third weak-isospin component Q - Y/2; left-handed for fermions.
+    /// Antiparticle chiralities are exchanged by charge conjugation.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> model.particle("c").weak_isospin
+    #[getter]
+    fn weak_isospin(&self) -> Option<PythonExpression> {
+        self.inner().weak_isospin().map(|t| Atom::num(t).into())
+    }
+
+    /// Right-handed fermion third weak-isospin component, if specified.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> model.particle("c").weak_isospin_right
+    #[getter]
+    fn weak_isospin_right(&self) -> Option<PythonExpression> {
+        self.inner()
+            .weak_isospin_right()
+            .map(|t| Atom::num(t).into())
     }
 
     /// Report whether this object represents an antiparticle.
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> model.particle_by_pdg(11).is_antiparticle
     /// False
-    ///
     #[getter]
     fn is_antiparticle(&self) -> bool {
         self.inner().is_antiparticle()
@@ -193,9 +589,10 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> model.particle_by_pdg(22).is_self_antiparticle
     /// True
-    ///
     #[getter]
     fn is_self_antiparticle(&self) -> bool {
         self.model.particle_is_self_conjugate(self.id)
@@ -205,9 +602,10 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> model.particle_by_pdg(11).is_fermion
     /// True
-    ///
     #[getter]
     fn is_fermion(&self) -> bool {
         self.inner().is_fermion()
@@ -217,26 +615,112 @@ impl PyParticle {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
     /// >>> model.particle_by_pdg(22).is_massless
     /// True
-    ///
     #[getter]
     fn is_massless(&self) -> bool {
         self.model.particle_is_massless(self.id)
     }
 
-    /// Return a concise representation containing the name and PDG code.
+    /// Summarize the defining data as well as the name and PDG code.
     ///
     /// Examples
     /// --------
-    /// >>> print(model.particle_by_pdg(11))
+    /// Using the setup in the ``Particle`` class example:
     ///
+    /// >>> print(model.particle_by_pdg(11))
     fn __repr__(&self) -> String {
         format!(
-            "Particle(name='{}', pdg_code={})",
-            self.inner().name,
-            self.inner().pdg_code
+            "Particle({:?}, pdg={}, antiparticle={:?}, spin={}, color={}, charge={}, mass={}, width={})",
+            self.name(),
+            self.pdg_code(),
+            self.model
+                .particle_by_id(self.inner().antiparticle)
+                .unwrap()
+                .name,
+            self.spin(),
+            self.color(),
+            self.inner().charge,
+            self.mass_parameter(),
+            self.width_parameter()
         )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(electron)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let p = self.inner();
+        let spin = if p.is_ghost() {
+            "ghost".to_owned()
+        } else {
+            format!(
+                "{} (UFO {})",
+                symbolica::domains::rational::Rational::from((p.spin - 1, 2)),
+                p.spin
+            )
+        };
+        let mut rows = vec![
+            ("PDG", p.pdg_code.to_string()),
+            (
+                "Antiparticle",
+                escape_html(&self.model.particle_by_id(p.antiparticle).unwrap().name),
+            ),
+            ("Spin", spin),
+            ("Color", p.color.to_string()),
+            ("Charge", expression_html(py, self.charge())?),
+            ("Mass", expression_html(py, self.mass())?),
+            ("Width", escape_html(self.width_parameter())),
+            (
+                "Ghost / lepton number",
+                format!("{} / {}", p.ghost_number, p.lepton_number),
+            ),
+            (
+                "Propagating / Goldstone",
+                format!("{} / {}", p.propagating, p.goldstone),
+            ),
+        ];
+        if let Some(y) = self.y_charge() {
+            rows.push(("Hypercharge (left)", expression_html(py, y)?));
+        }
+        if let Some(y) = self.y_charge_right() {
+            rows.push(("Hypercharge (right)", expression_html(py, y)?));
+        }
+        Ok(record_html("Particle", self.name(), &rows))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Particle`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(electron)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Particle(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -244,13 +728,15 @@ impl PyParticle {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> nature = fk.ParameterNature.EXTERNAL
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> nature = hep.ParameterNature.EXTERNAL
 /// >>> external = [p for p in model.parameters if p.nature == nature]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "ParameterNature",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     rename_all = "SCREAMING_SNAKE_CASE",
     frozen,
     eq,
@@ -276,12 +762,15 @@ impl From<ParameterNature> for PyParameterNature {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> real_parameters = [p for p in model.parameters if p.parameter_type == fk.ParameterType.REAL]
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> real_parameters = [p for p in model.parameters
+/// ...                    if p.parameter_type == hep.ParameterType.REAL]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "ParameterType",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     rename_all = "SCREAMING_SNAKE_CASE",
     frozen,
     eq,
@@ -310,13 +799,15 @@ impl From<ParameterType> for PyParameterType {
 ///
 /// Examples
 /// --------
-/// >>> mass = model.parameter("MMU")
-/// >>> mass.nature
-/// ParameterNature.EXTERNAL
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> mass = model.parameter("MM")
+/// >>> assert mass.nature == hep.ParameterNature.EXTERNAL
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Parameter",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -337,22 +828,75 @@ impl PyParameter {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyParameter {
+    /// Return the symbolic reference used by this model's expressions.
+    /// TeX and Typst output use ``texname`` and ``typstname``, respectively. Plain output keeps
+    /// its symbolic name; no defining expression or numerical value is substituted.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.standard_model()
+    /// >>> reference = model.parameter("ee").symbol
+    /// >>> mass = model.parameter("Me").symbol
+    /// >>> assert "m_e" in (mass**2).to_latex()
+    #[getter]
+    fn symbol(&self) -> PythonExpression {
+        Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
+    }
+
+    /// Native Typst math label, without dollar delimiters.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> hep.Model.standard_model().parameter("aS").typstname
+    /// 'alpha_s'
+    #[getter]
+    fn typstname(&self) -> Option<&str> {
+        self.inner().typstname.as_deref()
+    }
+
     /// Return the parameter name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Parameter`` class example:
+    ///
+    /// >>> assert mass.name == "MM"
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
+    }
+
+    /// The model's LaTeX display label, or None when no label was supplied.
+    /// Native Typst output uses ``typstname`` independently.
+    ///
+    /// >>> hep.Model.standard_model().parameter("ee").texname
+    /// 'e'
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Parameter`` class example:
+    ///
+    /// >>> label = model.parameter("ee").texname
+    /// >>> assert label == "e"
+    #[getter]
+    fn texname(&self) -> Option<&str> {
+        self.inner().texname.as_deref()
     }
 
     /// Return the Les Houches block name, when defined.
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Parameter`` class example:
+    ///
     /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
     /// >>> mass.lhablock
     /// 'MASS'
-    ///
     #[getter]
     fn lhablock(&self) -> Option<String> {
         self.inner().lhablock.clone()
@@ -362,10 +906,11 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Parameter`` class example:
+    ///
     /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
     /// >>> mass.lhacode
     /// [13]
-    ///
     #[getter]
     fn lhacode(&self) -> Option<Vec<usize>> {
         self.inner().lhacode.clone()
@@ -375,10 +920,11 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
-    /// >>> mass.nature == fk.ParameterNature.EXTERNAL
-    /// True
+    /// Using the setup in the ``Parameter`` class example:
     ///
+    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> mass.nature == hep.ParameterNature.EXTERNAL
+    /// True
     #[getter]
     fn nature(&self) -> PyParameterNature {
         self.inner().nature.clone().into()
@@ -388,10 +934,11 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
-    /// >>> mass.parameter_type == fk.ParameterType.REAL
-    /// True
+    /// Using the setup in the ``Parameter`` class example:
     ///
+    /// >>> mass = model.parameter(model.particle_by_pdg(13).mass_parameter)
+    /// >>> mass.parameter_type == hep.ParameterType.REAL
+    /// True
     #[getter]
     fn parameter_type(&self) -> PyParameterType {
         self.inner().parameter_type.clone().into()
@@ -403,9 +950,10 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
-    /// >>> mass_value = model.parameter("MMU").value
-    /// >>> print("mass:", mass_value.real, "width component:", mass_value.imag)
+    /// Using the setup in the ``Parameter`` class example:
     ///
+    /// >>> mass_value = model.parameter("MM").value
+    /// >>> print("mass:", mass_value.real, "width component:", mass_value.imag)
     #[getter]
     fn value<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyComplex>> {
         self.inner()
@@ -423,9 +971,10 @@ impl PyParameter {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Parameter`` class example:
+    ///
     /// >>> internal = next(p for p in model.parameters if p.expression is not None)
     /// >>> formula = internal.expression
-    ///
     #[getter]
     fn expression(&self) -> Option<PythonExpression> {
         self.inner()
@@ -434,14 +983,94 @@ impl PyParameter {
             .map(|expr| PythonExpression { expr })
     }
 
-    /// Return a concise representation containing the parameter name.
+    /// Summarize the defining data as well as the parameter name.
     ///
     /// Examples
     /// --------
-    /// >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
+    /// Using the setup in the ``Parameter`` class example:
     ///
+    /// >>> print(model.parameter(model.particle_by_pdg(13).mass_parameter))
     fn __repr__(&self) -> String {
-        format!("Parameter(name='{}')", self.inner().name)
+        format!(
+            "Parameter({:?}, {:?}, {:?}, expression={}, value={})",
+            self.name(),
+            self.inner().nature,
+            self.inner().parameter_type,
+            self.inner().expression.as_ref().map_or_else(
+                || "external input".to_owned(),
+                AtomCore::to_canonical_string
+            ),
+            display_value(self.inner().value)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Parameter`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(mass)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let p = self.inner();
+        let mut rows = vec![
+            (
+                "Symbol",
+                expression_html(
+                    py,
+                    PythonExpression {
+                        expr: Atom::var(symbol!(&format!("UFO::{}", p.name))),
+                    },
+                )?,
+            ),
+            (
+                "Nature / type",
+                format!("{:?} / {:?}", p.nature, p.parameter_type),
+            ),
+            ("Value", escape_html(&display_value(p.value))),
+        ];
+        if let Some(expression) = self.expression() {
+            rows.push(("Definition", expression_html(py, expression)?));
+        }
+        if let Some(block) = &p.lhablock {
+            rows.push((
+                "LHA entry",
+                escape_html(&format!(
+                    "{} {:?}",
+                    block,
+                    p.lhacode.as_deref().unwrap_or_default()
+                )),
+            ));
+        }
+        Ok(record_html("Parameter", self.name(), &rows))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Parameter`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(mass)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Parameter(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -452,13 +1081,16 @@ impl PyParameter {
 ///
 /// Examples
 /// --------
-/// >>> coupling = next(iter(model.couplings))
-/// >>> coupling.orders
-/// {'QED': 1}
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> coupling = model.couplings[0]
+/// >>> orders = coupling.orders
+/// >>> formula = coupling.expression
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Coupling",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -479,15 +1111,42 @@ impl PyCoupling {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyCoupling {
+    /// Return the symbolic reference used by this model's expressions.
+    /// This preserves the parameter or function identity without substituting
+    /// its defining expression or numerical value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.standard_model()
+    /// >>> reference = model.couplings[0].symbol
+    #[getter]
+    fn symbol(&self) -> PythonExpression {
+        Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
+    }
+
     /// Return the coupling name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Coupling`` class example:
+    ///
+    /// >>> coupling_by_name = {item.name: item.expression for item in model.couplings}
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
     }
 
     /// Return the expression defining the coupling.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Coupling`` class example:
+    ///
+    /// >>> formula = coupling.expression
     #[getter]
     fn expression(&self) -> PythonExpression {
         PythonExpression {
@@ -499,8 +1158,9 @@ impl PyCoupling {
     ///
     /// Examples
     /// --------
-    /// >>> qed_couplings = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
+    /// Using the setup in the ``Coupling`` class example:
     ///
+    /// >>> qed_couplings = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
     #[getter]
     fn orders(&self) -> BTreeMap<String, usize> {
         self.inner().orders.clone()
@@ -512,9 +1172,10 @@ impl PyCoupling {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Coupling`` class example:
+    ///
     /// >>> coupling_value = model.couplings[0].value
     /// >>> print("coupling:", coupling_value.real, coupling_value.imag)
-    ///
     #[getter]
     fn value<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyComplex>> {
         self.inner()
@@ -528,14 +1189,68 @@ impl PyCoupling {
             })
     }
 
-    /// Return a concise representation containing the coupling name.
+    /// Summarize the defining data as well as the coupling name.
     ///
     /// Examples
     /// --------
-    /// >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
+    /// Using the setup in the ``Coupling`` class example:
     ///
+    /// >>> print(next(c for c in model.couplings if c.orders.get("QED", 0) > 0))
     fn __repr__(&self) -> String {
-        format!("Coupling(name='{}')", self.inner().name)
+        format!(
+            "Coupling({:?}, expression={}, orders={:?}, value={})",
+            self.name(),
+            self.inner().expression.to_canonical_string(),
+            self.inner().orders,
+            display_value(self.inner().value)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Coupling`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(coupling)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(record_html(
+            "Coupling",
+            self.name(),
+            &[
+                ("Definition", expression_html(py, self.expression())?),
+                ("Orders", escape_html(&format!("{:?}", self.inner().orders))),
+                ("Value", escape_html(&display_value(self.inner().value))),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Coupling`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(coupling)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Coupling(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -546,13 +1261,15 @@ impl PyCoupling {
 ///
 /// Examples
 /// --------
-/// >>> vertex = next(iter(model.vertex_rules))
-/// >>> vertex.particles
-/// ['e+', 'e-', 'a']
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> vertex = model.vertex_rules[0]
+/// >>> particles = [model.particle(name) for name in vertex.particles]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "VertexRule",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -563,7 +1280,7 @@ pub struct PyVertexRule {
 }
 
 impl PyVertexRule {
-    fn new(id: VertexRuleId, model: Arc<Model>) -> Self {
+    pub(crate) fn new(id: VertexRuleId, model: Arc<Model>) -> Self {
         Self { id, model }
     }
 
@@ -577,9 +1294,16 @@ impl PyVertexRule {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyVertexRule {
     /// Return the vertex-rule name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``VertexRule`` class example:
+    ///
+    /// >>> rules_by_name = {rule.name: rule for rule in model.vertex_rules}
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
@@ -589,9 +1313,10 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``VertexRule`` class example:
+    ///
     /// >>> vertex = model.vertex_rules[0]
     /// >>> particles = [model.particle(name) for name in vertex.particles]
-    ///
     #[getter]
     fn particles(&self) -> Vec<String> {
         self.inner()
@@ -602,6 +1327,12 @@ impl PyVertexRule {
     }
 
     /// Return the color structures used by the vertex.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``VertexRule`` class example:
+    ///
+    /// >>> color_basis = vertex.color_structures
     #[getter]
     fn color_structures(&self) -> Vec<PythonExpression> {
         self.inner()
@@ -616,9 +1347,10 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``VertexRule`` class example:
+    ///
     /// >>> vertex = model.vertex_rules[0]
     /// >>> tensors = [model.lorentz_structure(name) for name in vertex.lorentz_structures]
-    ///
     #[getter]
     fn lorentz_structures(&self) -> Vec<String> {
         self.inner()
@@ -638,10 +1370,11 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``VertexRule`` class example:
+    ///
     /// >>> vertex = model.vertex_rules[0]
     /// >>> names = [name for row in vertex.couplings for name in row if name is not None]
     /// >>> couplings = [model.coupling(name) for name in names]
-    ///
     #[getter]
     fn couplings(&self) -> Vec<Vec<Option<String>>> {
         self.inner()
@@ -659,21 +1392,172 @@ impl PyVertexRule {
     ///
     /// Examples
     /// --------
-    /// >>> vertex.coupling_orders()
-    /// {'QED': 1}
+    /// Using the setup in the ``VertexRule`` class example:
     ///
+    /// >>> vertex.coupling_orders()
+    /// {'QED': 2}
     fn coupling_orders(&self) -> BTreeMap<String, usize> {
         self.inner().coupling_orders(&self.model)
     }
 
-    /// Return a concise representation containing the vertex-rule name.
+    /// Summarize the defining data as well as the vertex-rule name.
     ///
     /// Examples
     /// --------
-    /// >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
+    /// Using the setup in the ``VertexRule`` class example:
     ///
+    /// >>> print(next(v for v in model.vertex_rules if "e-" in v.particles))
     fn __repr__(&self) -> String {
-        format!("VertexRule(name='{}')", self.inner().name)
+        let colors = self
+            .inner()
+            .color_structures
+            .iter()
+            .map(AtomCore::to_canonical_string)
+            .collect::<Vec<_>>();
+        let lorentz = self
+            .inner()
+            .lorentz_structures
+            .iter()
+            .map(|id| {
+                let l = self.model.lorentz_structure_by_id(*id).unwrap();
+                format!("{}={}", l.name, l.structure.to_canonical_string())
+            })
+            .collect::<Vec<_>>();
+        let couplings = self
+            .inner()
+            .couplings
+            .iter()
+            .enumerate()
+            .flat_map(|(c, row)| {
+                row.iter().enumerate().filter_map(move |(l, id)| {
+                    id.map(|id| {
+                        let g = self.model.coupling_by_id(id).unwrap();
+                        format!(
+                            "({c},{l}): {}={}",
+                            g.name,
+                            g.expression.to_canonical_string()
+                        )
+                    })
+                })
+            })
+            .collect::<Vec<_>>();
+        format!(
+            "VertexRule({:?}, particles={:?}, color=[{}], lorentz=[{}], couplings=[{}])",
+            self.name(),
+            self.particles(),
+            colors.join(", "),
+            lorentz.join(", "),
+            couplings.join(", ")
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``VertexRule`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(vertex)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let particles = self
+            .particles()
+            .iter()
+            .enumerate()
+            .map(|(i, p)| format!("{}: {}", i + 1, escape_html(p)))
+            .collect::<Vec<_>>()
+            .join(" &nbsp;·&nbsp; ");
+        let colors = self
+            .color_structures()
+            .iter()
+            .enumerate()
+            .map(|(i, c)| {
+                Ok(format!(
+                    "<div>C<sub>{i}</sub> = {}</div>",
+                    expression_html(py, c.clone())?
+                ))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+            .join("");
+        let lorentz = self
+            .inner()
+            .lorentz_structures
+            .iter()
+            .enumerate()
+            .map(|(i, id)| {
+                let l = self.model.lorentz_structure_by_id(*id).unwrap();
+                let expr = expression_html(
+                    py,
+                    PythonExpression {
+                        expr: l.structure.clone(),
+                    },
+                )?;
+                Ok(format!(
+                    "<div>L<sub>{i}</sub> ({}) = {expr}</div>",
+                    escape_html(&l.name)
+                ))
+            })
+            .collect::<PyResult<Vec<_>>>()?
+            .join("");
+        let mut couplings = String::new();
+        for (c, row) in self.inner().couplings.iter().enumerate() {
+            for (l, id) in row.iter().enumerate() {
+                if let Some(id) = id {
+                    let g = self.model.coupling_by_id(*id).unwrap();
+                    let expr = expression_html(
+                        py,
+                        PythonExpression {
+                            expr: g.expression.clone(),
+                        },
+                    )?;
+                    couplings.push_str(&format!("<div><code>{}</code> C<sub>{c}</sub> L<sub>{l}</sub>; &nbsp; <code>{}</code> = {expr}</div>", escape_html(&g.name), escape_html(&g.name)));
+                }
+            }
+        }
+        if couplings.is_empty() {
+            couplings.push_str("No nonzero couplings");
+        }
+        Ok(record_html(
+            "Vertex rule",
+            self.name(),
+            &[
+                ("Particles (leg order)", particles),
+                ("Color structures", colors),
+                ("Lorentz structures", lorentz),
+                ("Coupling terms", couplings),
+                (
+                    "Orders",
+                    escape_html(&format!("{:?}", self.coupling_orders())),
+                ),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``VertexRule`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(vertex)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "VertexRule(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -684,13 +1568,16 @@ impl PyVertexRule {
 ///
 /// Examples
 /// --------
-/// >>> lorentz = next(iter(model.lorentz_structures))
-/// >>> lorentz.spins
-/// [2, 2, 3]
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> lorentz = model.lorentz_structures[0]
+/// >>> spins = lorentz.spins
+/// >>> formula = lorentz.structure
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "LorentzStructure",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -711,9 +1598,16 @@ impl PyLorentzStructure {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyLorentzStructure {
     /// Return the Lorentz-structure name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``LorentzStructure`` class example:
+    ///
+    /// >>> structures = {item.name: item.structure for item in model.lorentz_structures}
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
@@ -723,17 +1617,24 @@ impl PyLorentzStructure {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``LorentzStructure`` class example:
+    ///
     /// >>> vertex = model.vertex_rules[0]
     /// >>> lorentz = model.lorentz_structure(vertex.lorentz_structures[0])
     /// >>> len(lorentz.spins) == len(vertex.particles)
     /// True
-    ///
     #[getter]
     fn spins(&self) -> Vec<i64> {
         self.inner().spins.clone()
     }
 
     /// Return the symbolic Lorentz expression.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``LorentzStructure`` class example:
+    ///
+    /// >>> formula = lorentz.structure
     #[getter]
     fn structure(&self) -> PythonExpression {
         PythonExpression {
@@ -741,15 +1642,67 @@ impl PyLorentzStructure {
         }
     }
 
-    /// Return a concise representation containing the structure name.
+    /// Summarize the defining data as well as the structure name.
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``LorentzStructure`` class example:
+    ///
     /// >>> vertex = model.vertex_rules[0]
     /// >>> print(model.lorentz_structure(vertex.lorentz_structures[0]))
-    ///
     fn __repr__(&self) -> String {
-        format!("LorentzStructure(name='{}')", self.inner().name)
+        format!(
+            "LorentzStructure({:?}, spins={:?}, structure={})",
+            self.name(),
+            self.inner().spins,
+            self.inner().structure.to_canonical_string()
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``LorentzStructure`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(lorentz)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(record_html(
+            "Lorentz structure",
+            self.name(),
+            &[
+                ("Spins (UFO)", format!("{:?}", self.inner().spins)),
+                ("Structure", expression_html(py, self.structure())?),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``LorentzStructure`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(lorentz)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "LorentzStructure(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -760,12 +1713,15 @@ impl PyLorentzStructure {
 ///
 /// Examples
 /// --------
-/// >>> propagator = next(iter(model.propagators))
-/// >>> propagator.numerator / propagator.denominator
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> propagator = model.propagators[0]
+/// >>> formula = propagator.numerator / propagator.denominator
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Propagator",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -776,7 +1732,7 @@ pub struct PyPropagator {
 }
 
 impl PyPropagator {
-    fn new(id: PropagatorId, model: Arc<Model>) -> Self {
+    pub(crate) fn new(id: PropagatorId, model: Arc<Model>) -> Self {
         Self { id, model }
     }
 
@@ -786,9 +1742,16 @@ impl PyPropagator {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyPropagator {
     /// Return the propagator name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Propagator`` class example:
+    ///
+    /// >>> propagators_by_name = {item.name: item for item in model.propagators}
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
@@ -798,9 +1761,10 @@ impl PyPropagator {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Propagator`` class example:
+    ///
     /// >>> propagator = model.propagators[0]
     /// >>> particle = model.particle(propagator.particle)
-    ///
     #[getter]
     fn particle(&self) -> &str {
         &self
@@ -811,6 +1775,12 @@ impl PyPropagator {
     }
 
     /// Return the symbolic propagator numerator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Propagator`` class example:
+    ///
+    /// >>> formula = propagator.numerator / propagator.denominator
     #[getter]
     fn numerator(&self) -> PythonExpression {
         PythonExpression {
@@ -819,6 +1789,12 @@ impl PyPropagator {
     }
 
     /// Return the symbolic propagator denominator.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Propagator`` class example:
+    ///
+    /// >>> inverse_propagator = propagator.denominator
     #[getter]
     fn denominator(&self) -> PythonExpression {
         PythonExpression {
@@ -826,14 +1802,68 @@ impl PyPropagator {
         }
     }
 
-    /// Return a concise representation containing the propagator name.
+    /// Summarize the defining data as well as the propagator name.
     ///
     /// Examples
     /// --------
-    /// >>> print(model.propagators[0])
+    /// Using the setup in the ``Propagator`` class example:
     ///
+    /// >>> print(model.propagators[0])
     fn __repr__(&self) -> String {
-        format!("Propagator(name='{}')", self.inner().name)
+        format!(
+            "Propagator({:?}, particle={:?}, numerator={}, denominator={})",
+            self.name(),
+            self.particle(),
+            self.inner().numerator.to_canonical_string(),
+            self.inner().denominator.to_canonical_string()
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Propagator`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(propagator)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(record_html(
+            "Propagator",
+            self.name(),
+            &[
+                ("Particle", escape_html(self.particle())),
+                ("Numerator", expression_html(py, self.numerator())?),
+                ("Denominator", expression_html(py, self.denominator())?),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Propagator`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(propagator)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "Propagator(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -844,13 +1874,14 @@ impl PyPropagator {
 ///
 /// Examples
 /// --------
-/// >>> function = next(iter(model.functions))
-/// >>> function.arguments
-/// ['z']
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> functions = {function.name: function.arguments for function in model.functions}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ModelFunction",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -871,9 +1902,34 @@ impl PyModelFunction {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyModelFunction {
+    /// Return the symbolic reference used by this model's expressions.
+    /// This preserves the parameter or function identity without substituting
+    /// its defining expression or numerical value.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.standard_model()
+    /// >>> import json
+    /// >>> definition = json.loads(model.to_json())
+    /// >>> definition["functions"] = [{"name": "square", "arguments": ["x"], "expression": "x^2"}]
+    /// >>> custom = hep.Model.from_json(json.dumps(definition))
+    /// >>> reference = custom.function("square").symbol
+    #[getter]
+    fn symbol(&self) -> PythonExpression {
+        Atom::var(symbol!(&format!("UFO::{}", self.inner().name))).into()
+    }
+
     /// Return the function name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ModelFunction`` class example:
+    ///
+    /// >>> names = [function.name for function in model.functions]
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
@@ -883,15 +1939,21 @@ impl PyModelFunction {
     ///
     /// Examples
     /// --------
-    /// >>> function = model.functions[0]
-    /// >>> argument_slots = dict.fromkeys(function.arguments)
+    /// Using the setup in the ``ModelFunction`` class example:
     ///
+    /// >>> arguments_by_name = {function.name: function.arguments for function in model.functions}
     #[getter]
     fn arguments(&self) -> Vec<String> {
         self.inner().arguments.clone()
     }
 
     /// Return the function body, when one is defined by the model.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ModelFunction`` class example:
+    ///
+    /// >>> implementations = {function.name: function.expression for function in model.functions}
     #[getter]
     fn expression(&self) -> Option<PythonExpression> {
         self.inner()
@@ -900,14 +1962,74 @@ impl PyModelFunction {
             .map(|expr| PythonExpression { expr })
     }
 
-    /// Return a concise representation containing the function name.
+    /// Summarize the defining data as well as the function name.
     ///
     /// Examples
     /// --------
-    /// >>> print(model.functions[0])
+    /// Using the setup in the ``ModelFunction`` class example:
     ///
+    /// >>> summaries = [repr(function) for function in model.functions]
     fn __repr__(&self) -> String {
-        format!("ModelFunction(name='{}')", self.inner().name)
+        format!(
+            "ModelFunction({:?}, arguments={:?}, expression={})",
+            self.name(),
+            self.inner().arguments,
+            self.inner()
+                .expression
+                .as_ref()
+                .map_or_else(|| "not defined".to_owned(), AtomCore::to_canonical_string)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ModelFunction`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(model.functions)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let expression = self
+            .expression()
+            .map(|e| expression_html(py, e))
+            .transpose()?
+            .unwrap_or_else(|| "Not defined in the model".to_owned());
+        Ok(record_html(
+            "Model function",
+            self.name(),
+            &[
+                ("Arguments", escape_html(&self.inner().arguments.join(", "))),
+                ("Definition", expression),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ModelFunction`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(model.functions)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "ModelFunction(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -918,13 +2040,14 @@ impl PyModelFunction {
 ///
 /// Examples
 /// --------
-/// >>> form_factor = next(iter(model.form_factors))
-/// >>> form_factor.name
-/// 'FF1'
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
+/// >>> form_factors = {ff.name: ff.value for ff in model.form_factors}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FormFactor",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -945,21 +2068,40 @@ impl PyFormFactor {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyFormFactor {
     /// Return the form-factor name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FormFactor`` class example:
+    ///
+    /// >>> names = [ff.name for ff in model.form_factors]
     #[getter]
     fn name(&self) -> &str {
         &self.inner().name
     }
 
     /// Return the model-defined form-factor type, when present.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FormFactor`` class example:
+    ///
+    /// >>> types = {ff.name: ff.type_name for ff in model.form_factors}
     #[getter]
     fn type_name(&self) -> Option<String> {
         self.inner().type_name.clone()
     }
 
     /// Return the symbolic form-factor value, when present.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FormFactor`` class example:
+    ///
+    /// >>> formulas = {ff.name: ff.value for ff in model.form_factors}
     #[getter]
     fn value(&self) -> Option<PythonExpression> {
         self.inner()
@@ -968,14 +2110,77 @@ impl PyFormFactor {
             .map(|expr| PythonExpression { expr })
     }
 
-    /// Return a concise representation containing the form-factor name.
+    /// Summarize the defining data as well as the form-factor name.
     ///
     /// Examples
     /// --------
-    /// >>> print(model.form_factors[0])
+    /// Using the setup in the ``FormFactor`` class example:
     ///
+    /// >>> summaries = [repr(ff) for ff in model.form_factors]
     fn __repr__(&self) -> String {
-        format!("FormFactor(name='{}')", self.inner().name)
+        format!(
+            "FormFactor({:?}, type={:?}, value={})",
+            self.name(),
+            self.inner().type_name,
+            self.inner()
+                .value
+                .as_ref()
+                .map_or_else(|| "not defined".to_owned(), AtomCore::to_canonical_string)
+        )
+    }
+
+    /// Display the model member's physical data and defining expressions.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FormFactor`` class example:
+    ///
+    /// >>> from IPython.display import display
+    /// >>> display(model.form_factors)
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        let expression = self
+            .value()
+            .map(|e| expression_html(py, e))
+            .transpose()?
+            .unwrap_or_else(|| "Not defined in the model".to_owned());
+        Ok(record_html(
+            "Form factor",
+            self.name(),
+            &[
+                (
+                    "Type",
+                    escape_html(self.inner().type_name.as_deref().unwrap_or("unspecified")),
+                ),
+                ("Value", expression),
+            ],
+        ))
+    }
+
+    /// Write the complete text summary to an IPython pretty printer.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FormFactor`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(model.form_factors)
+    ///
+    /// Parameters
+    /// ----------
+    /// pretty : object
+    ///     IPython pretty printer receiving the text.
+    /// cycle : bool
+    ///     Whether the object occurs recursively in the current display.
+    fn _repr_pretty_(&self, pretty: &Bound<'_, PyAny>, cycle: bool) -> PyResult<()> {
+        pretty.call_method1(
+            "text",
+            (if cycle {
+                "FormFactor(...)".to_owned()
+            } else {
+                self.__repr__()
+            },),
+        )?;
+        Ok(())
     }
 }
 
@@ -986,13 +2191,25 @@ impl PyFormFactor {
 ///
 /// Examples
 /// --------
-/// >>> coupling_formulas = {
-/// ...     item.name: item.expression for item in request.couplings
-/// ... }
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> requests = []
+/// >>> def evaluate(request):
+/// ...     requests.append(request)
+/// ...     return hep.EvaluatedValues(
+/// ...         couplings={"SCALAR_COUPLING": (0.0, -1.0)},
+/// ...     )
+/// >>> updated_model = model.recompute_with(evaluate)
+/// >>> request = requests[0]
+/// >>> item = request.couplings[0]
+/// >>> formula = item.expression
+/// >>> name = item.name
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ModelExpression",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1008,15 +2225,28 @@ impl From<ModelExpression> for PyModelExpression {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyModelExpression {
     /// Return the name assigned to the expression.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ModelExpression`` class example:
+    ///
+    /// >>> formulas = {item.name: item.expression for item in request.couplings}
     #[getter]
     fn name(&self) -> &str {
         &self.inner.name
     }
 
     /// Return the symbolic expression text.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ModelExpression`` class example:
+    ///
+    /// >>> formula = item.expression
     #[getter]
     fn expression(&self) -> PythonExpression {
         crate::graph::parse_symbolic_annotation(&self.inner.expression)
@@ -1031,14 +2261,26 @@ impl PyModelExpression {
 ///
 /// Examples
 /// --------
+/// This evaluator implements the built-in scalar model at its default ``lam=1``.
+/// A callback must return every requested internal parameter and coupling.
+///
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.phi4()
+/// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+/// >>> requests = []
 /// >>> def evaluate(request):
-/// ...     assert request.known_parameters
-/// ...     return fk.EvaluatedValues()
+/// ...     requests.append(request)
+/// ...     return hep.EvaluatedValues(
+/// ...         couplings={"SCALAR_COUPLING": (0.0, -1.0)},
+/// ...     )
 /// >>> updated_model = model.recompute_with(evaluate)
+/// >>> request = requests[0]
+/// >>> formulas = {item.name: item.expression for item in request.couplings}
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "EvaluationRequest",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1055,16 +2297,18 @@ impl PyEvaluationRequest {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyEvaluationRequest {
     /// Return the known parameter values keyed by name.
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``EvaluationRequest`` class example:
+    ///
     /// >>> def evaluate(request):
     /// ...     alpha_s = request.known_parameters["aS"]
-    /// ...     return fk.EvaluatedValues()
-    ///
+    /// ...     return hep.EvaluatedValues()
     #[getter]
     fn known_parameters(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1078,8 +2322,9 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> formulas = {item.name: item.expression for item in request.internal_parameters}
+    /// Using the setup in the ``EvaluationRequest`` class example:
     ///
+    /// >>> formulas = {item.name: item.expression for item in request.internal_parameters}
     #[getter]
     fn internal_parameters(&self) -> Vec<PyModelExpression> {
         self.inner
@@ -1094,8 +2339,9 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> coupling_formulas = {item.name: item.expression for item in request.couplings}
+    /// Using the setup in the ``EvaluationRequest`` class example:
     ///
+    /// >>> coupling_formulas = {item.name: item.expression for item in request.couplings}
     #[getter]
     fn couplings(&self) -> Vec<PyModelExpression> {
         self.inner
@@ -1110,8 +2356,9 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> helper_functions = {function.name: function for function in request.functions}
+    /// Using the setup in the ``EvaluationRequest`` class example:
     ///
+    /// >>> helper_functions = {function.name: function for function in request.functions}
     #[getter]
     fn functions(&self) -> Vec<PyModelFunction> {
         self.inner
@@ -1130,8 +2377,9 @@ impl PyEvaluationRequest {
     ///
     /// Examples
     /// --------
-    /// >>> form_factors = {factor.name: factor for factor in request.form_factors}
+    /// Using the setup in the ``EvaluationRequest`` class example:
     ///
+    /// >>> form_factors = {factor.name: factor for factor in request.form_factors}
     #[getter]
     fn form_factors(&self) -> Vec<PyFormFactor> {
         self.inner
@@ -1154,8 +2402,8 @@ impl PyEvaluationRequest {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> values = fk.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
+/// >>> from symbolica.community import hepkit as hep
+/// >>> values = hep.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
 ///
 /// Parameters
 /// ----------
@@ -1166,7 +2414,7 @@ impl PyEvaluationRequest {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "EvaluatedValues",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1176,13 +2424,16 @@ pub struct PyEvaluatedValues {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyEvaluatedValues {
     /// Create values returned by a custom model evaluator.
     ///
     /// Examples
     /// --------
-    /// >>> values = EvaluatedValues(couplings={"GC_1": (1.0, 0.0)})
+    /// Using the setup in the ``EvaluatedValues`` class example:
+    ///
+    /// >>> values = hep.EvaluatedValues(couplings={"GC_1": (1.0, 0.0)})
     ///
     /// Parameters
     /// ----------
@@ -1213,6 +2464,13 @@ impl PyEvaluatedValues {
     }
 
     /// Return the evaluated internal parameters keyed by name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``EvaluatedValues`` class example:
+    ///
+    /// >>> values = hep.EvaluatedValues(internal_parameters={"alpha": (0.1, 0.0)})
+    /// >>> assert values.internal_parameters["alpha"] == (0.1, 0.0)
     #[getter]
     fn internal_parameters(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1223,6 +2481,13 @@ impl PyEvaluatedValues {
     }
 
     /// Return the evaluated couplings keyed by name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``EvaluatedValues`` class example:
+    ///
+    /// >>> values = hep.EvaluatedValues(couplings={"GC_1": (0.3, 0.0)})
+    /// >>> assert values.couplings["GC_1"] == (0.3, 0.0)
     #[getter]
     fn couplings(&self) -> BTreeMap<String, (f64, f64)> {
         self.inner
@@ -1257,13 +2522,16 @@ impl ModelEvaluator for PythonModelEvaluator<'_, '_> {
 ///
 /// Examples
 /// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
 /// >>> card = model.default_parameter_card()
-/// >>> card.set("MMU", 0.105658, 0.0)
+/// >>> card.set("MM", 0.105658, 0.0)
 /// >>> shifted_model = model.with_parameter_card(card)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ParameterCard",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     from_py_object
 )]
 #[derive(Clone, Default)]
@@ -1278,14 +2546,16 @@ impl From<ParameterCard> for PyParameterCard {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyParameterCard {
     /// Create an empty parameter card.
     ///
     /// Examples
     /// --------
-    /// >>> card = ParameterCard()
+    /// Using the setup in the ``ParameterCard`` class example:
     ///
+    /// >>> card = hep.ParameterCard()
     #[new]
     fn new() -> Self {
         Self::default()
@@ -1295,7 +2565,9 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
-    /// >>> card = ParameterCard.from_json('{"mass": [1.0, 0.0]}')
+    /// Using the setup in the ``ParameterCard`` class example:
+    ///
+    /// >>> card = hep.ParameterCard.from_json('{"mass": [1.0, 0.0]}')
     ///
     /// Parameters
     /// ----------
@@ -1312,7 +2584,14 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
-    /// >>> card = ParameterCard.from_path("parameters.json")
+    /// Using the setup in the ``ParameterCard`` class example:
+    ///
+    /// >>> from pathlib import Path
+    /// >>> from tempfile import TemporaryDirectory
+    /// >>> with TemporaryDirectory() as directory:
+    /// ...     path = Path(directory) / "parameters.json"
+    /// ...     path.write_text(card.to_json())
+    /// ...     restored = hep.ParameterCard.from_path(path)
     ///
     /// Parameters
     /// ----------
@@ -1329,6 +2608,8 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ParameterCard`` class example:
+    ///
     /// >>> card.get("mass")
     ///
     /// Parameters
@@ -1343,6 +2624,8 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ParameterCard`` class example:
+    ///
     /// >>> card.set("mass", 1.0)
     ///
     /// Parameters
@@ -1362,6 +2645,8 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ParameterCard`` class example:
+    ///
     /// >>> card.remove("mass")
     ///
     /// Parameters
@@ -1376,8 +2661,9 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
-    /// >>> card.items()
+    /// Using the setup in the ``ParameterCard`` class example:
     ///
+    /// >>> card.items()
     fn items(&self) -> Vec<(String, (f64, f64))> {
         self.inner
             .iter()
@@ -1389,6 +2675,8 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ParameterCard`` class example:
+    ///
     /// >>> card.to_json(pretty=False)
     ///
     /// Parameters
@@ -1409,6 +2697,8 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ParameterCard`` class example:
+    ///
     /// >>> card.write_json("parameters.json")
     ///
     /// Parameters
@@ -1425,8 +2715,9 @@ impl PyParameterCard {
     ///
     /// Examples
     /// --------
-    /// >>> number_of_external_inputs = len(model.default_parameter_card())
+    /// Using the setup in the ``ParameterCard`` class example:
     ///
+    /// >>> number_of_external_inputs = len(model.default_parameter_card())
     fn __len__(&self) -> usize {
         self.inner.len()
     }
@@ -1439,25 +2730,28 @@ impl PyParameterCard {
 ///
 /// Examples
 /// --------
-/// Load a raw UFO model while retaining its parameter card and diagnostics:
+/// Built-in models need no external files. To import your own UFO directory,
+/// see ``UfoLoader``; to restore a normalized JSON model, use ``Model(path)``
+/// or ``Model.from_json``.
 ///
-/// >>> loaded = fk.UfoLoader().load("path/to/MyUFO")
-/// >>> model = loaded.model
-/// >>> electron = model.particle_by_pdg(11)
-///
-/// Or open a previously normalized FeynKit JSON model directly:
-///
-/// >>> model = fk.Model("models/sm.json")
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> model = hep.Model.standard_model()
 /// >>> photon = model.particle("a")
+/// >>> process = model.process(["e-", "e+"], ["mu-", "mu+"])
+/// >>> result = process.generate_diagrams()
+/// >>> assert result.report.completed
+/// >>> scalar_model = hep.Model.phi4()
+/// >>> assert scalar_model.particle("phi").spin == 1
 ///
 /// Parameters
 /// ----------
 /// path : str or os.PathLike
-///     Path to a normalized FeynKit JSON model.
+///     Path to a normalized HEP JSON model.
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Model",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1466,29 +2760,180 @@ pub struct PyModel {
     pub(crate) inner: Arc<Model>,
 }
 
+impl PyModel {
+    /// Borrow the shared native model without serializing or reloading it.
+    pub fn as_model(&self) -> &Arc<Model> {
+        &self.inner
+    }
+}
+
 impl From<Model> for PyModel {
     fn from(inner: Model) -> Self {
-        Self {
-            inner: Arc::new(inner),
-        }
+        Arc::new(inner).into()
     }
 }
 
 impl From<Arc<Model>> for PyModel {
     fn from(inner: Arc<Model>) -> Self {
+        for parameter in inner.parameters() {
+            DisplaySettings::register_names(
+                symbol!(&format!("UFO::{}", parameter.name)),
+                parameter.texname.as_deref().unwrap_or_default(),
+                parameter.typstname.as_deref().unwrap_or_default(),
+            );
+        }
         Self { inner }
     }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyModel {
-    /// Load a model from a normalized FeynKit JSON file.
+    /// Load the complete embedded Standard Model with default parameters.
+    /// No model files or UFO installation are required.
     ///
     /// Examples
     /// --------
-    /// >>> model = fk.Model("model.json")
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.standard_model()
+    #[staticmethod]
+    fn standard_model() -> Self {
+        Model::standard_model().into()
+    }
+
+    /// Load QCD with six quark flavors, gluons, and gluon ghosts, filtered from
+    /// the Standard Model. Preserves its parameters and their default values.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.qcd()
+    #[staticmethod]
+    fn qcd() -> Self {
+        Model::qcd().into()
+    }
+
+    /// Load QED with photons and all charged fermions (including quarks), filtered
+    /// from the Standard Model. Preserves its parameters and their default values.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.qed()
+    #[staticmethod]
+    fn qed() -> Self {
+        Model::qed().into()
+    }
+
+    /// Load the electroweak Standard Model, retaining quarks, Higgs, Goldstones,
+    /// and electroweak ghosts, and removing gluons and gluon ghosts.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.electroweak()
+    #[staticmethod]
+    fn electroweak() -> Self {
+        Model::electroweak().into()
+    }
+
+    /// Load strong and electromagnetic interactions of all quarks and charged
+    /// leptons, including gluon ghosts, with Standard Model parameters.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.qcd_qed()
+    #[staticmethod]
+    fn qcd_qed() -> Self {
+        Model::qcd_qed().into()
+    }
+
+    /// Load pure SU(3) Yang-Mills theory: gluons and gluon ghosts without quarks.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.yang_mills()
+    #[staticmethod]
+    fn yang_mills() -> Self {
+        Model::yang_mills().into()
+    }
+
+    /// Load a real scalar phi with L_int = -g phi^3 / 3!.
+    /// The external parameters mass and g default to one; the width is zero.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.phi3()
+    #[staticmethod]
+    fn phi3() -> Self {
+        Model::phi3().into()
+    }
+
+    /// Load a real scalar phi with L_int = -lam phi^4 / 4!.
+    /// The external parameters mass and lam default to one; the width is zero.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.phi4()
+    #[staticmethod]
+    fn phi4() -> Self {
+        Model::phi4().into()
+    }
+
+    /// Load a real scalar phi with L_int = -g phi^3 / 3! - lam phi^4 / 4!.
+    /// Independent parameters mass, g, and lam default to one; the width is zero.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.phi_3_4()
+    #[staticmethod]
+    fn phi_3_4() -> Self {
+        Model::phi_3_4().into()
+    }
+
+    /// Load scalar QED in Feynman gauge with a, phi+, and phi-.
+    /// Parameters mass=e=1 and lam=0; the scalar potential is
+    /// mass^2 |phi|^2 + lam |phi|^4 / 4, and all widths vanish.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.scalar_qed()
+    #[staticmethod]
+    fn scalar_qed() -> Self {
+        Model::scalar_qed().into()
+    }
+
+    /// Load a model from a normalized HEP JSON file.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> from pathlib import Path
+    /// >>> from tempfile import TemporaryDirectory
+    /// >>> with TemporaryDirectory() as directory:
+    /// ...     path = Path(directory) / "model.json"
+    /// ...     model.write_json(path)
+    /// ...     restored = hep.Model(path)
+    /// ...     assert restored.name == model.name
     ///
     /// Parameters
     /// ----------
@@ -1505,7 +2950,11 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> model = fk.Model.from_json(model_json)
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model_json = model.to_json()
+    /// >>> restored = hep.Model.from_json(model_json)
+    /// >>> assert restored.name == model.name
     ///
     /// Parameters
     /// ----------
@@ -1516,73 +2965,74 @@ impl PyModel {
         Model::from_json(json).map(Self::from).map_err(error::model)
     }
 
-    /// Generate amplitude or cross-section diagrams from this model.
-    ///
-    /// Concrete :class:`Particle` values, particle names, signed PDG codes, and
-    /// :class:`ParticleSelector` objects may be mixed in the external states.
-    /// An integer loop order selects that exact order; a pair such as ``(0, 1)``
-    /// selects an inclusive range. The selected model Feynman rules are
-    /// instantiated on every returned vertex and propagator edge and combined
-    /// in each diagram numerator.
+    /// Define a process with model-validated external states and sector restrictions.
+    /// The returned process is immutable; loops and other calculation choices are
+    /// arguments to its generate_diagrams, generate_amplitude and generate_cross_section methods.
     ///
     /// Examples
     /// --------
-    /// Generate one-loop scalar amplitudes directly from their model:
+    /// Using the setup in the ``Model`` class example:
     ///
-    /// >>> options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
-    /// >>> scalar = model.particle("scalar_0")
-    /// >>> result = model.generate_diagrams(
-    /// ...     [scalar], [scalar, scalar.antiparticle],
-    /// ...     loops=1, options=options,
-    /// ... )
-    /// >>> diagram = result.diagrams[0]
-    /// >>> diagram.numerator_expression()
+    /// >>> process = model.process(["e-", "e+"], ["a", "a"])
+    /// >>> amplitude = process.generate_amplitude(loops=0)
     ///
     /// Parameters
     /// ----------
     /// incoming : sequence[Particle | ParticleSelector | str | int]
-    ///     Incoming particles in external-leg order.
+    ///     Ordered incoming external states.
     /// outgoing : sequence[Particle | ParticleSelector | str | int]
-    ///     Primary outgoing state in external-leg order.
-    /// kind : {"amplitude", "cross_section"}, optional
-    ///     Graph structure to generate.
-    /// loops : int or tuple[int, int], optional
-    ///     Exact loop order or inclusive minimum and maximum.
-    /// options : GenerationOptions or None, optional
-    ///     Generation filters and limits; defaults to standard options.
-    /// final_state_alternatives : sequence[sequence[Particle | ParticleSelector | str | int]] or None, optional
-    ///     Extra outgoing states for a cross section.
-    #[pyo3(signature = (incoming, outgoing, *, kind="amplitude", loops=LoopOrderInput::default(), options=None, final_state_alternatives=None))]
-    #[allow(clippy::too_many_arguments)]
-    fn generate_diagrams(
+    ///     Ordered outgoing external states.
+    /// particle_veto : sequence[Particle | ParticleSelector | str | int] or None, optional
+    ///     Excluded species, including their antiparticles.
+    /// particle_selection : sequence[Particle | ParticleSelector | str | int] or None, optional
+    ///     Allowed species, including their antiparticles. None allows all; an
+    ///     empty list allows none. Mutually exclusive with particle_veto.
+    /// vertex_allow : sequence[VertexRule | str] or None, optional
+    ///     Allowed interactions. None allows all; an empty list allows none.
+    /// vertex_veto : sequence[VertexRule | str] or None, optional
+    ///     Excluded interactions.
+    #[pyo3(signature = (incoming, outgoing, *, particle_veto=None, particle_selection=None, vertex_allow=None, vertex_veto=None))]
+    fn process(
         &self,
-        py: Python<'_>,
         incoming: Vec<SelectorInput>,
         outgoing: Vec<SelectorInput>,
-        kind: &str,
-        loops: LoopOrderInput,
-        options: Option<&PyGenerationOptions>,
-        final_state_alternatives: Option<Vec<Vec<SelectorInput>>>,
-    ) -> PyResult<PyGenerationResult> {
-        generate_diagrams_for_model(
-            py,
+        particle_veto: Option<Vec<SelectorInput>>,
+        particle_selection: Option<Vec<SelectorInput>>,
+        vertex_allow: Option<Vec<VertexInput>>,
+        vertex_veto: Option<Vec<VertexInput>>,
+    ) -> PyResult<PyProcess> {
+        PyProcess::from_model(
             self,
             incoming,
             outgoing,
-            kind,
-            loops,
-            options,
-            final_state_alternatives,
+            particle_veto,
+            particle_selection,
+            vertex_allow,
+            vertex_veto,
         )
     }
 
     /// Return the model name.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.standard_model()
+    /// >>> model_name = model.name
     #[getter]
     fn name(&self) -> &str {
         self.inner.name()
     }
 
     /// Return the applied restriction name, when present.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> model = hep.Model.standard_model()
+    /// >>> restriction = model.restriction
     #[getter]
     fn restriction(&self) -> Option<String> {
         self.inner.restriction().map(str::to_owned)
@@ -1592,8 +3042,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> fermions = [particle for particle in model.particles if particle.is_fermion]
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> fermions = [particle for particle in model.particles if particle.spin == 2]
     #[getter]
     fn particles(&self) -> Vec<PyParticle> {
         self.inner
@@ -1610,7 +3061,10 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> particle = model.particle("electron")
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> electron = model.particle("e-")
+    /// >>> assert electron.pdg_code == 11
     ///
     /// Parameters
     /// ----------
@@ -1627,6 +3081,8 @@ impl PyModel {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
     /// >>> particle = model.particle_by_pdg(11)
     ///
     /// Parameters
@@ -1644,8 +3100,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> external = [p for p in model.parameters if p.nature == fk.ParameterNature.EXTERNAL]
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> external = [p for p in model.parameters if p.nature == hep.ParameterNature.EXTERNAL]
     #[getter]
     fn parameters(&self) -> Vec<PyParameter> {
         self.inner
@@ -1662,7 +3119,10 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> parameter = model.parameter("mass")
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> mass = model.parameter("MM")
+    /// >>> assert mass.nature == hep.ParameterNature.EXTERNAL
     ///
     /// Parameters
     /// ----------
@@ -1679,8 +3139,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> qed = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> qed = [c for c in model.couplings if c.orders.get("QED", 0) > 0]
     #[getter]
     fn couplings(&self) -> Vec<PyCoupling> {
         self.inner
@@ -1697,6 +3158,8 @@ impl PyModel {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
     /// >>> coupling = model.coupling("GC_1")
     ///
     /// Parameters
@@ -1710,36 +3173,120 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Replace named UFO vertex coefficients by their analytic expressions.
+    /// Replace named UFO coefficients by their analytic model expressions.
     ///
-    /// Generated diagrams retain coefficient symbols such as ``UFO::GC_11``
-    /// so numerical calculations can use the model's precomputed coupling
-    /// values. Call this method when inspecting or manipulating a numerator in
-    /// terms of Lagrangian parameters such as ``UFO::G`` or ``UFO::ee``. The
-    /// input expression and the stored diagram are unchanged.
+    /// The input and the stored model are unchanged.
     ///
     /// Examples
     /// --------
-    /// >>> stored = diagram.numerator_expression()
-    /// >>> analytic = model.expand_couplings(stored)
-    /// >>> analytic  # native Symbolica expression in model parameters
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> analytic = model.expand_couplings(S("UFO::GC_11"))
     ///
     /// Parameters
     /// ----------
     /// expression : Expression
     ///     Symbolica expression containing named couplings from this model.
-    fn expand_couplings(&self, expression: &PythonExpression) -> PythonExpression {
-        PythonExpression {
-            expr: self.inner.expand_couplings(&expression.expr),
+    #[gen_stub(skip)]
+    fn expand_couplings(
+        &self,
+        py: Python<'_>,
+        expression: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<PyAny>> {
+        if let Ok(tensor) = expression.extract::<PyRef<'_, TensorExpression>>() {
+            let result = self
+                .inner
+                .expand_couplings(tensor.structured().expression());
+            return TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any);
         }
+        let input = expression.extract::<PyRef<'_, PythonExpression>>()?;
+        let result = self.inner.expand_couplings(&input.expr);
+        Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
+    }
+
+    /// Return exact model scalar bindings with all named dependencies resolved.
+    ///
+    /// Internal parameter and coupling definitions remain analytic; cached
+    /// dependent values are not used. Numerical model/card inputs are converted
+    /// to exact binary64 rationals. This operation does not mutate the model or
+    /// numerically recompute it. Unknown symbols and UFO functions outside the
+    /// returned map are retained, not evaluated.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica import E
+    /// >>> model = hep.Model.standard_model()
+    /// >>> values = model.scalar_bindings(overrides={
+    /// ...     model.parameter("MT").symbol: E("345/2"),
+    /// ...     model.parameter("ymt").symbol: E("345/2"),
+    /// ...     model.parameter("WT").symbol: E("0"),
+    /// ...     model.parameter("WH").symbol: E("0"),
+    /// ... })
+    /// >>> assert values[model.parameter("MT").symbol] == E("345/2")
+    ///
+    /// Parameters
+    /// ----------
+    /// card : ParameterCard or None, optional
+    ///     Restriction applied to a copy, including explicit internal overrides.
+    ///     Pass it explicitly even if already applied to the model, because
+    ///     the model does not retain the history of internal overrides.
+    /// overrides : dict[Expression, Expression] or None, optional
+    ///     Exact scalar definitions, keyed by plain symbols. They take
+    ///     precedence over model/card values before dependencies are resolved.
+    ///     Model parameters can be set here without creating a parameter card.
+    ///
+    /// Returns
+    /// -------
+    /// dict[Expression, Expression]
+    ///     Native exact expressions keyed by model and additional override symbols.
+    #[pyo3(signature = (card=None, *, overrides=None))]
+    #[gen_stub(override_return_type(type_repr="typing.Dict[symbolica.Expression, symbolica.Expression]", imports=("typing", "symbolica")))]
+    fn scalar_bindings<'py>(
+        &self,
+        py: Python<'py>,
+        card: Option<&PyParameterCard>,
+        #[gen_stub(override_type(type_repr="typing.Optional[typing.Dict[symbolica.Expression, symbolica.Expression]]", imports=("typing", "symbolica")))]
+        overrides: Option<&Bound<'_, PyDict>>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        let mut native_overrides = BTreeMap::new();
+        if let Some(overrides) = overrides {
+            for (key, value) in overrides.iter() {
+                let key = key.extract::<PyRef<'_, PythonExpression>>()?;
+                let AtomView::Var(symbol) = key.expr.as_view() else {
+                    return Err(PyValueError::new_err(
+                        "scalar binding keys must be plain symbols",
+                    ));
+                };
+                let value = value.extract::<PyRef<'_, PythonExpression>>()?;
+                native_overrides.insert(symbol.get_symbol(), value.expr.clone());
+            }
+        }
+        let bindings = self
+            .inner
+            .scalar_bindings(card.map(|card| &card.inner), &native_overrides)
+            .map_err(error::model)?;
+        let result = PyDict::new(py);
+        for (symbol, value) in bindings {
+            result.set_item(
+                Py::new(
+                    py,
+                    PythonExpression {
+                        expr: Atom::var(symbol),
+                    },
+                )?,
+                Py::new(py, PythonExpression { expr: value })?,
+            )?;
+        }
+        Ok(result)
     }
 
     /// Return all interaction vertex rules in model order.
     ///
     /// Examples
     /// --------
-    /// >>> electron_vertices = [v for v in model.vertex_rules if "e-" in v.particles]
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> electron_vertices = [v for v in model.vertex_rules if "e-" in v.particles]
     #[getter]
     fn vertex_rules(&self) -> Vec<PyVertexRule> {
         self.inner
@@ -1756,6 +3303,8 @@ impl PyModel {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
     /// >>> vertex = model.vertex_rule("V_1")
     ///
     /// Parameters
@@ -1773,8 +3322,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> lorentz_by_name = {item.name: item for item in model.lorentz_structures}
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> lorentz_by_name = {item.name: item for item in model.lorentz_structures}
     #[getter]
     fn lorentz_structures(&self) -> Vec<PyLorentzStructure> {
         self.inner
@@ -1794,6 +3344,8 @@ impl PyModel {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
     /// >>> lorentz = model.lorentz_structure("FFV1")
     ///
     /// Parameters
@@ -1811,8 +3363,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> propagator_particles = {item.particle for item in model.propagators}
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> propagators_by_name = {item.name: item for item in model.propagators}
     #[getter]
     fn propagators(&self) -> Vec<PyPropagator> {
         self.inner
@@ -1829,7 +3382,10 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> propagator = model.propagator("electron")
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> name = model.propagators[0].name
+    /// >>> propagator = model.propagator(name)
     ///
     /// Parameters
     /// ----------
@@ -1846,8 +3402,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> functions = {function.name: function for function in model.functions}
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> functions = {function.name: function for function in model.functions}
     #[getter]
     fn functions(&self) -> Vec<PyModelFunction> {
         self.inner
@@ -1864,7 +3421,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> function = model.function("complexconjugate")
+    /// Using ``model`` from the class example. A model may have no helper functions:
+    ///
+    /// >>> functions = [model.function(item.name) for item in model.functions]
     ///
     /// Parameters
     /// ----------
@@ -1881,8 +3440,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> form_factors = {factor.name: factor for factor in model.form_factors}
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> form_factors = {factor.name: factor for factor in model.form_factors}
     #[getter]
     fn form_factors(&self) -> Vec<PyFormFactor> {
         self.inner
@@ -1902,7 +3462,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> form_factor = model.form_factor("FF_1")
+    /// Using ``model`` from the class example. A model may have no form factors:
+    ///
+    /// >>> form_factors = [model.form_factor(item.name) for item in model.form_factors]
     ///
     /// Parameters
     /// ----------
@@ -1919,8 +3481,9 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> card = model.default_parameter_card()
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> card = model.default_parameter_card()
     fn default_parameter_card(&self) -> PyResult<PyParameterCard> {
         self.inner
             .default_parameter_card()
@@ -1932,6 +3495,10 @@ impl PyModel {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> card = model.default_parameter_card()
+    /// >>> card.set("MM", 0.105658, 0.0)
     /// >>> updated = model.with_parameter_card(card)
     ///
     /// Parameters
@@ -1971,7 +3538,22 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// >>> recomputed = model.recompute_with(evaluate)
+    /// This callback evaluates the built-in scalar model at its default coupling
+    /// ``lam=1``. See ``EvaluationRequest`` for callback inputs.
+    ///
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> process = model.process(["phi", "phi"], ["phi", "phi"])
+    /// >>> requests = []
+    /// >>> def evaluate(request):
+    /// ...     requests.append(request)
+    /// ...     return hep.EvaluatedValues(
+    /// ...         couplings={"SCALAR_COUPLING": (0.0, -1.0)},
+    /// ...     )
+    /// >>> updated_model = model.recompute_with(evaluate)
+    /// >>> request = requests[0]
+    /// >>> formulas = {item.name: item.expression for item in request.couplings}
     ///
     /// Parameters
     /// ----------
@@ -2000,6 +3582,8 @@ impl PyModel {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
     /// >>> model.to_json(pretty=False)
     ///
     /// Parameters
@@ -2020,6 +3604,8 @@ impl PyModel {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Model`` class example:
+    ///
     /// >>> model.write_json("model.json")
     ///
     /// Parameters
@@ -2032,12 +3618,13 @@ impl PyModel {
             .map_err(error::model)
     }
 
-    /// Return a concise representation containing the name and particle count.
+    /// Summarize the defining data as well as the name and particle count.
     ///
     /// Examples
     /// --------
-    /// >>> print(model)
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> print(model)
     fn __repr__(&self) -> String {
         format!(
             "Model(name='{}', particles={})",
@@ -2050,9 +3637,10 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// Leave ``model`` as the final expression in a notebook cell to display
-    /// its particle-content and interaction counts.
+    /// Using the setup in the ``Model`` class example:
     ///
+    /// >>> from IPython.display import display
+    /// >>> display(model)
     fn _repr_html_(&self) -> String {
         let restriction = self
             .inner
@@ -2085,7 +3673,10 @@ impl PyModel {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``Model`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(model)
     ///
     /// Parameters
     /// ----------
@@ -2125,6 +3716,60 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     Ok(())
 }
 
+#[cfg(feature = "python_stubgen")]
+submit! {
+    gen_methods_from_python! {
+        r#"
+        import typing
+
+        class PyModel:
+            @typing.overload
+            def expand_couplings(
+                self,
+                expression: pyo3_stub_gen.RustType["TensorExpression"],
+            ) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """
+                Replace named UFO coefficients by their analytic model expressions.
+
+                The input and the stored model are unchanged.
+
+                Examples
+                --------
+                Using the setup in the ``Model`` class example:
+
+                >>> analytic = model.expand_couplings(S("UFO::GC_11"))
+
+                Parameters
+                ----------
+                expression : Expression
+                    Symbolica expression containing named couplings from this model.
+                """
+
+            @typing.overload
+            def expand_couplings(
+                self,
+                expression: pyo3_stub_gen.RustType["PythonExpression"],
+            ) -> pyo3_stub_gen.RustType["PythonExpression"]:
+                """
+                Replace named UFO coefficients by their analytic model expressions.
+
+                The input and the stored model are unchanged.
+
+                Examples
+                --------
+                Using the setup in the ``Model`` class example:
+
+                >>> analytic = model.expand_couplings(S("UFO::GC_11"))
+
+                Parameters
+                ----------
+                expression : Expression
+                    Symbolica expression containing named couplings from this model.
+                """
+        "#
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::CString;
@@ -2132,6 +3777,16 @@ mod tests {
     use pyo3::types::PyDict;
 
     use super::*;
+
+    #[test]
+    fn native_model_borrow_preserves_shared_identity() {
+        let model = Arc::new(Model::phi4());
+        let wrapper = PyModel::from(Arc::clone(&model));
+        assert!(Arc::ptr_eq(wrapper.as_model(), &model));
+        let retained = Arc::clone(wrapper.as_model());
+        drop(wrapper);
+        assert!(Arc::ptr_eq(&retained, &model));
+    }
 
     const MODEL_JSON: &str = r#"{
         "name": "scalar",
@@ -2177,7 +3832,7 @@ mod tests {
     }"#;
 
     fn registered_module<'py>(py: Python<'py>) -> Bound<'py, PyModule> {
-        let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
         crate::initialize_feynkit(&module).unwrap();
         module
     }
@@ -2249,7 +3904,7 @@ positron = electron.antiparticle
 assert isinstance(positron, fk.Particle)
 assert positron.name == "e+"
 assert positron.pdg_code == -11
-assert positron.charge == 1.0
+assert str(positron.charge) == "1"
 assert positron.antiparticle.name == "e-"
 
 scalar = model.particle("s")

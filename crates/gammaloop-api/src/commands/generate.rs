@@ -127,7 +127,7 @@ impl GroupingChoice {
                 NumeratorGrouping::UpToSign(graph_grouping_options)
             }
             GroupingChoice::NoGrouping => NumeratorGrouping::None,
-            GroupingChoice::OnlyDetectZeroes => NumeratorGrouping::OnlyDetectZeroes,
+            GroupingChoice::OnlyDetectZeroes => NumeratorGrouping::None,
         }
     }
 }
@@ -1297,6 +1297,12 @@ pub fn parse_spec_with_model(
         .generation_options
         .clone()
         .numerator_grouping(build_grouping_option(args))
+        // Exact color-zero detection is independent of graph grouping in the
+        // native generator; retain the shell's existing zero-only choice.
+        .filter_zero_color(matches!(
+            args.numerator_aware_isomorphism_grouping,
+            Some(GroupingChoice::OnlyDetectZeroes)
+        ))
         .allow_self_loops(!args.filter_self_loop.unwrap_or(false))
         .allow_zero_flow_edges(!args.filter_zero_flow_edges.unwrap_or(true))
         .graph_prefix(args.graph_prefix.clone().unwrap_or_else(|| "GL".to_owned()));
@@ -1760,19 +1766,13 @@ fn feyngen_from_spec_args(
         // FeynKit generation deliberately represents one amplitude final
         // state at a time, as the generator has always consumed the first
         // alternative here.
-        GenerationType::Amplitude => {
-            GenerationProcess::amplitude(initial_pdgs.to_vec(), first_outgoing)
-        }
+        GenerationType::Amplitude => GenerationProcess::new(initial_pdgs.to_vec(), first_outgoing),
         GenerationType::CrossSection => {
-            GenerationProcess::cross_section(initial_pdgs.to_vec(), first_outgoing)
+            GenerationProcess::new(initial_pdgs.to_vec(), first_outgoing)
                 .with_final_state_alternatives(outgoing_alternatives)
                 .expect("the parser produces a non-empty final-state alternative list")
         }
-    }
-    .symmetrize_initial(sym_init)
-    .symmetrize_final(sym_final)
-    .symmetrize_left_right(sym_left_right)
-    .symmetrize_external_fermions(allow_symferm);
+    };
     let mut loop_count = (1, 1);
 
     // Build filters
@@ -1967,10 +1967,13 @@ fn feyngen_from_spec_args(
         }
     }
 
-    let process = process
+    let mut generation_options = GenerationOptions::default()
         .with_loop_count(loop_count.0, loop_count.1)
-        .expect("the parser produces a valid loop range");
-    let mut generation_options = GenerationOptions::default();
+        .expect("the parser produces a valid loop range")
+        .symmetrize_initial(sym_init)
+        .symmetrize_final(sym_final)
+        .symmetrize_left_right(sym_left_right)
+        .symmetrize_external_fermions(allow_symferm);
     match generation_type {
         GenerationType::Amplitude => {
             for filter in amp_filters {
@@ -1989,6 +1992,7 @@ fn feyngen_from_spec_args(
     }
 
     ProcessDefinition {
+        generation_type,
         process,
         generation_options,
         ..Default::default()
@@ -2460,9 +2464,55 @@ mod tests {
         test_initialise().unwrap();
         let ps = parse_ok_amp("e+ e- > mu+ mu-");
         assert_eq!(
-            ps.process_definition.process.generation_type(),
+            ps.process_definition.generation_type,
             GenerationType::Amplitude
         );
+    }
+
+    #[test]
+    fn zero_only_choice_enables_native_filter_without_grouping() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        for mode in [GenerationType::Amplitude, GenerationType::CrossSection] {
+            for (choice, filter_zero_color) in [
+                (GroupingChoice::NoGrouping, false),
+                (GroupingChoice::OnlyDetectZeroes, true),
+            ] {
+                let mut args = base_args("e+ e- > mu+ mu-");
+                args.numerator_aware_isomorphism_grouping = Some(choice);
+                let spec = parse_spec_with_model(&args, mode, &model).unwrap();
+                assert_eq!(spec.process_definition.generation_type, mode);
+                let options =
+                    serde_json::to_value(&spec.process_definition.generation_options).unwrap();
+                assert_eq!(options["numerator_grouping"], "none");
+                assert_eq!(options["filter_zero_color"], filter_zero_color);
+            }
+        }
+    }
+
+    #[test]
+    fn generation_options_preserve_loop_and_symmetry_configuration() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        for (mode, tokens, loops) in [
+            (GenerationType::Amplitude, "e+ e- > mu+ mu- [ {2} ]", 2),
+            (GenerationType::CrossSection, "e+ e- > mu+ mu- [ {{3}} ]", 3),
+        ] {
+            let mut args = base_args(tokens);
+            args.symmetrize_initial_states = Some(true);
+            args.symmetrize_final_states = Some(false);
+            args.symmetrize_left_right_states = Some(true);
+            args.allow_symmetrization_of_external_fermions_in_amplitudes = Some(true);
+            let spec = parse_spec_with_model(&args, mode, &model).unwrap();
+            let definition = spec.process_definition;
+            assert_eq!(definition.generation_type, mode);
+            let options = definition.generation_options;
+            assert_eq!(options.loop_count(), loops..=loops);
+            assert!(options.symmetrizes_initial());
+            assert!(!options.symmetrizes_final());
+            assert!(options.symmetrizes_left_right());
+            assert!(options.symmetrizes_external_fermions());
+        }
     }
 
     #[test]
@@ -2490,7 +2540,7 @@ mod tests {
         test_initialise().unwrap();
         let ps = parse_ok_xs("{} to {}");
         assert_eq!(
-            ps.process_definition.process.generation_type(),
+            ps.process_definition.generation_type,
             GenerationType::CrossSection
         );
 
@@ -2592,12 +2642,12 @@ mod tests {
         // Final-state alternatives captured
         assert_eq!(ps.final_sets.len(), 3);
         assert_eq!(
-            ps.process_definition.process.generation_type(),
+            ps.process_definition.generation_type,
             GenerationType::CrossSection
         );
 
         // XS loop count from {{3}}
-        assert_eq!(ps.process_definition.process.loop_count(), 3..=3);
+        assert_eq!(ps.process_definition.generation_options.loop_count(), 3..=3);
 
         // Perturbative orders end up in XS filters
         let xs_filters = ps

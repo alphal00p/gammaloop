@@ -119,6 +119,7 @@ fn saved_child_dirs(root: &Path, expected_binary: &str, kind: &str) -> Result<Ve
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct ProcessDefinition {
+    pub generation_type: GenerationType,
     pub process: GenerationProcess,
     pub generation_options: GenerationOptions,
     pub folder_name: String,
@@ -132,24 +133,24 @@ impl fmt::Display for ProcessDefinition {
             "Process #{}: '{}'\nGeneration type: {}{}{}\nInitial PDGs: {:?}{}\nFinal PDGs: {}{}\nLoop count: {}\nAmplitude filters:{}{}\nCross-section filters:{}{}",
             self.process_id,
             self.folder_name,
-            self.process.generation_type(),
-            if self.process.symmetrizes_left_right() {
+            self.generation_type,
+            if self.generation_options.symmetrizes_left_right() {
                 " (left-right symmetrized)"
             } else {
                 ""
             },
-            if self.process.symmetrizes_external_fermions()
-                && self.process.generation_type() == GenerationType::Amplitude
-                && (self.process.symmetrizes_initial()
-                    || self.process.symmetrizes_final()
-                    || self.process.symmetrizes_left_right())
+            if self.generation_options.symmetrizes_external_fermions()
+                && self.generation_type == GenerationType::Amplitude
+                && (self.generation_options.symmetrizes_initial()
+                    || self.generation_options.symmetrizes_final()
+                    || self.generation_options.symmetrizes_left_right())
             {
                 " (allowing fermion symmetrization)"
             } else {
                 ""
             },
             self.process.incoming(),
-            if self.process.symmetrizes_initial() {
+            if self.generation_options.symmetrizes_initial() {
                 " (symmetrized)"
             } else {
                 ""
@@ -166,15 +167,17 @@ impl fmt::Display for ProcessDefinition {
                         .join(" | ")
                 )
             },
-            if self.process.symmetrizes_final() {
+            if self.generation_options.symmetrizes_final() {
                 " (symmetrized)"
             } else {
                 ""
             },
-            if self.process.loop_count().start() == self.process.loop_count().end() {
-                format!("{}", self.process.loop_count().start())
+            if self.generation_options.loop_count().start()
+                == self.generation_options.loop_count().end()
+            {
+                format!("{}", self.generation_options.loop_count().start())
             } else {
-                format!("{:?}", self.process.loop_count())
+                format!("{:?}", self.generation_options.loop_count())
             },
             if self
                 .generation_options
@@ -229,10 +232,12 @@ impl fmt::Display for ProcessDefinition {
 impl Default for ProcessDefinition {
     fn default() -> Self {
         Self {
-            process: GenerationProcess::amplitude(Vec::<i64>::new(), Vec::<i64>::new())
+            generation_type: GenerationType::Amplitude,
+            process: GenerationProcess::new(Vec::<i64>::new(), Vec::<i64>::new()),
+            generation_options: GenerationOptions::default()
+                .graph_prefix("GL")
                 .with_loop_count(1, 1)
                 .expect("the default loop range is valid"),
-            generation_options: GenerationOptions::default().graph_prefix("GL"),
             folder_name: "undefined_process".to_string(),
             process_id: 0,
         }
@@ -361,18 +366,19 @@ impl ProcessDefinition {
 
         let first_final = final_pdgs_lists.first().cloned().unwrap_or_default();
         let process = match generation_type {
-            GenerationType::Amplitude => GenerationProcess::amplitude(initial_pdgs, first_final),
-            GenerationType::CrossSection => {
-                GenerationProcess::cross_section(initial_pdgs, first_final)
-                    .with_final_state_alternatives(final_pdgs_lists)
-                    .map_err(|error| eyre!(error))?
-            }
-        }
-        .with_loop_count(min_loop_count, max_loop_count)
-        .map_err(|error| eyre!(error))?;
+            GenerationType::Amplitude => GenerationProcess::new(initial_pdgs, first_final),
+            GenerationType::CrossSection => GenerationProcess::new(initial_pdgs, first_final)
+                .with_final_state_alternatives(final_pdgs_lists)
+                .map_err(|error| eyre!(error))?,
+        };
 
         Ok(Self {
+            generation_type,
             process,
+            generation_options: Self::default()
+                .generation_options
+                .with_loop_count(min_loop_count, max_loop_count)
+                .map_err(|error| eyre!(error))?,
             ..Self::default()
         })
     }

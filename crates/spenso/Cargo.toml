@@ -86,7 +86,7 @@ blake3 = { version = "1.8.3", optional = true }
 symbolica-typst-plugin = { workspace = true, optional = true }
 
 [dependencies.symbolica]
-version = "3.0.0"
+version = "3.0.1"
 default-features = false
 features = ["bincode", "serde"]
 optional = true

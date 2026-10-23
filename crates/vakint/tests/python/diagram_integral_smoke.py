@@ -8,7 +8,7 @@ import unittest
 from pathlib import Path
 
 from symbolica import E, S
-from symbolica.community import feynkit as fk
+from symbolica.community import hepkit as fk
 from symbolica.community.hepkit.vakint import (
     Vakint,
     VakintEvaluationMethod,
@@ -22,8 +22,9 @@ def _model_path():
 
 def _produce_tensor_graph(directory):
     model = fk.Model(_model_path())
-    diagram = fk.FeynmanDiagram.from_topology_dot(
-        model, 'digraph tensor { a -> a [particle="phi"]; }'
+    diagram = fk.FeynmanDiagram.from_dot(
+        model,
+        'digraph tensor { a -> b [particle="phi"]; a -> b [particle="phi"]; a -> b [particle="phi"]; }',
     )
     payload = json.loads(diagram.to_json())
     payload["numerator"] = "spenso::g(spenso::mink(4,mu),spenso::mink(4,nu))"
@@ -55,8 +56,17 @@ def _consume_tensor_graph(directory, encoding):
     assert fk.TensorReducer.feynkit(E("4")).reduce(numerator) == numerator
 
     canonical = "spenso::{spenso::representation,spenso::self_dual}::mink"
+    assert canonical in encoded
+    # Registered representations restore their full metadata from abbreviated tags.
+    abbreviated = loader(
+        model, encoded.replace(canonical, "spenso::{spenso::self_dual}::mink")
+    )
+    assert abbreviated.to_json() == tensor.to_json()
+    abbreviated_numerator = abbreviated.numerator_expression()
+    assert len(abbreviated_numerator.axes) == len(numerator.axes) == 2
+    assert abbreviated_numerator.axes == numerator.axes
+    assert abbreviated_numerator.to_expression() == numerator.to_expression()
     for malformed in [
-        "spenso::{spenso::self_dual}::mink",
         "spenso::{spenso::representation,spenso::dualizable}::mink",
     ]:
         assert canonical in encoded
@@ -65,7 +75,7 @@ def _consume_tensor_graph(directory, encoding):
         except fk.DiagramError as error:
             assert "redefined with new attributes" in str(error), error
         else:
-            raise AssertionError("changed or missing representation tags were accepted")
+            raise AssertionError("contradictory representation tags were accepted")
 
 
 class DiagramIntegralSmoke(unittest.TestCase):
@@ -119,7 +129,7 @@ class DiagramIntegralSmoke(unittest.TestCase):
         self.assertEqual((rewritten - expected).expand(), E("0"))
         partial = fk.IntegralFamily([k], [p], family.denominators[:1], kinematics=kin)
         self.assertFalse(partial.is_complete)
-        completed = partial.complete([kin.scalar_product(k, p)])
+        completed = partial.complete(candidates=[kin.scalar_product(k, p)])
         self.assertTrue(completed.is_complete)
         self.assertEqual(completed.denominators[0], partial.denominators[0])
 
@@ -127,7 +137,18 @@ class DiagramIntegralSmoke(unittest.TestCase):
         topology = 'digraph tadpole { a -> a [particle="phi"]; }'
         with self.assertRaises(fk.DiagramError):
             fk.FeynmanDiagram.from_dot(self.model, topology)
-        diagram = fk.FeynmanDiagram.from_topology_dot(self.model, topology)
+        engine = Vakint(
+            evaluation_order=[
+                VakintEvaluationMethod.new_rustred_method(master_mode="retain")
+            ],
+            form_exe_path="/native-python-ingress-must-not-use-form",
+            integral_normalization_factor="FMFTandMATAD",
+        )
+        diagram = next(
+            master.graph
+            for symbol in engine.master_symbols()
+            if (master := engine.get_master(symbol)).loop_count == 1
+        )
         self.assertEqual(
             diagram.propagator_family().kinematics.dimension, E("gammalooprs::dim")
         )
@@ -146,23 +167,82 @@ class DiagramIntegralSmoke(unittest.TestCase):
         canonical = E("topo(I1L(m2,1))", default_namespace="vakint").replace(
             E("m2", default_namespace="vakint"), mass_squared
         )
-        engine = Vakint(
-            evaluation_order=[
-                VakintEvaluationMethod.new_rustred_method(master_mode="retain")
-            ],
-            form_exe_path="/native-python-ingress-must-not-use-form",
-            integral_normalization_factor="FMFTandMATAD",
-        )
         actual = engine.evaluate_integral(integral)
         expected = engine.evaluate_integral(canonical)
         self.assertEqual((actual - expected).expand().together(), E("0"))
         with self.assertRaises(ValueError):
             integral_from_diagram(diagram, family, E("1"), powers=[True])
 
+    def test_independent_two_loop_closure_preserves_compound_common_mass(self):
+        model = fk.Model.phi4()
+        topology = 'digraph figure_eight { a -> a [particle="phi", lmb_id=0]; a -> a [particle="phi", lmb_id=1]; }'
+        engine = Vakint(
+            evaluation_order=[
+                VakintEvaluationMethod.new_rustred_method(master_mode="retain")
+            ],
+            form_exe_path="/native-python-closure-must-not-use-form",
+            integral_normalization_factor="FMFTandMATAD",
+        )
+        for mass, factors, remaining, expanded in (
+            (E("2"), 1, 1, False),
+            (E("3/2"), 2, 2, True),
+            (E("2*py_closure::mass"), 2, 1, False),
+            (E("2*py_closure::mass"), 2, 1, True),
+            (E("py_closure::mass+1"), 2, 1, False),
+            (E("py_closure::mass+1"), 2, 1, True),
+        ):
+            with self.subTest(mass=str(mass), expanded=expanded):
+                source = fk.FeynmanDiagram.from_dot(model, topology)
+                target = fk.FeynmanDiagram.from_dot(model, topology)
+                self.assertIsNot(source, target)
+                families = []
+                for diagram in (source, target):
+                    family = diagram.propagator_family(kinematics=fk.Kinematics())
+                    loop = family.loop_momenta[0]
+                    mass_squared = (
+                        family.kinematics.scalar_product(loop, loop)
+                        - family.denominators[0]
+                    ).expand()
+                    symbols = mass_squared.get_all_symbols()
+                    self.assertEqual(len(symbols), 1)
+                    parameter = symbols[0]
+                    self.assertEqual(mass_squared, parameter**2)
+                    families.append(
+                        fk.IntegralFamily(
+                            family.loop_momenta,
+                            [],
+                            [d.replace(parameter, mass) for d in family.denominators],
+                            kinematics=family.kinematics,
+                        )
+                    )
+                numerator = families[0].denominators[0] ** factors
+                if expanded:
+                    numerator = numerator.expand()
+                left = integral_from_diagram(
+                    source,
+                    families[0],
+                    numerator,
+                    powers=[remaining + factors, 1],
+                    parameter_substitutions={parameter: mass},
+                ).to_expression()
+                right = integral_from_diagram(
+                    target,
+                    families[1],
+                    E("1"),
+                    powers=[remaining, 1],
+                    parameter_substitutions={parameter: mass},
+                ).to_expression()
+                difference = (
+                    (engine.evaluate_integral(left) - engine.evaluate_integral(right))
+                    .expand()
+                    .together()
+                )
+                self.assertEqual(difference, E("0"))
+
     def test_auxiliary_numerator_keeps_native_scalar_product_and_rejects_positive_power(
         self,
     ):
-        diagram = fk.FeynmanDiagram.from_topology_dot(
+        diagram = fk.FeynmanDiagram.from_dot(
             self.model,
             'digraph sunset { a -> b [particle="phi"]; a -> b [particle="phi"]; a -> b [particle="phi"]; }',
         )

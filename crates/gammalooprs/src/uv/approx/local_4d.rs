@@ -4,24 +4,17 @@ use color_eyre::Result;
 use eyre::eyre;
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
-    color::ColorSimplifier,
-    dirac::GammaSimplifier,
-    representations::Bispinor,
-    shorthands::{
-        chain::Chain,
-        metric::MetricSimplifier,
-        schoonschip::{Schoonschip, SchoonschipSettings},
-    },
+    CookMode, CookSettings,
+    dirac::GammaSimplifySettings,
+    tensor::{AlgebraSettings, ContractSettings, SymbolicTensor},
 };
 
 use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike};
-use spenso::shadowing::TensorCollectExt;
 use symbolica::{atom::AtomCore, prelude::*};
 
 use crate::{
     debug_tags,
     graph::{Graph, LMBext, LoopMomentumBasis},
-    numerator::aind::Aind,
     utils::{GS, W_},
     uv::{
         ApproximationType, UltravioletGraph,
@@ -201,7 +194,19 @@ fn grow<S: super::ForestNodeLike>(
         .unwrap();
 
     t_arg /= graph.denominator(&reduced, ctx.model, |_| 1);
-    let integrand = (integrand.atom() * t_arg).simplify_metrics();
+    let input = integrand.atom() * t_arg;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let contracted = SymbolicTensor::infer_indexed(cooking.try_cook(input.as_view())?)?.contract(
+        ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        },
+    )?;
+    let integrand = cooking.uncook(contracted.expression().as_view());
 
     debug_tags!(#uv, #integrated, #algebra, #start; log.integrand = integrand, reduced = %reduced.string_label());
 
@@ -261,48 +266,20 @@ fn t<S: super::ForestNodeLike>(
     let evalutated = series.replace(GS.rescale).with(Atom::num(1));
     debug_tags!(#uv,#integrated,#series;log.res = evalutated, "Evaluated at t = 1");
 
-    let collected = evalutated
-        .simplify_metrics()
-        .collect_rep((Bispinor {}).into())
-        .collect_gamma_chains();
-    debug_tags!(#uv,#integrated,#collect;log.expr = collected, "After gamma chain collection");
-
-    let schoonschip = collected
-        .schoonschip_with_settings(&SchoonschipSettings {
-            simplify_chain_like_functions: true,
-            schoonschip_rank1_tensors: true,
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(evalutated.as_view())?)?
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            epsilon: true,
             ..Default::default()
-        })
-        .normalize_chains();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = schoonschip,
-        "After gamma schoonschip"
-    );
-    let collected = schoonschip
-        .collect_chains_and_traces()
-        .simplify_metrics()
-        .collect_gamma_chains()
-        .collect_color()
-        .collect_factors();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = collected,
-        "After gamma collection"
-    );
-
-    let simplified = collected.simplify_gamma();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
-        log.expr = simplified,
-        "After gamma simplification"
-    );
-    let schoonschipped = simplified.schoonschip_net::<Aind>()?;
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
-        log.expr = schoonschipped,
-        "After Schoonschip net"
-    );
-    let dotted = schoonschipped.to_dots().normalize_dots();
+        })?
+        .to_dots()?;
+    let dotted = cooking.uncook(simplified.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
         log.expr = dotted,
-        "After dots"
+        "Shared tensor and Dirac simplification of the local UV Taylor coefficient"
     );
 
     Ok(Local4dCts(dotted))

@@ -19,6 +19,9 @@ impl Vakint {
         mode: RustRedCacheSaveMode,
         options: &RustRedCacheSaveOptions,
     ) -> Result<RustRedCacheSaveReport, VakintError> {
+        if loop_count == 5 {
+            return self.save_five_loop_cache(output.as_ref(), mode, options);
+        }
         let limits = options
             .resolve(loop_count, Default::default())
             .map_err(operation)?;

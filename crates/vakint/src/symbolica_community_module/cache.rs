@@ -26,9 +26,9 @@ use crate::{
 };
 
 pub(super) fn check_loops(loops: usize) -> PyResult<()> {
-    if !(1..=4).contains(&loops) {
+    if !(1..=5).contains(&loops) {
         return Err(pyo3::exceptions::PyValueError::new_err(
-            "native cache preparation/storage currently supports one through four loops; five-loop cache preparation is deferred",
+            "native cache preparation/storage supports one through five loops",
         ));
     }
     Ok(())
@@ -379,6 +379,14 @@ pub(super) fn statistics(py: Python<'_>, stats: &RustRedCacheStatistics) -> PyRe
     result.set_item("backing_budget_fallbacks", stats.backing_budget_fallbacks)?;
     result.set_item("ram_is_process_rss", false)?;
     result.set_item(
+        "saved_application",
+        stats
+            .saved_application
+            .as_ref()
+            .map(|value| json_report(py, &value.to_document().to_string()))
+            .transpose()?,
+    )?;
+    result.set_item(
         "disk",
         stats.disk.map(|disk| disk_stats(py, disk)).transpose()?,
     )?;
@@ -438,10 +446,10 @@ mod tests {
         assert!(workload(Some(1), None, Some(vec![(0, vec![1])])).is_err());
         assert!(save_mode("automatic").is_err());
         assert!(lookup_policy("ignore-corruption").is_err());
-        for loops in [1, 2, 3, 4] {
+        for loops in [1, 2, 3, 4, 5] {
             check_loops(loops).unwrap();
         }
-        for loops in [0, 5, 6] {
+        for loops in [0, 6] {
             assert!(check_loops(loops).is_err());
         }
     }

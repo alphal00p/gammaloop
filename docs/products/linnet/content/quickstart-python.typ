@@ -22,10 +22,9 @@ git clone https://github.com/alphal00p/gammaloop.git
 cd gammaloop
 python3.10 -m venv .venv
 . .venv/bin/activate
-python -m pip install "maturin>=1.7,<2.0"
+python -m pip install "maturin>=1.13,<2"
 maturin develop --locked \
-  --manifest-path crates/linnet-py/Cargo.toml \
-  --features extension-module,abi3-py310
+  --manifest-path examples/notebooks/symbolica-host/Cargo.toml
 ```
 
 The declared Python dependencies install `typst` 0.15.0 alongside the extension. Python rendering
@@ -37,7 +36,7 @@ Save this as `linnet_quickstart.py`:
 
 // docs-example: compile linnet-python-quickstart
 ```python
-import linnet_py as lp
+from symbolica.community import graph as lp
 
 codec = lp.DotCodec.topology()
 graph = lp.Graph.from_dot(

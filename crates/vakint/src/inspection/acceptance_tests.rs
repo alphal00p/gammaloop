@@ -182,7 +182,24 @@ fn public_engine_certified_periods_at_20000_digits() {
         let path = binding["path"].as_str().unwrap();
         let entries: Vec<Value> =
             serde_json::from_slice(&fs::read(root.join("4L").join(path)).unwrap()).unwrap();
-        for entry in entries {
+        for name in [
+            "K5Moment(1)",
+            "K5Moment(3)",
+            "K5LogMoment(1)",
+            "K5LogMoment(3)",
+        ] {
+            let expected: ConstantSymbol = name.parse().unwrap();
+            let entry = entries
+                .iter()
+                .find(|entry| {
+                    entry["symbol"]
+                        .as_str()
+                        .unwrap()
+                        .parse::<ConstantSymbol>()
+                        .unwrap()
+                        == expected
+                })
+                .expect("the four certified primitive moments must remain installed");
             let symbol: ConstantSymbol = entry["symbol"].as_str().unwrap().parse().unwrap();
             let constant = engine.get_constant(&symbol, CERTIFIED_DIGITS).unwrap();
             assert_eq!(
@@ -331,4 +348,117 @@ fn public_engine_certified_periods_at_20000_digits() {
             "{name} epsilon^1"
         );
     }
+}
+
+#[test]
+#[ignore = "loads independently validated D2 periods; set VAKINT_TEST_EXTERNAL_DATA"]
+fn public_engine_independent_d2_periods_and_formula_inventory() {
+    let root = std::env::var_os("VAKINT_TEST_EXTERNAL_DATA")
+        .map(PathBuf::from)
+        .expect("set VAKINT_TEST_EXTERNAL_DATA to the external-data checkout");
+    let manifest: Value =
+        serde_json::from_slice(&fs::read(root.join("4L/manifest.json")).unwrap()).unwrap();
+    let version = manifest["version"].as_str().unwrap();
+    let mut engine = Vakint::new().unwrap();
+    engine.load_external_data(&root, 4).unwrap();
+
+    // The inspection catalogue must expose every concrete constant used by
+    // the loaded formulas, including the new independently defined periods.
+    let inventory = engine.constant_symbols().unwrap();
+    for symbol in &inventory {
+        let constant = engine.get_constant(symbol, 16).unwrap();
+        assert!(constant.to_atom().is_ok(), "{symbol}");
+    }
+    for name in ["PR7D2", "PR10D2", "PR15D2"] {
+        let symbol: ConstantSymbol = name.parse().unwrap();
+        assert!(inventory.contains(&symbol));
+        for requested in [16, 216] {
+            let constant = engine.get_constant(&symbol, requested).unwrap();
+            assert_eq!(
+                constant.available_precision(),
+                AvailablePrecision::FixedPrecision(215)
+            );
+            assert_eq!(
+                constant.precision().real().quality(),
+                ErrorQuality::Estimated
+            );
+            assert!(constant.precision().imaginary().exact_zero());
+            assert_eq!(constant.provenance().version(), version);
+            assert!(constant.to_atom().is_ok());
+            if requested == 216 {
+                assert!(constant.warnings().iter().any(|warning| {
+                    warning.requested_decimal_precision == requested
+                        && warning.data_version == version
+                        && warning.sources.iter().any(|source| {
+                            source.identity.contains(name)
+                                && source.available_decimal_precision == Some(215)
+                        })
+                }));
+                assert!(constant.numerical_value().prec() <= decimal_bits(215));
+            }
+        }
+    }
+
+    // These archived coefficients were independently computed before the new
+    // exact formulas were published. Compare all fifteen affected cells, not
+    // an expression obtained by solving the new formula for its period.
+    let mut checked = 0;
+    for metadata in manifest["masters"].as_array().unwrap() {
+        let symbolic_path = metadata["files"]["symbolic.json"]["path"].as_str().unwrap();
+        let formulas: Vec<(i64, String)> =
+            serde_json::from_slice(&fs::read(root.join("4L").join(symbolic_path)).unwrap())
+                .unwrap();
+        let affected = formulas
+            .iter()
+            .filter(|(_, formula)| {
+                ["PR7D2", "PR10D2", "PR15D2"]
+                    .iter()
+                    .any(|name| formula.contains(name))
+            })
+            .collect::<Vec<_>>();
+        if affected.is_empty() {
+            continue;
+        }
+        let numerical_path = metadata["files"]["numerical.json"]["path"]
+            .as_str()
+            .unwrap();
+        let references: Vec<(i64, String)> =
+            serde_json::from_slice(&fs::read(root.join("4L").join(numerical_path)).unwrap())
+                .unwrap();
+        let identity: MasterSymbol = metadata["master_id"].as_str().unwrap().parse().unwrap();
+        let master = engine.get_master(&identity, 80).unwrap();
+        for (power, _) in affected {
+            let coefficient = &master.coefficients()[power];
+            assert_eq!(
+                coefficient.available_precision(),
+                AvailablePrecision::FixedPrecision(215),
+                "{identity} epsilon^{power}"
+            );
+            assert_eq!(
+                coefficient.precision().real().quality(),
+                ErrorQuality::Estimated
+            );
+            let reference = exact_decimal(&references.iter().find(|(p, _)| p == power).unwrap().1);
+            let difference = coefficient.numerical_value().to_rational() - &reference;
+            let distance = if difference < 0 {
+                -difference
+            } else {
+                difference
+            };
+            let scale = if reference < 0 { -reference } else { reference };
+            let tolerance = (Rational::from(1) + scale) * exact_decimal("1e-70");
+            assert!(distance < tolerance, "{identity} epsilon^{power}");
+            assert!(coefficient.precision().imaginary().exact_zero());
+            assert!(coefficient.to_atom().is_ok());
+            checked += 1;
+        }
+    }
+    assert_eq!(
+        checked, 15,
+        "the published D2-dependent cells must all be checked"
+    );
+    eprintln!(
+        "checked {} constants and {checked} independent D2-dependent coefficients",
+        inventory.len()
+    );
 }

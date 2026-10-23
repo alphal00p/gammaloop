@@ -1,4 +1,3 @@
-use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -9,7 +8,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use eyre::{Context, Result, bail, eyre};
-use rust_embed::RustEmbed;
+use include_dir::Dir;
 
 mod typst;
 
@@ -23,25 +22,7 @@ const MINIMUM_TYPST_VERSION: (u32, u32, u32) = (0, 15, 0);
 static SCRATCH_ID: AtomicU64 = AtomicU64::new(0);
 static ASSET_STAGING_LOCK: Mutex<()> = Mutex::new(());
 
-#[derive(RustEmbed)]
-#[folder = "templates"]
-struct EmbeddedTemplates;
-
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../linnest/typst"]
-#[include = "src/*.typ"]
-#[include = "src/**/*.typ"]
-#[include = "typst.toml"]
-#[include = "linnest.wasm"]
-struct EmbeddedLinnestPackage;
-
-#[derive(RustEmbed)]
-#[folder = "$CARGO_MANIFEST_DIR/../kurvst/typst"]
-#[include = "src/*.typ"]
-#[include = "src/**/*.typ"]
-#[include = "typst.toml"]
-#[include = "kurvst.wasm"]
-struct EmbeddedKurvstPackage;
+include!(concat!(env!("OUT_DIR"), "/embedded_assets.rs"));
 
 #[derive(Copy, Clone)]
 enum TemplateKind {
@@ -58,9 +39,10 @@ impl TemplateKind {
         }
     }
 
-    fn embedded_bytes(self) -> Result<Cow<'static, [u8]>> {
-        EmbeddedTemplates::get(self.file_name())
-            .map(|file| file.data)
+    fn embedded_bytes(self) -> Result<&'static [u8]> {
+        TEMPLATE_ASSETS
+            .get_file(self.file_name())
+            .map(|file| file.contents())
             .ok_or_else(|| eyre!("embedded template {} is missing", self.file_name()))
     }
 }
@@ -295,20 +277,16 @@ impl TypstRenderer {
         let template_dir = self.build_dir.join(DEFAULT_TEMPLATE_SUBDIR);
         // Bundled paths always represent this renderer version. Custom V1
         // templates are selected explicitly on the render request.
-        Self::write_embedded_assets::<EmbeddedTemplates>(
-            &template_dir,
-            "template dependency",
-            true,
-        )?;
-        Self::write_embedded_assets::<EmbeddedLinnestPackage>(
+        Self::write_embedded_assets(&TEMPLATE_ASSETS, &template_dir, "template dependency")?;
+        Self::write_embedded_assets(
+            &LINNEST_PACKAGE_ASSETS,
             &template_dir.join(LINNEST_PACKAGE_DIR),
             "linnest typst package asset",
-            true,
         )?;
-        Self::write_embedded_assets::<EmbeddedKurvstPackage>(
+        Self::write_embedded_assets(
+            &KURVST_PACKAGE_ASSETS,
             &template_dir.join(KURVST_PACKAGE_DIR),
             "kurvst typst package asset",
-            true,
         )?;
         Ok(())
     }
@@ -510,7 +488,9 @@ impl TypstRenderer {
             let module_source = match (&module.source, file) {
                 (TypstModuleSource::File(_), Some(path)) => Self::typst_root_path(path, root)?,
                 (TypstModuleSource::Package(package), None) => Self::typst_string(package),
-                _ => bail!("internal Typst module source mismatch"),
+                _ => {
+                    bail!("internal Typst module source mismatch");
+                }
             };
             source.push_str(&format!("#import {module_source} as {}\n", module.alias));
         }
@@ -612,7 +592,7 @@ impl TypstRenderer {
             bail!(
                 "unsupported Typst output {}; expected a .pdf, .svg, or .png suffix",
                 output.display()
-            )
+            );
         }
     }
 
@@ -651,28 +631,19 @@ impl TypstRenderer {
         }
         Self::ensure_parent_dir(&target)?;
         let contents = kind.embedded_bytes()?;
-        fs::write(&target, contents.as_ref())
+        fs::write(&target, contents)
             .with_context(|| format!("failed to write default template {}", target.display()))?;
         Ok(target)
     }
 
-    fn write_embedded_assets<E: RustEmbed>(
-        root: &Path,
-        description: &str,
-        overwrite: bool,
-    ) -> Result<()> {
-        for path in E::iter() {
-            let target = root.join(path.as_ref());
-            let contents = E::get(path.as_ref())
-                .ok_or_else(|| eyre!("embedded {description} {} is missing", path))?;
-            if target.exists()
-                && (!overwrite
-                    || fs::read(&target).is_ok_and(|existing| existing == contents.data.as_ref()))
-            {
+    fn write_embedded_assets(assets: &Dir<'_>, root: &Path, description: &str) -> Result<()> {
+        for file in assets.files() {
+            let target = root.join(file.path());
+            if fs::read(&target).is_ok_and(|existing| existing == file.contents()) {
                 continue;
             }
             Self::ensure_parent_dir(&target)?;
-            fs::write(&target, contents.data.as_ref()).with_context(|| {
+            fs::write(&target, file.contents()).with_context(|| {
                 format!(
                     "failed to write embedded {description} {}",
                     target.display()
@@ -707,7 +678,7 @@ impl TypstRenderer {
             let stderr = String::from_utf8_lossy(&output.stderr);
 
             // Build detailed error message
-            let mut error_msg = format!("typst failed while {description}");
+            let mut error_msg = format!("typst failed while {description} ({})", output.status);
 
             // Show the command that was executed
             let cmd_str = format!("{:?}", command);
@@ -908,9 +879,44 @@ mod tests {
 
     #[test]
     fn embedded_packages_include_nested_sources() {
-        assert!(EmbeddedLinnestPackage::get("src/impl/draw.typ").is_some());
-        assert!(EmbeddedLinnestPackage::get("src/impl/subgraph.typ").is_some());
-        assert!(EmbeddedKurvstPackage::get("src/impl.typ").is_some());
+        assert!(
+            LINNEST_PACKAGE_ASSETS
+                .get_file("src/impl/draw.typ")
+                .is_some()
+        );
+        assert!(
+            LINNEST_PACKAGE_ASSETS
+                .get_file("src/impl/subgraph.typ")
+                .is_some()
+        );
+        assert!(KURVST_PACKAGE_ASSETS.get_file("src/impl.typ").is_some());
+        for name in ["ec-layout.wasm", "LICENSE.ec-layout", "LICENSE.clarabel"] {
+            assert!(
+                !LINNEST_PACKAGE_ASSETS
+                    .get_file(name)
+                    .unwrap()
+                    .contents()
+                    .is_empty()
+            );
+        }
+        for package in [&LINNEST_PACKAGE_ASSETS, &KURVST_PACKAGE_ASSETS] {
+            assert!(package.files().all(|file| {
+                let path = file.path();
+                (path.starts_with("src")
+                    && path.extension().is_some_and(|extension| extension == "typ"))
+                    || matches!(
+                        path.to_str(),
+                        Some(
+                            "typst.toml"
+                                | "linnest.wasm"
+                                | "kurvst.wasm"
+                                | "ec-layout.wasm"
+                                | "LICENSE.ec-layout"
+                                | "LICENSE.clarabel"
+                        )
+                    )
+            }));
+        }
     }
 
     #[test]
@@ -980,18 +986,21 @@ mod tests {
 
     #[test]
     fn default_template_renders_generic_config_and_static_subgraphs_with_typst() {
+        // Fail rather than skip without Typst: the Nix dev shell and the clinnet
+        // CI check both provide it.
         let typst = std::env::var_os("TYPST_TEST_EXECUTABLE")
             .map(PathBuf::from)
             .unwrap_or_else(|| PathBuf::from("typst"));
-        let Ok(version) = Command::new(&typst).arg("--version").output() else {
-            return;
-        };
-        if !version.status.success()
-            || TypstRenderer::require_typst_version(&String::from_utf8_lossy(&version.stdout))
-                .is_err()
-        {
-            return;
-        }
+        let version = Command::new(&typst)
+            .arg("--version")
+            .output()
+            .unwrap_or_else(|error| panic!("cannot run {}: {error}", typst.display()));
+        assert!(
+            version.status.success(),
+            "{} --version failed",
+            typst.display()
+        );
+        TypstRenderer::require_typst_version(&String::from_utf8_lossy(&version.stdout)).unwrap();
 
         let base = std::env::temp_dir().join(format!(
             "clinnet-real-typst-{}-{}",
@@ -1287,12 +1296,42 @@ mod tests {
 
         let gamma_assertions =
             Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/gamma-style-behavior.typ");
+        let repository = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         renderer
             .compile_template(
                 &gamma_assertions,
                 base.join("gamma-style-assertions.pdf"),
-                &[],
+                &[&repository],
             )
+            .unwrap();
+
+        let preparation_assertions =
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/resources/preparation-behavior.typ");
+        renderer
+            .compile_template(
+                &preparation_assertions,
+                base.join("preparation-assertions.pdf"),
+                &[&repository],
+            )
+            .unwrap();
+
+        // Drawing supplied geometry must not load the unused EC seed plugin.
+        fs::remove_file(templates.join(LINNEST_PACKAGE_DIR).join("ec-layout.wasm")).unwrap();
+        let precomputed = templates.join("precomputed-without-ec.typ");
+        fs::write(
+            &precomputed,
+            r#"#import "crates/linnest/typst/src/graph.typ" as graph
+#import "crates/linnest/typst/src/render/layout.typ": layout-graph
+#let g = graph.build({
+  graph.node(<v>, pos: graph.pos(x: 0, y: 0))
+  graph.edge(graph.source(<v>), pos: graph.pos(x: 2, y: 0))
+})
+#context layout-graph((layouts: none, draw: (title: none)), g)
+"#,
+        )
+        .unwrap();
+        renderer
+            .compile_template(&precomputed, base.join("precomputed-without-ec.pdf"), &[])
             .unwrap();
 
         fs::remove_dir_all(base).unwrap();

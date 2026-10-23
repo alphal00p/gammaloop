@@ -78,22 +78,26 @@ requests become a clear error instead of an accidental memory blow-up.
 
 ```rust,no_run
 use feynkit_tensor::TensorReducer;
+use idenso::tensor::SymbolicTensor;
 use symbolica::parse;
 
+// Register the vector heads in the same caller namespace used by parse!.
+let k = spenso::vector_symbol!("K");
+let _ = spenso::vector_symbol!("P");
 let dimension = parse!("D");
-let numerator = parse!("K(1,spenso::mink(D,mu))*K(1,spenso::mink(D,nu))*P(spenso::mink(D,mu))*P(spenso::mink(D,nu))");
-let reducer = TensorReducer::new(dimension).with_integrated_head_name("K");
-let scalar = reducer.reduce(numerator.as_view())?.into_expression();
+let numerator = SymbolicTensor::infer(parse!("K(1,spenso::mink(D,mu))*K(1,spenso::mink(D,nu))*P(spenso::mink(D,mu))*P(spenso::mink(D,nu))"))?;
+let reducer = TensorReducer::new(dimension).with_integrated_head(k);
+let scalar = reducer.reduce(&numerator)?.into_expression()?;
 println!("{scalar}");
 # Ok::<(), feynkit_tensor::TensorReductionError>(())
 ```
 
-The Python binding mirrors this API and returns one concrete Symbolica
-`Expression`:
+The Python binding mirrors this API and returns a `TensorExpression`, retaining
+the logical interface even when the result is zero:
 
 ```python
 from symbolica import E
-import symbolica.community.feynkit as fk
+import symbolica.community.hepkit as fk
 
 reducer = fk.TensorReducer.feynkit(E("4"))
 scalar_numerator = vacuum_diagram.reduce_tensor_numerator(reducer)
@@ -117,7 +121,7 @@ identities make its spanning set redundant. The all-equal isotropic fast path
 does not require that inverse and remains well defined at positive physical
 dimensions.
 
-For a graph with external `FeynKit::Momentum` tensors, select the internal
+For a graph with external `gammalooprs::Q` tensors, select the internal
 compact momenta explicitly with `with_integrated_vector`; the `feynkit`
 constructor intentionally selects the whole momentum head and is intended for
 pure vacuum numerators.
@@ -127,14 +131,14 @@ pure vacuum numerators.
 - B. Collins and S. Matsumoto,
   [On some properties of orthogonal Weingarten functions](https://arxiv.org/abs/0903.5143).
 - B. Collins and S. Matsumoto,
-  [Weingarten calculus via orthogonality relations](https://arxiv.org/abs/1701.04493).
-- F. Herzog *et al.*,
-  [The five-loop beta function of Yang--Mills theory with fermions](https://arxiv.org/abs/1801.06084),
+  [Weingarten calculus via orthogonality relations: new applications](https://arxiv.org/abs/1701.04493).
+- B. Ruijl *et al.*,
+  [R*-operation and five-loop calculations](https://arxiv.org/abs/1801.06084),
   for symmetry-reduced tensor projectors in the R* operation.
-- M. Goode *et al.*,
-  [Tensor reduction of vacuum integrals](https://arxiv.org/abs/2408.05137),
+- J. Goode *et al.*,
+  [Tensor Reduction for Feynman Integrals with Lorentz and Spinor Indices](https://arxiv.org/abs/2408.05137),
   for the modern orbit-partition formulation and high-rank projectors.
-- J. Davies *et al.*,
+- J. Goode, F. Herzog, and S. Teale,
   [OPITeR](https://arxiv.org/abs/2411.02233), for integrand-symmetry-aware
   tensor reduction.
 

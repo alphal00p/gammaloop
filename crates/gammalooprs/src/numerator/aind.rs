@@ -368,8 +368,8 @@ impl TryFrom<AtomView<'_>> for Aind {
 #[cfg(test)]
 mod tests {
     use idenso::{
+        CookMode, CookSettings,
         dirac::AGS,
-        shorthands::metric::MetricSimplifier,
         tensor::{SymbolicNetParse, SymbolicTensor},
     };
     use spenso::{
@@ -447,10 +447,23 @@ mod tests {
 
         match structure {
             Ok(s) => {
-                let pexpr = SymbolicTensor::from_canonicalized(&s)
+                let cooking = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .with_representation_payloads(true, true);
+                let expression = SymbolicTensor::from_canonicalized(&s)
                     .unwrap()
-                    .expression
-                    .simplify_metrics();
+                    .into_expression();
+                let tensor =
+                    SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view()).unwrap())
+                        .unwrap()
+                        .contract(idenso::tensor::ContractSettings {
+                            rank_one: false,
+                            collect_chains: false,
+                            collect_traces: false,
+                            ..Default::default()
+                        })
+                        .unwrap();
+                let pexpr = cooking.uncook(tensor.expression().as_view());
                 assert_eq!(s.canonical().order(), 8);
                 assert_eq!(
                     expr,

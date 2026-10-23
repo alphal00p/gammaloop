@@ -5,7 +5,7 @@ use linnet::half_edge::{
 };
 use typed_index_collections::ti_vec;
 
-use super::{Graph, feynkit_legacy_internal_order_key};
+use super::Graph;
 use crate::{
     finalized_runtime_dot,
     graph::{
@@ -55,26 +55,26 @@ fn legacy_internal_order_key_recovers_pre_normalized_fermion_flow() {
     let forward = DiagramEdge::new(model.particle_id("u").unwrap(), true);
     let reversed = DiagramEdge::new(model.particle_id("u~").unwrap(), true);
 
-    let forward_key = feynkit_legacy_internal_order_key(
-        &model,
-        EdgeId(7),
-        EdgeEndpoints {
-            source: VertexId(2),
-            target: VertexId(5),
-        },
-        &forward,
-    )
-    .unwrap();
-    let reversed_key = feynkit_legacy_internal_order_key(
-        &model,
-        EdgeId(7),
-        EdgeEndpoints {
-            source: VertexId(5),
-            target: VertexId(2),
-        },
-        &reversed,
-    )
-    .unwrap();
+    let forward_key = forward
+        .canonical_order_key(
+            &model,
+            EdgeId(7),
+            EdgeEndpoints {
+                source: Some(VertexId(2)),
+                target: Some(VertexId(5)),
+            },
+        )
+        .unwrap();
+    let reversed_key = reversed
+        .canonical_order_key(
+            &model,
+            EdgeId(7),
+            EdgeEndpoints {
+                source: Some(VertexId(5)),
+                target: Some(VertexId(2)),
+            },
+        )
+        .unwrap();
 
     assert_eq!(reversed_key, forward_key);
     assert_eq!(forward_key.2, 2);

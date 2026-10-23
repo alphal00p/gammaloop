@@ -306,10 +306,11 @@ impl<S: NodeStorageOps<NodeData = DotVertexData>> DotGraph<S> {
         };
         writeln!(writer, "digraph{name} {{")?;
 
+        write!(writer, "{:2}", self.global_data)?;
+
         let mut writer = CodeFormatter::new(writer, "  ");
         writer.indent(1);
 
-        write!(writer, "{}", self.global_data)?;
         for (n, (_, _, v)) in self.iter_nodes().enumerate() {
             let mut node_data: DotVertexData = v.clone();
             node_data.remove_common(&self.global_data);
@@ -1071,6 +1072,22 @@ pub mod test {
                 }) if kind == expected_kind && id == expected_id && len == expected_len
             ));
         }
+    }
+
+    #[test]
+    fn write_fmt_preserves_multiline_global_statement() {
+        let mut graph: DotGraph = DotGraph::from_string("digraph G {}").unwrap();
+        let embedded = "first\n    indented\nlast";
+        graph
+            .global_data
+            .statements
+            .insert("embedded".to_string(), embedded.to_string());
+
+        let serialized = graph.debug_dot();
+        assert!(serialized.contains("  embedded = \"first\n    indented\nlast\";"));
+
+        let reparsed: DotGraph = DotGraph::from_string(serialized).unwrap();
+        assert_eq!(reparsed.global_data.statements["embedded"], embedded);
     }
 
     #[test]

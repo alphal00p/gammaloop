@@ -1,4 +1,9 @@
-use std::{fmt, ops::RangeInclusive, str::FromStr};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt,
+    str::FromStr,
+    sync::Arc,
+};
 
 use feynkit_model::{Model, ModelError, ModelFingerprint, ParticleId, VertexRuleId};
 use serde::{Deserialize, Serialize};
@@ -198,6 +203,8 @@ pub enum GenerationType {
     CrossSection,
 }
 
+bincode::impl_borrow_decode!(GenerationType);
+
 impl fmt::Display for GenerationType {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter.write_str(match self {
@@ -229,21 +236,23 @@ impl FromStr for GenerationType {
     bincode_trait_derive::Encode,
     bincode_trait_derive::Decode,
 )]
+/// External states and particle/vertex restrictions, independent of calculation kind and order.
 pub struct Process {
-    generation_type: GenerationType,
     incoming: Vec<ParticleSelector>,
     outgoing_alternatives: Vec<Vec<ParticleSelector>>,
-    loop_count: RangeInclusive<usize>,
-    symmetrize_initial: bool,
-    symmetrize_final: bool,
-    symmetrize_left_right: bool,
-    symmetrize_external_fermions: bool,
+    particle_veto: Option<Vec<ParticleSelector>>,
+    #[serde(default)]
+    particle_selection: Option<Vec<ParticleSelector>>,
+    vertex_allow: Option<Vec<VertexSelector>>,
+    vertex_veto: Vec<VertexSelector>,
 }
 
 bincode::impl_borrow_decode!(Process);
 
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum ProcessError {
+    #[error("particle_selection and particle_veto are mutually exclusive")]
+    ConflictingParticleFilters,
     #[error("invalid generation type '{0}'")]
     InvalidGenerationType(String),
     #[error("a process must specify at least one final-state alternative")]
@@ -252,29 +261,52 @@ pub enum ProcessError {
     MultipleAmplitudeFinalStates,
     #[error("invalid loop range {minimum}..={maximum}")]
     InvalidLoopRange { minimum: usize, maximum: usize },
+    #[error(
+        "Final-state PDG {member} overlaps the covariant cut multiplet of requested physical PDG {physical}; separate physical and diagnostic requests so their observable labels remain unambiguous. For imported covariant partner graphs, supply the physical channel with --process-spec"
+    )]
+    CovariantCutOverlap { physical: i64, member: i64 },
+    #[error(
+        "Particle veto removes PDG {member} from the covariant cut multiplet of physical PDG {physical}; retain the complete vector/Goldstone/ghost sector for a physical cross section"
+    )]
+    CovariantCutVeto { physical: i64, member: i64 },
 }
 
 impl Process {
-    pub fn amplitude<I, O, PI, PO>(incoming: I, outgoing: O) -> Self
-    where
-        I: IntoIterator<Item = PI>,
-        O: IntoIterator<Item = PO>,
-        PI: Into<ParticleSelector>,
-        PO: Into<ParticleSelector>,
-    {
-        Self {
-            generation_type: GenerationType::Amplitude,
-            incoming: incoming.into_iter().map(Into::into).collect(),
-            outgoing_alternatives: vec![outgoing.into_iter().map(Into::into).collect()],
-            loop_count: 0..=0,
-            symmetrize_initial: false,
-            symmetrize_final: false,
-            symmetrize_left_right: false,
-            symmetrize_external_fermions: false,
-        }
+    /// Generate unsewn diagrams for this process.
+    pub fn generate_diagrams(
+        &self,
+        model: impl Into<Arc<Model>>,
+        options: &crate::GenerationOptions,
+    ) -> Result<crate::GenerationResult, crate::GenerationError> {
+        crate::generation::Generator::new(model).generate(self, options, GenerationType::Amplitude)
     }
 
-    pub fn cross_section<I, O, PI, PO>(incoming: I, outgoing: O) -> Self
+    /// Generate a coherent symbolic amplitude from complete, unsewn diagrams.
+    pub fn generate_amplitude(
+        &self,
+        model: impl Into<Arc<Model>>,
+        options: &crate::GenerationOptions,
+        amplitude_options: feynkit_amplitude::AmplitudeOptions,
+    ) -> Result<feynkit_amplitude::Amplitude, crate::GenerationError> {
+        self.generate_diagrams(model, options)?
+            .into_amplitude(amplitude_options)
+    }
+
+    /// Generate sewn forward diagrams with physical final-state cuts.
+    /// The loop range counts loops in the forward graph, not in each amplitude.
+    pub fn generate_cross_section(
+        &self,
+        model: impl Into<Arc<Model>>,
+        options: &crate::GenerationOptions,
+    ) -> Result<crate::GenerationResult, crate::GenerationError> {
+        crate::generation::Generator::new(model).generate(
+            self,
+            options,
+            GenerationType::CrossSection,
+        )
+    }
+
+    pub fn new<I, O, PI, PO>(incoming: I, outgoing: O) -> Self
     where
         I: IntoIterator<Item = PI>,
         O: IntoIterator<Item = PO>,
@@ -282,14 +314,12 @@ impl Process {
         PO: Into<ParticleSelector>,
     {
         Self {
-            generation_type: GenerationType::CrossSection,
             incoming: incoming.into_iter().map(Into::into).collect(),
             outgoing_alternatives: vec![outgoing.into_iter().map(Into::into).collect()],
-            loop_count: 0..=0,
-            symmetrize_initial: false,
-            symmetrize_final: false,
-            symmetrize_left_right: false,
-            symmetrize_external_fermions: false,
+            particle_veto: None,
+            particle_selection: None,
+            vertex_allow: None,
+            vertex_veto: Vec::new(),
         }
     }
 
@@ -309,47 +339,111 @@ impl Process {
         if alternatives.is_empty() {
             return Err(ProcessError::MissingFinalState);
         }
-        if self.generation_type == GenerationType::Amplitude && alternatives.len() != 1 {
-            return Err(ProcessError::MultipleAmplitudeFinalStates);
-        }
         self.outgoing_alternatives = alternatives;
         Ok(self)
     }
 
-    pub fn with_loop_count(mut self, minimum: usize, maximum: usize) -> Result<Self, ProcessError> {
-        if minimum > maximum {
-            return Err(ProcessError::InvalidLoopRange { minimum, maximum });
-        }
-        self.loop_count = minimum..=maximum;
+    /// Replace veto and vertex restrictions, clearing any particle selection.
+    /// This preserves the original Rust API; an empty veto means no restriction.
+    pub fn with_filters(
+        mut self,
+        particle_veto: Vec<ParticleSelector>,
+        vertex_allow: Option<Vec<VertexSelector>>,
+        vertex_veto: Vec<VertexSelector>,
+    ) -> Self {
+        self.particle_veto = (!particle_veto.is_empty()).then_some(particle_veto);
+        self.particle_selection = None;
+        self.vertex_allow = vertex_allow;
+        self.vertex_veto = vertex_veto;
+        self
+    }
+
+    /// Replace the model-sector restrictions without changing the external states.
+    pub fn with_particle_filters(
+        mut self,
+        particle_veto: Option<Vec<ParticleSelector>>,
+        particle_selection: Option<Vec<ParticleSelector>>,
+        vertex_allow: Option<Vec<VertexSelector>>,
+        vertex_veto: Vec<VertexSelector>,
+    ) -> Result<Self, ProcessError> {
+        self.particle_veto = particle_veto;
+        self.particle_selection = particle_selection;
+        self.vertex_allow = vertex_allow;
+        self.vertex_veto = vertex_veto;
+        self.validate()?;
         Ok(self)
     }
 
-    pub fn symmetrize_initial(mut self, enabled: bool) -> Self {
-        self.symmetrize_initial = enabled;
-        self
+    pub fn particle_veto(&self) -> Option<&[ParticleSelector]> {
+        self.particle_veto.as_deref()
+    }
+    /// None allows every species; an empty selection allows none. Antiparticles
+    /// are included automatically, matching the species semantics of the veto.
+    pub fn particle_selection(&self) -> Option<&[ParticleSelector]> {
+        self.particle_selection.as_deref()
+    }
+    /// None allows every interaction; an empty list allows no interaction.
+    pub fn vertex_allow(&self) -> Option<&[VertexSelector]> {
+        self.vertex_allow.as_deref()
+    }
+    pub fn vertex_veto(&self) -> &[VertexSelector] {
+        &self.vertex_veto
     }
 
-    pub fn symmetrize_final(mut self, enabled: bool) -> Self {
-        self.symmetrize_final = enabled;
-        self
+    /// Validate external states and restrictions against one concrete model.
+    pub fn validate_in(&self, model: &Model) -> Result<(), crate::GenerationError> {
+        self.validate()?;
+        for selector in self
+            .incoming
+            .iter()
+            .chain(self.outgoing_alternatives.iter().flatten())
+            .chain(self.particle_veto.iter().flatten())
+            .chain(self.particle_selection.iter().flatten())
+        {
+            selector.resolve(model)?;
+        }
+        for selector in self.vertex_allow.iter().flatten().chain(&self.vertex_veto) {
+            selector.resolve(model)?;
+        }
+        Ok(())
     }
 
-    pub fn symmetrize_left_right(mut self, enabled: bool) -> Self {
-        self.symmetrize_left_right = enabled;
-        self
-    }
-
-    /// Include amplitude fermions in enabled external-state symmetry classes.
-    ///
-    /// This is disabled by default. Cross-section symmetry is unchanged by
-    /// this amplitude-specific policy switch.
-    pub fn symmetrize_external_fermions(mut self, enabled: bool) -> Self {
-        self.symmetrize_external_fermions = enabled;
-        self
-    }
-
-    pub fn generation_type(&self) -> GenerationType {
-        self.generation_type
+    /// Apply immutable process restrictions before resolving generation settings.
+    pub(crate) fn restrict_options(
+        &self,
+        model: &Model,
+        options: &crate::GenerationOptions,
+    ) -> Result<crate::GenerationOptions, crate::GenerationError> {
+        let mut options = options.clone();
+        if let Some(selection) = &self.particle_selection {
+            // Resolve a whitelist to the complementary species veto once, so
+            // topology pruning and covariant cut validation share one path.
+            let selected = selection
+                .iter()
+                .map(|selector| selector.resolve(model))
+                .collect::<Result<BTreeSet<_>, _>>()?;
+            let mut vetoes = Vec::new();
+            for (index, particle) in model.particles().iter().enumerate() {
+                let id = model.particle_id_at(index)?;
+                if !selected.contains(&id) && !selected.contains(&particle.antiparticle) {
+                    vetoes.push(ParticleSelector::by_id(model, id)?);
+                }
+            }
+            options = options.with_graph_filter(crate::GenerationFilter::ParticleVeto(vetoes));
+        } else if let Some(vetoes) = &self.particle_veto {
+            options =
+                options.with_graph_filter(crate::GenerationFilter::ParticleVeto(vetoes.clone()));
+        }
+        if let Some(allowed) = &self.vertex_allow {
+            options =
+                options.with_graph_filter(crate::GenerationFilter::VertexAllow(allowed.clone()));
+        }
+        if !self.vertex_veto.is_empty() {
+            options = options.with_graph_filter(crate::GenerationFilter::VertexVeto(
+                self.vertex_veto.clone(),
+            ));
+        }
+        Ok(options)
     }
 
     pub fn incoming(&self) -> &[ParticleSelector] {
@@ -360,36 +454,125 @@ impl Process {
         &self.outgoing_alternatives
     }
 
-    pub fn loop_count(&self) -> RangeInclusive<usize> {
-        self.loop_count.clone()
+    /// Resolve explicit final-state alternatives to PDG codes.
+    pub fn outgoing_pdgs(&self, model: &Model) -> Result<Vec<Vec<i64>>, crate::GenerationError> {
+        self.outgoing_alternatives
+            .iter()
+            .map(|state| {
+                state
+                    .iter()
+                    .map(|selector| Ok(model.particle_by_id(selector.resolve(model)?)?.pdg_code))
+                    .collect()
+            })
+            .collect()
     }
 
-    pub fn symmetrizes_initial(&self) -> bool {
-        self.symmetrize_initial
+    /// Observable labels for the complete covariant partner sets requested by
+    /// physical vector states. Explicit diagnostic states retain their identity.
+    pub fn covariant_cut_representatives(
+        &self,
+        model: &Model,
+        generation_type: GenerationType,
+    ) -> Result<BTreeMap<i64, i64>, crate::GenerationError> {
+        if generation_type != GenerationType::CrossSection {
+            return Ok(BTreeMap::new());
+        }
+        let states = self.outgoing_pdgs(model)?;
+        Ok(model
+            .covariant_cut_multiplets()
+            .iter()
+            .filter(|(physical, _)| states.iter().any(|state| state.contains(physical)))
+            .flat_map(|(&physical, members)| members.iter().map(move |&member| (member, physical)))
+            .collect())
     }
 
-    pub fn symmetrizes_final(&self) -> bool {
-        self.symmetrize_final
+    /// Validate that generation filters retain every declared covariant partner.
+    pub fn validate_covariant_cut_filters(
+        &self,
+        model: &Model,
+        options: &crate::GenerationOptions,
+        generation_type: GenerationType,
+    ) -> Result<(), crate::GenerationError> {
+        let representatives = self.covariant_cut_representatives(model, generation_type)?;
+        let option_vetoes = [crate::FilterScope::Graph, crate::FilterScope::CutAmplitude]
+            .into_iter()
+            .flat_map(|scope| options.filters(scope))
+            .filter_map(|filter| match filter {
+                crate::GenerationFilter::ParticleVeto(vetoes) => Some(vetoes.iter()),
+                _ => None,
+            })
+            .flatten();
+        for selector in self.particle_veto.iter().flatten().chain(option_vetoes) {
+            let particle = model.particle_by_id(selector.resolve(model)?)?;
+            for member in [particle.pdg_code, model.antiparticle(particle)?.pdg_code] {
+                if let Some(&physical) = representatives.get(&member) {
+                    return Err(ProcessError::CovariantCutVeto { physical, member }.into());
+                }
+            }
+        }
+        Ok(())
     }
 
-    pub fn symmetrizes_left_right(&self) -> bool {
-        self.symmetrize_left_right
-    }
-
-    pub fn symmetrizes_external_fermions(&self) -> bool {
-        self.symmetrize_external_fermions
+    pub fn covariant_cut_states(
+        &self,
+        model: &Model,
+        generation_type: GenerationType,
+    ) -> Result<Vec<Vec<i64>>, crate::GenerationError> {
+        let requested = self.outgoing_pdgs(model)?;
+        if generation_type != GenerationType::CrossSection {
+            return Ok(requested);
+        }
+        let representatives = self.covariant_cut_representatives(model, generation_type)?;
+        for &member in requested.iter().flatten() {
+            if let Some(&physical) = representatives.get(&member)
+                && member != physical
+            {
+                return Err(ProcessError::CovariantCutOverlap { physical, member }.into());
+            }
+        }
+        Ok(model.covariant_cut_states(&requested)?)
     }
 
     pub fn validate(&self) -> Result<(), ProcessError> {
+        if self.particle_veto.is_some() && self.particle_selection.is_some() {
+            return Err(ProcessError::ConflictingParticleFilters);
+        }
         if self.outgoing_alternatives.is_empty() {
             return Err(ProcessError::MissingFinalState);
         }
-        if self.generation_type == GenerationType::Amplitude
-            && self.outgoing_alternatives.len() != 1
-        {
-            return Err(ProcessError::MultipleAmplitudeFinalStates);
-        }
         Ok(())
+    }
+}
+
+/// Construct validated process definitions without coupling the model crate to generation.
+pub trait ModelProcessExt {
+    fn process<I, O, PI, PO>(
+        &self,
+        incoming: I,
+        outgoing: O,
+    ) -> Result<Process, crate::GenerationError>
+    where
+        I: IntoIterator<Item = PI>,
+        O: IntoIterator<Item = PO>,
+        PI: Into<ParticleSelector>,
+        PO: Into<ParticleSelector>;
+}
+
+impl ModelProcessExt for Model {
+    fn process<I, O, PI, PO>(
+        &self,
+        incoming: I,
+        outgoing: O,
+    ) -> Result<Process, crate::GenerationError>
+    where
+        I: IntoIterator<Item = PI>,
+        O: IntoIterator<Item = PO>,
+        PI: Into<ParticleSelector>,
+        PO: Into<ParticleSelector>,
+    {
+        let process = Process::new(incoming, outgoing);
+        process.validate_in(self)?;
+        Ok(process)
     }
 }
 
@@ -398,19 +581,146 @@ mod tests {
     use super::*;
 
     #[test]
+    fn particle_selection_is_the_complementary_species_veto() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let process = model.process(["e-", "e+"], ["a", "a"]).unwrap();
+        let selected = process
+            .clone()
+            .with_particle_filters(None, Some(vec!["e-".into(), 22_i64.into()]), None, vec![])
+            .unwrap();
+        selected.validate_in(&model).unwrap();
+        let options = crate::GenerationOptions::default();
+        let restricted = selected.restrict_options(&model, &options).unwrap();
+        let vetoes = restricted
+            .filters(crate::FilterScope::Graph)
+            .iter()
+            .find_map(|filter| match filter {
+                crate::GenerationFilter::ParticleVeto(vetoes) => Some(vetoes.clone()),
+                _ => None,
+            })
+            .unwrap();
+        let vetoed = process
+            .clone()
+            .with_particle_filters(Some(vetoes), None, None, vec![])
+            .unwrap();
+        let generated = selected.generate_diagrams(model.clone(), &options).unwrap();
+        assert_eq!(generated.diagrams.len(), 2);
+        let ids = |result: crate::GenerationResult| {
+            result
+                .diagrams
+                .into_iter()
+                .map(|diagram| diagram.id())
+                .collect::<BTreeSet<_>>()
+        };
+        assert_eq!(
+            ids(generated),
+            ids(vetoed.generate_diagrams(model.clone(), &options).unwrap())
+        );
+        let restored: Process =
+            serde_json::from_str(&serde_json::to_string(&selected).unwrap()).unwrap();
+        assert_eq!(restored, selected);
+        assert!(
+            process
+                .clone()
+                .with_particle_filters(Some(vec![]), Some(vec![]), None, vec![])
+                .is_err()
+        );
+        let empty = process
+            .clone()
+            .with_particle_filters(None, Some(vec![]), None, vec![])
+            .unwrap();
+        assert!(
+            empty
+                .generate_diagrams(model.clone(), &options)
+                .unwrap()
+                .diagrams
+                .is_empty()
+        );
+        let unrestricted = empty
+            .with_particle_filters(None, None, None, vec![])
+            .unwrap();
+        assert_eq!(
+            unrestricted
+                .generate_diagrams(model.clone(), &options)
+                .unwrap()
+                .diagrams
+                .len(),
+            2
+        );
+        assert!(
+            process
+                .with_particle_filters(None, Some(vec!["missing".into()]), None, vec![])
+                .unwrap()
+                .validate_in(&model)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn model_process_validates_references_and_round_trips_only_process_state() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        assert!(model.process(["missing"], ["a"]).is_err());
+        let process = model
+            .process(["e-", "e+"], ["a", "a"])
+            .unwrap()
+            .with_filters(vec!["t".into()], Some(vec!["V_98".into()]), vec![]);
+        process.validate_in(&model).unwrap();
+        let definition = serde_json::to_value(&process).unwrap();
+        assert!(definition.get("loop_count").is_none());
+        assert!(definition.get("symmetrize_final").is_none());
+        assert_eq!(
+            serde_json::from_value::<Process>(definition).unwrap(),
+            process
+        );
+        assert!(
+            process
+                .clone()
+                .with_particle_filters(None, None, Some(vec!["missing".into()]), vec![])
+                .unwrap()
+                .validate_in(&model)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn process_veto_cannot_remove_a_physical_covariant_partner() {
+        let model =
+            Model::from_json(include_str!("../../feynkit-model/tests/fixtures/sm.json")).unwrap();
+        let process = model
+            .process(["H"], ["W+", "W-"])
+            .unwrap()
+            .with_particle_filters(Some(vec!["ghWp".into()]), None, None, vec![])
+            .unwrap();
+        process.validate_in(&model).unwrap();
+        let error = process
+            .validate_covariant_cut_filters(
+                &model,
+                &crate::GenerationOptions::default(),
+                GenerationType::CrossSection,
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            crate::GenerationError::Process(ProcessError::CovariantCutVeto { .. })
+        ));
+    }
+
+    #[test]
     fn accepts_vacuum_processes_and_empty_cross_section_alternatives() {
         assert!(
-            Process::cross_section(Vec::<i64>::new(), Vec::<i64>::new())
+            Process::new(Vec::<i64>::new(), Vec::<i64>::new())
                 .validate()
                 .is_ok()
         );
         assert!(
-            Process::cross_section([1_i64], [1_i64])
+            Process::new([1_i64], [1_i64])
                 .with_final_state_alternatives([Vec::<i64>::new(), vec![1]])
                 .is_ok()
         );
         assert!(
-            Process::amplitude(Vec::<i64>::new(), Vec::<i64>::new())
+            Process::new(Vec::<i64>::new(), Vec::<i64>::new())
                 .validate()
                 .is_ok()
         );

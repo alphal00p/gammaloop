@@ -23,7 +23,7 @@ pub mod utils;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
-use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
+use feynkit_tensor::TensorReducer;
 use graph::Graph;
 pub use inspection::{
     ConstantSymbol, DataProvenance, MasterCoefficient, MasterSymbol, MasterSymbolicExpression,
@@ -43,7 +43,7 @@ pub use rustred::solver::{
 pub use rustred_evaluation::cache::{
     RustRedCacheLoadOptions, RustRedCacheNamespaceStatistics, RustRedCachePreparationOptions,
     RustRedCacheRoot, RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveReport,
-    RustRedCacheStatistics, RustRedCacheWorkload,
+    RustRedCacheStatistics, RustRedCacheWorkload, RustRedSavedCacheStatistics,
 };
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};
@@ -1242,12 +1242,12 @@ impl Integral {
                             a.to_owned(),
                         );
                     }
-                    if let Some(Match::Single(a)) =
-                        m1.match_stack.get(vk_symbol!(format!("msq{}_", i_prop)))
-                    {
+                    // Additive masses bind as a match sequence, so retain the
+                    // complete image rather than only single-atom bindings.
+                    if let Some(mass) = m1.match_stack.get(vk_symbol!(format!("msq{}_", i_prop))) {
                         replacement_rules.canonical_expression_substitutions.insert(
                             vk_parse!(format!("msq({})", i_prop).as_str()).unwrap(),
-                            a.to_owned(),
+                            mass.to_atom(),
                         );
                     }
                 }
@@ -2691,11 +2691,63 @@ impl VakintTerm {
             )
             .with(vk_parse!("1").unwrap().to_pattern());
 
-        if vakint_settings.verify_numerator_identification && !matches!(test, Atom::Num(_)) {
-            return Err(VakintError::NumeratorNotReplaced(
-                EXTERNAL_MOMENTUM_SYMBOL.into(),
-                test.to_string(),
-            ));
+        if vakint_settings.verify_numerator_identification {
+            // Matched propagators authenticate scalar mass parameters; retain
+            // their arithmetic symbolically in this verification copy.
+            let mut mass_parameters = HashSet::new();
+            let masses = replacement_rules
+                .canonical_topology
+                .get_integral()
+                .canonical_expression
+                .as_ref()
+                .map(|_| replacement_rules.get_propagator_property_list("mUVsq_"))
+                .unwrap_or_default();
+            let mass_substitutions = replacement_rules
+                .canonical_expression_substitutions
+                .iter()
+                .map(|(source, target)| Replacement::new(source.clone(), target.clone()))
+                .collect::<Vec<_>>();
+            for mass in masses.values() {
+                // Canonicalization can verify against an uninstantiated
+                // topology template; evaluation already applied these rules.
+                let mass = mass.replace_multiple(mass_substitutions.as_slice());
+                if mass.get_all_symbols(true).iter().any(|symbol| {
+                    [S.k, S.p, S.dot, S.g].contains(symbol)
+                        || symbol.get_name().starts_with("spenso::")
+                }) {
+                    return Err(VakintError::InvalidIntegralFormat(format!(
+                        "matched propagator mass contains momentum or tensor notation: {mass}"
+                    )));
+                }
+                let mut algebraic = true;
+                mass.visitor(&mut |part| {
+                    algebraic &= !matches!(part, AtomView::Fun(_));
+                    algebraic
+                });
+                let parameters = mass.get_all_symbols(false);
+                if algebraic {
+                    mass_parameters.extend(parameters);
+                }
+            }
+            // A vanishing mass prefactor must not hide an unmatched momentum
+            // or scalar coefficient. Check structure without assigning masses
+            // arbitrary values, which could also introduce spurious poles.
+            let mut has_function = false;
+            test.visitor(&mut |part| {
+                has_function |= matches!(part, AtomView::Fun(_));
+                !has_function
+            });
+            if has_function
+                || test
+                    .get_all_symbols(true)
+                    .iter()
+                    .any(|symbol| !mass_parameters.contains(symbol))
+            {
+                return Err(VakintError::NumeratorNotReplaced(
+                    EXTERNAL_MOMENTUM_SYMBOL.into(),
+                    test.to_string(),
+                ));
+            }
         }
 
         self.numerator = new_numerator;
@@ -3036,8 +3088,15 @@ impl VakintTerm {
         // Closed loop invariants are coefficients of the remaining tensor.
         // Keep them opaque through collection: distributing their scalar powers
         // would introduce a projector expansion where no tensor rank remains.
-        let mut coefficient_aliases = Vec::new();
+        let mut coefficient_aliases = BTreeMap::<Atom, Atom>::new();
         let coefficient_head = vk_symbol!("tensor_scalar_coefficient");
+        let mut occupied_aliases = HashSet::new();
+        let _ = vakint_dots.replace_map(|term, _, _| {
+            if matches!(term, AtomView::Fun(function) if function.get_symbol() == coefficient_head)
+            {
+                occupied_aliases.insert(term.to_owned());
+            }
+        });
         let mut coefficient_index = 0;
         let tensor_numerator = vakint_dots.replace_map(|term, _context, out| {
             let AtomView::Fun(function) = term else {
@@ -3054,23 +3113,24 @@ impl VakintTerm {
             }) {
                 return;
             }
-            let alias = loop {
-                let alias = function!(coefficient_head, coefficient_index);
-                coefficient_index += 1;
-                if !vakint_dots.contains(&alias) {
-                    break alias;
-                }
-            };
-            coefficient_aliases.push((alias.clone(), term.to_owned()));
-            **out = alias;
+            // One invariant gets one alias even when it occurs in thousands
+            // of scalar monomials. Existing user functions were inventoried
+            // above, so alias allocation never rescans the whole numerator.
+            let alias = coefficient_aliases
+                .entry(term.to_owned())
+                .or_insert_with(|| {
+                    loop {
+                        let alias = function!(coefficient_head, coefficient_index);
+                        coefficient_index += 1;
+                        if !occupied_aliases.contains(&alias) {
+                            break alias;
+                        }
+                    }
+                });
+            **out = alias.clone();
         });
         let indexed_numerator = Vakint::convert_from_dot_notation(tensor_numerator.as_view());
-        // Preserve Vakint's historical spelling of paired scalar powers.
-        let reducer = TensorReducer::new(dimension)
-            .with_integrated_head(S.k)
-            .with_repeated_index_compatibility(
-                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
-            );
+        let reducer = TensorReducer::new(dimension).with_integrated_head(S.k);
         let mut next_bridge_dummy = Self::next_dot_dummy_index(indexed_numerator.as_view());
         let lorentz = TensorCollectFilter::Reps([Minkowski {}.into()]);
         // The frontend still carries Vakint's raw-index k/p/g leaves here.
@@ -3098,30 +3158,33 @@ impl VakintTerm {
         });
         let mut failure = None;
         let mut reduced = selected
-            .map_collects(|collected, _, out| {
-                if failure.is_some() {
-                    return;
-                }
-                let AtomView::Fun(collected) = collected else {
-                    unreachable!("map_collects visits only collector wrappers")
-                };
-                let term = collected.iter().next().expect("collector wrapper payload");
-                match Self::tensor_reduce_feynkit_term(
-                    term,
-                    &reducer,
-                    &mut next_bridge_dummy,
-                    scalar_only,
-                ) {
-                    Ok(value) => **out = value,
-                    Err(error) => failure = Some(error),
-                }
+            .map_root(|root| {
+                root.map_collects(|collected, _, out| {
+                    if failure.is_some() {
+                        return;
+                    }
+                    let AtomView::Fun(collected) = collected else {
+                        unreachable!("map_collects visits only collector wrappers")
+                    };
+                    let term = collected.iter().next().expect("collector wrapper payload");
+                    match Self::tensor_reduce_feynkit_term(
+                        term,
+                        &reducer,
+                        &mut next_bridge_dummy,
+                        scalar_only,
+                    ) {
+                        Ok(value) => **out = value,
+                        Err(error) => failure = Some(error),
+                    }
+                })
+                .unwrap_collect()
             })
-            .unwrap_collect();
+            .into_inner();
         if let Some(error) = failure {
             return Err(error);
         }
         let mut restored = AliasedAtom::from(reduced);
-        for (alias, coefficient) in coefficient_aliases {
+        for (coefficient, alias) in coefficient_aliases {
             restored.register_alias(alias, coefficient);
         }
         reduced = restored.into_inner();
@@ -3144,14 +3207,14 @@ impl VakintTerm {
         let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
         let numerator =
             Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
-        let reduced = reducer.reduce(numerator.as_view())?;
+        let reduced = reducer.reduce(&reducer.admit(numerator)?)?;
         if scalar_only && reduced.max_rank() != 0 {
             return Err(VakintError::InvalidNumerator(format!(
                 "RustRed scalar input still requires tensor projection of rank {}; run the tensor prepass first",
                 reduced.max_rank(),
             )));
         }
-        let reduced = reduced.into_expression();
+        let reduced = reduced.into_expression()?.into_expression();
         let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);
         let reduced =
             Self::spenso_to_vakint_numerator(reduced.as_view(), dimension, &opaque_compact_vectors);
@@ -4337,14 +4400,34 @@ impl Vakint {
     }
 
     /// Inspect every available Laurent coefficient and the native master graph.
+    /// A bare IBP application announces identities only; its matching data pack
+    /// is required for authenticated graph and coefficient inspection.
     pub fn get_master(
         &self,
         symbol: &MasterSymbol,
         prec: u32,
     ) -> Result<VakintMaster, VakintError> {
-        self.rustred_data()?
+        let result = self
+            .rustred_data()?
             .masters
-            .get_master(symbol.clone(), prec)
+            .get_master(symbol.clone(), prec);
+        if matches!(
+            &result,
+            Err(VakintError::Inspection(
+                inspection::InspectionError::UnknownMaster { .. }
+            ))
+        ) && let Some(declaration) = self.announced_bare_masters()?.get(symbol.as_atom())
+        {
+            return Err(inspection::InspectionError::UnavailableGraph {
+                master: symbol.to_string(),
+                detail: format!(
+                    "declared by native application {}; load its matching external-data pack to inspect authenticated master graphs and coefficients",
+                    declaration.application_path.display(),
+                ),
+            }
+            .into());
+        }
+        result
     }
 
     /// Registered constants used by the built-in or explicitly loaded RustRed data.
@@ -4354,7 +4437,13 @@ impl Vakint {
 
     /// Family-qualified identities, including declared but uncomputed terminals.
     pub fn master_symbols(&self) -> Result<Vec<MasterSymbol>, VakintError> {
-        Ok(self.rustred_data()?.masters.master_symbols())
+        let mut symbols = self.rustred_data()?.masters.master_symbols();
+        for symbol in self.announced_bare_masters()?.into_keys() {
+            symbols.push(MasterSymbol::try_from(symbol)?);
+        }
+        symbols.sort();
+        symbols.dedup();
+        Ok(symbols)
     }
 
     /// Normalize FORM's Gamma and EulerGamma spellings before the complete
@@ -4584,6 +4673,7 @@ Evaluated (n_loops=1, mu_r=1) :
             params_complex,
             externals,
         )?;
+        self.require_bare_master_coefficients(&expression)?;
         precision::evaluate_with_errors(
             expression.as_view(),
             &parameters,
@@ -6859,6 +6949,122 @@ mod tests {
     use super::*;
 
     #[test]
+    fn numerator_identification_preserves_authenticated_scalar_masses() {
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            verify_numerator_identification: true,
+            ..Default::default()
+        };
+        for (mass, numerator) in [
+            ("mass_squared", "dot(k(1),k(1))-mass_squared"),
+            ("mass_squared", "dot(k(1),k(1))/(mass_squared-1)"),
+            ("mass^2", "dot(k(1),k(1))-mass^2"),
+            ("mass_a+2*mass_b^2", "(dot(k(1),k(1))-mass_a-2*mass_b^2)^2"),
+            ("mass^2", "dot(p(7),p(7))*(dot(k(1),k(1))-mass^2)"),
+        ] {
+            let integral = vk_parse!(format!("topo(I1L({mass},2))")).unwrap();
+            let mut matched = engine
+                .topologies
+                .match_topologies_to_user_input(integral.as_view(), false)
+                .unwrap()
+                .unwrap();
+            assert_eq!(
+                matched
+                    .canonical_expression_substitutions
+                    .get(&vk_parse!("msq(1)").unwrap()),
+                Some(&vk_parse!(mass).unwrap()),
+                "the matched mass must be preserved before verification"
+            );
+            matched.apply_replacement_rules().unwrap();
+            let mut term = VakintTerm {
+                integral,
+                numerator: vk_parse!(numerator).unwrap(),
+                vectors: Vec::new(),
+            };
+            let input = &term.numerator * &term.integral;
+            assert_eq!(
+                engine
+                    .to_canonical(&settings, input.as_view(), true)
+                    .unwrap(),
+                input
+            );
+            let expected = term.clone();
+            term.apply_numerator_replacement_rules(&matched, &settings)
+                .unwrap();
+            assert_eq!(term, expected, "mass: {mass}; numerator: {numerator}");
+            for parameter in vk_parse!(mass).unwrap().get_all_symbols(false) {
+                assert!(term.numerator.contains_symbol(parameter));
+            }
+        }
+    }
+
+    #[test]
+    fn numerator_identification_rejects_unmatched_momenta_and_scalar_parameters() {
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            verify_numerator_identification: true,
+            ..Default::default()
+        };
+        let integral = vk_parse!("topo(I1L(mass_squared,2))").unwrap();
+        let mut matched = engine
+            .topologies
+            .match_topologies_to_user_input(integral.as_view(), false)
+            .unwrap()
+            .unwrap();
+        matched.apply_replacement_rules().unwrap();
+        for numerator in [
+            "dot(k(99),k(99))-mass_squared",
+            "dot(q(1),q(1))-mass_squared",
+            "dot(k(1),k(1))-undeclared_mass_squared",
+            "(mass_squared-1)*dot(k(99),k(99))",
+            "(mass_squared-1)*dot(q(1),q(1))",
+            "(mass_squared-1)*undeclared_scalar",
+            "(mass_squared-1)*mass_squared(1)",
+        ] {
+            let mut term = VakintTerm {
+                integral: integral.clone(),
+                numerator: vk_parse!(numerator).unwrap(),
+                vectors: Vec::new(),
+            };
+            let original = term.clone();
+            assert!(matches!(
+                term.apply_numerator_replacement_rules(&matched, &settings),
+                Err(VakintError::NumeratorNotReplaced(_, _))
+            ));
+            assert_eq!(term, original);
+        }
+    }
+
+    #[test]
+    fn numerator_identification_rejects_momentum_dependent_masses() {
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            verify_numerator_identification: true,
+            ..Default::default()
+        };
+        for mass in ["dot(k(99),k(99))", "dot(p(1),p(1))"] {
+            let integral = vk_parse!(format!("topo(I1L({mass},2))")).unwrap();
+            let mut matched = engine
+                .topologies
+                .match_topologies_to_user_input(integral.as_view(), false)
+                .unwrap()
+                .unwrap();
+            matched.apply_replacement_rules().unwrap();
+            let mut term = VakintTerm {
+                integral,
+                numerator: vk_parse!(format!("dot(k(1),k(1))-({mass})")).unwrap(),
+                vectors: Vec::new(),
+            };
+            let original = term.clone();
+            assert!(matches!(
+                term.apply_numerator_replacement_rules(&matched, &settings),
+                Err(VakintError::InvalidIntegralFormat(_))
+            ));
+            assert_eq!(term, original);
+        }
+    }
+
+    #[test]
     fn evaluation_input_tracking_precedes_topology_collection() {
         Vakint::initialize_vakint_symbols();
         let engine = Vakint::new().unwrap();
@@ -7075,6 +7281,48 @@ mod tests {
                 "dot notation: {use_dot_product_notation}"
             );
 
+            let mut rejected = VakintTerm {
+                numerator: input.clone(),
+                integral: Atom::one(),
+                vectors: Vec::new(),
+            };
+            assert!(rejected.tensor_reduce_feynkit(&settings, true).is_err());
+            assert_eq!(rejected.numerator, input);
+        }
+    }
+
+    #[test]
+    fn repeated_closed_invariants_preserve_user_aliases_and_mixed_tensors() {
+        Vakint::initialize_vakint_symbols();
+        let scalar = (0..24)
+            .map(|power| {
+                vk_parse!(format!(
+                    "c{power}*dot(k(1),k(1))^{power}*dot(k(1),k(2))^{}",
+                    power % 3
+                ))
+                .unwrap()
+            })
+            .sum::<Atom>()
+            * vk_parse!("tensor_scalar_coefficient(0)+tensor_scalar_coefficient(1)*alpha").unwrap();
+        let input = &scalar * vk_parse!("k(3,71)*k(3,72)").unwrap();
+        let expected = &scalar * vk_parse!("dot(k(3),k(3))*g(71,72)/(4-2*ε)").unwrap();
+        for use_dot_product_notation in [false, true] {
+            let settings = VakintSettings {
+                use_dot_product_notation,
+                ..Default::default()
+            };
+            let mut term = VakintTerm {
+                numerator: input.clone(),
+                integral: Atom::one(),
+                vectors: Vec::new(),
+            };
+            term.tensor_reduce_feynkit(&settings, false).unwrap();
+            let actual = if use_dot_product_notation {
+                term.numerator
+            } else {
+                Vakint::convert_to_dot_notation(term.numerator.as_view())
+            };
+            assert!((actual - &expected).expand().together().is_zero());
             let mut rejected = VakintTerm {
                 numerator: input.clone(),
                 integral: Atom::one(),

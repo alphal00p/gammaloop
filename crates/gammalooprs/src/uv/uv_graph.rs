@@ -1,7 +1,6 @@
 use std::{cell::RefCell, collections::BTreeSet, ops::Deref};
 
 use ahash::{AHashMap, AHashSet};
-use idenso::shorthands::schoonschip::Schoonschip;
 use linnet::half_edge::{
     HedgeGraph, PowersetIterator,
     involution::{Flow, Hedge, HedgePair},
@@ -9,6 +8,10 @@ use linnet::half_edge::{
         Cycle, InternalSubGraph, ModifySubSet, PairwiseSubSetOps, SuBitGraph, SubGraphLike,
         SubGraphOps, SubSetLike, SubSetOps, subset::SubSet,
     },
+};
+use spenso::{
+    network::tags::SPENSO_TAG,
+    structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
     atom::{Atom, AtomCore, Symbol},
@@ -28,7 +31,7 @@ use crate::{
     uv::{ApproximationType, UVgenerationSettings, settings::CTIdentifier},
 };
 
-use super::{Spinney, Wood, spenso_lor_atom};
+use super::{Spinney, Wood};
 
 pub trait UltravioletGraph: LMBext + FeynmanGraph + ParamBuilderGraph {
     fn n_loops<S: SubGraphLike, E, V, H>(&self, subgraph: &S) -> usize
@@ -407,10 +410,19 @@ impl UltravioletGraph for Graph {
                     usize::from(eid),
                     function!(GS.emr_mom, usize::from(eid)),
                     &m2,
-                    spenso_lor_atom(usize::from(eid) as i32, usize::from(eid), GS.dim)
-                        .pow(2)
-                        .to_dots()
-                        - &m2,
+                    function!(
+                        SPENSO_TAG.dot,
+                        function!(
+                            GS.emr_mom,
+                            usize::from(eid),
+                            Minkowski {}.new_rep(GS.dim).to_symbolic([])
+                        ),
+                        function!(
+                            GS.emr_mom,
+                            usize::from(eid),
+                            Minkowski {}.new_rep(GS.dim).to_symbolic([])
+                        )
+                    ) - &m2,
                 );
                 for _i in 0..edge_power.abs() {
                     if is_power_negative {
@@ -448,9 +460,19 @@ impl UltravioletGraph for Graph {
                     usize::from(edge_id),
                     function!(GS.emr_mom, usize::from(edge_id)),
                     &Atom::Zero,
-                    spenso_lor_atom(usize::from(edge_id) as i32, usize::from(edge_id), GS.dim)
-                        .pow(2)
-                        .to_dots(),
+                    function!(
+                        SPENSO_TAG.dot,
+                        function!(
+                            GS.emr_mom,
+                            usize::from(edge_id),
+                            Minkowski {}.new_rep(GS.dim).to_symbolic([])
+                        ),
+                        function!(
+                            GS.emr_mom,
+                            usize::from(edge_id),
+                            Minkowski {}.new_rep(GS.dim).to_symbolic([])
+                        )
+                    ),
                 );
             }
         }

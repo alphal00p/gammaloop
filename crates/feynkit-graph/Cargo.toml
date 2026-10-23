@@ -9,12 +9,23 @@ keywords = ["feynman", "graph", "physics"]
 categories = ["science"]
 
 [dependencies]
-itertools.workspace = true
-spenso = { workspace = true, features = ["shadowing"] }
-feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics" }
+itertools = { workspace = true }
+nu-ansi-term = { workspace = true }
+symbolica-utils = { workspace = true }
+feynkit-kinematics = { version = "0.1.0", path = "../feynkit-kinematics", default-features = false }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
-linnet = { version = "0.17.0", path = "../linnet", features = ["serde"] }
+linnet = { version = "0.17.0", path = "../linnet", default-features = false, features = ["serde"] }
+# Native diagram drawing; Typst only typesets its labels.
+linnest = { workspace = true, features = ["svg"], optional = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-symbolica = { workspace = true, default-features = false, features = ["integer-gmp", "float-mpfr"] }
+symbolica = { workspace = true, default-features = false }
 thiserror = { workspace = true }
+spenso = { workspace = true, features = ["shadowing"] }
+idenso = { workspace = true, default-features = false }
+
+[features]
+default = ["native"]
+svg = ["dep:linnest"]
+native = ["linnet/native", "feynkit-model/native", "feynkit-kinematics/native", "idenso/native"]
+wasm = ["linnet/wasm", "symbolica/wasm", "spenso/wasm", "feynkit-kinematics/wasm", "idenso/wasm"]

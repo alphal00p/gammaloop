@@ -3,7 +3,11 @@ use pyo3::{
     prelude::*,
     types::{PyAny, PyModule},
 };
-use symbolica::api::python::PythonExpression;
+use spynso3::{expression::TensorExpression, structure::SpensoName};
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::AtomView,
+};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen_derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -22,15 +26,24 @@ use crate::error;
 /// in ``D`` until afterward: at fixed positive integer dimension below half
 /// the rank, dimension-specific identities make the universal metric basis
 /// singular. The all-equal isotropic fast path remains well defined.
+/// For denominators depending on external momenta, add an independent basis
+/// with the ``external`` constructor keyword. Only the transverse components are then
+/// rotationally averaged; odd total ranks need not vanish.
 ///
 /// Examples
 /// --------
-/// Select every native FeynKit momentum in a pure vacuum numerator:
+/// Average a rank-two vacuum numerator over the loop direction. The result
+/// is proportional to the metric tensor times ``k.k / D``.
 ///
-/// >>> from symbolica import E
-/// >>> reducer = fk.TensorReducer.feynkit(E("4"))
-/// >>> scalar_numerator = reducer.reduce(vacuum_numerator)
-/// >>> scalar_numerator
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
+/// >>> D, mu, nu = S("D", "mu", "nu")
+/// >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
+/// >>> lorentz = Representation.mink(D)
+/// >>> reducer = hep.TensorReducer(D, integrated=[k(PortPattern.exact(lorentz))])
+/// >>> numerator = k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
+/// >>> projected = reducer.reduce(numerator)
 ///
 /// Parameters
 /// ----------
@@ -39,55 +52,113 @@ use crate::error;
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "TensorReducer",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
 #[derive(Clone)]
 pub struct PyTensorReducer {
-    pub(crate) inner: TensorReducer,
+    // Box is required for alignment: CPython's wasm32 object allocator guarantees
+    // only 8 bytes, but the reducer's u128 pairing limits require 16. Rust allocates
+    // the boxed payload with the required alignment; do not inline it here.
+    pub(crate) inner: Box<TensorReducer>,
 }
 
+#[cfg(target_arch = "wasm32")]
+const _: () = {
+    assert!(std::mem::align_of::<PyTensorReducer>() <= 8);
+    assert!(
+        std::mem::align_of::<<PyTensorReducer as pyo3::impl_::pyclass::PyClassImpl>::Layout>() <= 8
+    );
+};
+
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_tensor_usage, on_success)]
 #[pymethods]
 impl PyTensorReducer {
-    /// Construct a reducer without selecting an integrated momentum.
+    /// Configure the integrated momenta and independent external basis.
     ///
-    /// Add selectors with :meth:`with_integrated_head` or
-    /// :meth:`with_integrated_vector`. The object is immutable; each selector
-    /// returns a new reducer.
+    /// Bare symbols and ``TensorName`` entries in ``integrated`` select every
+    /// vector with that head. Compact vector expressions select one exact
+    /// momentum, including its scalar arguments. External entries are compact
+    /// vectors and take precedence over integrated-head selections.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica import E
-    /// >>> reducer = fk.TensorReducer(E("4 - 2*eps")).with_integrated_head("Loop::k")
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> reducer = hep.TensorReducer(D, integrated=[k])
+    /// >>> reducer = hep.TensorReducer(D, integrated=[k(PortPattern.exact(lorentz))], external=[p(PortPattern.exact(lorentz))])
     ///
     /// Parameters
     /// ----------
     /// dimension : Expression
     ///     Lorentz-space dimension used by every ``spenso::mink`` slot.
+    /// integrated : sequence of TensorName or Expression or TensorExpression, optional
+    ///     Whole vector heads or exact compact vectors to integrate.
+    /// external : sequence of Expression or TensorExpression, optional
+    ///     Independent compact vectors in the denominator's external basis.
     #[new]
-    fn new(dimension: &PythonExpression) -> Self {
-        Self {
-            inner: TensorReducer::new(dimension.expr.clone()),
+    #[pyo3(signature = (dimension, *, integrated=Vec::new(), external=Vec::new()))]
+    fn new(
+        dimension: &PythonExpression,
+        #[gen_stub(override_type(type_repr="typing.Sequence[symbolica.community.tensor.TensorName | symbolica.Expression | symbolica.community.tensor.TensorExpression]", imports=("typing", "symbolica", "symbolica.community.tensor")))]
+        integrated: Vec<Bound<'_, PyAny>>,
+        #[gen_stub(override_type(type_repr="typing.Sequence[symbolica.Expression | symbolica.community.tensor.TensorExpression]", imports=("typing", "symbolica", "symbolica.community.tensor")))]
+        external: Vec<Bound<'_, PyAny>>,
+    ) -> PyResult<Self> {
+        let mut inner = TensorReducer::new(dimension.expr.clone());
+        for selector in integrated {
+            if let Ok(name) = selector.extract::<SpensoName>() {
+                inner = inner.with_integrated_head(name.name);
+                continue;
+            }
+            // TensorExpression inherits Expression and shares its immutable atom.
+            let expression = selector.extract::<PyRef<'_, PythonExpression>>()?;
+            inner = match expression.expr.as_view() {
+                AtomView::Var(head) => inner.with_integrated_head(head.get_symbol()),
+                AtomView::Fun(_) => inner
+                    .with_integrated_vector(expression.expr.clone())
+                    .map_err(error::tensor)?,
+                _ => {
+                    return Err(pyo3::exceptions::PyValueError::new_err(
+                        "integrated selectors must be bare symbols or compact vector expressions",
+                    ));
+                }
+            };
         }
+        for vector in external {
+            let expression = vector.extract::<PyRef<'_, PythonExpression>>()?;
+            inner = inner
+                .with_external_vector(expression.expr.clone())
+                .map_err(error::tensor)?;
+        }
+        Ok(Self {
+            inner: Box::new(inner),
+        })
     }
 
-    /// Construct a reducer that selects every ``FeynKit::Momentum`` tensor.
+    /// Construct a reducer that selects every ``gammalooprs::Q`` tensor.
     ///
     /// This is the convenient constructor for vacuum numerators produced by
-    /// FeynKit's native Feynman-rule generator. It selects the entire
-    /// ``FeynKit::Momentum`` head and is therefore intended for pure vacuum
+    /// HEP native Feynman-rule generator. It selects the entire
+    /// ``gammalooprs::Q`` head and is therefore intended for pure vacuum
     /// numerators, where every such momentum is integrated. If a graph still
-    /// contains external ``FeynKit::Momentum`` tensors, construct a reducer
-    /// with exact :meth:`with_integrated_vector` selectors for its internal
+    /// contains external ``gammalooprs::Q`` tensors, construct a reducer
+    /// with exact compact vectors in ``integrated`` for its internal
     /// momenta instead.
     ///
     /// Examples
     /// --------
-    /// >>> from symbolica import E
-    /// >>> reducer = fk.TensorReducer.feynkit(E("4"))
-    /// >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression())
+    /// The equivalent explicit selector shows which momentum head is integrated:
+    ///
+    /// >>> from symbolica import S, E
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> model = hep.Model.phi4()
+    /// >>> vacuum_diagram = model.process([], []).generate_diagrams(loops=2, factorized_loop_topologies_count_range=None).diagrams[0]
+    /// >>> reducer = hep.TensorReducer(E("4"), integrated=[E("gammalooprs::Q")])
+    /// >>> reduced = reducer.reduce(vacuum_diagram.numerator_expression().to_expression())
     ///
     /// Parameters
     /// ----------
@@ -97,57 +168,21 @@ impl PyTensorReducer {
     #[staticmethod]
     fn feynkit(dimension: &PythonExpression) -> Self {
         Self {
-            inner: TensorReducer::feynkit(dimension.expr.clone()),
+            inner: Box::new(TensorReducer::feynkit(dimension.expr.clone())),
         }
     }
 
     /// Return the configured Lorentz-space dimension.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> assert reducer.dimension == D
     #[getter]
     fn dimension(&self) -> PythonExpression {
         PythonExpression {
             expr: self.inner.dimension().clone(),
-        }
-    }
-
-    /// Select all rank-one tensors with the qualified Symbolica head name.
-    ///
-    /// Examples
-    /// --------
-    /// >>> reducer = fk.TensorReducer(D).with_integrated_head("Loop::k")
-    /// >>> scalar = reducer.reduce(numerator)
-    ///
-    /// Parameters
-    /// ----------
-    /// head : str
-    ///     Qualified function name of the integrated vector.
-    fn with_integrated_head(&self, head: &str) -> Self {
-        Self {
-            inner: self.inner.clone().with_integrated_head_name(head),
-        }
-    }
-
-    /// Select one exact compact Spenso vector.
-    ///
-    /// A compact vector has a representation but no explicit index, for
-    /// example ``K(1, spenso::mink(D))``. This distinguishes different loop
-    /// momenta that share one tensor head.
-    ///
-    /// Examples
-    /// --------
-    /// >>> k1 = K(1, mink(D))
-    /// >>> reducer = fk.TensorReducer(D).with_integrated_vector(k1)
-    /// >>> scalar = reducer.reduce(numerator)
-    ///
-    /// Parameters
-    /// ----------
-    /// vector : Expression
-    ///     Exact indexed-free vector to integrate.
-    fn with_integrated_vector(&self, vector: &PythonExpression) -> Self {
-        Self {
-            inner: self
-                .inner
-                .clone()
-                .with_integrated_vector(vector.expr.clone()),
         }
     }
 
@@ -157,6 +192,8 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// >>> reducer = reducer.with_pairing_limit(200_000)
     ///
     /// Parameters
@@ -165,7 +202,12 @@ impl PyTensorReducer {
     ///     Maximum number of labeled perfect matchings to enumerate.
     fn with_pairing_limit(&self, limit: usize) -> Self {
         Self {
-            inner: self.inner.clone().with_pairing_limit(limit as u128),
+            inner: Box::new(
+                self.inner
+                    .as_ref()
+                    .clone()
+                    .with_pairing_limit(limit as u128),
+            ),
         }
     }
 
@@ -173,6 +215,8 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// >>> reducer = reducer.with_pairing_product_limit(150_000_000)
     ///
     /// Parameters
@@ -181,7 +225,12 @@ impl PyTensorReducer {
     ///     Maximum Cartesian product of internal and projector matchings.
     fn with_pairing_product_limit(&self, limit: usize) -> Self {
         Self {
-            inner: self.inner.clone().with_pairing_product_limit(limit as u128),
+            inner: Box::new(
+                self.inner
+                    .as_ref()
+                    .clone()
+                    .with_pairing_product_limit(limit as u128),
+            ),
         }
     }
 
@@ -189,6 +238,8 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// >>> reducer = reducer.with_output_term_limit(20_000)
     ///
     /// Parameters
@@ -197,45 +248,80 @@ impl PyTensorReducer {
     ///     Maximum compact contraction classes to materialize.
     fn with_output_term_limit(&self, limit: usize) -> Self {
         Self {
-            inner: self.inner.clone().with_output_term_limit(limit),
+            inner: Box::new(self.inner.as_ref().clone().with_output_term_limit(limit)),
         }
     }
 
-    /// Reduce a Spenso tensor expression to one Symbolica expression.
+    /// Reduce a numerator to a TensorExpression with its ordered interface.
     ///
     /// Rank-one tensors must carry a final ``spenso::mink(D,index)`` argument.
     /// Fully contracted projectors are returned as scalar ``spenso::dot``
     /// invariants. Residual free projector pairs remain explicit
     /// ``spenso::g`` tensors; this method intentionally does not reject
-    /// tensor-valued output. Odd-rank vacuum tensors vanish.
+    /// tensor-valued output. Compact dots between an integrated vector and a
+    /// spectator are reduced directly, including nonnegative integer powers.
+    /// Dots between integrated vectors or with declared external basis vectors
+    /// remain scalar invariants. Negative or noninteger powers of spectator
+    /// contractions are rejected. Odd-rank vacuum tensors vanish while retaining
+    /// their output interface.
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
     /// A rank-two vacuum projection becomes a product of dot products divided
     /// by the dimension:
     ///
-    /// >>> reduced = reducer.reduce(k(mu) * k(nu) * p(mu) * p(nu))
-    /// >>> reduced
+    /// >>> from symbolica import S
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> D, mu, nu = S("hep_docs::D", "hep_docs::mu", "hep_docs::nu")
+    /// >>> from symbolica.community.tensor import TensorName, Representation, PortPattern, TensorPattern
+    /// >>> k, p = (TensorName.vector("hep_reducer_docs::" + name).to_expression() for name in ("k", "p"))
+    /// >>> lorentz, dot = Representation.mink(D), TensorPattern.dot
+    /// >>> k_compact = k(PortPattern.exact(lorentz))
+    /// >>> p_compact = p(PortPattern.exact(lorentz))
+    /// >>> numerator = (
+    /// ...     k(PortPattern.exact(lorentz, mu)) * k(PortPattern.exact(lorentz, nu))
+    /// ...     * p(PortPattern.exact(lorentz, mu)) * p(PortPattern.exact(lorentz, nu))
+    /// ... )
+    /// >>> reducer = hep.TensorReducer(D, integrated=[k_compact])
+    /// >>> reduced = reducer.reduce(numerator)
+    /// >>> expected = dot(k_compact, k_compact) * dot(p_compact, p_compact) / D
+    /// >>> assert reduced.rank == 0 and reduced.axes == ()
+    /// >>> assert reduced.to_expression() == expected
     ///
     /// Parameters
     /// ----------
-    /// expression : Expression
+    /// expression : Expression or TensorExpression
     ///     Tensor numerator or projected tensor numerator to reduce.
-    fn reduce(&self, expression: &PythonExpression) -> PyResult<PythonExpression> {
-        self.inner
-            .reduce(expression.expr.as_view())
-            .map(|reduction| PythonExpression {
-                expr: reduction.into_expression(),
-            })
-            .map_err(error::tensor)
+    fn reduce(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression", imports=("symbolica", "symbolica.community.tensor")))]
+        expression: &Bound<'_, PyAny>,
+    ) -> PyResult<Py<TensorExpression>> {
+        let expression = match expression.extract::<PyRef<'_, TensorExpression>>() {
+            Ok(value) => value.structured().clone(),
+            Err(_) => feynkit_graph::NumeratorInterface::admit(
+                expression
+                    .extract::<ConvertibleToExpression>()?
+                    .to_expression()
+                    .expr,
+                None,
+            )
+            .map_err(|error| crate::error::TensorReductionError::new_err(error.to_string()))?,
+        };
+        let reduction = self.inner.reduce(&expression).map_err(error::tensor)?;
+        TensorExpression::from_structured(py, reduction.into_expression().map_err(error::tensor)?)
     }
 
     /// Return a concise description of the reducer configuration.
     ///
     /// Examples
     /// --------
-    /// >>> print(reducer)
+    /// Using the setup in the ``TensorReducer`` class example:
     ///
+    /// >>> print(reducer)
     fn __repr__(&self) -> String {
         format!("TensorReducer(dimension={})", self.inner.dimension())
     }
@@ -244,7 +330,10 @@ impl PyTensorReducer {
     ///
     /// Examples
     /// --------
-    /// IPython calls this method when formatting a reducer for text display.
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(reducer)
     ///
     /// Parameters
     /// ----------
@@ -268,4 +357,18 @@ impl PyTensorReducer {
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
     module.add_class::<PyTensorReducer>()?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::PyTensorReducer;
+
+    #[test]
+    fn python_wrapper_fits_wasm_allocator_alignment() {
+        assert!(std::mem::align_of::<PyTensorReducer>() <= 8);
+        assert!(
+            std::mem::align_of::<<PyTensorReducer as pyo3::impl_::pyclass::PyClassImpl>::Layout>()
+                <= 8
+        );
+    }
 }

@@ -1,6 +1,6 @@
 {
   "schema": "vakint.external-data.loop.v1",
-  "version": "v0.1.1",
+  "version": "v0.1.2",
   "loop_count": 1,
   "dimension": "4-2*epsilon",
   "normalization": "FMFTandMATAD",
@@ -125,7 +125,7 @@
         },
         "graph.dot": {
           "path": "masters/P1/graph.dot",
-          "sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae"
+          "sha256": "1667a9d7e1a2ae60857016f9002d06675c0bf267b14f85cc864db59f52b80eb4"
         }
       },
       "acceptance_sha256": {
@@ -210,7 +210,7 @@
       "bytes": 2738
     },
     "graphs/e74e81b24d3540d6e9ab4e5f073993c715c27e2287a726a892d34a5577bab7a4.dot": {
-      "sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae",
+      "sha256": "1667a9d7e1a2ae60857016f9002d06675c0bf267b14f85cc864db59f52b80eb4",
       "bytes": 815
     },
     "ibps/rules.rrbin": {
@@ -218,7 +218,7 @@
       "bytes": 2790
     },
     "masters/P1/graph.dot": {
-      "sha256": "04497dfa677dc3584502a729c89d9c995256cb04e1caea7dd148348947c3b7ae",
+      "sha256": "1667a9d7e1a2ae60857016f9002d06675c0bf267b14f85cc864db59f52b80eb4",
       "bytes": 815
     },
     "masters/P1/numerical.json": {
@@ -234,8 +234,8 @@
       "bytes": 3477
     },
     "producer-update.json": {
-      "sha256": "de7db29c80edc577be61503f62500d0e727d94fffa6ed04cd42ec48b480bd483",
-      "bytes": 6954
+      "sha256": "4104426a0b3dd96cf6b286e109052be2fc11d82b47aa3f421aa2ebecd8db9f54",
+      "bytes": 12966
     }
   },
   "producer_update": "producer-update.json"

@@ -1,5 +1,7 @@
 #![cfg(feature = "feynkit-ingress")]
 
+use idenso::tensor::SymbolicTensor;
+
 #[allow(dead_code)] // Shared CLI helpers also support file-based input outside this suite.
 #[path = "../examples/saved_application/dot.rs"]
 mod saved_application_dot;
@@ -33,8 +35,7 @@ fn banana_dot() -> Result<String> {
         builder.add_vertex(DiagramVertex {
             name: name.into(),
             interaction: None,
-            external: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
         })
     };
     let left = vertex("left");

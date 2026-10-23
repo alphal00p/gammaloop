@@ -173,6 +173,25 @@ class NativeCacheSmoke(unittest.TestCase):
             self.assertEqual(resumed["status"], "complete")
             self.assertEqual(resumed["completed_roots"], 5)
 
+    def test_detach_preserves_pack_and_resumes_uncached_evaluation(self):
+        obj = engine()
+        prepared = self.scratch / "detach"
+        self.assertEqual(self.prepare(obj, prepared)["status"], "complete")
+        obj.load_cache(1, str(prepared))
+        cached = obj.evaluate_integral(integral(4))
+        self.assertTrue(obj.cache_statistics(1)["attached"])
+        self.assertEqual(obj.cache_statistics(1)["native"]["backing_hits"], 1)
+        obj.detach_cache(1)
+        detached = obj.cache_statistics(1)
+        self.assertFalse(detached["attached"])
+        self.assertEqual(detached["native"]["cached_integrals"], 0)
+        self.assertTrue(prepared.is_dir())
+        self.same(cached, obj.evaluate_integral(integral(4)))
+        self.assertGreater(obj.cache_statistics(1)["native"]["rule_applications"], 0)
+        obj.load_cache(1, str(prepared))
+        self.same(cached, obj.evaluate_integral(integral(4)))
+        self.assertEqual(obj.cache_statistics(1)["native"]["backing_hits"], 1)
+
     def test_callback_exception_keeps_original_and_durable_prefix(self):
         obj = engine()
         output = self.scratch / "exception"
@@ -375,9 +394,11 @@ class NativeCacheSmoke(unittest.TestCase):
     def test_controls_fail_before_unrequested_io(self):
         obj = engine()
         path = self.scratch / "invalid"
-        for loop_count in (0, 5):
+        for loop_count in (0, 6):
             with self.assertRaises(ValueError):
                 obj.prepare_cache(loop_count, str(path))
+        with self.assertRaisesRegex(ValueError, "explicit selected workload"):
+            obj.prepare_cache(5, str(path))
         for options in (
             {"cache_policy": "unbounded"},
             {"workload": ROOTS, "extra_dots": 1},
@@ -388,6 +409,11 @@ class NativeCacheSmoke(unittest.TestCase):
         ):
             with self.assertRaises((TypeError, ValueError)):
                 obj.prepare_cache(1, str(path), **options)
+        self.assertFalse(path.exists())
+        checkpoint = self.scratch / "invalid-checkpoint"
+        with self.assertRaisesRegex(ValueError, "only used by the five-loop"):
+            obj.prepare_cache(1, str(path), checkpoint_path=checkpoint)
+        self.assertFalse(checkpoint.exists())
         self.assertFalse(path.exists())
         with self.assertRaises(ValueError):
             obj.save_cache(1, str(path), mode="automatic")

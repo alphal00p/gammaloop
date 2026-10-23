@@ -22,7 +22,13 @@ use crate::native_graph::PyHedgeGraph;
     feature = "python_stubgen",
     pyo3_stub_gen::derive::gen_stub_pyclass_enum
 )]
-#[pyclass(from_py_object, eq, eq_int, name = "DirectionBasis")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    from_py_object,
+    eq,
+    eq_int,
+    name = "DirectionBasis"
+)]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum PyDirectionBasis {
     /// Follow the source/sink roles stored by the half-edge involution.
@@ -43,7 +49,7 @@ impl From<PyDirectionBasis> for DirectionBasis {
 
 /// A graph-bound structural selection.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "Subgraph")]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "Subgraph")]
 pub struct PySubgraph {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -333,7 +339,12 @@ impl PySubgraph {
         self.complement(py)
     }
 
-    fn __eq__(&self, py: Python<'_>, other: &Self) -> PyResult<bool> {
+    fn __eq__(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "builtins.object", imports = ("builtins")))]
+        other: &Self,
+    ) -> PyResult<bool> {
         let graph = self.owner(py)?;
         let other_graph = other.owner(py)?;
         Ok(graph.is(other_graph)
@@ -357,6 +368,51 @@ impl PySubgraph {
     fn __gt__(&self, py: Python<'_>, other: &Self) -> PyResult<bool> {
         Ok(self.is_superset(py, other)?
             && (self.subgraph != other.subgraph || self.isolated_nodes != other.isolated_nodes))
+    }
+
+    /// Prepare the full owner graph with this selection highlighted and its complement dotted.
+    /// The owner's layout, drawing configuration, and topology remain unchanged.
+    #[pyo3(signature = (*, config=None))]
+    fn render(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
+            &Bound<'_, PyAny>,
+        >,
+    ) -> PyResult<crate::PyDiagramRender> {
+        crate::render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self))
+    }
+
+    /// Render this selection in the context of the full graph, including isolated nodes.
+    #[pyo3(signature = (*, config=None))]
+    fn to_svg(
+        &self,
+        py: Python<'_>,
+        #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
+            &Bound<'_, PyAny>,
+        >,
+    ) -> PyResult<String> {
+        let svg = self.render(py, config)?.to_svg()?;
+        Ok(svg
+            .replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)
+            .replacen(
+                '>',
+                concat!(
+                    "> <style>",
+                    include_str!("../typst/subgraph.css"),
+                    "</style>"
+                ),
+                1,
+            ))
+    }
+
+    fn _repr_svg_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_svg(py, None)
+    }
+
+    /// Show the selected half-edges within their complete graph in notebook output.
+    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
+        self.to_svg(py, None)
     }
 
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
@@ -383,7 +439,7 @@ impl PySubgraph {
 
 /// A cycle in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "Cycle")]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "Cycle")]
 pub struct PyCycle {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -453,7 +509,7 @@ impl PyCycle {
 
 /// An oriented cut in a particular graph revision.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "OrientedCut")]
+#[pyclass(module = "symbolica.community.graph", unsendable, name = "OrientedCut")]
 pub struct PyOrientedCut {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -487,7 +543,11 @@ impl PyOrientedCut {
 
 /// One source-side, oriented-boundary, target-side cut partition.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "CutPartition")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    unsendable,
+    name = "CutPartition"
+)]
 pub struct PyCutPartition {
     graph: Option<Py<PyGraph>>,
     revision: u64,
@@ -687,7 +747,11 @@ impl PyOrientedCut {
 
 /// A graph-bound DFS or BFS traversal tree.
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
-#[pyclass(unsendable, name = "TraversalTree")]
+#[pyclass(
+    module = "symbolica.community.graph",
+    unsendable,
+    name = "TraversalTree"
+)]
 pub struct PyTraversalTree {
     graph: Option<Py<PyGraph>>,
     revision: u64,

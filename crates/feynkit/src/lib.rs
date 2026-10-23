@@ -7,6 +7,13 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "amplitude")]
+pub use feynkit_amplitude as amplitude;
+#[cfg(feature = "amplitude")]
+pub use feynkit_amplitude::{
+    Amplitude, AmplitudeError, AmplitudeLeg, AmplitudeOptions, AxialReference, ColorRepresentation,
+    ColorSum, ColorSumError, SpinSum, SpinSumError, SquaredAmplitude,
+};
 #[cfg(feature = "cff")]
 pub use feynkit_cff as cff;
 #[cfg(feature = "generator")]
@@ -26,13 +33,18 @@ pub use feynkit_ufo as ufo;
 pub use feynkit_cff::{CffGenerator, CffOptions, CffResult};
 #[cfg(feature = "generator")]
 pub use feynkit_generator::{
-    GenerationOptions, GenerationResult, Generator, ParticleSelector, Process,
+    FeynmanDiagramRulesExt, GenerationOptions, GenerationResult, ModelProcessExt, ParticleSelector,
+    Process,
 };
 #[cfg(feature = "graph")]
-pub use feynkit_graph::{FeynmanDiagram, LoopMomentumBasis};
+pub use feynkit_graph::{
+    FeynmanDiagram, IntegralFamily, IntegralFamilyError, IntegralMapping, LoopMomentumBasis,
+    PropagatorMapping,
+};
 #[cfg(feature = "kinematics")]
 pub use feynkit_kinematics::{
-    Boost, FourMomentum, Helicity, JetDefinition, Rotation, ThreeMomentum,
+    Boost, FourMomentum, Helicity, InitialStateFlux, JetDefinition, Kinematics, Rotation,
+    SymbolicKinematicsError, ThreeMomentum,
 };
 #[cfg(feature = "model")]
 pub use feynkit_model::{Model, ParameterCard};
@@ -58,7 +70,6 @@ mod tests {
     fn facade_exposes_primary_types() {
         let _ = std::any::TypeId::of::<super::Model>();
         let _ = std::any::TypeId::of::<super::FeynmanDiagram>();
-        let _ = std::any::TypeId::of::<super::Generator>();
         let _ = std::any::TypeId::of::<super::CffGenerator>();
         let _ = std::any::TypeId::of::<super::FourMomentum<f64>>();
         let _ = std::any::TypeId::of::<super::TensorReducer>();

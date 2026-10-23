@@ -16,12 +16,39 @@ fn scalar_model() -> Model {
 }
 
 fn sunset() -> (FeynmanDiagram, IntegralFamily) {
-    let diagram = FeynmanDiagram::from_topology_dot(
+    let diagram = FeynmanDiagram::from_dot(
         scalar_model(),
         "digraph sunset { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; }",
     ).unwrap();
     let family = diagram.propagator_family(&Kinematics::new()).unwrap();
     (diagram, family)
+}
+
+#[test]
+fn native_graph_ingress_preserves_high_rank_factored_numerator() {
+    let (diagram, family) = sunset();
+    let first = &family.denominators()[0] + &family.denominators()[1];
+    let second = &family.denominators()[1] - &family.denominators()[2];
+    let convert = |numerator: &Atom| {
+        VakintExpression::from_diagram(
+            &diagram,
+            &family,
+            numerator,
+            &DiagramIntegralOptions::default(),
+        )
+        .unwrap()
+    };
+    let first_mapped = convert(&first);
+    let second_mapped = convert(&second);
+    let complete = convert(&(first.pow(8) * second.pow(9)));
+    assert_eq!(complete.0.len(), 1);
+    assert_eq!(complete.0[0].integral, first_mapped.0[0].integral);
+    assert_eq!(complete.0[0].integral, second_mapped.0[0].integral);
+    assert_eq!(
+        complete.0[0].numerator,
+        first_mapped.0[0].numerator.pow(8) * second_mapped.0[0].numerator.pow(9),
+        "native scalar-product conversion must preserve exact numerator factors and powers",
+    );
 }
 
 #[test]
@@ -65,7 +92,7 @@ fn graph_propagator_powers_supply_defaults_and_explicit_powers_override_them() {
 
 #[test]
 fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
-    let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
+    let diagram = FeynmanDiagram::from_dot(scalar_model(),
         "digraph repeated { a -> b [particle=\"phi\"]; a -> b [particle=\"phi\"]; a -> a [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();
     let family = diagram.propagator_family(&Kinematics::new()).unwrap();
     assert_eq!(diagram.loop_count(), 3);
@@ -104,7 +131,7 @@ fn repeated_native_propagators_coalesce_exact_powers_before_matching() {
 
 #[test]
 fn massive_zero_flow_bridge_is_a_scalar_factor_without_losing_loops() {
-    let diagram = FeynmanDiagram::from_topology_dot(scalar_model(),
+    let diagram = FeynmanDiagram::from_dot(scalar_model(),
         "digraph two_tadpoles { a -> a [particle=\"phi\"]; a -> b [particle=\"phi\"]; b -> b [particle=\"phi\"]; }").unwrap();
     let original = diagram.propagator_family(&Kinematics::new()).unwrap();
     assert_eq!(diagram.loop_count(), 2);
@@ -186,7 +213,7 @@ fn massive_zero_flow_bridge_is_a_scalar_factor_without_losing_loops() {
 
 #[test]
 fn five_loop_self_edge_pinch_never_downgrades_the_integration_dimension() {
-    let diagram = FeynmanDiagram::from_topology_dot(
+    let diagram = FeynmanDiagram::from_dot(
         scalar_model(),
         "digraph five_tadpoles {\
         a -> a [particle=\"phi\"]; a -> b [particle=\"phi\"];\

@@ -52,8 +52,13 @@
     width: 100%,
     height: 100%,
   )[
+    #if show-graph-labels {
+      place(top + right, dx: -3pt, dy: 3pt)[
+        #text(size: graph-label-size, fill: gray)[\##index]
+      ]
+    }
     #if show-graph-labels and graph-label-position == "top" [
-      #text(size: graph-label-size)[Graph \##index]
+      #text(size: graph-label-size)[#fig.name]
       #v(3pt)
     ]
 
@@ -61,7 +66,7 @@
 
     #if show-graph-labels and graph-label-position == "bottom" [
       #v(3pt)
-      #text(size: graph-label-size)[Graph \##index]
+      #text(size: graph-label-size)[#fig.name]
     ]
   ]
   let empty-cell = box(inset: 0pt, width: 100%, height: 100%)[]

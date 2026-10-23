@@ -61,8 +61,8 @@ use symbolica_utils::{IntoArgs, IntoSymbol};
 
 #[cfg(feature = "native-code-generation")]
 use symbolica::evaluate::{
-    CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, ExportNumber,
-    ExportSettings, ExportedCode,
+    CompileOptions, CompiledCode, CompiledComplexEvaluator, CompiledNumber, CompiledRealEvaluator,
+    ExportNumber, ExportSettings, ExportedCode,
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder, Indeterminate, KeyLookup, Symbol},
@@ -82,7 +82,7 @@ use symbolica::{
 };
 
 #[cfg(feature = "native-code-generation")]
-use symbolica::domains::float::{FloatLike, SingleFloat};
+use symbolica::domains::float::SingleFloat;
 
 #[cfg(feature = "shadowing")]
 fn horner_contract_atom<CStrat: crate::network::AtomComponentOptimizer>(atom: Atom) -> Atom {
@@ -2015,17 +2015,16 @@ fn grouped_atom_sum(terms: Vec<Atom>) -> Atom {
     }
 }
 
-fn grouped_sparse_atom_contract<I>(
+fn grouped_atom_contract<I>(
     left: &DataTensor<Atom, I>,
     right: &DataTensor<Atom, I>,
 ) -> Result<Option<DataTensor<Atom, I>>, ContractionError>
 where
     I: TensorStructure + Clone + StructureContract,
 {
-    let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
-        return Ok(None);
-    };
-    if !left.zero.as_view().is_zero() || !right.zero.as_view().is_zero() {
+    if [left, right].into_iter().any(
+        |tensor| matches!(tensor, DataTensor::Sparse(sparse) if !sparse.zero.as_view().is_zero()),
+    ) {
         return Ok(None);
     }
 
@@ -2036,6 +2035,9 @@ where
     match (common_count, merge_info) {
         (0, _) | (_, MergeInfo::Interleaved(_)) => Ok(None),
         (1, MergeInfo::FirstBeforeSecond) => {
+            let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
+                return Ok(None);
+            };
             let left_axis = pos_left
                 .included_iter()
                 .next()
@@ -2054,6 +2056,9 @@ where
             .map(|tensor| Some(DataTensor::Sparse(tensor)))
         }
         (1, MergeInfo::SecondBeforeFirst) => {
+            let (DataTensor::Sparse(left), DataTensor::Sparse(right)) = (left, right) else {
+                return Ok(None);
+            };
             let left_axis = pos_left
                 .included_iter()
                 .next()
@@ -2072,20 +2077,18 @@ where
             .map(|tensor| Some(DataTensor::Sparse(tensor)))
         }
         (_, MergeInfo::FirstBeforeSecond) => {
-            grouped_sparse_atom_multi_contract(left, right, resulting_structure)
-                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+            grouped_atom_multi_contract(left, right, resulting_structure).map(Some)
         }
         (_, MergeInfo::SecondBeforeFirst) => {
-            grouped_sparse_atom_multi_contract(right, left, resulting_structure)
-                .map(|tensor| Some(DataTensor::Sparse(tensor)))
+            grouped_atom_multi_contract(right, left, resulting_structure).map(Some)
         }
     }
 }
 
-// Finishing grouped sparse Atom contractions has remained slower with Rayon in
-// the measured workload range. Adaptive mode therefore stays serial until a
-// reproducible crossover is found; explicit Parallel still exercises the path.
-const GROUPED_SPARSE_ATOM_SUM_AUTO_PARALLEL: bool = false;
+// Finishing grouped Atom contractions has remained slower with Rayon in
+// the measured sparse workload range. Adaptive mode therefore stays serial until
+// a reproducible crossover is found; explicit Parallel still exercises the path.
+const GROUPED_ATOM_SUM_AUTO_PARALLEL: bool = false;
 
 fn grouped_sparse_atom_single_contract<I>(
     left: &SparseTensor<Atom, I>,
@@ -2157,7 +2160,7 @@ where
         (!value.as_view().is_zero()).then_some((index, value))
     };
     let elements = if crate::symbolic_parallelism::SymbolicParallelism::rayon_enabled_for(|| {
-        GROUPED_SPARSE_ATOM_SUM_AUTO_PARALLEL
+        GROUPED_ATOM_SUM_AUTO_PARALLEL
     }) {
         grouped.into_par_iter().filter_map(finish_group).collect()
     } else {
@@ -2171,11 +2174,11 @@ where
     })
 }
 
-fn grouped_sparse_atom_multi_contract<I>(
-    left: &SparseTensor<Atom, I>,
-    right: &SparseTensor<Atom, I>,
+fn grouped_atom_multi_contract<I>(
+    left: &DataTensor<Atom, I>,
+    right: &DataTensor<Atom, I>,
     final_structure: I,
-) -> Result<SparseTensor<Atom, I>, ContractionError>
+) -> Result<DataTensor<Atom, I>, ContractionError>
 where
     I: TensorStructure + Clone + StructureContract,
 {
@@ -2191,42 +2194,21 @@ where
 
     for mut fiber_a in self_iter {
         for mut fiber_b in other_iter.by_ref() {
-            let mut items = fiber_a
-                .next()
-                .map(|(a, skip, (neg, _))| (a, skip, neg))
-                .zip(fiber_b.next().map(|(b, skip, _)| (b, skip)));
-            let mut terms = Vec::new();
-
-            while let Some(((a, skip_a, neg), (b, skip_b))) = items {
-                if skip_a > skip_b {
-                    let b = fiber_b
-                        .by_ref()
-                        .next()
-                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
-                    items = Some((a, skip_a, neg)).zip(b);
-                } else if skip_b > skip_a {
-                    let a = fiber_a
-                        .by_ref()
-                        .next()
-                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
-                    items = a.zip(Some((b, skip_b)));
-                } else {
-                    let mut product = a.mul_fallible(b).unwrap();
-                    if neg {
-                        product = -product;
+            // Batch each component sum without expanding its factorized products.
+            let terms = fiber_a
+                .iter
+                .by_ref()
+                .zip(fiber_b.iter.by_ref())
+                .filter_map(|(left_index, right_index)| {
+                    let a = left.get_ref_linear(left_index.item)?;
+                    let b = right.get_ref_linear(right_index)?;
+                    if a.is_zero() || b.is_zero() {
+                        return None;
                     }
-                    terms.push(product);
-                    let b = fiber_b
-                        .by_ref()
-                        .next()
-                        .map(|(b, skip, _)| (b, skip + skip_b + 1));
-                    let a = fiber_a
-                        .by_ref()
-                        .next()
-                        .map(|(a, skip, (neg, _))| (a, skip + skip_a + 1, neg));
-                    items = a.zip(b);
-                }
-            }
+                    let product = a.mul_fallible(b).unwrap();
+                    Some(if left_index.neg { -product } else { product })
+                })
+                .collect::<Vec<_>>();
 
             if !terms.is_empty() {
                 grouped.push((result_index.into(), terms));
@@ -2242,17 +2224,21 @@ where
         (!value.as_view().is_zero()).then_some((index, value))
     };
     let elements = if crate::symbolic_parallelism::SymbolicParallelism::rayon_enabled_for(|| {
-        GROUPED_SPARSE_ATOM_SUM_AUTO_PARALLEL
+        GROUPED_ATOM_SUM_AUTO_PARALLEL
     }) {
         grouped.into_par_iter().filter_map(finish_group).collect()
     } else {
         grouped.into_iter().filter_map(finish_group).collect()
     };
 
-    Ok(SparseTensor {
+    let result = SparseTensor {
         zero: Atom::Zero,
         elements,
         structure: final_structure,
+    };
+    Ok(match (left, right) {
+        (DataTensor::Sparse(_), DataTensor::Sparse(_)) => DataTensor::Sparse(result),
+        _ => DataTensor::Dense(result.to_dense()),
     })
 }
 
@@ -2269,7 +2255,7 @@ where
     {
         let s = if let Some(s) = self.one_hot_selector_contract(other)? {
             s
-        } else if let Some(s) = grouped_sparse_atom_contract(&self.tensor, &other.tensor)? {
+        } else if let Some(s) = grouped_atom_contract(&self.tensor, &other.tensor)? {
             s
         } else {
             self.tensor.contract(&other.tensor)?
@@ -2605,7 +2591,9 @@ impl<T, S: TensorStructure> EvalTreeTensorSet<T, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
 
         let mut elements = vec![zero; self.size];
         self.eval.0.evaluate(params, &mut elements);
@@ -2733,7 +2721,9 @@ impl<S: Clone, T> EvalTreeTensor<T, S> {
         T: Real,
         S: TensorStructure,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
         if let Some(ref indexmap) = self.indexmap {
             let mut elements = vec![zero.clone(); indexmap.len()];
             self.eval.evaluate(params, &mut elements);
@@ -2759,6 +2749,33 @@ pub struct EvalTensor<T, S> {
 }
 
 impl<T, S: TensorStructure + Clone> EvalTensor<T, S> {
+    /// Evaluate the stored components and restore their dense or sparse layout.
+    ///
+    /// The callback receives the underlying evaluator and an output slice in
+    /// evaluator order. It must fill every entry. Sparse component indices are
+    /// restored here, so callers may use custom numeric domains or component
+    /// batches without copying the tensor's indexing logic. `zero` supplies the
+    /// correct precision and component shape for implicit sparse zeros.
+    pub fn evaluate_components<U: Clone>(
+        &mut self,
+        zero: U,
+        evaluate: impl FnOnce(&mut T, &mut [U]),
+    ) -> DataTensor<U, S> {
+        if let Some(indexmap) = &self.indexmap {
+            let mut elements = vec![zero.clone(); indexmap.len()];
+            evaluate(&mut self.eval, &mut elements);
+            DataTensor::Sparse(SparseTensor {
+                zero,
+                elements: indexmap.iter().copied().zip(elements).collect(),
+                structure: self.structure.clone(),
+            })
+        } else {
+            let mut tensor = DenseTensor::repeat(self.structure.clone(), zero);
+            evaluate(&mut self.eval, &mut tensor.data);
+            DataTensor::Dense(tensor)
+        }
+    }
+
     pub fn usize_tensor(&self, shift: usize) -> DataTensor<usize, S> {
         if let Some(ref indexmap) = self.indexmap {
             let mut sparse_tensor = SparseTensor::empty(self.structure.clone(), 0);
@@ -3009,21 +3026,10 @@ impl<T, S> EvalTensor<ExpressionEvaluator<T>, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
-        if let Some(ref indexmap) = self.indexmap {
-            let mut elements = vec![zero.clone(); indexmap.len()];
-            self.eval.evaluate(params, &mut elements);
-            let s = SparseTensor {
-                zero: zero.clone(),
-                elements: indexmap.iter().cloned().zip(elements.drain(0..)).collect(),
-                structure: self.structure.clone(),
-            };
-            DataTensor::Sparse(s)
-        } else {
-            let mut out_data = DenseTensor::repeat(self.structure.clone(), zero.clone());
-            self.eval.evaluate(params, &mut out_data.data);
-            DataTensor::Dense(out_data)
-        }
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
+        self.evaluate_components(zero, |eval, out| eval.evaluate(params, out))
     }
 }
 
@@ -3102,7 +3108,9 @@ impl<T, S: TensorStructure> LinearizedEvalTensorSet<T, S> {
         T: Real,
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = params
+            .first()
+            .map_or_else(T::new_zero, |value| value.zero());
 
         let mut elements = vec![zero; self.size];
         self.eval.0.evaluate(params, &mut elements);
@@ -3157,48 +3165,25 @@ impl<S: TensorStructure, F: CompiledNumber> EvalTensorSet<CompiledCode<F>, S> {
 pub type CompiledEvalTensor<S> = EvalTensor<CompiledComplexEvaluatorSpenso, S>;
 
 #[cfg(feature = "native-code-generation")]
-impl<S> EvalTensor<CompiledComplexEvaluatorSpenso, S> {
-    pub fn evaluate(&mut self, params: &[Complex<f64>]) -> DataTensor<Complex<f64>, S>
-    where
-        S: TensorStructure + Clone,
-    {
-        if let Some(ref indexmap) = self.indexmap {
-            let mut elements: Vec<Complex<f64>> = vec![Complex::default(); indexmap.len()];
-            self.eval.evaluate(params, &mut elements);
-            let s = SparseTensor {
-                zero: Complex::new_zero(),
-                elements: indexmap.iter().cloned().zip(elements.drain(0..)).collect(),
-                structure: self.structure.clone(),
-            };
-            DataTensor::Sparse(s)
-        } else {
-            let mut out_data = DenseTensor::repeat(self.structure.clone(), Complex::default());
-            self.eval.evaluate(params, &mut out_data.data);
-            DataTensor::Dense(out_data)
-        }
+impl<S: TensorStructure + Clone> EvalTensor<CompiledComplexEvaluatorSpenso, S> {
+    pub fn evaluate(&mut self, params: &[Complex<f64>]) -> DataTensor<Complex<f64>, S> {
+        self.evaluate_components(Complex::default(), |eval, out| eval.evaluate(params, out))
     }
 }
 
 #[cfg(feature = "native-code-generation")]
-impl<S> EvalTensor<CompiledComplexEvaluator, S> {
-    pub fn evaluate(&mut self, params: &[SymComplex<f64>]) -> DataTensor<SymComplex<f64>, S>
-    where
-        S: TensorStructure + Clone,
-    {
-        if let Some(ref indexmap) = self.indexmap {
-            let mut elements: Vec<SymComplex<f64>> = vec![SymComplex::default(); indexmap.len()];
-            self.eval.evaluate(params, &mut elements);
-            let s = SparseTensor {
-                zero: SymComplex::new_zero(),
-                elements: indexmap.iter().cloned().zip(elements.drain(0..)).collect(),
-                structure: self.structure.clone(),
-            };
-            DataTensor::Sparse(s)
-        } else {
-            let mut out_data = DenseTensor::repeat(self.structure.clone(), SymComplex::default());
-            self.eval.evaluate(params, &mut out_data.data);
-            DataTensor::Dense(out_data)
-        }
+impl<S: TensorStructure + Clone> EvalTensor<CompiledComplexEvaluator, S> {
+    pub fn evaluate(&mut self, params: &[SymComplex<f64>]) -> DataTensor<SymComplex<f64>, S> {
+        self.evaluate_components(SymComplex::default(), |eval, out| {
+            eval.evaluate(params, out)
+        })
+    }
+}
+
+#[cfg(feature = "native-code-generation")]
+impl<S: TensorStructure + Clone> EvalTensor<CompiledRealEvaluator, S> {
+    pub fn evaluate(&mut self, params: &[f64]) -> DataTensor<f64, S> {
+        self.evaluate_components(0.0, |eval, out| eval.evaluate(params, out))
     }
 }
 
@@ -3211,7 +3196,7 @@ impl<S: TensorStructure> CompiledEvalTensorSet<S> {
     where
         S: TensorStructure + Clone,
     {
-        let zero = params[0].zero();
+        let zero = Complex::new_zero();
 
         let mut elements = vec![zero; self.size];
         self.eval.evaluate(params, &mut elements);
@@ -3256,6 +3241,156 @@ pub mod test {
     };
 
     use super::MixedTensor;
+
+    #[test]
+    fn evaluate_components_restores_sparse_batched_outputs() {
+        use super::EvalTensor;
+        use crate::structure::representation::Euclidean;
+
+        let structure: OrderedStructure =
+            Canonicalized::from_iter([Euclidean {}.new_slot(4, 0)]).into_canonical();
+        let mut tensor = EvalTensor {
+            eval: (),
+            indexmap: Some(vec![2.into(), 0.into()]),
+            structure,
+        };
+        let output = tensor.evaluate_components(vec![0.0; 3], |_, out| {
+            assert_eq!(out.len(), 2);
+            out[0] = vec![2.0, 3.0, 4.0];
+            out[1] = vec![5.0, 6.0, 7.0];
+        });
+        let DataTensor::Sparse(output) = output else {
+            panic!("sparse evaluator must preserve sparse output");
+        };
+        assert_eq!(output.zero, vec![0.0; 3]);
+        assert_eq!(output.elements[&2.into()], vec![2.0, 3.0, 4.0]);
+        assert_eq!(output.elements[&0.into()], vec![5.0, 6.0, 7.0]);
+        assert!(!output.elements.contains_key(&1.into()));
+
+        tensor.indexmap = Some(Vec::new());
+        let output = tensor.evaluate_components(vec![0.0; 3], |_, out| assert!(out.is_empty()));
+        let DataTensor::Sparse(output) = output else {
+            panic!("empty sparse evaluator must remain sparse");
+        };
+        assert!(output.elements.is_empty());
+        assert_eq!(output.zero, vec![0.0; 3]);
+    }
+
+    #[test]
+    fn grouped_atom_multi_contraction_preserves_metric_permutations_and_factors() {
+        use crate::{
+            contraction::Contract,
+            structure::{
+                representation::{Euclidean, Lorentz},
+                slot::{DualSlotTo, IsAbstractSlot},
+            },
+            tensors::data::{DenseTensor, SetTensorData},
+        };
+        use symbolica::{atom::AtomCore, function, parse, symbol};
+
+        use super::ParamTensor;
+
+        let metric = Minkowski {}.new_slot(4, 10).to_lib();
+        let first = Lorentz {}.new_slot(2, 12).to_lib();
+        let second = Lorentz {}.new_slot(2, 14).to_lib();
+        let left_structure: Canonicalized<OrderedStructure> = Canonicalized::from_iter([
+            Euclidean {}.new_slot(2, 0).to_lib(),
+            metric,
+            first,
+            second.dual(),
+        ]);
+        let right_structure: Canonicalized<OrderedStructure> = Canonicalized::from_iter([
+            Euclidean {}.new_slot(2, 2).to_lib(),
+            metric,
+            first.dual(),
+            second,
+        ]);
+        let (permutation, left_matches, right_matches) = left_structure
+            .canonical()
+            .match_indices(right_structure.canonical())
+            .unwrap();
+        assert!(!permutation.is_identity());
+        assert_eq!(left_matches.iter().filter(|matched| **matched).count(), 3);
+        assert_eq!(right_matches.iter().filter(|matched| **matched).count(), 3);
+
+        let mut left = DenseTensor::repeat(left_structure.canonical().clone(), Atom::Zero);
+        let mut right = DenseTensor::repeat(right_structure.canonical().clone(), Atom::Zero);
+        for free in 0..2 {
+            for i in 0..4 {
+                for j in 0..2 {
+                    for k in 0..2 {
+                        let n = (i * 2 + j) * 2 + k;
+                        let factors = (parse!("x") + function!(symbol!("a"), Atom::num(n)))
+                            * (parse!("y") + function!(symbol!("b"), Atom::num(n)));
+                        let a = if n % 5 == 0 {
+                            Atom::Zero
+                        } else {
+                            factors * Atom::num((free + 1) * (n + 1))
+                        };
+                        let b = if n % 7 == 0 {
+                            Atom::Zero
+                        } else {
+                            Atom::num((free + 2) * (n % 3 - 1))
+                        };
+                        // Apply the structure's existing permutations to the data too.
+                        let mut indices = [free, i, j, k].map(|index| index as usize);
+                        let canonical_indices =
+                            left_structure.layout().logical_to_canonical(&indices);
+                        indices.copy_from_slice(&canonical_indices);
+                        left.set(&indices, a).unwrap();
+                        let mut indices = [free, i, j, k].map(|index| index as usize);
+                        let canonical_indices =
+                            right_structure.layout().logical_to_canonical(&indices);
+                        indices.copy_from_slice(&canonical_indices);
+                        right.set(&indices, b).unwrap();
+                    }
+                }
+            }
+        }
+
+        // Independently enumerate physical coordinates with the Minkowski sign.
+        // This reference does not use contraction fibers or their permutation.
+        let expected = (0..2)
+            .flat_map(|a| (0..2).map(move |b| (a, b)))
+            .map(|(a, b)| {
+                (0..16).fold(Atom::Zero, |sum, n| {
+                    if n % 5 == 0 || n % 7 == 0 {
+                        return sum;
+                    }
+                    let sign = if n / 4 == 0 { 1 } else { -1 };
+                    let weight = sign * (a + 1) * (n + 1) * (b + 2) * (n % 3 - 1);
+                    sum + Atom::num(weight)
+                        * (parse!("x") + function!(symbol!("a"), Atom::num(n)))
+                        * (parse!("y") + function!(symbol!("b"), Atom::num(n)))
+                })
+            })
+            .collect::<Vec<_>>();
+        assert!(
+            expected
+                .iter()
+                .any(|atom| atom.expand().nterms() > atom.nterms())
+        );
+
+        let mut left_sparse = left.to_sparse();
+        let mut right_sparse = right.to_sparse();
+        // Keep explicit zero entries as well as absent sparse entries.
+        left_sparse.set_flat(0.into(), Atom::Zero).unwrap();
+        right_sparse.set_flat(0.into(), Atom::Zero).unwrap();
+        let left_inputs = [DataTensor::Dense(left), DataTensor::Sparse(left_sparse)];
+        let right_inputs = [DataTensor::Dense(right), DataTensor::Sparse(right_sparse)];
+        for left in &left_inputs {
+            for right in &right_inputs {
+                for (left, right) in [(left, right), (right, left)] {
+                    let reference = left.contract(right).unwrap();
+                    assert_eq!(reference.to_bare_dense().data, expected);
+                    let actual = ParamTensor::composite(left.clone())
+                        .contract(&ParamTensor::composite(right.clone()))
+                        .unwrap();
+                    assert_eq!(actual.tensor.to_bare_dense().data, expected);
+                }
+            }
+        }
+    }
 
     #[test]
     fn tensor_structure() {

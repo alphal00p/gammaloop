@@ -12,32 +12,21 @@ use symbolica::{
     prelude::{Q, Z},
 };
 
-pub(super) fn scalar(mut expression: Atom) -> Result<Atom> {
-    // The local Idenso APIs expose the same identity kernels separately.
-    // Repeat until stable because gamma/color identities can create new metric contractions.
-    loop {
-        // Gamma and color identities can return sums inside tensor products.
-        // Expose each monomial before the next contraction stage so its dummy
-        // indices are contracted within that term.
-        // Contract color and Lorentz indices before tracing gamma matrices.
-        // Repeated indices then avoid unnecessary trace branches.
-        let next = expression
-            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
-            .to_dots()
-            .expand()
-            // Expansion can expose vector coefficients outside gamma products.
-            // Contract them before collection closes those products into traces.
-            .to_dots()
-            .simplify_gamma()
-            .expand()
-            .simplify_color_with(ColorSimplifySettings::default().with_cof_dimension_invariants())
-            .expand()
-            .to_dots();
-        if next == expression {
-            break;
-        }
-        expression = next;
+pub(super) fn scalar(expression: Atom) -> Result<Atom> {
+    let reduced = SymbolicTensor::infer(expression)?.simplify_algebra(&AlgebraSettings {
+        gamma: Some(Default::default()),
+        color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+        contract: AlgebraContraction::Dots,
+        ..Default::default()
+    })?;
+    if reduced.reduction_status() != ReductionStatus::Complete {
+        return Err(format!(
+            "native tensor contraction is incomplete: {:?}",
+            reduced.reduction_status()
+        )
+        .into());
     }
+    let expression = reduced.expression().clone();
     if !expression
         .list_dangling::<spenso::structure::abstract_index::AbstractIndex>()?
         .is_empty()
@@ -77,12 +66,13 @@ fn angular(expression: &Atom, q: Symbol, d: &Atom, guards: &mut BTreeSet<Atom>) 
         return Ok(Atom::Zero);
     }
     let rep = Minkowski::selfless_symbol().call(d);
-    // The local reducer consumes indexed vectors. Expand compact products with
-    // Idenso so each factor, including powers of mixed dots, gets its own indices.
+    // Retain the validated indexed boundary while the compact native path is
+    // checked independently against these controls and the complete source.
     let indexed = indexed_dot_polynomial(expression.as_view())?;
     let reduction = TensorReducer::new(d.clone())
-        .with_integrated_vector(q.call(rep))
-        .reduce(indexed.as_view())?;
+        .with_output_term_limit(ANGULAR_OUTPUT_TERM_LIMIT)
+        .with_integrated_vector(q.call(rep))?
+        .reduce(&SymbolicTensor::infer(indexed)?)?;
     if reduction.max_rank() > 4 {
         return Err("the quadratic transverse projector exceeded auxiliary q rank four".into());
     }
@@ -99,7 +89,7 @@ fn angular(expression: &Atom, q: Symbol, d: &Atom, guards: &mut BTreeSet<Atom>) 
     // transverse projector is exactly evaluation of the remaining radial
     // invariant at one AFTER angular contraction. No physical limit is taken
     // on an uncontracted tensor, and no extra loop normalization is introduced.
-    let result = scalar(reduction.into_expression())?
+    let result = scalar(reduction.into_expression()?.expression().clone())?
         .replace(radial)
         .with(Atom::one())
         .together();

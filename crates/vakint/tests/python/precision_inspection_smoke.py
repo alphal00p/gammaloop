@@ -1,6 +1,5 @@
 """Exercise the installed, coherent Symbolica/Vakint extension without FORM."""
 
-import importlib.util
 import json
 import os
 import unittest
@@ -8,7 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from symbolica import ComplexFloat, E, Float
-from symbolica.community.feynkit import FeynmanDiagram
+from symbolica.community.hepkit import FeynmanDiagram
 from symbolica.community.hepkit.vakint import (
     ConstantSymbol,
     MasterSymbol,
@@ -69,10 +68,7 @@ class PrecisionInspectionSmoke(unittest.TestCase):
         master = self.engine.get_master(self.engine.master_symbols()[0], prec=24)
         html = master.to_html()
         self.assertIn("<table>", html)
-        if importlib.util.find_spec("typst"):
-            self.assertIn("<svg", html)
-        else:
-            self.assertIn("Graph preview unavailable", html)
+        self.assertIn("<svg", html)
 
     def test_unknown_and_invalid_identities_fail_explicitly(self):
         with self.assertRaisesRegex(ValueError, "unknown RustRed constant"):

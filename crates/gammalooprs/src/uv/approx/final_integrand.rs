@@ -16,8 +16,9 @@ use crate::{
 use color_eyre::Result;
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
 use idenso::{
-    color::{ColorSimplifier, ColorSimplifySettings},
-    shorthands::metric::MetricSimplifier,
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    tensor::{AlgebraSettings, SymbolicTensor},
 };
 use linnet::half_edge::subgraph::SubSetOps;
 use symbolica::{
@@ -131,14 +132,18 @@ impl<'a> FinalIntegrandBuilder<'a> {
 
             let color_simplify_input = a.replace(GS.dim).with(4);
 
-            a = color_simplify_input
-                .collect_factors()
-                .simplify_metrics()
-                .simplify_color_with(
-                    ColorSimplifySettings::default().with_cof_dimension_invariants(),
-                );
-
-            a = a.expand_dots()?;
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer_indexed(
+                cooking.try_cook(color_simplify_input.collect_factors().as_view())?,
+            )?
+            .simplify_algebra(&AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
+            })?
+            .expand_dots()?;
+            a = cooking.uncook(reduced.expression().as_view());
 
             a = a.replace_multiple(&reps);
 

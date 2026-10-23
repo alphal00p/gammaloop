@@ -77,14 +77,15 @@ mod tests {
     use std::sync::Arc;
 
     use feynkit_cff::{
-        CffError, CffOptions, EnergySurface, HSurface, HedgeGraphCffExt, ShiftRewrite, Surface,
-        VertexSet,
+        CffError, CffOptions, EnergySurface, FeynmanDiagramCffExt, HSurface, HedgeGraphCffExt,
+        ShiftRewrite, Surface, VertexSet,
     };
-    use feynkit_generator::{GenerationOptions, Generator, Process};
+    use feynkit_generator::{GenerationOptions, Process};
     use linnet::half_edge::{
-        involution::EdgeIndex,
+        involution::{EdgeIndex, Orientation},
         subgraph::{ModifySubSet, SuBitGraph},
     };
+    use symbolica::atom::{Atom, AtomCore};
 
     use crate::{
         cff::generation::GammaLoopGraphCffExt,
@@ -115,13 +116,15 @@ mod tests {
 
     fn cross_section_bubble() -> Graph {
         let model = Arc::new(load_generic_model("scalars"));
-        let process = Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"])
-            .with_loop_count(1, 1)
-            .unwrap();
-        let generated = Generator::new(model)
-            .generate(
-                &process,
-                &GenerationOptions::default().threads(1).max_vertices(2),
+        let process = Process::new(["scalar_1"], ["scalar_1", "scalar_1"]);
+        let generated = process
+            .generate_cross_section(
+                model,
+                &GenerationOptions::default()
+                    .threads(1)
+                    .max_vertices(2)
+                    .with_loop_count(1, 1)
+                    .unwrap(),
             )
             .unwrap();
         generated
@@ -158,6 +161,76 @@ mod tests {
             }
         }
         subgraph
+    }
+
+    #[test]
+    fn sewn_bubble_preserves_each_nonzero_external_energy_branch() {
+        test_initialise().unwrap();
+        let model = Arc::new(load_generic_model("scalars"));
+        let generated = Process::new(["scalar_1"], ["scalar_1", "scalar_1"])
+            .generate_cross_section(
+                model,
+                &GenerationOptions::default()
+                    .threads(1)
+                    .max_vertices(2)
+                    .with_loop_count(1, 1)
+                    .unwrap(),
+            )
+            .unwrap();
+        let native = &generated.diagrams[0];
+        let mut runtime = generated.to_gamma_loop_graphs().unwrap().remove(0);
+        let native_cff = native.build_cff(CffOptions::default()).unwrap();
+        let runtime_cff = runtime
+            .generate_cff(&[], &None, &OrientationPattern::default())
+            .unwrap();
+        let crossing = &native.cuts()[0].cut;
+        assert_eq!(crossing.len(), 2);
+        let replacements = |cache: &feynkit_cff::SurfaceCache| {
+            cache.replacements_with(
+                |edge| Atom::num(if edge.0 == crossing[0].edge.0 { 2 } else { 3 }),
+                |_| Atom::num(7),
+            )
+        };
+        assert_eq!(native_cff.orientations().len(), 2);
+        assert_eq!(runtime_cff.orientations().len(), 2);
+        let mut physical_branches = 0;
+        for native_branch in native_cff.orientations() {
+            let runtime_branch = runtime_cff
+                .orientations()
+                .iter()
+                .find(|branch| branch.data.orientation == native_branch.data.orientation)
+                .expect("the same physical orientation survives enrichment");
+            let value = runtime_branch
+                .expression
+                .to_atom_inverse()
+                .replace_multiple(replacements(&runtime_cff.surfaces));
+            assert_eq!(
+                value,
+                native_branch
+                    .expression
+                    .to_atom_inverse()
+                    .replace_multiple(replacements(&native_cff.surfaces))
+            );
+            let physical = crossing.iter().all(|half_edge| {
+                native_branch.data.orientation[EdgeIndex(half_edge.edge.0)]
+                    == match half_edge.endpoint {
+                        feynkit_graph::DiagramEndpoint::Source => Orientation::Default,
+                        feynkit_graph::DiagramEndpoint::Target => Orientation::Reversed,
+                    }
+            });
+            physical_branches += usize::from(physical);
+            // The orientation sum is even in external energy; only the
+            // separate causal denominators expose an erroneous sign reversal.
+            assert_eq!(
+                value,
+                if physical {
+                    Atom::num(-1) / 2
+                } else {
+                    Atom::num(1) / 12
+                }
+            );
+        }
+        assert_eq!(physical_branches, 1);
     }
 
     #[test]
@@ -204,6 +277,38 @@ mod tests {
         let expression = graph
             .generate_cff(&[], &None, &OrientationPattern::default())
             .unwrap();
+
+        // There is one incoming edge (4) and one outgoing edge (3), so
+        // conservation means Q3=Q4=P, with arbitrary P. The native cache keeps
+        // the explicit Q3-Q4 dependence and vertex provenance instead of
+        // collapsing those surfaces before applying this physical relation.
+        let energies = [
+            symbolica::parse!("cff_regression::E0"),
+            symbolica::parse!("cff_regression::E1"),
+            symbolica::parse!("cff_regression::E2"),
+        ];
+        let replacements = expression.surfaces.replacements_with(
+            |edge| energies[edge.0].clone(),
+            |_| symbolica::parse!("cff_regression::P"),
+        );
+        let expected = [
+            "1/((E0+E1-P)*(E0+E2-P))",
+            "1/((E0+E2-P)*(E1+E2))",
+            "1/((E0+E1+P)*(E1+E2))",
+            "1/((E0+E1-P)*(E1+E2))",
+            "1/((E0+E2+P)*(E1+E2))",
+            "1/((E0+E1+P)*(E0+E2+P))",
+        ];
+        assert_eq!(expression.orientations().len(), expected.len());
+        for (orientation, expected) in expression.orientations().iter().zip(expected) {
+            assert_eq!(
+                orientation
+                    .expression
+                    .to_atom_inverse()
+                    .replace_multiple(&replacements),
+                Atom::parse(expected, "cff_regression", Default::default()).unwrap()
+            );
+        }
 
         insta::assert_json_snapshot!(
             "root_tree",

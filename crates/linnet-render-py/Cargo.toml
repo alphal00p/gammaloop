@@ -1,0 +1,39 @@
+[package]
+name = "linnet-render-py"
+version = "0.1.0"
+edition = "2021"
+description = "Shared Python graph presentation bindings"
+license = "MIT"
+
+[lib]
+crate-type = ["rlib"]
+name = "linnet_render_py"
+
+[[bin]]
+name = "linnet-render-stubgen"
+path = "src/bin/stubgen.rs"
+required-features = ["python_stubgen"]
+
+[dependencies]
+symbolica = { workspace = true, features = ["python_export"] }
+linnet = { workspace = true }
+linnest = { workspace = true, features = ["svg"] }
+pyo3 = { workspace = true, features = ["multiple-pymethods"] }
+pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
+pyo3-stub-gen-derive = { workspace = true, default-features = false }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+typst-renderer = { path = "../typst-renderer" }
+resvg = { version = "0.47.0", default-features = false }
+krilla = { version = "0.8.2", default-features = false }
+krilla-svg = { version = "0.8.1", default-features = false }
+
+[dev-dependencies]
+tempfile = "3.8"
+roxmltree = "0.21.1"
+
+[features]
+default = ["native"]
+native = ["symbolica/integer-gmp", "symbolica/float-mpfr"]
+wasm = ["symbolica/wasm"]
+python_stubgen = ["dep:pyo3-stub-gen", "symbolica/python_stubgen"]

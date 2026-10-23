@@ -14,7 +14,13 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::{LogMessage, debug_instrument};
-use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    tensor::{AlgebraSettings, SymbolicTensor},
+};
+use spenso::shadowing::TensorCollectExt;
 use spenso::shadowing::symbolica_utils::LogPrint;
 
 use symbolica::atom::{Atom, AtomCore};
@@ -325,7 +331,16 @@ impl Forest {
                 dod = n.data.spinney.dod,
                 "Dumped pole part color simplification input"
             );
-            let atom = atom.simplify_color().expand_num().to_dots();
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let atom = cooking.uncook(reduced.expression().as_view()).expand_num();
             // .replace(GS.dim)
             // .max_level(0)
             // .with(4); //.with(Atom::var(GS.dim_epsilon) * (-2) + 4);
@@ -363,7 +378,16 @@ impl Forest {
                 .data
                 .final_integrand(graph)?
                 .iter()
-                .map(|(cut_index, integrand)| (*cut_index, integrand.clone().collect_color()))
+                .map(|(cut_index, integrand)| {
+                    (
+                        *cut_index,
+                        integrand.clone().collect_reps([
+                            ColorAdjoint {}.into(),
+                            ColorFundamental {}.into(),
+                            ColorSextet {}.into(),
+                        ]),
+                    )
+                })
                 .collect();
             sum = Some(match sum {
                 Some(sum) => sum.zip_add(&terms).wrap_err_with(|| {

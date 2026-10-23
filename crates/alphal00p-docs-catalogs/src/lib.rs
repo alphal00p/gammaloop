@@ -915,11 +915,21 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
         ]),
         "spynso3" => Ok(&[
             "BroadcastFunction",
+            "CanonicalizationError",
             "CompiledTensorEvaluator",
+            "CookingError",
+            "DiracAdjointError",
             "DisplaySettings",
+            "ExecutionMode",
+            "ExecutionStatus",
+            "FactorProjector",
+            "NetworkToolingError",
             "PortPattern",
             "Representation",
+            "RepresentationName",
+            "ReductionStatus",
             "Slot",
+            "SymbolicParallelism",
             "Tensor",
             "TensorEvaluator",
             "TensorExpression",
@@ -928,8 +938,8 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "TensorName",
             "TensorNetwork",
             "TensorPattern",
-            "ExecutionMode",
-            "SymbolicParallelism",
+            "TensorRule",
+            "TensorStructure",
             "as_tensor",
             "chain",
             "dot",
@@ -941,14 +951,14 @@ fn python_required_exports(component: &str) -> Result<&'static [&'static str]> {
             "to_typst",
             "trace",
         ]),
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(&[]),
+        "feynkit-community" | "linnet-graph" | "vakint-community" => Ok(&[]),
         _ => bail!("unknown Python component {component}"),
     }
 }
 
 fn python_export_is_supported(component: &str, name: &str) -> Result<bool> {
     match component {
-        "linnet-py" | "idenso-community" | "vakint-community" => Ok(true),
+        "feynkit-community" | "linnet-graph" | "vakint-community" => Ok(true),
         "gammaloop-python" | "spynso3" => Ok(python_required_exports(component)?.contains(&name)),
         _ => bail!("unknown Python component {component}"),
     }
@@ -1313,8 +1323,9 @@ mod tests {
     #[test]
     fn spynso_supported_surface_covers_the_documented_workflow_types() {
         let required = python_required_exports("spynso3").unwrap();
-        assert_eq!(required.len(), 26);
         for entry in [
+            "FactorProjector",
+            "ReductionStatus",
             "CompiledTensorEvaluator",
             "TensorExpression",
             "TensorEvaluator",
@@ -1334,6 +1345,27 @@ mod tests {
         let source = fs::read_to_string(root.join("docs/api/python/spynso3.pyi"))
             .expect("checked-in spynso3 Python stub");
         let declarations = python_declarations(&source).unwrap();
+        for entry in required {
+            let declaration = declarations
+                .iter()
+                .find(|declaration| declaration.name == *entry)
+                .unwrap_or_else(|| panic!("missing supported Python declaration {entry}"));
+            assert!(
+                !declaration.docs.trim().is_empty(),
+                "supported Python declaration {entry} has no docs"
+            );
+        }
+        for retired in [
+            "SimplifySettings",
+            "AlgebraSettings",
+            "ContractSettings",
+            "ColorSimplifySettings",
+            "GammaSimplifySettings",
+            "GammaChainOrdering",
+        ] {
+            assert!(!required.contains(&retired));
+            assert!(!declarations.iter().any(|item| item.name == retired));
+        }
         let promoted = declarations
             .iter()
             .filter(|declaration| {
@@ -1353,43 +1385,157 @@ mod tests {
                 .iter()
                 .all(|declaration| !declaration.docs.trim().is_empty())
         );
-        let members = promoted
-            .iter()
-            .flat_map(|declaration| &declaration.members)
-            .collect::<Vec<_>>();
-        assert_eq!(members.len(), 111);
-        let overload_groups = members
-            .iter()
-            .filter(|member| {
-                member
+        for declaration in &promoted {
+            for member in declaration.members.iter().filter(|member| {
+                !matches!(
+                    member.name.as_str(),
+                    "_repr_pretty_" | "_repr_html_" | "_repr_latex_"
+                )
+            }) {
+                let overloads = member
                     .members
                     .iter()
-                    .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-            })
-            .count();
-        let overloads = members
+                    .filter(|overload| {
+                        overload.kind == alphal00p_docs_schema::DocMemberKind::Overload
+                    })
+                    .collect::<Vec<_>>();
+                let documented = if overloads.is_empty() {
+                    vec![member]
+                } else {
+                    overloads
+                };
+                for overload in documented {
+                    assert!(
+                        overload
+                            .docs
+                            .as_ref()
+                            .is_some_and(|docs| !docs.body.trim().is_empty()),
+                        "undocumented public member {}.{}",
+                        declaration.name,
+                        member.name,
+                    );
+                }
+            }
+        }
+        let tensor = declarations
             .iter()
-            .flat_map(|member| &member.members)
-            .filter(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-            .collect::<Vec<_>>();
-        assert_eq!(members.len() - overload_groups + overloads.len(), 113);
-        assert_eq!(
-            members
+            .find(|item| item.name == "TensorExpression")
+            .unwrap();
+        for method in [
+            "contract",
+            "contract_ports",
+            "simplify_algebra",
+            "to_expression",
+            "to_dots",
+            "undo_dots",
+            "undo_chain",
+            "undo_trace",
+            "reduction_status",
+            "contraction_complete",
+        ] {
+            assert!(
+                tensor.members.iter().any(|member| member.name == method),
+                "missing typed tensor method {method}"
+            );
+        }
+        for method in [
+            "simplify",
+            "reduce_algebra",
+            "simplify_gamma",
+            "simplify_color",
+            "simplify_epsilon",
+            "undo_all",
+        ] {
+            assert!(
+                !tensor.members.iter().any(|member| member.name == method),
+                "retired tensor method {method}"
+            );
+        }
+        for method in [
+            "expand_num",
+            "factor",
+            "collect",
+            "collect_num",
+            "collect_factors",
+            "collect_by_coefficient",
+            "collect_symbol",
+            "collect_horner",
+            "together",
+            "cancel",
+            "apart",
+        ] {
+            let member = tensor
+                .members
                 .iter()
-                .filter(|member| {
-                    !member
-                        .members
-                        .iter()
-                        .any(|member| member.kind == alphal00p_docs_schema::DocMemberKind::Overload)
-                        && member.docs.is_some()
-                })
-                .count()
-                + overloads
+                .find(|member| member.name == method)
+                .unwrap_or_else(|| panic!("missing tensor algebra method {method}"));
+            assert!(
+                member
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ends_with("-> TensorExpression:"),
+                "{method} must preserve the tensor type"
+            );
+        }
+        for (method, defaults) in [
+            (
+                "contract",
+                &[
+                    ("expand", "True"),
+                    ("representations", "None"),
+                    ("max_steps_per_domain", "None"),
+                ][..],
+            ),
+            (
+                "simplify_algebra",
+                &[
+                    ("gamma", "True"),
+                    ("color", "True"),
+                    ("epsilon", "False"),
+                    ("contract", "\"fully\""),
+                    ("max_steps_per_domain", "None"),
+                ][..],
+            ),
+        ] {
+            let member = tensor
+                .members
+                .iter()
+                .find(|member| member.name == method)
+                .unwrap();
+            assert!(
+                member
+                    .signature
+                    .as_ref()
+                    .unwrap()
+                    .ends_with("-> TensorExpression:")
+            );
+            assert!(
+                !member
+                    .members
                     .iter()
-                    .filter(|member| member.docs.is_some())
-                    .count(),
-            96
-        );
+                    .any(|parameter| parameter.name == "settings")
+            );
+            for &(name, expected) in defaults {
+                let parameter = member
+                    .members
+                    .iter()
+                    .find(|parameter| parameter.name == name)
+                    .unwrap();
+                assert_eq!(
+                    parameter.default.as_deref(),
+                    Some(expected),
+                    "{method}.{name}"
+                );
+                assert!(
+                    parameter
+                        .docs
+                        .as_ref()
+                        .is_some_and(|docs| !docs.body.trim().is_empty()),
+                    "undocumented parameter {method}.{name}"
+                );
+            }
+        }
     }
 
     #[test]
@@ -1433,18 +1579,18 @@ def run(value: int) -> int:
         let request = CatalogRequest {
             product_id: "test".to_owned(),
             product_title: "Test".to_owned(),
-            component_id: "idenso-community".to_owned(),
-            package: "idenso".to_owned(),
-            component_title: "Idenso Python".to_owned(),
+            component_id: "spynso3".to_owned(),
+            package: "spynso3".to_owned(),
+            component_title: "Spenso and Idenso Python".to_owned(),
             version: "0.1.0".to_owned(),
             language: ApiLanguage::Python,
-            module: Some("symbolica.community.idenso".to_owned()),
+            module: Some("symbolica.community.tensor".to_owned()),
             features: vec![],
         };
         let catalog = export_catalog(
             &request,
             root,
-            Some(&root.join("docs/api/python/idenso-community.pyi")),
+            Some(&root.join("docs/api/python/spynso3.pyi")),
         )
         .unwrap();
         let items = catalog.root.scopes["exports"]

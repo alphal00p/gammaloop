@@ -26,8 +26,8 @@ use crate::{VakintExpression, diagram_integral::DiagramIntegralOptions};
 #[pyfunction]
 #[pyo3(signature = (diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=Vec::new()), text_signature = "(diagram, family, numerator, *, powers=None, physical_slots=None, parameter_substitutions=None, external_momenta=())")]
 pub(crate) fn integral_from_diagram(
-    diagram: &PyFeynmanDiagram,
-    family: &PyIntegralFamily,
+    diagram: PyRef<'_, PyFeynmanDiagram>,
+    family: PyRef<'_, PyIntegralFamily>,
     numerator: PythonExpression,
     #[gen_stub(override_type(type_repr="typing.Sequence[int] | None", imports=("typing")))]
     powers: Option<&Bound<'_, PyAny>>,
@@ -78,7 +78,7 @@ pub(crate) fn integral_from_diagram(
     };
     Ok(VakintExpressionWrapper {
         value: VakintExpression::from_diagram(
-            diagram.as_diagram(),
+            diagram.as_diagram()?,
             family.as_family(),
             &numerator.expr,
             &options,

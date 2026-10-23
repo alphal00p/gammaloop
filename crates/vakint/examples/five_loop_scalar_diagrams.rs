@@ -1,6 +1,6 @@
 //! Generate reusable vacuum DOT fixtures through the public model pipeline.
 
-use feynkit_generator::{GenerationOptions, Generator, Process};
+use feynkit_generator::{GenerationOptions, Process};
 use feynkit_model::Model;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -14,20 +14,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let options = GenerationOptions::default()
         .threads(1)
         .allow_self_loops(true)
-        .max_vertices(8);
-    let generated = Generator::new(
-        Model::from_json(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/phi_3_4.json"
-        )))
-        .expect("valid phi_3_4 fixture"),
-    )
-    .generate(
-        &Process::amplitude(Vec::<&str>::new(), Vec::<&str>::new())
-            .with_loop_count(5, 5)
-            .unwrap(),
-        &options,
-    )?;
+        .max_vertices(8)
+        .with_loop_count(5, 5)?;
+    let model = Model::from_json(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/phi_3_4.json"
+    )))
+    .expect("valid phi_3_4 fixture");
+    let generated =
+        Process::new(Vec::<&str>::new(), Vec::<&str>::new()).generate_diagrams(model, &options)?;
     std::fs::create_dir_all(directory)?;
     for (index, diagram) in generated.diagrams.iter().enumerate() {
         std::fs::write(

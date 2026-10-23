@@ -1,5 +1,5 @@
 digraph feynkit {
-  graph [feynkit_name="tadpole", model_fingerprint="b5455343bcd738affc9576f49c296cfb3e5f4c08c9b0f5779d076699a77bdbd8", symmetry_factor=1, overall_factor="1", numerator="1", numerator_prefactor="1", projector="1", loop_momentum_edges="0", loop_momentum_basis="{\"tree_edges\":[],\"loop_edges\":[0],\"external_edges\":[],\"dependent_externals\":[],\"edge_signatures\":{\"0\":{\"loops\":[1],\"external\":[]}}}", half_edge_order="[{\"edge\":0,\"endpoint\":\"source\"},{\"edge\":0,\"endpoint\":\"target\"}]", cuts="[]", topology_threshold_candidates="[]"];
+  graph [feynkit_name="tadpole", model_fingerprint="109aa62f4f49a115fba675e216f4066efa3f480b620eaf04bf218e9a25e05c82", symmetry_factor=1, overall_factor="1", numerator="1", numerator_prefactor="1", projector="1", loop_momentum_edges="0", loop_momentum_basis="{\"tree_edges\":[],\"loop_edges\":[0],\"external_edges\":[],\"dependent_externals\":[],\"edge_signatures\":{\"0\":{\"loops\":[1],\"external\":[]}}}", half_edge_order="[{\"edge\":0,\"endpoint\":\"source\"},{\"edge\":0,\"endpoint\":\"target\"}]", cuts="[]", topology_threshold_candidates="[]"];
   v0 [id=0, feynkit_name="v0", interaction_id=2, interaction="V_SCALAR2", numerator="1"];
   v0 -> v0 [id=0, particle_id=0, pdg=9000001, particle="phi", directed=false, source_slot=0, target_slot=1, power=1, lmb_id=0, dir=none, numerator="1"];
 }

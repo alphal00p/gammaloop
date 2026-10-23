@@ -81,7 +81,7 @@ impl ScalarDotInput {
         }
         let mass = model
             .particle_by_id(model.particle_id("phi")?)?
-            .symbolic_mass_parameter(&model)?;
+            .symbolic_mass(&model);
         let substitutions = vec![(mass, Atom::one())];
         let replacements = substitutions
             .iter()

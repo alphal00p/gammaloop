@@ -7,6 +7,7 @@ mod presentation;
 
 use std::collections::{BTreeMap, HashMap};
 use std::env;
+use std::path::PathBuf;
 
 use pyo3::types::{PyAnyMethods, PyDict, PyMapping, PyModule, PyModuleMethods, PyType};
 use pyo3::{
@@ -1084,18 +1085,21 @@ impl VakintWrapper {
             .map_err(vakint_to_python_error)
     }
 
-    /// Explicitly prepare a finite native cache for one through four loops.
+    /// Explicitly prepare a finite native cache for one through five loops.
     /// No cache attaches automatically and no numerical masters are computed.
     /// Inspect the returned status: resource/time/cancellation stops are partial.
     /// `workload` is a sequence of `(namespace, complete_integer_powers)` pairs;
-    /// otherwise the native all-pinch relative-dot/rank primer is used.
+    /// otherwise the native all-pinch relative-dot/rank primer is used for 1L–4L.
+    /// Five-loop preparation requires an explicit selected workload and writes
+    /// one compressed cache file. `checkpoint_path` selects its resumable work
+    /// directory; it is only valid for 5L and never changes the final file format.
     ///
     /// The GIL is released during native work. `progress(report)` runs between
     /// roots (throttled) and may return False to cancel; `cancel()` is a polled
     /// predicate. Python signals and callback errors stop cooperatively after
     /// the current native operation, checkpoint completed roots, then re-raise
     /// with `cache_report` attached when possible. No hard deadline is promised.
-    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0))]
+    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, checkpoint_path=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0))]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn prepare_cache(
         &self,
@@ -1115,6 +1119,7 @@ impl VakintWrapper {
         extra_dots: Option<u32>,
         numerator_rank: Option<u32>,
         workload: Option<Vec<(usize, Vec<i64>)>>,
+        checkpoint_path: Option<PathBuf>,
         resume: bool,
         progress: Option<Py<PyAny>>,
         cancel: Option<Py<PyAny>>,
@@ -1127,6 +1132,7 @@ impl VakintWrapper {
         options.storage.cache_policy =
             rustred_cache_policy(cache_policy).map_err(exceptions::PyValueError::new_err)?;
         options.storage.resume = resume;
+        options.checkpoint_path = checkpoint_path;
         if let Some(value) = time_limit_seconds {
             options.storage.time_limit_seconds = value;
         }
@@ -1315,6 +1321,15 @@ impl VakintWrapper {
         cache::check_loops(n_loops)?;
         let engine = self.vakint.clone();
         py.detach(move || engine.clear_cache(n_loops))
+            .map_err(vakint_to_python_error)
+    }
+
+    /// Detach persistent backing and clear resident reduction records.
+    /// The loaded reduction campaign remains available for uncached evaluation.
+    pub fn detach_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<()> {
+        cache::check_loops(n_loops)?;
+        let engine = self.vakint.clone();
+        py.detach(move || engine.detach_cache(n_loops))
             .map_err(vakint_to_python_error)
     }
 

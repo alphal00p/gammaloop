@@ -44,7 +44,7 @@ impl MomentumInput {
         mut accept: impl FnMut(&ReplacementRules) -> Result<Option<K>, VakintError>,
     ) -> Result<Option<ReplacementRules>, VakintError> {
         let topologies = topologies.into_iter().collect::<Vec<_>>();
-        // Retain the ordinary exact witness for a useful scope error if every
+        // Retain the ordinary exact witness for partial reduction if every
         // verified alternative is outside the saved entry union. Errors from
         // acceptance are never confused with ordinary out-of-scope rejection.
         let mut fallback = None;
@@ -179,7 +179,7 @@ impl MomentumInput {
                 Ok(())
             };
             // Try precisely the ordinary incidence witness first, under the
-            // same budget, so a complete scope miss preserves its diagnostics.
+            // same budget, so a complete scope miss has a deterministic fallback.
             if let Some(first) = self.incidence_permutation(&integral.graph) {
                 charge(
                     &mut graph_maps,

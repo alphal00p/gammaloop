@@ -21,6 +21,13 @@ status-level = "fail"
 final-status-level = "fail"
 
 [[profile.default.overrides]]
+# Five-loop closure pairs are selected below 240s and must finish within five minutes.
+filter = "binary(rustred_five_loop_closure_tests) or test(/^rustred_evaluation::five_loop::partial_acceptance::/)"
+slow-timeout = { period = "60s", terminate-after = 5 }
+retries = 0
+test-group = "five-loop-reduction"
+
+[[profile.default.overrides]]
 # Mark integration tests as slow
 filter = "test(integration)"
 test-group = "integration"
@@ -69,12 +76,24 @@ final-status-level = "fail"
 # JUnit output for CI systems
 path = "junit.xml"
 
+[[profile.ci.overrides]]
+filter = "binary(rustred_five_loop_closure_tests) or test(/^rustred_evaluation::five_loop::partial_acceptance::/)"
+slow-timeout = { period = "60s", terminate-after = 5 }
+retries = 0
+test-group = "five-loop-reduction"
+
 [profile.ci_gammaloop]
 inherits = "ci"
 default-filter = "not test(/(^|::)(slow|failing)::/)"
 
 [profile.ci_gammaloop.junit]
 path = "junit.xml"
+
+[[profile.ci_gammaloop.overrides]]
+filter = "binary(rustred_five_loop_closure_tests) or test(/^rustred_evaluation::five_loop::partial_acceptance::/)"
+slow-timeout = { period = "60s", terminate-after = 5 }
+retries = 0
+test-group = "five-loop-reduction"
 
 [[profile.ci_gammaloop.overrides]]
 # Vakint tests can end up running restricted Symbolica instances in nix-ci,
@@ -111,7 +130,15 @@ success-output = "never"
 retries = 0
 fail-fast = false
 
+[[profile.partition.overrides]]
+filter = "binary(rustred_five_loop_closure_tests) or test(/^rustred_evaluation::five_loop::partial_acceptance::/)"
+slow-timeout = { period = "60s", terminate-after = 5 }
+retries = 0
+test-group = "five-loop-reduction"
+
 [test-groups]
+# Keep five-loop native programs from competing for memory and their time budget.
+five-loop-reduction = { max-threads = 1 }
 # Group integration tests that might be slow - allow some parallelism
 integration = { max-threads = 2 }
 # Group tests that use a lot of memory - limit but don't serialize completely

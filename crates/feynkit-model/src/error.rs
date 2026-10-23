@@ -35,6 +35,8 @@ impl std::fmt::Display for EntityKind {
 /// A structural error in a model definition.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum ModelValidationError {
+    #[error("Covariant cut multiplet {physical} {reason}")]
+    CovariantCutMultiplet { physical: i64, reason: String },
     #[error("model name must not be empty")]
     EmptyModelName,
     #[error("duplicate {kind} name '{name}'")]
@@ -98,6 +100,14 @@ pub enum ModelValidationError {
 /// Errors returned by model and parameter-card APIs.
 #[derive(Debug, Error)]
 pub enum ModelError {
+    #[error(
+        "model '{model}' has no supported minimal photon–fermion or photon–scalar vertex from which to infer electric charge"
+    )]
+    MissingElectricCharge { model: String },
+    #[error(
+        "model '{model}' has inconsistent electric charge normalizations in its photon vertices"
+    )]
+    InconsistentElectricCharge { model: String },
     #[error("could not read model data from '{}': {source}", path.display())]
     Read {
         path: PathBuf,
@@ -132,6 +142,12 @@ pub enum ModelError {
     },
     #[error("parameter card references unknown parameter '{name}'")]
     UnknownCardParameter { name: String },
+    #[error("cyclic internal parameter definitions prevent expansion of {parameters:?}")]
+    CyclicParameterDefinitions { parameters: Vec<String> },
     #[error("external parameter '{name}' has no value for the default parameter card")]
     MissingCardValue { name: String },
+    #[error("parameter '{name}' has a non-finite scalar value")]
+    NonFiniteScalarBinding { name: String },
+    #[error("scalar bindings have a cyclic or unresolved named dependency")]
+    UnresolvedScalarBindings,
 }

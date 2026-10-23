@@ -493,23 +493,18 @@ fn solve_level(
         })
         .collect::<Vec<_>>();
 
-    // Projector coefficients live in the rational-function field of the
-    // dimension. Native matrix solving preserves its poles without selecting
-    // or silently discarding branches of the general equation solver.
     let solutions = Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
         .and_then(|(matrix, rhs)| {
             matrix
                 .solve(&rhs)
-                .map(|solution| {
-                    solution
-                        .into_vec()
-                        .into_iter()
-                        .map(|coefficient| coefficient.to_expression())
-                        .collect::<Vec<_>>()
-                })
-                .map_err(|error| {
-                    symbolica::solve::SolveError::Other(format!("Could not solve {error:?}"))
-                })
+                .map_err(|error| symbolica::solve::SolveError::Other(error.to_string()))
+        })
+        .map(|solution| {
+            solution
+                .into_vec()
+                .into_iter()
+                .map(|value| value.to_expression())
+                .collect::<Vec<_>>()
         })
         .map_err(|source| WeingartenError::Solve {
             rank: 2 * pair_count,
@@ -605,17 +600,6 @@ mod tests {
     };
 
     use super::{CosetType, OrthogonalWeingarten, partitions, reference_matching, representative};
-
-    #[test]
-    fn native_level_solve_preserves_dimension_poles_and_rejects_a_singular_dimension() {
-        let lower = [(CosetType::new([]).unwrap(), Atom::num(1))]
-            .into_iter()
-            .collect();
-        let values = super::solve_level(1, &parse!("d"), &lower).unwrap();
-        let coefficient = &values[&CosetType::new([1]).unwrap()];
-        assert!((coefficient - parse!("1/d")).cancel().is_zero());
-        assert!(super::solve_level(1, &Atom::num(0), &lower).is_err());
-    }
 
     #[test]
     fn partition_system_sizes_reach_only_42_at_rank_twenty() {

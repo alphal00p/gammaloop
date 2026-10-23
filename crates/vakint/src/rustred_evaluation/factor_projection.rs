@@ -2,7 +2,7 @@
 
 use std::collections::BTreeSet;
 
-use feynkit_tensor::{RepeatedIndexCompatibility, TensorReducer};
+use feynkit_tensor::TensorReducer;
 use rustred::algebra::Coefficient;
 use rustred::reduction::terminal_normalization::{
     VacuumTensorProjection, VacuumTensorProjectionInput,
@@ -45,12 +45,11 @@ pub(super) fn project(
     let mut nonzero_conditions = BTreeSet::new();
     let mut offset = 0;
     for component in &input.component_loop_momenta {
-        let mut reducer = TensorReducer::new(input.dimension.clone())
-            .with_repeated_index_compatibility(
-                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
-            );
+        let mut reducer = TensorReducer::new(input.dimension.clone());
         for axis in offset..offset + component.len() {
-            reducer = reducer.with_integrated_vector(S.k.call((axis + 1, representation.clone())));
+            reducer = reducer
+                .with_integrated_vector(S.k.call((axis + 1, representation.clone())))
+                .map_err(|error| error.to_string())?;
         }
         offset += component.len();
         // Other blocks are numerator spectators. Registering them as external
@@ -65,9 +64,8 @@ pub(super) fn project(
             &input.dimension,
             &opaque_slots,
         );
-        let reduced = reducer
-            .reduce(native.as_view())
-            .map_err(|error| error.to_string())?;
+        let native = reducer.admit(native).map_err(|error| error.to_string())?;
+        let reduced = reducer.reduce(&native).map_err(|error| error.to_string())?;
         log::debug!(target: "vakint::saved_application",
             "phase=factor_tensor_projected component_loops={} residual_rank={} terms={}",
             component.len(), reduced.max_rank(), reduced.terms().len());
@@ -80,7 +78,10 @@ pub(super) fn project(
                 .map_err(|error| error.to_string())?;
             nonzero_conditions.insert(coefficient.denominator.to_expression());
         }
-        let reduced = reduced.into_expression();
+        let reduced = reduced
+            .into_expression()
+            .map_err(|error| error.to_string())?
+            .into_expression();
         let bridged = VakintTerm::bridge_opaque_projectors(reduced.as_view(), &mut next_dummy);
         let bridged = VakintTerm::spenso_to_vakint_numerator(
             bridged.as_view(),

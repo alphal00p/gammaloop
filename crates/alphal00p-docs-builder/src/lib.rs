@@ -3135,7 +3135,9 @@ impl SiteBuilder {
             return Some(checked_in);
         }
         if component.package == "linnet-py" {
-            let path = self.root.join("crates/linnet-py/linnet_py.pyi");
+            let path = self
+                .root
+                .join("crates/linnet-py/python/symbolica/community/graph/__init__.pyi");
             if path.is_file() {
                 return Some(path);
             }
@@ -10086,7 +10088,7 @@ mod tests {
             (None, None),
         );
 
-        assert_eq!(module, "symbolica.community.spenso");
+        assert_eq!(module, "symbolica.community.tensor");
         assert_ne!(module, catalog.component.package);
         assert_eq!(item.required_features.as_slice(), ["python_stubgen"]);
         assert!(rendered.contains(&format!("<p><code>{module}</code> · version")));

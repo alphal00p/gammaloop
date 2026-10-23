@@ -1,6 +1,9 @@
-//! Explicit lower-loop cache steering. RustRed owns root admission, exact
+//! Explicit native cache steering. RustRed owns root admission, exact
 //! reduction, persistent records, RAM policy and all filesystem operations.
-use std::{path::Path, sync::atomic::AtomicBool};
+use std::{
+    path::{Path, PathBuf},
+    sync::atomic::AtomicBool,
+};
 
 use rustred::{
     family::IntegralKey,
@@ -16,6 +19,11 @@ use rustred_app::{
     EntryPowerBudget, SavedApplicationCachePackLimits, SavedApplicationCachePackStatistics,
     prepare_application_cache,
 };
+
+#[path = "cache_five_loop.rs"]
+mod five;
+pub use five::RustRedSavedCacheStatistics;
+pub(super) use five::{SavedFiveLoopCache, saved_application_digest};
 
 #[path = "cache_save.rs"]
 mod save;
@@ -61,6 +69,9 @@ pub struct RustRedCachePreparationOptions {
     /// Native arithmetic/work limits; storage selection never raises these.
     pub native: ReductionLimits,
     pub workload: RustRedCacheWorkload,
+    /// Five-loop preparation checkpoints remain separate from its final single
+    /// gzip file. Omission uses `<output>.checkpoints`; lower loops use output.
+    pub checkpoint_path: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -71,12 +82,21 @@ pub struct RustRedCacheLoadOptions {
     pub policy: Option<CompletedCachePolicy>,
     /// Omitted reload preserves the active policy. A new optional attachment
     /// falls back only on typed prospective lookup-work exhaustion.
+    /// Supported for one through four loops; five loops reject an override.
     pub lookup_budget_policy: Option<CacheLookupBudgetPolicy>,
+    /// Five-loop single files support disk and index bounds, with fixed native
+    /// file-codec defaults. Custom per-chunk bounds apply only to 1L–4L packs
+    /// and are rejected for five loops.
     pub storage: SavedApplicationCachePackLimits,
+    /// Authenticated official single-file identity. Explicit trusted-generated
+    /// paths may omit it; their embedded digest and semantic binding are checked.
+    pub file_identity: Option<rustred_app::SavedApplicationCacheFileIdentity>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RustRedCacheStatistics {
+    /// Five-loop Route/Apply counters retain their own native semantics.
+    pub saved_application: Option<RustRedSavedCacheStatistics>,
     pub attached: bool,
     /// Retained native coefficient payload, not process RSS.
     pub native: GuardedRootCacheStatistics,
@@ -155,6 +175,15 @@ impl Vakint {
         &self,
         loop_count: usize,
     ) -> Result<Option<ReductionLimits>, VakintError> {
+        if loop_count == 5 {
+            let loaded = self
+                .rustred_application
+                .lock()
+                .map_err(|_| RustRedEvaluationError::CacheLockPoisoned)?;
+            return Ok(loaded
+                .as_ref()
+                .map(|current| current.options.reduction_limits));
+        }
         let caches = self
             .rustred_lower_caches
             .lock()
@@ -181,6 +210,16 @@ impl Vakint {
         cancellation: &AtomicBool,
         observer: impl FnMut(&CachePreparationReport) -> Result<(), rustred_app::AppError>,
     ) -> Result<CachePreparationReport, VakintError> {
+        if loop_count == 5 {
+            return self.prepare_five_loop_cache(output.as_ref(), options, cancellation, observer);
+        }
+        if options.checkpoint_path.is_some() {
+            return Err(operation(rustred_app::AppError::new(
+                rustred_app::AppErrorKind::Input,
+                "a separate checkpoint path is only used by the five-loop single-file cache",
+            ))
+            .into());
+        }
         let resolved = options
             .storage
             .resolve(loop_count, Default::default())
@@ -242,6 +281,16 @@ impl Vakint {
         path: impl AsRef<Path>,
         options: &RustRedCacheLoadOptions,
     ) -> Result<(), VakintError> {
+        if loop_count == 5 {
+            return self.load_five_loop_cache(path.as_ref(), options);
+        }
+        if options.file_identity.is_some() {
+            return Err(operation(rustred_app::AppError::new(
+                rustred_app::AppErrorKind::Input,
+                "single-file identity is only applicable to a five-loop cache",
+            ))
+            .into());
+        }
         if loop_count == 4 {
             let programs = super::four_loop::cache::programs(self)?;
             let mut caches = self
@@ -313,6 +362,9 @@ impl Vakint {
         &self,
         loop_count: usize,
     ) -> Result<RustRedCacheStatistics, VakintError> {
+        if loop_count == 5 {
+            return self.five_loop_cache_statistics();
+        }
         if loop_count == 4 {
             let caches = self
                 .rustred_lower_caches
@@ -356,6 +408,7 @@ impl Vakint {
         let statistics = cache.cache_statistics();
         let io = cache.io_statistics();
         Ok(RustRedCacheStatistics {
+            saved_application: None,
             attached: true,
             native: statistics,
             disk: io,
@@ -372,6 +425,9 @@ impl Vakint {
     /// Clear only attached RAM payloads; preserve the read-only backing and
     /// cumulative work counters. No files are removed.
     pub fn clear_cache(&self, loop_count: usize) -> Result<(), VakintError> {
+        if loop_count == 5 {
+            return self.clear_rustred_application_cache();
+        }
         if loop_count == 4 {
             let mut caches = self
                 .rustred_lower_caches
@@ -394,6 +450,33 @@ impl Vakint {
             .find(|(candidate, _)| *candidate == family)
         {
             cache.clear_ram().map_err(operation)?;
+        }
+        Ok(())
+    }
+
+    /// Remove an attached backing and its resident reduction cache. Immutable
+    /// application data remain loaded; no files are modified or removed.
+    pub fn detach_cache(&self, loop_count: usize) -> Result<(), VakintError> {
+        if loop_count == 5 {
+            let application = self.loaded_application()?;
+            application.clear_resident_cache()?;
+            let mut attached = application
+                .cache
+                .lock()
+                .map_err(|_| RustRedEvaluationError::CacheLockPoisoned)?;
+            *attached = None;
+            return Ok(());
+        }
+        let mut caches = self
+            .rustred_lower_caches
+            .lock()
+            .map_err(|_| RustRedEvaluationError::CacheLockPoisoned)?;
+        if loop_count == 4 {
+            caches.candidate = None;
+        } else {
+            let family = shipped_family_for_loop_count(loop_count)
+                .ok_or(RustRedEvaluationError::CacheBackendUnavailable { loop_count })?;
+            caches.closed.retain(|(candidate, _)| *candidate != family);
         }
         Ok(())
     }

@@ -14,7 +14,10 @@ use gammalooprs::{
     settings::{global::OrientationPattern, RuntimeSettings},
     utils::tracing::LogLevel,
 };
-use idenso::shorthands::{metric::to_dots_impl, schoonschip::Schoonschip};
+use idenso::{
+    tensor::{ContractSettings, SymbolicTensor},
+    CookMode, CookSettings,
+};
 use linnet::half_edge::{
     involution::{EdgeIndex, Orientation},
     subgraph::{ModifySubSet, SuBitGraph},
@@ -57,7 +60,11 @@ use gammalooprs::feyngen::{
 use itertools::{self, Itertools};
 use std::{path::PathBuf, str::FromStr};
 
-use symbolica::{atom::AtomCore, parse, printer::PrintOptions};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    parse,
+    printer::PrintOptions,
+};
 // const GIT_VERSION: &str = git_version!(fallback = "unavailable");
 
 #[allow(unused)]
@@ -159,17 +166,29 @@ pub(crate) fn atom_to_canonical_string(atom_str: &str) -> Result<String> {
 /// Rewrite a contraction before passing it to an Idenso workflow:
 ///
 /// ```python
-/// to_dots("p(mu) * q(mu)")
+/// to_dots("spenso::g(spenso::mink(4,mu),spenso::mink(4,mu))")
 /// ```
 #[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyfunction)]
 #[pyfunction]
 #[pyo3(name = "to_dots")]
 pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
-    let dotted = to_dots_impl(
-        parse!(atom_str, default_namespace = "python")
-            .to_dots()
-            .as_view(),
-    );
+    let input = Atom::parse(
+        atom_str,
+        "python",
+        symbolica::parser::ParseSettings::default(),
+    )
+    .map_err(|error| eyre!(error))?;
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(input.as_view())?)?
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?
+        .to_dots()?;
+    let dotted = cooking.uncook(tensor.expression().as_view());
     Ok(format!(
         "{}",
         dotted.as_view().printer(PrintOptions {
@@ -177,6 +196,21 @@ pub(crate) fn atom_to_dots(atom_str: &str) -> Result<String> {
             ..PrintOptions::file()
         })
     ))
+}
+
+#[cfg(test)]
+mod tensor_conversion_tests {
+    use super::*;
+
+    #[test]
+    fn to_dots_contracts_explicit_metric_and_rejects_invalid_input() {
+        gammalooprs::initialisation::test_initialise().unwrap();
+        assert_eq!(
+            atom_to_dots("spenso::g(spenso::mink(4,mu),spenso::mink(4,mu))").unwrap(),
+            "4"
+        );
+        assert!(atom_to_dots("(").is_err());
+    }
 }
 
 #[pymodule(name = "_gammaloop")]

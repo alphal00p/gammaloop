@@ -21,22 +21,10 @@ impl Vacuum {
         let rows = loop_rows(source);
         let attachments = source
             .edges()
-            .filter_map(|(_, ends, _)| {
-                if source
-                    .vertex(ends.source)
-                    .expect("valid source")
-                    .is_external()
-                {
-                    Some(ends.target)
-                } else if source
-                    .vertex(ends.target)
-                    .expect("valid target")
-                    .is_external()
-                {
-                    Some(ends.source)
-                } else {
-                    None
-                }
+            .filter_map(|(_, ends, edge)| {
+                edge.external
+                    .as_ref()
+                    .and_then(|_| ends.source.or(ends.target))
             })
             .collect::<BTreeSet<_>>();
         if attachments.len() != 2 {
@@ -49,7 +37,7 @@ impl Vacuum {
                 .edges()
                 .filter(|(_, ends, _)| {
                     !is_external_edge(source, *ends)
-                        && (ends.source == *vertex || ends.target == *vertex)
+                        && (ends.source == Some(*vertex) || ends.target == Some(*vertex))
                 })
                 .collect::<Vec<_>>();
             let [left, right] = adjacent.as_slice() else {
@@ -72,17 +60,17 @@ impl Vacuum {
                 return Err("the two merged massless propagators are not equal at q=0".into());
             }
             let other = |ends: &feynkit_graph::EdgeEndpoints| {
-                if ends.source == *vertex {
-                    ends.target
+                if ends.source == Some(*vertex) {
+                    ends.target.expect("internal edge")
                 } else {
-                    ends.source
+                    ends.source.expect("internal edge")
                 }
             };
             records.push((
                 other(&left.1),
                 other(&right.1),
                 Line {
-                    momentum: if left.1.target == *vertex {
+                    momentum: if left.1.target == Some(*vertex) {
                         p.clone()
                     } else {
                         -p
@@ -95,8 +83,8 @@ impl Vacuum {
         for (id, ends, _) in source.edges() {
             if !is_external_edge(source, ends) && !removed.contains(&id) {
                 records.push((
-                    ends.source,
-                    ends.target,
+                    ends.source.expect("internal edge"),
+                    ends.target.expect("internal edge"),
                     Line {
                         momentum: rows[&id].clone(),
                         original_edges: vec![id],
@@ -124,21 +112,18 @@ impl Vacuum {
         )))
         .expect("valid phi3 fixture");
         let particle = model.particle_id("phi")?;
-        let mass = model
-            .particle_by_id(particle)?
-            .symbolic_mass_parameter(&model)?;
+        let mass = model.particle_by_id(particle)?.symbolic_mass(&model);
         let mut builder = FeynmanDiagram::builder(model, "projected_qcd_ladder_vacuum");
         let vertices = source
             .vertices()
-            .filter(|(id, vertex)| !vertex.is_external() && !attachments.contains(id))
+            .filter(|(id, _)| !attachments.contains(id))
             .map(|(id, _)| {
                 (
                     id,
                     builder.add_vertex(DiagramVertex {
                         name: format!("v{}", id.0),
                         interaction: None,
-                        external: None,
-                        numerator: Atom::one(),
+                        numerator: SymbolicTensor::infer(Atom::one()).expect("one is scalar"),
                     }),
                 )
             })
@@ -285,6 +270,32 @@ impl Vacuum {
         {
             return Err("native repeated-denominator coalescing changed the five-loop/nine-propagator scalar graph".into());
         }
+        // Even an exactly cancellable numerator factor stays in the numerator
+        // at this boundary. Only equal denominator forms are coalesced.
+        let raw_momentum = &self.lines[0].momentum;
+        let raw_square = self
+            .family
+            .kinematics()
+            .scalar_product(raw_momentum, raw_momentum)?;
+        let cancellable = &marker * (raw_square - self.mass.clone().pow(2));
+        let retained = VakintExpression::try_from(self.input(&cancellable, &initial)?.as_view())?;
+        let first = records
+            .iter()
+            .find(|record| record[&id].is_zero())
+            .ok_or("initial ingress lost its first physical denominator")?;
+        let expected =
+            &marker * (S.dot.call((&first[&momentum], &first[&momentum])) - &first[&mass]);
+        if retained.0.len() != 1
+            || retained.0[0].integral != expression.0[0].integral
+            || !(&retained.0[0].numerator - expected)
+                .expand()
+                .together()
+                .is_zero()
+        {
+            return Err(
+                "benchmark ingress canceled a physical denominator against its numerator".into(),
+            );
+        }
         std::fs::write(
             evidence.join("native-vacuum-counts.txt"),
             "Original: 14 internal edges, 10 vertices, 5 loops.\nAfter external insertion collapse: 12 incidence edges, 8 vertices, two insertion dots, A=14.\nExact native quadratic forms: 9 distinct (five fermion forms of power2, four gluon forms of power1).\nNative ingress: 9 propagators, 5 vertices, 5 loops, numerator retained exactly, A=14.\n",
@@ -325,4 +336,12 @@ impl Vacuum {
         )?
         .into())
     }
+}
+
+#[test]
+fn ingress_retains_cancelable_numerator_and_physical_powers() -> Result<()> {
+    let generated = dressed_diagram()?;
+    let vacuum = Vacuum::new(&generated.diagrams[0], &dimension()?)?;
+    let evidence = tempfile::tempdir()?;
+    vacuum.validate_initial_ingress(evidence.path())
 }

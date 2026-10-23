@@ -21,6 +21,143 @@ Partial reductions never become complete cache records. The finite primer and
 its intermediate-capture limits are independent of IBP certification coverage.
 The timing receipts below document the revisions on which they were measured.
 
+== Five-loop saved-application caches
+
+Five loops use the same explicit preparation, load, save, clear and statistics
+interfaces. Their persistent representation is one gzip-compressed native file,
+containing one shared coefficient table and exact completed `Route` and `Apply`
+records. A record binds the complete saved application, terminal substitutions,
+catalogue identities, dimension and normalization, plus the native family,
+physical arity and solver layer. Cache inventory, release labels, graph styling
+and numerical master values do not change this semantic identity.
+
+Loading verifies the complete file before replacing an attachment. Official
+data supplies independently authenticated compressed and decoded identities;
+an explicit trusted-generated path still checks the embedded decoded digest,
+gzip framing, native records and semantic binding. The decoder accepts exactly
+one gzip member, at most 95 MiB compressed and 1 GiB decoded. The native shared
+coefficient table is imported once, and record lookups reuse its bounded index.
+The shared API's custom per-chunk bounds and per-lookup chunk-budget policy are
+unsupported for five loops and are rejected explicitly. Disk and index bounds
+still constrain the single file; reduction RAM uses the native runtime settings.
+Ordinary reduction never modifies the file. Corruption, incompatible data and
+native algebraic failures remain errors rather than cache misses.
+
+The five-loop workload must be an explicit selection of owner-mapped native
+roots in common-family namespace zero. There is no exhaustive default primer.
+Preparation loads an isolated application with `UnresolvedPolicy::Reject` and
+advisory entry coverage. A starting root outside the recorded campaign can still
+be attempted using individually applicable rules, but an unresolved leaf remains
+an error. Each selected root's recorded coverage membership is reported separately
+from successful complete reduction; the cache does not enlarge certification.
+Incomplete reductions cannot become prepared records. Completed descendants
+retain their own exact nonzero conditions. Checkpoints use the existing bounded
+native bundle writer, then a completed selection is compacted into the final
+single file. The optional `checkpoint_path` keeps this temporary state separate
+from the output; its default is the output name followed by `.checkpoints`.
+Checkpoint directories can be resumed, while a completed output file is never
+overwritten. A resource or time stop is not a completed cache.
+The preparation allowance includes the isolated strict application's setup;
+the hard supervisor deadline also includes final compaction and publication.
+
+```python
+report = engine.prepare_cache(
+    5, "workspace/cache/candidate.rrcache.gz",
+    workload=[(0, owner_powers)],
+    checkpoint_path="workspace/cache/checkpoints",
+    time_limit_seconds=840,
+)
+if report["status"] == "complete":
+    engine.load_cache(5, "workspace/cache/candidate.rrcache.gz")
+```
+
+Configure five-loop arithmetic limits and eviction policy through the engine's
+runtime settings before attaching a file. Omitted load overrides retain those
+settings; conflicting explicit overrides fail with an actionable error. A
+change of operational settings rebuilds resident reduction state while retaining
+a compatible immutable file. Changing the authenticated program or catalogue
+invalidates incompatible backing data.
+
+`clear_cache(5)` clears resident application, factor and witness caches while
+preserving the read-only file. `detach_cache(5)` removes its backing and clears
+the same resident application, factor and witness caches, leaving the
+authenticated application loaded. Use a fresh
+process for a cold benchmark; detachment does not undo process initialization.
+Five-loop telemetry uses the dedicated `saved_application` record returned by
+`cache_statistics(5)`, separately
+from the lower-loop guarded-root counters. It reports native work, requested-root
+and intermediate backing hits, compressed/decoded storage, and shared-table
+decoding. Persistent request counters describe successful requests.
+
+`save_cache(5, ..., mode)` writes a new single file. `resident-roots` exports
+complete resident nodes; `full-snapshot` merges the verified attached records
+with those nodes into one coefficient table. Native unresolved nodes are skipped
+and counted in `skipped_partial_records`; they never become distributed shortcuts.
+Single-file snapshots cannot be appended. Neither save mode changes the live
+RAM allowance or eviction policy.
+
+The reproducible #link("examples/build_cache.rs")[build-cache driver] requires a
+frozen workload with separate training, tuning and at least twelve held-out
+inputs. It rejects overlap with the held-out set and verifies the recorded data
+manifest and source-census file. Tuning and held-out entries include their public
+input expressions, complete lowered-key sets and independently authenticated
+owner-key sets. Training cannot contain any of those protected owner roots.
+Its supervisor enforces a cumulative wall-clock deadline, including finalization
+and resumed attempts, while native checkpoints preserve completed work.
+Interrupted attempts remain charged, concurrent supervisors are refused, and a
+worker retains its hard deadline if its supervisor exits. Start with a
+fifteen-minute pilot; the final production command is:
+
+```sh
+export VAKINT_CACHE_BUILD_RUSTC="$(rustc -Vv)"
+export VAKINT_CACHE_BUILD_PROFILE=release
+export VAKINT_CACHE_BUILD_GIT_REVISION="$(git rev-parse HEAD)"
+cargo run --locked --release -p vakint --example build_cache -- \
+  --artifacts /path/to/vakint-external-data \
+  --workload /path/to/workspace/cache/workload.json \
+  --source-census /path/to/workspace/cache/source-census.json \
+  --output /path/to/workspace/cache/prepared.rrcache.gz \
+  --work-dir /path/to/workspace/cache/final \
+  --phase final --prepare-seconds 32400 --max-seconds 36000
+```
+
+Compile the production driver with `VAKINT_CACHE_BUILD_RUSTC`,
+`VAKINT_CACHE_BUILD_PROFILE` and `VAKINT_CACHE_BUILD_GIT_REVISION` set to the
+actual compiler, profile and source identity. These compile-time values accompany
+the executable, embedded driver/schema/lockfile hashes and runtime settings;
+resuming with another executable or operational identity is rejected.
+
+The driver records native progress, strict preparation policy, intermediate
+capture diagnostics, input and output hashes, compressed and decoded identities,
+and elapsed time. Its publication target is at most 50 MiB. A larger completed
+file remains a candidate pending an independently measured size exception; the
+native codec's 95 MiB hard ceiling is not permission to publish one. Warm RAM
+repeats, requested-root hits and intermediate-only benefits must be reported
+separately in performance comparisons.
+
+The #link("examples/measure_cache.rs")[suite measurement driver] runs each
+case, repetition and cache variant in a fresh process. Matching, tensor work,
+scalar lowering, deferred owner setup, saved-rule application and lower-factor
+work are reported separately. The reported IBP interval excludes deferred owner
+setup; data and cache loading are also separate. Final comparisons use three
+samples, median/range and exact canonical output and guard-set parity:
+
+```sh
+measure_cache --artifacts /path/to/vakint-external-data \
+  --workload /path/to/workspace/cache/workload.json \
+  --source-census /path/to/workspace/cache/source-census.json \
+  --cache /path/to/workspace/cache/prepared.rrcache.gz \
+  --suite held-out --repetitions 3 \
+  --work-dir /path/to/workspace/cache/held-out
+```
+
+Full opt-in native-key telemetry must agree with the frozen lowered roots;
+missing telemetry or mismatched roots cannot establish held-out status.
+Requested-root hits, intermediate-only reuse, regressions and negligible gains
+remain visible per case. Failed or interrupted samples are preserved without an
+automatic retry. The explicitly provisional mode supports older library probes
+and disables selection and final held-out claims.
+
 == Recorded cache preparation and validation
 
 The preparation measurements below used RustRed
@@ -201,8 +338,8 @@ at most two extra positive powers and numerator rank at most one. Completing
 it does not establish unrestricted integral coverage or candidate closure.
 The earlier lower-loop, collector and Python receipts below retain their
 original scope. Explicit import/download APIs and their completed native/private
-Python-runtime gates are described below. Five-loop cache preparation is deferred
-until the updated artifact is available.
+Python-runtime gates are described below. Those historical measurements predate
+the five-loop single-file implementation described above.
 
 == Explicit import and download
 
@@ -451,7 +588,8 @@ or a physics-coverage bound.
 
 == Preparation and attachment
 
-`Vakint::prepare_cache` takes a loop count, an output directory,
+`Vakint::prepare_cache` takes a loop count, an output path (a directory for one
+through four loops, or a single gzip file for five loops),
 `RustRedCachePreparationOptions`, a cooperative cancellation flag and a progress
 callback. Inspect the returned status: completion, time-budget stop,
 cancellation, storage-budget stop, native resource refusal and failure are
@@ -553,9 +691,11 @@ maximum RSS; this small workflow is not a performance comparison.
 == Python and HepKit steering
 
 The current local `Vakint` Python wrapper exposes the same `prepare_cache`,
-`load_cache`, `save_cache`, `clear_cache` and `cache_statistics` operations for
-one through four loops, plus explicit `import_cache` and `download_cache` on
-supported native platforms. The transfer facade is source-checked and its native
+`load_cache`, `save_cache`, `clear_cache`, `detach_cache` and `cache_statistics`
+operations for one through five loops. Explicit `import_cache` and `download_cache`
+transport the one-through-four-loop directory packs on supported native platforms;
+use official external-data loading or a single explicit file for five loops.
+The transfer facade is source-checked and its native
 implementation passes eight focused tests and an independent repeat. The final
 private host passes all eleven Python smoke tests, including explicit import,
 and the nine public transfer cases described next. The earlier host receipts

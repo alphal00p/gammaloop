@@ -9,6 +9,7 @@ keywords = ["feynman", "hep", "physics"]
 categories = ["science"]
 
 [dependencies]
+feynkit-amplitude = { version = "0.1.0", path = "../feynkit-amplitude", optional = true }
 feynkit-cff = { version = "0.1.0", path = "../feynkit-cff", optional = true }
 feynkit-generator = { version = "0.1.0", path = "../feynkit-generator", optional = true }
 feynkit-graph = { version = "0.1.0", path = "../feynkit-graph", optional = true }
@@ -18,7 +19,8 @@ feynkit-tensor = { version = "0.1.0", path = "../feynkit-tensor", optional = tru
 feynkit-ufo = { version = "0.1.0", path = "../feynkit-ufo", optional = true }
 
 [features]
-default = ["cff", "generator", "graph", "kinematics", "model", "tensor"]
+default = ["amplitude", "cff", "generator", "graph", "kinematics", "model", "tensor"]
+amplitude = ["graph", "dep:feynkit-amplitude"]
 cff = ["graph", "dep:feynkit-cff"]
 generator = ["graph", "model", "dep:feynkit-generator"]
 graph = ["model", "dep:feynkit-graph"]

@@ -5,6 +5,54 @@ use symbolica::{atom::AtomView, parser::ParseSettings, prelude::Rational};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum CensusProjection {
+    Quadratic,
+    ZeroMomentum,
+}
+
+impl CensusProjection {
+    fn from_requested(value: Option<&str>) -> Result<Self> {
+        match value {
+            None | Some("quadratic") => Ok(Self::Quadratic),
+            Some("zero-momentum") => Ok(Self::ZeroMomentum),
+            _ => Err("census projection must be quadratic or zero-momentum".into()),
+        }
+    }
+
+    fn parameters(self) -> (&'static str, usize, i64) {
+        match self {
+            Self::Quadratic => ("quadratic-transverse", 21, 10),
+            Self::ZeroMomentum => ("zero-momentum-metric", 1, 9),
+        }
+    }
+}
+
+#[test]
+fn census_projection_configuration_preserves_physical_contracts() -> Result<()> {
+    assert_eq!(
+        CensusProjection::from_requested(None)?.parameters(),
+        ("quadratic-transverse", 21, 10)
+    );
+    assert_eq!(
+        CensusProjection::from_requested(Some("quadratic"))?,
+        CensusProjection::Quadratic
+    );
+    assert_eq!(
+        CensusProjection::from_requested(Some("zero-momentum"))?.parameters(),
+        ("zero-momentum-metric", 1, 9)
+    );
+    for invalid in [
+        "",
+        "quadratic,zero-momentum",
+        "quadratic zero-momentum",
+        "zero-momentum-metric",
+    ] {
+        assert!(CensusProjection::from_requested(Some(invalid)).is_err());
+    }
+    Ok(())
+}
+
 // Metadata-only mirror of the existing conservative term-support estimate.
 // It performs no symbolic algebra; saturation bounds the diagnostic itself.
 fn supports(atom: AtomView<'_>) -> (u128, u128) {
@@ -451,7 +499,7 @@ fn prepared_ladder_weighted_preflight_without_ibps() -> Result<()> {
                     return Err("nonmonomial mass coefficient".into());
                 };
                 if exponent < 0 || exponent % 2 != 0 || degree - exponent / 2 != 10 {
-                    return Err("physical D-j=10 homogeneity failed".into());
+                    return Err("engineering mass-dimension balance D_key-j=10 failed".into());
                 }
                 *histogram.entry((degree, exponent / 2)).or_default() += 1;
             }
@@ -485,5 +533,555 @@ fn prepared_ladder_weighted_preflight_without_ibps() -> Result<()> {
         expression.0.len(),
         guards.len()
     );
+    Ok(())
+}
+
+/// Replays an explicitly supplied prepared integrand for an early campaign
+/// census. Fresh native preparation is still required by the slow acceptance.
+#[test]
+#[ignore = "manual selected-witness census; requires prepared input and explicit local external data"]
+fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
+    use crate::{
+        EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
+        RustRedMasterMode,
+    };
+    use serde_json::json;
+    use std::time::Instant;
+
+    let source_path = PathBuf::from(
+        std::env::var_os("VAKINT_QCD_PREPARED_INPUT").ok_or("set VAKINT_QCD_PREPARED_INPUT")?,
+    );
+    let requested_projection = match std::env::var("VAKINT_QCD_CENSUS_PROJECTION") {
+        Ok(value) => Some(value),
+        Err(std::env::VarError::NotPresent) => None,
+        Err(error) => return Err(error.into()),
+    };
+    let (projection, expected_groups, engineering_degree_balance) =
+        CensusProjection::from_requested(requested_projection.as_deref())?.parameters();
+    let data_path = PathBuf::from(
+        std::env::var_os("VAKINT_EXTERNAL_DATA").ok_or("set VAKINT_EXTERNAL_DATA to a checkout")?,
+    );
+    let evidence = PathBuf::from(
+        std::env::var_os("VAKINT_QCD_WEIGHT_EVIDENCE").ok_or("set VAKINT_QCD_WEIGHT_EVIDENCE")?,
+    );
+    std::fs::create_dir_all(&evidence)?;
+    let mut settings = VakintSettings {
+        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+            RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Retain,
+            },
+        )]),
+        form_exe_path: "/campaign-census-must-not-use-form".into(),
+        use_dot_product_notation: true,
+        ..Default::default()
+    };
+    settings.rustred_application_options.unresolved_policy =
+        rustred::solver::UnresolvedPolicy::Preserve;
+    // Completed exact lowerings remain valid under a larger work budget.
+    // Imported receipts retain their original limits; this diagnostic override
+    // never changes the input, family, predicates, or reduction rules.
+    if let Some(value) = std::env::var_os("VAKINT_QCD_CENSUS_MAX_TERM_OPERATIONS") {
+        settings
+            .rustred_scalar_numerator_limits
+            .exact_algebra
+            .max_term_operations = value
+            .to_str()
+            .ok_or("non-UTF8 census work budget")?
+            .parse()?;
+    }
+    eprintln!("qcd_campaign_census phase=engine_construction_begin");
+    let mut engine = Vakint::new()?;
+    eprintln!("qcd_campaign_census phase=data_loading_begin");
+    let started = Instant::now();
+    let load = engine.load_official_external_data(
+        5,
+        &OfficialExternalDataOptions {
+            local_artifacts_path: Some(data_path),
+            ..Default::default()
+        },
+    )?;
+    let application = engine.saved_application(&settings)?;
+    let load_seconds = started.elapsed().as_secs_f64();
+    eprintln!("qcd_campaign_census phase=data_loading_end seconds={load_seconds:.6}");
+    let source = std::fs::read(&source_path)?;
+    let source_sha256 = format!("{:x}", Sha256::digest(&source));
+    let parsing_started = Instant::now();
+    eprintln!(
+        "qcd_campaign_census phase=input_parsing_begin bytes={}",
+        source.len()
+    );
+    let input = Atom::parse(
+        std::str::from_utf8(&source)?,
+        "qcd_ladder",
+        ParseSettings::default(),
+    )?;
+    eprintln!(
+        "qcd_campaign_census phase=input_parsing_end seconds={:.6}",
+        parsing_started.elapsed().as_secs_f64()
+    );
+    let started = Instant::now();
+    eprintln!("qcd_campaign_census phase=canonicalization_begin");
+    let mut expression = VakintExpression::try_from(input.as_view())?;
+    expression.canonicalize(&settings, &engine.topologies, false)?;
+    eprintln!(
+        "qcd_campaign_census phase=canonicalization_end seconds={:.6}",
+        started.elapsed().as_secs_f64()
+    );
+    let tensor_started = Instant::now();
+    eprintln!("qcd_campaign_census phase=tensor_prepass_begin");
+    expression.tensor_reduce(&engine, &settings)?;
+    eprintln!(
+        "qcd_campaign_census phase=tensor_prepass_end seconds={:.6}",
+        tensor_started.elapsed().as_secs_f64()
+    );
+    let terms = VakintExpression::split_integrals(Atom::from(expression).as_view())?;
+    let canonical_seconds = started.elapsed().as_secs_f64();
+    assert_eq!(
+        terms.len(),
+        expected_groups,
+        "all physical projection groups must survive"
+    );
+    let binding = json!({"schema":"vakint.qcd-ladder.census-checkpoint.v1",
+        "input_sha256":source_sha256,
+        "data_manifest_sha256":format!("{:x}",Sha256::digest(std::fs::read(load.path.join("manifest.json"))?)),
+        "application_manifest_sha256":format!("{:x}",Sha256::digest(std::fs::read(load.path.join("5L/ibps/application.json"))?)),
+        "scalar_limits":format!("{:?}",settings.rustred_scalar_numerator_limits),
+        "application_options":format!("{:?}",settings.rustred_application_options)});
+    // Fresh processes can enumerate the same sources in a different order.
+    // Ordinals are presentation metadata, never checkpoint identities.
+    let mut checkpoints = BTreeMap::new();
+    for entry in std::fs::read_dir(&evidence)? {
+        let path = entry?.path();
+        if !path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with("contribution-") && name.ends_with(".json"))
+        {
+            continue;
+        }
+        let bytes = std::fs::read(&path)?;
+        let row: serde_json::Value = serde_json::from_slice(&bytes)?;
+        let identity = row["source_identity"]
+            .as_str()
+            .ok_or("checkpoint has no exact source identity")?
+            .to_owned();
+        if checkpoints.insert(identity, (path, bytes, row)).is_some() {
+            return Err("duplicate exact-source census checkpoints".into());
+        }
+    }
+    let mut contributions = Vec::new();
+    let mass = Atom::var(vk_symbol!("mUV"));
+    for (index, original) in terms.into_iter().enumerate() {
+        let identity = format!(
+            "{:x}",
+            Sha256::digest(serde_json::to_vec(&(
+                original.integral.to_canonical_string(),
+                original.numerator.to_canonical_string()
+            ))?)
+        );
+        eprintln!("qcd_campaign_census contribution={index} source_identity={identity}");
+        if let Some((checkpoint, bytes, mut row)) = checkpoints.remove(&identity) {
+            let started = Instant::now();
+            for field in [
+                "schema",
+                "input_sha256",
+                "data_manifest_sha256",
+                "application_manifest_sha256",
+            ] {
+                if row["binding"][field] != binding[field] {
+                    return Err(format!(
+                        "census checkpoint {} has another semantic binding ({field})",
+                        checkpoint.display()
+                    )
+                    .into());
+                }
+            }
+            let prepared = application
+                .prepared
+                .lock()
+                .map_err(|error| error.to_string())?;
+            if row["family_fingerprint"] != json!(prepared.family().fingerprint()) {
+                return Err("checkpoint family identity changed".into());
+            }
+            for root in row["roots"].as_array().ok_or("checkpoint has no roots")? {
+                let key = IntegralKey::try_new(serde_json::from_value::<Vec<i64>>(
+                    root["powers"].clone(),
+                )?)?;
+                if root["admitted"] != json!(prepared.routed_entry_is_admitted(&key)?) {
+                    return Err("checkpoint admission disagrees with active predicates".into());
+                }
+            }
+            row["imported_checkpoint"] = json!({"path": checkpoint, "sha256":format!("{:x}", Sha256::digest(&bytes)),
+                "original_contribution": row["contribution"], "completed_under_prior_policy": row["binding"] != binding});
+            row["contribution"] = json!(index);
+            eprintln!(
+                "qcd_campaign_census contribution={index} phase=checkpoint_reused seconds={:.6}",
+                started.elapsed().as_secs_f64()
+            );
+            contributions.push(row);
+            continue;
+        }
+        let started = Instant::now();
+        eprintln!("qcd_campaign_census contribution={index} phase=selected_witness_begin");
+        let mut matched = engine
+            .match_rustred_input(
+                &settings,
+                original.integral.as_view(),
+                original.numerator.as_view(),
+            )?
+            .ok_or("quadratic source has no verified geometric witness")?;
+        let matching_seconds = started.elapsed().as_secs_f64();
+        matched.apply_replacement_rules()?;
+        let mut term = original;
+        term.apply_scalar_numerator_replacement_rules(&matched, &settings)?;
+        let descriptor = select(&matched.canonical_topology)?;
+        let input = MatchedScalarInput::prepare(
+            term.numerator.as_view(),
+            &matched,
+            &descriptor.momenta,
+            descriptor.physical_slots,
+            15,
+            &settings,
+            ScalarNumeratorForm::PreserveProducts,
+        )?;
+        let prepared = application
+            .prepared
+            .lock()
+            .map_err(|error| error.to_string())?;
+        let scalar = FamilyScalarNumeratorService::try_new(
+            prepared.family(),
+            S.dot,
+            (1..=5).map(|axis| S.k.call(axis)).collect(),
+            settings.rustred_scalar_numerator_limits,
+        )?;
+        capture_weighted_input(&evidence, index, &input, prepared.family())?;
+        let started = Instant::now();
+        let lowered =
+            scalar.lower_weighted(&input.numerator, &input.target, &input.mass_squared)?;
+        let lowering_seconds = started.elapsed().as_secs_f64();
+        let mut records = Vec::new();
+        for lowered_term in lowered.terms() {
+            let key = lowered_term.integral();
+            let weight = super::super::combine_exact(
+                lowered_term.coefficient().to_expression() * lowered_term.scalar_spectator(),
+            );
+            let degree = key.powers().iter().sum::<i64>();
+            let mut mass_powers = Vec::new();
+            for (monomial, coefficient) in weight.coefficient_list::<u16>(&[&mass]) {
+                if coefficient.is_zero() {
+                    continue;
+                }
+                let exponent = if monomial.is_one() {
+                    0
+                } else if monomial == mass {
+                    1
+                } else if let AtomView::Pow(power) = monomial.as_view() {
+                    if power.get_base() != mass.as_view() {
+                        return Err("non-mass monomial".into());
+                    }
+                    i64::try_from(power.get_exp())?
+                } else {
+                    return Err("nonmonomial mass dependence".into());
+                };
+                if exponent < 0
+                    || exponent % 2 != 0
+                    || degree - exponent / 2 != engineering_degree_balance
+                {
+                    return Err(format!(
+                        "mapped key violates exact {projection} engineering mass-dimension balance D_key-j={engineering_degree_balance}"
+                    )
+                    .into());
+                }
+                mass_powers.push(exponent / 2);
+            }
+            let admitted = prepared.routed_entry_is_admitted(key)?;
+            if !admitted {
+                eprintln!(
+                    "qcd_campaign_census uncovered contribution={index} family={} powers={:?} mass_squared_powers={mass_powers:?}",
+                    prepared.family().name(),
+                    key.powers()
+                );
+            }
+            let owner_route = if admitted {
+                let routed = prepared.route_entry_to_owner(key)?;
+                let mut images = Vec::new();
+                for (endpoint, coefficient) in routed.terms() {
+                    if coefficient.is_zero() {
+                        continue;
+                    }
+                    let owner_weight =
+                        super::super::combine_exact(&weight * coefficient.to_expression());
+                    images.push(json!({"powers": endpoint.powers(), "weight": owner_weight.to_canonical_string(),
+                        "transport_coefficient": coefficient.to_expression().to_canonical_string()}));
+                }
+                Some(
+                    json!({"images": images, "nonzero_conditions": routed.nonzero_conditions().iter()
+                    .map(|coefficient| coefficient.to_expression().to_canonical_string()).collect::<Vec<_>>()}),
+                )
+            } else {
+                None
+            };
+            records.push(json!({"powers": key.powers(), "weight": weight.to_canonical_string(),
+                "D_key": degree,"r_idx":key.powers().iter().filter(|power|**power<0).map(|power|-power).sum::<i64>(),
+                "omega_uv_at_d4_with_mass_fixed":20-2*degree,
+                "admitted": admitted, "mass_squared_powers": mass_powers, "owner_route": owner_route}));
+        }
+        let row = json!({"contribution": index, "source_identity":identity,"binding":binding,"topology": matched.canonical_topology.get_integral().name,
+            "family_fingerprint": prepared.family().fingerprint(), "target": input.target.powers(),
+            "mass_squared": input.mass_squared.to_canonical_string(), "matching_seconds": matching_seconds,
+            "lowering_seconds": lowering_seconds, "roots": records,
+            "nonzero_conditions": lowered.nonzero_conditions().iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>()});
+        std::fs::write(
+            evidence.join(format!("contribution-{identity}.json")),
+            serde_json::to_vec_pretty(&row)?,
+        )?;
+        contributions.push(row);
+    }
+    let mut roots = BTreeMap::<IntegralKey, (Atom, usize, BTreeSet<usize>)>::new();
+    let mut owner_roots = BTreeMap::<IntegralKey, (Atom, usize, BTreeSet<usize>)>::new();
+    for (index, contribution) in contributions.iter().enumerate() {
+        for root in contribution["roots"]
+            .as_array()
+            .ok_or("checkpoint has no roots")?
+        {
+            let key =
+                IntegralKey::try_new(serde_json::from_value::<Vec<i64>>(root["powers"].clone())?)?;
+            let weight = Atom::parse(
+                root["weight"].as_str().ok_or("checkpoint has no weight")?,
+                "qcd_ladder",
+                ParseSettings::default(),
+            )?;
+            let row = roots
+                .entry(key)
+                .or_insert_with(|| (Atom::Zero, 0, BTreeSet::new()));
+            row.0 += weight;
+            row.1 += 1;
+            row.2.insert(index);
+            if let Some(images) = root["owner_route"]["images"].as_array() {
+                for image in images {
+                    let key = IntegralKey::try_new(serde_json::from_value::<Vec<i64>>(
+                        image["powers"].clone(),
+                    )?)?;
+                    let weight = Atom::parse(
+                        image["weight"]
+                            .as_str()
+                            .ok_or("checkpoint owner has no weight")?,
+                        "qcd_ladder",
+                        ParseSettings::default(),
+                    )?;
+                    let row = owner_roots
+                        .entry(key)
+                        .or_insert_with(|| (Atom::Zero, 0, BTreeSet::new()));
+                    row.0 += weight;
+                    row.1 += 1;
+                    row.2.insert(index);
+                }
+            }
+        }
+    }
+    let prepared = application
+        .prepared
+        .lock()
+        .map_err(|error| error.to_string())?;
+    let mut combined = Vec::new();
+    for (key, (weight, multiplicity, contribution_indices)) in roots {
+        let weight = super::super::combine_exact(weight);
+        if weight.is_zero() {
+            continue;
+        }
+        combined.push(
+            json!({"powers": key.powers(), "weight": weight.to_canonical_string(),
+            "admitted": prepared.routed_entry_is_admitted(&key)?, "multiplicity": multiplicity,
+            "contributions": contribution_indices}),
+        );
+    }
+    let mut combined_owner_roots = Vec::new();
+    for (key, (weight, multiplicity, contribution_indices)) in owner_roots {
+        let weight = super::super::combine_exact(weight);
+        if weight.is_zero() {
+            continue;
+        }
+        prepared.validate_entry(&key)?;
+        combined_owner_roots.push(
+            json!({"powers": key.powers(), "weight": weight.to_canonical_string(),
+            "multiplicity": multiplicity, "contributions": contribution_indices}),
+        );
+    }
+    let report = json!({"schema": "vakint.qcd-ladder.campaign-census.v1", "diagnostic_replay_only": true,
+        "projection":projection,"engineering_degree_balance":engineering_degree_balance,
+        "degree_semantics":"D_key-j is engineering mass dimension, not the UV degree of an individual lowered term with MUV fixed; omega_UV(d=4)=20-2*D_key",
+        "fresh_numerator_preparation": false, "ibp_application": false, "source": source_path,
+        "source_sha256": source_sha256, "source_bytes": source.len(), "data": load,
+        "family_fingerprint": prepared.family().fingerprint(), "load_seconds": load_seconds,
+        "canonical_seconds": canonical_seconds, "scalar_limits": format!("{:?}", settings.rustred_scalar_numerator_limits),
+        "application_options": format!("{:?}", settings.rustred_application_options),
+        "contributions": contributions, "combined_roots": combined, "combined_owner_roots": combined_owner_roots});
+    std::fs::write(
+        evidence.join("campaign-census.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    Ok(())
+}
+
+/// A single exact term from the physical census, not the complete benchmark.
+/// Starting-predicate membership and surviving catalogue closure are separate.
+#[test]
+#[ignore = "manual bounded uncovered-witness reduction; requires witness JSON and local data"]
+fn physical_uncovered_witness_safe_reduction() -> Result<()> {
+    use crate::{
+        EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
+        RustRedMasterMode,
+    };
+    use serde_json::json;
+    use std::time::Instant;
+
+    let witness_path = PathBuf::from(
+        std::env::var_os("VAKINT_QCD_COVERAGE_WITNESS").ok_or("set VAKINT_QCD_COVERAGE_WITNESS")?,
+    );
+    let data_path =
+        PathBuf::from(std::env::var_os("VAKINT_EXTERNAL_DATA").ok_or("set VAKINT_EXTERNAL_DATA")?);
+    let evidence = PathBuf::from(
+        std::env::var_os("VAKINT_QCD_WEIGHT_EVIDENCE").ok_or("set VAKINT_QCD_WEIGHT_EVIDENCE")?,
+    );
+    std::fs::create_dir_all(&evidence)?;
+    let bytes = std::fs::read(&witness_path)?;
+    let witness: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let key = IntegralKey::try_new(serde_json::from_value::<Vec<i64>>(
+        witness["powers"].clone(),
+    )?)?;
+    let weight = Atom::parse(
+        witness["weight_original"]
+            .as_str()
+            .ok_or("witness has no exact weight")?,
+        "qcd_ladder",
+        ParseSettings::default(),
+    )?;
+    let mut settings = VakintSettings {
+        evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+            RustRedEvaluationOptions {
+                master_mode: RustRedMasterMode::Retain,
+            },
+        )]),
+        form_exe_path: "/physical-witness-must-not-use-form".into(),
+        use_dot_product_notation: true,
+        ..Default::default()
+    };
+    settings.rustred_application_options.unresolved_policy =
+        rustred::solver::UnresolvedPolicy::Preserve;
+    let started = Instant::now();
+    eprintln!("qcd_uncovered_witness phase=data_loading_begin");
+    let mut engine = Vakint::new()?;
+    let loaded = engine.load_official_external_data(
+        5,
+        &OfficialExternalDataOptions {
+            local_artifacts_path: Some(data_path),
+            ..Default::default()
+        },
+    )?;
+    engine.detach_cache(5)?;
+    let application = engine.saved_application(&settings)?;
+    let admitted = application
+        .prepared
+        .lock()
+        .map_err(|error| error.to_string())?
+        .routed_entry_is_admitted(&key)?;
+    if admitted {
+        return Err("the selected witness is no longer outside the actual saved predicates".into());
+    }
+    let source = super::admission_census_tests::input_for_key(&key)?;
+    if !source.numerator.is_one() {
+        return Err("the concrete witness must have no reconstructed auxiliary numerator".into());
+    }
+    let mass_squared = Atom::var(vk_symbol!("mUV")).pow(2);
+    let integral = source.integral.replace_map(|part, _, output| {
+        if let AtomView::Fun(function) = part
+            && function.get_symbol() == S.prop
+        {
+            let arguments = function.iter().collect::<Vec<_>>();
+            if arguments.len() == 5 {
+                **output = S.prop.call((
+                    arguments[0],
+                    arguments[1],
+                    arguments[2],
+                    &mass_squared,
+                    arguments[4],
+                ));
+            }
+        }
+    });
+    let input = weight * integral;
+    std::fs::write(
+        evidence.join("input.symbolica"),
+        input.to_canonical_string(),
+    )?;
+    let mut report = json!({"schema":"vakint.qcd-ladder.uncovered-witness.v1",
+        "complete_primary_benchmark":false,"witness":witness_path,
+        "witness_sha256":format!("{:x}",Sha256::digest(&bytes)),"powers":key.powers(),
+        "actual_saved_predicate_admitted":admitted,"physical_mass_squared":mass_squared.to_canonical_string(),
+        "weight_original":witness["weight_original"],"application_options":format!("{:?}",settings.rustred_application_options),
+        "scalar_limits":format!("{:?}",settings.rustred_scalar_numerator_limits),
+        "data":loaded,"data_loading_seconds":started.elapsed().as_secs_f64(),"status":"reduction_started"});
+    std::fs::write(
+        evidence.join("result.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    eprintln!(
+        "qcd_uncovered_witness phase=reduction_begin powers={:?}",
+        key.powers()
+    );
+    let started = Instant::now();
+    let outcome = engine.evaluate_rustred_symbolic(&settings, input.as_view());
+    report["reduction_seconds"] = json!(started.elapsed().as_secs_f64());
+    match outcome {
+        Err(error) => {
+            report["status"] = json!("operational_or_algebra_error");
+            report["error"] = json!(error.to_string());
+            std::fs::write(
+                evidence.join("result.json"),
+                serde_json::to_vec_pretty(&report)?,
+            )?;
+            return Err(error.into());
+        }
+        Ok(result) => {
+            let known = engine
+                .master_symbols()?
+                .into_iter()
+                .map(|value| value.as_atom().clone())
+                .collect::<BTreeSet<_>>();
+            let mut terminals = BTreeSet::new();
+            result.value.visitor(&mut |part| {
+                if matches!(part,AtomView::Fun(function) if function.get_symbol()==vk_symbol!("RustRedMaster")) {
+                    terminals.insert(part.to_owned());
+                    return false;
+                }
+                true
+            });
+            let unknown = terminals
+                .difference(&known)
+                .map(AtomCore::to_canonical_string)
+                .collect::<Vec<_>>();
+            let value = result.value.to_canonical_string();
+            std::fs::write(evidence.join("result.symbolica"), &value)?;
+            report["status"] = json!("retained_result");
+            report["result_sha256"] = json!(format!("{:x}", Sha256::digest(value.as_bytes())));
+            report["terminal_count"] = json!(terminals.len());
+            report["unknown_terminals"] = json!(unknown);
+            report["catalogue_closed"] = json!(unknown.is_empty());
+            let guards = result
+                .nonzero_conditions
+                .iter()
+                .map(AtomCore::to_canonical_string)
+                .collect::<Vec<_>>()
+                .join("\n");
+            std::fs::write(evidence.join("nonzero-conditions.symbolica"), &guards)?;
+            report["guards"] = json!({"count":result.nonzero_conditions.len(),
+                "sha256":format!("{:x}",Sha256::digest(guards.as_bytes())),"file":"nonzero-conditions.symbolica"});
+        }
+    }
+    std::fs::write(
+        evidence.join("result.json"),
+        serde_json::to_vec_pretty(&report)?,
+    )?;
+    println!("{report}");
     Ok(())
 }

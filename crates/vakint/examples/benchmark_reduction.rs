@@ -4,7 +4,7 @@
 //! prefix Cargo (or the compiled executable) with `taskset -c CPU` on Linux.
 use std::{
     fs::{self, File},
-    io::Read,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     time::Instant,
@@ -65,6 +65,7 @@ struct Options {
     child: Option<usize>,
     backend: Backend,
     repetition: usize,
+    select_current: bool,
 }
 
 impl Options {
@@ -79,6 +80,7 @@ impl Options {
             child: None,
             backend: Backend::Fmft,
             repetition: 0,
+            select_current: false,
         };
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
@@ -91,9 +93,14 @@ impl Options {
                      --form PATH         FORM executable (default: form on PATH)\n\
                      --repetitions N     Fresh processes per case/backend (default: 3)\n\
                      --work-dir PATH     Scratch/log directory (default: cwd/workspace/benchmark)\n\
+                     --select-current    Select this new run for the report; preserve all previous runs\n\
                      Use an optimized Cargo profile; optionally pin the entire command to one CPU."
                 );
                 return Ok(None);
+            }
+            if arg == "--select-current" {
+                result.select_current = true;
+                continue;
             }
             let value = args
                 .next()
@@ -304,7 +311,7 @@ impl Options {
                 }))
             })
             .collect::<Result<Vec<_>>>()?;
-        Json::write(
+        let run_id = Json::append_run(
             &self.output,
             &json!({
                 "completed_utc": Provenance::command("date", &["-u", "+%Y-%m-%dT%H:%M:%SZ"])?,
@@ -316,8 +323,9 @@ impl Options {
                     .map(|r| &r["loader_seconds"]).collect::<Vec<_>>(),
                 "raw_runs": runs,
             }),
+            self.select_current,
         )?;
-        eprintln!("Validated results: {}", self.output.display());
+        eprintln!("Validated run {run_id}: {}", self.output.display());
         Ok(())
     }
 }
@@ -543,6 +551,64 @@ impl Json {
         fs::write(path, text)?;
         Ok(())
     }
+
+    fn append_run(path: &Path, run: &Value, select_current: bool) -> Result<String> {
+        ensure!(run["validation_passed"] == true, "run is not validated");
+        let completed = run["completed_utc"]
+            .as_str()
+            .ok_or_else(|| eyre::eyre!("missing completion time"))?;
+        let binary = run["protocol"]["binary_sha256"]
+            .as_str()
+            .filter(|digest| digest.len() == 64 && digest.bytes().all(|b| b.is_ascii_hexdigit()))
+            .ok_or_else(|| eyre::eyre!("invalid benchmark executable digest"))?;
+        let run_id = format!("{completed}-{}", &binary[..12]);
+        let mut document: Value = if path.exists() {
+            Self::read(path)?
+        } else {
+            json!({})
+        };
+        let root = document
+            .as_object_mut()
+            .ok_or_else(|| eyre::eyre!("benchmark document must be an object"))?;
+        let selected = root.get("selected_reduction_run").cloned();
+        if let Some(selected) = selected.as_ref() {
+            let selected = selected
+                .as_str()
+                .ok_or_else(|| eyre::eyre!("selected_reduction_run must be a run identifier"))?;
+            ensure!(
+                root.get("reduction_runs")
+                    .and_then(Value::as_object)
+                    .is_some_and(|runs| runs.contains_key(selected)),
+                "selected reduction run is missing"
+            );
+        }
+        let has_historical_run = root.get("validation_passed") == Some(&json!(true));
+        let runs = root
+            .entry("reduction_runs")
+            .or_insert_with(|| json!({}))
+            .as_object_mut()
+            .ok_or_else(|| eyre::eyre!("reduction_runs must be an object"))?;
+        ensure!(
+            !runs.contains_key(&run_id),
+            "run {run_id} is already recorded"
+        );
+        runs.insert(run_id.clone(), run.clone());
+        if select_current || (!has_historical_run && selected.is_none()) {
+            root.insert("selected_reduction_run".into(), json!(&run_id));
+        }
+
+        let parent = path
+            .parent()
+            .filter(|p| !p.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        fs::create_dir_all(parent)?;
+        let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+        serde_json::to_writer_pretty(&mut temporary, &document)?;
+        temporary.write_all(b"\n")?;
+        temporary.as_file().sync_all()?;
+        temporary.persist(path)?;
+        Ok(run_id)
+    }
 }
 
 fn main() -> Result<()> {
@@ -554,5 +620,61 @@ fn main() -> Result<()> {
         options.child(&cases, index)
     } else {
         options.run(&cases)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn refresh_preserves_recorded_history_and_selects_only_when_requested() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("results.json");
+        let historical: Value =
+            serde_json::from_str(include_str!("../docs/benchmark/data/results.json"))?;
+        Json::write(&path, &historical)?;
+        let mut run = json!({
+            "validation_passed": true,
+            "completed_utc": "2030-01-01T00:00:00Z",
+            "protocol": historical["protocol"],
+            "summary": historical["summary"],
+            "raw_runs": historical["raw_runs"],
+        });
+        let first_run = run.clone();
+        let first = Json::append_run(&path, &run, false)?;
+        let recorded: Value = Json::read(&path)?;
+        for (key, value) in historical.as_object().unwrap() {
+            if key == "reduction_runs" {
+                for (id, run) in value.as_object().unwrap() {
+                    assert_eq!(&recorded[key][id], run);
+                }
+            } else {
+                assert_eq!(&recorded[key], value, "historical field {key} changed");
+            }
+        }
+        assert_eq!(recorded["reduction_runs"][&first], run);
+
+        run["completed_utc"] = json!("2030-01-01T00:01:00Z");
+        let selected = Json::append_run(&path, &run, true)?;
+        run["completed_utc"] = json!("2030-01-01T00:02:00Z");
+        Json::append_run(&path, &run, false)?;
+        let recorded: Value = Json::read(&path)?;
+        assert_eq!(recorded["selected_reduction_run"], selected);
+        assert_eq!(recorded["reduction_runs"][&first], first_run);
+        let before = fs::read(&path)?;
+        assert!(Json::append_run(&path, &run, true).is_err());
+        assert_eq!(fs::read(&path)?, before, "duplicate run replaced output");
+
+        let fresh = directory.path().join("fresh.json");
+        let selected = Json::append_run(&fresh, &run, false)?;
+        assert_eq!(
+            Json::read::<Value>(&fresh)?["selected_reduction_run"],
+            selected
+        );
+        fs::write(&fresh, b"{invalid")?;
+        assert!(Json::append_run(&fresh, &run, false).is_err());
+        assert_eq!(fs::read(&fresh)?, b"{invalid");
+        Ok(())
     }
 }

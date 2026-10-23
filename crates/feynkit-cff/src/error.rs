@@ -32,8 +32,6 @@ pub enum CffError {
     ExternalToExternalEdge(EdgeId),
     #[error("diagram edge {0} has an endpoint excluded as external without external metadata")]
     MissingExternalMetadata(EdgeId),
-    #[error("CFF generation requires simple propagators; edge {edge} has power {power}")]
-    UnsupportedPropagatorPower { edge: EdgeId, power: i32 },
     #[error("contracted edge {0} cannot also have a fixed orientation")]
     OrientedContractedEdge(EdgeId),
     #[error("fixed orientation for edge {0} must be default or reversed")]

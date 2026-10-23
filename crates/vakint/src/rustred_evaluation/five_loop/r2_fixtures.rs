@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 use feynkit_graph::{DiagramEdge, DiagramVertex, FeynmanDiagram, IntegralFamily};
 use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
+use idenso::tensor::SymbolicTensor;
 use rustred::family::IntegralKey;
 use symbolica::{
     atom::{Atom, AtomCore},
@@ -39,15 +40,13 @@ fn diagram(banana: bool) -> Result<FeynmanDiagram> {
     let left = builder.add_vertex(DiagramVertex {
         name: "left".into(),
         interaction: None,
-        external: None,
-        numerator: Atom::one(),
+        numerator: SymbolicTensor::infer(Atom::one())?,
     });
     let right = if banana {
         builder.add_vertex(DiagramVertex {
             name: "right".into(),
             interaction: None,
-            external: None,
-            numerator: Atom::one(),
+            numerator: SymbolicTensor::infer(Atom::one())?,
         })
     } else {
         left
@@ -73,7 +72,7 @@ fn family(diagram: &FeynmanDiagram) -> Result<(IntegralFamily, Atom)> {
     let model = diagram.model();
     let mass = model
         .particle_by_id(model.particle_id("phi")?)?
-        .symbolic_mass_parameter(model)?;
+        .symbolic_mass(model);
     let replacement = [Replacement::new(mass.clone(), Atom::one())];
     let family = IntegralFamily::new(
         original.loop_momenta().to_vec(),

@@ -49,20 +49,19 @@ operations group naturally into four phases:
   `simplify_color`.
 
 ```python
-from symbolica.community.idenso import list_dangling, simplify_metrics
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 minkowski = Representation.mink(4)
 mu = minkowski("mu")
 nu = minkowski("nu")
 metric = TensorExpression.g(minkowski)
-momentum = TensorName("p")
+momentum = TensorName.vector("p")
 expression = metric(mu, nu) * momentum(mu)
 
-external_indices = list_dangling(expression)
-reduced = simplify_metrics(expression)
+external_indices = expression.list_dangling()
+reduced = expression.contract()
 assert len(external_indices) == 1
-assert len(list_dangling(reduced)) == 1
+assert len(reduced.list_dangling()) == 1
 ```
 
 Idenso does not define a second parser syntax: the example constructs a Spenso-compatible

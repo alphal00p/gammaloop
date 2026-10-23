@@ -73,6 +73,15 @@ pub(crate) struct MasterCatalog {
     basis_aliases: BTreeMap<Atom, Atom>,
 }
 
+/// A declaration read from a native application's authenticated terminal inventory.
+/// It supplies declarations only, never numerical coefficients or invented graphs.
+#[derive(Clone, Debug)]
+pub(crate) struct BareMasterDeclaration {
+    pub(crate) application_path: std::path::PathBuf,
+}
+
+pub(crate) type BareMasterDeclarations = BTreeMap<Atom, BareMasterDeclaration>;
+
 pub(crate) fn combine_exact(expression: Atom) -> Atom {
     let expression = expression.expand();
     let mut has_float = false;
@@ -488,14 +497,23 @@ impl MasterCatalog {
         result
     }
 
-    fn unresolved(&self, expression: &Atom) -> Vec<String> {
-        Self::referenced_masters(expression)
+    fn unresolved(
+        &self,
+        expression: &Atom,
+        require_coefficients: bool,
+        announced: &BareMasterDeclarations,
+    ) -> Vec<String> {
+        let mut issues: Vec<_> = Self::referenced_masters(expression)
             .iter()
             .filter_map(|symbol| match self.masters.get(symbol) {
-                Some(master) if !master.coefficients.is_empty() => None,
+                Some(master) if !require_coefficients || !master.coefficients.is_empty() => None,
                 Some(master) => Some(format!(
                     "{}: declared terminal has no computed coefficients; parent graph {}",
                     master.identity, master.graph
+                )),
+                None if announced.contains_key(symbol) => require_coefficients.then(|| format!(
+                    "{}: declared terminal has no computed coefficients; native application {}; load its matching external-data pack for master coefficients and graphs",
+                    symbol.to_canonical_string(), announced[symbol].application_path.display()
                 )),
                 None => {
                     let graph = match symbol.as_view() {
@@ -514,7 +532,42 @@ impl MasterCatalog {
                     ))
                 }
             })
-            .collect()
+            .collect();
+        issues.sort();
+        issues
+    }
+
+    pub(super) fn retain(&self, raw: Atom, announced: &BareMasterDeclarations) -> Atom {
+        let raw = combine_exact(raw);
+        let unresolved = self.unresolved(&raw, false, announced);
+        if !unresolved.is_empty() {
+            log::warn!(
+                "Unresolved RustRed masters (data {}):\n  - {}",
+                self.version,
+                unresolved.join("\n  - ")
+            );
+        }
+        raw
+    }
+
+    pub(super) fn require_coefficients(
+        &self,
+        expression: &Atom,
+        announced: &BareMasterDeclarations,
+    ) -> Result<(), VakintError> {
+        let unresolved = self.unresolved(expression, true, announced);
+        if unresolved.is_empty() {
+            Ok(())
+        } else {
+            Err(RustRedEvaluationError::MasterCapability {
+                detail: format!(
+                    "Unresolved RustRed masters (data {}):\n  - {}",
+                    self.version,
+                    unresolved.join("\n  - ")
+                ),
+            }
+            .into())
+        }
     }
 
     pub(super) fn finalize(
@@ -582,22 +635,11 @@ impl MasterCatalog {
         loop_count: usize,
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
-        let raw = combine_exact(raw);
-        let unresolved = self.unresolved(&raw);
-        if !unresolved.is_empty() {
-            let detail = format!(
-                "Unresolved RustRed masters (data {}): {}",
-                self.version,
-                unresolved.join("; ")
-            );
-            if mode == RustRedMasterMode::Numerical {
-                return Err(failure(detail).into());
-            }
-            log::warn!("{detail}");
-        }
         if mode == RustRedMasterMode::Retain {
-            return Ok(raw);
+            return Ok(self.retain(raw, &BTreeMap::new()));
         }
+        let raw = combine_exact(raw);
+        self.require_coefficients(&raw, &BTreeMap::new())?;
         let epsilon = vk_symbol!(&settings.epsilon_symbol);
         let target = settings
             .number_of_terms_in_epsilon_expansion
@@ -608,7 +650,6 @@ impl MasterCatalog {
         let terms = raw.coefficient_list::<i32>(&symbols);
         let mut required = BTreeMap::<Atom, i64>::new();
         let mut known = Atom::Zero;
-        let mut retained = Atom::Zero;
         for (monomial, coefficient) in terms {
             let coefficient = combine_exact(coefficient);
             if coefficient.is_zero() {
@@ -616,14 +657,6 @@ impl MasterCatalog {
             }
             let mut multiplicities = BTreeMap::new();
             Self::master_multiplicities(monomial.as_view(), &mut multiplicities)?;
-            if multiplicities.keys().any(|symbol| {
-                self.masters
-                    .get(symbol)
-                    .is_none_or(|master| master.coefficients.is_empty())
-            }) {
-                retained += monomial * coefficient;
-                continue;
-            }
             let series = coefficient
                 .series(epsilon, Atom::Zero.as_view(), SeriesDepth::relative(1))
                 .map_err(failure)?;
@@ -723,7 +756,6 @@ impl MasterCatalog {
         if mode == RustRedMasterMode::Numerical {
             result = self.resolve_numerical(result, settings)?;
         }
-        let result = result + retained;
         if mode == RustRedMasterMode::Symbolic {
             // An exact formula can still depend on snapshot-local finite
             // periods. Bind those leaves before returning a symbolic result,
@@ -869,13 +901,15 @@ impl MasterCatalog {
         _settings: &VakintSettings,
     ) -> Result<Atom, VakintError> {
         let result = combine_exact(expression);
-        let unresolved = self.unresolved(&result);
+        let unresolved = self.unresolved(&result, true, &BTreeMap::new());
         if !unresolved.is_empty() {
-            return Err(failure(format!(
-                "Cannot numerically evaluate unresolved masters (data {}): {}",
-                self.version,
-                unresolved.join("; ")
-            ))
+            return Err(RustRedEvaluationError::MasterCapability {
+                detail: format!(
+                    "Cannot numerically evaluate unresolved masters (data {}):\n  - {}",
+                    self.version,
+                    unresolved.join("\n  - ")
+                ),
+            }
             .into());
         }
         let retained = Self::referenced_masters(&result);
@@ -960,6 +994,136 @@ mod tests {
             number_of_terms_in_epsilon_expansion: terms,
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn retained_catalogue_terminals_are_not_unknown_but_substitution_needs_coefficients() {
+        let (mut catalog, terminal) = catalog(None, 30);
+        catalog
+            .masters
+            .get_mut(&terminal)
+            .unwrap()
+            .coefficients
+            .clear();
+        assert!(
+            catalog
+                .unresolved(&terminal, false, &BTreeMap::new())
+                .is_empty()
+        );
+        assert_eq!(
+            catalog
+                .finalize(
+                    terminal.clone(),
+                    &settings(16, 2),
+                    1,
+                    RustRedMasterMode::Retain
+                )
+                .unwrap(),
+            terminal
+        );
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let error = catalog
+                .finalize(terminal.clone(), &settings(16, 2), 1, mode)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("test-master"), "{error}");
+            assert!(
+                error.contains("declared terminal has no computed coefficients"),
+                "{error}"
+            );
+            assert!(
+                error.contains("test-parent.dot") && error.contains("test-v1"),
+                "{error}"
+            );
+            assert!(!error.contains("undeclared residual master"), "{error}");
+        }
+    }
+
+    #[test]
+    fn native_bare_declarations_supply_identity_without_fabricating_master_data() {
+        let (catalog, _) = catalog(Some("5/2"), 30);
+        let declared = catalog.symbol("bare-native-family", &[1, 1]);
+        let unknown = catalog.symbol("bare-native-family", &[2, 1]);
+        let announced = BTreeMap::from([(
+            declared.clone(),
+            BareMasterDeclaration {
+                application_path: "native/application.json".into(),
+            },
+        )]);
+        assert!(catalog.unresolved(&declared, false, &announced).is_empty());
+        assert_eq!(catalog.retain(declared.clone(), &announced), declared);
+        let error = catalog
+            .require_coefficients(&declared, &announced)
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("declared terminal has no computed coefficients"),
+            "{error}"
+        );
+        assert!(
+            error.contains("native/application.json")
+                && error.contains("matching external-data pack"),
+            "{error}"
+        );
+        assert!(!error.contains("undeclared residual master"), "{error}");
+        let unknown_issues = catalog.unresolved(&unknown, false, &announced);
+        assert_eq!(unknown_issues.len(), 1);
+        assert!(unknown_issues[0].contains("undeclared residual master"));
+        // The native view is read-only; no data record, precision or graph was
+        // added to the numerical registry by retaining an announced terminal.
+        assert!(!catalog.masters.contains_key(&declared));
+        let zero = vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
+        let combined = combine_exact(zero * declared);
+        assert!(catalog.require_coefficients(&combined, &announced).is_ok());
+    }
+
+    #[test]
+    fn residual_diagnostics_are_sorted_deduplicated_and_follow_exact_combination() {
+        let (mut catalog, _) = catalog(Some("5/2"), 30);
+        catalog.family_graphs.insert(
+            MasterCatalog::family_symbol("test-family"),
+            "test-parent.dot".into(),
+        );
+        let first = catalog.symbol("test-family", &[2]);
+        let second = catalog.symbol("test-family", &[3]);
+        let input = first.clone() + first.clone() + second.clone();
+        let issues = catalog.unresolved(&input, false, &BTreeMap::new());
+        assert_eq!(issues.len(), 2);
+        assert!(issues.windows(2).all(|pair| pair[0] < pair[1]));
+        assert!(issues.iter().all(|issue| issue.contains("test-parent.dot")));
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let error = catalog
+                .finalize(input.clone(), &settings(16, 2), 1, mode)
+                .unwrap_err()
+                .to_string();
+            assert_eq!(error.matches("undeclared residual master").count(), 2);
+            assert!(
+                error.contains("test-v1") && error.contains("\n  - "),
+                "{error}"
+            );
+            // A nontrivial rational zero must be combined before classifying
+            // terminals, in both substitution modes and in retained output.
+            let zero = vk_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap();
+            let cancelled = zero * input.clone();
+            assert!(!cancelled.is_zero());
+            assert!(
+                catalog
+                    .finalize(cancelled, &settings(16, 2), 1, mode)
+                    .unwrap()
+                    .is_zero()
+            );
+        }
+        assert_eq!(
+            catalog
+                .finalize(
+                    input.clone(),
+                    &settings(16, 2),
+                    1,
+                    RustRedMasterMode::Retain
+                )
+                .unwrap(),
+            combine_exact(input)
+        );
     }
 
     fn evaluate(

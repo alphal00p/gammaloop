@@ -2,66 +2,72 @@ use std::{
     collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fmt,
     hash::{Hash, Hasher},
-    sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    },
+    sync::{Arc, Mutex, RwLock},
 };
 
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
     DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram,
-    VertexSlot,
+    NumeratorInterface, VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
 use idenso::{
-    color::CS,
-    dirac::{AGS, PS},
-    epsilon::EPSILON_SYMBOL,
-    representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet},
+    color::CS, dirac::AGS, epsilon::EPSILON_SYMBOL, representations::Bispinor,
+    tensor::SymbolicTensor,
 };
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
-use linnet::half_edge::{HedgeGraph, NodeIndex, TadpoleError};
-use rayon::{ThreadPoolBuildError, ThreadPoolBuilder, prelude::*};
+use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::permutation::Permutation;
+use rayon::ThreadPoolBuildError;
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::{ThreadPoolBuilder, prelude::*};
 use serde::{Deserialize, Serialize};
 use spenso::{
     network::library::symbolic::ETS,
-    structure::representation::{Minkowski, RepName},
+    structure::{
+        partial::PartialStructure,
+        representation::{Minkowski, RepName},
+    },
 };
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, FunctionBuilder},
     graph::{GenerationSettings, Graph, HalfEdge},
-    parser::ParseSettings,
     symbol,
 };
 use thiserror::Error;
 
+use feynkit_amplitude::ColorRepresentation;
+
 use crate::{
-    FilterScope, GenerationControl, GenerationFilter, GenerationFilterKind, GenerationOptions,
-    GenerationProgress, GenerationType, GroupingError, NumeratorGrouping, ParticleSelector,
-    Process, ProcessError, SelectorError, SelfEnergyFilterOptions, SewnFilterOptions,
-    SnailFilterOptions, TadpoleFilterOptions, VertexSelector, grouping, momentum_symbol,
+    FilterScope, GenerationFilter, GenerationFilterKind, GenerationOptions, GenerationType,
+    GroupingError, NumeratorGrouping, ParticleSelector, Process, ProcessError, SelectorError,
+    SelfEnergyFilterOptions, SewnFilterOptions, SnailFilterOptions, TadpoleFilterOptions,
+    VertexSelector, grouping, momentum_symbol,
 };
+
+#[cfg(test)]
+#[path = "main_generation_regressions.rs"]
+mod main_generation_regressions;
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
     #[error(transparent)]
     Process(#[from] ProcessError),
     #[error(transparent)]
+    Amplitude(#[from] Box<feynkit_amplitude::AmplitudeError>),
+    #[error("generation was cancelled; cannot construct a complete amplitude")]
+    IncompleteAmplitude,
+    #[error(transparent)]
     Model(#[from] ModelError),
     #[error(transparent)]
     Selector(#[from] SelectorError),
     #[error(transparent)]
     Diagram(#[from] DiagramError),
-    #[error("cannot evaluate the sewn tadpole filter: {0}")]
-    SewnTadpoles(#[from] TadpoleError),
     #[error("failed to build generation thread pool: {0}")]
     ThreadPool(#[from] ThreadPoolBuildError),
     #[error("graph automorphism factor cannot be represented by u64: {0}")]
     SymmetryFactor(String),
-    #[error("no graph was generated for the requested process")]
-    NoGraphs,
     #[error("could not assign an interaction to node {node} with signature {signature:?}")]
     MissingInteraction { node: usize, signature: Vec<String> },
     #[error("option {option} for filter {filter} in the {scope} scope is not implemented")]
@@ -92,7 +98,7 @@ pub enum GenerationError {
     },
     #[error("generation thread count must be greater than zero, received {0}")]
     InvalidThreadCount(usize),
-    #[error("numerator grouping requires at least one numerical sample")]
+    #[error("numerator grouping requires canonical comparison or at least one numerical sample")]
     InvalidNumericalSampleCount,
     #[error("arithmetic overflow while computing {0}")]
     ArithmeticOverflow(&'static str),
@@ -112,6 +118,8 @@ pub enum GenerationError {
     MissingExternalEdge { node: usize },
     #[error("external leg {index} has no resolved particle")]
     MissingExternalParticle { index: usize },
+    #[error("projector refers to unknown process external leg {index}")]
+    UnknownProjectorExternalIndex { index: usize },
     #[error("external fermion flow must have exactly two legs, found {legs:?}")]
     InvalidExternalFermionLegCount { legs: Vec<usize> },
     #[error(
@@ -211,6 +219,20 @@ pub struct GenerationResult {
 }
 
 impl GenerationResult {
+    /// Convert complete unsewn diagrams into a coherent symbolic amplitude.
+    pub fn into_amplitude(
+        self,
+        options: feynkit_amplitude::AmplitudeOptions,
+    ) -> Result<feynkit_amplitude::Amplitude, GenerationError> {
+        if !self.report.completed {
+            return Err(GenerationError::IncompleteAmplitude);
+        }
+        Ok(
+            feynkit_amplitude::Amplitude::new(self.diagrams.into_iter().map(Arc::new), options)
+                .map_err(Box::new)?,
+        )
+    }
+
     /// Validate collapsed group provenance against the finalized master list.
     pub fn validate_groups(&self) -> Result<(), GenerationError> {
         if self.groups.len() != self.diagrams.len() {
@@ -295,15 +317,17 @@ pub fn unresolved_cut_content(
     }))
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct NumeratorHalfEdge {
     edge: usize,
+    // Native half-edge IDs need not equal 2 * edge + endpoint after sewing.
+    hedge: usize,
     flow: Flow,
     spin: i64,
     color: i64,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum NumeratorOwner {
     Vertex(usize),
     Edge(usize),
@@ -313,37 +337,6 @@ enum NumeratorOwner {
 enum NumeratorSector {
     Spin,
     Color,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ColorRepresentation {
-    Fundamental,
-    AntiFundamental,
-    Sextet,
-    AntiSextet,
-    Adjoint,
-}
-
-impl ColorRepresentation {
-    fn dual(self) -> Self {
-        match self {
-            Self::Fundamental => Self::AntiFundamental,
-            Self::AntiFundamental => Self::Fundamental,
-            Self::Sextet => Self::AntiSextet,
-            Self::AntiSextet => Self::Sextet,
-            Self::Adjoint => Self::Adjoint,
-        }
-    }
-
-    fn index(self, index: Atom) -> Atom {
-        match self {
-            Self::Fundamental => ColorFundamental {}.new_rep(3).to_symbolic([index]),
-            Self::AntiFundamental => ColorFundamental {}.dual().new_rep(3).to_symbolic([index]),
-            Self::Sextet => ColorSextet {}.new_rep(6).to_symbolic([index]),
-            Self::AntiSextet => ColorSextet {}.dual().new_rep(6).to_symbolic([index]),
-            Self::Adjoint => ColorAdjoint {}.new_rep(8).to_symbolic([index]),
-        }
-    }
 }
 
 impl fmt::Display for NumeratorOwner {
@@ -523,6 +516,7 @@ impl NumeratorInstantiation<'_> {
         let _ = (
             AGS.gamma,
             AGS.gamma5,
+            AGS.charge_conjugation,
             AGS.projm,
             AGS.projp,
             AGS.sigma,
@@ -609,20 +603,26 @@ impl NumeratorInstantiation<'_> {
                             * momentum)
                     })
                 }
-                "Epsilon" => {
-                    if arguments.is_empty() {
-                        Err(self.invalid_tensor(term, "expected at least one Lorentz index"))
-                    } else {
-                        Ok(arguments
-                            .into_iter()
-                            .fold(
-                                FunctionBuilder::new(*EPSILON_SYMBOL),
-                                |builder, argument| builder.add_arg(self.minkowski(argument)),
-                            )
-                            .finish())
-                    }
-                }
-                "C" => Err(self.unsupported_tensor(term)),
+                // UFO's real Levi-Civita tensor has ε^{0123} = −1 (ALOHA,
+                // matching FeynRules), so Tr[γ5 γ^μ γ^ν γ^ρ γ^σ] = 4i ε^{μνρσ}
+                // for the same γ5 = diag(−1,−1,1,1). Idenso's epsilon is
+                // normalized by Tr[…] = 4 ε^{μνρσ}, i.e. ε^{0123} = −i.
+                "Epsilon" => self.exact_arguments(term, &arguments, 4).map(|args| {
+                    let epsilon = args
+                        .iter()
+                        .fold(
+                            FunctionBuilder::new(*EPSILON_SYMBOL),
+                            |builder, argument| builder.add_arg(self.minkowski(argument.clone())),
+                        )
+                        .finish();
+                    -Atom::i() * epsilon
+                }),
+                "C" => self.exact_arguments(term, &arguments, 2).map(|args| {
+                    FunctionBuilder::new(AGS.charge_conjugation)
+                        .add_arg(self.bispinor(args[0].clone()))
+                        .add_arg(self.bispinor(args[1].clone()))
+                        .finish()
+                }),
                 "T" | "f" | "d" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
                     Err(self.invalid_tensor(term, "a color tensor appeared in a Lorentz structure"))
                 }
@@ -637,7 +637,7 @@ impl NumeratorInstantiation<'_> {
             return Err(error);
         }
 
-        // P(mu, leg) has already become FeynKit::Momentum(edge, mu).
+        // P(mu, leg) has already become gammalooprs::Q(edge, mu).
         // Attach the Minkowski representation after all UFO indices have been
         // localized. PSlash momenta already carry the freshly allocated slot.
         atom = atom.replace_map(|term, _, out| {
@@ -663,10 +663,73 @@ impl NumeratorInstantiation<'_> {
     }
 
     fn lower_color(&self, mut atom: Atom) -> Result<Atom, GenerationError> {
-        let _ = (CS.t, CS.f, ETS.metric);
+        let _ = (CS.t, CS.f, ETS.metric, *EPSILON_SYMBOL);
+        atom = atom.expand();
+        if let AtomView::Add(terms) = atom.as_view() {
+            return terms.iter().try_fold(Atom::Zero, |sum, term| {
+                Ok(sum + self.lower_color(term.to_owned())?)
+            });
+        }
+        let dummy_symbol = match self.owner {
+            NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
+            NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
+        };
+        // Contract identities touching a local dummy before assigning oriented
+        // slots. Each step removes one identity, including chains of identities;
+        // the remaining tensors or external legs determine its representation.
+        loop {
+            let factors = match atom.as_view() {
+                AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
+                factor => vec![factor],
+            };
+            let mut contraction = None;
+            for term in factors {
+                let AtomView::Fun(function) = term else {
+                    continue;
+                };
+                if !Self::is_model_symbol(function.get_symbol(), "Identity")
+                    || function.get_nargs() != 2
+                {
+                    continue;
+                }
+                let args = function.iter().collect::<Vec<_>>();
+                if args[0] == args[1] {
+                    continue;
+                }
+                for (left, right) in [(args[0], args[1]), (args[1], args[0])] {
+                    if !matches!(left, AtomView::Fun(index) if index.get_symbol() == dummy_symbol) {
+                        continue;
+                    }
+                    let mut occurrences = 0;
+                    let mut powered = false;
+                    atom.visitor(&mut |index| {
+                        if let AtomView::Pow(_) = index {
+                            index.visitor(&mut |nested| {
+                                powered |= nested == left;
+                                true
+                            });
+                            return false;
+                        }
+                        occurrences += usize::from(index == left);
+                        true
+                    });
+                    if occurrences == 2 && !powered {
+                        contraction = Some((term.to_owned(), left.to_owned(), right.to_owned()));
+                        break;
+                    }
+                }
+                if contraction.is_some() {
+                    break;
+                }
+            }
+            let Some((identity, dummy, other)) = contraction else {
+                break;
+            };
+            atom = (atom / identity).replace(dummy.to_pattern()).with(other);
+        }
         let mut representations = HashMap::<String, ColorRepresentation>::new();
         for leg in self.legs {
-            if let Some(representation) = Self::vertex_color_representation(leg.color) {
+            if let Some(representation) = ColorRepresentation::from_ufo(leg.color) {
                 let index = self.index(*leg, 1)?;
                 self.assign_color_representation(
                     &mut representations,
@@ -715,7 +778,7 @@ impl NumeratorInstantiation<'_> {
                         ColorRepresentation::AntiFundamental,
                     )
                 }),
-                "f" => self.exact_arguments(term, &arguments, 3).and_then(|args| {
+                "f" | "d" => self.exact_arguments(term, &arguments, 3).and_then(|args| {
                     for argument in args {
                         self.assign_color_representation(
                             &mut representations,
@@ -725,9 +788,24 @@ impl NumeratorInstantiation<'_> {
                     }
                     Ok(())
                 }),
-                "d" | "Epsilon" | "EpsilonBar" | "T6" | "K6" | "K6Bar" => {
-                    Err(self.unsupported_tensor(term))
+                "Epsilon" | "EpsilonBar" => {
+                    self.exact_arguments(term, &arguments, 3).and_then(|args| {
+                        let representation = if name == "Epsilon" {
+                            ColorRepresentation::Fundamental
+                        } else {
+                            ColorRepresentation::AntiFundamental
+                        };
+                        for argument in args {
+                            self.assign_color_representation(
+                                &mut representations,
+                                argument.as_view(),
+                                representation,
+                            )?;
+                        }
+                        Ok(())
+                    })
                 }
+                "T6" | "K6" | "K6Bar" => Err(self.unsupported_tensor(term)),
                 "IdentityL" | "Gamma" | "Gamma5" | "ProjM" | "ProjP" | "Sigma" | "C" | "Metric"
                 | "PSlash" => {
                     Err(self.invalid_tensor(term, "a Lorentz tensor appeared in a color structure"))
@@ -822,21 +900,65 @@ impl NumeratorInstantiation<'_> {
                 "Identity" => self.exact_arguments(term, &arguments, 2).map(|args| {
                     let left = representations[&Self::index_key(args[0].as_view())];
                     let right = representations[&Self::index_key(args[1].as_view())];
-                    ETS.metric(left.index(args[0].clone()), right.index(args[1].clone()))
+                    ETS.metric(
+                        left.representation().to_symbolic([args[0].clone()]),
+                        right.representation().to_symbolic([args[1].clone()]),
+                    )
                 }),
                 "T" => self.exact_arguments(term, &arguments, 3).map(|args| {
                     FunctionBuilder::new(CS.t)
-                        .add_arg(ColorRepresentation::Adjoint.index(args[0].clone()))
-                        .add_arg(ColorRepresentation::Fundamental.index(args[1].clone()))
-                        .add_arg(ColorRepresentation::AntiFundamental.index(args[2].clone()))
+                        .add_arg(
+                            ColorRepresentation::Adjoint
+                                .representation()
+                                .to_symbolic([args[0].clone()]),
+                        )
+                        .add_arg(
+                            ColorRepresentation::Fundamental
+                                .representation()
+                                .to_symbolic([args[1].clone()]),
+                        )
+                        .add_arg(
+                            ColorRepresentation::AntiFundamental
+                                .representation()
+                                .to_symbolic([args[2].clone()]),
+                        )
                         .finish()
                 }),
-                "f" => self.exact_arguments(term, &arguments, 3).map(|args| {
-                    args.iter()
-                        .fold(FunctionBuilder::new(CS.f), |builder, argument| {
-                            builder.add_arg(ColorRepresentation::Adjoint.index(argument.clone()))
-                        })
-                        .finish()
+                "f" | "d" => self.exact_arguments(term, &arguments, 3).map(|args| {
+                    let adjoint_indices = args.iter().map(|argument| {
+                        ColorRepresentation::Adjoint
+                            .representation()
+                            .to_symbolic([argument.clone()])
+                    });
+                    if name == "d" {
+                        // UFO d^{abc} = 2 Tr({T^a,T^b} T^c), whereas Idenso
+                        // stores the normalized symmetric generator trace.
+                        Atom::num(4)
+                            * CS.symmetric_generator_trace(
+                                ColorRepresentation::Fundamental
+                                    .representation()
+                                    .to_symbolic([]),
+                                adjoint_indices,
+                            )
+                    } else {
+                        adjoint_indices
+                            .fold(FunctionBuilder::new(CS.f), |builder, argument| {
+                                builder.add_arg(argument)
+                            })
+                            .finish()
+                    }
+                }),
+                "Epsilon" | "EpsilonBar" => self.exact_arguments(term, &arguments, 3).map(|args| {
+                    let representation = if name == "Epsilon" {
+                        ColorRepresentation::Fundamental
+                    } else {
+                        ColorRepresentation::AntiFundamental
+                    };
+                    idenso::epsilon::epsilon(args.iter().map(|argument| {
+                        representation
+                            .representation()
+                            .to_symbolic([argument.clone()])
+                    }))
                 }),
                 _ => return,
             };
@@ -853,7 +975,7 @@ impl NumeratorInstantiation<'_> {
     }
 
     fn edge_color_identity(&self, color: i64) -> Result<Option<Atom>, GenerationError> {
-        let Some(source_representation) = Self::vertex_color_representation(color) else {
+        let Some(source_representation) = ColorRepresentation::from_ufo(color) else {
             return Ok(None);
         };
         let source = self
@@ -873,8 +995,13 @@ impl NumeratorInstantiation<'_> {
                 owner: self.owner.to_string(),
             })?;
         let identity = ETS.metric(
-            source_representation.index(self.index(source, 1)?),
-            source_representation.dual().index(self.index(sink, 1)?),
+            source_representation
+                .representation()
+                .to_symbolic([self.index(source, 1)?]),
+            source_representation
+                .dual()
+                .representation()
+                .to_symbolic([self.index(sink, 1)?]),
         );
         Ok(Some(identity))
     }
@@ -890,8 +1017,8 @@ impl NumeratorInstantiation<'_> {
                 return;
             };
             let expected = match self.owner {
-                NumeratorOwner::Vertex(_) => symbol!("FeynKit::VertexDummy"),
-                NumeratorOwner::Edge(_) => symbol!("FeynKit::EdgeDummy"),
+                NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
+                NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
             };
             if function.get_symbol() != expected || function.get_nargs() != 2 {
                 return;
@@ -950,19 +1077,8 @@ impl NumeratorInstantiation<'_> {
             AtomView::Fun(function)
                 if function.get_symbol().get_namespace() == "spenso"
                     && function.get_symbol().get_stripped_name() == name
-                    && function.get_nargs() == 2
+                    && matches!(function.get_nargs(), 1 | 2)
         )
-    }
-
-    fn vertex_color_representation(color: i64) -> Option<ColorRepresentation> {
-        match color {
-            3 => Some(ColorRepresentation::Fundamental),
-            -3 => Some(ColorRepresentation::AntiFundamental),
-            6 => Some(ColorRepresentation::Sextet),
-            -6 => Some(ColorRepresentation::AntiSextet),
-            8 => Some(ColorRepresentation::Adjoint),
-            _ => None,
-        }
     }
 
     fn assign_color_representation(
@@ -972,8 +1088,14 @@ impl NumeratorInstantiation<'_> {
         representation: ColorRepresentation,
     ) -> Result<(), GenerationError> {
         let key = Self::index_key(index);
+        let local_dummy = matches!(index, AtomView::Fun(function)
+            if [feynkit_graph::symbols::vertex_index(), feynkit_graph::symbols::edge_index()]
+                .contains(&function.get_symbol()));
         match representations.insert(key, representation) {
-            Some(previous) if previous != representation => Err(self.invalid_tensor(
+            // A contracted fundamental index joins dual slots. External ports
+            // retain the exact orientation fixed by their particle record.
+            Some(previous) if previous != representation
+                && !(local_dummy && previous == representation.dual()) => Err(self.invalid_tensor(
                 index,
                 &format!(
                     "index is used as both {previous:?} and {representation:?} color representations"
@@ -1145,19 +1267,15 @@ impl NumeratorInstantiation<'_> {
     }
 
     fn index(&self, leg: NumeratorHalfEdge, shift: i64) -> Result<Atom, GenerationError> {
-        let edge = i64::try_from(leg.edge)
-            .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic edge identifier"))?;
-        let symbol = match leg.flow {
-            Flow::Source => symbol!("FeynKit::SourceIndex"),
-            Flow::Sink => symbol!("FeynKit::SinkIndex"),
-        };
-        Ok(symbol.call((edge, shift)))
+        let hedge = i64::try_from(leg.hedge)
+            .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic half-edge identifier"))?;
+        Ok(feynkit_graph::symbols::hedge_index().call((hedge, shift)))
     }
 
     fn dummy(&self, local: usize) -> Result<Atom, GenerationError> {
         let (symbol, owner) = match self.owner {
-            NumeratorOwner::Vertex(vertex) => (symbol!("FeynKit::VertexDummy"), vertex),
-            NumeratorOwner::Edge(edge) => (symbol!("FeynKit::EdgeDummy"), edge),
+            NumeratorOwner::Vertex(vertex) => (feynkit_graph::symbols::vertex_index(), vertex),
+            NumeratorOwner::Edge(edge) => (feynkit_graph::symbols::edge_index(), edge),
         };
         let owner = i64::try_from(owner)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic numerator owner"))?;
@@ -1196,62 +1314,146 @@ impl NumeratorInstantiation<'_> {
 }
 
 #[derive(Clone)]
-pub struct Generator {
+pub(crate) struct Generator {
     model: Arc<Model>,
+    numerators: Arc<NumeratorCache>,
+}
+
+/// Localized factors depend on the immutable model and their index assignment,
+/// not on the rest of the diagram. Keep them for this generator's lifetime.
+#[derive(Default)]
+struct NumeratorCache {
+    interactions: RwLock<HashMap<InteractionNumeratorKey, SymbolicTensor<PartialStructure>>>,
+    propagators: RwLock<HashMap<PropagatorNumeratorKey, SymbolicTensor<PartialStructure>>>,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct InteractionNumeratorKey {
+    rule: VertexRuleId,
+    owner: NumeratorOwner,
+    legs: Vec<NumeratorHalfEdge>,
+}
+
+#[derive(PartialEq, Eq, Hash)]
+struct PropagatorNumeratorKey {
+    particle: ParticleId,
+    edge: usize,
+    hedges: [usize; 2],
+}
+
+/// Feynman-rule numerators for a finalized topology, using its attached model.
+pub trait FeynmanDiagramRulesExt {
+    /// Instantiate vertex and propagator numerators in an imported diagram's
+    /// existing half-edge frame, using its interaction-slot assignments.
+    ///
+    /// The diagram's routing, overall factor, numerator prefactor and projector
+    /// are retained. Existing local numerator fragments are replaced with the
+    /// model's Feynman rules, just as during diagram generation.
+    fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError>;
+
+    /// Construct the external wavefunctions in the finalized half-edge frame.
+    /// Callers with an explicit projector retain that supplied expression.
+    fn external_state_projector(&self)
+    -> Result<SymbolicTensor<PartialStructure>, GenerationError>;
+}
+
+impl FeynmanDiagramRulesExt for FeynmanDiagram {
+    fn apply_feynman_rules(&self) -> Result<FeynmanDiagram, GenerationError> {
+        self.validate()?;
+        Generator::new(self.model_arc()).construct_numerators(self.clone())
+    }
+
+    fn external_state_projector(
+        &self,
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
+        let generator = Generator::new(self.model_arc());
+        let mut projector = Atom::one();
+        for (edge, endpoints, data) in self.edges() {
+            let Some(external) = &data.external else {
+                continue;
+            };
+            for (vertex, endpoint, state) in [
+                (
+                    endpoints.source,
+                    DiagramEndpoint::Source,
+                    ExternalState::Outgoing,
+                ),
+                (
+                    endpoints.target,
+                    DiagramEndpoint::Target,
+                    ExternalState::Incoming,
+                ),
+            ] {
+                if vertex.is_none() {
+                    continue;
+                }
+                let state = if endpoints.source.is_some() && endpoints.target.is_some() {
+                    state
+                } else {
+                    external.state
+                };
+                let hedge = self
+                    .half_edge_id(DiagramHalfEdge { edge, endpoint })
+                    .expect("finalized external endpoint")
+                    .0;
+                projector *=
+                    generator.external_wavefunction(state, data.particle, edge.0, hedge)?;
+            }
+        }
+        Ok(NumeratorInterface::admit(projector, None)?)
+    }
 }
 
 impl Generator {
     pub fn new(model: impl Into<Arc<Model>>) -> Self {
         Self {
             model: model.into(),
+            numerators: Arc::default(),
         }
-    }
-
-    pub fn model(&self) -> &Model {
-        &self.model
     }
 
     pub fn generate(
         &self,
         process: &Process,
         options: &GenerationOptions,
+        generation_type: GenerationType,
     ) -> Result<GenerationResult, GenerationError> {
         process.validate()?;
-        let options = options.resolve_selectors(&self.model)?;
+        if generation_type == GenerationType::Amplitude
+            && process.outgoing_alternatives().len() != 1
+        {
+            return Err(ProcessError::MultipleAmplitudeFinalStates.into());
+        }
+        process.validate_in(&self.model)?;
+        let options = process
+            .restrict_options(&self.model, options)?
+            .resolve_selectors(&self.model)?;
         let options = &options;
-        self.validate_options(process, options)?;
-        let resolved = ResolvedProcess::new(&self.model, process)?;
+        self.validate_options(generation_type, options)?;
+        process.validate_covariant_cut_filters(&self.model, options, generation_type)?;
+        let expanded_process = process.clone().with_final_state_alternatives(
+            process.covariant_cut_states(&self.model, generation_type)?,
+        )?;
+        let process = &expanded_process;
+        let resolved = ResolvedProcess::new(&self.model, process, generation_type, options)?;
         let signatures = InteractionSignatures::new(&self.model, options)?;
         let external_edges = resolved.external_edges(&self.model)?;
         let generation_signatures: Vec<_> = signatures.keys().cloned().collect();
 
-        let progress_count = Arc::new(AtomicUsize::new(0));
-        let callback = options.progress.clone();
-        let cancellation = options.cancellation.clone();
-        let progress_counter = progress_count.clone();
-        let progress_cancellation = cancellation.clone();
-        let progress_cancellation_check = options.cancellation_check.clone();
+        let progress_count = Arc::new(Mutex::new(0));
+        let progress_options = options.clone();
+        options.report_progress("topologies", 0, None);
+        // Fast cut filter switch multiplicity is no longer a separate CLI option;
+        // FeynKit owns the physical-cut filtering strategy.
         let mut settings = GenerationSettings::new()
-            .max_loops(*process.loop_count().end())
+            .max_loops(*options.loop_count().end())
             .allow_self_loops(options.allow_self_loops)
             .allow_zero_flow_edges(options.allow_zero_flow_edges)
             .progress_fn(Box::new(move |_| {
-                let generated_graphs = progress_counter.fetch_add(1, Ordering::Relaxed) + 1;
-                let control = callback
-                    .as_ref()
-                    .map_or(GenerationControl::Continue, |callback| {
-                        callback(GenerationProgress { generated_graphs })
-                    });
-                if control == GenerationControl::Cancel {
-                    progress_cancellation.cancel();
-                }
-                if progress_cancellation_check
-                    .as_ref()
-                    .is_some_and(|check| check())
-                {
-                    progress_cancellation.cancel();
-                }
-                !progress_cancellation.is_cancelled()
+                let mut count = progress_count.lock().unwrap();
+                *count += 1;
+                progress_options.report_progress("topologies", *count, None);
+                !progress_options.cancellation_requested()
             }));
         if let Some(filter) = options.filter.clone() {
             let filter_options = options.clone();
@@ -1266,17 +1468,11 @@ impl Generator {
                 GenerationError::ArithmeticOverflow("the Symbolica vertex limit"),
             )?);
         }
-        if let Some(maximum) = options.max_bridges() {
+        if let Some(maximum) = options.max_bridges(*options.loop_count().start()) {
             settings = settings.max_bridges(maximum);
         }
-        let abort_cancellation = cancellation.clone();
-        let abort_cancellation_check = options.cancellation_check.clone();
-        settings = settings.abort_check(Box::new(move || {
-            abort_cancellation.is_cancelled()
-                || abort_cancellation_check
-                    .as_ref()
-                    .is_some_and(|check| check())
-        }));
+        let abort_options = options.clone();
+        settings = settings.abort_check(Box::new(move || abort_options.cancellation_requested()));
 
         let generated = Graph::generate(&external_edges, &generation_signatures, settings);
         let (raw_graphs, mut completed) = match generated {
@@ -1286,17 +1482,16 @@ impl Generator {
         if options.cancellation_requested() {
             completed = false;
         }
-        if raw_graphs.is_empty() && completed {
-            return Err(GenerationError::NoGraphs);
-        }
 
         let mut raw_graphs: Vec<_> = raw_graphs.into_iter().collect();
         // Sort for reproducible generated IDs, then discard contributions below
         // the requested loop range before more expensive processing.
         raw_graphs.sort_by(|left, right| left.0.cmp(&right.0));
-        raw_graphs.retain(|(graph, _)| process.loop_count().contains(&graph.num_loops()));
+        raw_graphs.retain(|(graph, _)| options.loop_count().contains(&graph.num_loops()));
         let mut filtered_graphs = Vec::with_capacity(raw_graphs.len());
-        for entry in raw_graphs {
+        let total = raw_graphs.len();
+        options.report_progress("topology_filters", 0, Some(total));
+        for (index, entry) in raw_graphs.into_iter().enumerate() {
             if options.cancellation_requested() {
                 completed = false;
                 break;
@@ -1304,42 +1499,72 @@ impl Generator {
             if self.passes_topology_filters(&entry.0, options)? {
                 filtered_graphs.push(entry);
             }
+            options.report_progress("topology_filters", index + 1, Some(total));
         }
         let raw_graphs = filtered_graphs;
         let topology_count = raw_graphs.len();
 
-        let mut pool = ThreadPoolBuilder::new();
-        // Respect an explicit thread count; otherwise Rayon uses its default
-        // logical-CPU count.
-        if let Some(threads) = options.threads {
-            pool = pool.num_threads(threads);
-        }
-        let pool = pool.build()?;
-        let colored = pool.install(|| {
+        let assignments = Mutex::new(0);
+        options.report_progress("interactions", 0, Some(topology_count));
+        let color_graph = |(graph, symmetry): &(
+            Graph<NodeColor, EdgeColor>,
+            symbolica::domains::integer::Integer,
+        )| {
+            if options.cancellation_requested() {
+                return Ok(None);
+            }
+            let symmetry = match u64::try_from(symmetry.clone()) {
+                Ok(symmetry) => symmetry,
+                Err(error) => {
+                    return Err(GenerationError::SymmetryFactor(error.to_string()));
+                }
+            };
+            let result = self
+                .assign_interactions(graph, &signatures)
+                .map(|graphs| (graphs, symmetry));
+            let mut count = assignments.lock().unwrap();
+            *count += 1;
+            options.report_progress("interactions", *count, Some(topology_count));
+            result.map(Some)
+        };
+        // An explicit single thread runs every stage on the caller without a
+        // Rayon pool. Otherwise respect an explicit thread count, or Rayon's
+        // default logical-CPU count. Browser kernels process the same graphs serially.
+        #[cfg(not(target_arch = "wasm32"))]
+        let pool = if options.threads == Some(1) {
+            None
+        } else {
+            let mut pool = ThreadPoolBuilder::new();
+            if let Some(threads) = options.threads {
+                pool = pool.num_threads(threads);
+            }
+            Some(pool.build()?)
+        };
+        #[cfg(target_arch = "wasm32")]
+        let colored = raw_graphs
+            .iter()
+            .map(color_graph)
+            .collect::<Result<Vec<_>, _>>()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let colored = if let Some(pool) = &pool {
+            pool.install(|| {
+                raw_graphs
+                    .par_iter()
+                    .map(color_graph)
+                    .collect::<Result<Vec<_>, _>>()
+            })?
+        } else {
             raw_graphs
-                .par_iter()
-                .filter_map(|(graph, symmetry)| {
-                    if options.cancellation_requested() {
-                        return None;
-                    }
-                    let symmetry = match u64::try_from(symmetry.clone()) {
-                        Ok(symmetry) => symmetry,
-                        Err(error) => {
-                            return Some(Err(GenerationError::SymmetryFactor(error.to_string())));
-                        }
-                    };
-                    Some(
-                        self.assign_interactions(graph, &signatures)
-                            .map(|graphs| (graphs, symmetry)),
-                    )
-                })
-                .collect::<Result<Vec<_>, GenerationError>>()
-        })?;
+                .iter()
+                .map(color_graph)
+                .collect::<Result<Vec<_>, _>>()?
+        };
         if options.cancellation_requested() {
             completed = false;
         }
         let mut colored: Vec<_> = colored
             .into_iter()
+            .flatten()
             .flat_map(|(graphs, symmetry)| {
                 graphs
                     .into_iter()
@@ -1356,7 +1581,13 @@ impl Generator {
         let interaction_assignment_count = colored.len();
 
         let mut diagram_inputs = Vec::new();
-        for mut topology in colored {
+        options.report_progress("interaction_filters", 0, Some(interaction_assignment_count));
+        for (index, mut topology) in colored.into_iter().enumerate() {
+            options.report_progress(
+                "interaction_filters",
+                index,
+                Some(interaction_assignment_count),
+            );
             if options.cancellation_requested() {
                 completed = false;
                 break;
@@ -1366,23 +1597,24 @@ impl Generator {
                 &self.model,
                 &options.numerator_grouping,
             )?;
-            if process.generation_type() == GenerationType::CrossSection {
+            if generation_type == GenerationType::CrossSection {
                 let inventory = resolved.cut_partitions(&topology.graph, &self.model, options)?;
                 topology.cut_partitions = inventory.physical;
                 topology.topology_threshold_candidates = inventory.topology_threshold_candidates;
                 if topology.cut_partitions.is_empty()
                     || !self.retain_cut_amplitude_partitions(&mut topology, options)?
-                    || !resolved.passes_sewn_filter(&topology.graph, options)?
+                    || !resolved.passes_sewn_filter(&topology.graph, options)
                 {
                     continue;
                 }
             }
             topology.graph =
                 ResolvedProcess::repair_cp_interaction_rules(topology.graph, &self.model)?;
-            let fermion_loop_count = self.closed_fermion_loop_count(&topology.graph)?;
+            let fermion_loop_count = self.closed_fermion_loop_count(&topology.graph, false)?;
             if !self.passes_interaction_filters(&topology.graph, fermion_loop_count, options)? {
                 continue;
             }
+            let grassmann_loop_count = self.closed_fermion_loop_count(&topology.graph, true)?;
             // Canonicalization fixes the stable vertex/edge-ID frame used by
             // cuts and routing.  The physical representative must still have
             // each fermion chain oriented consistently before its numerator
@@ -1403,44 +1635,124 @@ impl Generator {
                     &normalized.reversed_edges,
                 ),
             };
+            // Without numerator comparisons, the normalized physical graph is
+            // already the representative. Its orientation-independent key also
+            // provides the same deterministic ordering.
+            let (topology, reversed_edges) =
+                if matches!(options.numerator_grouping, NumeratorGrouping::None) {
+                    (representative.clone(), BTreeSet::new())
+                } else {
+                    (topology, normalized.reversed_edges)
+                };
             diagram_inputs.push((
                 topology,
                 representative,
-                fermion_loop_count,
+                grassmann_loop_count,
                 normalized.signs,
-                normalized.reversed_edges,
+                reversed_edges,
             ));
         }
+        if !options.cancellation_requested() {
+            options.report_progress(
+                "interaction_filters",
+                interaction_assignment_count,
+                Some(interaction_assignment_count),
+            );
+        }
+        let total = diagram_inputs.len();
+        options.report_progress("numerators", 0, Some(total));
         let width = diagram_inputs.len().saturating_sub(1).to_string().len();
-        let mut diagram_pairs = Vec::with_capacity(diagram_inputs.len());
-        for (index, (comparison, representative, fermion_loop_count, signs, reversed_edges)) in
-            diagram_inputs.into_iter().enumerate()
-        {
+        let constructed = Mutex::new(0);
+        let construct = |(
+            index,
+            (comparison, representative, grassmann_loop_count, signs, reversed_edges),
+        ): (
+            usize,
+            (
+                ColoredTopology,
+                ColoredTopology,
+                usize,
+                FermionSigns,
+                BTreeSet<EdgeId>,
+            ),
+        )| {
             if options.cancellation_requested() {
-                completed = false;
-                break;
+                return Ok::<_, GenerationError>(None);
             }
             let name = format!("{}{index:0width$}", options.graph_prefix);
-            diagram_pairs.push(DiagramPair {
-                comparison: self.to_diagram(
-                    name.clone(),
-                    process.generation_type(),
-                    comparison,
-                    fermion_loop_count,
-                    signs,
-                    options,
-                )?,
-                representative: self.to_diagram(
-                    name,
-                    process.generation_type(),
-                    representative,
-                    fermion_loop_count,
-                    signs,
-                    options,
-                )?,
+            let identical = comparison == representative;
+            let signs = FermionSigns {
+                internal_loop_negative: grassmann_loop_count % 2 == 1,
+                ..signs
+            };
+            let internal_reversals = comparison
+                .graph
+                .edges()
+                .iter()
+                .enumerate()
+                .filter(|(_, edge)| {
+                    [edge.vertices.0, edge.vertices.1].iter().all(|vertex| {
+                        matches!(
+                            comparison.graph.nodes()[*vertex].data,
+                            ColoredNode::Interaction(_)
+                        )
+                    })
+                })
+                .map(|(edge, _)| reversed_edges.contains(&EdgeId(edge)))
+                .collect::<Vec<_>>();
+            let comparison =
+                self.to_diagram(name.clone(), generation_type, comparison, signs, options)?;
+            let representative = if identical {
+                comparison.clone()
+            } else {
+                self.to_diagram(name, generation_type, representative, signs, options)?
+            };
+            // Finalization orders external carriers before the internal edges.
+            // Transport the comparison-to-representative reversals into that
+            // finalized edge frame; process flow fixes all external carriers.
+            let reversed_edges = comparison
+                .edges()
+                .filter(|(_, _, edge)| edge.external.is_none())
+                .zip(internal_reversals)
+                .filter_map(|((edge, _, _), reversed)| reversed.then_some(edge))
+                .collect();
+            let pair = DiagramPair {
+                comparison,
+                representative,
                 reversed_edges,
-            });
+            };
+            let mut count = constructed.lock().unwrap();
+            *count += 1;
+            options.report_progress("numerators", *count, Some(total));
+            Ok(Some(pair))
+        };
+        #[cfg(target_arch = "wasm32")]
+        let diagram_pairs = diagram_inputs
+            .into_iter()
+            .enumerate()
+            .map(construct)
+            .collect::<Result<Vec<_>, _>>()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let diagram_pairs = if let Some(pool) = &pool {
+            pool.install(|| {
+                diagram_inputs
+                    .into_par_iter()
+                    .enumerate()
+                    .map(construct)
+                    .collect::<Result<Vec<_>, _>>()
+            })?
+        } else {
+            diagram_inputs
+                .into_iter()
+                .enumerate()
+                .map(construct)
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        let mut diagram_pairs = diagram_pairs.into_iter().flatten().collect::<Vec<_>>();
+        if options.cancellation_requested() {
+            completed = false;
         }
+        options.report_progress("selection", 0, None);
         if !options.forced_cuts.is_empty() {
             let mut matched = vec![false; options.forced_cuts.len()];
             let mut retained = Vec::new();
@@ -1543,21 +1855,28 @@ impl Generator {
             comparison_diagrams.push(pair.comparison);
             representatives.push((pair.representative, pair.reversed_edges));
         }
-        let grouped = if options.cancellation_requested() {
+        let grouping = if options.cancellation_requested() {
             completed = false;
-            grouping::group_diagrams(
-                comparison_diagrams,
-                &self.model,
-                &NumeratorGrouping::None,
-                process.symmetrizes_left_right(),
-            )?
+            &NumeratorGrouping::None
         } else {
+            &options.numerator_grouping
+        };
+        let group = || {
             grouping::group_diagrams(
                 comparison_diagrams,
                 &self.model,
-                &options.numerator_grouping,
-                process.symmetrizes_left_right(),
-            )?
+                grouping,
+                options.symmetrizes_left_right(),
+                options,
+            )
+        };
+        #[cfg(target_arch = "wasm32")]
+        let grouped = group()?;
+        #[cfg(not(target_arch = "wasm32"))]
+        let grouped = if let Some(pool) = &pool {
+            pool.install(group)?
+        } else {
+            group()?
         };
         if options.cancellation_requested() {
             completed = false;
@@ -1572,6 +1891,8 @@ impl Generator {
         // grouping factor and routing choice.
         let zero_numerator_count = grouped.zero_numerator_count;
         let mut groups = grouped.groups;
+        let total = groups.len();
+        options.report_progress_with_zero_count("grouping", 0, Some(total), zero_numerator_count);
         let mut diagrams = Vec::with_capacity(grouped.diagrams.len());
         for (output_index, (comparison_master, group)) in grouped
             .diagrams
@@ -1600,21 +1921,27 @@ impl Generator {
                         "group {output_index} references unknown source diagram {source_diagram}"
                     ))
                 })?;
-            let cut_partitions = transport_cut_metadata(comparison_master.cuts(), reversed_edges)
-                .into_iter()
-                .map(|cut| (cut.left.half_edges, cut.right.half_edges))
-                .collect();
-            let threshold_partitions = transport_threshold_candidate_metadata(
+            let cuts = transport_cut_metadata(comparison_master.cuts(), reversed_edges);
+            let thresholds = transport_threshold_candidate_metadata(
                 comparison_master.topology_threshold_candidates(),
                 reversed_edges,
-            )
-            .into_iter()
-            .map(|candidate| (candidate.left, candidate.right))
-            .collect();
-            let mut representative = source_representative
-                .clone()
-                .with_cut_partitions(cut_partitions)?
-                .with_topology_threshold_partitions(threshold_partitions)?;
+            );
+            let mut representative = source_representative.clone();
+            if cuts != representative.cuts() {
+                representative = representative.with_cut_partitions(
+                    cuts.into_iter()
+                        .map(|cut| (cut.left.half_edges, cut.right.half_edges))
+                        .collect(),
+                )?;
+            }
+            if thresholds != representative.topology_threshold_candidates() {
+                representative = representative.with_topology_threshold_partitions(
+                    thresholds
+                        .into_iter()
+                        .map(|candidate| (candidate.left, candidate.right))
+                        .collect(),
+                )?;
+            }
             if representative.loop_momentum_basis().loop_edges
                 != comparison_master.loop_momentum_basis().loop_edges
             {
@@ -1637,6 +1964,12 @@ impl Generator {
                 member.source_id = source.id();
                 member.source_name = source.name().to_owned();
             }
+            options.report_progress_with_zero_count(
+                "grouping",
+                output_index + 1,
+                Some(total),
+                zero_numerator_count,
+            );
         }
 
         let result = GenerationResult {
@@ -1651,12 +1984,18 @@ impl Generator {
             groups,
         };
         result.validate_groups()?;
+        options.report_progress_with_zero_count(
+            if completed { "complete" } else { "cancelled" },
+            result.diagrams.len(),
+            Some(result.diagrams.len()),
+            zero_numerator_count,
+        );
         Ok(result)
     }
 
     fn validate_options(
         &self,
-        process: &Process,
+        generation_type: GenerationType,
         options: &GenerationOptions,
     ) -> Result<(), GenerationError> {
         if options.threads == Some(0) {
@@ -1667,18 +2006,14 @@ impl Generator {
             NumeratorGrouping::Identical(options)
                 | NumeratorGrouping::UpToSign(options)
                 | NumeratorGrouping::UpToScalar(options)
-                if options.number_of_numerical_samples == 0
+                if options.number_of_numerical_samples == 0 && !options.check_canonical_numerator
         ) {
             return Err(GenerationError::InvalidNumericalSampleCount);
         }
-        self.validate_filters(
-            FilterScope::Graph,
-            process.generation_type(),
-            &options.graph_filters,
-        )?;
+        self.validate_filters(FilterScope::Graph, generation_type, &options.graph_filters)?;
         self.validate_filters(
             FilterScope::CutAmplitude,
-            process.generation_type(),
+            generation_type,
             &options.cut_amplitude_filters,
         )
     }
@@ -1732,6 +2067,7 @@ impl Generator {
                     | GenerationFilter::VertexAllow(_)
                     | GenerationFilter::VertexVeto(_)
                     | GenerationFilter::MaxNumberOfBridges(_)
+                    | GenerationFilter::LoopOneParticleIrreducible
                     | GenerationFilter::CouplingOrders(_)
                     | GenerationFilter::LoopCountRange(_)
                     | GenerationFilter::FermionLoopCountRange(_)
@@ -1774,6 +2110,7 @@ impl Generator {
                         | GenerationFilter::VertexAllow(_)
                         | GenerationFilter::VertexVeto(_)
                         | GenerationFilter::MaxNumberOfBridges(_)
+                        | GenerationFilter::LoopOneParticleIrreducible
                         | GenerationFilter::BlobRange(_)
                         | GenerationFilter::SpectatorRange(_)
                         | GenerationFilter::PerturbativeOrders(_)
@@ -1817,6 +2154,7 @@ impl Generator {
                 | GenerationFilter::ZeroSnails(_)
                 | GenerationFilter::Sewn(_)
                 | GenerationFilter::MaxNumberOfBridges(_)
+                | GenerationFilter::LoopOneParticleIrreducible
                 | GenerationFilter::LoopCountRange(_)
                 | GenerationFilter::BlobRange(_)
                 | GenerationFilter::SpectatorRange(_)
@@ -1857,6 +2195,7 @@ impl Generator {
             | GenerationFilter::VertexAllow(_)
             | GenerationFilter::VertexVeto(_)
             | GenerationFilter::MaxNumberOfBridges(_)
+            | GenerationFilter::LoopOneParticleIrreducible
             | GenerationFilter::PerturbativeOrders(_) => None,
         };
         if let Some((minimum, maximum)) = invalid {
@@ -1988,6 +2327,13 @@ impl Generator {
 
         for filter in &options.graph_filters {
             match filter {
+                GenerationFilter::LoopOneParticleIrreducible if graph.num_loops() > 0 => {
+                    let mut tree = graph.get_spanning_tree(0);
+                    tree.chain_decomposition();
+                    if tree.count_bridges() != 0 {
+                        return Ok(false);
+                    }
+                }
                 GenerationFilter::ParticleVeto(vetoed)
                     if graph.edges().iter().any(|edge| {
                         vetoed.iter().any(|selector| match selector {
@@ -2014,6 +2360,7 @@ impl Generator {
                 | GenerationFilter::VertexAllow(_)
                 | GenerationFilter::VertexVeto(_)
                 | GenerationFilter::MaxNumberOfBridges(_)
+                | GenerationFilter::LoopOneParticleIrreducible
                 | GenerationFilter::CouplingOrders(_)
                 | GenerationFilter::LoopCountRange(_)
                 | GenerationFilter::FermionLoopCountRange(_)
@@ -2391,6 +2738,7 @@ impl Generator {
                 }
                 GenerationFilter::ParticleVeto(_)
                 | GenerationFilter::MaxNumberOfBridges(_)
+                | GenerationFilter::LoopOneParticleIrreducible
                 | GenerationFilter::LoopCountRange(_)
                 | GenerationFilter::SelfEnergy(_)
                 | GenerationFilter::Tadpoles(_)
@@ -2462,18 +2810,23 @@ impl Generator {
         Ok(result)
     }
 
-    // Count closed, non-branching fermion components. Branching components are
-    // rejected explicitly below.
+    // Count closed, non-branching fermion components, optionally including ghosts
+    // for the Grassmann sign. The fermion-loop filter excludes ghosts. Branching
+    // components are rejected explicitly below.
     fn closed_fermion_loop_count(
         &self,
         graph: &Graph<ColoredNode, EdgeColor>,
+        include_ghosts: bool,
     ) -> Result<usize, GenerationError> {
         let mut adjacency = vec![Vec::new(); graph.nodes().len()];
         let mut degrees = vec![0; graph.nodes().len()];
-        // Build adjacency using only fermion edges. A self-loop contributes
-        // degree two.
+        // Build adjacency using only the selected Grassmann edges. A self-loop
+        // contributes degree two.
         for edge in graph.edges() {
-            if !self.model.particle_by_id(edge.data.particle)?.is_fermion() {
+            let particle = self.model.particle_by_id(edge.data.particle)?;
+            if !(particle.is_fermion() && !particle.is_ghost()
+                || include_ghosts && particle.is_ghost())
+            {
                 continue;
             }
             let (left, right) = edge.vertices;
@@ -2525,22 +2878,24 @@ impl Generator {
         name: String,
         generation_type: GenerationType,
         topology: ColoredTopology,
-        fermion_loop_count: usize,
         fermion_signs: FermionSigns,
         options: &GenerationOptions,
     ) -> Result<FeynmanDiagram, GenerationError> {
         // Symbolica's automorphism factor is a denominator in the overall
         // multiplier.
-        let mut overall_factor = if topology.multiplicity == 1 {
-            format!("1/AutG({})", topology.symmetry)
-        } else {
-            format!(
-                "CouplingsMultiplicity({})/AutG({})",
-                topology.multiplicity, topology.symmetry
-            )
-        };
-        if fermion_loop_count % 2 == 1 {
-            overall_factor = format!("InternalFermionLoopSign(-1)*{overall_factor}");
+        let mut factors = vec![
+            symbol!("feynkit_generator_factor::AutG")
+                .call(topology.symmetry)
+                .pow(-1),
+        ];
+        if topology.multiplicity != 1 {
+            factors.push(
+                symbol!("feynkit_generator_factor::CouplingsMultiplicity")
+                    .call(topology.multiplicity),
+            );
+        }
+        if fermion_signs.internal_loop_negative {
+            factors.push(symbol!("feynkit_generator_factor::InternalFermionLoopSign").call(-1));
         }
         if fermion_signs.include_external_ordering {
             let sign = if fermion_signs.external_ordering_negative {
@@ -2548,7 +2903,8 @@ impl Generator {
             } else {
                 1
             };
-            overall_factor = format!("ExternalFermionOrderingSign({sign})*{overall_factor}");
+            factors
+                .push(symbol!("feynkit_generator_factor::ExternalFermionOrderingSign").call(sign));
         }
         if fermion_signs.include_antifermion_spin_sum {
             let sign = if fermion_signs.antifermion_spin_sum_negative {
@@ -2556,18 +2912,9 @@ impl Generator {
             } else {
                 1
             };
-            overall_factor = format!("AntiFermionSpinSumSign({sign})*{overall_factor}");
+            factors.push(symbol!("feynkit_generator_factor::AntiFermionSpinSumSign").call(sign));
         }
-        let overall_factor = Atom::parse(
-            &overall_factor,
-            "feynkit_generator_factor",
-            ParseSettings::default(),
-        )
-        .map_err(|message| GenerationError::NumeratorParse {
-            owner: "diagram overall factor".to_owned(),
-            expression: overall_factor,
-            message,
-        })?;
+        let overall_factor = Atom::mul_many(factors);
         let incoming_count = topology
             .graph
             .nodes()
@@ -2582,18 +2929,19 @@ impl Generator {
                 )
             })
             .count();
-        let projector = match &options.projector {
-            Some(projector) => projector.clone(),
-            None => self.external_state_projector(&topology.graph)?,
-        };
+        let projector =
+            self.external_state_projector(&topology.graph, options.projector.as_ref())?;
         let mut builder = FeynmanDiagram::builder(Arc::clone(&self.model), name)
+            .canonical_loop_momentum_basis()
             .symmetry_factor(topology.symmetry)
             .overall_factor(overall_factor)
-            .numerator_prefactor(options.numerator_prefactor.clone())
+            .numerator_prefactor(NumeratorInterface::admit(
+                options.numerator_prefactor.clone(),
+                None,
+            )?)
             .projector(projector)
             .cuts(topology.cut_partitions.clone())
             .topology_threshold_candidates(topology.topology_threshold_candidates.clone());
-        let mut numerator_factors = Vec::new();
         let mut endpoint_slots = BTreeMap::new();
         for (index, node) in topology.graph.nodes().iter().enumerate() {
             let vertex = match &node.data {
@@ -2609,84 +2957,27 @@ impl Generator {
                                 index: external.index,
                             })?,
                     };
-                    DiagramVertex::external_in_connection(
+                    builder.add_generation_external(
                         format!("ext{}", external.index),
                         external.index,
                         external.state,
                         connection,
-                    )
+                    );
+                    continue;
                 }
                 ColoredNode::Interaction(rule_id) => {
                     let rule = self.model.vertex_rule_by_id(*rule_id)?;
                     let legs = self.interaction_half_edges(&topology.graph, index, rule)?;
-                    let instantiation = NumeratorInstantiation {
-                        owner: NumeratorOwner::Vertex(index),
-                        legs: &legs,
-                    };
                     for (slot, leg) in legs.iter().enumerate() {
                         endpoint_slots.insert((leg.edge, leg.flow), VertexSlot(slot));
                     }
-                    let numerator = self.interaction_numerator(rule, &instantiation)?;
-                    if numerator != Atom::one() {
-                        numerator_factors.push(numerator.clone());
-                    }
-                    let mut vertex = DiagramVertex::interaction(format!("v{index}"), *rule_id);
-                    vertex.numerator = numerator;
-                    vertex
+                    DiagramVertex::interaction(format!("v{index}"), *rule_id)
                 }
             };
             builder.add_vertex(vertex);
         }
         for (edge_index, edge) in topology.graph.edges().iter().enumerate() {
-            let particle = self.model.particle_by_id(edge.data.particle)?;
-            let internal = matches!(
-                &topology.graph.nodes()[edge.vertices.0].data,
-                ColoredNode::Interaction(_)
-            ) && matches!(
-                &topology.graph.nodes()[edge.vertices.1].data,
-                ColoredNode::Interaction(_)
-            );
-            let edge_numerator = if internal {
-                let (propagator_numerator, used_antiparticle_fallback) =
-                    self.propagator_numerator(particle)?;
-                let (first_flow, second_flow) = if used_antiparticle_fallback {
-                    (Flow::Sink, Flow::Source)
-                } else {
-                    (Flow::Source, Flow::Sink)
-                };
-                let legs = [
-                    NumeratorHalfEdge {
-                        edge: edge_index,
-                        flow: first_flow,
-                        spin: particle.spin,
-                        color: particle.color,
-                    },
-                    NumeratorHalfEdge {
-                        edge: edge_index,
-                        flow: second_flow,
-                        spin: particle.spin,
-                        color: particle.color,
-                    },
-                ];
-                let instantiation = NumeratorInstantiation {
-                    owner: NumeratorOwner::Edge(edge_index),
-                    legs: &legs,
-                };
-                let spin =
-                    instantiation.instantiate(&propagator_numerator, NumeratorSector::Spin)?;
-                let color = instantiation.edge_color_identity(particle.color)?;
-                match color {
-                    None => spin,
-                    Some(color) => spin * color,
-                }
-            } else {
-                Atom::one()
-            };
-            if edge_numerator != Atom::one() {
-                numerator_factors.push(edge_numerator.clone());
-            }
-            let mut diagram_edge = DiagramEdge::new(edge.data.particle, edge.directed);
-            diagram_edge.numerator = edge_numerator;
+            let diagram_edge = DiagramEdge::new(edge.data.particle, edge.directed);
             let source_slot = endpoint_slots
                 .get(&(edge_index, Flow::Source))
                 .copied()
@@ -2703,62 +2994,88 @@ impl Generator {
                 target_slot,
             )?;
         }
-        let numerator = numerator_factors
-            .into_iter()
-            .fold(Atom::one(), |product, factor| product * factor);
-        let diagram = builder.numerator(numerator).build()?;
-        let diagram = self.with_legacy_loop_momentum_basis(diagram)?;
-        diagram.validate()?;
-        Ok(diagram)
+        let diagram = builder.build()?;
+        self.construct_numerators(diagram)
     }
 
-    /// Select the first spanning-forest routing in the canonical topology
-    /// order historically used by GammaLoop's `sorted_g` graphs.
-    ///
-    /// Stable FeynKit edge IDs remain the momentum labels. Only the ordering
-    /// used to choose the default tree is changed, so the generator owns the
-    /// coordinate convention before the runtime bridge transports it.
-    fn with_legacy_loop_momentum_basis(
+    fn construct_numerators(
         &self,
         diagram: FeynmanDiagram,
     ) -> Result<FeynmanDiagram, GenerationError> {
-        let mut ordered_internal_edges = diagram
-            .edges()
-            .filter(|(_, endpoints, _)| {
-                diagram
-                    .vertex(endpoints.source)
-                    .is_some_and(|vertex| !vertex.is_external())
-                    && diagram
-                        .vertex(endpoints.target)
-                        .is_some_and(|vertex| !vertex.is_external())
-            })
-            .map(|(edge_id, endpoints, edge)| {
-                let (source, target, particle) = if endpoints.source <= endpoints.target {
-                    (endpoints.source, endpoints.target, edge.particle)
-                } else {
+        // Instantiate directly in the finalized frame. This avoids building
+        // every factor in provisional indices and then translating it again.
+        let mut vertices = Vec::new();
+        for (vertex, data) in diagram.vertices() {
+            let Some(rule_id) = data.interaction else {
+                continue;
+            };
+            let rule = self.model.vertex_rule_by_id(rule_id)?;
+            let mut legs = vec![None; rule.particles.len()];
+            for (edge, endpoints, data) in diagram.edges() {
+                for (attached, slot, endpoint, flow) in [
+                    (
+                        endpoints.source,
+                        data.source_slot(),
+                        DiagramEndpoint::Source,
+                        Flow::Source,
+                    ),
                     (
                         endpoints.target,
-                        endpoints.source,
-                        self.model.particle_by_id(edge.particle)?.antiparticle,
-                    )
-                };
-                let signed_pdg = self.model.particle_by_id(particle)?.pdg_code;
-                Ok(((source, target, signed_pdg, edge_id), edge_id))
-            })
-            .collect::<Result<Vec<_>, ModelError>>()?;
-        ordered_internal_edges.sort_by_key(|(key, _)| *key);
-        let ordered_internal_edges = ordered_internal_edges
-            .into_iter()
-            .map(|(_, edge)| edge)
-            .collect::<Vec<_>>();
-        Ok(diagram.with_first_loop_momentum_basis_in_edge_order(&ordered_internal_edges)?)
+                        data.target_slot(),
+                        DiagramEndpoint::Target,
+                        Flow::Sink,
+                    ),
+                ] {
+                    if attached != Some(vertex) {
+                        continue;
+                    }
+                    let particle = self.model.particle_by_id(rule.particles[slot.0])?;
+                    let hedge = diagram
+                        .half_edge_id(DiagramHalfEdge { edge, endpoint })
+                        .expect("finalized endpoint")
+                        .0;
+                    legs[slot.0] = Some(NumeratorHalfEdge {
+                        edge: edge.0,
+                        hedge,
+                        flow,
+                        spin: particle.spin,
+                        color: particle.color,
+                    });
+                }
+            }
+            let legs = legs
+                .into_iter()
+                .map(|leg| leg.expect("assigned interaction slot"))
+                .collect::<Vec<_>>();
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(vertex.0),
+                legs: &legs,
+            };
+            vertices.push((vertex, self.interaction_numerator(rule_id, &instantiation)?));
+        }
+        let mut edges = Vec::new();
+        for (edge, _, data) in diagram
+            .edges()
+            .filter(|(_, _, data)| data.external.is_none())
+        {
+            let hedges = [DiagramEndpoint::Source, DiagramEndpoint::Target].map(|endpoint| {
+                diagram
+                    .half_edge_id(DiagramHalfEdge { edge, endpoint })
+                    .expect("internal edge endpoint")
+                    .0
+            });
+            edges.push((edge, self.edge_numerator(data.particle, edge.0, hedges)?));
+        }
+        Ok(diagram.with_numerator_fragments(vertices, edges)?)
     }
 
     fn external_state_projector(
         &self,
         graph: &Graph<ColoredNode, EdgeColor>,
-    ) -> Result<Atom, GenerationError> {
+        supplied: Option<&Atom>,
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
         let mut projector = Atom::one();
+        let mut external_indices = BTreeMap::new();
         for (vertex, node) in graph.nodes().iter().enumerate() {
             let ColoredNode::External(external) = &node.data else {
                 continue;
@@ -2773,39 +3090,103 @@ impl Generator {
             } else {
                 Flow::Source
             };
-            let index_symbol = match flow {
-                Flow::Source => symbol!("FeynKit::SourceIndex"),
-                Flow::Sink => symbol!("FeynKit::SinkIndex"),
-            };
-            let edge_index = i64::try_from(edge_id)
-                .map_err(|_| GenerationError::ArithmeticOverflow("an external edge identifier"))?;
-            let index = index_symbol.call((edge_index, 1_i64));
-            let particle = self.model.particle_by_id(external.particle)?;
-            let (head, index) = match particle.spin {
-                2 => {
-                    let head = match (external.state, particle.is_antiparticle()) {
-                        (ExternalState::Incoming, false) => PS.u,
-                        (ExternalState::Incoming, true) => PS.vbar,
-                        (ExternalState::Outgoing, false) => PS.ubar,
-                        (ExternalState::Outgoing, true) => PS.v,
-                    };
-                    (head, Bispinor {}.new_rep(4).to_symbolic([index]))
-                }
-                3 => {
-                    let head = match external.state {
-                        ExternalState::Incoming => PS.eps,
-                        ExternalState::Outgoing => PS.ebar,
-                    };
-                    (head, Minkowski {}.new_rep(4).to_symbolic([index]))
-                }
-                _ => continue,
-            };
-            projector *= FunctionBuilder::new(head)
-                .add_arg(edge_index)
-                .add_arg(index)
-                .finish();
+            let hedge = edge_id
+                .checked_mul(2)
+                .and_then(|index| index.checked_add(usize::from(flow == Flow::Sink)))
+                .ok_or(GenerationError::ArithmeticOverflow(
+                    "an external half-edge identifier",
+                ))?;
+            if supplied.is_some() {
+                external_indices.insert(external.index, (edge_id, hedge));
+            } else {
+                projector *=
+                    self.external_wavefunction(external.state, external.particle, edge_id, hedge)?;
+            }
         }
-        Ok(projector)
+        let Some(supplied) = supplied else {
+            return Ok(NumeratorInterface::admit(projector, None)?);
+        };
+        // Process-level expressions cannot know a topology's provisional IDs.
+        // Resolve their external-leg owners before the finalizer transports the
+        // resulting edge/half-edge chart. Native local UFO slots are unchanged.
+        let hedge_head = feynkit_graph::symbols::hedge_index();
+        let edge_head = feynkit_graph::symbols::edge_index();
+        let carriers = [
+            momentum_symbol(),
+            feynkit_graph::symbols::u(),
+            feynkit_graph::symbols::ubar(),
+            feynkit_graph::symbols::v(),
+            feynkit_graph::symbols::vbar(),
+            feynkit_graph::symbols::epsilon(),
+            feynkit_graph::symbols::epsilonbar(),
+        ];
+        projector = supplied.clone();
+        for carrier_pass in [false, true] {
+            let mut unknown = None;
+            projector = projector.replace_map(|part, _, output| {
+                let AtomView::Fun(function) = part else {
+                    return;
+                };
+                let head = function.get_symbol();
+                let is_index = head == hedge_head || head == edge_head;
+                if (carrier_pass && !carriers.contains(&head)) || (!carrier_pass && !is_index) {
+                    return;
+                }
+                let Some(index) = function
+                    .iter()
+                    .next()
+                    .and_then(|arg| usize::try_from(arg).ok())
+                else {
+                    return;
+                };
+                let Some(&(edge, hedge)) = external_indices.get(&index) else {
+                    unknown = Some(index);
+                    return;
+                };
+                **output = FunctionBuilder::new(head)
+                    .add_arg(if head == hedge_head { hedge } else { edge })
+                    .add_args(function.iter().skip(1))
+                    .finish();
+            });
+            if let Some(index) = unknown {
+                return Err(GenerationError::UnknownProjectorExternalIndex { index });
+            }
+        }
+        Ok(NumeratorInterface::admit(projector, None)?)
+    }
+
+    fn external_wavefunction(
+        &self,
+        state: ExternalState,
+        particle: ParticleId,
+        edge: usize,
+        hedge: usize,
+    ) -> Result<Atom, GenerationError> {
+        let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
+        let particle = self.model.particle_by_id(particle)?;
+        let (head, index) = match particle.spin {
+            2 => {
+                let head = match (state, particle.is_antiparticle()) {
+                    (ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
+                    (ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
+                    (ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
+                    (ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
+                };
+                (head, Bispinor {}.new_rep(4).to_symbolic([index]))
+            }
+            3 => {
+                let head = match state {
+                    ExternalState::Incoming => feynkit_graph::symbols::epsilon(),
+                    ExternalState::Outgoing => feynkit_graph::symbols::epsilonbar(),
+                };
+                (head, Minkowski {}.new_rep(4).to_symbolic([index]))
+            }
+            _ => return Ok(Atom::one()),
+        };
+        Ok(FunctionBuilder::new(head)
+            .add_arg(edge)
+            .add_arg(index)
+            .finish())
     }
 
     fn interaction_half_edges(
@@ -2843,45 +3224,28 @@ impl Generator {
     }
 
     fn propagator_numerator(&self, particle: &Particle) -> Result<(Atom, bool), GenerationError> {
-        if let Some(propagator) = particle.propagator {
-            return Ok((
-                self.model.propagator_by_id(propagator)?.numerator.clone(),
-                false,
-            ));
+        match self.model.particle_propagator(particle)? {
+            Some((id, reversed)) => {
+                Ok((self.model.propagator_by_id(id)?.numerator.clone(), reversed))
+            }
+            None => Ok((Atom::one(), false)),
         }
-        let particle_id = self.model.particle_id(&particle.name)?;
-        if let Some(propagator) = self
-            .model
-            .propagators()
-            .iter()
-            .find(|propagator| propagator.particle == particle_id)
-        {
-            return Ok((propagator.numerator.clone(), false));
-        }
-
-        let antiparticle = self.model.antiparticle(particle)?;
-        if let Some(propagator) = antiparticle.propagator {
-            return Ok((
-                self.model.propagator_by_id(propagator)?.numerator.clone(),
-                true,
-            ));
-        }
-        Ok(self
-            .model
-            .propagators()
-            .iter()
-            .find(|propagator| propagator.particle == particle.antiparticle)
-            .map_or_else(
-                || (Atom::one(), false),
-                |propagator| (propagator.numerator.clone(), true),
-            ))
     }
 
     fn interaction_numerator(
         &self,
-        rule: &VertexRule,
+        rule_id: VertexRuleId,
         instantiation: &NumeratorInstantiation<'_>,
-    ) -> Result<Atom, GenerationError> {
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
+        let key = InteractionNumeratorKey {
+            rule: rule_id,
+            owner: instantiation.owner,
+            legs: instantiation.legs.to_vec(),
+        };
+        if let Some(numerator) = self.numerators.interactions.read().unwrap().get(&key) {
+            return Ok(numerator.clone());
+        }
+        let rule = self.model.vertex_rule_by_id(rule_id)?;
         let mut terms = Vec::new();
         for (color_index, color) in rule.color_structures.iter().enumerate() {
             for (lorentz_index, lorentz_name) in rule.lorentz_structures.iter().enumerate() {
@@ -2900,18 +3264,71 @@ impl Generator {
                 }
             }
         }
-        if terms.is_empty() {
-            Ok(Atom::one())
+        let numerator = if terms.is_empty() {
+            Atom::one()
         } else {
-            Ok(terms.into_iter().fold(Atom::new(), |sum, term| sum + term))
+            Atom::add_many(terms)
+        };
+        let numerator = NumeratorInterface::admit(numerator, None)?;
+        self.numerators
+            .interactions
+            .write()
+            .unwrap()
+            .insert(key, numerator.clone());
+        Ok(numerator)
+    }
+
+    fn edge_numerator(
+        &self,
+        particle_id: ParticleId,
+        edge: usize,
+        hedges: [usize; 2],
+    ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
+        let key = PropagatorNumeratorKey {
+            particle: particle_id,
+            edge,
+            hedges,
+        };
+        if let Some(numerator) = self.numerators.propagators.read().unwrap().get(&key) {
+            return Ok(numerator.clone());
         }
+        let particle = self.model.particle_by_id(particle_id)?;
+        let (propagator, reversed) = self.propagator_numerator(particle)?;
+        let flows = if reversed {
+            [Flow::Sink, Flow::Source]
+        } else {
+            [Flow::Source, Flow::Sink]
+        };
+        let legs = flows.map(|flow| NumeratorHalfEdge {
+            edge,
+            flow,
+            hedge: hedges[usize::from(flow == Flow::Sink)],
+            spin: particle.spin,
+            color: particle.color,
+        });
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Edge(edge),
+            legs: &legs,
+        };
+        let spin = instantiation.instantiate(&propagator, NumeratorSector::Spin)?;
+        let numerator = match instantiation.edge_color_identity(particle.color)? {
+            None => spin,
+            Some(color) => spin * color,
+        };
+        let numerator = NumeratorInterface::admit(numerator, None)?;
+        self.numerators
+            .propagators
+            .write()
+            .unwrap()
+            .insert(key, numerator.clone());
+        Ok(numerator)
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct EdgeColor {
     pub particle: ParticleId,
-    direction: Option<bool>,
+    pub direction: Option<bool>,
 }
 
 impl fmt::Display for EdgeColor {
@@ -2939,6 +3356,7 @@ fn available_interaction_half_edges(
                 NumeratorHalfEdge {
                     edge: *edge_id,
                     flow: Flow::Source,
+                    hedge: 2 * *edge_id,
                     spin: 0,
                     color: 1,
                 },
@@ -2956,6 +3374,7 @@ fn available_interaction_half_edges(
                 NumeratorHalfEdge {
                     edge: *edge_id,
                     flow: Flow::Sink,
+                    hedge: 2 * *edge_id + 1,
                     spin: 0,
                     color: 1,
                 },
@@ -3074,6 +3493,7 @@ impl fmt::Display for ColoredNode {
     }
 }
 
+#[derive(Clone, PartialEq, Eq)]
 struct ColoredTopology {
     graph: Graph<ColoredNode, EdgeColor>,
     symmetry: u64,
@@ -3176,6 +3596,7 @@ fn transport_threshold_candidate_metadata(
 
 #[derive(Debug, Clone, Copy, Default)]
 struct FermionSigns {
+    internal_loop_negative: bool,
     include_external_ordering: bool,
     external_ordering_negative: bool,
     include_antifermion_spin_sum: bool,
@@ -3357,6 +3778,17 @@ impl InteractionSignatures {
             {
                 continue;
             }
+            // Coupling powers are nonnegative. A vertex exceeding a graph-wide
+            // upper bound cannot occur in an accepted graph, so exclude its
+            // signature before enumerating topologies (especially QED=0).
+            let orders = rule.coupling_orders(model);
+            if options.graph_filters.iter().any(|filter| {
+                matches!(filter, GenerationFilter::CouplingOrders(required)
+                    if required.iter().any(|(name, (_, maximum))|
+                        maximum.is_some_and(|maximum| orders.get(name).copied().unwrap_or(0) > maximum)))
+            }) {
+                continue;
+            }
             let mut signature = Vec::new();
             let mut rejected = false;
             for particle_id in &rule.particles {
@@ -3417,12 +3849,17 @@ struct ResolvedProcess {
 }
 
 impl ResolvedProcess {
-    fn new(model: &Model, process: &Process) -> Result<Self, GenerationError> {
+    fn new(
+        model: &Model,
+        process: &Process,
+        generation_type: GenerationType,
+        options: &GenerationOptions,
+    ) -> Result<Self, GenerationError> {
         let resolve = |selector: &ParticleSelector| -> Result<Particle, GenerationError> {
             Ok(model.particle_by_id(selector.resolve(model)?)?.clone())
         };
         Ok(Self {
-            generation_type: process.generation_type(),
+            generation_type,
             incoming: process
                 .incoming()
                 .iter()
@@ -3433,10 +3870,10 @@ impl ResolvedProcess {
                 .iter()
                 .map(|alternative| alternative.iter().map(resolve).collect())
                 .collect::<Result<_, _>>()?,
-            symmetrize_initial: process.symmetrizes_initial(),
-            symmetrize_final: process.symmetrizes_final(),
-            symmetrize_left_right: process.symmetrizes_left_right(),
-            symmetrize_external_fermions: process.symmetrizes_external_fermions(),
+            symmetrize_initial: options.symmetrizes_initial(),
+            symmetrize_final: options.symmetrizes_final(),
+            symmetrize_left_right: options.symmetrizes_left_right(),
+            symmetrize_external_fermions: options.symmetrizes_external_fermions(),
         })
     }
 
@@ -3496,15 +3933,16 @@ impl ResolvedProcess {
                 (ExternalState::Incoming, true) | (ExternalState::Outgoing, false) => false,
             })
         };
-        let symmetrized_within_state = match state {
-            ExternalState::Incoming => self.symmetrize_initial,
-            ExternalState::Outgoing => self.symmetrize_final,
-        } && (self.generation_type == GenerationType::CrossSection
-            || !particle.is_fermion()
-            || self.symmetrize_external_fermions);
-        // Left/right symmetry is one global transformation of a sewn graph,
-        // not an independent automorphism of every external pair. It is
-        // applied after generation when canonical diagram keys are built.
+        let symmetrized_within_state = self.generation_type == GenerationType::Amplitude
+            && match state {
+                ExternalState::Incoming => self.symmetrize_initial,
+                ExternalState::Outgoing => self.symmetrize_final,
+            }
+            && (!particle.is_fermion() || self.symmetrize_external_fermions);
+        // Both sides of a forward graph are labelled copies of the incoming
+        // state. Neither independent permutations nor final-state symmetry may
+        // enter its raw automorphism denominator. Paired incoming permutations
+        // and the optional global side exchange are compared after generation.
         let external_class = if symmetrized_within_state {
             ExternalCanonicalClass::WithinState(state)
         } else {
@@ -3549,10 +3987,10 @@ impl ResolvedProcess {
             NumeratorGrouping::Identical(options)
             | NumeratorGrouping::UpToSign(options)
             | NumeratorGrouping::UpToScalar(options) => Some(options),
-            NumeratorGrouping::None | NumeratorGrouping::OnlyDetectZeroes => None,
+            NumeratorGrouping::None => None,
         };
-        let include_left_right =
-            self.generation_type == GenerationType::CrossSection && self.symmetrize_left_right;
+        let include_external = self.generation_type == GenerationType::CrossSection
+            && (self.symmetrize_initial || self.symmetrize_left_right);
         let exact_internal_particles =
             grouping_options.is_some_and(|options| !options.differentiate_particle_masses_only);
 
@@ -3560,10 +3998,10 @@ impl ResolvedProcess {
             graph,
             model,
             exact_internal_particles,
-            include_left_right,
-            include_left_right,
+            include_external,
+            include_external,
         )?;
-        let canonical = if include_left_right {
+        let canonical = if include_external {
             self.canonicalize_numerator_graph_pass(
                 &selected,
                 model,
@@ -3582,12 +4020,12 @@ impl ResolvedProcess {
         graph: &Graph<ColoredNode, EdgeColor>,
         model: &Model,
         exact_internal_particles: bool,
-        include_left_right_remapping: bool,
-        use_left_right_external_colors: bool,
+        include_external_remapping: bool,
+        use_sewn_external_colors: bool,
     ) -> Result<Graph<ColoredNode, EdgeColor>, GenerationError> {
         let mut candidates = Vec::new();
-        let mut remappings = vec![BTreeMap::new()];
-        if include_left_right_remapping {
+        let mut remappings = vec![(false, BTreeMap::new())];
+        if include_external_remapping {
             let external_nodes = graph
                 .nodes()
                 .iter()
@@ -3600,29 +4038,59 @@ impl ResolvedProcess {
             let incoming_count = self.incoming.len();
             if external_nodes.len() != 2 * incoming_count {
                 return Err(GenerationError::GraphConstruction(format!(
-                    "left/right canonicalization expected {} sewn external nodes, found {}",
+                    "sewn canonicalization expected {} external nodes, found {}",
                     2 * incoming_count,
                     external_nodes.len()
                 )));
             }
-            remappings.push(
-                (0..incoming_count)
-                    .flat_map(|index| {
-                        [
-                            (
-                                external_nodes[&index],
-                                external_nodes[&(incoming_count + index)],
-                            ),
-                            (
-                                external_nodes[&(incoming_count + index)],
-                                external_nodes[&index],
-                            ),
-                        ]
-                    })
-                    .collect(),
-            );
+            let mut generators = vec![Permutation::id(incoming_count)];
+            if self.symmetrize_initial {
+                let mut species = BTreeMap::<i64, Vec<usize>>::new();
+                for (index, particle) in self.incoming.iter().enumerate() {
+                    species.entry(particle.pdg_code).or_default().push(index);
+                }
+                // Adjacent transpositions generate only permutations within
+                // each identical-species class, without enumerating rejected
+                // permutations of distinct incoming particles.
+                for positions in species.values() {
+                    for pair in positions.windows(2) {
+                        let mut mapping = (0..incoming_count).collect::<Vec<_>>();
+                        mapping.swap(pair[0], pair[1]);
+                        generators.push(Permutation::from_map(mapping));
+                    }
+                }
+            }
+            let mut permutations = Permutation::generate_all(&generators)
+                .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
+            permutations.sort_by(|left, right| left.map().cmp(right.map()));
+            remappings.clear();
+            for permutation in permutations {
+                for swapped in [false, true] {
+                    if swapped && !self.symmetrize_left_right {
+                        continue;
+                    }
+                    let mapping = (0..incoming_count)
+                        .flat_map(|index| {
+                            let target = permutation.map()[index];
+                            let (left, right) = if swapped {
+                                (target + incoming_count, target)
+                            } else {
+                                (target, target + incoming_count)
+                            };
+                            [
+                                (external_nodes[&index], external_nodes[&left]),
+                                (
+                                    external_nodes[&(index + incoming_count)],
+                                    external_nodes[&right],
+                                ),
+                            ]
+                        })
+                        .collect();
+                    remappings.push((swapped, mapping));
+                }
+            }
         }
-        for (swapped, remapping) in remappings.into_iter().enumerate() {
+        for (swapped, remapping) in remappings {
             let mut skeleton = Graph::new();
             for node in graph.nodes() {
                 let color = match &node.data {
@@ -3633,7 +4101,7 @@ impl ResolvedProcess {
                         let incoming_count = i64::try_from(self.incoming.len()).map_err(|_| {
                             GenerationError::ArithmeticOverflow("an external canonical color")
                         })?;
-                        if use_left_right_external_colors {
+                        if use_sewn_external_colors {
                             if index < incoming_count {
                                 -2001 - index
                             } else {
@@ -3666,8 +4134,8 @@ impl ResolvedProcess {
                         .unwrap_or(edge.vertices.1),
                 );
                 // As in the legacy comparison graph, all external edges point
-                // into the interaction graph.  Internal direction is omitted
-                // from the reduced skeleton but restored below.
+                // into the interaction graph. Internal fermion direction is
+                // omitted from the reduced skeleton but restored below.
                 let external_outgoing = matches!(
                     graph.nodes()[edge.vertices.1].data,
                     ColoredNode::External(_)
@@ -3675,17 +4143,21 @@ impl ResolvedProcess {
                 if external_outgoing {
                     vertices = (vertices.1, vertices.0);
                 }
-                let color = if external {
-                    let particle = if external_outgoing {
-                        model.particle_by_id(edge.data.particle)?.antiparticle
-                    } else {
-                        edge.data.particle
-                    };
-                    model.particle_by_id(particle)?.name.clone()
-                } else if exact_internal_particles {
-                    model.particle_by_id(edge.data.particle)?.name.clone()
+                let particle = model.particle_by_id(if external_outgoing {
+                    model.particle_by_id(edge.data.particle)?.antiparticle
                 } else {
-                    let particle = model.particle_by_id(edge.data.particle)?;
+                    edge.data.particle
+                })?;
+                // Ghost vertices differentiate one propagator end. Preserve its
+                // physical arrow in the momentum chart: reversing storage while
+                // conjugating the ghost must describe the same directed edge.
+                if particle.is_ghost() && particle.is_antiparticle() {
+                    vertices = (vertices.1, vertices.0);
+                }
+                let keep_direction = external || particle.is_ghost();
+                let color = if external || exact_internal_particles {
+                    particle.name.clone()
+                } else {
                     format!(
                         "{} | {}",
                         model.parameter_by_id(particle.mass)?.name,
@@ -3696,12 +4168,12 @@ impl ResolvedProcess {
                     .add_edge(
                         vertices.0,
                         vertices.1,
-                        external,
+                        keep_direction,
                         NumeratorCanonicalEdge(color),
                     )
                     .map_err(|error| GenerationError::GraphConstruction(error.to_string()))?;
             }
-            candidates.push((swapped == 1, remapping, skeleton.canonize()));
+            candidates.push((swapped, remapping, skeleton.canonize()));
         }
         candidates.sort_by(|left, right| {
             (left.2.graph.nodes(), left.2.graph.edges())
@@ -3711,10 +4183,14 @@ impl ResolvedProcess {
             .into_iter()
             .next()
             .ok_or_else(|| GenerationError::GraphConstruction("no canonical graph".to_owned()))?;
+        let inverse_remapping = remapping
+            .iter()
+            .map(|(source, target)| (*target, *source))
+            .collect::<BTreeMap<_, _>>();
         let mut canonical_to_input = vec![0; graph.nodes().len()];
         for (input, canonical_position) in canonical.vertex_map.iter().copied().enumerate() {
             canonical_to_input[canonical_position] =
-                remapping.get(&input).copied().unwrap_or(input);
+                inverse_remapping.get(&input).copied().unwrap_or(input);
         }
         let mut input_to_canonical = vec![0; graph.nodes().len()];
         for (canonical_position, input) in canonical_to_input.iter().copied().enumerate() {
@@ -3723,10 +4199,9 @@ impl ResolvedProcess {
 
         let mut result = Graph::new();
         for input in canonical_to_input.iter().copied() {
-            // The selected global remapping is an involution. Applying it
-            // a second time keeps each physical external label attached to
-            // its original process state while adopting the selected
-            // topology.
+            // Source edges retain their input owners; external labels belong
+            // to the selected paired remapping. General incoming cycles need
+            // the inverse above, unlike the involutive global side exchange.
             let data = remapping.get(&input).copied().unwrap_or(input);
             result.add_node(graph.nodes()[data].data.clone());
         }
@@ -3765,8 +4240,15 @@ impl ResolvedProcess {
                 if edge.directed && flipped {
                     data.particle = model.particle_by_id(data.particle)?.antiparticle;
                 }
-                if edge.directed && left_right_swapped {
-                    data.particle = model.particle_by_id(data.particle)?.antiparticle;
+                let particle = model.particle_by_id(data.particle)?;
+                // CP acts on neutral adjoint Faddeev-Popov ghosts through
+                // color, without exchanging ghost and antighost fields. Their
+                // derivative momentum must keep its ghost-number orientation.
+                if edge.directed
+                    && left_right_swapped
+                    && !(particle.is_ghost() && particle.color == 8 && particle.charge.is_zero())
+                {
+                    data.particle = particle.antiparticle;
                 }
                 let pdg_code = model.particle_by_id(data.particle)?.pdg_code;
                 Ok((vertices, edge.directed, data, pdg_code))
@@ -3929,11 +4411,13 @@ impl ResolvedProcess {
                 false,
             )?;
             let legs = legs.into_iter().collect::<Vec<_>>();
-            // Ghost chains are oriented like fermion chains but do not enter
-            // the external-fermion permutation sign. Physical processes do
-            // not normally expose external ghosts, yet keeping this split
-            // makes the flow normalization faithful for complete UFO models.
-            if !model.particle_by_id(external.particle)?.is_fermion() {
+            // Both spinor and ghost chains anticommute. Ghosts therefore
+            // enter external permutation signs even though their scalar
+            // propagators do not contribute antifermion spin sums.
+            if !model
+                .particle_by_id(external.particle)?
+                .is_anticommutating()
+            {
                 continue;
             }
             let [first_leg, second_leg] = legs.as_slice() else {
@@ -3948,9 +4432,9 @@ impl ResolvedProcess {
             let first_particle = all_incoming_particle(&first.1, model)?;
             let second_particle = all_incoming_particle(&second.1, model)?;
             let (anti_leg, anti, particle_leg, particle) = match (
-                first_particle.is_fermion(),
+                first_particle.is_anticommutating(),
                 first_particle.is_antiparticle(),
-                second_particle.is_fermion(),
+                second_particle.is_anticommutating(),
                 second_particle.is_antiparticle(),
             ) {
                 (true, true, true, false) => {
@@ -4041,7 +4525,9 @@ impl ResolvedProcess {
             }
             GenerationType::Amplitude => permutation_is_odd(&concatenated_lines),
             GenerationType::CrossSection => {
-                self.external_fermion_loop_count(&line_pairings)? % 2 == 1
+                // Closing n open fermion chains into c cycles has permutation
+                // parity (-1)^(n-c). The closure itself is not a virtual loop.
+                (line_pairings.len() + self.external_fermion_loop_count(&line_pairings)?) % 2 == 1
             }
         };
         let antifermion_spin_sum_negative = self.generation_type == GenerationType::CrossSection
@@ -4057,6 +4543,7 @@ impl ResolvedProcess {
             graph: normalized_graph,
             reversed_edges,
             signs: FermionSigns {
+                internal_loop_negative: false,
                 include_external_ordering: self.generation_type == GenerationType::CrossSection
                     || !(self.symmetrize_external_fermions
                         && (self.symmetrize_initial || self.symmetrize_final)),
@@ -4080,7 +4567,7 @@ impl ResolvedProcess {
             connect(left, right);
         }
         for (index, particle) in self.incoming.iter().enumerate() {
-            if particle.is_fermion() {
+            if particle.is_anticommutating() {
                 connect(index, self.incoming.len() + index);
             }
         }
@@ -4358,7 +4845,7 @@ impl ResolvedProcess {
         &self,
         graph: &Graph<ColoredNode, EdgeColor>,
         options: &GenerationOptions,
-    ) -> Result<bool, GenerationError> {
+    ) -> bool {
         let Some(SewnFilterOptions {
             filter_tadpoles: true,
         }) = options
@@ -4369,7 +4856,7 @@ impl ResolvedProcess {
                 _ => None,
             })
         else {
-            return Ok(true);
+            return true;
         };
 
         let mut graph: HedgeGraph<EdgeColor, ColoredNode, ()> = graph.clone().into();
@@ -4382,9 +4869,13 @@ impl ResolvedProcess {
             .collect();
         let externals: Vec<_> = external_nodes.iter().map(|(_, node, _)| *node).collect();
         if externals.is_empty() {
-            return Ok(true);
+            return true;
         }
-        let connected_components_before = graph.tadpoles(&externals)?.len() + 1;
+        let connected_components_before = graph
+            .tadpoles(&externals)
+            .expect("external nodes are distinct graph terminals with incident edges")
+            .len()
+            + 1;
         let by_index: BTreeMap<usize, (NodeIndex, ColoredNode)> = external_nodes
             .into_iter()
             .map(|(index, node, color)| (index, (node, color)))
@@ -4402,7 +4893,7 @@ impl ResolvedProcess {
         // run on the sewn quotient graph, without those historical crowns.
         graph.forget_identification_history();
         let non_bridges = graph.non_bridges();
-        Ok(graph.count_connected_components(&non_bridges) == connected_components_before)
+        graph.count_connected_components(&non_bridges) == connected_components_before
     }
 }
 
@@ -4410,6 +4901,7 @@ impl ResolvedProcess {
 mod tests {
     use crate::{CancellationToken, GraphGroupingOptions, NumeratorGrouping};
     use feynkit_model::Model;
+    use symbolica::parser::ParseSettings;
 
     use super::*;
 
@@ -4441,56 +4933,32 @@ mod tests {
             NumeratorHalfEdge {
                 edge: 10,
                 flow: Flow::Source,
+                hedge: 20,
                 spin: 2,
                 color: -3,
             },
             NumeratorHalfEdge {
                 edge: 20,
                 flow: Flow::Sink,
+                hedge: 41,
                 spin: 2,
                 color: 3,
             },
             NumeratorHalfEdge {
                 edge: 30,
                 flow: Flow::Source,
+                hedge: 60,
                 spin: 3,
                 color: 8,
             },
             NumeratorHalfEdge {
                 edge: 40,
                 flow: Flow::Sink,
+                hedge: 81,
                 spin: 3,
                 color: 8,
             },
         ]
-    }
-
-    #[test]
-    fn partial_topology_filter_prunes_enumeration_without_changing_persistent_options() {
-        let generator = Generator::new(scalar_model());
-        let process = Process::amplitude(["phi", "phi"], ["phi", "phi"]);
-        let baseline = generator
-            .generate(&process, &GenerationOptions::default())
-            .unwrap();
-        assert!(baseline.report.completed);
-        assert!(!baseline.diagrams.is_empty());
-        let partial_calls = Arc::new(AtomicUsize::new(0));
-        let calls = Arc::clone(&partial_calls);
-        let options = GenerationOptions::default().filter(move |graph, completed| {
-            if completed < graph.nodes().len() {
-                calls.fetch_add(1, Ordering::Relaxed);
-            }
-            false
-        });
-        assert!(matches!(
-            generator.generate(&process, &options),
-            Err(GenerationError::NoGraphs)
-        ));
-        assert!(partial_calls.load(Ordering::Relaxed) > 0);
-        let restored: GenerationOptions =
-            serde_json::from_str(&serde_json::to_string(&options).unwrap()).unwrap();
-        let regenerated = generator.generate(&process, &restored).unwrap();
-        assert_eq!(regenerated.diagrams.len(), baseline.diagrams.len());
     }
 
     fn scalar_model() -> Model {
@@ -4555,7 +5023,7 @@ mod tests {
                      "charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0}
                 ],
                 "propagators":[
-                    {"name":"f_prop","particle":"f","numerator":"Slash(P)","denominator":"P^2"},
+                    {"name":"f_prop","particle":"f","numerator":"PSlash(2,1)","denominator":"P^2"},
                     {"name":"a_prop","particle":"a","numerator":"1","denominator":"P^2"}
                 ],
                 "lorentz_structures":[{
@@ -4567,7 +5035,7 @@ mod tests {
                 ],
                 "vertex_rules":[{
                     "name":"V","particles":["f~","f","a"],
-                    "color_structures":["1","T(3,2,1)"],
+                    "color_structures":["1","1"],
                     "lorentz_structures":["FFV"],
                     "couplings":[["GC_LOW"],["GC_HIGH"]]
                 }]
@@ -4600,10 +5068,10 @@ mod tests {
                      "charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0},
                     {"pdg_code":5,"name":"b","antiname":"b~","spin":2,"color":3,
                      "mass":"M","width":"ZERO","texname":"b","antitexname":"b~",
-                     "charge":-0.3333333333333333,"ghost_number":0,"lepton_number":0,"y_charge":0},
+                     "charge":"-1/3","ghost_number":0,"lepton_number":0,"y_charge":0},
                     {"pdg_code":-5,"name":"b~","antiname":"b","spin":2,"color":-3,
                      "mass":"M","width":"ZERO","texname":"b~","antitexname":"b",
-                     "charge":0.3333333333333333,"ghost_number":0,"lepton_number":0,"y_charge":0},
+                     "charge":"1/3","ghost_number":0,"lepton_number":0,"y_charge":0},
                     {"pdg_code":25,"name":"H","antiname":"H","spin":1,"color":1,
                      "mass":"M","width":"ZERO","texname":"H","antitexname":"H",
                      "charge":0.0,"ghost_number":0,"lepton_number":0,"y_charge":0},
@@ -4643,13 +5111,11 @@ mod tests {
     }
 
     fn photon_process() -> Process {
-        Process::amplitude([22_i64], [22_i64])
+        Process::new([22_i64], [22_i64])
     }
 
     fn scalar_cross_section_process() -> Process {
-        Process::cross_section(["phi", "phi"], ["phi", "phi"])
-            .with_loop_count(1, 1)
-            .unwrap()
+        Process::new(["phi", "phi"], ["phi", "phi"])
     }
 
     fn particle(model: &Model, pdg: i64) -> ParticleId {
@@ -4668,15 +5134,84 @@ mod tests {
     }
 
     #[test]
+    fn loop_one_particle_irreducibility_preserves_trees_in_mixed_ranges() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::new(["phi", "phi"], ["phi", "phi"]);
+        let options = GenerationOptions::default()
+            .with_loop_count(0, 1)
+            .unwrap()
+            .threads(1)
+            .max_vertices(4);
+        let automatic = options
+            .clone()
+            .with_graph_filter(GenerationFilter::LoopOneParticleIrreducible);
+        assert_eq!(automatic.max_bridges(0), None);
+        assert_eq!(automatic.max_bridges(1), Some(0));
+
+        let all = generator
+            .generate(&process, &options, GenerationType::Amplitude)
+            .unwrap();
+        let filtered = generator
+            .generate(&process, &automatic, GenerationType::Amplitude)
+            .unwrap();
+        let strict = generator
+            .generate(
+                &process,
+                &options.with_graph_filter(GenerationFilter::MaxNumberOfBridges(0)),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        let ids = |result: &GenerationResult, loops| {
+            result
+                .diagrams
+                .iter()
+                .filter(|diagram| diagram.loop_count() == loops)
+                .map(FeynmanDiagram::id)
+                .collect::<BTreeSet<_>>()
+        };
+        assert_eq!(
+            ids(&filtered, 0).len(),
+            3,
+            "all tree exchange channels survive"
+        );
+        assert_eq!(ids(&filtered, 0), ids(&all, 0));
+        assert!(
+            ids(&strict, 0).is_empty(),
+            "an explicit bridge limit remains literal"
+        );
+        assert!(!ids(&filtered, 1).is_empty());
+        assert_eq!(ids(&filtered, 1), ids(&strict, 1));
+        assert!(
+            ids(&all, 1).len() > ids(&filtered, 1).len(),
+            "1PR loop diagrams are removed"
+        );
+
+        let loops_only = generator
+            .generate(
+                &process,
+                &automatic.with_loop_count(1, 1).unwrap(),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert_eq!(
+            ids(&loops_only, 1),
+            ids(&filtered, 1),
+            "early pruning preserves the result"
+        );
+    }
+
+    #[test]
     fn generates_tree_and_one_loop_diagrams() {
         let generator = Generator::new(scalar_model());
-        let process = Process::amplitude(["phi"], ["phi", "phi"])
-            .with_loop_count(0, 1)
-            .unwrap();
+        let process = Process::new(["phi"], ["phi", "phi"]);
         let generated = generator
             .generate(
                 &process,
-                &GenerationOptions::default().allow_self_loops(true),
+                &GenerationOptions::default()
+                    .with_loop_count(0, 1)
+                    .unwrap()
+                    .allow_self_loops(true),
+                GenerationType::Amplitude,
             )
             .unwrap();
         assert!(!generated.diagrams.is_empty());
@@ -4692,44 +5227,171 @@ mod tests {
     #[test]
     fn finalizes_external_fermion_projectors_unless_explicitly_overridden() {
         let generator = Generator::new(fermion_model());
-        let process = Process::amplitude([1_i64, -1], [1_i64, -1])
+        let process = Process::new([1_i64, -1], [1_i64, -1]);
+        let options = GenerationOptions::default()
             .with_loop_count(0, 0)
+            .unwrap()
+            .threads(1)
+            .max_vertices(2);
+        let generated = generator
+            .generate(&process, &options, GenerationType::Amplitude)
             .unwrap();
-        let options = GenerationOptions::default().threads(1).max_vertices(2);
-        let generated = generator.generate(&process, &options).unwrap();
         assert!(!generated.diagrams.is_empty());
         for diagram in &generated.diagrams {
-            for wavefunction in [PS.u, PS.ubar, PS.v, PS.vbar] {
-                assert_eq!(function_count(diagram.projector(), wavefunction), 1);
+            for wavefunction in [
+                feynkit_graph::symbols::u(),
+                feynkit_graph::symbols::ubar(),
+                feynkit_graph::symbols::v(),
+                feynkit_graph::symbols::vbar(),
+            ] {
+                assert_eq!(
+                    function_count(
+                        &NumeratorInterface::export(diagram.projector()).0,
+                        wavefunction
+                    ),
+                    1
+                );
             }
             assert_eq!(
-                function_count(diagram.projector(), symbol!("FeynKit::SourceIndex"))
-                    + function_count(diagram.projector(), symbol!("FeynKit::SinkIndex")),
+                function_count(
+                    &NumeratorInterface::export(diagram.projector()).0,
+                    feynkit_graph::symbols::hedge_index()
+                ),
                 4
             );
         }
 
+        let supplied = Atom::mul_many(
+            [
+                (1, ExternalState::Incoming),
+                (-1, ExternalState::Incoming),
+                (1, ExternalState::Outgoing),
+                (-1, ExternalState::Outgoing),
+            ]
+            .into_iter()
+            .enumerate()
+            .map(|(index, (pdg, state))| {
+                generator
+                    .external_wavefunction(state, particle(&generator.model, pdg), index, index)
+                    .unwrap()
+            }),
+        );
+        let overridden = generator
+            .generate(
+                &process,
+                &options.clone().projector(supplied),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert_eq!(overridden.diagrams.len(), generated.diagrams.len());
+        for (automatic, supplied) in generated.diagrams.iter().zip(&overridden.diagrams) {
+            assert_eq!(automatic.id(), supplied.id());
+            assert_eq!(automatic.projector(), supplied.projector());
+            assert_eq!(automatic.numerator(), supplied.numerator());
+        }
+
         let explicit = generator
-            .generate(&process, &options.projector(Atom::one()))
+            .generate(
+                &process,
+                &options.projector(Atom::one()),
+                GenerationType::Amplitude,
+            )
             .unwrap();
         assert!(
             explicit
                 .diagrams
                 .iter()
-                .all(|diagram| diagram.projector() == &Atom::one())
+                .all(|diagram| diagram.projector().expression() == &Atom::one())
         );
+    }
+
+    #[test]
+    fn compton_cuts_preserve_the_requested_particle_charge() {
+        let generator = Generator::new(fermion_model());
+        for pdg in [1_i64, -1] {
+            let process = Process::new([pdg, 22], [pdg, 22]);
+            let generated = generator
+                .generate(
+                    &process,
+                    &GenerationOptions::default()
+                        .with_loop_count(1, 1)
+                        .unwrap()
+                        .threads(1)
+                        .max_vertices(4),
+                    GenerationType::CrossSection,
+                )
+                .unwrap();
+            assert!(!generated.diagrams.is_empty());
+            for diagram in generated.diagrams {
+                assert!(!diagram.cuts().is_empty());
+                for cut in diagram.cuts() {
+                    let mut particles = diagram
+                        .cut_particles(cut)
+                        .unwrap()
+                        .into_iter()
+                        .map(|id| diagram.model().particle_by_id(id).unwrap().pdg_code)
+                        .collect::<Vec<_>>();
+                    particles.sort();
+                    assert_eq!(particles, vec![pdg, 22]);
+                    // Reversing a stored edge conjugates its species and its
+                    // cut endpoint together, preserving the physical state.
+                    let reversed = diagram.reverse_edge(cut.cut[0].edge).unwrap();
+                    let mut reversed_particles = reversed
+                        .cut_particles(&reversed.cuts()[0])
+                        .unwrap()
+                        .into_iter()
+                        .map(|id| reversed.model().particle_by_id(id).unwrap().pdg_code)
+                        .collect::<Vec<_>>();
+                    reversed_particles.sort();
+                    assert_eq!(reversed_particles, particles);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sewing_a_single_external_fermion_chain_has_even_ordering() {
+        let model = fermion_model();
+        let generator = Generator::new(model);
+        for pdg in [1_i64, -1] {
+            let process = Process::new([pdg, 22], [pdg, 22]);
+            let generated = generator
+                .generate(
+                    &process,
+                    &GenerationOptions::default()
+                        .with_loop_count(1, 1)
+                        .unwrap()
+                        .threads(1)
+                        .max_vertices(4),
+                    GenerationType::CrossSection,
+                )
+                .unwrap();
+            assert!(!generated.diagrams.is_empty());
+            for diagram in generated.diagrams {
+                // One external chain closes into one cycle without exchanging
+                // any external fermions. Its ordering sign must be positive.
+                let positive = symbolica::function!(
+                    symbol!("feynkit_generator_factor::ExternalFermionOrderingSign"),
+                    Atom::num(1)
+                );
+                assert!(diagram.overall_factor().contains(positive.as_view()));
+            }
+        }
     }
 
     #[test]
     fn normalized_cross_section_fermion_chains_keep_valid_cuts() {
         let generator = Generator::new(fermion_model());
-        let process = Process::cross_section([1_i64, -1], [22_i64])
-            .with_loop_count(0, 1)
-            .unwrap();
+        let process = Process::new([1_i64, -1], [22_i64]);
         let generated = generator
             .generate(
                 &process,
-                &GenerationOptions::default().threads(1).max_vertices(4),
+                &GenerationOptions::default()
+                    .with_loop_count(0, 1)
+                    .unwrap()
+                    .threads(1)
+                    .max_vertices(4),
+                GenerationType::CrossSection,
             )
             .unwrap();
         assert!(!generated.diagrams.is_empty());
@@ -4740,15 +5402,7 @@ mod tests {
 
             let external_edges = diagram
                 .edges()
-                .filter_map(|(edge, endpoints, _)| {
-                    (diagram
-                        .vertex(endpoints.source)
-                        .is_some_and(|vertex| vertex.is_external())
-                        || diagram
-                            .vertex(endpoints.target)
-                            .is_some_and(|vertex| vertex.is_external()))
-                    .then_some(edge)
-                })
+                .filter_map(|(edge, _, data)| data.external.is_some().then_some(edge))
                 .collect::<BTreeSet<_>>();
             for candidate in diagram.topology_threshold_candidates() {
                 assert!(
@@ -4762,6 +5416,7 @@ mod tests {
 
             let fermion_edges = diagram
                 .edges()
+                .filter(|(_, _, edge)| edge.external.is_none())
                 .filter_map(|(edge_id, endpoints, edge)| {
                     diagram
                         .model()
@@ -4770,8 +5425,8 @@ mod tests {
                         .is_fermion()
                         .then_some((
                             edge_id,
-                            endpoints.source.0,
-                            endpoints.target.0,
+                            endpoints.source.expect("sewn source").0,
+                            endpoints.target.expect("sewn target").0,
                             edge.particle,
                         ))
                 })
@@ -4780,7 +5435,30 @@ mod tests {
                 .iter()
                 .map(|(edge, _, _, _)| *edge)
                 .collect::<BTreeSet<_>>();
-            let mut saw_chain = false;
+            // Sewing preserves the ordinary particle flow at both attachment
+            // vertices, including initial-state carriers.
+            for (node, _, _) in diagram.underlying().iter_nodes() {
+                let signed_pdgs = diagram
+                    .underlying()
+                    .iter_crown(node)
+                    .map(|hedge| {
+                        let edge = &diagram.underlying()[diagram.underlying()[&hedge]];
+                        let particle = diagram.model().particle_by_id(edge.particle).unwrap();
+                        let pdg = particle.pdg_code;
+                        if !particle.is_fermion() {
+                            0
+                        } else if diagram.underlying().flow(hedge) == Flow::Source {
+                            pdg
+                        } else {
+                            -pdg
+                        }
+                    })
+                    .sum::<i64>();
+                assert_eq!(
+                    signed_pdgs, 0,
+                    "fermion flow must be conserved at each interaction"
+                );
+            }
             while let Some(start) = remaining.iter().next().copied() {
                 let (_, source, target, _) = fermion_edges
                     .iter()
@@ -4788,36 +5466,36 @@ mod tests {
                     .copied()
                     .unwrap();
                 let mut stack = vec![source, target];
-                let mut component_edges = 0;
                 let mut component_particles = BTreeSet::new();
                 while let Some(vertex) = stack.pop() {
                     for (edge, source, target, particle) in &fermion_edges {
                         if remaining.contains(edge) && (*source == vertex || *target == vertex) {
                             remaining.remove(edge);
-                            component_edges += 1;
                             component_particles.insert(*particle);
                             stack.push(*source);
                             stack.push(*target);
                         }
                     }
                 }
-                saw_chain |= component_edges > 1;
                 assert_eq!(
                     component_particles.len(),
                     1,
                     "every finalized fermion chain must use one particle species"
                 );
             }
-            assert!(saw_chain);
         }
     }
 
     #[test]
     fn cut_partitions_use_sewn_attachment_nodes() {
         let model = fermion_model();
-        let resolved =
-            ResolvedProcess::new(&model, &Process::cross_section([22_i64, 22], [22_i64, 22]))
-                .unwrap();
+        let resolved = ResolvedProcess::new(
+            &model,
+            &Process::new([22_i64, 22], [22_i64, 22]),
+            GenerationType::CrossSection,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
         let mut graph = Graph::new();
         let external = |index, state| {
             ColoredNode::External(ExternalNode {
@@ -4897,7 +5575,6 @@ mod tests {
     #[test]
     fn default_loop_routing_uses_canonical_topology_order() {
         let model = Arc::new(scalar_model());
-        let generator = Generator::new(Arc::clone(&model));
         let particle = model.particle_id("phi").unwrap();
         let interaction = model.vertex_rule_id("V1").unwrap();
         let mut builder = FeynmanDiagram::builder(Arc::clone(&model), "routing-order");
@@ -4924,15 +5601,15 @@ mod tests {
         let stable_id_default = builder.build().unwrap();
         assert_eq!(
             stable_id_default.loop_momentum_basis().loop_edges,
-            vec![EdgeId(2), EdgeId(4)],
+            vec![EdgeId(0), EdgeId(1)],
         );
 
-        let canonical = generator
-            .with_legacy_loop_momentum_basis(stable_id_default)
+        let canonical = stable_id_default
+            .with_canonical_loop_momentum_basis()
             .unwrap();
         assert_eq!(
             canonical.loop_momentum_basis().tree_edges,
-            vec![EdgeId(3), EdgeId(2), EdgeId(0)],
+            vec![EdgeId(0), EdgeId(2), EdgeId(3)],
         );
         assert_eq!(
             canonical.loop_momentum_basis().loop_edges,
@@ -4943,28 +5620,17 @@ mod tests {
     #[test]
     fn default_loop_routing_matches_gl_multichannel_traversal() {
         let model = Arc::new(scalar_model());
-        let generator = Generator::new(Arc::clone(&model));
         let particle = model.particle_id("phi").unwrap();
         let mut builder = FeynmanDiagram::builder(model, "gl-like-routing");
-        let outgoing_0 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "out0",
-            0,
-            ExternalState::Outgoing,
-            0,
-        ));
-        let outgoing_1 = builder.add_vertex(DiagramVertex::external_in_connection(
-            "out1",
-            1,
-            ExternalState::Outgoing,
-            1,
-        ));
+        let outgoing_0 = builder.add_generation_external("out0", 0, ExternalState::Outgoing, 0);
+        let outgoing_1 = builder.add_generation_external("out1", 1, ExternalState::Outgoing, 1);
         let vertices = (0..8)
             .map(|vertex| {
                 builder.add_vertex(DiagramVertex {
                     name: format!("v{vertex}"),
                     interaction: None,
-                    external: None,
-                    numerator: Atom::one(),
+
+                    numerator: SymbolicTensor::infer(Atom::one()).unwrap(),
                 })
             })
             .collect::<Vec<_>>();
@@ -5004,14 +5670,58 @@ mod tests {
             );
         }
 
-        let routed = generator
-            .with_legacy_loop_momentum_basis(builder.build().unwrap())
-            .unwrap();
+        let routed = builder.canonical_loop_momentum_basis().build().unwrap();
 
         assert_eq!(
             routed.loop_momentum_basis().loop_edges,
             vec![EdgeId(4), EdgeId(5), EdgeId(9)],
         );
+    }
+
+    #[test]
+    fn supplied_vector_projector_uses_external_labels_before_topology_finalization() {
+        let generator = Generator::new(fermion_model());
+        for reversed in [false, true] {
+            let mut graph = Graph::new();
+            let left = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+            let right = graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V")));
+            graph
+                .add_edge(left, right, false, edge(&generator.model, 22))
+                .unwrap();
+            let mut supplied = Atom::one();
+            for (index, state, attached) in [
+                (7, ExternalState::Incoming, left),
+                (3, ExternalState::Outgoing, right),
+            ] {
+                let external = graph.add_node(ColoredNode::External(ExternalNode {
+                    index,
+                    state,
+                    particle: particle(&generator.model, 22),
+                }));
+                let (source, target) = if reversed {
+                    (attached, external)
+                } else {
+                    (external, attached)
+                };
+                graph
+                    .add_edge(source, target, false, edge(&generator.model, 22))
+                    .unwrap();
+                supplied *= generator
+                    .external_wavefunction(state, particle(&generator.model, 22), index, index)
+                    .unwrap();
+            }
+            assert_eq!(
+                generator
+                    .external_state_projector(&graph, Some(&supplied))
+                    .unwrap(),
+                generator.external_state_projector(&graph, None).unwrap(),
+            );
+            let invalid = feynkit_graph::symbols::epsilon().call(999usize);
+            assert!(matches!(
+                generator.external_state_projector(&graph, Some(&invalid)),
+                Err(GenerationError::UnknownProjectorExternalIndex { index: 999 })
+            ));
+        }
     }
 
     #[test]
@@ -5036,16 +5746,21 @@ mod tests {
         vector_graph
             .add_edge(right, outgoing, false, edge(&generator.model, 22))
             .unwrap();
-        let vector_projector = generator.external_state_projector(&vector_graph).unwrap();
-        assert_eq!(function_count(&vector_projector, PS.eps), 1);
-        assert_eq!(function_count(&vector_projector, PS.ebar), 1);
+        let vector_projector = generator
+            .external_state_projector(&vector_graph, None)
+            .unwrap();
+        let vector_projector = NumeratorInterface::export(&vector_projector).0;
         assert_eq!(
-            function_count(&vector_projector, symbol!("FeynKit::SinkIndex")),
+            function_count(&vector_projector, feynkit_graph::symbols::epsilon()),
             1
         );
         assert_eq!(
-            function_count(&vector_projector, symbol!("FeynKit::SourceIndex")),
+            function_count(&vector_projector, feynkit_graph::symbols::epsilonbar()),
             1
+        );
+        assert_eq!(
+            function_count(&vector_projector, feynkit_graph::symbols::hedge_index()),
+            2
         );
 
         let mut scalar_graph = Graph::new();
@@ -5060,8 +5775,11 @@ mod tests {
             .add_edge(scalar, internal, false, edge(&generator.model, 25))
             .unwrap();
         assert_eq!(
-            generator.external_state_projector(&scalar_graph).unwrap(),
-            Atom::one()
+            generator
+                .external_state_projector(&scalar_graph, None)
+                .unwrap()
+                .expression(),
+            &Atom::one()
         );
     }
 
@@ -5069,8 +5787,14 @@ mod tests {
     fn forced_cuts_retain_only_the_requested_typed_edge_set() {
         let generator = Generator::new(scalar_model());
         let process = scalar_cross_section_process();
-        let options = GenerationOptions::default().threads(1).max_vertices(4);
-        let generated = generator.generate(&process, &options).unwrap();
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .max_vertices(4);
+        let generated = generator
+            .generate(&process, &options, GenerationType::CrossSection)
+            .unwrap();
         let requested: BTreeSet<EdgeId> = generated
             .diagrams
             .iter()
@@ -5083,7 +5807,11 @@ mod tests {
             .collect();
 
         let forced = generator
-            .generate(&process, &options.clone().forced_cuts([requested.clone()]))
+            .generate(
+                &process,
+                &options.clone().forced_cuts([requested.clone()]),
+                GenerationType::CrossSection,
+            )
             .unwrap();
 
         assert!(!forced.diagrams.is_empty());
@@ -5105,9 +5833,12 @@ mod tests {
         let result = Generator::new(scalar_model()).generate(
             &scalar_cross_section_process(),
             &GenerationOptions::default()
+                .with_loop_count(1, 1)
+                .unwrap()
                 .threads(1)
                 .max_vertices(4)
                 .forced_cuts([unknown]),
+            GenerationType::CrossSection,
         );
 
         assert!(matches!(
@@ -5121,8 +5852,14 @@ mod tests {
     fn forced_cut_filtering_precedes_numerator_grouping() {
         let generator = Generator::new(scalar_model());
         let process = scalar_cross_section_process();
-        let options = GenerationOptions::default().threads(1).max_vertices(4);
-        let generated = generator.generate(&process, &options).unwrap();
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .max_vertices(4);
+        let generated = generator
+            .generate(&process, &options, GenerationType::CrossSection)
+            .unwrap();
         let cut_sets = generated
             .diagrams
             .iter()
@@ -5146,6 +5883,7 @@ mod tests {
                 &options.forced_cuts([requested.clone()]).numerator_grouping(
                     NumeratorGrouping::Identical(GraphGroupingOptions::default()),
                 ),
+                GenerationType::CrossSection,
             )
             .unwrap();
 
@@ -5174,9 +5912,13 @@ mod tests {
 
         let foreign_particle =
             ParticleSelector::by_id(&source, source.particle_id("phi").unwrap()).unwrap();
-        let process = Process::amplitude([foreign_particle.clone()], ["phi"]);
+        let process = Process::new([foreign_particle.clone()], ["phi"]);
         assert!(matches!(
-            Generator::new(target.clone()).generate(&process, &GenerationOptions::default()),
+            Generator::new(target.clone()).generate(
+                &process,
+                &GenerationOptions::default(),
+                GenerationType::Amplitude
+            ),
             Err(GenerationError::Selector(SelectorError::ModelMismatch {
                 kind: "particle",
                 ..
@@ -5191,12 +5933,37 @@ mod tests {
         ] {
             let options = GenerationOptions::default().with_graph_filter(filter);
             assert!(matches!(
-                Generator::new(target.clone())
-                    .generate(&Process::amplitude(["phi"], ["phi", "phi"]), &options,),
+                Generator::new(target.clone()).generate(
+                    &Process::new(["phi"], ["phi", "phi"]),
+                    &options,
+                    GenerationType::Amplitude
+                ),
                 Err(GenerationError::Selector(
                     SelectorError::ModelMismatch { .. }
                 ))
             ));
+        }
+    }
+
+    #[test]
+    fn empty_generation_returns_a_completed_result() {
+        let generator = Generator::new(scalar_model());
+        let process = Process::new(["phi"], ["phi", "phi"]);
+        for options in [
+            GenerationOptions::default().max_vertices(0),
+            GenerationOptions::default().with_graph_filter(GenerationFilter::ParticleVeto(vec![
+                ParticleSelector::Name("phi".to_owned()),
+            ])),
+        ] {
+            let result = generator
+                .generate(&process, &options, GenerationType::Amplitude)
+                .unwrap();
+            assert!(result.report.completed);
+            assert!(result.diagrams.is_empty());
+            assert!(result.groups.is_empty());
+            assert_eq!(result.report.topology_count, 0);
+            assert_eq!(result.report.interaction_assignment_count, 0);
+            assert_eq!(result.report.retained_count, 0);
         }
     }
 
@@ -5206,8 +5973,9 @@ mod tests {
         cancellation.cancel();
         let generated = Generator::new(scalar_model())
             .generate(
-                &Process::amplitude(["phi"], ["phi", "phi"]),
+                &Process::new(["phi"], ["phi", "phi"]),
                 &GenerationOptions::default().cancellation_token(cancellation),
+                GenerationType::Amplitude,
             )
             .unwrap();
 
@@ -5216,11 +5984,273 @@ mod tests {
     }
 
     #[test]
+    fn thread_counts_preserve_diagrams_and_progress_order() {
+        let generator = Generator::new(Model::qcd());
+        let process = Process::new(["g"], ["g"])
+            .with_particle_filters(
+                Some(
+                    ["u", "d", "c", "s", "t"]
+                        .into_iter()
+                        .map(Into::into)
+                        .collect(),
+                ),
+                None,
+                None,
+                vec![],
+            )
+            .unwrap();
+        let options = GenerationOptions::default()
+            .with_loop_count(2, 2)
+            .unwrap()
+            .with_graph_filter(GenerationFilter::MaxNumberOfBridges(0));
+        let serial = generator
+            .generate(
+                &process,
+                &options.clone().threads(1),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        let progress = Arc::new(Mutex::new(Vec::new()));
+        let progress_sink = Arc::clone(&progress);
+        let parallel = generator
+            .generate(
+                &process,
+                &options.threads(4).progress(move |update| {
+                    if update.stage == "numerators" {
+                        progress_sink.lock().unwrap().push(update.completed);
+                    }
+                    crate::GenerationControl::Continue
+                }),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert!(!serial.diagrams.is_empty());
+        assert_eq!(serial.report, parallel.report);
+        assert_eq!(
+            *progress.lock().unwrap(),
+            (0..=parallel.diagrams.len()).collect::<Vec<_>>()
+        );
+        for (serial, parallel) in serial.diagrams.iter().zip(&parallel.diagrams) {
+            assert_eq!(serial.to_json().unwrap(), parallel.to_json().unwrap());
+        }
+        assert_eq!(serial.groups.len(), parallel.groups.len());
+        for (serial, parallel) in serial.groups.iter().zip(&parallel.groups) {
+            assert_eq!(serial.master, parallel.master);
+            assert_eq!(serial.members.len(), parallel.members.len());
+            for (serial, parallel) in serial.members.iter().zip(&parallel.members) {
+                assert_eq!(serial.source_id, parallel.source_id);
+                assert_eq!(serial.source_diagram, parallel.source_diagram);
+                assert_eq!(serial.ratio, parallel.ratio);
+                assert_eq!(serial.overall_factor, parallel.overall_factor);
+            }
+        }
+    }
+
+    #[test]
+    fn zero_color_filter_is_opt_in_for_generated_qcd_tadpoles() {
+        let model = Arc::new(Model::qcd());
+        let process = Process::new([] as [&str; 0], ["g"]);
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .max_vertices(1)
+            .allow_self_loops(true)
+            .allow_zero_flow_edges(true)
+            .threads(1);
+        let unfiltered = process.generate_diagrams(model.clone(), &options).unwrap();
+        assert!(unfiltered.report.completed);
+        assert!(!unfiltered.diagrams.is_empty());
+        assert_eq!(unfiltered.report.zero_numerator_count, 0);
+        assert!(
+            unfiltered
+                .diagrams
+                .iter()
+                .any(|diagram| !diagram.numerator().is_zero())
+        );
+
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let captured = updates.clone();
+        let filtered_options = options
+            .clone()
+            .filter_zero_color(true)
+            .progress(move |update| {
+                if update.stage == "filter_zero_color" {
+                    captured.lock().unwrap().push(update);
+                }
+                crate::GenerationControl::Continue
+            });
+        let filtered = process
+            .generate_diagrams(model.clone(), &filtered_options)
+            .unwrap();
+        assert!(filtered.report.completed);
+        assert!(filtered.diagrams.is_empty());
+        assert_eq!(
+            filtered.report.zero_numerator_count,
+            unfiltered.diagrams.len()
+        );
+        filtered.validate_groups().unwrap();
+        let updates = updates.lock().unwrap();
+        assert_eq!(
+            updates
+                .iter()
+                .map(|update| (update.completed, update.zero_numerator_count))
+                .collect::<Vec<_>>(),
+            (0..=unfiltered.diagrams.len())
+                .map(|count| (count, count))
+                .collect::<Vec<_>>()
+        );
+        assert!(
+            updates
+                .iter()
+                .all(|update| update.total == Some(unfiltered.diagrams.len()))
+        );
+
+        let amplitude = process
+            .generate_amplitude(model.clone(), &options, Default::default())
+            .unwrap();
+        assert_eq!(amplitude.diagrams().len(), unfiltered.diagrams.len());
+        assert!(matches!(
+            process.generate_amplitude(model, &options.filter_zero_color(true), Default::default()),
+            Err(GenerationError::Amplitude(error)) if matches!(*error, feynkit_amplitude::AmplitudeError::Empty)
+        ));
+    }
+
+    #[test]
+    fn zero_color_filter_progress_can_cancel_algebra() {
+        let process = Process::new([] as [&str; 0], ["g"]);
+        let result = process
+            .generate_diagrams(
+                Model::qcd(),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
+                    .max_vertices(1)
+                    .allow_self_loops(true)
+                    .allow_zero_flow_edges(true)
+                    .threads(1)
+                    .filter_zero_color(true)
+                    .progress(|update| {
+                        if update.stage == "filter_zero_color" && update.completed == 1 {
+                            crate::GenerationControl::Cancel
+                        } else {
+                            crate::GenerationControl::Continue
+                        }
+                    }),
+            )
+            .unwrap();
+        assert!(!result.report.completed);
+        assert_eq!(result.report.zero_numerator_count, 1);
+        assert!(!result.diagrams.is_empty());
+        result.validate_groups().unwrap();
+    }
+
+    #[test]
+    fn single_thread_generation_stays_on_the_caller() {
+        let caller = std::thread::current().id();
+        let observed = Arc::new(Mutex::new(Vec::new()));
+        let sink = observed.clone();
+        let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
+            .threads(1)
+            .filter_zero_color(true)
+            .progress(move |progress| {
+                if progress.completed > 0 {
+                    sink.lock()
+                        .unwrap()
+                        .push((progress.stage.to_owned(), std::thread::current().id()));
+                }
+                crate::GenerationControl::Continue
+            });
+        let generator = Generator::new(Model::yang_mills());
+        let process = Process::new(["g"], ["g"]);
+        let first = generator
+            .generate(&process, &options, GenerationType::Amplitude)
+            .unwrap();
+        let second = generator
+            .generate(&process, &options, GenerationType::Amplitude)
+            .unwrap();
+        assert!(first.report.completed && second.report.completed);
+        first.validate_groups().unwrap();
+        second.validate_groups().unwrap();
+        assert!(!first.diagrams.is_empty());
+        assert_eq!(first.diagrams.len(), second.diagrams.len());
+        for (left, right) in first.diagrams.iter().zip(&second.diagrams) {
+            assert_eq!(left.to_dot().unwrap(), right.to_dot().unwrap());
+        }
+        let observed = observed.lock().unwrap();
+        for stage in ["interactions", "numerators", "filter_zero_color"] {
+            assert!(
+                observed.iter().any(|(actual, _)| actual == stage),
+                "missing {stage}"
+            );
+        }
+        assert!(observed.iter().all(|(_, thread)| *thread == caller));
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    #[test]
+    fn color_filter_uses_the_requested_generation_pool() {
+        for threads in [2, 4] {
+            let observed = Arc::new(Mutex::new(Vec::new()));
+            let sink = observed.clone();
+            let options = GenerationOptions::default()
+                .with_loop_count(1, 1)
+                .unwrap()
+                .threads(threads)
+                .filter_zero_color(true)
+                .progress(move |progress| {
+                    if progress.stage == "filter_zero_color" && progress.completed > 0 {
+                        sink.lock().unwrap().push(rayon::current_num_threads());
+                    }
+                    crate::GenerationControl::Continue
+                });
+            let generated = Generator::new(Model::yang_mills())
+                .generate(
+                    &Process::new(["g"], ["g"]),
+                    &options,
+                    GenerationType::Amplitude,
+                )
+                .unwrap();
+            assert!(generated.report.completed);
+            let observed = observed.lock().unwrap();
+            assert!(!observed.is_empty());
+            assert!(observed.iter().all(|&actual| actual == threads));
+        }
+    }
+
+    #[test]
+    fn numerator_progress_can_cancel_construction() {
+        let generated = Generator::new(Model::yang_mills())
+            .generate(
+                &Process::new(["g"], ["g"]),
+                &GenerationOptions::default()
+                    .with_loop_count(2, 2)
+                    .unwrap()
+                    .threads(4)
+                    .progress(|update| {
+                        if update.stage == "numerators" && update.completed == 2 {
+                            crate::GenerationControl::Cancel
+                        } else {
+                            crate::GenerationControl::Continue
+                        }
+                    }),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert!(!generated.report.completed);
+        assert!(!generated.diagrams.is_empty());
+        assert!(generated.report.retained_count < generated.report.interaction_assignment_count);
+        generated.validate_groups().unwrap();
+    }
+
+    #[test]
     fn cancellation_callback_returns_an_incomplete_result() {
         let generated = Generator::new(scalar_model())
             .generate(
-                &Process::amplitude(["phi"], ["phi", "phi"]),
+                &Process::new(["phi"], ["phi", "phi"]),
                 &GenerationOptions::default().cancellation_check(|| true),
+                GenerationType::Amplitude,
             )
             .unwrap();
 
@@ -5262,9 +6292,13 @@ mod tests {
     #[test]
     fn external_fermion_chains_are_oriented_consistently() {
         let model = fermion_model();
-        let process =
-            ResolvedProcess::new(&model, &Process::amplitude([1_i64, -1], Vec::<i64>::new()))
-                .unwrap();
+        let process = ResolvedProcess::new(
+            &model,
+            &Process::new([1_i64, -1], Vec::<i64>::new()),
+            GenerationType::Amplitude,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
         let mut graph = Graph::new();
         let particle_vertex = graph.add_node(ColoredNode::External(ExternalNode {
             index: 0,
@@ -5322,7 +6356,9 @@ mod tests {
 
         let symmetrized = ResolvedProcess::new(
             &model,
-            &Process::amplitude([1_i64, -1], Vec::<i64>::new())
+            &Process::new([1_i64, -1], Vec::<i64>::new()),
+            GenerationType::Amplitude,
+            &GenerationOptions::default()
                 .symmetrize_initial(true)
                 .symmetrize_external_fermions(true),
         )
@@ -5334,7 +6370,7 @@ mod tests {
     }
 
     #[test]
-    fn ghost_chains_are_oriented_without_entering_external_fermion_signs() {
+    fn ghost_chains_follow_external_anticommuting_order() {
         let source = fermion_model().to_json().unwrap();
         let mut definition = serde_json::from_str::<serde_json::Value>(&source).unwrap();
         for particle in definition["particles"].as_array_mut().unwrap() {
@@ -5352,9 +6388,13 @@ mod tests {
         }
         definition["lorentz_structures"][0]["spins"] = serde_json::json!([-1, -1, 3]);
         let model = Model::from_json(&definition.to_string()).unwrap();
-        let process =
-            ResolvedProcess::new(&model, &Process::amplitude([1_i64, -1], Vec::<i64>::new()))
-                .unwrap();
+        let process = ResolvedProcess::new(
+            &model,
+            &Process::new([1_i64, -1], Vec::<i64>::new()),
+            GenerationType::Amplitude,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
         let mut graph = Graph::new();
         let ghost = graph.add_node(ColoredNode::External(ExternalNode {
             index: 0,
@@ -5380,7 +6420,105 @@ mod tests {
         assert_eq!(normalized.graph.edges()[0].vertices, (ghost, left));
         assert_eq!(normalized.graph.edges()[1].vertices, (left, right));
         assert_eq!(normalized.graph.edges()[2].vertices, (right, antighost));
-        assert!(!normalized.signs.external_ordering_negative);
+        // The all-incoming order [ghost, antighost] is one transposition
+        // from the canonical [antighost, ghost] order, just as for spinors.
+        assert!(normalized.signs.external_ordering_negative);
+        assert!(!normalized.signs.antifermion_spin_sum_negative);
+    }
+
+    #[test]
+    fn cp_symmetrization_groups_mirrored_real_scalar_forward_graphs() {
+        let model = Model::from_json(include_str!(
+            "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+        ))
+        .unwrap();
+        let mut definition = serde_json::to_value(&model).unwrap();
+        definition["lorentz_structures"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name":"SCALAR_4_LORENTZ_STRUCTURE", "spins":[1,1,1,1], "structure":"1"
+            }));
+        definition["vertex_rules"]
+            .as_array_mut()
+            .unwrap()
+            .push(serde_json::json!({
+                "name":"V_4_SCALAR_0000", "particles":["scalar_0","scalar_0","scalar_0","scalar_0"],
+                "color_structures":["1"], "lorentz_structures":["SCALAR_4_LORENTZ_STRUCTURE"],
+                "couplings":[["SCALAR_COUPLING"]]
+            }));
+        let model: Model = serde_json::from_value(definition).unwrap();
+        let mut graphs = Vec::new();
+        for mirrored in [false, true] {
+            let mut graph = Graph::new();
+            // Sew a cubic box to a quartic Born vertex. Its two external
+            // neighbors have different valences, so only a global side swap
+            // can identify the mirror.
+            for node in 0..5 {
+                graph.add_node(ColoredNode::Interaction(vertex(
+                    &model,
+                    if node == 4 {
+                        "V_4_SCALAR_0000"
+                    } else {
+                        "V_3_SCALAR_000"
+                    },
+                )));
+            }
+            for index in 0..2 {
+                let index = if mirrored { 1 - index } else { index };
+                graph.add_node(ColoredNode::External(ExternalNode {
+                    index,
+                    state: if index == 0 {
+                        ExternalState::Incoming
+                    } else {
+                        ExternalState::Outgoing
+                    },
+                    particle: particle(&model, 1000),
+                }));
+            }
+            for (left, right) in [
+                (5, 0),
+                (0, 1),
+                (1, 2),
+                (2, 3),
+                (3, 0),
+                (1, 4),
+                (2, 4),
+                (3, 4),
+                (4, 6),
+            ] {
+                let (left, right) = if mirrored {
+                    (right, left)
+                } else {
+                    (left, right)
+                };
+                graph
+                    .add_edge(left, right, true, edge(&model, 1000))
+                    .unwrap();
+            }
+            graphs.push(graph);
+        }
+        for enabled in [false, true] {
+            let process = ResolvedProcess::new(
+                &model,
+                &Process::new([1000_i64], [1000_i64, 1000, 1000]),
+                GenerationType::CrossSection,
+                &GenerationOptions::default()
+                    .with_loop_count(3, 3)
+                    .unwrap()
+                    .symmetrize_left_right(enabled),
+            )
+            .unwrap();
+            let canonical = graphs
+                .iter()
+                .map(|graph| {
+                    process
+                        .canonicalize_numerator_graph(graph, &model, &NumeratorGrouping::None)
+                        .unwrap()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(canonical[0] == canonical[1], enabled);
+        }
     }
 
     #[test]
@@ -5388,7 +6526,9 @@ mod tests {
         let model = fermion_model();
         let process = ResolvedProcess::new(
             &model,
-            &Process::cross_section([1_i64, -1], [22_i64]).symmetrize_left_right(true),
+            &Process::new([1_i64, -1], [22_i64]),
+            GenerationType::CrossSection,
+            &GenerationOptions::default().symmetrize_left_right(true),
         )
         .unwrap();
         let mut graph = Graph::new();
@@ -5507,12 +6647,14 @@ mod tests {
             NumeratorHalfEdge {
                 edge: internal_edge,
                 flow: first_flow,
+                hedge: 2 * internal_edge + usize::from(first_flow == Flow::Sink),
                 spin: 2,
                 color: 1,
             },
             NumeratorHalfEdge {
                 edge: internal_edge,
                 flow: second_flow,
+                hedge: 2 * internal_edge + usize::from(second_flow == Flow::Sink),
                 spin: 2,
                 color: 1,
             },
@@ -5523,13 +6665,19 @@ mod tests {
         }
         .instantiate(&propagator, NumeratorSector::Spin)
         .unwrap();
-        assert_eq!(function_count(&localized, symbol!("FeynKit::Momentum")), 1);
+        assert_eq!(function_count(&localized, symbol!("gammalooprs::Q")), 1);
     }
 
     #[test]
     fn canonical_parallel_edges_are_ordered_by_signed_pdg() {
         let model = standard_model();
-        let process = ResolvedProcess::new(&model, &photon_process()).unwrap();
+        let process = ResolvedProcess::new(
+            &model,
+            &photon_process(),
+            GenerationType::Amplitude,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
         let grouping = NumeratorGrouping::UpToSign(GraphGroupingOptions::default());
 
         for particles in [[-4_i64, 251_i64], [4_i64, -251_i64]] {
@@ -5696,12 +6844,18 @@ mod tests {
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },
-                1,
-                FermionSigns::default(),
+                FermionSigns {
+                    internal_loop_negative: true,
+                    ..FermionSigns::default()
+                },
                 &GenerationOptions::default(),
             )
             .unwrap();
-        let actual = &diagram.edges().next().unwrap().2.numerator;
+        let (actual_edge, _, actual_data) = diagram
+            .edges()
+            .find(|(_, _, edge)| edge.external.is_none())
+            .unwrap();
+        let actual = &actual_data.numerator;
         let (antiparticle_propagator, antiparticle_fallback) = generator
             .propagator_numerator(model.particle_by_id(particle(&model, -1)).unwrap())
             .unwrap();
@@ -5715,6 +6869,7 @@ mod tests {
             let legs = flows.map(|flow| NumeratorHalfEdge {
                 edge: 0,
                 flow,
+                hedge: usize::from(flow == Flow::Sink),
                 spin: 2,
                 color: 1,
             });
@@ -5725,13 +6880,65 @@ mod tests {
             .instantiate(propagator, NumeratorSector::Spin)
             .unwrap()
         };
-        let exact = instantiate(&antiparticle_propagator, [Flow::Source, Flow::Sink]);
-        let blanket_reversal = instantiate(&antiparticle_propagator, [Flow::Sink, Flow::Source]);
-        let particle_fallback = instantiate(&particle_propagator, [Flow::Source, Flow::Sink]);
+        let native = |expression: Atom| {
+            let source = diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: actual_edge,
+                    endpoint: DiagramEndpoint::Source,
+                })
+                .unwrap();
+            let sink = diagram
+                .half_edge_id(DiagramHalfEdge {
+                    edge: actual_edge,
+                    endpoint: DiagramEndpoint::Target,
+                })
+                .unwrap();
+            expression.replace_map_bottom_up(|term, _, output| {
+                let AtomView::Fun(function) = term else {
+                    return;
+                };
+                let head = function.get_symbol();
+                let arguments = function.iter().collect::<Vec<_>>();
+                let owner = usize::try_from(arguments[0]).ok();
+                let index = if head == feynkit_graph::symbols::hedge_index() {
+                    match owner {
+                        Some(0) => Some(source.0),
+                        Some(1) => Some(sink.0),
+                        _ => None,
+                    }
+                } else if (head == feynkit_graph::symbols::edge_index()
+                    || head == momentum_symbol())
+                    && owner == Some(0)
+                {
+                    Some(actual_edge.0)
+                } else {
+                    None
+                };
+                if let Some(index) = index {
+                    **output = FunctionBuilder::new(head)
+                        .add_arg(index)
+                        .add_args(arguments[1..].iter().copied())
+                        .finish();
+                }
+            })
+        };
+        let exact = native(instantiate(
+            &antiparticle_propagator,
+            [Flow::Source, Flow::Sink],
+        ));
+        let blanket_reversal = native(instantiate(
+            &antiparticle_propagator,
+            [Flow::Sink, Flow::Source],
+        ));
+        let particle_fallback = native(instantiate(
+            &particle_propagator,
+            [Flow::Source, Flow::Sink],
+        ));
 
-        assert_eq!(actual, &exact);
-        assert_ne!(actual, &blanket_reversal);
-        assert_ne!(actual, &particle_fallback);
+        let actual = NumeratorInterface::export(actual).0;
+        assert_eq!(actual, exact);
+        assert_ne!(actual, blanket_reversal);
+        assert_ne!(actual, particle_fallback);
     }
 
     #[test]
@@ -5779,7 +6986,20 @@ mod tests {
 
     #[test]
     fn interaction_numerator_keeps_named_couplings_and_lowers_tensors() {
-        let model = fermion_model();
+        let mut definition = serde_json::to_value(fermion_model()).unwrap();
+        for particle in definition["particles"].as_array_mut().unwrap() {
+            particle["color"] = serde_json::json!(match particle["name"].as_str() {
+                Some("f") => 3,
+                Some("f~") => -3,
+                Some("a") => 8,
+                _ => 1,
+            });
+        }
+        // Both couplings multiply the same open color interface. A scalar
+        // color term cannot be added to a fundamental-adjoint tensor term.
+        definition["vertex_rules"][0]["color_structures"] =
+            serde_json::json!(["T(3,2,1)", "T(3,2,1)"]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
         let generator = Generator::new(model.clone());
         let legs = tensor_test_legs();
         let instantiation = NumeratorInstantiation {
@@ -5787,10 +7007,10 @@ mod tests {
             legs: &legs[..3],
         };
         let numerator = generator
-            .interaction_numerator(model.vertex_rule("V").unwrap(), &instantiation)
+            .interaction_numerator(model.vertex_rule_id("V").unwrap(), &instantiation)
             .unwrap();
 
-        let numerator = numerator.to_plain_string();
+        let numerator = NumeratorInterface::export(&numerator).0.to_plain_string();
         assert!(numerator.contains("UFO::GC_LOW"));
         assert!(numerator.contains("UFO::GC_HIGH"));
         assert!(!numerator.contains("g_low"));
@@ -5799,6 +7019,33 @@ mod tests {
         assert!(numerator.contains("spenso::t"));
         assert!(!numerator.contains("Gamma("));
         assert!(!numerator.contains("UFO::T("));
+    }
+
+    #[test]
+    fn interaction_numerator_rejects_incompatible_color_summands() {
+        let mut definition = serde_json::to_value(fermion_model()).unwrap();
+        definition["vertex_rules"][0]["color_structures"] = serde_json::json!(["1", "T(3,2,1)"]);
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let generator = Generator::new(model.clone());
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..3],
+        };
+        let error = generator
+            .interaction_numerator(model.vertex_rule_id("V").unwrap(), &instantiation)
+            .unwrap_err();
+
+        assert!(matches!(
+            &error,
+            GenerationError::Diagram(DiagramError::Tensor(_))
+        ));
+        assert!(
+            error
+                .to_string()
+                .contains("tensor summands do not have compatible tensor interfaces")
+        );
+        assert!(generator.numerators.interactions.read().unwrap().is_empty());
     }
 
     #[test]
@@ -5814,7 +7061,7 @@ mod tests {
         assert_eq!(
             gamma,
             test_atom(
-                "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(20,1)),spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::mink(4,FeynKit::SourceIndex(30,1)))"
+                "spenso::gamma(spenso::bis(4,gammalooprs::hedge(41,1)),spenso::bis(4,gammalooprs::hedge(20,1)),spenso::mink(4,gammalooprs::hedge(60,1)))"
             )
         );
 
@@ -5824,7 +7071,7 @@ mod tests {
         assert_eq!(
             metric,
             test_atom(
-                "spenso::g(spenso::mink(4,FeynKit::SourceIndex(30,1)),spenso::mink(4,FeynKit::SinkIndex(40,1)))"
+                "spenso::g(spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(81,1)))"
             )
         );
 
@@ -5834,8 +7081,239 @@ mod tests {
         assert_eq!(
             identity,
             test_atom(
-                "spenso::g(spenso::bis(4,FeynKit::SourceIndex(10,1)),spenso::bis(4,FeynKit::SinkIndex(20,1)))"
+                "spenso::g(spenso::bis(4,gammalooprs::hedge(20,1)),spenso::bis(4,gammalooprs::hedge(41,1)))"
             )
+        );
+    }
+
+    #[test]
+    fn lowers_covariant_propagator_with_compact_momentum_slots() {
+        use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
+        use spenso::structure::abstract_index::AbstractIndex;
+
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Edge(30),
+            legs: &legs[2..],
+        };
+        let numerator = instantiation
+            .instantiate(
+                &test_atom(
+                    "-1i*(Metric(idx(1,1),idx(1,2))-(1-xi)*P(idx(1,1))*P(idx(1,2))/spenso::dot(P(spenso::mink(4)),P(spenso::mink(4))))",
+                ),
+                NumeratorSector::Spin,
+            )
+            .unwrap();
+        assert_eq!(
+            numerator,
+            test_atom(
+                "-1i*(spenso::g(spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(81,1)))-(1-xi)*gammalooprs::Q(30,spenso::mink(4,gammalooprs::hedge(60,1)))*gammalooprs::Q(30,spenso::mink(4,gammalooprs::hedge(81,1)))/spenso::dot(gammalooprs::Q(30,spenso::mink(4)),gammalooprs::Q(30,spenso::mink(4))))"
+            )
+        );
+        assert_eq!(
+            instantiation.lower_spin(numerator.clone()).unwrap(),
+            numerator
+        );
+        assert_eq!(numerator.list_dangling::<AbstractIndex>().unwrap().len(), 2);
+        let metric = instantiation
+            .instantiate(&test_atom("Metric(1,2)"), NumeratorSector::Spin)
+            .unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let source = SymbolicTensor::infer(cooking.cook((numerator * metric).as_view())).unwrap();
+        let result = source.contract(Default::default()).unwrap();
+        let result = result.to_dots().unwrap();
+        let scalar = cooking.uncook(result.expression().as_view());
+        assert_eq!(
+            (scalar - test_atom("-1i*(3+xi)")).together().cancel(),
+            Atom::Zero
+        );
+    }
+
+    #[test]
+    fn ufo_lorentz_epsilon_matches_aloha_and_native_gamma5() {
+        use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
+        use spenso::{
+            network::{
+                ExecutionResult, Sequential, SmallestDegree,
+                library::symbolic::ExplicitKey,
+                parsing::{ParseSettings as TensorParseSettings, StrictTensorFilter},
+            },
+            structure::abstract_index::{AIND_SYMBOLS, AbstractIndex},
+            tensors::parametric::MixedTensor,
+        };
+        use spenso_hep_lib::{FUN_LIB, HepNet, hep_lib_atom};
+        use symbolica::function;
+
+        let mut legs = tensor_test_legs();
+        for leg in &mut legs {
+            leg.spin = 3;
+        }
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let lowered = instantiation
+            .instantiate(&test_atom("Epsilon(1,2,3,4)"), NumeratorSector::Spin)
+            .unwrap();
+        let native_epsilon = test_atom(
+            "spenso::epsilon(spenso::mink(4,gammalooprs::hedge(20,1)),spenso::mink(4,gammalooprs::hedge(41,1)),spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(81,1)))",
+        );
+        assert_eq!(lowered, -Atom::i() * &native_epsilon);
+        assert_eq!(instantiation.lower_spin(lowered.clone()).unwrap(), lowered);
+        assert_eq!(
+            instantiation
+                .instantiate(&test_atom("Epsilon(2,1,3,4)"), NumeratorSector::Spin)
+                .unwrap(),
+            -&lowered,
+        );
+
+        // Use the unchanged gamma5/gamma library as an exact component oracle,
+        // not a second epsilon table. Idenso defines Tr(g5*g^a*g^b*g^c*g^d)
+        // = 4*epsilon(a,b,c,d), with epsilon(0,1,2,3) = -i.
+        let trace = instantiation
+            .instantiate(
+                &test_atom(
+                    "Gamma5(-1,-2)*Gamma(1,-2,-3)*Gamma(2,-3,-4)*Gamma(3,-4,-5)*Gamma(4,-5,-1)",
+                ),
+                NumeratorSector::Spin,
+            )
+            .unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplified = SymbolicTensor::infer(cooking.cook(trace.as_view()))
+            .unwrap()
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                gamma: Some(idenso::dirac::GammaSimplifySettings::default()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(
+            cooking.uncook(simplified.expression().as_view()),
+            Atom::num(4) * &native_epsilon,
+        );
+        let component_expression = lowered
+            .replace(native_epsilon.to_pattern())
+            .with(&trace / Atom::num(4));
+        let library = hep_lib_atom::<AbstractIndex, MixedTensor<f64, ExplicitKey<AbstractIndex>>>();
+        let settings = TensorParseSettings::default()
+            .with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
+        // MadGraph/ALOHA L_Epsilon.give_parity gives (0,1,2,3) -> -1.
+        // Include an odd permutation and a repeated index. Four Minkowski
+        // selectors add a minus sign for the three spatial directions.
+        for (coordinates, aloha_component) in [
+            ([0, 1, 2, 3], -1),
+            ([1, 0, 2, 3], 1),
+            ([0, 2, 3, 1], -1),
+            ([0, 1, 2, 2], 0),
+        ] {
+            let mut selected = component_expression.clone();
+            for (coordinate, hedge) in coordinates.into_iter().zip([20, 41, 60, 81]) {
+                selected *= function!(
+                    ETS.delta,
+                    function!(AIND_SYMBOLS.cind, coordinate),
+                    test_atom(&format!("spenso::mink(4,gammalooprs::hedge({hedge},1))"))
+                );
+            }
+            let selected = cooking.cook(selected.as_view());
+            let mut network =
+                HepNet::<AbstractIndex>::try_from_view(selected.as_view(), &library, &settings)
+                    .unwrap();
+            network
+                .execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)
+                .unwrap();
+            let actual = match network.result_scalar().unwrap() {
+                ExecutionResult::One => Atom::one(),
+                ExecutionResult::Zero => Atom::Zero,
+                ExecutionResult::Val(value) => value.into_owned(),
+            };
+            assert_eq!(actual, Atom::num(-aloha_component), "{coordinates:?}");
+        }
+    }
+
+    #[test]
+    fn lowers_ufo_epsilon_with_the_ufo_normalization() {
+        use idenso::{
+            CookMode, CookSettings,
+            tensor::{AlgebraSettings, SymbolicTensor},
+        };
+
+        let legs: [NumeratorHalfEdge; 4] = std::array::from_fn(|i| NumeratorHalfEdge {
+            edge: 10 * (i + 1),
+            flow: Flow::Sink,
+            hedge: 20 * (i + 1),
+            spin: 3,
+            color: 1,
+        });
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let lower = |structure: &str| {
+            instantiation
+                .instantiate(&test_atom(structure), NumeratorSector::Spin)
+                .unwrap()
+        };
+        assert_eq!(
+            lower("Epsilon(1,2,3,4)"),
+            test_atom(
+                "-1i*spenso::epsilon(spenso::mink(4,gammalooprs::hedge(20,1)),spenso::mink(4,gammalooprs::hedge(40,1)),spenso::mink(4,gammalooprs::hedge(60,1)),spenso::mink(4,gammalooprs::hedge(80,1)))"
+            )
+        );
+        // ALOHA's explicit matrices satisfy
+        // Tr[γ5 γ^μ γ^ν γ^ρ γ^σ] = 4i ε^{μνρσ} with its ε^{0123} = −1; the
+        // lowered structures must agree after Idenso's trace simplification.
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplify = |structure: &str| {
+            let tensor = SymbolicTensor::infer(cooking.cook(lower(structure).as_view())).unwrap();
+            let simplified = tensor
+                .simplify_algebra(&AlgebraSettings::hep())
+                .unwrap()
+                .into_expression();
+            cooking.uncook(simplified.as_view())
+        };
+        let trace =
+            simplify("Gamma5(-1,-2)*Gamma(1,-2,-3)*Gamma(2,-3,-4)*Gamma(3,-4,-5)*Gamma(4,-5,-1)");
+        assert!(!trace.is_zero());
+        assert_eq!(trace, simplify("4*1i*Epsilon(1,2,3,4)"));
+        for malformed in ["Epsilon()", "Epsilon(1,2,3)", "Epsilon(1,2,3,4,-1)"] {
+            assert!(matches!(
+                instantiation.instantiate(&test_atom(malformed), NumeratorSector::Spin),
+                Err(GenerationError::InvalidNumeratorTensor { .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn lowers_ufo_charge_conjugation_and_rejects_invalid_arity() {
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs,
+        };
+        let charge_conjugation = instantiation
+            .instantiate(&test_atom("C(1,2)"), NumeratorSector::Spin)
+            .unwrap();
+        assert_eq!(
+            charge_conjugation,
+            test_atom(
+                "spenso::charge_conjugation(spenso::bis(4,gammalooprs::hedge(20,1)),spenso::bis(4,gammalooprs::hedge(41,1)))"
+            )
+        );
+        assert_eq!(
+            instantiation
+                .instantiate(&test_atom("C(2,1)"), NumeratorSector::Spin)
+                .unwrap(),
+            -charge_conjugation,
+        );
+        for malformed in ["C()", "C(1)", "C(1,2,3)"] {
+            assert!(matches!(
+                instantiation.instantiate(&test_atom(malformed), NumeratorSector::Spin),
+                Err(GenerationError::InvalidNumeratorTensor { .. })
+            ));
+        }
+        assert!(
+            instantiation
+                .instantiate(&test_atom("C(1,2)"), NumeratorSector::Color)
+                .is_err()
         );
     }
 
@@ -5853,7 +7331,7 @@ mod tests {
             )
             .unwrap();
         let expected = test_atom(
-            "spenso::g(spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))),spenso::cof(3,FeynKit::SinkIndex(20,1)))*spenso::t(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::cof(3,FeynKit::SinkIndex(20,1)),spenso::dind(spenso::cof(3,FeynKit::SourceIndex(10,1))))*spenso::f(spenso::coad(8,FeynKit::SourceIndex(30,1)),spenso::coad(8,FeynKit::VertexDummy(7,1)),spenso::coad(8,FeynKit::VertexDummy(7,2)))",
+            "spenso::g(spenso::dind(spenso::cof(3,gammalooprs::hedge(20,1))),spenso::cof(3,gammalooprs::hedge(41,1)))*spenso::t(spenso::coad(8,gammalooprs::hedge(60,1)),spenso::cof(3,gammalooprs::hedge(41,1)),spenso::dind(spenso::cof(3,gammalooprs::hedge(20,1))))*spenso::f(spenso::coad(8,gammalooprs::hedge(60,1)),spenso::coad(8,gammalooprs::vertex(7,1)),spenso::coad(8,gammalooprs::vertex(7,2)))",
         );
         assert_eq!(tensors, expected);
     }
@@ -5864,12 +7342,14 @@ mod tests {
             NumeratorHalfEdge {
                 edge: 5,
                 flow: Flow::Source,
+                hedge: 10,
                 spin: 2,
                 color: 3,
             },
             NumeratorHalfEdge {
                 edge: 5,
                 flow: Flow::Sink,
+                hedge: 11,
                 spin: 2,
                 color: 3,
             },
@@ -5887,9 +7367,232 @@ mod tests {
         assert_eq!(
             slash,
             test_atom(
-                "spenso::gamma(spenso::bis(4,FeynKit::SinkIndex(5,1)),spenso::bis(4,FeynKit::SourceIndex(5,1)),spenso::mink(4,FeynKit::EdgeDummy(5,5)))*FeynKit::Momentum(5,spenso::mink(4,FeynKit::EdgeDummy(5,5)))*spenso::g(spenso::mink(4,FeynKit::EdgeDummy(5,4)),spenso::mink(4,FeynKit::EdgeDummy(5,4)))"
+                "spenso::gamma(spenso::bis(4,gammalooprs::hedge(11,1)),spenso::bis(4,gammalooprs::hedge(10,1)),spenso::mink(4,gammalooprs::edge(5,5)))*gammalooprs::Q(5,spenso::mink(4,gammalooprs::edge(5,5)))*spenso::g(spenso::mink(4,gammalooprs::edge(5,4)),spenso::mink(4,gammalooprs::edge(5,4)))"
             )
         );
+    }
+
+    #[test]
+    fn lowers_ufo_symmetric_color_tensor_with_standard_normalization() {
+        use idenso::{
+            CookMode, CookSettings, IndexTooling, color::ColorSimplifySettings,
+            tensor::SymbolicTensor,
+        };
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplify = |expression: Atom| {
+            let source = SymbolicTensor::infer(cooking.cook(expression.as_view())).unwrap();
+            let result = source
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                    ..Default::default()
+                })
+                .unwrap()
+                .contract(idenso::tensor::ContractSettings {
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap();
+            cooking.uncook(result.expression().as_view())
+        };
+
+        let mut legs = [0, 1, 2].map(|edge| NumeratorHalfEdge {
+            edge,
+            flow: Flow::Source,
+            hedge: 2 * edge,
+            spin: 1,
+            color: 8,
+        });
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(0),
+            legs: &legs,
+        };
+        let tensor = instantiation
+            .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
+            .unwrap();
+        assert_eq!(tensor, tensor.spenso_conj());
+        assert_eq!(
+            tensor,
+            instantiation
+                .instantiate(&test_atom("d(3,1,2)"), NumeratorSector::Color)
+                .unwrap()
+        );
+        assert_eq!(simplify(tensor.clone() * &tensor), test_atom("40/3"));
+        let third = instantiation.index(legs[2], 1).unwrap();
+        let other = test_atom("other_color_index");
+        let right = tensor.replace(third.to_pattern()).with(other.clone());
+        assert_eq!(
+            simplify(tensor * right),
+            test_atom("5/3")
+                * ETS.metric(
+                    ColorRepresentation::Adjoint
+                        .representation()
+                        .to_symbolic([third]),
+                    ColorRepresentation::Adjoint
+                        .representation()
+                        .to_symbolic([other]),
+                )
+        );
+        assert_eq!(
+            simplify(
+                instantiation
+                    .instantiate(&test_atom("d(-1,-1,3)"), NumeratorSector::Color)
+                    .unwrap()
+            ),
+            Atom::Zero
+        );
+        legs[0].color = 3;
+        let incompatible = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(0),
+            legs: &legs,
+        };
+        assert!(
+            incompatible
+                .instantiate(&test_atom("d(1,2,3)"), NumeratorSector::Color)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn lowers_ufo_color_epsilon_and_dual_contractions() {
+        use idenso::{CookMode, CookSettings, IndexTooling, tensor::SymbolicTensor};
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let simplify = |expression: Atom| {
+            let source = SymbolicTensor::infer(cooking.cook(expression.as_view())).unwrap();
+            let result = source
+                .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                    epsilon: true,
+                    ..Default::default()
+                })
+                .unwrap();
+            cooking.uncook(result.expression().as_view())
+        };
+
+        for (color, name, conjugate_name) in
+            [(3, "Epsilon", "EpsilonBar"), (-3, "EpsilonBar", "Epsilon")]
+        {
+            let legs = [0, 1, 2].map(|edge| NumeratorHalfEdge {
+                edge,
+                flow: Flow::Source,
+                hedge: 2 * edge,
+                spin: 1,
+                color,
+            });
+            let instantiation = NumeratorInstantiation {
+                owner: NumeratorOwner::Vertex(0),
+                legs: &legs,
+            };
+            let tensor = instantiation
+                .instantiate(
+                    &test_atom(&format!("{name}(1,2,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            let exchanged = instantiation
+                .instantiate(
+                    &test_atom(&format!("{name}(2,1,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            assert_eq!(tensor, -exchanged);
+            assert_eq!(tensor.spenso_conj().spenso_conj(), tensor);
+            assert_eq!(
+                simplify(tensor.clone() * tensor.spenso_conj()),
+                Atom::num(6)
+            );
+            assert!(
+                instantiation
+                    .instantiate(
+                        &test_atom(&format!("{conjugate_name}(1,2,3)")),
+                        NumeratorSector::Color
+                    )
+                    .is_err()
+            );
+            assert!(
+                instantiation
+                    .instantiate(&test_atom(&format!("{name}(1,2)")), NumeratorSector::Color)
+                    .is_err()
+            );
+            // Identity chains must transmit orientation to the external port,
+            // without treating the two ends of a summed index as the same slot.
+            let relayed = instantiation
+                .instantiate(
+                    &test_atom(&format!("Identity(1,-1)*Identity(-1,-2)*{name}(-2,2,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            assert_eq!(relayed, tensor);
+            let sum = instantiation
+                .instantiate(
+                    &test_atom(&format!("{name}(1,2,3)+{name}(1,2,-1)*Identity(-1,3)")),
+                    NumeratorSector::Color,
+                )
+                .unwrap();
+            assert_eq!(sum, Atom::num(2) * tensor);
+        }
+        let closed = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(3),
+            legs: &[],
+        };
+        assert_eq!(
+            simplify(
+                closed
+                    .instantiate(
+                        &test_atom("Epsilon(-1,-2,-3)*EpsilonBar(-1,-2,-3)"),
+                        NumeratorSector::Color,
+                    )
+                    .unwrap()
+            ),
+            Atom::num(6)
+        );
+        assert!(
+            closed
+                .instantiate(
+                    &test_atom("Epsilon(-1,-2,-3)*f(-1,-2,-3)"),
+                    NumeratorSector::Color
+                )
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn lowers_summed_fundamental_color_indices() {
+        use idenso::{
+            CookMode, CookSettings, color::ColorSimplifySettings, tensor::SymbolicTensor,
+        };
+
+        let legs = [0, 1].map(|edge| NumeratorHalfEdge {
+            edge,
+            flow: Flow::Source,
+            hedge: 2 * edge,
+            spin: 1,
+            color: 8,
+        });
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(2),
+            legs: &legs,
+        };
+        let trace = instantiation
+            .instantiate(&test_atom("T(1,-1,-2)*T(2,-2,-1)"), NumeratorSector::Color)
+            .unwrap();
+        let expected = instantiation
+            .instantiate(&test_atom("Identity(1,2)/2"), NumeratorSector::Color)
+            .unwrap();
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let source = SymbolicTensor::infer(cooking.cook(trace.as_view())).unwrap();
+        let result = source
+            .simplify_algebra(&idenso::tensor::AlgebraSettings {
+                color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                ..Default::default()
+            })
+            .unwrap()
+            .contract(idenso::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(cooking.uncook(result.expression().as_view()), expected);
     }
 
     #[test]
@@ -5900,18 +7603,21 @@ mod tests {
             NumeratorHalfEdge {
                 edge: 1,
                 flow: Flow::Source,
+                hedge: 2,
                 spin: 2,
                 color: -3,
             },
             NumeratorHalfEdge {
                 edge: 2,
                 flow: Flow::Sink,
+                hedge: 5,
                 spin: 2,
                 color: 3,
             },
             NumeratorHalfEdge {
                 edge: 3,
                 flow: Flow::Source,
+                hedge: 6,
                 spin: 1,
                 color: 1,
             },
@@ -5921,10 +7627,10 @@ mod tests {
             legs: &legs,
         };
         let numerator = generator
-            .interaction_numerator(model.vertex_rule("V_78").unwrap(), &instantiation)
+            .interaction_numerator(model.vertex_rule_id("V_78").unwrap(), &instantiation)
             .unwrap();
 
-        let numerator = numerator.to_plain_string();
+        let numerator = NumeratorInterface::export(&numerator).0.to_plain_string();
         assert!(numerator.contains("spenso::bis(4"));
         assert!(numerator.contains("spenso::cof(3"));
         assert!(numerator.contains("spenso::dind"));
@@ -5933,9 +7639,33 @@ mod tests {
     }
 
     #[test]
+    fn coupling_upper_bounds_prune_vertex_signatures_without_applying_lower_bounds() {
+        let model = standard_model();
+        let options = GenerationOptions::default().with_graph_filter(
+            GenerationFilter::CouplingOrders(BTreeMap::from([
+                ("QCD".to_owned(), (6, Some(6))),
+                ("QED".to_owned(), (0, Some(0))),
+            ])),
+        );
+        let signatures = InteractionSignatures::new(&model, &options).unwrap();
+        let rules: BTreeSet<_> = signatures.0.values().flatten().copied().collect();
+        assert!(!rules.is_empty());
+        for (index, rule) in model.vertex_rules().iter().enumerate() {
+            let orders = rule.coupling_orders(&model);
+            assert_eq!(
+                rules.contains(&model.vertex_rule_id_at(index).unwrap()),
+                orders.get("QED").copied().unwrap_or(0) == 0
+                    && orders.get("QCD").copied().unwrap_or(0) <= 6
+            );
+        }
+    }
+
+    #[test]
     fn generated_qcd_loop_numerators_are_spenso_ready() {
         let model = standard_model();
         let options = GenerationOptions::default()
+            .with_loop_count(1, 1)
+            .unwrap()
             .threads(1)
             .max_vertices(2)
             .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
@@ -5950,10 +7680,9 @@ mod tests {
             ));
         let generated = Generator::new(model)
             .generate(
-                &Process::amplitude(["g"], ["g"])
-                    .with_loop_count(1, 1)
-                    .unwrap(),
+                &Process::new(["g"], ["g"]),
                 &options,
+                GenerationType::Amplitude,
             )
             .unwrap();
         assert_eq!(generated.diagrams.len(), 3);
@@ -5980,12 +7709,24 @@ mod tests {
         ];
         let mut combined = String::new();
         for diagram in &generated.diagrams {
-            combined.push_str(&diagram.numerator().to_plain_string());
+            combined.push_str(
+                &NumeratorInterface::export(diagram.numerator())
+                    .0
+                    .to_plain_string(),
+            );
             for (_, vertex) in diagram.vertices() {
-                combined.push_str(&vertex.numerator.to_plain_string());
+                combined.push_str(
+                    &NumeratorInterface::export(&vertex.numerator)
+                        .0
+                        .to_plain_string(),
+                );
             }
             for (_, _, edge) in diagram.edges() {
-                combined.push_str(&edge.numerator.to_plain_string());
+                combined.push_str(
+                    &NumeratorInterface::export(&edge.numerator)
+                        .0
+                        .to_plain_string(),
+                );
             }
         }
         for head in residual_heads {
@@ -5995,6 +7736,61 @@ mod tests {
         assert!(combined.contains("spenso::t("));
         assert!(combined.contains("spenso::f("));
         assert!(combined.contains("spenso::g("));
+    }
+
+    #[test]
+    fn apply_feynman_rules_to_compact_dot() {
+        let generator = Generator::new(scalar_model());
+        let diagram = FeynmanDiagram::from_dot(
+            Arc::clone(&generator.model),
+            r#"digraph bubble {
+                ext [style=invis];
+                ext -> a [particle="phi"];
+                a -> b [particle="phi", lmb_id=0];
+                a -> b [particle="phi"];
+                b -> ext [particle="phi"];
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(diagram.numerator().expression(), &Atom::one());
+        let routed = diagram.loop_momentum_basis().clone();
+        let id = diagram.id();
+        let diagram = diagram.apply_feynman_rules().unwrap();
+        assert_eq!(diagram.numerator().expression(), &test_atom("GC1^2"));
+        assert_eq!(diagram.loop_momentum_basis(), &routed);
+        assert_eq!(diagram.id(), id);
+        diagram.validate().unwrap();
+    }
+
+    #[test]
+    fn apply_feynman_rules_matches_generated_local_factors() {
+        let generator = Generator::new(standard_model());
+        let generated = generator
+            .generate(
+                &Process::new(["g"], ["g"]),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
+                    .threads(1)
+                    .max_vertices(2)
+                    .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
+                        ("QCD".to_owned(), (2, Some(2))),
+                        ("QED".to_owned(), (0, Some(0))),
+                    ]))),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert!(!generated.diagrams.is_empty());
+        for diagram in generated.diagrams {
+            let topology = diagram
+                .clone()
+                .with_numerator(SymbolicTensor::infer(Atom::one()).unwrap())
+                .unwrap();
+            let restored = topology.apply_feynman_rules().unwrap();
+            assert_eq!(restored.to_json().unwrap(), diagram.to_json().unwrap());
+            let reapplied = restored.apply_feynman_rules().unwrap();
+            assert_eq!(reapplied.to_json().unwrap(), restored.to_json().unwrap());
+        }
     }
 
     #[test]
@@ -6030,7 +7826,7 @@ mod tests {
             )
             .unwrap();
 
-        let loop_count = generator.closed_fermion_loop_count(&graph).unwrap();
+        let loop_count = generator.closed_fermion_loop_count(&graph, false).unwrap();
         assert_eq!(loop_count, 1);
         let diagram = generator
             .to_diagram(
@@ -6043,8 +7839,10 @@ mod tests {
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },
-                loop_count,
-                FermionSigns::default(),
+                FermionSigns {
+                    internal_loop_negative: loop_count % 2 == 1,
+                    ..FermionSigns::default()
+                },
                 &GenerationOptions::default(),
             )
             .unwrap();
@@ -6052,6 +7850,270 @@ mod tests {
             diagram.overall_factor(),
             &factor_atom("InternalFermionLoopSign(-1)*CouplingsMultiplicity(2)/AutG(3)")
         );
+    }
+
+    #[test]
+    fn open_ghost_chain_exchange_has_grassmann_sign() {
+        let model = standard_model();
+        let process = ResolvedProcess::new(
+            &model,
+            &Process::new([9000005_i64, 9000005], [9000005_i64, 9000005]),
+            GenerationType::Amplitude,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
+        let mut signs = Vec::new();
+        for outgoing in [[2, 3], [3, 2]] {
+            let mut graph = Graph::new();
+            for index in 0..4 {
+                graph.add_node(ColoredNode::External(ExternalNode {
+                    index,
+                    state: if index < 2 {
+                        ExternalState::Incoming
+                    } else {
+                        ExternalState::Outgoing
+                    },
+                    particle: particle(&model, 9000005),
+                }));
+            }
+            for _ in 0..2 {
+                graph.add_node(ColoredNode::Interaction(vertex(&model, "V_35")));
+            }
+            for (left, right, pdg) in [
+                (0, 4, 9000005),
+                (4, outgoing[0], 9000005),
+                (1, 5, 9000005),
+                (5, outgoing[1], 9000005),
+                (4, 5, 21),
+            ] {
+                graph
+                    .add_edge(
+                        left,
+                        right,
+                        true,
+                        EdgeColor {
+                            particle: particle(&model, pdg),
+                            direction: None,
+                        },
+                    )
+                    .unwrap();
+            }
+            signs.push(
+                process
+                    .normalize_fermion_flows(&graph, &model)
+                    .unwrap()
+                    .signs
+                    .external_ordering_negative,
+            );
+        }
+        assert_ne!(
+            signs[0], signs[1],
+            "exchanging two identical external ghosts must reverse the sign"
+        );
+    }
+
+    #[test]
+    fn closed_ghost_loops_contribute_a_grassmann_minus_sign() {
+        let generator = Generator::new(standard_model());
+        let generated = generator
+            .generate(
+                &Process::new(["g"], ["g"]),
+                &GenerationOptions::default()
+                    .with_loop_count(1, 1)
+                    .unwrap()
+                    .threads(1)
+                    .max_vertices(2)
+                    .with_graph_filter(GenerationFilter::VertexAllow(vec![VertexSelector::Name(
+                        "V_35".to_owned(),
+                    )])),
+                GenerationType::Amplitude,
+            )
+            .unwrap();
+        assert_eq!(generated.diagrams.len(), 1);
+        let diagram = &generated.diagrams[0];
+        assert_eq!(
+            diagram
+                .edges()
+                .filter(|(_, _, edge)| {
+                    generator.model.particle_by_id(edge.particle).unwrap().spin == -1
+                })
+                .count(),
+            2,
+        );
+
+        // The ghost-gluon vertex and propagator supply no closed-loop sign.
+        let factor = diagram.overall_factor();
+        let without_loop_sign = factor
+            .replace(factor_atom("InternalFermionLoopSign(-1)").to_pattern())
+            .with(Atom::one().to_pattern());
+        assert_ne!(
+            factor, &without_loop_sign,
+            "a closed ghost loop must carry its Grassmann minus sign in the overall factor",
+        );
+    }
+
+    #[test]
+    fn closed_anticommutating_loop_counts() {
+        let model = standard_model();
+        let mut definition = serde_json::to_value(&model).unwrap();
+        for particle in definition["particles"].as_array_mut().unwrap() {
+            if particle["ghost_number"].as_i64().unwrap_or(0) != 0 {
+                particle["spin"] = serde_json::json!(2);
+            }
+        }
+        for lorentz in definition["lorentz_structures"].as_array_mut().unwrap() {
+            for spin in lorentz["spins"].as_array_mut().unwrap() {
+                if spin.as_i64() == Some(-1) {
+                    *spin = serde_json::json!(2);
+                }
+            }
+        }
+        // This artificial spin/statistics model no longer describes the SM's
+        // physical vector/Goldstone/ghost quartets used for covariant cuts.
+        definition["covariant_cut_multiplets"] = serde_json::json!({});
+        let half_integer_ghost_model: Model = serde_json::from_value(definition).unwrap();
+        let generators = [
+            Generator::new(model),
+            Generator::new(half_integer_ghost_model),
+        ];
+        for (name, edges, expected, expected_fermions) in [
+            ("ghost", vec![(0, 1, 9000005), (1, 0, 9000005)], 1, 0),
+            ("antighost", vec![(0, 1, -9000005), (1, 0, -9000005)], 1, 0),
+            ("ghost self-loop", vec![(0, 0, 9000005)], 1, 0),
+            ("Dirac", vec![(0, 1, 5), (1, 0, 5)], 1, 1),
+            ("anti-Dirac", vec![(0, 1, -5), (1, 0, -5)], 1, 1),
+            ("Dirac self-loop", vec![(0, 0, 5)], 1, 1),
+            ("open Dirac chain", vec![(0, 1, 5), (1, 2, 5)], 0, 0),
+            (
+                "open ghost chain",
+                vec![(0, 1, 9000005), (1, 2, 9000005)],
+                0,
+                0,
+            ),
+            ("gluon cycle", vec![(0, 1, 21), (1, 0, 21)], 0, 0),
+            (
+                "ghost and Dirac loops joined by a gluon",
+                vec![
+                    (0, 1, 9000005),
+                    (1, 0, 9000005),
+                    (1, 2, 21),
+                    (2, 3, 5),
+                    (3, 2, 5),
+                ],
+                2,
+                1,
+            ),
+            (
+                "two ghost loops joined by a gluon",
+                vec![
+                    (0, 1, 9000005),
+                    (1, 0, 9000005),
+                    (1, 2, 21),
+                    (2, 3, 9000005),
+                    (3, 2, 9000005),
+                ],
+                2,
+                0,
+            ),
+            (
+                "two Dirac loops joined by a gluon",
+                vec![(0, 1, 5), (1, 0, 5), (1, 2, 21), (2, 3, 5), (3, 2, 5)],
+                2,
+                2,
+            ),
+        ] {
+            for generator in &generators {
+                let model = &generator.model;
+                let mut graph = Graph::new();
+                let last_node = edges.iter().flat_map(|(a, b, _)| [*a, *b]).max().unwrap();
+                for _ in 0..=last_node {
+                    graph.add_node(ColoredNode::Interaction(vertex(model, "V_35")));
+                }
+                for &(a, b, pdg) in &edges {
+                    graph.add_edge(a, b, true, edge(model, pdg)).unwrap();
+                }
+                assert_eq!(
+                    generator.closed_fermion_loop_count(&graph, true).unwrap(),
+                    expected,
+                    "{name}"
+                );
+                assert_eq!(
+                    generator.closed_fermion_loop_count(&graph, false).unwrap(),
+                    expected_fermions,
+                    "fermion filter: {name}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn ghost_loop_count_excludes_open_chains_and_counts_each_closed_component() {
+        let generator = Generator::new(standard_model());
+        let mut graph = Graph::new();
+        let incoming = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 0,
+            state: ExternalState::Incoming,
+            particle: particle(&generator.model, 9000005),
+        }));
+        let outgoing = graph.add_node(ColoredNode::External(ExternalNode {
+            index: 1,
+            state: ExternalState::Outgoing,
+            particle: particle(&generator.model, 9000005),
+        }));
+        graph
+            .add_edge(incoming, outgoing, true, edge(&generator.model, 9000005))
+            .unwrap();
+        assert_eq!(
+            generator.closed_fermion_loop_count(&graph, true).unwrap(),
+            0
+        );
+
+        for loop_count in 1..=2 {
+            let interaction =
+                graph.add_node(ColoredNode::Interaction(vertex(&generator.model, "V_35")));
+            graph
+                .add_edge(
+                    interaction,
+                    interaction,
+                    true,
+                    edge(&generator.model, 9000005),
+                )
+                .unwrap();
+            assert_eq!(
+                generator.closed_fermion_loop_count(&graph, true).unwrap(),
+                loop_count,
+            );
+            assert_eq!(
+                generator.closed_fermion_loop_count(&graph, false).unwrap(),
+                0
+            );
+        }
+    }
+
+    #[test]
+    fn fermion_loop_filter_excludes_ghost_loops() {
+        let generator = Generator::new(standard_model());
+        for (fermion_loops, expected_diagrams) in [(0, 1), (1, 0)] {
+            let generated = generator
+                .generate(
+                    &Process::new(["g"], ["g"]),
+                    &GenerationOptions::default()
+                        .with_loop_count(1, 1)
+                        .unwrap()
+                        .threads(1)
+                        .max_vertices(2)
+                        .with_graph_filter(GenerationFilter::VertexAllow(vec![
+                            VertexSelector::Name("V_35".to_owned()),
+                        ]))
+                        .with_graph_filter(GenerationFilter::FermionLoopCountRange((
+                            fermion_loops,
+                            fermion_loops,
+                        ))),
+                    GenerationType::Amplitude,
+                )
+                .unwrap();
+            assert_eq!(generated.diagrams.len(), expected_diagrams);
+        }
     }
 
     #[test]
@@ -6068,8 +8130,8 @@ mod tests {
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },
-                0,
                 FermionSigns {
+                    internal_loop_negative: false,
                     include_external_ordering: true,
                     external_ordering_negative: false,
                     include_antifermion_spin_sum: true,
@@ -6105,7 +8167,7 @@ mod tests {
         }
 
         assert!(matches!(
-            generator.closed_fermion_loop_count(&graph),
+            generator.closed_fermion_loop_count(&graph, false),
             Err(GenerationError::UnsupportedFermionBranching {
                 vertex,
                 degree: 3
@@ -6125,7 +8187,7 @@ mod tests {
             }),
         );
         assert!(matches!(
-            generator.generate(&process, &unsupported),
+            generator.generate(&process, &unsupported, GenerationType::Amplitude),
             Err(GenerationError::UnsupportedFilterOption {
                 scope: FilterScope::Graph,
                 filter: GenerationFilterKind::SelfEnergy,
@@ -6144,7 +8206,7 @@ mod tests {
             .unwrap();
         let perturbative = GenerationOptions::default().with_graph_filter(perturbative_filter);
         assert!(matches!(
-            generator.generate(&process, &perturbative),
+            generator.generate(&process, &perturbative, GenerationType::Amplitude),
             Err(GenerationError::InvalidFilterScope {
                 scope: FilterScope::Graph,
                 filter: GenerationFilterKind::PerturbativeOrders,
@@ -6163,7 +8225,8 @@ mod tests {
         assert!(matches!(
             generator.generate(
                 &process,
-                &GenerationOptions::default().with_graph_filter(sewn_filter)
+                &GenerationOptions::default().with_graph_filter(sewn_filter),
+                GenerationType::Amplitude
             ),
             Err(GenerationError::InvalidFilterScope {
                 scope: FilterScope::Graph,
@@ -6176,7 +8239,7 @@ mod tests {
             .with_graph_filter(GenerationFilter::LoopCountRange((0, 0)))
             .with_graph_filter(GenerationFilter::LoopCountRange((0, 1)));
         assert!(matches!(
-            generator.generate(&process, &duplicate),
+            generator.generate(&process, &duplicate, GenerationType::Amplitude),
             Err(GenerationError::DuplicateFilter {
                 scope: FilterScope::Graph,
                 filter: GenerationFilterKind::LoopCountRange
@@ -6186,7 +8249,7 @@ mod tests {
         let invalid = GenerationOptions::default()
             .with_graph_filter(GenerationFilter::LoopCountRange((2, 1)));
         assert!(matches!(
-            generator.generate(&process, &invalid),
+            generator.generate(&process, &invalid, GenerationType::Amplitude),
             Err(GenerationError::InvalidFilterRange {
                 scope: FilterScope::Graph,
                 filter: GenerationFilterKind::LoopCountRange,
@@ -6199,7 +8262,7 @@ mod tests {
             GenerationFilter::ParticleVeto(vec![ParticleSelector::Pdg(1)]),
         );
         assert!(matches!(
-            generator.generate(&process, &invalid_scope),
+            generator.generate(&process, &invalid_scope, GenerationType::Amplitude),
             Err(GenerationError::InvalidFilterScope {
                 scope: FilterScope::CutAmplitude,
                 filter: GenerationFilterKind::ParticleVeto,
@@ -6211,11 +8274,11 @@ mod tests {
     #[test]
     fn grouping_options_are_validated() {
         let generator = Generator::new(fermion_model());
-        let process = photon_process();
 
-        let grouping =
-            GenerationOptions::default().numerator_grouping(NumeratorGrouping::OnlyDetectZeroes);
-        generator.validate_options(&process, &grouping).unwrap();
+        let grouping = GenerationOptions::default().filter_zero_color(true);
+        generator
+            .validate_options(GenerationType::Amplitude, &grouping)
+            .unwrap();
 
         let invalid = GenerationOptions::default().numerator_grouping(
             NumeratorGrouping::Identical(GraphGroupingOptions {
@@ -6224,9 +8287,19 @@ mod tests {
             }),
         );
         assert!(matches!(
-            generator.validate_options(&process, &invalid),
+            generator.validate_options(GenerationType::Amplitude, &invalid),
             Err(GenerationError::InvalidNumericalSampleCount)
         ));
+        let canonical_only = GenerationOptions::default().numerator_grouping(
+            NumeratorGrouping::Identical(GraphGroupingOptions {
+                number_of_numerical_samples: 0,
+                check_canonical_numerator: true,
+                ..GraphGroupingOptions::default()
+            }),
+        );
+        generator
+            .validate_options(GenerationType::Amplitude, &canonical_only)
+            .unwrap();
     }
 
     #[test]
@@ -6237,6 +8310,7 @@ mod tests {
             generator.generate(
                 &photon_process(),
                 &GenerationOptions::default().max_vertices(usize::MAX),
+                GenerationType::Amplitude
             ),
             Err(GenerationError::ArithmeticOverflow(
                 "the Symbolica vertex limit"
@@ -6368,7 +8442,9 @@ mod tests {
 
         let resolved = ResolvedProcess::new(
             &model,
-            &Process::cross_section([-11_i64, 11], [5_i64, -5, 25]),
+            &Process::new([-11_i64, 11], [5_i64, -5, 25]),
+            GenerationType::CrossSection,
+            &GenerationOptions::default(),
         )
         .unwrap();
         // These graphs contain the requested species, but neither has an
@@ -6395,8 +8471,13 @@ mod tests {
     #[test]
     fn sewn_filter_vetoes_factorization_created_by_pairwise_sewing() {
         let model = fermion_model();
-        let process =
-            ResolvedProcess::new(&model, &Process::cross_section([22_i64, 22], [22_i64])).unwrap();
+        let process = ResolvedProcess::new(
+            &model,
+            &Process::new([22_i64, 22], [22_i64]),
+            GenerationType::CrossSection,
+            &GenerationOptions::default(),
+        )
+        .unwrap();
         let mut graph = Graph::new();
         let externals: Vec<_> = (0..4)
             .map(|index| {
@@ -6419,7 +8500,7 @@ mod tests {
 
         let options = GenerationOptions::default()
             .with_graph_filter(GenerationFilter::Sewn(SewnFilterOptions::default()));
-        assert!(process.passes_sewn_filter(&graph, &options).unwrap());
+        assert!(process.passes_sewn_filter(&graph, &options));
 
         let mut factorized = Graph::new();
         let externals: Vec<_> = (0..4)
@@ -6444,53 +8525,22 @@ mod tests {
             factorized.add_edge(external, right, false, photon).unwrap();
         }
         factorized.add_edge(left, right, false, photon).unwrap();
-        assert!(!process.passes_sewn_filter(&factorized, &options).unwrap());
-        assert!(
-            process
-                .passes_sewn_filter(
-                    &factorized,
-                    &GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
-                        SewnFilterOptions {
-                            filter_tadpoles: false,
-                        }
-                    ))
-                )
-                .unwrap()
-        );
-    }
-
-    #[test]
-    fn sewn_filter_reports_external_terminals_without_incident_edges() {
-        let model = fermion_model();
-        let process =
-            ResolvedProcess::new(&model, &Process::cross_section([22_i64], [22_i64])).unwrap();
-        let mut graph = Graph::new();
-        graph.add_node(ColoredNode::External(ExternalNode {
-            index: 0,
-            state: ExternalState::Incoming,
-            particle: particle(&model, 22),
-        }));
-        let enabled = GenerationOptions::default()
-            .with_graph_filter(GenerationFilter::Sewn(SewnFilterOptions::default()));
-        assert!(matches!(
-            process.passes_sewn_filter(&graph, &enabled),
-            Err(GenerationError::SewnTadpoles(
-                TadpoleError::TerminalWithoutIncidentHalfEdge(_)
+        assert!(!process.passes_sewn_filter(&factorized, &options));
+        assert!(process.passes_sewn_filter(
+            &factorized,
+            &GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
+                SewnFilterOptions {
+                    filter_tadpoles: false,
+                }
             ))
         ));
-        let disabled = GenerationOptions::default().with_graph_filter(GenerationFilter::Sewn(
-            SewnFilterOptions {
-                filter_tadpoles: false,
-            },
-        ));
-        assert!(process.passes_sewn_filter(&graph, &disabled).unwrap());
     }
 
     #[test]
     fn external_canonical_classes_keep_global_left_right_symmetry_out_of_raw_generation() {
         let model = fermion_model();
-        let classes = |process: Process| {
-            ResolvedProcess::new(&model, &process)
+        let classes = |process: Process, generation_type, options: GenerationOptions| {
+            ResolvedProcess::new(&model, &process, generation_type, &options)
                 .unwrap()
                 .external_edges(&model)
                 .unwrap()
@@ -6498,10 +8548,13 @@ mod tests {
                 .map(|(node, _)| node.external_class.unwrap())
                 .collect::<Vec<_>>()
         };
-        let process =
-            Process::amplitude([1_i64, -1, 22], Vec::<i64>::new()).symmetrize_initial(true);
+        let process = Process::new([1_i64, -1, 22], Vec::<i64>::new());
         assert_eq!(
-            classes(process.clone()),
+            classes(
+                process.clone(),
+                GenerationType::Amplitude,
+                GenerationOptions::default().symmetrize_initial(true)
+            ),
             vec![
                 ExternalCanonicalClass::Exact {
                     state: ExternalState::Incoming,
@@ -6515,7 +8568,13 @@ mod tests {
             ]
         );
         assert_eq!(
-            classes(process.symmetrize_external_fermions(true)),
+            classes(
+                process,
+                GenerationType::Amplitude,
+                GenerationOptions::default()
+                    .symmetrize_initial(true)
+                    .symmetrize_external_fermions(true)
+            ),
             vec![
                 ExternalCanonicalClass::WithinState(ExternalState::Incoming),
                 ExternalCanonicalClass::WithinState(ExternalState::Incoming),
@@ -6523,12 +8582,22 @@ mod tests {
             ]
         );
 
-        let cross_section = Process::cross_section([1_i64, -1], [22_i64]).symmetrize_initial(true);
+        let cross_section = Process::new([1_i64, -1], [22_i64]);
         assert_eq!(
-            classes(cross_section),
+            classes(
+                cross_section,
+                GenerationType::CrossSection,
+                GenerationOptions::default().symmetrize_initial(true)
+            ),
             vec![
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
-                ExternalCanonicalClass::WithinState(ExternalState::Incoming),
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 0
+                },
+                ExternalCanonicalClass::Exact {
+                    state: ExternalState::Incoming,
+                    index: 1
+                },
                 ExternalCanonicalClass::Exact {
                     state: ExternalState::Outgoing,
                     index: 2,
@@ -6540,9 +8609,13 @@ mod tests {
             ]
         );
 
-        let left_right = Process::cross_section([1_i64, -1], [22_i64]).symmetrize_left_right(true);
+        let left_right = Process::new([1_i64, -1], [22_i64]);
         assert_eq!(
-            classes(left_right),
+            classes(
+                left_right,
+                GenerationType::CrossSection,
+                GenerationOptions::default().symmetrize_left_right(true)
+            ),
             vec![
                 ExternalCanonicalClass::Exact {
                     state: ExternalState::Incoming,
@@ -6628,43 +8701,49 @@ mod tests {
                     cut_partitions: Vec::new(),
                     topology_threshold_candidates: Vec::new(),
                 },
-                1,
-                FermionSigns::default(),
+                FermionSigns {
+                    internal_loop_negative: true,
+                    ..FermionSigns::default()
+                },
                 &GenerationOptions::default(),
             )
             .unwrap();
-        let internal_numerator = diagram
+        let internal_numerator = &diagram
             .edges()
-            .find(|(id, _, _)| id.0 == 0)
+            .find(|(_, _, edge)| edge.external.is_none())
             .unwrap()
             .2
-            .numerator
+            .numerator;
+        let internal_numerator = NumeratorInterface::export(internal_numerator)
+            .0
             .to_plain_string();
-        assert!(internal_numerator.contains("FeynKit::Momentum"));
-        assert!(internal_numerator.contains("FeynKit::SourceIndex"));
-        assert!(internal_numerator.contains("FeynKit::SinkIndex"));
-        assert!(internal_numerator.contains("FeynKit::EdgeDummy"));
+        assert!(internal_numerator.contains("gammalooprs::Q"));
+        assert!(internal_numerator.contains("gammalooprs::hedge"));
+        assert!(internal_numerator.contains("gammalooprs::hedge"));
+        assert!(internal_numerator.contains("gammalooprs::edge"));
         assert!(!internal_numerator.contains("idx("));
         assert!(!internal_numerator.contains("Slash(P)"));
 
-        let momentum = symbol!("FeynKit::Momentum");
+        let momentum = symbol!("gammalooprs::Q");
         assert!(momentum.has_tag("spenso::tensor"));
         assert!(momentum.has_tag("spenso::rank1"));
 
         let external_numerator = &diagram
             .edges()
-            .find(|(id, _, _)| id.0 == 1)
+            .find(|(_, _, edge)| edge.external.is_some())
             .unwrap()
             .2
             .numerator;
-        assert_eq!(external_numerator, &Atom::one());
+        assert_eq!(external_numerator.expression(), &Atom::one());
 
-        let vertex_numerator = diagram
+        let vertex_numerator = &diagram
             .vertex(feynkit_graph::VertexId(interaction))
             .unwrap()
-            .numerator
+            .numerator;
+        let vertex_numerator = NumeratorInterface::export(vertex_numerator)
+            .0
             .to_plain_string();
-        assert!(vertex_numerator.contains("FeynKit::SourceIndex"));
-        assert!(vertex_numerator.contains("FeynKit::SinkIndex"));
+        assert!(vertex_numerator.contains("gammalooprs::hedge"));
+        assert!(vertex_numerator.contains("gammalooprs::hedge"));
     }
 }

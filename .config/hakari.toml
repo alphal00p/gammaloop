@@ -33,6 +33,12 @@ workspace-members = [
     "alphal00p-docs-examples",
     "alphal00p-docs-python-exporter",
     "clinnet",
+    "feynkit-cff",
+    "feynkit-generator",
+    "feynkit-graph",
+    "feynkit-tensor",
+    "linnet-render-py",
+    "typst-renderer",
     "feynkit-py",
     "idenso",
     # These reusable crates expose a mutually exclusive `wasm` feature for

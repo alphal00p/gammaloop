@@ -15,8 +15,8 @@
   inherit (pkgs) lib;
 
   documentation = import ./documentation.nix {
-    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources nonCargoBuildSources
-      commonArgs dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
+    inherit self pkgs docsPkgs craneLib workspaceRoot cargoSources localCargoPatchSources nonCargoBuildSources
+      commonArgs symbolicaRenderData dummyCargoTarget normalizeWorkspaceHackBuildScriptTimestampScript
       workspacePackageSrcFor workspaceMissingCargoTargetsScript;
   };
   inherit (documentation) docsTypst docsFontPath documentationDeveloperScopeSources;
@@ -37,7 +37,14 @@
   workspacePrebuildPackage = "gammaloop-ci-prebuild";
   workspacePrebuildPackageDir = "crates/${workspacePrebuildPackage}";
 
-  cargoSources = craneLib.fileset.commonCargoSources workspaceRoot;
+  # The native DOT parser is a path dependency outside the workspace members.
+  localCargoPatchSources = lib.fileset.unions [
+    (workspaceRoot + "/vendor/dot-parser")
+  ];
+  cargoSources = lib.fileset.unions [
+    (craneLib.fileset.commonCargoSources workspaceRoot)
+    localCargoPatchSources
+  ];
 
   cargoVendorDir = craneLib.vendorCargoDeps {
     cargoLock = (workspaceRoot + "/Cargo.lock");
@@ -80,17 +87,37 @@
     (workspaceRoot + "/.config")
     (workspaceRoot + "/assets")
     (workspaceRoot + "/crates/clinnet/templates")
+    (workspaceRoot + "/crates/feynkit-model/data/sm.json.zlib")
+    (workspaceRoot + "/crates/feynkit-ufo/src/model_metadata.py")
+    (workspaceRoot + "/crates/feynkit-py/src/collection.css")
+    (workspaceRoot + "/crates/feynkit-py/src/collection.js")
+    (workspaceRoot + "/crates/feynkit-py/src/notebook.js")
+    (workspaceRoot + "/crates/feynkit-py/src/expression.css")
+    (workspaceRoot + "/crates/feynkit-py/src/expression.js")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.css")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.html")
+    (workspaceRoot + "/crates/feynkit-py/src/cff/display.js")
+    (workspaceRoot + "/crates/feynkit-py/src/ltd/display.css")
+    (workspaceRoot + "/crates/feynkit-py/src/ltd/display.js")
+    (workspaceRoot + "/crates/linnest/src/svg/interactive.css")
+    (workspaceRoot + "/crates/linnest/src/svg/interactive.js")
     (workspaceRoot + "/crates/kurvst/typst/kurvst.wasm")
     (workspaceRoot + "/crates/kurvst/typst/src")
     (workspaceRoot + "/crates/kurvst/typst/typst.toml")
     (workspaceRoot + "/crates/linnest/typst/linnest.wasm")
+    (workspaceRoot + "/crates/linnest/typst/ec-layout.wasm")
+    (workspaceRoot + "/crates/linnest/typst/LICENSE.clarabel")
+    (workspaceRoot + "/crates/linnest/typst/LICENSE.ec-layout")
     (workspaceRoot + "/crates/linnest/typst/src")
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
-    (workspaceRoot + "/crates/linnet-py/vendor")
+    (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
     # Reviewed 2026-09-14: Spynso's embedded Typst renderer is also a build input;
     # adding its source directory does not change the documentation cache boundaries.
     (workspaceRoot + "/crates/spynso3/typst")
+    (workspaceRoot + "/crates/spynso3/data.json")
+    (workspaceRoot + "/crates/typst-renderer/fonts")
+    (workspaceRoot + "/crates/typst-renderer/data.json")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
     (workspaceRoot + "/crates/vakint/data")
@@ -134,7 +161,7 @@
       (workspaceRoot + "/docs/api/python")
       (workspaceRoot + "/docs/examples.toml")
       (workspaceRoot + "/docs/products")
-      (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+      (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
     ] ++ workspacePackageExtraFilesetsForSourcePackages "compileTimeTest" workspaceMemberPackages);
   };
 
@@ -294,7 +321,7 @@
 
   workspaceDependencySrc = lib.fileset.toSource {
     root = workspaceRoot;
-    fileset = lib.fileset.unions workspaceDependencyManifestFiles;
+    fileset = lib.fileset.unions (workspaceDependencyManifestFiles ++ [localCargoPatchSources]);
   };
 
   cargoGraphGenerationSrc = lib.fileset.toSource {
@@ -304,6 +331,7 @@
       ++ workspaceDependencyBuildScripts
       ++ workspaceCargoTargetEntrypoints
       ++ [
+        localCargoPatchSources
         (workspaceRoot + "/crate-hashes.json")
         (workspaceRoot + "/.config/hakari.toml")
       ]
@@ -385,19 +413,22 @@
   workspacePackageExtraSourceRoots.production = {
     "alphal00p-docs-catalogs" = documentationCatalogAnnotatedItemSourcePaths;
     "alphal00p-docs-examples" = [
-      "crates/linnet-py/pyproject.toml"
       "docs/api/python"
       "docs/examples.toml"
       "docs/products"
       "pyproject.toml"
     ];
     "gammaloop-api" = [
+      "crates/linnest/build_assets.rs"
       "assets/embedded"
       "assets/models"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
+      "crates/linnest/typst/ec-layout.wasm"
+      "crates/linnest/typst/LICENSE.clarabel"
+      "crates/linnest/typst/LICENSE.ec-layout"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
     ];
@@ -405,55 +436,77 @@
       "assets/models/json"
     ];
     "feynkit-py" = [
-      "crates/kurvst/typst/kurvst.wasm"
-      "crates/kurvst/typst/src"
-      "crates/linnest/typst/linnest.wasm"
-      "crates/linnest/typst/src"
+      "crates/feynkit-py/src/collection.css"
+      "crates/feynkit-py/src/collection.js"
+      "crates/feynkit-py/src/notebook.js"
+      "crates/feynkit-py/src/expression.css"
+      "crates/feynkit-py/src/expression.js"
+      "crates/feynkit-py/src/cff/display.css"
+      "crates/feynkit-py/src/cff/display.html"
+      "crates/feynkit-py/src/cff/display.js"
+      "crates/feynkit-py/src/ltd/display.css"
+      "crates/feynkit-py/src/ltd/display.js"
     ];
     "gammaloop-integration-tests" = [
       "tests/resources/fjcore"
     ];
     clinnet = [
+      "crates/linnest/build_assets.rs"
       "crates/clinnet/templates"
       "crates/kurvst/typst/kurvst.wasm"
       "crates/kurvst/typst/src"
       "crates/kurvst/typst/typst.toml"
       "crates/linnest/typst/linnest.wasm"
+      "crates/linnest/typst/ec-layout.wasm"
+      "crates/linnest/typst/LICENSE.clarabel"
+      "crates/linnest/typst/LICENSE.ec-layout"
       "crates/linnest/typst/src"
       "crates/linnest/typst/typst.toml"
     ];
     "linnet-py" = [
       "crates/linnet-py/LICENSE"
       "crates/linnet-py/README.md"
-      "crates/kurvst/typst/LICENSE"
-      "crates/kurvst/typst/kurvst.wasm"
-      "crates/kurvst/typst/src"
-      "crates/kurvst/typst/typst.toml"
-      "crates/linnest/typst/linnest.wasm"
-      "crates/linnest/typst/LICENSE"
-      "crates/linnest/typst/src"
-      "crates/linnest/typst/typst.toml"
-      "crates/linnet-py/vendor"
+      "crates/linnet-py/typst/subgraph.css"
     ];
-    spynso3 = ["crates/spynso3/typst"];
+    spynso3 = ["crates/spynso3/typst" "crates/spynso3/data.json"];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
       "crates/vakint/data"
     ];
+    linnest = [
+      "crates/linnest/src/svg/interactive.css"
+      "crates/linnest/src/svg/interactive.js"
+    ];
+    "feynkit-ufo" = ["crates/feynkit-ufo/src/model_metadata.py"];
+    "feynkit-model" = ["crates/feynkit-model/data/sm.json.zlib"];
+    "linnet-render-py" = [ ];
+    "typst-renderer" = ["crates/typst-renderer/fonts" "crates/typst-renderer/data.json"];
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
     "alphal00p-docs-macros" = ["crates/alphal00p-docs-macros/tests/ui"];
-    "alphal00p-docs-python-exporter" = ["crates/linnet-py/linnet_py.pyi" "docs/api/python"];
+    "alphal00p-docs-python-exporter" = ["crates/linnet-py/python/symbolica/community/graph/__init__.pyi" "docs/api/python"];
     "feynkit-cff" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-generator" = ["crates/feynkit-model/tests/fixtures"];
-    "feynkit-model" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-generator" = [
+      "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-generator/tests/fixtures"
+    ];
+    "feynkit-model" = [
+      "crates/feynkit-model/tests/fixtures"
+      "assets/models/json/sm/sm.json"
+    ];
     "feynkit-py" = [
       "crates/feynkit-model/tests/fixtures"
+      "crates/feynkit-py/python/symbolica/community/hepkit/__init__.py"
       "crates/feynkit-py/tests/fixtures"
-      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.py"
-      "crates/feynkit-py/python/symbolica/community/feynkit/__init__.pyi"
+      "crates/feynkit-py/tests/cff_display.py"
+      "crates/feynkit-py/tests/installed_wavefunctions.py"
+      "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/spynso3/tests/installed_tensor_network_display.py"
+      "crates/linnet-py/tests/test_community_rendering.py"
+      "crates/linnet-py/python/symbolica/community/graph/__init__.py"
+      "crates/linnet-render-py/python/symbolica/community/graph/__init__.py"
     ];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
     vakint = [
@@ -475,6 +528,18 @@
       "tests/resources/graphs/scalar/dod2_bubble.dot"
     ];
     "gammaloop-integration-tests" = ["crates/feynkit-model/tests/fixtures"];
+    idenso = [
+      "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
+      "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
+    ];
+    "linnet-py" = ["crates/linnet-py/tests/test_svg_interaction.py"];
+    linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
+    linnest = [
+      "crates/linnest/layout/native/fixtures"
+      "crates/linnest/src/ec_seed/fixtures"
+    ];
+    "feynkit-amplitude" = ["crates/feynkit-model/tests/fixtures"];
+    "feynkit-graph" = ["crates/feynkit-model/tests/fixtures"];
   };
 
   workspacePackageExtraSourceRoots.runtimeTest = {
@@ -556,7 +621,6 @@
       "crates/spenso/src/network/test.rs"
       "crates/spenso/src/network/tests.rs"
       "crates/spenso/src/shadowing/tests.rs"
-      "crates/spenso/src/tests.rs"
     ];
   };
 
@@ -565,6 +629,49 @@
 
   workspacePackageExtraFilesetsForSourcePackages = kind: sourcePackages:
     map (sourceRoot: workspaceRoot + "/${sourceRoot}") (workspacePackageExtraSourceRootsForSourcePackages kind sourcePackages);
+
+  symbolicaRenderData = let
+    locked = lib.findFirst (package: package.name == "typst-assets")
+      (throw "Cargo.lock must contain typst-assets")
+      (builtins.fromTOML (builtins.readFile (workspaceRoot + "/Cargo.lock"))).package;
+    fonts = pkgs.fetchurl {
+      url = "https://static.crates.io/crates/typst-assets/typst-assets-${locked.version}.crate";
+      sha256 = locked.checksum;
+    };
+    assets = lib.fileset.toSource {
+      root = workspaceRoot;
+      fileset = lib.fileset.unions
+        (workspacePackageExtraFilesetsForSourcePackages "production" ["typst-renderer" "spynso3"]);
+    };
+  in pkgs.runCommand "gammaloop-render-data" {
+    nativeBuildInputs = [pkgs.python313];
+  } ''
+    tar -xzf ${fonts}
+    python3 - <<'PY'
+    import json, os, shutil
+    from pathlib import Path
+    destination = Path(os.environ["out"])
+    provider = Path("typst-assets-${locked.version}")
+    for consumer in ("typst-renderer", "spynso3"):
+        root = Path("${assets}") / "crates" / consumer
+        for asset in json.loads((root / "data.json").read_text())["assets"]:
+            name, path = Path(asset["name"]), Path(asset["path"])
+            assert not name.is_absolute() and ".." not in name.parts
+            assert not path.is_absolute() and ".." not in path.parts
+            package = asset.get("package")
+            assert package in (None, "typst-assets")
+            source = (provider if package else root) / path
+            output = destination / name
+            output.parent.mkdir(parents=True, exist_ok=True)
+            if output.exists():
+                assert output.read_bytes() == source.read_bytes(), name
+            else:
+                shutil.copyfile(source, output)
+    shutil.copyfile(Path("${assets}") / "crates/typst-renderer/fonts/NOTICE", destination / "NOTICE")
+    for license in provider.glob("LICENSE*"):
+        shutil.copyfile(license, destination / license.name)
+    PY
+  '';
 
   workspacePackageExtraSourceRestoreInDummySrcScriptFor = sourcePackages:
     ''
@@ -2307,6 +2414,7 @@
       // lib.optionalAttrs (name == "doctest") {
         preBuild = licensePreCheck;
         SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+    SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
       })) {
     check = "cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets";
     clippy = "cargoWithProfile clippy ${ciArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings";
@@ -2633,6 +2741,7 @@
       RUST_BACKTRACE = "1";
       RUST_LIB_BACKTRACE = "1";
       SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+    SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
       VAKINT_TEST_EXTERNAL_DATA =
         if builtins.elem "vakint" target.packages
         then vakintExternalTestData.outPath

@@ -11,10 +11,7 @@ use linnet::{
     half_edge::{
         HedgeGraph,
         involution::{EdgeData, EdgeIndex, Hedge, HedgePair},
-        subgraph::{
-            HedgeNode, Inclusion, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike,
-            SubSetOps,
-        },
+        subgraph::{HedgeNode, ModifySubSet, OrientedCut, SuBitGraph, SubGraphLike, SubSetLike},
     },
     parser::DotGraph,
 };
@@ -150,8 +147,11 @@ impl Graph {
         DotGraph::from(self).debug_dot()
     }
 
-    pub fn debug_dot_with_settings(&self, settings: &DotExportSettings) -> String {
-        self.to_dot_graph_with_settings(settings).debug_dot()
+    pub fn debug_dot_with_settings(
+        &self,
+        settings: &DotExportSettings,
+    ) -> color_eyre::Result<String> {
+        Ok(self.to_dot_graph_with_settings(settings)?.debug_dot())
     }
 
     pub fn pretty_dot(&self) -> String {
@@ -541,54 +541,6 @@ impl Graph {
         }
 
         None
-    }
-
-    /// Return the loop-momentum-independent tree attached to the sewn initial state.
-    ///
-    /// Canonical FeynKit threshold partitions still include this tree. Runtime
-    /// threshold construction historically removes it after sewing, so the
-    /// mechanical bridge applies this exact topology cleanup once.
-    pub(crate) fn get_initial_state_tree(&self) -> (SuBitGraph, Vec<EdgeIndex>) {
-        let mut tree_like_edges = Vec::new();
-        let full_graph = self.underlying.full_filter();
-        let full_initial_state_cut = self
-            .initial_state_cut
-            .left
-            .union(&self.initial_state_cut.right);
-        let graph_without_initial_state_cut = full_graph.subtract(&full_initial_state_cut);
-        let mut result = self.underlying.empty_subgraph::<SuBitGraph>();
-
-        for (pair, edge_id, _) in self
-            .underlying
-            .iter_edges_of(&graph_without_initial_state_cut)
-        {
-            if let HedgePair::Paired { source, sink } = pair
-                && self.loop_momentum_basis.edge_signatures[edge_id]
-                    .internal
-                    .iter()
-                    .all(|sign| sign.is_zero())
-            {
-                tree_like_edges.push(edge_id);
-                let source_node = self.underlying.node_id(source);
-                let sink_node = self.underlying.node_id(sink);
-                let source_connects_initial_state =
-                    self.underlying.iter_crown(source_node).any(|hedge| {
-                        let mut one_hedge = self.underlying.empty_subgraph::<SuBitGraph>();
-                        one_hedge.add(hedge);
-                        one_hedge.intersects(&full_initial_state_cut)
-                    });
-                let initial_node = if source_connects_initial_state {
-                    source_node
-                } else {
-                    sink_node
-                };
-                for hedge in self.underlying.iter_crown(initial_node) {
-                    result.add(hedge);
-                }
-            }
-        }
-
-        (result, tree_like_edges)
     }
 
     pub(crate) fn get_raised_edge_groups(&self) -> Vec<Vec<EdgeIndex>> {

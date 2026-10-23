@@ -4,13 +4,14 @@ use std::{
     ops::{Mul, Neg},
 };
 
-use crate::{
-    GammaLoopContext, cff::CutCFFIndex, numerator::aind::Aind, utils::GS, uv::approx::Rooted,
-};
+use crate::{GammaLoopContext, cff::CutCFFIndex, uv::approx::Rooted};
+#[cfg(test)]
+use crate::{numerator::aind::Aind, utils::GS};
 use bincode_trait_derive::{Decode, Encode};
 use color_eyre::Result;
 use eyre::eyre;
 use itertools::{EitherOrBoth, Itertools};
+#[cfg(test)]
 use spenso::{
     network::parsing::ShadowedStructure,
     structure::{
@@ -25,6 +26,7 @@ use linnet::half_edge::involution::HedgePair;
 
 // use vakint::{EvaluationOrder, LoopNormalizationFactor, Vakint, VakintSettings};
 
+#[cfg(test)]
 pub(crate) fn spenso_lor(
     tag: i32,
     ind: impl Into<Aind>,
@@ -34,6 +36,7 @@ pub(crate) fn spenso_lor(
     NamedStructure::from_iter([mink], GS.emr_mom, Some(vec![Atom::num(tag)])).into_canonical()
 }
 
+#[cfg(test)]
 pub(crate) fn spenso_lor_atom(tag: i32, ind: impl Into<Aind>, dim: impl Into<Dimension>) -> Atom {
     spenso_lor(tag, ind, dim).to_symbolic(None).unwrap()
 }

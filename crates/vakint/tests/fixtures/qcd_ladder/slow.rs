@@ -10,13 +10,11 @@ mod fixture;
 fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture::Result<()> {
     use crate::{EvaluationMethod, EvaluationOrder, RustRedEvaluationOptions};
     let artifact = std::env::var_os("VAKINT_SAVED_APPLICATION").ok_or("set VAKINT_SAVED_APPLICATION to the explicitly selected saved publication; no default/download is permitted")?;
-    let evidence = std::env::var_os("VAKINT_QCD_LADDER_EVIDENCE")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join(format!("../../TMP/qcd-ladder-slow-{}", std::process::id()))
-        });
-    let prepared_input = fixture::prepare(&evidence)?;
+    let evidence = PathBuf::from(
+        std::env::var_os("VAKINT_QCD_LADDER_EVIDENCE")
+            .ok_or("set VAKINT_QCD_LADDER_EVIDENCE to a development workspace directory")?,
+    );
+    let prepared_input = fixture::prepare(&evidence, fixture::Projection::QuadraticTransverse)?;
     eprintln!(
         "qcd_ladder phase=preparation_complete seconds={:.6} scalar_terms={} contributions={}",
         prepared_input.preparation_seconds,
@@ -41,7 +39,7 @@ fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture
     let mut unsupported = BTreeSet::new();
     let mut lowered_count = 0usize;
     let mut report = String::from(
-        "# physical quadratic Taylor terms have A-R=10; D below is a stored shifted-denominator key, not a new physical starting request\n# This census describes the reported native geometric witnesses only; a refusal here does not exclude another admitted exact witness. Full public scope-aware matching follows the census.\n# D mass_squared_power_j terms; D-j=10 is checked exactly\n",
+        "# unlowered quadratic source terms have A-r_mom=10; D_key below is a signed denominator-key degree\n# This census describes the reported native geometric witnesses only; a refusal here does not exclude another admitted exact witness. Full public scope-aware matching follows the census.\n# D_key coefficient_mass_squared_power_j terms; D_key-j=10 checks engineering mass dimension only, not individual-term UV degree at fixed MUV\n",
     );
     let muv = Atom::var(vk_symbol!("mUV"));
     for term in &expression.0 {
@@ -101,7 +99,7 @@ fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture
                     return Err("native mass collection did not return a monomial".into());
                 };
                 if exponent < 0 || exponent % 2 != 0 || degree - exponent / 2 != 10 {
-                    return Err("stored key and explicit mass power violate physical logarithmic homogeneity D-j=10".into());
+                    return Err("stored key and explicit mass power violate engineering mass-dimension balance D_key-j=10".into());
                 }
                 *histogram.entry((degree, exponent / 2)).or_default() += 1;
             }
@@ -122,8 +120,9 @@ fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture
     }
     std::fs::write(evidence.join("saved-entry-admission.txt"), report)?;
     // The geometric census does not authorize/reject the physical input:
-    // public evaluation still searches its complete bounded native witness
-    // alternatives and enforces the saved union before any rule application.
+    // Public evaluation searches its bounded native witness alternatives.
+    // Recorded coverage is advisory; individually safe rules may still reduce
+    // a verified fallback, and surviving undeclared terminals are reported.
     let started = std::time::Instant::now();
     let first = vakint.evaluate_rustred_symbolic(&settings, prepared_input.input.as_view())?;
     let first_seconds = started.elapsed().as_secs_f64();
@@ -176,5 +175,28 @@ fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture
         "qcd_ladder phase=reduction_complete first_seconds={first_seconds:.6} warm_seconds={:.6} lowered_terms={lowered_count}",
         started.elapsed().as_secs_f64()
     );
+    Ok(())
+}
+
+#[test]
+#[ignore = "native zero-momentum control; requires licensed tensor algebra and explicit evidence directory"]
+fn qcd_ladder_zero_momentum_metric_retains_both_current_vertices() -> fixture::Result<()> {
+    let evidence = PathBuf::from(
+        std::env::var_os("VAKINT_QCD_LADDER_EVIDENCE")
+            .ok_or("set VAKINT_QCD_LADDER_EVIDENCE to a development workspace directory")?,
+    );
+    let prepared = fixture::prepare(&evidence, fixture::Projection::ZeroMomentumMetric)?;
+    assert!(matches!(
+        prepared.projection,
+        fixture::Projection::ZeroMomentumMetric
+    ));
+    assert_eq!(prepared.contributions, 1);
+    assert!(!prepared.input.is_zero());
+    assert!(
+        prepared.nonzero_conditions.is_empty(),
+        "the unaveraged metric contraction must not acquire transverse projector poles"
+    );
+    assert_eq!(prepared.timings.angular_seconds, 0.0);
+    assert_eq!(prepared.timings.taylor_seconds, 0.0);
     Ok(())
 }

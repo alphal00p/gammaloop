@@ -74,6 +74,53 @@ fn finite_primitives_share_snapshot_leaves_and_keep_formula_capabilities() {
 }
 
 #[test]
+fn estimated_named_periods_share_formula_sources_without_becoming_exact() {
+    let mut catalog = empty_catalog();
+    let period = finite_constant(&mut catalog, "independent_period");
+    catalog.constants.get_mut(&period).unwrap().error_is_bounded = false;
+    let coefficient = add_master(
+        &mut catalog,
+        1,
+        "period-dependent-master",
+        "period-dependent-basis",
+        Some("2*independent_period"),
+        20,
+    );
+    let prepared = catalog.prepare_evaluation(coefficient.clone()).unwrap();
+    assert_eq!(
+        prepared.available_precision(),
+        AvailablePrecision::FixedPrecision(30)
+    );
+    assert_eq!(prepared.sources.len(), 1);
+    assert!(!prepared.sources.values().next().unwrap().error_is_bounded);
+    let canceled = catalog
+        .prepare_evaluation(coefficient - Atom::num(2) * period.clone())
+        .unwrap();
+    assert!(canceled.expression.is_zero());
+    assert!(canceled.sources.is_empty());
+    assert!(canceled.origins.is_empty());
+
+    let catalog = Arc::new(catalog);
+    let constant = catalog
+        .get_constant(ConstantSymbol::try_from(period).unwrap(), 40)
+        .unwrap();
+    assert_eq!(
+        constant.available_precision(),
+        AvailablePrecision::FixedPrecision(30)
+    );
+    assert_eq!(
+        constant.precision().real().quality(),
+        crate::ErrorQuality::Estimated
+    );
+    assert!(constant.warnings().iter().any(|warning| {
+        warning.sources.iter().any(|source| {
+            source.identity.contains("independent_period")
+                && source.available_decimal_precision == Some(30)
+        })
+    }));
+}
+
+#[test]
 fn finite_primitive_lookup_is_capped_and_rejects_another_snapshot() {
     let mut catalog = empty_catalog();
     let period = finite_constant(&mut catalog, "K5LogMoment(3)");

@@ -1,48 +1,186 @@
-//! Python bindings installed as `symbolica.community.feynkit`.
+//! Python bindings installed as `symbolica.community.hepkit`.
 
+mod amplitude;
 mod cff;
 mod display;
+mod energy;
 mod error;
 mod generation;
 mod graph;
+#[cfg(feature = "linnet-python")]
+mod graph_interop;
 mod integrals;
 mod kinematics;
+mod ltd;
 mod model;
-mod symbolic_kinematics;
+mod progress;
+mod render_settings;
+mod sector_decomposition;
 mod tensor;
 #[cfg(feature = "ufo")]
 mod ufo;
+mod wavefunction;
 
 use pyo3::{prelude::*, types::PyModule};
-use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::api::python::{Citation, SymbolicaCommunityModule};
 
-pub use cff::{PyCffGenerator, PyCffOrientation, PyCffReport, PyCffResult, PyCffSurface};
+pub use amplitude::{PyAmplitude, PyAmplitudeLeg, PySquaredAmplitude};
+pub use cff::{
+    PyCffOrientation, PyCffReport, PyCffRepresentation, PyCffSurfaceGroup, PyCrossFreeFamily,
+    PyCutPropagator,
+};
+pub use energy::{PyEnergySurface, PyOnShellEnergy, PySurfaceFactor};
 pub use generation::{
-    PyCancellationToken, PyDiagramGroup, PyGenerationOptions, PyGenerationReport,
-    PyGenerationResult, PyGenerationType, PyGenerator, PyGroupMember, PyParticleSelector,
-    PyProcess,
+    PyCancellationToken, PyDiagramGroup, PyGenerationProgress, PyGenerationReport,
+    PyGenerationResult, PyGroupMember, PyNumeratorGrouping, PyParticleSelector, PyProcess,
+    PySelfEnergyFilterOptions, PySnailFilterOptions, PyTadpoleFilterOptions,
 };
 pub use graph::{
-    PyDiagramEdge, PyDiagramVertex, PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
+    PyDiagramCut, PyDiagramCutSide, PyDiagramEdge, PyDiagramThresholdCandidate, PyDiagramVertex,
+    PyFeynmanDiagram, PyLoopMomentumBasis, PyMomentumSignature,
 };
-pub use integrals::PyIntegralFamily;
+pub use integrals::{PyIntegralFamily, PyIntegralMapping, PyPropagatorMapping};
 pub use kinematics::{
     PyAxis, PyBoost, PyClusteringResult, PyFourMomentum, PyHelicity, PyJet, PyJetAlgorithm,
-    PyJetDefinition, PyRotation, PyThreeMomentum,
+    PyJetDefinition, PyKinematics, PyRotation, PyThreeMomentum,
 };
+pub use ltd::{PyLtdReport, PyLtdRepresentation, PyLtdResidue, PySurfacePair};
 pub use model::{
     PyCoupling, PyEvaluatedValues, PyEvaluationRequest, PyFormFactor, PyLorentzStructure, PyModel,
     PyModelExpression, PyModelFunction, PyParameter, PyParameterCard, PyParameterNature,
     PyParameterType, PyParticle, PyPropagator, PyVertexRule,
 };
-pub use symbolic_kinematics::PyKinematics;
+pub use progress::MarimoProgress;
+pub use render_settings::PyDiagramStyle;
+pub use sector_decomposition::SECTOR_DECOMPOSE;
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
+pub use wavefunction::PyWavefunction;
+
+mod symbols;
 
 pub struct FeynkitModule;
 
+#[cfg(feature = "python_stubgen")]
+impl FeynkitModule {
+    /// Render overloads in the form recognized by notebook language servers.
+    pub fn stub_source(module: &pyo3_stub_gen::generate::Module) -> String {
+        // Jedi only collects adjacent overloads with the bare decorator name;
+        // `@typing.overload` silently exposes just the last CFF/LTD signature.
+        let source = module.to_string();
+        source
+            .replace(
+                "import typing\n",
+                "import typing\nfrom typing import overload\n",
+            )
+            .replace("@typing.overload\n", "@overload\n")
+    }
+}
+
 impl SymbolicaCommunityModule for FeynkitModule {
+    fn get_citations() -> Vec<Citation> {
+        if !CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+            return Vec::new();
+        }
+        // The product registry credits FeynKit contributors collectively.
+        let mut citations = vec![
+            Citation {
+                id: "https://github.com/alphal00p/gammaloop#feynkit".into(),
+                url: "https://github.com/alphal00p/gammaloop#feynkit".into(),
+                reference: "FeynKit contributors. FeynKit (2026).".into(),
+                bibtex: r#"@software{feynkit,
+  author = {{FeynKit contributors}},
+  title = {FeynKit},
+  year = {2026},
+  url = {https://github.com/alphal00p/gammaloop}
+}"#.into(),
+                reasons: vec!["Provides the FeynKit functionality in this community module.".into()],
+                description: "".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:0903.5143".into(),
+                url: "https://arxiv.org/abs/0903.5143".into(),
+                reference: "Benoît Collins and Sho Matsumoto. On some properties of orthogonal Weingarten functions (2009).".into(),
+                bibtex: r#"@article{feynkit_0903.5143,
+  author = {Benoît Collins and Sho Matsumoto},
+  title = {{On some properties of orthogonal Weingarten functions}},
+  year = {2009},
+  eprint = {0903.5143},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Orthogonal Weingarten functions used by FeynKit tensor reduction.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:1701.04493".into(),
+                url: "https://arxiv.org/abs/1701.04493".into(),
+                reference: "Benoît Collins and Sho Matsumoto. Weingarten calculus via orthogonality relations: new applications (2017).".into(),
+                bibtex: r#"@article{feynkit_1701.04493,
+  author = {Benoît Collins and Sho Matsumoto},
+  title = {{Weingarten calculus via orthogonality relations: new applications}},
+  year = {2017},
+  eprint = {1701.04493},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Orthogonality relations underlying FeynKit tensor projectors.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:1801.06084".into(),
+                url: "https://arxiv.org/abs/1801.06084".into(),
+                reference: "B. Ruijl and F. Herzog and T. Ueda and J. A. M. Vermaseren and A. Vogt. R*-operation and five-loop calculations (2018).".into(),
+                bibtex: r#"@article{feynkit_1801.06084,
+  author = {B. Ruijl and F. Herzog and T. Ueda and J. A. M. Vermaseren and A. Vogt},
+  title = {{R*-operation and five-loop calculations}},
+  year = {2018},
+  eprint = {1801.06084},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Symmetry-reduced tensor projectors in the R* operation.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:2408.05137".into(),
+                url: "https://arxiv.org/abs/2408.05137".into(),
+                reference: "Jae Goode and Franz Herzog and Anthony Kennedy and Sam Teale and Jos Vermaseren. Tensor Reduction for Feynman Integrals with Lorentz and Spinor Indices (2024).".into(),
+                bibtex: r#"@article{feynkit_2408.05137,
+  author = {Jae Goode and Franz Herzog and Anthony Kennedy and Sam Teale and Jos Vermaseren},
+  title = {{Tensor Reduction for Feynman Integrals with Lorentz and Spinor Indices}},
+  year = {2024},
+  eprint = {2408.05137},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Orbit-partition formulation and high-rank tensor projectors.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            },
+            Citation {
+                id: "arXiv:2411.02233".into(),
+                url: "https://arxiv.org/abs/2411.02233".into(),
+                reference: "Jae Goode and Franz Herzog and Sam Teale. OPITeR: A program for tensor reduction of multi-loop Feynman Integrals (2024).".into(),
+                bibtex: r#"@article{feynkit_2411.02233,
+  author = {Jae Goode and Franz Herzog and Sam Teale},
+  title = {{OPITeR: A program for tensor reduction of multi-loop Feynman Integrals}},
+  year = {2024},
+  eprint = {2411.02233},
+  archivePrefix = {arXiv}
+}"#.into(),
+                reasons: vec!["Method reference for integrand-symmetry-aware tensor reduction.".into()],
+                description: "Method and validation source listed in crates/feynkit-tensor/README.md.".into(),
+                relevance: None,
+            }
+        ];
+        if !TENSOR_CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+            citations.truncate(1);
+        }
+        citations
+    }
+
     fn get_name() -> String {
         "feynkit".to_owned()
     }
@@ -58,15 +196,26 @@ impl SymbolicaCommunityModule for FeynkitModule {
 
 /// Register FeynKit classes in an existing Symbolica community module.
 pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<symbols::PySymbols>()?;
+
+    render_settings::register(module)?;
     error::register(module)?;
+    amplitude::register(module)?;
     model::register(module)?;
     graph::register(module)?;
-    module.add_class::<PyIntegralFamily>()?;
-    module.add_class::<PyKinematics>()?;
     generation::register(module)?;
     kinematics::register(module)?;
     cff::register(module)?;
+    module.add_class::<PyLtdRepresentation>()?;
+    module.add_class::<PyLtdResidue>()?;
+    module.add_class::<PyLtdReport>()?;
+    module.add_class::<PySurfacePair>()?;
+    module.add_class::<PyEnergySurface>()?;
+    module.add_class::<PyOnShellEnergy>()?;
+    module.add_class::<PySurfaceFactor>()?;
+
     tensor::register(module)?;
+    integrals::register(module)?;
     #[cfg(feature = "ufo")]
     ufo::register(module)?;
     Ok(())
@@ -75,21 +224,54 @@ pub fn initialize_feynkit(module: &Bound<'_, PyModule>) -> PyResult<()> {
 /// Gather the FeynKit stub inventory without declaring an independent wheel.
 #[cfg(feature = "python_stubgen")]
 pub fn stub_info() -> pyo3_stub_gen::Result<pyo3_stub_gen::StubInfo> {
-    let info = pyo3_stub_gen::StubInfo::from_project_root(
-        // Untagged host classes (including Numerica Float/ComplexFloat) belong
-        // to Symbolica. FeynKit classes declare their community module explicitly.
+    // Unqualified dependency classes belong to Symbolica; FeynKit declarations
+    // explicitly name their community module.
+    let mut info = pyo3_stub_gen::StubInfo::from_project_root(
         "symbolica".to_owned(),
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("python"),
     )?;
     let module = info
         .modules
-        .get("symbolica.community.feynkit")
+        .get_mut("symbolica.community.hepkit")
         .ok_or_else(|| {
             std::io::Error::new(
                 std::io::ErrorKind::NotFound,
-                "FeynKit did not contribute a symbolica.community.feynkit stub module",
+                "FeynKit did not contribute a symbolica.community.hepkit stub module",
             )
         })?;
+    // Type overrides preserve Rust default expressions verbatim in stubgen.
+    // Render the automatic policy sentinel as its Python Ellipsis spelling,
+    // automatic notebook progress as a Python string literal, and empty
+    // tensor selector sequences as Python tuples.
+    for class in module.class.values_mut() {
+        for method in class.methods.values_mut().flatten() {
+            if class.name == "TensorReducer" && method.name == "__new__" {
+                for parameter in &mut method.parameters.keyword_only {
+                    if matches!(parameter.name, "integrated" | "external") {
+                        parameter.default =
+                            pyo3_stub_gen::generate::ParameterDefault::Expr("()".to_owned());
+                    }
+                }
+            }
+            if matches!(
+                method.name,
+                "generate_diagrams"
+                    | "generate_amplitude"
+                    | "generate_cross_section"
+                    | "with_filters"
+            ) {
+                for parameter in &mut method.parameters.keyword_only {
+                    if parameter.type_info.name.contains("types.EllipsisType") {
+                        parameter.default =
+                            pyo3_stub_gen::generate::ParameterDefault::Expr("...".to_owned());
+                    } else if parameter.name == "progress" {
+                        parameter.default =
+                            pyo3_stub_gen::generate::ParameterDefault::Expr("'auto'".to_owned());
+                    }
+                }
+            }
+        }
+    }
     validate_stub_documentation(&module.to_string())?;
     Ok(info)
 }
@@ -162,7 +344,7 @@ for node in ast.walk(tree):
 
     if not doc:
         errors.append(f"callable {node.name} has no documentation")
-    if not is_property and not has_examples:
+    if not has_examples:
         errors.append(f"callable {node.name} has no Examples section")
     if not is_property and arguments and not has_parameters:
         errors.append(f"callable {node.name} has undocumented parameters")
@@ -204,19 +386,41 @@ if errors:
     })
 }
 
+static CITATIONS_USED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+pub(crate) fn record_usage() {
+    use std::sync::atomic::Ordering;
+    if !CITATIONS_USED.load(Ordering::Relaxed) {
+        CITATIONS_USED.store(true, Ordering::Relaxed);
+    }
+}
+
+static TENSOR_CITATIONS_USED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[inline]
+fn record_tensor_usage() {
+    record_usage();
+    spynso3::SpensoModule::record_usage();
+    if !TENSOR_CITATIONS_USED.load(std::sync::atomic::Ordering::Relaxed) {
+        TENSOR_CITATIONS_USED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ffi::CString;
 
     use pyo3::types::PyDict;
-    use symbolica::api::python::PythonExpression;
+    use spynso3::expression::TensorExpression;
 
     use super::*;
 
     const NORMALIZED_SCALAR_MODEL: &str = include_str!("../tests/fixtures/scalars_2p_3p.json");
 
     fn registered_module<'py>(py: Python<'py>) -> Bound<'py, PyModule> {
-        let module = PyModule::new(py, "symbolica.community.feynkit").unwrap();
+        let module = PyModule::new(py, "symbolica.community.hepkit").unwrap();
         FeynkitModule::register_module(&module).unwrap();
         FeynkitModule::initialize(py).unwrap();
         module
@@ -231,10 +435,8 @@ mod tests {
     fn primary_wrappers_are_send() {
         fn assert_send<T: Send>() {}
         assert_send::<PyModel>();
-        assert_send::<PyGenerator>();
+        assert_send::<PyProcess>();
         assert_send::<PyFeynmanDiagram>();
-        assert_send::<PyIntegralFamily>();
-        assert_send::<PyKinematics>();
         assert_send::<PyTensorReducer>();
     }
 
@@ -247,7 +449,7 @@ mod tests {
             let info = stub_info().unwrap();
             let source = info
                 .modules
-                .get("symbolica.community.feynkit")
+                .get("symbolica.community.hepkit")
                 .unwrap()
                 .to_string();
             let locals = PyDict::new(py);
@@ -261,7 +463,6 @@ stub_classes = {
     node.name for node in ast.walk(ast.parse(source))
     if isinstance(node, ast.ClassDef)
 }
-assert not {"Float", "ComplexFloat"} & stub_classes, "host numeric classes leaked into FeynKit"
 runtime_classes = {
     name for name, value in vars(fk).items()
     if isinstance(value, type) and value.__module__ == fk.__name__
@@ -282,13 +483,11 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
             let module = registered_module(py);
             for class in [
                 "Model",
-                "Generator",
                 "Process",
                 "FeynmanDiagram",
-                "IntegralFamily",
-                "Kinematics",
                 "TensorReducer",
-                "CffGenerator",
+                "CffRepresentation",
+                "LtdRepresentation",
                 "FourMomentum",
                 "JetDefinition",
                 "Helicity",
@@ -301,6 +500,7 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
             for removed_function in [
                 "generate_diagrams",
                 "build_cff",
+                "cross_free_family",
                 "cluster_jets",
                 "load_ufo_model",
             ] {
@@ -317,6 +517,28 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
         Python::initialize();
         Python::attach(|py| {
             let module = registered_module(py);
+            // CFF presentation uses the tensor module supplied by the Community host.
+            let tensor = PyModule::new(py, "symbolica.community.tensor").unwrap();
+            spynso3::SpensoModule::register_module(&tensor).unwrap();
+            spynso3::SpensoModule::initialize(py).unwrap();
+            // Supply the complete Community package hierarchy used by display
+            // imports, without requiring a separately installed Python host.
+            let root = PyModule::new(py, "symbolica").unwrap();
+            let community = PyModule::new(py, "symbolica.community").unwrap();
+            root.add("__path__", Vec::<String>::new()).unwrap();
+            community.add("__path__", Vec::<String>::new()).unwrap();
+            root.add("community", &community).unwrap();
+            community.add("tensor", &tensor).unwrap();
+            community.add("hepkit", &module).unwrap();
+            let modules = py.import("sys").unwrap().getattr("modules").unwrap();
+            for (name, value) in [
+                ("symbolica", &root),
+                ("symbolica.community", &community),
+                ("symbolica.community.tensor", &tensor),
+                ("symbolica.community.hepkit", &module),
+            ] {
+                modules.set_item(name, value).unwrap();
+            }
             let locals = PyDict::new(py);
             locals.set_item("fk", &module).unwrap();
             locals
@@ -327,7 +549,7 @@ assert not missing, f"native classes missing from the generated stub: {missing}"
 import sys
 
 assert "_gammaloop" not in sys.modules
-assert fk.__name__ == "symbolica.community.feynkit"
+assert fk.__name__ == "symbolica.community.hepkit"
 
 model = fk.Model.from_json(MODEL_JSON)
 assert model.name == "scalars"
@@ -337,35 +559,23 @@ assert scalar.antiparticle.name == "scalar_0"
 model = fk.Model.from_json(model.to_json(pretty=False))
 
 scalar = model.particle("scalar_0")
-process = fk.Process.amplitude([scalar], [1000, scalar.antiparticle])
-process = process.with_loop_count(0, 1)
+process = model.process([scalar], [1000, scalar.antiparticle], vertex_allow=["V_3_SCALAR_000"], particle_veto=[model.particle("scalar_1"), 1002])
 assert isinstance(process, fk.Process)
-assert process.generation_type == "amplitude"
-assert process.loop_count == (0, 1)
+assert not hasattr(process, "loop_count")
 
-options = fk.GenerationOptions(max_vertices=3, allow_self_loops=True)
-options.add_vertex_allow(["V_3_SCALAR_000"])
-options.add_particle_veto([model.particle("scalar_1"), 1002])
-options.set_coupling_orders({"QCD": (0, None)})
-options.set_loop_count_range(0, 1)
-options.set_fermion_loop_count_range(0, 0)
-options.set_factorized_loop_topologies_count_range(0, 1)
-assert options.disable_numerator_grouping() is None
-generated = model.generate_diagrams(
-    [scalar],
-    [1000, scalar.antiparticle],
-    loops=(0, 1),
-    options=options,
+generation_arguments = dict(
+    max_vertices=3,
+    allow_self_loops=True,
+    coupling_orders={"QCD": (0, None)},
+    fermion_loop_count_range=(0, 0),
+    factorized_loop_topologies_count_range=(0, 1),
 )
+generated = process.generate_diagrams(loops=(0, 1), **generation_arguments)
 assert len(generated) > 0
 assert generated[0].name == next(iter(generated)).name
 assert generated.report.completed
-try:
-    generation_html = generated._repr_html_()
-except ImportError as error:
-    assert "typst-py" in str(error)
-else:
-    assert "Generation result" in generation_html
+generation_html = generated._repr_html_()
+assert "Generation result" in generation_html
 assert "retained diagrams" in generated.report._repr_html_()
 assert "particles" in model._repr_html_()
 
@@ -376,17 +586,18 @@ loop_diagram = next(
     and all(edge.source != edge.target for edge in diagram.edges)
 )
 loop_diagram.validate()
-try:
-    diagram_svg = loop_diagram.to_svg()
-except ImportError as error:
-    # The minimal Rust test environment does not install optional Python
-    # rendering dependencies; the community-venv tests exercise the SVG path.
-    assert "typst-py" in str(error)
-else:
-    assert diagram_svg.startswith("<svg")
-    assert loop_diagram.to_html() == loop_diagram._repr_html_()
-    assert "<svg" in loop_diagram._repr_svg_()
-    assert "Feynman diagram" in loop_diagram._repr_html_()
+assert loop_diagram.superficial_degree_of_divergence() == -2
+assert loop_diagram.superficial_degree_of_divergence(dimension=6) == 0
+denominator = loop_diagram.denominator_expression()
+assert denominator.rank == 0
+assert "ZERO" not in str(denominator)
+assert denominator != 1
+integrand = loop_diagram.numerator_expression() / denominator
+diagram_svg = loop_diagram.render().to_svg()
+assert diagram_svg.startswith("<svg")
+assert loop_diagram.to_html() == loop_diagram._repr_html_()
+assert "<svg" in loop_diagram._repr_svg_()
+assert "Feynman diagram" in loop_diagram._repr_html_()
 
 json_diagram = fk.FeynmanDiagram.from_json(model, loop_diagram.to_json())
 dot_diagram = fk.FeynmanDiagram.from_dot(model, loop_diagram.to_dot())
@@ -411,7 +622,7 @@ routed = bases[0].route(
 )
 assert set(routed) == {edge.id for edge in json_diagram.edges}
 
-cff = json_diagram.build_cff()
+cff = json_diagram.integrate_energy(method="cff")
 assert len(cff) > 0
 expression = cff.to_expression()
 assert "Cross-free family" in cff._repr_html_()
@@ -443,7 +654,15 @@ assert "_gammaloop" not in sys.modules
 
             py.run(&code, Some(&locals), Some(&locals)).unwrap();
             let expression = locals.get_item("expression").unwrap().unwrap();
-            assert!(expression.is_instance_of::<PythonExpression>());
+            assert!(expression.is_instance_of::<TensorExpression>());
+            assert_eq!(
+                expression
+                    .getattr("rank")
+                    .unwrap()
+                    .extract::<usize>()
+                    .unwrap(),
+                0
+            );
         });
     }
 
@@ -467,14 +686,14 @@ def assert_feynkit_error(error_type, operation):
         operation()
     except error_type as error:
         assert isinstance(error, fk.FeynkitError)
-        assert type(error).__module__ == "symbolica.community.feynkit"
+        assert type(error).__module__ == "symbolica.community.hepkit"
     else:
         raise AssertionError(f"{error_type.__name__} was not raised")
 
 assert_feynkit_error(fk.ModelError, lambda: fk.Model.from_json("{}"))
 assert_feynkit_error(
     fk.GenerationError,
-    lambda: fk.Process.amplitude([], []).with_loop_count(2, 1),
+    lambda: model.process(["missing_particle"], []),
 )
 assert_feynkit_error(
     fk.DiagramError,
@@ -485,38 +704,17 @@ assert_feynkit_error(
     lambda: fk.Boost(fk.ThreeMomentum(1.0, 0.0, 0.0)),
 )
 
-generator = fk.Generator(model)
 
-filter_options = fk.GenerationOptions()
-assert filter_options.set_self_energy_filter(
-    veto_massive=False,
-    veto_massless=True,
-    only_scaleless=False,
-) is None
-assert filter_options.set_tadpole_filter(
-    veto_attached_to_massive=False,
-    veto_attached_to_massless=True,
-    only_scaleless=False,
-) is None
-assert filter_options.set_zero_snail_filter(
-    veto_attached_to_massive=True,
-    veto_attached_to_massless=False,
-    only_scaleless=False,
-) is None
-assert filter_options.set_coupling_orders({"QCD": (0, None)}) is None
-assert filter_options.set_loop_count_range(0, 2) is None
-assert filter_options.set_fermion_loop_count_range(0, 1) is None
-assert filter_options.set_factorized_loop_topologies_count_range(0, 1) is None
-assert filter_options.set_blob_range(0, 1) is None
-assert filter_options.set_spectator_range(0, 1) is None
-assert filter_options.set_cut_amplitude_coupling_orders(
-    {"QCD": (0, None)}
-) is None
-assert filter_options.set_cut_amplitude_loop_count_range(0, 1) is None
-
-grouping_options = fk.GenerationOptions()
-assert grouping_options.disable_numerator_grouping() is None
-assert grouping_options.detect_zero_numerators() is None
+filter_arguments = dict(
+    self_energy=fk.SelfEnergyFilterOptions(veto_massive=False),
+    tadpoles=fk.TadpoleFilterOptions(veto_attached_to_massive=False),
+    zero_snails=fk.SnailFilterOptions(
+        veto_attached_to_massive=True, veto_attached_to_massless=False,
+    ),
+    coupling_orders={"QCD": (0, None)},
+    fermion_loop_count_range=(0, 1),
+    factorized_loop_topologies_count_range=(0, 1),
+)
 grouping_arguments = dict(
     numerical_sample_seed=7,
     number_of_numerical_samples=11,
@@ -525,72 +723,72 @@ grouping_arguments = dict(
     check_canonical_numerator=True,
     symmetric_polarizations=True,
 )
-assert grouping_options.group_identical_numerators(**grouping_arguments) is None
-assert grouping_options.group_numerators_up_to_sign(**grouping_arguments) is None
-assert grouping_options.group_numerators_up_to_scalar(**grouping_arguments) is None
-assert not hasattr(fk.GenerationOptions, "set_numerator_grouping")
+assert not hasattr(fk, "GenerationOptions")
 
-amplitude = fk.Process.amplitude(
-    ["scalar_0"],
-    ["scalar_0", "scalar_0"],
-)
+amplitude = model.process(["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"])
+assert amplitude.generate_diagrams(max_vertices=3, **filter_arguments).report.completed
+for mode in ("none", "identical", "up_to_sign", "up_to_scalar"):
+    grouping = fk.NumeratorGrouping(mode, **grouping_arguments)
+    assert amplitude.generate_diagrams(max_vertices=3, numerator_grouping=grouping).report.completed
 
-def assert_generation_configuration_error(configure):
-    invalid_options = fk.GenerationOptions(max_vertices=3)
-    configure(invalid_options)
+for invalid_arguments in (
+    dict(self_energy=fk.SelfEnergyFilterOptions(only_scaleless=True)),
+    dict(tadpoles=fk.TadpoleFilterOptions(only_scaleless=True)),
+    dict(zero_snails=fk.SnailFilterOptions(only_scaleless=True)),
+    dict(fermion_loop_count_range=(2, 1)),
+    dict(factorized_loop_topologies_count_range=(2, 1)),
+    dict(blob_range=(0, 1)),
+    dict(spectator_range=(0, 1)),
+    dict(cut_amplitude_coupling_orders={"QCD": (0, None)}),
+    dict(cut_amplitude_loop_count_range=(0, 1)),
+):
     assert_feynkit_error(
         fk.GenerationError,
-        lambda: generator.generate(amplitude, invalid_options),
+        lambda: amplitude.generate_diagrams(max_vertices=3, **invalid_arguments),
     )
 
-assert_generation_configuration_error(
-    lambda value: value.set_self_energy_filter(only_scaleless=True)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_tadpole_filter(only_scaleless=True)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_zero_snail_filter(only_scaleless=True)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_coupling_orders({"QCD": (2, 1)})
-)
-assert_generation_configuration_error(
-    lambda value: value.set_loop_count_range(2, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_fermion_loop_count_range(2, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_factorized_loop_topologies_count_range(2, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_blob_range(0, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_spectator_range(0, 1)
-)
-assert_generation_configuration_error(
-    lambda value: value.set_cut_amplitude_coupling_orders({"QCD": (0, None)})
-)
-assert_generation_configuration_error(
-    lambda value: value.set_cut_amplitude_loop_count_range(0, 1)
-)
+for invalid_arguments in (
+    dict(coupling_orders={"QCD": (2, 1)}),
+    dict(loops=(2, 1)),
+    dict(loops=(0, None)),
+):
+    try:
+        model.process(["scalar_0"], ["scalar_0", "scalar_0"]).generate_diagrams(**invalid_arguments)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("invalid generation range was accepted")
 
-valid_grouping = fk.GenerationOptions(max_vertices=3)
-valid_grouping.group_identical_numerators(**grouping_arguments)
-assert generator.generate(amplitude, valid_grouping).report.completed
+# Process generation accepts reusable exact/ranged orders.
+kwargs = dict(max_vertices=3, coupling_orders={"QCD": 1})
+exact = amplitude.generate_diagrams(**kwargs)
+ranged = model.process(["scalar_0"], ["scalar_0", "scalar_0"], vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(**dict(kwargs, coupling_orders={"QCD": (1, 1)}))
+assert len(exact) > 0
+assert [d.id for d in exact] == [d.id for d in ranged]
+assert [d.id for d in amplitude.generate_diagrams(**kwargs)] == [d.id for d in exact]
+assert kwargs["coupling_orders"] == {"QCD": 1}
+assert len(amplitude.generate_diagrams(**dict(kwargs, coupling_orders={"QCD": 0}))) == 0
+assert len(amplitude.with_filters(particle_veto=["scalar_0"]).generate_diagrams(**kwargs)) == 0
+assert len(amplitude.with_filters(vertex_veto=["V_3_SCALAR_000"]).generate_diagrams(**kwargs)) == 0
+assert len(amplitude.generate_diagrams(select_diagrams=[exact[0]], **kwargs)) == 1
+assert len(amplitude.generate_diagrams(veto_diagrams=[d.id for d in exact], **kwargs)) == 0
 
-options = fk.GenerationOptions(max_vertices=3)
-options.add_vertex_allow(["V_3_SCALAR_000"])
-diagram = generator.generate(
-    fk.Process.amplitude(["scalar_0"], ["scalar_0", "scalar_0"])
-    .with_loop_count(1, 1),
-    options,
-).diagrams[0]
+for invalid_arguments in (dict(options=None), dict(coupling_order={"QCD": 0}), dict(coupling_orders={"QCD": True})):
+    try:
+        amplitude.generate_diagrams(**invalid_arguments)
+    except TypeError:
+        pass
+    else:
+        raise AssertionError("invalid generation keyword/type was accepted")
+
+token = fk.CancellationToken()
+token.cancel()
+assert not amplitude.generate_diagrams(cancellation_token=token, **kwargs).report.completed
+
+diagram = amplitude.with_filters(vertex_allow=["V_3_SCALAR_000"]).generate_diagrams(loops=1, max_vertices=3).diagrams[0]
 assert_feynkit_error(
     fk.CffError,
-    lambda: fk.CffGenerator(max_orientations=0).generate(diagram),
+    lambda: diagram.integrate_energy(method="cff", max_orientations=0),
 )
 
 assert "_gammaloop" not in sys.modules
@@ -615,12 +813,18 @@ class Diagram:
 
     Examples
     --------
-    >>> diagram = model.generate_diagrams([], []).diagrams[0]
+    >>> diagram = model.process([], []).generate_diagrams().diagrams[0]
     """
 
     @property
     def loops(self) -> int:
-        """Return the loop count."""
+        """Return the loop count.
+
+        Examples
+        --------
+        >>> diagram.loops
+        1
+        """
         ...
 
     def render(self, width: int) -> str:

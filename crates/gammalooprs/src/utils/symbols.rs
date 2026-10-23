@@ -439,52 +439,6 @@ macro_rules! spenso_print_scripted_indexed {
     }};
 }
 
-macro_rules! spenso_print_simple_indexed {
-    ($a:ident, $opt:ident, $symbol:expr) => {
-        spenso_print_simple_indexed!($a, $opt, $symbol, $symbol)
-    };
-    ($a:ident, $opt:ident, $symbol:expr, $typst_symbol:expr) => {{
-        match $opt.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(_)) => {
-                let AtomView::Fun(f) = $a else {
-                    return None;
-                };
-
-                let mut out = $symbol.to_string();
-                let mut args = f.iter();
-
-                let id = args.next().unwrap();
-                let Ok(i) = usize::try_from(id) else {
-                    return None;
-                };
-
-                if $opt.typst_mode().is_some() {
-                    out = $typst_symbol.to_string();
-                    out.push('_');
-                    out.push_str(&i.to_string());
-                } else {
-                    out.push_str(&to_subscript(i as isize));
-                }
-                let mut first = true;
-                for arg in args {
-                    if first {
-                        first = false;
-                        out.push('(');
-                    } else {
-                        out.push(',');
-                    }
-                    arg.format(&mut out, $opt, PrintState::new()).unwrap();
-                }
-                if !first {
-                    out.push(')');
-                }
-                Some(out)
-            }
-            _ => None,
-        }
-    }};
-}
-
 macro_rules! spenso_print_uv_unary {
     ($a:ident, $opt:ident, $prefix:expr, $suffix:expr) => {{
         match $opt.custom_print_mode.get("spenso") {
@@ -562,67 +516,8 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         },
         tags = [SPENSO_TAG.index.clone()]
     ),
-    edgeaind: symbol!(
-        "edge",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵉ".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
-    ),
-    vertexaind: symbol!(
-        "vertex",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(_i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-
-                    let mut out = "ᵛ".to_string();
-
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-
-                        out.push_str(&to_superscript(i));
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
-    ),
+    edgeaind: feynkit_graph::symbols::edge_index(),
+    vertexaind: feynkit_graph::symbols::vertex_index(),
     dummyaind: symbol!(
         "dummy",
         print = |a, opt, _state| {
@@ -653,42 +548,7 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         },
         tags = [SPENSO_TAG.index.clone()]
     ),
-    hedgeaind: symbol!(
-        "hedge",
-        print = |a, opt, _state| {
-            match opt.custom_print_mode.get("spenso") {
-                Some(PrintUserData::Integer(i)) => {
-                    let AtomView::Fun(f) = a else {
-                        return None;
-                    };
-                    let SpensoPrintSettings {
-                        index_subscripts, ..
-                    } = SpensoPrintSettings::from(*i as usize);
-
-                    let mut out = "".to_string();
-                    let mut first = true;
-                    for arg in f.iter() {
-                        let Ok(i) = isize::try_from(arg) else {
-                            return None;
-                        };
-
-                        if !first {
-                            out.push('.');
-                        }
-                        first = false;
-                        if index_subscripts {
-                            out.push_str(&to_superscript(i));
-                        } else {
-                            out.push_str(&to_subscript(i));
-                        }
-                    }
-                    Some(out)
-                }
-                _ => None,
-            }
-        },
-        tags = [SPENSO_TAG.index.clone()]
-    ),
+    hedgeaind: feynkit_graph::symbols::hedge_index(),
     uv_subgraph: symbol!(
         "gammalooprs::uv::subgraph",
         print = |a, opt, _state| {
@@ -882,47 +742,14 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         }
     ),
     num: symbol!("num"),
-    den: symbol!(
-        "denom",
-        der = |_, arg, out| {
-            if arg != 3 {
-                **out = Atom::Zero;
-            } else {
-                **out = Atom::num(1);
-            }
-        }
-    ),
-    ubar: symbol!(
-        "ubar",
-        print = |a, opt, _state| {
-            spenso_print_scripted_indexed!(a, opt, "u̅", "overline(u)")
-        },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    vbar: symbol!(
-        "vbar",
-        print = |a, opt, _state| {
-            spenso_print_scripted_indexed!(a, opt, "v̅", "overline(v)")
-        },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    den: feynkit_graph::symbols::denominator(),
+    ubar: feynkit_graph::symbols::ubar(),
+    vbar: feynkit_graph::symbols::vbar(),
     dot: symbol!("dot"),
-    dim: symbol!("dim"),
-    v: symbol!(
-        "v",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "v") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    u: symbol!(
-        "u",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "u") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    emr_mom: symbol!(
-        "Q",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "q") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    dim: feynkit_graph::symbols::dimension(),
+    v: feynkit_graph::symbols::v(),
+    u: feynkit_graph::symbols::u(),
+    emr_mom: feynkit_graph::symbols::momentum(),
     orientation_delta: symbol!("orientation_delta"),
     emr_vec: symbol!(
         "Q3",
@@ -950,45 +777,14 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
         },
         tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
     ),
-    ose: symbol!(
-        "OSE"; Scalar;
-        print = |a, opt, _state| {
-            spenso_print_simple_indexed!(a, opt, "Eᵒˢ", r#"E^("os")"#)
-        },
-            der = |_, arg, out| {
-                if arg == 1 {
-                    **out = Atom::num(1);
-                }
-            }
-    ),
-    energy: symbol!(
-        "E",
-        print = |a, opt, _state| { spenso_print_simple_indexed!(a, opt, "E") }
-    ),
-    external_mom: symbol!(
-        "P",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "p") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    loop_mom: symbol!(
-        "K",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "k") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
-    epsilon: symbol!(
-        "ϵ",
-        print = |a, opt, _state| { spenso_print_scripted_indexed!(a, opt, "ϵ") },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    ose: feynkit_cff::symbols::on_shell(),
+    energy: feynkit_cff::symbols::energy(),
+    external_mom: feynkit_graph::symbols::external_momentum(),
+    loop_mom: feynkit_graph::symbols::loop_momentum(),
+    epsilon: feynkit_graph::symbols::epsilon(),
     pi: Symbol::PI,
     color_wrap: symbol!("color"),
-    epsilonbar: symbol!(
-        "ϵbar",
-        print = |a, opt, _state| {
-            spenso_print_scripted_indexed!(a, opt, "ϵ̅", "overline(epsilon.alt)")
-        },
-        tags = [SPENSO_TAG.rank1.clone(), SPENSO_TAG.tensor.clone()]
-    ),
+    epsilonbar: feynkit_graph::symbols::epsilonbar(),
     coeff: symbol!("coef"),
     radius_left: symbol!("r_left"),
     radius_star_left: symbol!("r⃰_left"),

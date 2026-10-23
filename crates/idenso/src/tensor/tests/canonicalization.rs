@@ -1,16 +1,117 @@
-use crate::{IndexTooling, test_support::test_initialize};
+use crate::{
+    Cookable, IndexTooling,
+    color::CS,
+    representations::{ColorAdjoint, ColorFundamental},
+    test_support::test_initialize,
+};
 use spenso::{antisym, bracket, broadcast_symbol, cyclic, dind, euc, lor, mink, sym, tensor};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView},
-    function,
+    function, parse_lit, symbol,
 };
 
-use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::{abstract_index::AbstractIndex, representation::RepName};
 
 fn canonicalize(expression: &Atom) -> Atom {
     expression
         .canonize::<AbstractIndex>(AbstractIndex::Dummy)
         .expect("test expression should canonicalize")
+}
+
+fn canonicalize_formal(expression: &Atom) -> Atom {
+    let cooking = crate::CookSettings::reversible().with_representation_payloads(true, true);
+    let admitted = cooking.try_cook(expression.as_view()).unwrap();
+    let canonical = canonicalize(&admitted);
+    cooking.uncook(canonical.as_view())
+}
+
+#[test]
+fn formal_color_dimensions_canonicalize_closed_quark_trace_partners() {
+    test_initialize();
+    let nc = Atom::var(CS.nc);
+    let adjoint_dimension = nc.clone().pow(2) - Atom::one();
+    let fundamental = ColorFundamental {}.to_symbolic([nc]);
+    let trace = |indices: [usize; 6]| {
+        spenso::shadowing::trace(
+            fundamental.clone(),
+            indices.map(|index| {
+                CS.chain_t(ColorAdjoint {}.to_symbolic([
+                    adjoint_dimension.clone(),
+                    function!(symbol!("formal_trace_hedge"), index),
+                ]))
+            }),
+        )
+        .cook_indices()
+    };
+
+    // Actual sampled color traces of XS GL204/205 (also GL206/207) and GL282/283.
+    // The two contracted adjoint names may be exchanged without changing T slots.
+    for (left, right) in [
+        ([6, 10, 12, 6, 10, 12], [6, 12, 10, 6, 12, 10]),
+        ([6, 14, 10, 6, 14, 10], [6, 10, 14, 6, 10, 14]),
+    ] {
+        let canonical = canonicalize_formal(&trace(left));
+        assert_eq!(canonical, canonicalize_formal(&trace(right)));
+        assert_eq!(canonical, canonicalize_formal(&canonical));
+        assert!(canonical.contains(&adjoint_dimension));
+    }
+}
+
+#[test]
+fn formal_color_dimensions_preserve_free_adjoint_and_fundamental_slots() {
+    test_initialize();
+    let open_adjoint = spenso::shadowing::trace(
+        parse_lit!(cof(Nc), default_namespace = "spenso"),
+        [
+            parse_lit!(
+                coad(Nc ^ 2 - 1, formal_free_a),
+                default_namespace = "spenso"
+            ),
+            parse_lit!(
+                coad(Nc ^ 2 - 1, formal_free_b),
+                default_namespace = "spenso"
+            ),
+            parse_lit!(
+                coad(Nc ^ 2 - 1, formal_free_c),
+                default_namespace = "spenso"
+            ),
+        ]
+        .map(|adjoint| CS.chain_t(adjoint)),
+    );
+    let renamed_adjoint = open_adjoint
+        .replace(parse_lit!(formal_free_b, default_namespace = "spenso"))
+        .with(parse_lit!(formal_free_d, default_namespace = "spenso"));
+    let canonical = canonicalize_formal(&open_adjoint);
+    assert_ne!(canonical, canonicalize_formal(&renamed_adjoint));
+    assert!(canonical.contains(&parse_lit!(
+        coad(Nc ^ 2 - 1, formal_free_b),
+        default_namespace = "spenso"
+    )));
+
+    let open_fundamental = parse_lit!(
+        t(
+            coad(Nc ^ 2 - 1, formal_paired_a),
+            cof(Nc, formal_free_i),
+            dind(cof(Nc, formal_paired_j))
+        ) * t(
+            coad(Nc ^ 2 - 1, formal_paired_a),
+            cof(Nc, formal_paired_j),
+            dind(cof(Nc, formal_free_k))
+        ),
+        default_namespace = "spenso"
+    );
+    let renamed_fundamental = open_fundamental
+        .replace(parse_lit!(formal_free_i, default_namespace = "spenso"))
+        .with(parse_lit!(formal_free_l, default_namespace = "spenso"));
+    let canonical = canonicalize_formal(&open_fundamental);
+    assert_ne!(canonical, canonicalize_formal(&renamed_fundamental));
+    for external in [
+        parse_lit!(cof(Nc, formal_free_i), default_namespace = "spenso"),
+        parse_lit!(dind(cof(Nc, formal_free_k)), default_namespace = "spenso"),
+    ] {
+        assert!(canonical.contains(&external));
+    }
+    assert_eq!(canonical, canonicalize_formal(&canonical));
 }
 
 fn odd_cycle() -> Atom {
@@ -27,12 +128,110 @@ fn odd_antisymmetric_cycle_canonicalizes_to_zero() {
 }
 
 #[test]
+fn canonicalization_preserves_spectators_after_pruning() {
+    test_initialize();
+    assert!(canonicalize(&odd_cycle()).is_zero());
+    let spectator = tensor!(signed_metric_spectator_a) + tensor!(signed_metric_spectator_b);
+    let expression = &spectator * (Atom::one() + odd_cycle());
+    let canonical = canonicalize(&expression);
+    assert_eq!(canonical, spectator);
+    assert_eq!(canonicalize(&canonical), canonical);
+}
+
+#[test]
 fn nested_odd_summand_is_removed() {
     test_initialize();
     let scalar = tensor!(signed_nested_scalar);
     let expression = &scalar * (Atom::num(1) + odd_cycle());
 
     assert_eq!(canonicalize(&expression), scalar);
+}
+
+#[test]
+fn pruning_nested_zero_preserves_unrelated_sum_factors() {
+    test_initialize();
+    let spectator = tensor!(signed_spectator_a) + tensor!(signed_spectator_b);
+    let expected = tensor!(signed_nested_scalar) * spectator;
+    let expression = &expected * (Atom::one() + odd_cycle());
+
+    assert_eq!(canonicalize(&expression), expected);
+}
+
+#[test]
+fn products_of_tensor_sums_keep_closed_indices_and_factorization() {
+    test_initialize();
+    let expression = |i: Atom, j: Atom| {
+        (tensor!(factorized_a, i.clone()) + tensor!(factorized_b, i.clone()))
+            * (tensor!(factorized_c, i.clone()) + tensor!(factorized_d, i))
+            + tensor!(factorized_e, j.clone()) * tensor!(factorized_f, j)
+    };
+    let original = expression(mink!(4, factorized_i), mink!(4, factorized_j));
+    let renamed = expression(mink!(4, factorized_l), mink!(4, factorized_k));
+    let canonical = canonicalize(&original);
+
+    assert_eq!(canonical, canonicalize(&renamed));
+    assert_eq!(canonical, canonicalize(&canonical));
+    assert!(
+        canonical
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .is_empty()
+    );
+    let AtomView::Add(sum) = canonical.as_view() else {
+        panic!("the two original scalar summands must remain present");
+    };
+    assert!(sum.iter().any(|term| matches!(term, AtomView::Mul(product)
+        if product.iter().filter(|factor| matches!(factor, AtomView::Add(_))).count() == 2)));
+    assert_ne!(canonical, canonicalize(&(original + Atom::one())));
+}
+
+#[test]
+fn products_of_tensor_sums_preserve_genuine_external_indices() {
+    test_initialize();
+    // Native allocation must reserve true external names even when they sort
+    // before all dummy candidates, as well as when they sort after them.
+    for external in [
+        mink!(4, a_factorized_external),
+        mink!(4, z_factorized_external),
+    ] {
+        let expression = |i: Atom| {
+            (tensor!(factorized_open_a, i.clone()) + tensor!(factorized_open_b, i.clone()))
+                * (tensor!(factorized_open_c, i.clone(), external.clone())
+                    + tensor!(factorized_open_d, i, external.clone()))
+        };
+        let original = expression(mink!(4, factorized_open_i));
+        let renamed = expression(mink!(4, factorized_open_j));
+        let canonical = canonicalize(&original);
+
+        assert_eq!(canonical, canonicalize(&renamed));
+        assert_eq!(canonical, canonicalize(&canonical));
+        assert_eq!(
+            canonical.list_dangling::<AbstractIndex>().unwrap(),
+            vec![external]
+        );
+        assert!(matches!(canonical.as_view(), AtomView::Mul(product)
+            if product.iter().filter(|factor| matches!(factor, AtomView::Add(_))).count() == 2));
+    }
+}
+
+#[test]
+fn factorized_canonicalization_rejects_mismatched_external_indices() {
+    test_initialize();
+    let expression = tensor!(factorized_bad_a, mink!(4, factorized_bad_i))
+        + tensor!(factorized_bad_b, mink!(4, factorized_bad_j));
+
+    assert!(std::panic::catch_unwind(|| canonicalize(&expression)).is_err());
+}
+
+#[test]
+fn factorized_canonicalization_rejects_overcontracted_indices() {
+    test_initialize();
+    let index = mink!(4, factorized_overcontracted);
+    let expression = tensor!(factorized_over_a, index.clone())
+        * tensor!(factorized_over_b, index.clone())
+        * tensor!(factorized_over_c, index);
+
+    assert!(std::panic::catch_unwind(|| canonicalize(&expression)).is_err());
 }
 
 #[test]
@@ -158,4 +357,87 @@ fn cyclic_symmetry_preserves_only_rotations() {
 
     // A four-cycle is odd. Reflections are not part of cyclic symmetry.
     assert!(canonicalize(&rank_four).is_zero());
+}
+
+#[test]
+fn inverse_scalar_contractions_preserve_their_boundary_during_canonicalization() {
+    test_initialize();
+    let p = spenso::vector_symbol!("inverse_scalar_canon::p");
+    let q = spenso::vector_symbol!("inverse_scalar_canon::q");
+    let minkowski = spenso::structure::representation::Minkowski {};
+    use spenso::structure::representation::RepName;
+    let denominator = minkowski.new_rep(4).inner_product(p, q) - Atom::one();
+    let numerator = tensor!(inverse_scalar_a, mink!(4, inverse_scalar_i))
+        * tensor!(inverse_scalar_b, mink!(4, inverse_scalar_i));
+    let expression = numerator / denominator;
+    let canonical = canonicalize(&expression);
+    assert_eq!(canonical, canonicalize(&canonical));
+    assert!(
+        canonical
+            .list_dangling::<AbstractIndex>()
+            .unwrap()
+            .is_empty()
+    );
+    assert!(!canonical.to_plain_string().contains("scalar_store"));
+}
+
+#[test]
+fn pruning_zero_arm_exposes_outer_signed_contraction() {
+    test_initialize();
+    let a = mink!(4, signed_exposed_a);
+    let b = mink!(4, signed_exposed_b);
+    let sum = sym!(a.clone(), b.clone())
+        + odd_cycle() * tensor!(signed_exposed_other, a.clone(), b.clone());
+    let expression = antisym!(a, b) * sum;
+    assert!(canonicalize(&expression).is_zero());
+}
+
+#[test]
+fn pruning_open_zero_arm_preserves_free_and_dual_ports() {
+    test_initialize();
+    let a = lor!(4, signed_pruned_dual_a);
+    let b = mink!(4, signed_pruned_free_b);
+    let survivor = tensor!(signed_pruned_survivor, a.clone(), b.clone());
+    let sum = &survivor + odd_cycle() * tensor!(signed_pruned_zero, a.clone(), b.clone());
+    let closing = tensor!(signed_pruned_close, dind!(a));
+    let expected = canonicalize(&(&closing * survivor));
+    let result = canonicalize(&(closing * sum));
+    assert_eq!(result, expected);
+    assert_eq!(canonicalize(&result), result);
+    assert_eq!(result.list_dangling::<AbstractIndex>().unwrap(), vec![b]);
+}
+
+#[test]
+fn pruning_signed_term_does_not_mutate_a_shared_tensor_occurrence() {
+    test_initialize();
+    let a = mink!(4, signed_cycle_a);
+    let b = mink!(4, signed_cycle_b);
+    let even = antisym!(a, b).pow(2);
+    let expected = canonicalize(&even);
+    assert!(!expected.is_zero());
+    assert_eq!(canonicalize(&(odd_cycle() + even)), expected);
+}
+
+#[test]
+fn unparseable_indices_are_rejected_before_signed_zero_pruning() {
+    test_initialize();
+    use crate::{CanonicalizationError, Cookable, NetworkToolingError};
+    use symbolica::symbol;
+    let slot = |n| mink!(4, function!(symbol!("signed_raw_index"), Atom::num(n)));
+    let expression =
+        antisym!(slot(1), slot(2)) * antisym!(slot(2), slot(3)) * antisym!(slot(3), slot(1));
+    assert!(!expression.is_zero());
+    let raw = expression.canonize::<AbstractIndex>(AbstractIndex::Dummy);
+    assert!(
+        matches!(
+            raw,
+            Err(CanonicalizationError::Network(
+                NetworkToolingError::Parse { .. }
+            ))
+        ),
+        "structured index admission result: {raw:?}"
+    );
+    // A caller with structured labels explicitly admits them once. Zero and
+    // nonzero terms obey the same abstract-index boundary.
+    assert!(canonicalize(&expression.cook_indices()).is_zero());
 }

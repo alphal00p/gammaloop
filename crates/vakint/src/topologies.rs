@@ -406,8 +406,8 @@ impl Topologies {
     /// Scope-aware exact witness selection for long-form five-loop inputs.
     /// Ordinary and lower-loop matching retain their existing fast behavior.
     /// `None` from the criterion means only an ordinary scope rejection; typed
-    /// errors propagate. If no witness is admitted, retain the ordinary exact
-    /// witness so the caller can report its unchanged entry-domain failure.
+    /// errors propagate. If no witness is admitted, retain an exact witness so
+    /// the caller can attempt a partial reduction outside recorded coverage.
     pub fn match_topologies_to_user_input_with_acceptance<K: Ord>(
         &self,
         input: AtomView,

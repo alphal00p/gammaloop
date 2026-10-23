@@ -1,3 +1,4 @@
+use idenso::{coad, cof, color_cas, color_idx};
 use std::{
     borrow::Cow,
     fmt::Display,
@@ -1248,10 +1249,10 @@ impl<T: FloatLike> ParamBuilder<T> {
         .unwrap();
         // new.fn_map.add_conditional(GS.orientation_if);
         // Leave pi to the native constant evaluator at the runtime precision.
-        new.add_constant(CS.cf.into(), Rational::new(4, 3).into());
-        new.add_constant(CS.ca.into(), Rational::new(3, 1).into());
+        new.add_constant(color_cas!(2, cof!(3)), Rational::new(4, 3).into());
+        new.add_constant(color_cas!(2, coad!(8)), Rational::new(3, 1).into());
         new.add_constant(CS.nc.into(), Rational::new(3, 1).into());
-        new.add_constant(CS.tr.into(), Rational::new(1, 2).into());
+        new.add_constant(color_idx!(2, cof!(3)), Rational::new(1, 2).into());
 
         new.values = vec![vec![Complex::new_re(F(T::from_f64(0.))); len]];
         new.update_model_values(model);

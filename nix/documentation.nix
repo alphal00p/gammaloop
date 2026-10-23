@@ -5,7 +5,9 @@
   craneLib,
   workspaceRoot,
   cargoSources,
+  localCargoPatchSources,
   nonCargoBuildSources,
+  symbolicaRenderData,
   commonArgs,
   dummyCargoTarget,
   normalizeWorkspaceHackBuildScriptTimestampScript,
@@ -119,15 +121,15 @@ let
         (workspaceRoot + "/tests/resources/graphs/uv_tests/epem_a_bbx.dot")
         (workspaceRoot + "/tests/resources/graphs/epemttbar.dot")
         (workspaceRoot + "/pyproject.toml")
-        (workspaceRoot + "/crates/linnet-py/pyproject.toml")
-        (workspaceRoot + "/crates/linnet-py/uv.lock")
-        (workspaceRoot + "/crates/linnet-py/linnet_py.pyi")
+        (workspaceRoot + "/crates/linnet-py/python/symbolica/community/graph/__init__.pyi")
         (workspaceRoot + "/crates/linnet-py/examples/physics_render_settings.py")
         (workspaceRoot + "/crates/linnet-py/examples/layout_stream.py")
         (workspaceRoot + "/crates/linnet-py/examples/rendering_api.py")
         (workspaceRoot + "/crates/linnet-py/tests/test_basic.py")
         (workspaceRoot + "/crates/linnet-py/tests/test_wasm.py")
         (workspaceRoot + "/crates/linnet-py/tests/test_streaming.py")
+        (workspaceRoot + "/crates/linnet-py/tests")
+        (workspaceRoot + "/examples/notebooks/symbolica-host")
       ]
     );
   };
@@ -139,6 +141,7 @@ let
     fileset = lib.fileset.unions [
       (craneLib.fileset.cargoTomlAndLock workspaceRoot)
       (craneLib.fileset.rust workspaceRoot)
+      localCargoPatchSources
       (workspaceRoot + "/.cargo/config.toml")
       (lib.fileset.difference nonCargoBuildSources (
         lib.fileset.unions [
@@ -171,9 +174,11 @@ let
     product: product.rust_components or [ ]
   ) documentationRegistry.product;
   documentationCatalogFeatures = "gammaloop-reference,vakint-reference";
-  documentationPythonExporterBuildCommands = lib.concatMapStringsSep "\n" (product: ''
-    cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg product.id}
-  '') documentationRegistry.product;
+  documentationPythonExporterBuildCommands = lib.concatMapStringsSep "\n" (feature: ''
+    cargoWithProfile build --locked -p alphal00p-docs-python-exporter --features ${lib.escapeShellArg feature}
+  '') (builtins.attrNames (builtins.removeAttrs
+    (builtins.fromTOML (builtins.readFile (workspaceRoot + "/crates/alphal00p-docs-python-exporter/Cargo.toml"))).features
+    ["default"]));
   documentationRustdocBuildCommands = lib.concatMapStringsSep "\n" (
     component:
     let
@@ -209,7 +214,7 @@ let
         cargoWithProfile test --locked --no-run -p alphal00p-docs-examples
         cargo clean --profile ${docsCargoProfile} -p alphal00p-docs-examples
         cargoWithProfile build --locked -p alphal00p-docs-builder
-        cargoWithProfile build --locked -p linnet-py --lib --features extension-module,abi3-py310
+        cargoWithProfile build --locked -p linnet-py --lib
         ${documentationRustdocBuildCommands}
         cargoWithProfile build --locked -p alphal00p-docs-catalogs \
           --features ${lib.escapeShellArg documentationCatalogFeatures} \
@@ -274,6 +279,7 @@ let
     TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
     ALPHAL00P_DOCS_CARGO_PROFILE = docsCargoProfile;
     SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
+    SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
     doNotLinkInheritedArtifacts = true;
     doInstallCargoArtifacts = false;
     checkPhaseCargoCommand = "";
@@ -316,12 +322,12 @@ let
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-catalogs --features ${lib.escapeShellArg documentationCatalogFeatures} --bin alphal00p-docs-vakint-reference -- --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-examples
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
+    cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo test --locked --profile ${docsCargoProfile} -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
-    linnet_python="$TMPDIR/alphal00p-docs-linnet-python"
+    linnet_python="$TMPDIR/alphal00p-docs-linnet-graph"
     export UV_CACHE_DIR="$TMPDIR/alphal00p-docs-uv-cache"
     export UV_OFFLINE=true
     uv venv "$linnet_python" --python "${linnetPython}/bin/python3" --system-site-packages
@@ -332,16 +338,11 @@ let
       --profile ${docsCargoProfile} \
       --interpreter "$linnet_python/bin/python" \
       --out "$linnet_wheels" \
-      --manifest-path crates/linnet-py/Cargo.toml \
-      --features extension-module,abi3-py310
-    # Python imports the pinned Typst from Nix; uv does not discover those
-    # inherited packages when resolving dependencies.
+      --manifest-path examples/notebooks/symbolica-host/Cargo.toml
+    # The complete Community wheel embeds its graph renderer.
     uv pip install --offline --no-deps --python "$linnet_python/bin/python" \
-      "$linnet_wheels"/linnet_py-*.whl
-    "$linnet_python/bin/python" -m unittest \
-      crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py \
-      crates/linnet-py/tests/test_streaming.py
+      "$linnet_wheels"/*.whl
+    "$linnet_python/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
     cargo run --locked --profile ${docsCargoProfile} -p alphal00p-docs-builder -- check
     svg_assets="$TMPDIR/alphal00p-svg-assets"
     bash scripts/render-docs-svg-assets.sh "$svg_assets"

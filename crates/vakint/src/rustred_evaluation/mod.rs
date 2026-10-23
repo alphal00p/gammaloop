@@ -183,9 +183,16 @@ impl Vakint {
         loop_count: usize,
         mode: RustRedMasterMode,
     ) -> Result<Atom, VakintError> {
-        self.rustred_data()?
-            .masters
-            .finalize(raw, settings, loop_count, mode)
+        let data = self.rustred_data()?;
+        let announced = self.announced_bare_masters()?;
+        if mode == RustRedMasterMode::Retain {
+            return Ok(data.masters.retain(raw, &announced));
+        }
+        if !announced.is_empty() {
+            data.masters
+                .require_coefficients(&combine_exact(raw.clone()), &announced)?;
+        }
+        data.masters.finalize(raw, settings, loop_count, mode)
     }
 
     /// Reduce and normalize without inspecting coefficient availability. The

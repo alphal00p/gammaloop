@@ -61,7 +61,11 @@ fn coefficient(expression: &Atom, parameter: Symbol, power: i64) -> Result<Atom>
 type GluonPorts = Vec<Vec<LibrarySlot<AbstractIndex>>>;
 
 fn amputated_source(diagram: &FeynmanDiagram, d: &Atom) -> Result<(Atom, GluonPorts)> {
-    let raw = lorentz_dimension(&(diagram.numerator() * diagram.numerator_prefactor()), d);
+    let raw = lorentz_dimension(
+        &(NumeratorInterface::export(diagram.numerator()).0
+            * NumeratorInterface::export(diagram.numerator_prefactor()).0),
+        d,
+    );
     // Generated FeynKit indices are function payloads; the local Idenso index
     // type consumes symbols. Keep the existing reversible encoding boundary.
     let cooking = CookSettings::reversible();
@@ -74,17 +78,19 @@ fn amputated_source(diagram: &FeynmanDiagram, d: &Atom) -> Result<(Atom, GluonPo
         .map(|port| LibrarySlot::<AbstractIndex>::try_from(port.as_view()))
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let mut legs = BTreeMap::new();
-    for (id, ends, _) in diagram.edges() {
-        let source = diagram.vertex(ends.source).expect("valid source");
-        let target = diagram.vertex(ends.target).expect("valid target");
-        let (external, index_head) = if let Some(external) = &source.external {
-            (external, symbol!("FeynKit::SinkIndex"))
-        } else if let Some(external) = &target.external {
-            (external, symbol!("FeynKit::SourceIndex"))
-        } else {
+    for (id, ends, edge) in diagram.edges() {
+        let Some(external) = &edge.external else {
             continue;
         };
-        let tensor_index = index_head.call((id.0, 1));
+        let endpoint = if ends.source.is_some() {
+            feynkit_graph::DiagramEndpoint::Source
+        } else {
+            feynkit_graph::DiagramEndpoint::Target
+        };
+        let hedge = diagram
+            .half_edge_id(feynkit_graph::DiagramHalfEdge { edge: id, endpoint })
+            .ok_or("external edge has no native half-edge")?;
+        let tensor_index = symbols::hedge_index().call((hedge.0, 1));
         let mut slots = ports
             .iter()
             .filter(|slot| cooking.uncook(slot.aind.to_atom().as_view()) == tensor_index)
@@ -108,6 +114,8 @@ pub(super) fn prepare(
     generated: feynkit_generator::GenerationResult,
     d: &Atom,
     evidence: &Path,
+    projection: Projection,
+    timings: &mut PreparationTimings,
 ) -> Result<Projected> {
     projector::controls(d)?;
     if !generated.report.completed || generated.diagrams.len() != 1 {
@@ -119,13 +127,13 @@ pub(super) fn prepare(
     let mut gluons = 0;
     for (_, ends, edge) in diagram.edges() {
         if is_external_edge(diagram, ends) {
-            if !edge.numerator.is_one() {
+            if !edge.numerator.expression().is_one() {
                 return Err("source contains external propagators or wavefunctions".into());
             }
             continue;
         }
         let particle = diagram.model().particle_by_id(edge.particle)?;
-        if !particle.symbolic_mass_parameter(diagram.model())?.is_zero() {
+        if !particle.symbolic_mass(diagram.model()).is_zero() {
             return Err("original QCD numerator is not massless".into());
         }
         match particle.pdg_code.abs() {
@@ -193,15 +201,47 @@ pub(super) fn prepare(
             color *= ETS.metric(slot.to_atom(), other.to_atom());
         }
     }
+    let algebra_started = Instant::now();
     let mut metric_coefficients = Vec::new();
     let mut longitudinal_coefficients = Vec::new();
-    for power in 0..=2 {
-        let numerator = coefficient(&scaled, t, power)?;
+    let max_order = match projection {
+        Projection::QuadraticTransverse => 2,
+        Projection::ZeroMomentumMetric => 0,
+    };
+    for power in 0..=max_order {
+        let numerator = if matches!(projection, Projection::ZeroMomentumMetric) {
+            scaled.replace(Atom::var(t)).with(Atom::Zero)
+        } else {
+            coefficient(&scaled, t, power)?
+        };
         eprintln!("qcd_ladder phase=native_gamma_color taylor_order={power}");
         metric_coefficients.push(projector::scalar(&numerator * &color * &metric)?);
-        longitudinal_coefficients.push(projector::scalar(numerator * &color * &longitudinal)?);
+        if matches!(projection, Projection::QuadraticTransverse) {
+            longitudinal_coefficients.push(projector::scalar(numerator * &color * &longitudinal)?);
+        }
     }
 
+    timings.scalar_contraction_seconds = algebra_started.elapsed().as_secs_f64();
+    if matches!(projection, Projection::ZeroMomentumMetric) {
+        let powers = vacuum
+            .lines
+            .iter()
+            .map(|line| line.original_edges.len() as i32)
+            .collect::<Vec<_>>();
+        let numerator = metric_coefficients.remove(0)
+            * evaluate_overall_factor(diagram.overall_factor().as_view());
+        validate_homogeneity(&numerator, 5)?;
+        std::fs::write(
+            evidence.join("projected-numerator-000.symbolica"),
+            numerator.to_canonical_string(),
+        )?;
+        return Ok(Projected {
+            vacuum,
+            contributions: vec![Contribution { powers, numerator }],
+            conditions: BTreeSet::new(),
+        });
+    }
+    let taylor_started = Instant::now();
     let inverses = (0..12)
         .map(|slot| Atom::var(symbol!(&format!("qcd_ladder::inverse_{slot}"))))
         .collect::<Vec<_>>();
@@ -255,6 +295,8 @@ pub(super) fn prepare(
             .or_insert_with(|| (Atom::Zero, Atom::Zero))
             .1 += value;
     }
+    timings.taylor_seconds = taylor_started.elapsed().as_secs_f64();
+    let angular_started = Instant::now();
     let overall = evaluate_overall_factor(diagram.overall_factor().as_view());
     let mut conditions = BTreeSet::new();
     let mut contributions = Vec::new();
@@ -277,23 +319,7 @@ pub(super) fn prepare(
         }
         assert_lorentz_dimension(&numerator, d)?;
         let rank = powers.iter().sum::<i32>() - 10;
-        let scale = Atom::var(symbol!("qcd_ladder::loop_scale"));
-        let scaled = numerator.replace_map(|view, _, output| {
-            if let AtomView::Fun(fun) = view
-                && fun.get_symbol() == SPENSO_TAG.dot
-            {
-                **output = view.to_owned() * scale.clone().pow(2);
-            }
-        });
-        if !(scaled - &numerator * scale.pow(i64::from(2 * rank)))
-            .expand()
-            .together()
-            .is_zero()
-        {
-            return Err(
-                "projected term fails homogeneous kinetic-coefficient power counting A-R=10".into(),
-            );
-        }
+        validate_homogeneity(&numerator, rank)?;
         let numerator = numerator.collect_factors();
         std::fs::write(
             evidence.join(format!("projected-numerator-{index:03}.symbolica")),
@@ -304,11 +330,31 @@ pub(super) fn prepare(
     if contributions.is_empty() {
         return Err("the complete projected source vanished unexpectedly".into());
     }
+    timings.angular_seconds = angular_started.elapsed().as_secs_f64();
     Ok(Projected {
         vacuum,
         contributions,
         conditions,
     })
+}
+
+fn validate_homogeneity(numerator: &Atom, rank: i32) -> Result<()> {
+    let scale = Atom::var(symbol!("qcd_ladder::loop_scale"));
+    let scaled = numerator.replace_map(|view, _, output| {
+        if let AtomView::Fun(fun) = view
+            && fun.get_symbol() == SPENSO_TAG.dot
+        {
+            **output = view.to_owned() * scale.clone().pow(2);
+        }
+    });
+    if !(scaled - numerator * scale.pow(i64::from(2 * rank)))
+        .expand()
+        .together()
+        .is_zero()
+    {
+        return Err("projected numerator fails exact momentum homogeneity".into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -322,7 +368,11 @@ fn generated_qcd_external_ports_are_reversibly_encoded() -> Result<()> {
     assert!(legs.iter().all(|slots| slots.len() == 2));
     assert_eq!(
         CookSettings::reversible().uncook(numerator.as_view()),
-        lorentz_dimension(&(diagram.numerator() * diagram.numerator_prefactor()), &d)
+        lorentz_dimension(
+            &(NumeratorInterface::export(diagram.numerator()).0
+                * NumeratorInterface::export(diagram.numerator_prefactor()).0),
+            &d
+        )
     );
     Ok(())
 }

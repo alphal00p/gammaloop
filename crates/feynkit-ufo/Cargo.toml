@@ -9,6 +9,7 @@ keywords = ["feynman", "hep", "physics", "ufo"]
 categories = ["science"]
 
 [dependencies]
+serde_json = { workspace = true }
 feynkit-model = { version = "0.1.0", path = "../feynkit-model" }
 pyo3 = { workspace = true }
 thiserror = { workspace = true }

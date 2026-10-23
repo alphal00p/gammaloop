@@ -13,12 +13,14 @@
         "gammaloop-tracing-filter"
         "gammaloop-tracing-filter-macros"
         "gammalooprs"
+        "three-dimensional-reps"
       ];
     }
     {
       name = "feynkit";
       packages = [
         "feynkit"
+        "feynkit-amplitude"
         "feynkit-cff"
         "feynkit-generator"
         "feynkit-graph"
@@ -63,6 +65,8 @@
         "kurvst"
         "linnet"
         "linnet-py"
+        "linnet-render-py"
+        "typst-renderer"
         "linnest"
       ];
     }
@@ -75,6 +79,7 @@
         "spenso-macros"
         "spynso3"
         "symbolica-utils"
+        "symbolica-data"
       ];
     }
     {

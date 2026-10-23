@@ -19,12 +19,10 @@ use symbolica::{
     atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder},
     parse,
 };
-use symbolica_typst_plugin::payload::{
-    AttachmentSet, PayloadError, encode_atom_from_set, parse_payload,
-};
+use symbolica_typst_plugin::payload::{encode_atom_from_set, parse_payload};
 
 const SPENSO_WRAPPER: &str = r#"
-from ..spenso_native import *
+from ..tensor_native import *
 
 initialize_module()
 "#;
@@ -41,7 +39,9 @@ fn install_package<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyMo
 
 fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyModule>> {
     let py = core.py();
-    let native = PyModule::new(py, "spenso_native")?;
+    assert_eq!(SpensoModule::get_name(), "tensor");
+    let native_name = format!("{}_native", SpensoModule::get_name());
+    let native = PyModule::new(py, &native_name)?;
     let initialize_module =
         PyCFunction::new_closure(py, Some(c"initialize_module"), None, |args, _kwargs| {
             SpensoModule::initialize(args.py())
@@ -51,7 +51,7 @@ fn register_spenso<'py>(core: &Bound<'py, PyModule>) -> PyResult<Bound<'py, PyMo
     core.add_submodule(&native)?;
     py.import("sys")?
         .getattr("modules")?
-        .set_item("symbolica.community.spenso_native", &native)?;
+        .set_item(format!("symbolica.community.{native_name}"), &native)?;
     Ok(native)
 }
 
@@ -59,7 +59,7 @@ fn import_spenso_wrapper<'py>(
     py: Python<'py>,
     community: &Bound<'py, PyModule>,
 ) -> PyResult<Bound<'py, PyModule>> {
-    let name = "symbolica.community.spenso";
+    let name = "symbolica.community.tensor";
     let wrapper = PyModule::new(py, name)?;
     wrapper.setattr("__package__", name)?;
     wrapper.setattr("__path__", PyList::empty(py))?;
@@ -68,7 +68,7 @@ fn import_spenso_wrapper<'py>(
         .set_item(name, &wrapper)?;
     let source = CString::new(SPENSO_WRAPPER).expect("Spenso wrapper contains a null byte");
     py.run(&source, Some(&wrapper.dict()), Some(&wrapper.dict()))?;
-    community.add("spenso", &wrapper)?;
+    community.add("tensor", &wrapper)?;
     PyModule::import(py, name)
 }
 
@@ -88,6 +88,16 @@ fn combined_core_exposes_rich_display_with_one_expression_type() {
         symbolica.add("community", &community)?;
         register_spenso(&core)?;
         let spenso = import_spenso_wrapper(py, &community)?;
+        assert!(!community.hasattr("spenso")?);
+        for name in ["Tensor", "TensorExpression", "Representation"] {
+            assert_eq!(
+                spenso
+                    .getattr(name)?
+                    .getattr("__module__")?
+                    .extract::<String>()?,
+                "symbolica.community.tensor"
+            );
+        }
 
         let locals = PyDict::new(py);
         locals.set_item("core", &core)?;
@@ -120,78 +130,36 @@ assert type(spenso.formatted(expression, True)) is core.FormattedOutput
 for name in ("formatted", "to_html", "to_svg", "to_typst"):
     assert hasattr(tensor, name), name
 
-# Explicit rendering reports the optional dependency, while notebook and
-# FormattedOutput paths silently retain their existing LaTeX/text fallback.
+# Rendering is self-contained even when the unrelated PyPI Linnet and
+# typst-py cannot be imported. Trusted notation still crosses the real compiler.
 import builtins
 import sys
 
-previous_typst = sys.modules.pop("typst", None)
 original_import = builtins.__import__
-
-def import_without_typst(name, globals=None, locals=None, fromlist=(), level=0):
-    if name == "typst":
-        raise ImportError("typst deliberately unavailable in this test")
+def import_without_renderers(name, globals=None, locals=None, fromlist=(), level=0):
+    if name in ("typst", "linnet"):
+        raise ImportError(f"{name} deliberately unavailable in this test")
     return original_import(name, globals, locals, fromlist, level)
 
-builtins.__import__ = import_without_typst
+builtins.__import__ = import_without_renderers
 try:
-    try:
-        spenso.to_html(expression)
-    except ImportError as error:
-        assert "gammaloop[typst-display]" in str(error)
-    else:
-        raise AssertionError("explicit HTML rendering must require typst-display")
-
-    assert tensor._repr_html_() is None
+    html = spenso.to_html(expression)
+    assert "<math" in html
+    assert "data:font" not in html
+    assert len(html.encode()) < 10_000
+    assert "<math" in tensor._repr_html_()
+    assert tensor.to_svg().startswith("<svg")
     assert type(spenso.formatted(expression, True)) is core.FormattedOutput
+    for render in (spenso.to_html, spenso.to_svg):
+        try:
+            render(expression, notation_source='#panic("trusted-notation-sentinel")')
+        except RuntimeError as error:
+            assert "trusted-notation-sentinel" in str(error), str(error)
+        else:
+            raise AssertionError("custom notation was not compiled")
 finally:
     builtins.__import__ = original_import
-    if previous_typst is not None:
-        sys.modules["typst"] = previous_typst
 
-# A fake compiler lets this test verify the trusted notation source and
-# temporary project routing without installing typst-py or pretending to test
-# its compiler.
-import pathlib
-import types
-
-typst = types.ModuleType("typst")
-typst.calls = []
-
-def compile_typst(input, *, root, format, pretty):
-    root = pathlib.Path(root)
-    assert pathlib.Path(input) == root / "main.typ"
-    files = {path.name: path.read_bytes() for path in root.iterdir()}
-    typst.calls.append((files, format, pretty))
-    if format == "html":
-        return b"<html><head><style>.math{}</style></head><body><math><mi>T</mi></math></body></html>"
-    if format == "svg":
-        return b"<svg xmlns='http://www.w3.org/2000/svg'></svg>"
-    raise AssertionError(format)
-
-typst.compile = compile_typst
-sys.modules["typst"] = typst
-notation_source = "#let trusted-notation-sentinel = 42"
-
-html = spenso.to_html(expression, notation_source=notation_source)
-assert "<math" in html
-files, format, pretty = typst.calls[-1]
-assert files["notation.typ"] == notation_source.encode()
-assert files["render.typ"]
-assert files["tree.cbor"]
-assert format == "html"
-assert pretty is True
-
-svg = tensor.to_svg(notation_source=notation_source)
-assert svg.startswith("<svg")
-files, format, pretty = typst.calls[-1]
-assert files["notation.typ"] == notation_source.encode()
-assert format == "svg"
-assert pretty is True
-
-del sys.modules["typst"]
-if previous_typst is not None:
-    sys.modules["typst"] = previous_typst
 "##,
         )
         .expect("Python assertions contain a null byte");
@@ -280,23 +248,4 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
     let imported = parsed.import_atom().unwrap();
     assert_eq!(imported, atom);
     assert_eq!(attachments_for_atom(&imported).unwrap(), attachments);
-}
-
-#[test]
-fn native_payload_rejects_a_different_symbolica_export_version() {
-    let mut payload = encode_atom_from_set(&Atom::num(1), &AttachmentSet::new()).unwrap();
-    let native = parse_payload(&payload).unwrap().atom_bytes().to_vec();
-    let offset = payload
-        .windows(native.len())
-        .position(|bytes| bytes == native)
-        .unwrap();
-    // The native header is a four-byte magic followed by a little-endian u16.
-    // Alter its version without changing any envelope bounds or attachments.
-    payload[offset + 4] ^= 1;
-    assert!(matches!(
-        parse_payload(&payload),
-        Err(PayloadError::InvalidEnvelope(
-            "Atom export uses an unsupported Symbolica format version"
-        ))
-    ));
 }

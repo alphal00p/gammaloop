@@ -83,10 +83,6 @@ check-docs:
 bench:
     cargo bench
 
-# Run benchmarks with custom getrandom
-bench-custom:
-    cargo bench --features linnest/custom
-
 # Run specific benchmark
 bench-layout:
     cargo bench layout

@@ -1,6 +1,8 @@
 // Render from the checked measurement record; never edit timing values here.
 // Visual reference: https://github.com/alphal00p/ninjars/blob/main/docs/benchmark/benchmark.pdf
-#let data = json("data/results.json")
+#let report = json("data/results.json")
+#let selected = report.at("selected_reduction_run", default: none)
+#let data = if selected == none { report } else { report.reduction_runs.at(selected) }
 #assert(data.validation_passed, message: "Only validated benchmark results may be published")
 #let navy = rgb("#1f3b63")
 #let pale = rgb("#eef3f9")
@@ -122,8 +124,109 @@ Median seconds over #data.protocol.repetitions fresh processes per backend and c
 
 #v(0.5em)
 #set text(8.5pt, fill: luma(100))
-Measured source: #raw(data.protocol.source_commit.slice(0, 12)).
+#if selected == none [Historical measurements, unchanged.] else [Selected validated run: #raw(selected).]
+Source: #raw(data.protocol.source_commit.slice(0, 12)).
 #if data.protocol.source_dirty [Modified source tree.]
 Data: #raw(data.protocol.data_version).
 Samples and provenance: #raw("data/results.json").
 Refresh instructions: #raw("../../AGENTS.md").
+
+#pagebreak()
+#let ingress = report.five_loop_dot_ingress_acceptance
+#let pending = report.five_loop_performance_status
+#assert(ingress.validation_passed, message: "Five-loop ingress checks must pass")
+#set text(font: "Libertinus Serif", size: 10pt, fill: black)
+
+#align(center)[
+  #text(22pt, weight: "bold", fill: navy)[Five-loop validation and benchmarks]
+  #v(0.2em)
+  #text(11.5pt, fill: luma(80))[640 declared, uncomputed masters · performance measurements pending]
+]
+
+#v(0.55em)
+#text(13pt, weight: "bold", fill: navy)[Historical DOT ingress acceptance]
+#v(0.2em)
+#ingress.completed_utc.split("T").first() · one sequential debug-build pass.
+This checks graph definitions; it does not time IBP reduction, master evaluation,
+package loading or cache preparation.
+
+#v(0.35em)
+#{
+  set text(font: "DejaVu Sans", size: 9pt)
+  set par(justify: false)
+  table(
+    columns: (2.1fr, 1fr),
+    inset: (x: 11pt, y: 8pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else if calc.rem(y, 2) == 0 { pale } else { none },
+    table.header(
+      text(fill: white, weight: "bold")[Validation workload],
+      text(fill: white, weight: "bold")[Recorded result],
+    ),
+    [Master graphs / dotted / with numerator],
+    [#ingress.graphs.masters_checked / #ingress.graphs.dotted_masters / #ingress.graphs.numerator_masters],
+    [Exact routing, full numerators, native ingress and DOT round trips], [Passed],
+    [Complete graph-validation pass],
+    text(size: 16pt, weight: "bold", fill: navy)[#timing(ingress.graphs.elapsed_seconds) s],
+    [Per graph: minimum / median / maximum],
+    [#timing(ingress.graphs.minimum_seconds) / #timing(ingress.graphs.median_seconds) / #timing(ingress.graphs.maximum_seconds) s],
+    [Numerical master values / prepared 5L cache in this run], [Absent / absent],
+  )
+}
+
+#v(0.3em)
+#set text(9pt)
+Physical powers, signed indices, mass terms, full numerators, loop-basis slots
+(including zero) and integration Jacobians were checked exactly. These checks
+establish the stored graph definitions, without claiming that the catalogue is
+an independent master basis. One observed run supports no statistical speedup
+claim. Earlier interrupted checks are not a timing baseline.
+
+#v(0.5em)
+#text(13pt, weight: "bold", fill: navy)[Five-loop reduction comparison]
+#v(0.25em)
+#{
+  set text(font: "DejaVu Sans", size: 9pt)
+  set par(justify: false)
+  table(
+    columns: (1.8fr, 1fr, 1fr),
+    inset: (x: 10pt, y: 11pt),
+    stroke: 0.4pt + luma(215),
+    fill: (x, y) => if y == 0 { navy } else if x > 0 { rgb("#fff3dc") } else { pale },
+    table.header(
+      text(fill: white, weight: "bold")[Retained-master workload],
+      text(fill: white, weight: "bold")[No persistent cache],
+      text(fill: white, weight: "bold")[With persistent cache],
+    ),
+    ..for case in pending.cases {
+      (case.label, [Pending], [Pending])
+    },
+  )
+}
+
+#v(0.35em)
+#block(fill: pale, inset: 9pt, radius: 4pt, width: 100%)[
+  #set text(9pt)
+  *Required before filling these cells.* Complete reductions and exact result/guard
+  agreement; a completed, strict cache workload; three fresh-process runs per
+  mode with fixed affinity and worker counts. Report graph preparation, loading,
+  lowering, IBP, cache loading and end-to-end time separately. Cache size,
+  preparation cost, intermediate reuse and held-out regressions accompany the
+  comparison. No cache speedup is claimed yet.
+]
+
+#v(0.35em)
+#set text(8pt, fill: luma(100))
+Historical ingress: source #raw(ingress.protocol.source_commit.slice(0, 12))
+(modified); RustRed #raw(ingress.protocol.rustred_commit.slice(0, 12));
+Symbolica #raw(ingress.protocol.symbolica_commit.slice(0, 12)).
+Exact patch, executable, data and per-graph digests remain in JSON.
+
+#v(0.2em)
+Latest validated integration cohort, separate from these historical timings:
+RustRed #raw(pending.validated_compatibility_cohort.rustred_revision.slice(0, 12));
+Symbolica #raw(pending.validated_compatibility_cohort.symbolica_numerica_graphica_revision.slice(0, 12)).
+Published upgrade: Symbolica
+#raw(pending.pending_upgrade.symbolica_numerica_graphica_revision.slice(0, 12)),
+FeynKit #raw(pending.pending_upgrade.feynkit_owner_source_revision.slice(0, 12));
+final coordinated acceptance pending. Full revisions: #raw("data/results.json").

@@ -68,6 +68,67 @@ impl<R: PartialEq + RepName, Aind: PartialEq> PartialEq for OrderedStructure<R, 
 }
 impl<R: Eq + RepName, Aind: Eq> Eq for OrderedStructure<R, Aind> {}
 
+impl super::IndexedStructure {
+    /// Return the explicitly indexed slots in their declared logical order.
+    pub fn logical_slots(&self) -> Vec<Slot<LibraryRep, AbstractIndex>> {
+        self.layout()
+            .canonical_to_logical(&self.canonical().external_structure())
+    }
+
+    /// Project index metadata to the partial interface without changing storage order.
+    /// This neither allocates indices nor rewrites any symbolic payload.
+    pub fn into_partial(self) -> super::partial::PartialStructure {
+        self.map_canonical(|structure| OrderedStructure {
+            structure: structure
+                .structure
+                .into_iter()
+                .map(|slot| {
+                    slot.rep()
+                        .slot(super::partial::PartialIndex::Explicit(slot.aind))
+                })
+                .collect(),
+            dual_start: structure.dual_start,
+            base_start: structure.base_start,
+        })
+    }
+}
+
+impl TryFrom<super::partial::PartialStructure> for super::IndexedStructure {
+    type Error = StructureError;
+
+    fn try_from(value: super::partial::PartialStructure) -> Result<Self, Self::Error> {
+        use super::partial::PartialIndex;
+
+        let mut slots = Vec::with_capacity(value.canonical().order());
+        for (axis, slot) in value.canonical().external_structure_iter().enumerate() {
+            let PartialIndex::Explicit(index) = slot.aind else {
+                return Err(StructureError::ExpectedExplicitSlot { axis });
+            };
+            let unscoped = index;
+            #[cfg(feature = "shadowing")]
+            let unscoped = {
+                let mut index = unscoped;
+                while let AbstractIndex::Scoped(scope) = index {
+                    index = scope.index();
+                }
+                index
+            };
+            if matches!(unscoped, AbstractIndex::Open { .. }) {
+                return Err(StructureError::ExpectedExplicitSlot { axis });
+            }
+            slots.push(slot.rep().slot(index));
+        }
+        // Removing the Explicit enum wrapper does not change the established
+        // canonical order. Keep both ordering stages verbatim, including ties
+        // involving symbolic dimensions; do not sort an admitted layout again.
+        Ok(value.map_canonical(|structure| OrderedStructure {
+            structure: slots,
+            dual_start: structure.dual_start,
+            base_start: structure.base_start,
+        }))
+    }
+}
+
 impl<R: RepName, Aind> super::ApplyPendingIndexPermutation for OrderedStructure<R, Aind> {
     type Output = Self;
 
@@ -222,11 +283,7 @@ impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
     }
 
     pub fn self_dual_slice(&self) -> &[Slot<R, Aind>] {
-        if self.base_start >= self.structure.len() {
-            &self.structure[..]
-        } else {
-            &self.structure[self.base_start..]
-        }
+        &self.structure[..self.n_self_dual()]
     }
 
     pub fn n_self_dual(&self) -> usize {
@@ -530,6 +587,12 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
         let a = self.structure.remove(i);
         let b = self.structure.remove(j);
         assert!(a.matches(&b), "cannot trace unmatched slots {a} and {b}");
+        // Each removed slot in front of a partition moves that partition's start down.
+        for start in [&mut self.base_start, &mut self.dual_start] {
+            if *start != usize::MAX {
+                *start -= usize::from(j < *start) + usize::from(i < *start);
+            }
+        }
     }
 
     fn trace_out(&mut self) {
@@ -900,6 +963,76 @@ pub mod test {
     use super::OrderedStructure;
 
     #[test]
+    fn partial_trace_preserves_partitions_for_contraction() {
+        let up = Lorentz {}.new_slot(2, 0).to_lib();
+        let remaining = [up.reindex(2.into()), up.dual().reindex(1.into())];
+        let a: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([up.reindex(1.into()), up.dual().reindex(2.into())])
+                .into_canonical();
+
+        for (i, j) in [(0, 2), (2, 0)] {
+            let mut b: OrderedStructure<LibraryRep> =
+                Canonicalized::from_iter([up, remaining[0], up.dual(), remaining[1]])
+                    .into_canonical();
+            b.trace(i, j);
+
+            assert_eq!(b.structure, remaining);
+            assert_eq!((b.n_self_dual(), b.n_base(), b.n_dual()), (0, 1, 1));
+            for (left, right) in [(&a, &b), (&b, &a)] {
+                let (merged, left_matches, right_matches, _) = left.merge(right).unwrap();
+                assert!(merged.is_scalar());
+                assert_eq!(left_matches.n_included(), 2);
+                assert_eq!(right_matches.n_included(), 2);
+            }
+        }
+    }
+
+    #[test]
+    fn trace_out_preserves_empty_and_mixed_partitions() {
+        let self_dual = Euclidean {}.new_slot(2, 0).to_lib();
+        let up = Lorentz {}.new_slot(2, 0).to_lib();
+        for remaining in [
+            vec![],
+            vec![self_dual.reindex(1.into())],
+            vec![up.reindex(1.into())],
+            vec![up.dual().reindex(2.into())],
+            vec![up.reindex(1.into()), up.dual().reindex(2.into())],
+            vec![
+                self_dual.reindex(1.into()),
+                up.reindex(1.into()),
+                up.dual().reindex(2.into()),
+            ],
+        ] {
+            for traced in [
+                vec![self_dual, self_dual],
+                vec![self_dual, self_dual, up, up.dual()],
+            ] {
+                let expected: OrderedStructure<LibraryRep> =
+                    Canonicalized::from(remaining.clone()).into_canonical();
+                let mut structure: OrderedStructure<LibraryRep> =
+                    Canonicalized::from_iter(traced.into_iter().chain(remaining.iter().copied()))
+                        .into_canonical();
+
+                structure.trace_out();
+
+                assert_eq!(structure, expected);
+                assert_eq!(structure.n_self_dual(), expected.n_self_dual());
+                assert_eq!(structure.n_base(), expected.n_base());
+                assert_eq!(structure.n_dual(), expected.n_dual());
+                assert_eq!(structure.base_slice(), expected.base_slice());
+                assert_eq!(structure.dual_slice(), expected.dual_slice());
+                assert!(
+                    structure
+                        .merge(&structure.clone().dual())
+                        .unwrap()
+                        .0
+                        .is_scalar()
+                );
+            }
+        }
+    }
+
+    #[test]
     fn merge_dual() {
         let a: OrderedStructure<LibraryRep> = Canonicalized::from_iter([
             Lorentz {}.new_slot(3, 2).to_lib().dual(),
@@ -962,6 +1095,48 @@ pub mod test {
         println!("{:?}", b);
         println!("{}", a.merge(&b).unwrap().0);
         println!("{}", b.merge(&a).unwrap().0);
+    }
+
+    #[test]
+    fn partition_slices_split_representation_kinds() {
+        let self_dual = Euclidean {}.new_slot(4, 2).to_lib();
+        let upper = Lorentz {}.new_slot(3, 1).to_lib();
+        let lower = Lorentz {}.new_slot(3, 3).to_lib().dual();
+        let structure: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([lower, self_dual, upper]).into_canonical();
+
+        assert_eq!(structure.self_dual_slice(), [self_dual]);
+        assert_eq!(structure.base_slice(), [upper]);
+        assert_eq!(structure.dual_slice(), [lower]);
+    }
+
+    #[test]
+    fn trace_keeps_remaining_slots_contractible() {
+        // Tracing removes slots in front of later partitions. The slots left
+        // behind must keep their variance, or merging misses their contraction.
+        let traced = Lorentz {}.new_slot(3, 0).to_lib();
+        let lower = Lorentz {}.new_slot(3, 1).to_lib().dual();
+        let mut dualizable: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([traced, lower, traced.dual()]).into_canonical();
+        dualizable.trace_out();
+        assert_eq!(dualizable.dual_slice(), [lower]);
+        assert!(dualizable.base_slice().is_empty());
+
+        let euclidean = Euclidean {}.new_slot(4, 0).to_lib();
+        let upper = lower.dual();
+        let mut self_dual: OrderedStructure<LibraryRep> =
+            Canonicalized::from_iter([euclidean, euclidean, upper]).into_canonical();
+        self_dual.trace_out();
+        assert_eq!(self_dual.base_slice(), [upper]);
+        assert!(self_dual.self_dual_slice().is_empty());
+
+        for (structure, remaining) in [(dualizable, lower), (self_dual, upper)] {
+            let partner: OrderedStructure<LibraryRep> =
+                Canonicalized::from_iter([remaining.dual()]).into_canonical();
+            let (merged, common, _, _) = structure.merge(&partner).unwrap();
+            assert!(merged.is_scalar());
+            assert_eq!(common.n_included(), 1);
+        }
     }
 
     #[cfg(feature = "shadowing")]

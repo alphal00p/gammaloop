@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use feynkit_generator::{GenerationOptions, Generator, Process};
+use feynkit_generator::{GenerationOptions, Process};
 use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
 use symbolica::atom::{Atom, AtomCore};
@@ -44,20 +44,14 @@ fn generated_contraction_closure_has_native_exact_registered_witnesses() {
         .max_vertices(8)
         .allow_self_loops(true)
         .allow_zero_flow_edges(false);
-    let generated = Generator::new(
-        Model::from_json(include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/tests/fixtures/phi_3_4.json"
-        )))
-        .expect("valid phi_3_4 fixture"),
-    )
-    .generate(
-        &Process::amplitude(Vec::<&str>::new(), Vec::<&str>::new())
-            .with_loop_count(5, 5)
-            .unwrap(),
-        &options,
-    )
-    .unwrap();
+    let model = Model::from_json(include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/phi_3_4.json"
+    )))
+    .expect("valid phi_3_4 fixture");
+    let generated = Process::new(Vec::<&str>::new(), Vec::<&str>::new())
+        .generate_diagrams(model, &options.with_loop_count(5, 5).unwrap())
+        .unwrap();
     let vakint = Vakint::new().unwrap();
     vakint
         .topologies
@@ -89,7 +83,10 @@ fn generated_contraction_closure_has_native_exact_registered_witnesses() {
                     );
                     S.prop.call((
                         index + 1,
-                        S.edge.call((endpoints.source.0, endpoints.target.0)),
+                        S.edge.call((
+                            endpoints.source.expect("vacuum source").0,
+                            endpoints.target.expect("vacuum target").0,
+                        )),
                         momentum,
                         Atom::one(),
                         1,

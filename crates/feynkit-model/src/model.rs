@@ -5,12 +5,19 @@ use std::{
     sync::OnceLock,
 };
 
+use linnet::half_edge::{
+    HedgeGraph,
+    algorithms::{DirectionBasis, topological_order::TopoError},
+    builder::HedgeGraphBuilder,
+    involution::Orientation,
+};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use symbolica::{
     atom::{Atom, AtomCore},
-    id::Replacement,
+    domains::rational::Rational,
+    id::{Pattern, Replacement},
     parser::ParseSettings,
-    printer::PrintOptions,
+    printer::CanonicalOrderingSettings,
     symbol,
 };
 
@@ -18,6 +25,10 @@ use crate::{
     ComplexValue, EntityKind, EvaluatedValues, EvaluationRequest, ModelError, ModelEvaluator,
     ModelExpression, ModelValidationError, ParameterCard, RecomputeError,
 };
+
+mod builtins;
+mod parameter_print;
+mod quantum_number;
 
 const fn default_true() -> bool {
     true
@@ -48,14 +59,18 @@ fn parse_expression(
 
 /// Export an expression in the UFO interchange syntax.
 ///
-/// Runtime atoms deliberately live in Symbolica's `UFO` namespace, but the
-/// UFO JSON and evaluator boundaries use the original, namespaceless symbol
-/// spelling. Keeping that conversion in one place also gives every exported
-/// expression a deterministic ordering.
+/// Model symbols use Symbolica's `UFO` namespace, which is implicit at the
+/// UFO JSON and evaluator boundaries. Preserve other namespaces so user
+/// parameters and tensor functions retain their identities when reloaded.
+/// Keeping that conversion in one place also gives every exported expression
+/// a deterministic ordering.
 fn export_expression(expression: &Atom) -> String {
-    expression
-        .printer(PrintOptions::file_no_namespace())
-        .to_string()
+    expression.to_canonically_ordered_string(
+        CanonicalOrderingSettings::new()
+            .include_namespace(true)
+            .include_attributes(false)
+            .hide_namespace(Some("UFO")),
+    )
 }
 
 /// The UFO convention stores twice the spin plus one (scalar = 1, spinor = 2,
@@ -69,12 +84,25 @@ pub(crate) struct ParticleDefinition {
     pub color: i64,
     pub mass: String,
     pub width: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub chemical_potential: Option<String>,
     pub texname: String,
     pub antitexname: String,
-    pub charge: f64,
+    /// Native Typst math source (without dollar delimiters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typstname: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub antitypstname: Option<String>,
+    #[serde(with = "quantum_number")]
+    pub charge: Rational,
     pub ghost_number: i64,
     pub lepton_number: i64,
-    pub y_charge: i64,
+    /// Hypercharge in Q = T3 + Y/2; the left-handed component for fermions.
+    #[serde(default, with = "quantum_number::optional")]
+    pub y_charge: Option<Rational>,
+    /// Right-handed fermion hypercharge. None means absent or unspecified.
+    #[serde(default, with = "quantum_number::optional")]
+    pub y_charge_right: Option<Rational>,
     #[serde(default = "default_true")]
     pub propagating: bool,
     #[serde(
@@ -132,6 +160,11 @@ pub enum ParameterType {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub(crate) struct ParameterDefinition {
     pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub texname: Option<String>,
+    /// Native Typst math source (without dollar delimiters).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub typstname: Option<String>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -180,6 +213,8 @@ pub(crate) struct ModelFormFactorDefinition {
 pub(crate) struct ModelDefinition {
     pub name: String,
     pub restriction: Option<String>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
     pub orders: Vec<Order>,
     pub parameters: Vec<ParameterDefinition>,
     pub particles: Vec<ParticleDefinition>,
@@ -265,6 +300,32 @@ impl std::fmt::Display for ModelFingerprint {
     }
 }
 
+/// Line drawn for a particle by the shared physics renderer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LineKind {
+    Plain,
+    /// Scalars.
+    Dashed,
+    /// Ghosts.
+    Dotted,
+    /// Neutral colour-singlet vectors.
+    Wave,
+    /// Neutral colour-octet vectors.
+    Coil,
+    /// Other vectors.
+    Zigzag,
+}
+
+/// A particle's drawing conventions: its line, accent paint when charged, a
+/// heavier stroke when massive, and a particle-flow arrow for fermions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LineStyle {
+    pub kind: LineKind,
+    pub charged: bool,
+    pub massive: bool,
+    pub fermion_flow: bool,
+}
+
 /// A particle whose links into the model are stable typed identifiers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Particle {
@@ -275,26 +336,129 @@ pub struct Particle {
     pub color: i64,
     pub mass: ParameterId,
     pub width: ParameterId,
+    pub chemical_potential: Option<ParameterId>,
     pub texname: String,
     pub antitexname: String,
-    pub charge: f64,
+    /// Native Typst math source (without dollar delimiters).
+    pub typstname: Option<String>,
+    pub antitypstname: Option<String>,
+    pub charge: Rational,
     pub ghost_number: i64,
     pub lepton_number: i64,
-    pub y_charge: i64,
+    /// Hypercharge in Q = T3 + Y/2; the left-handed component for fermions.
+    pub y_charge: Option<Rational>,
+    /// Right-handed fermion hypercharge. None means absent or unspecified.
+    pub y_charge_right: Option<Rational>,
     pub propagating: bool,
     pub goldstone: bool,
     pub propagator: Option<PropagatorId>,
 }
 
 impl Particle {
+    /// Native math label, with an escaped ordinary name for models without one.
+    pub fn typst_label(&self) -> String {
+        self.typstname
+            .clone()
+            .filter(|label| !label.trim().is_empty())
+            .unwrap_or_else(|| format!("{:?}", self.name))
+    }
+
+    /// Signed physical charge Q e, inferred from the model's photon vertices.
+    pub fn electric_charge(&self, model: &Model) -> Result<Atom, ModelError> {
+        if self.charge.is_zero() {
+            Ok(Atom::Zero)
+        } else {
+            Ok(Atom::num(self.charge.clone()) * model.unit_electric_charge()?)
+        }
+    }
+
     /// Symbolic UFO mass parameter, without substituting its numerical value.
-    pub fn symbolic_mass_parameter(&self, model: &Model) -> Result<Atom, ModelError> {
-        let mass = model.parameter_by_id(self.mass)?;
-        Ok(if mass.name == "ZERO" {
+    pub fn symbolic_mass(&self, model: &Model) -> Atom {
+        if self.is_massless(model) {
             Atom::num(0)
         } else {
+            let mass = model.parameter_by_id(self.mass).unwrap();
             Atom::var(symbol!(&format!("UFO::{}", mass.name)))
-        })
+        }
+    }
+
+    /// Third weak-isospin component, derived in the convention Q = T3 + Y/2.
+    /// For fermions this is the left-handed component; missing metadata stays None.
+    pub fn weak_isospin(&self) -> Option<Rational> {
+        self.y_charge
+            .as_ref()
+            .map(|y| self.charge.clone() - y.clone() / Rational::from(2))
+    }
+
+    /// Third weak-isospin component of the right-handed fermion.
+    pub fn weak_isospin_right(&self) -> Option<Rational> {
+        self.y_charge_right
+            .as_ref()
+            .map(|y| self.charge.clone() - y.clone() / Rational::from(2))
+    }
+
+    /// Whether the model declares this particle's mass to be zero.
+    pub fn is_massless(&self, model: &Model) -> bool {
+        let mass = model.parameter_by_id(self.mass).unwrap();
+        mass.name == "ZERO"
+            || (mass.nature == ParameterNature::Internal
+                && mass.expression.as_ref().is_some_and(Atom::is_zero))
+    }
+
+    /// How the shared physics renderer draws this particle's line.
+    pub fn line_style(&self, model: &Model) -> LineStyle {
+        let neutral = self.charge.is_zero();
+        let kind = if self.is_ghost() {
+            LineKind::Dotted
+        } else if self.is_vector() && neutral && self.color == 1 {
+            LineKind::Wave
+        } else if self.is_vector() && neutral && self.color == 8 {
+            LineKind::Coil
+        } else if self.is_vector() {
+            LineKind::Zigzag
+        } else if self.is_scalar() {
+            LineKind::Dashed
+        } else {
+            LineKind::Plain
+        };
+        LineStyle {
+            kind,
+            charged: !neutral,
+            massive: !self.is_massless(model),
+            fermion_flow: self.is_fermion() && !self.is_ghost(),
+        }
+    }
+
+    /// Particle styles consumed by the shared Typst physics renderer.
+    pub fn generate_edge_typst_dict(&self, model: &Model) -> String {
+        let style = self.line_style(model);
+        let color = if style.charged {
+            "palette.accent"
+        } else {
+            "palette.ink"
+        };
+        let thickness = if style.massive { "massive" } else { "massless" };
+        let (dash, decoration) = match style.kind {
+            LineKind::Plain => ("", ""),
+            LineKind::Dashed => (", dash: dashed", ""),
+            LineKind::Dotted => (", dash: dotted", ""),
+            LineKind::Wave => ("", " + wave"),
+            LineKind::Coil => ("", " + coil"),
+            LineKind::Zigzag => ("", " + zigzag"),
+        };
+        let stroke =
+            |half| format!("{half}-stroke(c: {color}, thickness: {thickness}{dash}){decoration}");
+        format!(
+            "(source:{}, sink:{}, label:$ {} $){}",
+            stroke("source"),
+            stroke("sink"),
+            self.typst_label(),
+            if style.fermion_flow {
+                " + fermion-flow"
+            } else {
+                ""
+            }
+        )
     }
 
     pub fn is_antiparticle(&self) -> bool {
@@ -319,6 +483,10 @@ impl Particle {
 
     pub fn is_spinor(&self) -> bool {
         self.spin == 2
+    }
+
+    pub fn is_anticommutating(&self) -> bool {
+        self.is_fermion() || self.is_ghost()
     }
 
     pub fn is_ghost(&self) -> bool {
@@ -364,6 +532,10 @@ pub struct Coupling {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Parameter {
     pub name: String,
+    /// Model-supplied LaTeX label, independent of the algebraic symbol name.
+    pub texname: Option<String>,
+    /// Native Typst math source (without dollar delimiters).
+    pub typstname: Option<String>,
     pub lhablock: Option<String>,
     pub lhacode: Option<Vec<usize>>,
     pub nature: ParameterNature,
@@ -429,6 +601,7 @@ struct ModelIndexes {
 /// A validated physics model with fallible, indexed lookups.
 #[derive(Clone, Debug)]
 pub struct Model {
+    covariant_cut_multiplets: BTreeMap<i64, [i64; 4]>,
     name: String,
     restriction: Option<String>,
     orders: Vec<Order>,
@@ -442,6 +615,31 @@ pub struct Model {
     form_factors: Vec<ModelFormFactor>,
     indexes: ModelIndexes,
     coupling_replacement_rules: OnceLock<Vec<Replacement>>,
+    fingerprint: OnceLock<ModelFingerprint>,
+}
+
+// Model interchange contains symbolic expressions and validated name-based
+// references. Keep binary persistence on the same reconstruction boundary.
+impl bincode::Encode for Model {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> Result<(), bincode::error::EncodeError> {
+        let json = self
+            .to_json()
+            .map_err(|error| bincode::error::EncodeError::OtherString(error.to_string()))?;
+        bincode::Encode::encode(&json, encoder)
+    }
+}
+
+impl<Context> bincode::Decode<Context> for Model {
+    fn decode<D: bincode::de::Decoder<Context = Context>>(
+        decoder: &mut D,
+    ) -> Result<Self, bincode::error::DecodeError> {
+        let json = <String as bincode::Decode<Context>>::decode(decoder)?;
+        Self::from_json(&json)
+            .map_err(|error| bincode::error::DecodeError::OtherString(error.to_string()))
+    }
 }
 
 impl Model {
@@ -451,6 +649,7 @@ impl Model {
         Self::new(ModelDefinition {
             name: name.into(),
             restriction: None,
+            covariant_cut_multiplets: BTreeMap::new(),
             orders: Vec::new(),
             parameters: Vec::new(),
             particles: Vec::new(),
@@ -466,12 +665,23 @@ impl Model {
 
     fn new(definition: ModelDefinition) -> Result<Self, ModelError> {
         let indexes = ModelIndexes::build(&definition)?;
-        let parameters = definition
+        // Declare every parameter before parsing any expression: a parameter
+        // can reference a later entry, and Symbolica fixes printers at creation.
+        for parameter in &definition.parameters {
+            Self::register_parameter_symbol(
+                &parameter.name,
+                parameter.texname.as_deref(),
+                parameter.typstname.as_deref(),
+            )?;
+        }
+        let mut parameters = definition
             .parameters
             .iter()
             .map(|parameter| {
                 Ok(Parameter {
                     name: parameter.name.clone(),
+                    texname: parameter.texname.clone(),
+                    typstname: parameter.typstname.clone(),
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),
@@ -492,6 +702,62 @@ impl Model {
                 })
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
+        // Structural zeros come only from exact internal expressions. External
+        // parameters remain adjustable even when their current value is zero.
+        let mut zero_parameters = BTreeSet::from(["ZERO".to_owned()]);
+        loop {
+            let previous_len = zero_parameters.len();
+            let replacements = zero_parameters
+                .iter()
+                .map(|name| {
+                    Replacement::new(
+                        Atom::var(symbol!(&format!("UFO::{name}"))).to_pattern(),
+                        Atom::Zero,
+                    )
+                })
+                .collect::<Vec<_>>();
+            zero_parameters.extend(
+                parameters
+                    .iter()
+                    .filter(|parameter| {
+                        parameter.nature == ParameterNature::Internal
+                            && parameter.expression.as_ref().is_some_and(|expression| {
+                                expression.replace_multiple(&replacements).is_zero()
+                            })
+                    })
+                    .map(|parameter| parameter.name.clone()),
+            );
+            if zero_parameters.len() == previous_len {
+                break;
+            }
+        }
+        // A declared ZERO supplies the canonical mass/medium identity below.
+        // Keep other parameter expressions intact, including width aliases.
+        // Without that identity, retain the exact zero proof on the parameter.
+        if !indexes.parameters.contains_key("ZERO") {
+            for parameter in &mut parameters {
+                if parameter.nature == ParameterNature::Internal
+                    && parameter.expression.is_some()
+                    && zero_parameters.contains(&parameter.name)
+                {
+                    parameter.expression = Some(Atom::Zero);
+                }
+            }
+        }
+        let zero_mass_replacements = definition
+            .particles
+            .iter()
+            .map(|particle| &particle.mass)
+            .filter(|mass| zero_parameters.contains(*mass))
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .map(|name| {
+                Replacement::new(
+                    Atom::var(symbol!(&format!("UFO::{name}"))).to_pattern(),
+                    Atom::Zero,
+                )
+            })
+            .collect::<Vec<_>>();
         let particles = definition
             .particles
             .iter()
@@ -501,14 +767,36 @@ impl Model {
                 antiparticle: indexes.particles[&particle.antiname],
                 spin: particle.spin,
                 color: particle.color,
-                mass: indexes.parameters[&particle.mass],
+                mass: if zero_parameters.contains(&particle.mass) {
+                    indexes
+                        .parameters
+                        .get("ZERO")
+                        .copied()
+                        .unwrap_or(indexes.parameters[&particle.mass])
+                } else {
+                    indexes.parameters[&particle.mass]
+                },
                 width: indexes.parameters[&particle.width],
+                chemical_potential: particle.chemical_potential.as_ref().map(|name| {
+                    if zero_parameters.contains(name) {
+                        indexes
+                            .parameters
+                            .get("ZERO")
+                            .copied()
+                            .unwrap_or(indexes.parameters[name])
+                    } else {
+                        indexes.parameters[name]
+                    }
+                }),
                 texname: particle.texname.clone(),
                 antitexname: particle.antitexname.clone(),
-                charge: particle.charge,
+                typstname: particle.typstname.clone(),
+                antitypstname: particle.antitypstname.clone(),
+                charge: particle.charge.clone(),
                 ghost_number: particle.ghost_number,
                 lepton_number: particle.lepton_number,
-                y_charge: particle.y_charge,
+                y_charge: particle.y_charge.clone(),
+                y_charge_right: particle.y_charge_right.clone(),
                 propagating: particle.propagating,
                 goldstone: particle.goldstone,
                 propagator: particle
@@ -529,13 +817,15 @@ impl Model {
                         &propagator.name,
                         "numerator",
                         &propagator.numerator,
-                    )?,
+                    )?
+                    .replace_multiple(&zero_mass_replacements),
                     denominator: parse_expression(
                         EntityKind::Propagator,
                         &propagator.name,
                         "denominator",
                         &propagator.denominator,
-                    )?,
+                    )?
+                    .replace_multiple(&zero_mass_replacements),
                 })
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
@@ -656,7 +946,8 @@ impl Model {
                 })
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
-        Ok(Self {
+        let model = Self {
+            covariant_cut_multiplets: definition.covariant_cut_multiplets,
             name: definition.name,
             restriction: definition.restriction,
             orders: definition.orders,
@@ -670,7 +961,138 @@ impl Model {
             form_factors,
             indexes,
             coupling_replacement_rules: OnceLock::new(),
-        })
+            fingerprint: OnceLock::new(),
+        };
+        model.validate_covariant_cut_multiplets()?;
+        Ok(model)
+    }
+
+    /// Physical vector PDG -> [vector, Goldstone, ghost, antighost]. Equal masses do not infer a quartet.
+    pub fn covariant_cut_multiplets(&self) -> &BTreeMap<i64, [i64; 4]> {
+        &self.covariant_cut_multiplets
+    }
+
+    /// Invalidate the model identity before editing its covariant partner declarations.
+    /// Call [`Self::validate_covariant_cut_multiplets`] after editing.
+    pub fn covariant_cut_multiplets_mut(&mut self) -> &mut BTreeMap<i64, [i64; 4]> {
+        self.fingerprint.take();
+        &mut self.covariant_cut_multiplets
+    }
+
+    pub fn validate_covariant_cut_multiplets(&self) -> Result<(), ModelError> {
+        let mut declared = BTreeSet::new();
+        for (&physical, members) in &self.covariant_cut_multiplets {
+            let invalid = |reason: &str| ModelValidationError::CovariantCutMultiplet {
+                physical,
+                reason: reason.to_owned(),
+            };
+            let particles = members
+                .iter()
+                .map(|pdg| self.particle_by_pdg(*pdg))
+                .collect::<Result<Vec<_>, _>>()?;
+            let vector = particles[0];
+            let denominator = |particle: &Particle| -> Result<&Atom, ModelError> {
+                let id = self.particle_id(&particle.name)?;
+                let propagator = match particle.propagator {
+                    Some(id) => self.propagator_by_id(id)?,
+                    None => self
+                        .propagators
+                        .iter()
+                        .find(|p| p.particle == id)
+                        .ok_or_else(|| invalid("a quartet member has no propagator"))?,
+                };
+                Ok(&propagator.denominator)
+            };
+            let pole = denominator(vector)?;
+            // Structural masslessness governs graph construction. A declared
+            // massive quartet additionally needs a nonzero evaluated pole for
+            // its physical longitudinal state, even when its mass is adjustable.
+            let zero_pole = self
+                .parameter_by_id(vector.mass)?
+                .value
+                .is_some_and(|mass| mass.re == 0.0 && mass.im == 0.0);
+            if members[0] != physical
+                || !vector.is_vector()
+                || vector.is_massless(self)
+                || zero_pole
+                || vector.ghost_number != 0
+                || particles[1].spin != 1
+                || !particles[1].is_goldstone()
+                || particles[1].ghost_number != 0
+                || particles[2].spin != -1
+                || particles[2].ghost_number != 1
+                || particles[3].spin != -1
+                || particles[3].ghost_number != -1
+                || particles.iter().any(|p| {
+                    p.mass != vector.mass || p.charge != vector.charge || p.color != vector.color
+                })
+                || members.iter().any(|pdg| !declared.insert(*pdg))
+            {
+                return Err(invalid("must contain one massive vector, its Goldstone, ghost and antighost with the same symbolic pole mass, charge and color").into());
+            }
+            for particle in &particles {
+                if denominator(particle)? != pole {
+                    return Err(invalid("members must have the same propagator denominator").into());
+                }
+            }
+            let conjugate_vector = self.antiparticle(vector)?.pdg_code;
+            let mut conjugate_members = particles
+                .iter()
+                .map(|p| self.antiparticle(p).map(|p| p.pdg_code))
+                .collect::<Result<Vec<_>, _>>()?;
+            conjugate_members.sort_unstable();
+            let conjugate = self
+                .covariant_cut_multiplets
+                .get(&conjugate_vector)
+                .map(|m| {
+                    let mut m = m.to_vec();
+                    m.sort_unstable();
+                    m
+                });
+            if conjugate != Some(conjugate_members) {
+                return Err(invalid("is not closed under particle conjugation").into());
+            }
+        }
+        Ok(())
+    }
+
+    /// Covariant completeness acts on whole final-state multisets. Mixed
+    /// vector/Goldstone states and the two ghost charges remain distinct;
+    /// graph automorphisms supply their symmetry factors exactly once.
+    pub fn covariant_cut_states(&self, states: &[Vec<i64>]) -> Result<Vec<Vec<i64>>, ModelError> {
+        self.validate_covariant_cut_multiplets()?;
+        if !states
+            .iter()
+            .flatten()
+            .any(|pdg| self.covariant_cut_multiplets.contains_key(pdg))
+        {
+            return Ok(states.to_vec());
+        }
+        let mut expanded = BTreeSet::new();
+        for state in states {
+            let mut products = vec![Vec::new()];
+            for pdg in state {
+                let members = self
+                    .covariant_cut_multiplets
+                    .get(pdg)
+                    .map_or_else(|| std::slice::from_ref(pdg), |members| members.as_slice());
+                products = products
+                    .into_iter()
+                    .flat_map(|prefix| {
+                        members.iter().map(move |member| {
+                            let mut next = prefix.clone();
+                            next.push(*member);
+                            next
+                        })
+                    })
+                    .collect();
+            }
+            for mut members in products {
+                members.sort_unstable();
+                expanded.insert(members);
+            }
+        }
+        Ok(expanded.into_iter().collect())
     }
 
     pub fn from_json(json: &str) -> Result<Self, ModelError> {
@@ -706,12 +1128,15 @@ impl Model {
         ModelDefinition {
             name: self.name.clone(),
             restriction: self.restriction.clone(),
+            covariant_cut_multiplets: self.covariant_cut_multiplets.clone(),
             orders: self.orders.clone(),
             parameters: self
                 .parameters
                 .iter()
                 .map(|parameter| ParameterDefinition {
                     name: parameter.name.clone(),
+                    texname: parameter.texname.clone(),
+                    typstname: parameter.typstname.clone(),
                     lhablock: parameter.lhablock.clone(),
                     lhacode: parameter.lhacode.clone(),
                     nature: parameter.nature.clone(),
@@ -731,12 +1156,18 @@ impl Model {
                     color: particle.color,
                     mass: self.parameters[particle.mass.index()].name.clone(),
                     width: self.parameters[particle.width.index()].name.clone(),
+                    chemical_potential: particle
+                        .chemical_potential
+                        .map(|id| self.parameters[id.index()].name.clone()),
                     texname: particle.texname.clone(),
                     antitexname: particle.antitexname.clone(),
-                    charge: particle.charge,
+                    typstname: particle.typstname.clone(),
+                    antitypstname: particle.antitypstname.clone(),
+                    charge: particle.charge.clone(),
                     ghost_number: particle.ghost_number,
                     lepton_number: particle.lepton_number,
-                    y_charge: particle.y_charge,
+                    y_charge: particle.y_charge.clone(),
+                    y_charge_right: particle.y_charge_right.clone(),
                     propagating: particle.propagating,
                     goldstone: particle.goldstone,
                     propagator: particle
@@ -831,9 +1262,11 @@ impl Model {
     }
 
     pub fn fingerprint(&self) -> ModelFingerprint {
-        let bytes = serde_json::to_vec(&self.definition())
-            .expect("canonical model definitions are always JSON serializable");
-        ModelFingerprint(*blake3::hash(&bytes).as_bytes())
+        *self.fingerprint.get_or_init(|| {
+            let bytes = serde_json::to_vec(&self.definition())
+                .expect("canonical model definitions are always JSON serializable");
+            ModelFingerprint(*blake3::hash(&bytes).as_bytes())
+        })
     }
 
     /// Remove parameters and interactions that evaluate to zero, rebuilding
@@ -935,6 +1368,106 @@ impl Model {
         &self.form_factors
     }
 
+    /// Extract e from minimally coupled photon–matter vertices. No parameter or
+    /// vertex names are assumed: normalize the full Lorentz coefficient by i Q.
+    fn unit_electric_charge(&self) -> Result<Atom, ModelError> {
+        let mut result: Option<Atom> = None;
+        for vertex in &self.vertex_rules {
+            if vertex.particles.len() != 3 {
+                continue;
+            }
+            let particles: Vec<_> = vertex
+                .particles
+                .iter()
+                .map(|id| &self.particles[id.index()])
+                .collect();
+            let Some(photon) = particles
+                .iter()
+                .position(|p| p.pdg_code == 22 && p.spin == 3 && p.charge.is_zero())
+            else {
+                continue;
+            };
+            let Some(matter) = particles.iter().position(|p| {
+                p.pdg_code > 0
+                    && !p.charge.is_zero()
+                    && p.ghost_number == 0
+                    && matches!(p.spin, 1 | 2)
+            }) else {
+                continue;
+            };
+            let anti = 3 - photon - matter;
+            if particles[matter].antiparticle != vertex.particles[anti] {
+                continue;
+            }
+            let parse = |expression: &str| {
+                parse_expression(
+                    EntityKind::VertexRule,
+                    &vertex.name,
+                    "structure",
+                    expression,
+                )
+            };
+            let (a, p, v) = (anti + 1, matter + 1, photon + 1);
+            let reference = if particles[matter].spin == 2 {
+                parse(&format!("Gamma(idx(1,{v}),idx(1,{a}),idx(1,{p}))"))?
+            } else {
+                parse(&format!("P(idx(1,{v}),idx(1,{p}))"))?
+            };
+            let structure = if particles[matter].spin == 2 {
+                reference.clone()
+            } else {
+                &reference - parse(&format!("P(idx(1,{v}),idx(1,{a}))"))?
+            };
+            let colors = if particles[matter].color == 1 {
+                vec![Atom::num(1)]
+            } else {
+                vec![
+                    parse(&format!("Identity({a},{p})"))?,
+                    parse(&format!("Identity({p},{a})"))?,
+                ]
+            };
+            // Only the color identity is part of an electromagnetic vertex.
+            // Keep all Lorentz components together, including split projectors.
+            if !vertex
+                .color_structures
+                .iter()
+                .all(|color| colors.contains(color))
+            {
+                continue;
+            }
+            let mut interaction = Atom::Zero;
+            for row in &vertex.couplings {
+                for (lorentz, coupling) in vertex.lorentz_structures.iter().zip(row) {
+                    if let Some(coupling) = coupling {
+                        interaction += &self.lorentz_structures[lorentz.index()].structure
+                            * &self.couplings[coupling.index()].expression;
+                    }
+                }
+            }
+            let interaction = interaction.expand();
+            let coefficient = interaction.coefficient(&reference);
+            if coefficient.is_zero() || !(interaction - &coefficient * structure).expand().is_zero()
+            {
+                continue;
+            }
+            let candidate = (coefficient
+                / (parse("1𝑖")? * Atom::num(particles[matter].charge.clone())))
+            .together();
+            if let Some(previous) = &result {
+                if !(&candidate - previous).together().is_zero() {
+                    return Err(ModelError::InconsistentElectricCharge {
+                        model: self.name.clone(),
+                    });
+                }
+            } else {
+                result = Some(candidate);
+            }
+        }
+        result.ok_or_else(|| ModelError::MissingElectricCharge {
+            model: self.name.clone(),
+        })
+    }
+
     pub fn particle_id(&self, name: &str) -> Result<ParticleId, ModelError> {
         self.indexes
             .particles
@@ -990,16 +1523,8 @@ impl Model {
     }
 
     pub fn particle_is_massless(&self, particle: ParticleId) -> bool {
-        self.particle_mass(particle).is_ok_and(|mass| {
-            mass.name == "ZERO"
-                || mass
-                    .value
-                    .is_some_and(|value| value.re == 0.0 && value.im == 0.0)
-                || mass
-                    .expression
-                    .as_ref()
-                    .is_some_and(|expression| expression.is_zero())
-        })
+        self.particle_by_id(particle)
+            .is_ok_and(|particle| particle.is_massless(self))
     }
 
     pub fn parameter_id(&self, name: &str) -> Result<ParameterId, ModelError> {
@@ -1038,6 +1563,66 @@ impl Model {
     /// inspection and algebra in terms of the underlying model parameters.
     pub fn expand_couplings(&self, expression: &Atom) -> Atom {
         expression.replace_multiple(self.coupling_replacement_rules())
+    }
+
+    /// Expand internal analytic parameter definitions to their external inputs.
+    ///
+    /// Linnet orders the definitions by their dependencies, and Symbolica performs
+    /// the exact substitutions. External parameters and internal parameters with
+    /// only numerical values remain symbolic: this never reads a parameter card
+    /// or converts binary64 defaults into symbolic constants.
+    ///
+    /// All internal analytic definitions must be acyclic, including unused ones.
+    /// The cycle error lists definitions still blocked by a cycle, which may
+    /// include definitions depending on that cycle. The model and input expression
+    /// are unchanged, and applying this expansion twice gives the same result.
+    pub fn expand_parameters(&self, expression: &Atom) -> Result<Atom, ModelError> {
+        let mut builder = HedgeGraphBuilder::<(), _>::new();
+        let definitions = self
+            .parameters
+            .iter()
+            .filter(|parameter| parameter.nature == ParameterNature::Internal)
+            .filter_map(|parameter| {
+                parameter.expression.as_ref().map(|definition| {
+                    let name = symbol!(&format!("UFO::{}", parameter.name));
+                    (name, (builder.add_node(parameter), definition))
+                })
+            })
+            .collect::<BTreeMap<_, _>>();
+        for (node, definition) in definitions.values() {
+            for dependency in definition.get_all_symbols(false) {
+                if let Some((dependency_node, _)) = definitions.get(&dependency) {
+                    builder.add_edge(*dependency_node, *node, (), Orientation::Default);
+                }
+            }
+        }
+        let graph: HedgeGraph<(), &Parameter> = builder.build();
+        let order = graph.topo_sort_kahn(DirectionBasis::Underlying).map_err(
+            |TopoError::NotDag {
+                 remaining_nodes, ..
+             }| {
+                let mut parameters = remaining_nodes
+                    .into_iter()
+                    .map(|(node, _)| graph[node].name.clone())
+                    .collect::<Vec<_>>();
+                parameters.sort();
+                ModelError::CyclicParameterDefinitions { parameters }
+            },
+        )?;
+        let mut replacements = Vec::with_capacity(order.len());
+        for node in order {
+            let parameter = graph[node];
+            let definition = parameter
+                .expression
+                .as_ref()
+                .expect("dependency nodes contain analytic definitions");
+            let expanded = definition.replace_multiple(&replacements);
+            replacements.push(Replacement::new(
+                Pattern::Literal(Atom::var(symbol!(&format!("UFO::{}", parameter.name)))),
+                Pattern::Literal(expanded),
+            ));
+        }
+        Ok(expression.replace_multiple(&replacements))
     }
 
     fn coupling_replacement_rules(&self) -> &[Replacement] {
@@ -1080,6 +1665,29 @@ impl Model {
         self.propagators
             .get(id.index())
             .ok_or_else(|| self.not_found(EntityKind::Propagator, &id.index().to_string()))
+    }
+
+    /// Resolve a particle's explicit or default propagator, then its antiparticle's.
+    /// The boolean records whether the template belongs to the antiparticle and
+    /// its numerator slots must be reversed during instantiation.
+    pub fn particle_propagator(
+        &self,
+        particle: &Particle,
+    ) -> Result<Option<(PropagatorId, bool)>, ModelError> {
+        for (candidate, reversed) in [(particle, false), (self.antiparticle(particle)?, true)] {
+            if let Some(id) = candidate.propagator {
+                return Ok(Some((id, reversed)));
+            }
+            let particle_id = self.particle_id(&candidate.name)?;
+            if let Some(index) = self
+                .propagators
+                .iter()
+                .position(|p| p.particle == particle_id)
+            {
+                return Ok(Some((PropagatorId(index), reversed)));
+            }
+        }
+        Ok(None)
     }
 
     pub fn propagator_id_at(&self, index: usize) -> Result<PropagatorId, ModelError> {
@@ -1194,6 +1802,7 @@ impl Model {
         if updates.is_empty() {
             return Ok(());
         }
+        self.fingerprint.take();
         for parameter in &mut self.parameters {
             if parameter.nature == ParameterNature::Internal && parameter.expression.is_some() {
                 parameter.value = None;
@@ -1230,6 +1839,7 @@ impl Model {
             .map_err(RecomputeError::Evaluator)?;
         self.validate_evaluated_values(&evaluated, overrides)?;
 
+        self.fingerprint.take();
         for parameter in &mut self.parameters {
             if parameter.nature == ParameterNature::Internal
                 && parameter.expression.is_some()
@@ -1619,6 +2229,16 @@ fn validate_particles(
             &particle.width,
             parameters,
         )?;
+        if let Some(name) = &particle.chemical_potential {
+            reference(
+                EntityKind::Particle,
+                &particle.name,
+                "chemical_potential",
+                EntityKind::Parameter,
+                name,
+                parameters,
+            )?;
+        }
         let antiparticle_id = *reference(
             EntityKind::Particle,
             &particle.name,
@@ -1806,6 +2426,66 @@ mod tests {
     }
 
     #[test]
+    fn binary_roundtrip_preserves_canonical_records_and_identity() {
+        let model = Model::from_json(&model_json("GC1")).unwrap();
+        let bytes = bincode::encode_to_vec(&model, bincode::config::standard()).unwrap();
+        let (decoded, consumed): (Model, _) =
+            bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+        assert_eq!(consumed, bytes.len());
+        assert_eq!(decoded.fingerprint(), model.fingerprint());
+        assert_eq!(decoded.to_json().unwrap(), model.to_json().unwrap());
+        assert_eq!(decoded.particle("s").unwrap(), model.particle("s").unwrap());
+    }
+
+    #[test]
+    fn chemical_potentials_preserve_adjustable_zeros_and_follow_exact_restrictions() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][1]["value"] = serde_json::json!([0.0, 0.0]);
+        definition["particles"][0]["chemical_potential"] = serde_json::json!("double_mass");
+        let mut model = Model::from_json(&definition.to_string()).unwrap();
+        let particle = model.particle("s").unwrap();
+        assert!(!particle.symbolic_mass(&model).is_zero());
+        assert!(!particle.is_massless(&model));
+        assert_eq!(
+            particle.chemical_potential,
+            Some(model.parameter_id("double_mass").unwrap())
+        );
+
+        let bytes = bincode::encode_to_vec(&model, bincode::config::standard()).unwrap();
+        let (restored, _): (Model, _) =
+            bincode::decode_from_slice(&bytes, bincode::config::standard()).unwrap();
+        assert_eq!(
+            restored.particle("s").unwrap().chemical_potential,
+            particle.chemical_potential
+        );
+
+        model.simplify_zero_values().unwrap();
+        let particle = model.particle("s").unwrap();
+        let zero = model.parameter_id("ZERO").unwrap();
+        assert_eq!(particle.mass, zero);
+        assert_eq!(particle.chemical_potential, Some(zero));
+        assert!(particle.symbolic_mass(&model).is_zero());
+        assert!(particle.is_massless(&model));
+        assert_eq!(
+            model.propagator("s_prop").unwrap().denominator,
+            Atom::var(symbol!("UFO::P")).pow(2)
+        );
+    }
+
+    #[test]
+    fn rejects_unknown_chemical_potential_parameters() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["particles"][0]["chemical_potential"] = serde_json::json!("missing_mu");
+        let error = Model::from_json(&definition.to_string())
+            .unwrap_err()
+            .to_string();
+        assert!(
+            error.contains("chemical_potential") && error.contains("missing_mu"),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn parses_ufo_json_and_builds_typed_indexes() {
         let model = Model::from_json(&model_json("GC1")).unwrap();
 
@@ -1885,6 +2565,161 @@ mod tests {
     }
 
     #[test]
+    fn fingerprints_are_independent_of_symbol_registration_order() {
+        const ORDER: &str = "FEYNKIT_MODEL_FINGERPRINT_TEST_ORDER";
+        if let Ok(order) = std::env::var(ORDER) {
+            let names = if order == "forward" {
+                ["Gamma", "Gamma5"]
+            } else {
+                ["Gamma5", "Gamma"]
+            };
+            for name in names {
+                let _ = symbol!(&format!("UFO::{name}"));
+            }
+            let model = Model::standard_model();
+            let restored = Model::from_json(&model.to_json().unwrap()).unwrap();
+            assert_eq!(model.fingerprint(), restored.fingerprint());
+            println!("MODEL_FINGERPRINT={}", model.fingerprint());
+            return;
+        }
+        let fingerprints = ["forward", "reverse"].map(|order| {
+            let result = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "model::tests::fingerprints_are_independent_of_symbol_registration_order",
+                    "--nocapture",
+                ])
+                .env(ORDER, order)
+                .output()
+                .unwrap();
+            assert!(
+                result.status.success(),
+                "{}",
+                String::from_utf8_lossy(&result.stderr)
+            );
+            String::from_utf8(result.stdout)
+                .unwrap()
+                .lines()
+                .find_map(|line| line.strip_prefix("MODEL_FINGERPRINT=").map(str::to_owned))
+                .expect("the child must report the model fingerprint")
+        });
+        assert_eq!(fingerprints[0], fingerprints[1]);
+    }
+
+    #[test]
+    fn model_round_trip_preserves_non_ufo_namespaces() {
+        let mut definition = Model::from_json(&model_json("GC1")).unwrap().definition();
+        definition.propagators[0].numerator =
+            "mass+custom_model::mass+spenso::dot(custom_model::p,custom_model::p)".to_owned();
+        let model = Model::new(definition).unwrap();
+        let serialized = model.to_json().unwrap();
+        let restored = Model::from_json(&serialized).unwrap();
+
+        assert!(!serialized.contains("UFO::"));
+        assert_eq!(restored.propagators(), model.propagators());
+        assert_eq!(restored.fingerprint(), model.fingerprint());
+        assert_eq!(
+            model
+                .with_restriction(Some("custom".to_owned()))
+                .unwrap()
+                .propagators(),
+            model.propagators()
+        );
+    }
+
+    #[test]
+    fn fingerprints_distinguish_identical_names_in_different_namespaces() {
+        let mut definition = Model::from_json(&model_json("GC1")).unwrap().definition();
+        definition.propagators[0].numerator = "gauge_a::xi".to_owned();
+        let first = Model::new(definition.clone()).unwrap();
+        definition.propagators[0].numerator = "gauge_b::xi".to_owned();
+        let second = Model::new(definition).unwrap();
+
+        assert_ne!(first.propagators(), second.propagators());
+        assert_ne!(first.fingerprint(), second.fingerprint());
+    }
+
+    #[test]
+    fn fingerprints_follow_parameter_updates_and_recomputation() {
+        let original = Model::from_json(&model_json("GC1")).unwrap();
+        let original_fingerprint = original.fingerprint();
+        let mut updated = original.clone();
+        updated
+            .apply_parameter_card(&ParameterCard::from_iter([(
+                "mass".to_owned(),
+                ComplexValue::new(3.0, 0.0),
+            )]))
+            .unwrap();
+        let pending_fingerprint = updated.fingerprint();
+        assert_ne!(pending_fingerprint, original_fingerprint);
+        assert_eq!(
+            pending_fingerprint,
+            Model::from_json(&updated.to_json().unwrap())
+                .unwrap()
+                .fingerprint()
+        );
+
+        updated
+            .recompute_with(&mut |_| {
+                Ok::<_, std::convert::Infallible>(EvaluatedValues {
+                    internal_parameters: BTreeMap::from([(
+                        "double_mass".to_owned(),
+                        ComplexValue::new(6.0, 0.0),
+                    )]),
+                    couplings: BTreeMap::from([("GC1".to_owned(), ComplexValue::new(6.0, 0.0))]),
+                })
+            })
+            .unwrap();
+        assert_ne!(updated.fingerprint(), pending_fingerprint);
+        assert_eq!(
+            updated.fingerprint(),
+            Model::from_json(&updated.to_json().unwrap())
+                .unwrap()
+                .fingerprint()
+        );
+        assert_eq!(original.fingerprint(), original_fingerprint);
+    }
+
+    #[test]
+    fn fingerprints_follow_covariant_multiplet_edits() {
+        let original = Model::standard_model();
+        let original_fingerprint = original.fingerprint();
+        let mut updated = original.clone();
+        assert!(!updated.covariant_cut_multiplets().is_empty());
+        updated.covariant_cut_multiplets_mut().clear();
+        updated.validate_covariant_cut_multiplets().unwrap();
+        assert_ne!(updated.fingerprint(), original_fingerprint);
+        assert_eq!(
+            updated.fingerprint(),
+            Model::from_json(&updated.to_json().unwrap())
+                .unwrap()
+                .fingerprint()
+        );
+        assert_eq!(original.fingerprint(), original_fingerprint);
+    }
+
+    #[test]
+    fn massive_covariant_multiplet_rejects_a_zero_evaluated_pole() {
+        let mut model = Model::standard_model();
+        model.validate_covariant_cut_multiplets().unwrap();
+        model
+            .apply_parameter_card(&ParameterCard::from_iter([(
+                "MZ".to_owned(),
+                ComplexValue::new(0.0, 0.0),
+            )]))
+            .unwrap();
+        assert!(!model.particle_by_pdg(23).unwrap().is_massless(&model));
+        assert!(model.validate_covariant_cut_multiplets().is_err());
+        model
+            .apply_parameter_card(&ParameterCard::from_iter([(
+                "MZ".to_owned(),
+                ComplexValue::new(3.0, 0.0),
+            )]))
+            .unwrap();
+        model.validate_covariant_cut_multiplets().unwrap();
+    }
+
+    #[test]
     fn expands_named_couplings_without_mutating_the_source_expression() {
         let model = Model::from_json(&model_json("GC1")).unwrap();
         let named_coupling = Atom::var(symbol!("UFO::GC1"));
@@ -1900,6 +2735,93 @@ mod tests {
             named_coupling * 2 + Atom::var(symbol!("UFO::GC_UNKNOWN"))
         );
         assert_eq!(model.expand_couplings(&expanded), expanded);
+    }
+
+    #[test]
+    fn expands_parameters_transitively_in_dependency_order_without_numeric_defaults() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        let mut derived = definition.parameters[2].clone();
+        derived.name = "derived_mass".to_owned();
+        derived.expression = Some("double_mass^2/3+mass".to_owned());
+        // Put the dependent definition before its dependency deliberately.
+        definition.parameters.insert(0, derived);
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+        let fingerprint = model.fingerprint();
+        let source = Atom::var(symbol!("UFO::derived_mass"))
+            + Atom::var(symbol!("UFO::ZERO"))
+            + Atom::var(symbol!("other_model::mass"));
+        let original = source.clone();
+        let mass = Atom::var(symbol!("UFO::mass"));
+        let expected = (&mass * 2).pow(2) / 3
+            + mass
+            + Atom::var(symbol!("UFO::ZERO"))
+            + Atom::var(symbol!("other_model::mass"));
+
+        let expanded = model.expand_parameters(&source).unwrap();
+        assert_eq!(expanded, expected);
+        assert_eq!(model.expand_parameters(&expanded).unwrap(), expanded);
+        assert_eq!(source, original);
+        assert_eq!(model.fingerprint(), fingerprint);
+        assert_eq!(
+            model
+                .expand_parameters(&model.expand_couplings(&Atom::var(symbol!("UFO::GC1"))))
+                .unwrap(),
+            Atom::var(symbol!("UFO::mass")) * 2
+        );
+    }
+
+    #[test]
+    fn parameter_expansion_rejects_self_cycles_even_for_unused_definitions() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition.parameters[2].expression = Some("double_mass".to_owned());
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+
+        assert!(matches!(
+            model.expand_parameters(&Atom::num(1)),
+            Err(ModelError::CyclicParameterDefinitions { parameters })
+                if parameters == ["double_mass"]
+        ));
+    }
+
+    #[test]
+    fn parameter_expansion_treats_trailing_underscores_as_literal_names() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        let mut external = definition.parameters[1].clone();
+        external.name = "external_".to_owned();
+        external.lhacode = Some(vec![999]);
+        let mut derived = definition.parameters[2].clone();
+        derived.name = "derived_".to_owned();
+        derived.expression = Some("2*external_".to_owned());
+        definition.parameters[2].expression = Some("derived_+mass".to_owned());
+        definition.parameters.extend([external, derived]);
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+        let unrelated = Atom::var(symbol!("other_model::unrelated_"));
+        let source = Atom::var(symbol!("UFO::double_mass")) + &unrelated;
+        let expected =
+            Atom::var(symbol!("UFO::external_")) * 2 + Atom::var(symbol!("UFO::mass")) + unrelated;
+        let expanded = model.expand_parameters(&source).unwrap();
+        assert_eq!(expanded, expected);
+        assert_eq!(model.expand_parameters(&expanded).unwrap(), expanded);
+    }
+
+    #[test]
+    fn parameter_expansion_reports_cycles_and_definitions_blocked_by_them() {
+        let mut definition: ModelDefinition = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition.parameters[2].expression = Some("cycle_peer+mass".to_owned());
+        let mut peer = definition.parameters[2].clone();
+        peer.name = "cycle_peer".to_owned();
+        peer.expression = Some("double_mass/2".to_owned());
+        let mut dependent = peer.clone();
+        dependent.name = "dependent".to_owned();
+        dependent.expression = Some("cycle_peer^2".to_owned());
+        definition.parameters.extend([peer, dependent]);
+        let model = Model::from_json(&serde_json::to_string(&definition).unwrap()).unwrap();
+
+        assert!(matches!(
+            model.expand_parameters(&Atom::var(symbol!("UFO::dependent"))),
+            Err(ModelError::CyclicParameterDefinitions { parameters })
+                if parameters == ["cycle_peer", "dependent", "double_mass"]
+        ));
     }
 
     #[test]
@@ -2110,7 +3032,7 @@ mod tests {
                 [crate::EvaluationFormFactor {
                     name: "FF1".to_owned(),
                     type_name: Some("complex".to_owned()),
-                    value: Some("twice(P(1)^2)".to_owned()),
+                    value: Some("twice((P(1))^2)".to_owned()),
                 }]
             );
             Ok::<_, std::convert::Infallible>(EvaluatedValues {

@@ -1,5 +1,6 @@
 ---
 source: crates/gammalooprs/src/cff/feynkit.rs
+assertion_line: 210
 expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cache\": graph.surface_cache,\n})"
 ---
 {
@@ -91,7 +92,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
                   1
                 ],
                 "data": {
-                  "Energy": 2
+                  "Energy": 3
                 },
                 "id": 0,
                 "parent": null
@@ -99,7 +100,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               {
                 "children": [],
                 "data": {
-                  "Energy": 3
+                  "Energy": 4
                 },
                 "id": 1,
                 "parent": 0
@@ -125,7 +126,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
                   1
                 ],
                 "data": {
-                  "Energy": 2
+                  "Energy": 3
                 },
                 "id": 0,
                 "parent": null
@@ -159,7 +160,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
                   1
                 ],
                 "data": {
-                  "Energy": 4
+                  "Energy": 5
                 },
                 "id": 0,
                 "parent": null
@@ -167,7 +168,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               {
                 "children": [],
                 "data": {
-                  "Energy": 2
+                  "Energy": 6
                 },
                 "id": 1,
                 "parent": 0
@@ -193,7 +194,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
                   1
                 ],
                 "data": {
-                  "Energy": 4
+                  "Energy": 5
                 },
                 "id": 0,
                 "parent": null
@@ -201,7 +202,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
               {
                 "children": [],
                 "data": {
-                  "Energy": 3
+                  "Energy": 4
                 },
                 "id": 1,
                 "parent": 0
@@ -215,7 +216,7 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
     "report": {
       "acyclic_orientations": 6,
       "candidate_orientations": 8,
-      "interned_surfaces": 5,
+      "interned_surfaces": 7,
       "unfolded_terms": 6
     },
     "surfaces": {
@@ -245,6 +246,17 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
             1,
             2
           ],
+          "external_shift": {
+            "3": 1,
+            "4": -1
+          },
+          "vertex_set": 5
+        },
+        {
+          "energies": [
+            1,
+            2
+          ],
           "external_shift": {},
           "vertex_set": 2
         },
@@ -267,6 +279,17 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
             "4": 1
           },
           "vertex_set": 1
+        },
+        {
+          "energies": [
+            1,
+            2
+          ],
+          "external_shift": {
+            "3": -1,
+            "4": 1
+          },
+          "vertex_set": 5
         }
       ],
       "h_surfaces": []
@@ -299,6 +322,17 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
           1,
           2
         ],
+        "external_shift": {
+          "3": 1,
+          "4": -1
+        },
+        "vertex_set": 5
+      },
+      {
+        "energies": [
+          1,
+          2
+        ],
         "external_shift": {},
         "vertex_set": 2
       },
@@ -321,6 +355,17 @@ expression: "serde_json::json!({\n    \"expression\": expression, \"surface_cach
           "4": 1
         },
         "vertex_set": 1
+      },
+      {
+        "energies": [
+          1,
+          2
+        ],
+        "external_shift": {
+          "3": -1,
+          "4": 1
+        },
+        "vertex_set": 5
       }
     ],
     "h_surfaces": []

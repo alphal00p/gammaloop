@@ -28,22 +28,24 @@ each factor with a distinct header first, while leaving its external indices unt
 // docs-example: compile idenso-dummy-namespaces
 ```python
 import symbolica as sp
-from symbolica.community.idenso import list_dangling, wrap_dummies
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 rep = Representation.euc(3)
 mu = rep("mu")
 nu = rep("nu")
 rho = rep("rho")
 g = TensorExpression.g(rep)
-p = TensorName("p")
-q = TensorName("q")
+p = TensorName.vector("p")
+q = TensorName.vector("q")
 
-left = g(mu, nu) * p(mu)
-right = g(mu, rho) * q(mu)
-safe_product = wrap_dummies(left, sp.S("lhs")) * wrap_dummies(right, sp.S("rhs"))
+left = TensorExpression(g(mu, nu).to_expression() * p(mu).to_expression())
+right = TensorExpression(g(mu, rho).to_expression() * q(mu).to_expression())
+safe_product = (
+    left.wrap_indices(sp.S("lhs"), dummies_only=True)
+    * right.wrap_indices(sp.S("rhs"), dummies_only=True)
+)
 
-assert len(list_dangling(safe_product)) == 2
+assert len(safe_product.list_dangling()) == 2
 ```
 
 The stable invariant is two free indices, `nu` and `rho`; the two occurrences of local `mu`

@@ -9,8 +9,13 @@ use color_eyre::Result;
 use colored::Colorize;
 use gammalooprs::model::ModelGammaLoopExt;
 use gammalooprs::uv::ApproximationType;
-use idenso::color::{ColorSimplifier, CS};
-use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
+use idenso::{
+    coad, cof,
+    color::{ColorSimplifySettings, CS},
+    color_cas, color_idx,
+    tensor::{AlgebraSettings, SymbolicTensor},
+    CookMode, CookSettings,
+};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
@@ -112,20 +117,27 @@ impl Renormalize {
                 .renormalization_part(&state.model, &settings)?
                 .expression;
 
-            part =
-                state
-                    .model
-                    .apply_parameter_replacement_rules(&state.model.expand_couplings(
-                        &part.simplify_color().expand().simplify_metrics().to_dots(),
-                    ))
-                    .collect_factors();
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(part.as_view())?)?
+                .simplify_algebra(&AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let simplified = cooking.uncook(simplified.expression().as_view()).expand();
+            part = state
+                .model
+                .apply_parameter_replacement_rules(&state.model.expand_couplings(&simplified))
+                .collect_factors();
 
             if self.align_to_rqft {
                 part = (part
-                    .replace(CS.tr)
+                    .replace(color_idx!(2, cof!(3)))
                     .with(Atom::num((1, 2)))
                     .replace(CS.nc)
-                    .with(CS.ca)
+                    .with(color_cas!(2, coad!(8)))
                     .replace(parse!("UFO::aS"))
                     .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
                     / 8)

@@ -9,20 +9,484 @@ use pyo3::{
 };
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods};
+use pyo3_stub_gen::{
+    derive::{
+        gen_methods_from_python, gen_stub_pyclass, gen_stub_pyclass_enum, gen_stub_pymethods,
+    },
+    inventory::submit,
+};
 
 use crate::error;
+use spynso3::expression::TensorExpression;
+use symbolica::{
+    api::python::{ConvertibleToExpression, PythonExpression},
+    atom::Atom,
+    symbol,
+};
+
+/// Scoped symbolic scalar products and two-to-two Mandelstam kinematics.
+///
+/// The immutable object uses Spenso's dot products and metric
+/// shorthand. Apply it after contracting tensors with Idenso. Momentum inputs
+/// are unindexed names, and mass inputs are squared masses.
+///
+/// Examples
+/// --------
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> P = hep.Kinematics.external_momentum()
+/// >>> p1, p2, p3, p4 = [P(i) for i in range(4)]
+/// >>> s, t, u = hep.Kinematics.s(), hep.Kinematics.t(), hep.Kinematics.u()
+/// >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+/// >>> assert kin.scalar_product(p1, p2) == s/2
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "Kinematics",
+    module = "symbolica.community.hepkit",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct PyKinematics {
+    pub(crate) inner: feynkit_kinematics::Kinematics,
+}
+
+impl PyKinematics {
+    /// Borrow the shared native assumptions when calling another HEPKit backend.
+    pub fn as_kinematics(&self) -> &feynkit_kinematics::Kinematics {
+        &self.inner
+    }
+}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
+#[pymethods]
+impl PyKinematics {
+    /// Mandelstam invariant ``s=(p1+p2)^2`` for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> s = hep.Kinematics.s()
+    #[staticmethod]
+    fn s() -> PythonExpression {
+        Atom::var(symbol!("feynkit::s")).into()
+    }
+
+    /// Mandelstam invariant ``t=(p1-p3)^2`` for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> t = hep.Kinematics.t()
+    #[staticmethod]
+    fn t() -> PythonExpression {
+        Atom::var(symbol!("feynkit::t")).into()
+    }
+
+    /// Mandelstam invariant ``u=(p1-p4)^2`` for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> u = hep.Kinematics.u()
+    #[staticmethod]
+    fn u() -> PythonExpression {
+        Atom::var(symbol!("feynkit::u")).into()
+    }
+
+    /// External momentum family indexed by physical leg.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> reference = hep.Kinematics.external_momentum()
+    #[staticmethod]
+    fn external_momentum() -> PythonExpression {
+        Atom::var(feynkit_graph::symbols::external_momentum()).into()
+    }
+
+    /// Loop momentum family indexed by loop basis position.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> reference = hep.Kinematics.loop_momentum()
+    #[staticmethod]
+    fn loop_momentum() -> PythonExpression {
+        Atom::var(feynkit_graph::symbols::loop_momentum()).into()
+    }
+
+    /// Start with no scalar-product assumptions in the chosen dimension.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> kin = hep.Kinematics()
+    /// >>> dimensional = hep.Kinematics(S("D"))
+    ///
+    /// Parameters
+    /// ----------
+    /// dimension : Expression | None
+    ///     Integer or symbolic Lorentz dimension; defaults to four.
+    /// momenta : list[Expression] | None
+    ///     Momentum names used in linear combinations with scalar coefficients.
+    #[new]
+    #[pyo3(signature = (dimension=None, *, momenta=None))]
+    fn new(
+        dimension: Option<&PythonExpression>,
+        momenta: Option<Vec<PythonExpression>>,
+    ) -> PyResult<Self> {
+        let inner = match dimension {
+            None => feynkit_kinematics::Kinematics::new(),
+            Some(dimension) => feynkit_kinematics::Kinematics::in_dimension(&dimension.expr)
+                .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?,
+        };
+        let inner = inner
+            .with_momenta(momenta.unwrap_or_default().into_iter().map(|p| p.expr))
+            .map_err(error::kinematics)?;
+        Ok(Self { inner })
+    }
+
+    /// Lorentz dimension as a Symbolica integer or symbol.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> assert hep.Kinematics(S("D")).dimension == S("D")
+    #[getter]
+    fn dimension(&self) -> PythonExpression {
+        PythonExpression {
+            expr: self.inner.dimension().to_symbolic(),
+        }
+    }
+
+    /// Set the invariants for ``p1 + p2 -> p3 + p4``.
+    ///
+    /// The convention is ``s=(p1+p2)^2``, ``t=(p1-p3)^2``, and
+    /// ``u=(p1-p4)^2``. These obey ``s+t+u=sum(mass_squared)``; use Symbolica
+    /// substitution when you want to eliminate one invariant.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+    ///
+    /// Parameters
+    /// ----------
+    /// momenta : list[Expression]
+    ///     Four unindexed momenta, with the incoming pair first.
+    /// mass_squared : list[Expression]
+    ///     Four squared masses in the same order.
+    /// invariants : list[Expression]
+    ///     The three symbols or expressions ``s, t, u``.
+    #[staticmethod]
+    fn mandelstam(
+        momenta: [PythonExpression; 4],
+        mass_squared: [PythonExpression; 4],
+        invariants: [PythonExpression; 3],
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: feynkit_kinematics::Kinematics::mandelstam(
+                momenta.each_ref().map(|p| &p.expr),
+                mass_squared.map(|m| m.expr),
+                invariants.map(|s| s.expr),
+            )
+            .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Return a new context with one scalar product set.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> p, m = S("p", "m")
+    /// >>> kin = hep.Kinematics(momenta=[p]).with_scalar_product(p, p, m**2)
+    /// >>> assert kin.scalar_product(p, p) == m**2
+    ///
+    /// Parameters
+    /// ----------
+    /// left : Expression
+    ///     First unindexed momentum.
+    /// right : Expression
+    ///     Second unindexed momentum.
+    /// value : Expression
+    ///     Assumed scalar product.
+    fn with_scalar_product(
+        &self,
+        left: &PythonExpression,
+        right: &PythonExpression,
+        value: &PythonExpression,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: self
+                .inner
+                .clone()
+                .with_scalar_product(&left.expr, &right.expr, value.expr.clone())
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Expand a bilinear scalar product and apply known assumptions.
+    ///
+    /// For linear combinations, declare the momentum names in the constructor
+    /// or by setting scalar products. Other symbols are scalar coefficients.
+    /// Nonlinear momentum expressions raise ``KinematicsError``.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> assert kin.scalar_product(p1, p2) == s/2
+    /// >>> assert kin.scalar_product(p1 + p2, p1 + p2) == s
+    ///
+    /// Parameters
+    /// ----------
+    /// left : Expression
+    ///     First unindexed momentum or linear combination.
+    /// right : Expression
+    ///     Second unindexed momentum or linear combination.
+    fn scalar_product(
+        &self,
+        left: &PythonExpression,
+        right: &PythonExpression,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .scalar_product(&left.expr, &right.expr)
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Return the initial-state denominator for a cross section or decay rate.
+    ///
+    /// Two momenta give ``4*sqrt((p1.p2)**2-p1**2*p2**2)``. One momentum
+    /// gives ``2*sqrt(p**2)`` for a decay in its rest frame. Divide the squared
+    /// matrix element times phase space by this value. Inputs must be physical,
+    /// future-directed on-shell momenta. Symbolica retains square-root branches;
+    /// declare positive invariants with ``S("s", is_positive=True)`` when known.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> p1, p2, s = S("p1", "p2", "s")
+    /// >>> kin = hep.Kinematics(momenta=[p1, p2])
+    /// >>> kin = kin.with_scalar_product(p1, p1, E("0")).with_scalar_product(p2, p2, E("0"))
+    /// >>> kin = kin.with_scalar_product(p1, p2, s/2)
+    /// >>> flux = kin.flux(p1, p2)
+    ///
+    /// Parameters
+    /// ----------
+    /// first : Expression
+    ///     Incoming unindexed momentum or declared linear combination.
+    /// second : Expression | None
+    ///     Other incoming momentum; None selects a rest-frame decay.
+    #[pyo3(signature = (first, second=None))]
+    fn flux(
+        &self,
+        first: &PythonExpression,
+        second: Option<&PythonExpression>,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .flux(&first.expr, second.map(|p| &p.expr))
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Return four-dimensional two-body phase space per unit solid angle.
+    ///
+    /// This is ``dPhi_2/dOmega`` in the final pair's rest frame, with
+    /// ``(2*pi)**4*delta**4(P-p1-p2)`` and ``d**3p/((2*pi)**3*2E)`` for each
+    /// final particle. Use physical on-shell momenta above threshold. Flux,
+    /// spin/color averages and identical-particle factors are separate. For an
+    /// angle-independent amplitude, integrating this measure gives ``4*pi``
+    /// times the returned expression. Non-four-dimensional contexts are rejected.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+    /// >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+    /// >>> density = kin.two_body_phase_space(p3, p4)
+    ///
+    /// Parameters
+    /// ----------
+    /// first : Expression
+    ///     First outgoing unindexed momentum or declared linear combination.
+    /// second : Expression
+    ///     Second outgoing unindexed momentum or declared linear combination.
+    fn two_body_phase_space(
+        &self,
+        first: &PythonExpression,
+        second: &PythonExpression,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .two_body_phase_space(&first.expr, &second.expr)
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Return four-dimensional three-body phase space per two Dalitz invariants.
+    ///
+    /// This is ``dPhi_3/(ds12*ds23) = 1/(128*pi**3*P**2)``, where
+    /// ``P=first+second+third`` and ``sij=(pi+pj)**2``. The overall spatial
+    /// orientation is integrated. Use an orientation-independent or
+    /// orientation-averaged squared amplitude and physical on-shell momenta.
+    /// The measure includes ``(2*pi)**4*delta**4`` and one
+    /// ``d**3p/((2*pi)**3*2E)`` for each final particle.
+    ///
+    /// Masses constrain the allowed Dalitz region; its boundaries are not
+    /// imposed here. Flux, spin/color averages and identical-particle factors
+    /// remain separate. Non-four-dimensional contexts are rejected.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> k1, k2, k3 = S("k1", "k2", "k3")
+    /// >>> kin = hep.Kinematics(momenta=[k1, k2, k3])
+    /// >>> density = kin.three_body_phase_space(k1, k2, k3)
+    ///
+    /// Parameters
+    /// ----------
+    /// first, second, third : Expression
+    ///     Final-state on-shell momenta. Their scalar products determine the
+    ///     total invariant mass squared through this kinematic context.
+    fn three_body_phase_space(
+        &self,
+        first: &PythonExpression,
+        second: &PythonExpression,
+        third: &PythonExpression,
+    ) -> PyResult<PythonExpression> {
+        Ok(PythonExpression {
+            expr: self
+                .inner
+                .three_body_phase_space(&first.expr, &second.expr, &third.expr)
+                .map_err(error::kinematics)?,
+        })
+    }
+
+    /// Substitute scalar products without mutating global assumptions.
+    ///
+    /// Accepts a scalar Expression or a tensor expression. Tensor results retain
+    /// the ordered open slots, including when the result is zero.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Kinematics`` class example:
+    ///
+    /// >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+    /// >>> free = hep.Kinematics(momenta=[p1, p2, p3, p4])
+    /// >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+    /// >>> contracted_expression = free.scalar_product(p1, p2)
+    /// >>> assert kin.apply(contracted_expression) == s/2
+    ///
+    /// Parameters
+    /// ----------
+    /// expression : Expression
+    ///     Expression with compact scalar products.
+    #[gen_stub(skip)]
+    fn apply(&self, py: Python<'_>, expression: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        if let Ok(tensor) = expression.extract::<PyRef<'_, TensorExpression>>() {
+            let result = self.inner.apply(tensor.structured().expression());
+            return TensorExpression::preserving_interface(&tensor, py, result).map(Py::into_any);
+        }
+        let atom = expression
+            .extract::<ConvertibleToExpression>()?
+            .to_expression()
+            .expr;
+        let result = self.inner.apply(&atom);
+        Py::new(py, PythonExpression { expr: result }).map(Py::into_any)
+    }
+}
+
+#[cfg(feature = "python_stubgen")]
+submit! {
+    gen_methods_from_python! {
+        r#"
+        import typing
+
+        class PyKinematics:
+            @typing.overload
+            def apply(
+                self,
+                expression: pyo3_stub_gen.RustType["TensorExpression"],
+            ) -> pyo3_stub_gen.RustType["TensorExpression"]:
+                """
+                Substitute scalar products without mutating global assumptions.
+
+                Accepts a scalar Expression or a tensor expression. Tensor results retain
+                the ordered open slots, including when the result is zero.
+
+                Examples
+                --------
+                Using the setup in the ``Kinematics`` class example:
+
+                >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+                >>> free = hep.Kinematics(momenta=[p1, p2, p3, p4])
+                >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+                >>> contracted_expression = free.scalar_product(p1, p2)
+                >>> assert kin.apply(contracted_expression) == s/2
+
+                Parameters
+                ----------
+                expression : Expression
+                    Expression with compact scalar products.
+                """
+
+            @typing.overload
+            def apply(
+                self,
+                expression: pyo3_stub_gen.RustType["ConvertibleToExpression"],
+            ) -> pyo3_stub_gen.RustType["PythonExpression"]:
+                """
+                Substitute scalar products without mutating global assumptions.
+
+                Accepts a scalar Expression or a tensor expression. Tensor results retain
+                the ordered open slots, including when the result is zero.
+
+                Examples
+                --------
+                Using the setup in the ``Kinematics`` class example:
+
+                >>> p1, p2, p3, p4, s, t, u = S("p1", "p2", "p3", "p4", "s", "t", "u")
+                >>> free = hep.Kinematics(momenta=[p1, p2, p3, p4])
+                >>> kin = hep.Kinematics.mandelstam([p1, p2, p3, p4], [E("0")]*4, [s, t, u])
+                >>> contracted_expression = free.scalar_product(p1, p2)
+                >>> assert kin.apply(contracted_expression) == s/2
+
+                Parameters
+                ----------
+                expression : Expression
+                    Expression with compact scalar products.
+                """
+        "#
+    }
+}
 
 /// A spin projection along a particle's direction of motion.
 ///
-/// FeynKit represents the physical minus, longitudinal, and plus helicity
+/// HEP represents the physical minus, longitudinal, and plus helicity
 /// states by the integers -1, 0, and 1.
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> incoming_fermion_helicity = fk.Helicity(-1)
-/// >>> incoming_fermion_helicity == fk.Helicity.MINUS
+/// >>> from symbolica.community import hepkit as hep
+/// >>> incoming_fermion_helicity = hep.Helicity(-1)
+/// >>> incoming_fermion_helicity == hep.Helicity.MINUS
 /// True
 ///
 /// Parameters
@@ -32,7 +496,7 @@ use crate::error;
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Helicity",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -42,13 +506,16 @@ pub struct PyHelicity {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyHelicity {
     /// Construct a physical helicity from -1, 0, or 1.
     ///
     /// Examples
     /// --------
-    /// >>> helicity = Helicity(-1)
+    /// Using the setup in the ``Helicity`` class example:
+    ///
+    /// >>> helicity = hep.Helicity(-1)
     ///
     /// Parameters
     /// ----------
@@ -65,7 +532,9 @@ impl PyHelicity {
     ///
     /// Examples
     /// --------
-    /// >>> Helicity.parse("+") == Helicity.PLUS
+    /// Using the setup in the ``Helicity`` class example:
+    ///
+    /// >>> hep.Helicity.parse("+") == hep.Helicity.PLUS
     /// True
     ///
     /// Parameters
@@ -129,9 +598,10 @@ impl PyHelicity {
     ///
     /// Examples
     /// --------
-    /// >>> Helicity.PLUS.value
-    /// 1
+    /// Using the setup in the ``Helicity`` class example:
     ///
+    /// >>> hep.Helicity.PLUS.value
+    /// 1
     #[getter]
     fn value(&self) -> i8 {
         self.inner.integer()
@@ -141,9 +611,10 @@ impl PyHelicity {
     ///
     /// Examples
     /// --------
-    /// >>> int(Helicity.MINUS)
-    /// -1
+    /// Using the setup in the ``Helicity`` class example:
     ///
+    /// >>> int(hep.Helicity.MINUS)
+    /// -1
     fn __int__(&self) -> i8 {
         self.inner.integer()
     }
@@ -152,7 +623,9 @@ impl PyHelicity {
     ///
     /// Examples
     /// --------
-    /// >>> Helicity(0) == Helicity.ZERO
+    /// Using the setup in the ``Helicity`` class example:
+    ///
+    /// >>> hep.Helicity(0) == hep.Helicity.ZERO
     /// True
     ///
     /// Parameters
@@ -169,8 +642,9 @@ impl PyHelicity {
     ///
     /// Examples
     /// --------
-    /// >>> print(f"selected external helicity: {Helicity.PLUS!r}")
+    /// Using the setup in the ``Helicity`` class example:
     ///
+    /// >>> print(f"selected external helicity: {hep.Helicity.PLUS!r}")
     fn __repr__(&self) -> String {
         format!("Helicity({})", self.inner.integer())
     }
@@ -180,14 +654,13 @@ impl PyHelicity {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> beam_axis = fk.Axis.Z
-/// >>> rotation = fk.Rotation.quarter_turn(beam_axis)
-///
+/// >>> from symbolica.community import hepkit as hep
+/// >>> beam_axis = hep.Axis.Z
+/// >>> rotation = hep.Rotation.quarter_turn(beam_axis)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "Axis",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     eq,
     eq_int,
@@ -216,14 +689,13 @@ impl From<PyAxis> for Axis {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> algorithm = fk.JetAlgorithm.AntiKt
-/// >>> definition = fk.JetDefinition(algorithm, radius=0.4)
-///
+/// >>> from symbolica.community import hepkit as hep
+/// >>> algorithm = hep.JetAlgorithm.AntiKt
+/// >>> definition = hep.JetDefinition(algorithm, radius=0.4)
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass_enum)]
 #[pyclass(
     name = "JetAlgorithm",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     eq,
     eq_int,
@@ -263,10 +735,13 @@ impl From<JetAlgorithm> for PyJetAlgorithm {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> p = fk.ThreeMomentum(30.0, 40.0, 10.0)
-/// >>> p.pt
-/// 50.0
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> momentum = hep.ThreeMomentum(3.0, 4.0, 0.0)
+/// >>> p = momentum
+/// >>> first = hep.ThreeMomentum(0.0, 1.0, 0.0)
+/// >>> second = hep.ThreeMomentum(1.0, 0.0, 0.0)
+/// >>> assert momentum.pt == 5.0
 ///
 /// Parameters
 /// ----------
@@ -279,7 +754,7 @@ impl From<JetAlgorithm> for PyJetAlgorithm {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ThreeMomentum",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -295,13 +770,16 @@ impl From<ThreeMomentum<f64>> for PyThreeMomentum {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyThreeMomentum {
     /// Construct a Cartesian three-momentum.
     ///
     /// Examples
     /// --------
-    /// >>> momentum = ThreeMomentum(3.0, 4.0, 0.0)
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> momentum = hep.ThreeMomentum(3.0, 4.0, 0.0)
     ///
     /// Parameters
     /// ----------
@@ -317,16 +795,34 @@ impl PyThreeMomentum {
     }
 
     /// Return the x component.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> assert momentum.px == 3.0
     #[getter]
     fn px(&self) -> f64 {
         self.inner.px
     }
     /// Return the y component.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> assert momentum.py == 4.0
     #[getter]
     fn py(&self) -> f64 {
         self.inner.py
     }
     /// Return the z component.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> assert momentum.pz == 0.0
     #[getter]
     fn pz(&self) -> f64 {
         self.inner.pz
@@ -335,9 +831,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm_squared
-    /// 25.0
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> hep.ThreeMomentum(3.0, 4.0, 0.0).norm_squared
+    /// 25.0
     #[getter]
     fn norm_squared(&self) -> f64 {
         self.inner.norm_squared()
@@ -346,9 +843,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(3.0, 4.0, 0.0).norm
-    /// 5.0
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> hep.ThreeMomentum(3.0, 4.0, 0.0).norm
+    /// 5.0
     #[getter]
     fn norm(&self) -> f64 {
         self.inner.norm()
@@ -357,9 +855,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(3.0, 4.0, 12.0).pt
-    /// 5.0
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> hep.ThreeMomentum(3.0, 4.0, 12.0).pt
+    /// 5.0
     #[getter]
     fn pt(&self) -> f64 {
         self.inner.pt()
@@ -368,9 +867,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(1.0, 0.0, 0.0).phi
-    /// 0.0
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> hep.ThreeMomentum(1.0, 0.0, 0.0).phi
+    /// 0.0
     #[getter]
     fn phi(&self) -> f64 {
         self.inner.phi()
@@ -379,9 +879,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity
-    /// 0.0
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> abs(hep.ThreeMomentum(1.0, 0.0, 0.0).pseudorapidity) < 1e-12
+    /// True
     #[getter]
     fn pseudorapidity(&self) -> f64 {
         self.inner.pseudorapidity()
@@ -390,7 +891,9 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(1.0, 0.0, 0.0).dot(ThreeMomentum(2.0, 0.0, 0.0))
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> hep.ThreeMomentum(1.0, 0.0, 0.0).dot(hep.ThreeMomentum(2.0, 0.0, 0.0))
     /// 2.0
     ///
     /// Parameters
@@ -404,7 +907,9 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(1.0, 0.0, 0.0).cross(ThreeMomentum(0.0, 1.0, 0.0))
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> hep.ThreeMomentum(1.0, 0.0, 0.0).cross(hep.ThreeMomentum(0.0, 1.0, 0.0))
     /// ThreeMomentum(0, 0, 1)
     ///
     /// Parameters
@@ -418,6 +923,8 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
     /// >>> first.delta_phi(second)
     /// 1.5707963267948966
     ///
@@ -432,6 +939,8 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
     /// >>> separation = first.delta_r(second)
     /// >>> passes_isolation = separation > 0.4
     ///
@@ -447,6 +956,8 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
     /// >>> total = first + second
     ///
     /// Parameters
@@ -461,7 +972,12 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> incoming = hep.ThreeMomentum(3.0, 4.0, 0.0)
+    /// >>> outgoing = hep.ThreeMomentum(1.0, 0.0, 0.0)
     /// >>> transfer = incoming - outgoing
+    /// >>> assert transfer.px == 2.0
     ///
     /// Parameters
     /// ----------
@@ -475,8 +991,11 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> outgoing_convention = -incoming_convention
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> incoming_convention = hep.ThreeMomentum(3.0, 4.0, 0.0)
+    /// >>> outgoing_convention = -incoming_convention
+    /// >>> assert outgoing_convention.px == -3.0
     fn __neg__(&self) -> Self {
         (-self.inner).into()
     }
@@ -485,6 +1004,8 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
     /// >>> half_momentum = momentum * 0.5
     ///
     /// Parameters
@@ -499,6 +1020,8 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
     /// >>> half_momentum = 0.5 * momentum
     ///
     /// Parameters
@@ -513,7 +1036,9 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> ThreeMomentum(3.0, 4.0, 0.0).on_shell().energy
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> hep.ThreeMomentum(3.0, 4.0, 0.0).on_shell().energy
     /// 5.0
     ///
     /// Parameters
@@ -529,9 +1054,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> track_momentum = ThreeMomentum(1.0, 2.0, 3.0)
-    /// >>> print(f"track momentum: {track_momentum!r}")
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> track_momentum = hep.ThreeMomentum(1.0, 2.0, 3.0)
+    /// >>> print(f"track momentum: {track_momentum!r}")
     fn __repr__(&self) -> String {
         format!(
             "ThreeMomentum({}, {}, {})",
@@ -543,9 +1069,9 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// Leave ``momentum`` as the final expression in a notebook cell to render
-    /// its Cartesian components.
+    /// Using the setup in the ``ThreeMomentum`` class example:
     ///
+    /// >>> latex = momentum._repr_latex_()
     fn _repr_latex_(&self) -> String {
         format!(
             r"$\vec{{p}}=\left({},{},{}\right)$",
@@ -557,7 +1083,10 @@ impl PyThreeMomentum {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``ThreeMomentum`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(momentum)
     ///
     /// Parameters
     /// ----------
@@ -585,10 +1114,13 @@ impl PyThreeMomentum {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> p = fk.FourMomentum(50.0, 30.0, 40.0, 0.0)
-/// >>> p.mass_squared
-/// 0.0
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
+/// >>> p = momentum
+/// >>> first = hep.FourMomentum(5.0, 0.0, 5.0, 0.0)
+/// >>> second = hep.FourMomentum(5.0, 5.0, 0.0, 0.0)
+/// >>> assert momentum.mass_squared == 0.0
 ///
 /// Parameters
 /// ----------
@@ -603,7 +1135,7 @@ impl PyThreeMomentum {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "FourMomentum",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -619,13 +1151,16 @@ impl From<FourMomentum<f64>> for PyFourMomentum {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyFourMomentum {
     /// Construct a four-momentum from energy and Cartesian spatial components.
     ///
     /// Examples
     /// --------
-    /// >>> momentum = FourMomentum(5.0, 3.0, 4.0, 0.0)
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
+    /// >>> momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
     ///
     /// Parameters
     /// ----------
@@ -642,22 +1177,76 @@ impl PyFourMomentum {
         FourMomentum::from_args(energy, px, py, pz).into()
     }
 
+    /// Construct a fixed scalar, vector or spinor external state.
+    ///
+    /// ``kind`` is ``scalar``, ``epsilon``, ``epsilon_bar``, ``u``, ``u_bar``,
+    /// ``v`` or ``v_bar``. Scalar helicity is zero; spinors use plus or minus.
+    /// A massive vector also admits zero helicity for a longitudinal state.
+    /// The inherited longitudinal convention is undefined at rest or zero mass
+    /// and raises ``KinematicsError``. All states use four-dimensional external
+    /// components and GammaLoop's MadGraph phases; no averaging is included.
+    ///
+    /// Examples
+    /// --------
+    /// >>> from symbolica.community import hepkit as hep
+    /// >>> p = hep.FourMomentum(150.0, 0.0, 0.0, 150.0)
+    /// >>> eps = p.wavefunction("epsilon", hep.Helicity.PLUS)
+    /// >>> assert len(eps.components) == 4 and eps.bar().bar() == eps
+    ///
+    /// Parameters
+    /// ----------
+    /// kind : str
+    ///     Scalar, vector or spinor state kind, including the barred variants above.
+    /// helicity : Helicity
+    ///     Fixed helicity; zero for scalars, plus/minus for spinors, and also zero
+    ///     for a massive longitudinal vector with nonzero spatial momentum.
+    fn wavefunction(&self, kind: &str, helicity: &PyHelicity) -> PyResult<crate::PyWavefunction> {
+        self.inner
+            .wavefunction(kind.parse().map_err(error::kinematics)?, helicity.inner)
+            .map(|inner| crate::PyWavefunction { inner })
+            .map_err(error::kinematics)
+    }
+
     /// Return the energy component.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
+    /// >>> assert momentum.energy == 5.0
     #[getter]
     fn energy(&self) -> f64 {
         self.inner.temporal.value
     }
     /// Return the x component of spatial momentum.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
+    /// >>> assert momentum.px == 3.0
     #[getter]
     fn px(&self) -> f64 {
         self.inner.spatial.px
     }
     /// Return the y component of spatial momentum.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
+    /// >>> assert momentum.py == 4.0
     #[getter]
     fn py(&self) -> f64 {
         self.inner.spatial.py
     }
     /// Return the z component of spatial momentum.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
+    /// >>> assert momentum.pz == 0.0
     #[getter]
     fn pz(&self) -> f64 {
         self.inner.spatial.pz
@@ -666,9 +1255,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).spatial.pt
-    /// 5.0
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> hep.FourMomentum(5.0, 3.0, 4.0, 0.0).spatial.pt
+    /// 5.0
     #[getter]
     fn spatial(&self) -> PyThreeMomentum {
         self.inner.spatial.into()
@@ -677,9 +1267,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).components()
-    /// (5.0, 3.0, 4.0, 0.0)
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> hep.FourMomentum(5.0, 3.0, 4.0, 0.0).components()
+    /// (5.0, 3.0, 4.0, 0.0)
     fn components(&self) -> (f64, f64, f64, f64) {
         self.inner.into()
     }
@@ -687,6 +1278,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
     /// >>> momentum.dot(momentum)
     /// 0.0
     ///
@@ -701,20 +1294,47 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared
-    /// 0.0
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> hep.FourMomentum(5.0, 3.0, 4.0, 0.0).mass_squared
+    /// 0.0
     #[getter]
     fn mass_squared(&self) -> f64 {
         self.inner.mass_squared()
     }
+
+    /// Return the decay denominator ``2E`` or the invariant two-particle flux.
+    ///
+    /// Inputs must be physical, future-directed on-shell momenta. Decay rates
+    /// refer to this momentum's frame; the rest-frame result is ``2M``.
+    /// No unit conversion, spin/color average or symmetry factor is included.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
+    /// >>> p = hep.FourMomentum(5.0, 0.0, 0.0, 5.0)
+    /// >>> q = hep.FourMomentum(5.0, 0.0, 0.0, -5.0)
+    /// >>> p.flux(q)
+    /// 200.0
+    ///
+    /// Parameters
+    /// ----------
+    /// other : FourMomentum | None
+    ///     Other incoming momentum; None selects a decay in this frame.
+    #[pyo3(signature = (other=None))]
+    fn flux(&self, other: Option<&PyFourMomentum>) -> f64 {
+        self.inner.flux(other.map(|p| &p.inner))
+    }
+
     /// Return the invariant mass.
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(5.0, 0.0, 0.0, 0.0).mass
-    /// 5.0
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> hep.FourMomentum(5.0, 0.0, 0.0, 0.0).mass
+    /// 5.0
     #[getter]
     fn mass(&self) -> f64 {
         self.inner.mass()
@@ -723,9 +1343,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(13.0, 3.0, 4.0, 12.0).pt
-    /// 5.0
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> hep.FourMomentum(13.0, 3.0, 4.0, 12.0).pt
+    /// 5.0
     #[getter]
     fn pt(&self) -> f64 {
         self.inner.pt()
@@ -734,9 +1355,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).phi
-    /// 0.0
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> hep.FourMomentum(1.0, 1.0, 0.0, 0.0).phi
+    /// 0.0
     #[getter]
     fn phi(&self) -> f64 {
         self.inner.phi()
@@ -745,9 +1367,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity
-    /// 0.0
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> abs(hep.FourMomentum(1.0, 1.0, 0.0, 0.0).pseudorapidity) < 1e-12
+    /// True
     #[getter]
     fn pseudorapidity(&self) -> f64 {
         self.inner.pseudorapidity()
@@ -756,9 +1379,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity
-    /// 0.0
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> hep.FourMomentum(1.0, 1.0, 0.0, 0.0).rapidity
+    /// 0.0
     #[getter]
     fn rapidity(&self) -> f64 {
         self.inner.rapidity()
@@ -767,6 +1391,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
     /// >>> first.delta_phi(second)
     /// 1.5707963267948966
     ///
@@ -781,6 +1407,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
     /// >>> separation = first.delta_r(second)
     /// >>> same_jet = separation < 0.4
     ///
@@ -795,6 +1423,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
     /// >>> (first + second).energy == first.energy + second.energy
     /// True
     ///
@@ -809,6 +1439,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
     /// >>> (first - second).energy == first.energy - second.energy
     /// True
     ///
@@ -824,8 +1456,11 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> outgoing_convention = -incoming_convention
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> incoming_convention = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
+    /// >>> outgoing_convention = -incoming_convention
+    /// >>> assert outgoing_convention.energy == -5.0
     fn __neg__(&self) -> Self {
         (-self.inner).into()
     }
@@ -834,6 +1469,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
     /// >>> half_momentum = momentum * 0.5
     ///
     /// Parameters
@@ -848,6 +1485,8 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
     /// >>> half_momentum = 0.5 * momentum
     ///
     /// Parameters
@@ -862,9 +1501,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// >>> muon_momentum = FourMomentum(5.0, 3.0, 4.0, 0.0)
-    /// >>> print(f"muon four-momentum: {muon_momentum!r}")
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> muon_momentum = hep.FourMomentum(5.0, 3.0, 4.0, 0.0)
+    /// >>> print(f"muon four-momentum: {muon_momentum!r}")
     fn __repr__(&self) -> String {
         let (energy, px, py, pz): (f64, f64, f64, f64) = self.inner.into();
         format!("FourMomentum({energy}, {px}, {py}, {pz})")
@@ -874,9 +1514,9 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// Leave ``momentum`` as the final expression in a notebook cell to render
-    /// its energy and Cartesian momentum components.
+    /// Using the setup in the ``FourMomentum`` class example:
     ///
+    /// >>> latex = momentum._repr_latex_()
     fn _repr_latex_(&self) -> String {
         let (energy, px, py, pz): (f64, f64, f64, f64) = self.inner.into();
         format!(r"$p^\mu=\left({energy},{px},{py},{pz}\right)$")
@@ -886,7 +1526,10 @@ impl PyFourMomentum {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``FourMomentum`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(momentum)
     ///
     /// Parameters
     /// ----------
@@ -914,14 +1557,13 @@ impl PyFourMomentum {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> rotation = fk.Rotation.quarter_turn(fk.Axis.Z)
-/// >>> rotated = rotation.apply_three(fk.ThreeMomentum(1.0, 0.0, 0.0))
-///
+/// >>> from symbolica.community import hepkit as hep
+/// >>> rotation = hep.Rotation.quarter_turn(hep.Axis.Z)
+/// >>> rotated = rotation.apply_three(hep.ThreeMomentum(1.0, 0.0, 0.0))
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Rotation",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -931,14 +1573,16 @@ pub struct PyRotation {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyRotation {
     /// Construct the identity rotation.
     ///
     /// Examples
     /// --------
-    /// >>> rotation = Rotation.identity()
+    /// Using the setup in the ``Rotation`` class example:
     ///
+    /// >>> rotation = hep.Rotation.identity()
     #[staticmethod]
     fn identity() -> Self {
         Self {
@@ -950,7 +1594,9 @@ impl PyRotation {
     ///
     /// Examples
     /// --------
-    /// >>> rotation = Rotation.euler(0.1, 0.2, 0.3)
+    /// Using the setup in the ``Rotation`` class example:
+    ///
+    /// >>> rotation = hep.Rotation.euler(0.1, 0.2, 0.3)
     ///
     /// Parameters
     /// ----------
@@ -971,7 +1617,9 @@ impl PyRotation {
     ///
     /// Examples
     /// --------
-    /// >>> rotation = Rotation.quarter_turn(Axis.Z)
+    /// Using the setup in the ``Rotation`` class example:
+    ///
+    /// >>> rotation = hep.Rotation.quarter_turn(hep.Axis.Z)
     ///
     /// Parameters
     /// ----------
@@ -988,7 +1636,10 @@ impl PyRotation {
     ///
     /// Examples
     /// --------
-    /// >>> rotated = Rotation.quarter_turn(Axis.Z).apply_three(momentum)
+    /// Using the setup in the ``Rotation`` class example:
+    ///
+    /// >>> momentum = hep.ThreeMomentum(1.0, 0.0, 0.0)
+    /// >>> rotated = rotation.apply_three(momentum)
     ///
     /// Parameters
     /// ----------
@@ -1002,7 +1653,10 @@ impl PyRotation {
     ///
     /// Examples
     /// --------
-    /// >>> rotated = Rotation.quarter_turn(Axis.Z).apply_four(momentum)
+    /// Using the setup in the ``Rotation`` class example:
+    ///
+    /// >>> momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
+    /// >>> rotated = rotation.apply_four(momentum)
     ///
     /// Parameters
     /// ----------
@@ -1016,6 +1670,9 @@ impl PyRotation {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Rotation`` class example:
+    ///
+    /// >>> momentum = hep.ThreeMomentum(1.0, 0.0, 0.0)
     /// >>> original = rotation.apply_inverse_three(rotation.apply_three(momentum))
     ///
     /// Parameters
@@ -1030,6 +1687,9 @@ impl PyRotation {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Rotation`` class example:
+    ///
+    /// >>> momentum = hep.FourMomentum(2.0, 1.0, 0.0, 0.0)
     /// >>> original = rotation.apply_inverse_four(rotation.apply_four(momentum))
     ///
     /// Parameters
@@ -1048,9 +1708,12 @@ impl PyRotation {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> boost = fk.Boost(fk.ThreeMomentum(0.0, 0.0, 0.5))
-/// >>> boosted = boost.apply(fk.FourMomentum(10.0, 0.0, 0.0, 0.0))
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> momentum = hep.FourMomentum(10.0, 0.0, 0.0, 0.0)
+/// >>> boost = hep.Boost(hep.ThreeMomentum(0.0, 0.0, 0.5))
+/// >>> boosted = boost.apply(momentum)
+/// >>> assert abs(boosted.mass_squared - momentum.mass_squared) < 1e-10
 ///
 /// Parameters
 /// ----------
@@ -1059,7 +1722,7 @@ impl PyRotation {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Boost",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1069,13 +1732,16 @@ pub struct PyBoost {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyBoost {
     /// Construct a Lorentz boost from a dimensionless three-velocity.
     ///
     /// Examples
     /// --------
-    /// >>> boost = Boost(ThreeMomentum(0.0, 0.0, 0.5))
+    /// Using the setup in the ``Boost`` class example:
+    ///
+    /// >>> boost = hep.Boost(hep.ThreeMomentum(0.0, 0.0, 0.5))
     ///
     /// Parameters
     /// ----------
@@ -1089,6 +1755,12 @@ impl PyBoost {
     }
 
     /// Return the dimensionless boost velocity.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Boost`` class example:
+    ///
+    /// >>> assert boost.beta.pz == 0.5
     #[getter]
     fn beta(&self) -> PyThreeMomentum {
         self.inner.beta().to_owned().into()
@@ -1097,6 +1769,8 @@ impl PyBoost {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Boost`` class example:
+    ///
     /// >>> boosted = boost.apply(momentum)
     ///
     /// Parameters
@@ -1110,6 +1784,8 @@ impl PyBoost {
     ///
     /// Examples
     /// --------
+    /// Using the setup in the ``Boost`` class example:
+    ///
     /// >>> original = boost.apply_inverse(boost.apply(momentum))
     ///
     /// Parameters
@@ -1128,14 +1804,20 @@ impl PyBoost {
 ///
 /// Examples
 /// --------
-/// >>> jets = fk.JetDefinition.anti_kt(0.4).cluster(particles).jets
-/// >>> leading_jet = next(iter(jets))
-/// >>> leading_jet.momentum
-///
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
+/// ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
+/// >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
+/// >>> clustering = definition.cluster(particles)
+/// >>> jets = clustering.jets
+/// >>> leading_jet = jets[0]
+/// >>> assert leading_jet.pt == 50.0
+/// >>> inputs = [particles[i] for i in leading_jet.constituent_indices]
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "Jet",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1145,29 +1827,60 @@ pub struct PyJet {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyJet {
     /// Return the recombined four-momentum of this jet.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Jet`` class example:
+    ///
+    /// >>> assert leading_jet.momentum.pt == leading_jet.pt
     #[getter]
     fn momentum(&self) -> PyFourMomentum {
         self.inner.momentum.into()
     }
     /// Return sorted positions of the input momenta assigned to this jet.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Jet`` class example:
+    ///
+    /// >>> inputs = [particles[i] for i in leading_jet.constituent_indices]
     #[getter]
     fn constituent_indices(&self) -> Vec<usize> {
         self.inner.constituent_indices().to_vec()
     }
     /// Return the jet transverse momentum.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Jet`` class example:
+    ///
+    /// >>> assert leading_jet.pt == 50.0
     #[getter]
     fn pt(&self) -> f64 {
         self.inner.pt()
     }
     /// Return the jet rapidity.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Jet`` class example:
+    ///
+    /// >>> assert leading_jet.rapidity == 0.0
     #[getter]
     fn rapidity(&self) -> f64 {
         self.inner.rapidity()
     }
     /// Return the jet azimuthal angle in radians.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``Jet`` class example:
+    ///
+    /// >>> azimuth = leading_jet.phi
     #[getter]
     fn phi(&self) -> f64 {
         self.inner.phi()
@@ -1177,8 +1890,9 @@ impl PyJet {
     ///
     /// Examples
     /// --------
-    /// >>> print(jet)
+    /// Using the setup in the ``Jet`` class example:
     ///
+    /// >>> summary = repr(leading_jet)
     fn __repr__(&self) -> String {
         format!(
             "Jet(pt={}, rapidity={}, phi={}, constituents={})",
@@ -1193,9 +1907,10 @@ impl PyJet {
     ///
     /// Examples
     /// --------
-    /// Leave ``jet`` as the final expression in a notebook cell to display its
-    /// transverse momentum, rapidity, azimuth, and constituents.
+    /// Using the setup in the ``Jet`` class example:
     ///
+    /// >>> from IPython.display import display
+    /// >>> display(leading_jet)
     fn _repr_html_(&self) -> String {
         format!(
             "<table class=\"feynkit-jet\" style=\"border-collapse:collapse\"><thead><tr>\
@@ -1218,7 +1933,10 @@ impl PyJet {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``Jet`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(leading_jet)
     ///
     /// Parameters
     /// ----------
@@ -1246,14 +1964,18 @@ impl PyJet {
 ///
 /// Examples
 /// --------
-/// >>> definition = fk.JetDefinition.anti_kt(0.4, minimum_pt=20.0)
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
+/// ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
+/// >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
 /// >>> clustering = definition.cluster(particles)
 /// >>> jets = clustering.jets
-///
+/// >>> assert len(jets) == 2
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "ClusteringResult",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1264,16 +1986,18 @@ pub struct PyClusteringResult {
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
 #[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyClusteringResult {
     /// Return inclusive jets ordered by decreasing transverse momentum.
     ///
     /// Examples
     /// --------
-    /// >>> jets = result.jets
+    /// Using the setup in the ``ClusteringResult`` class example:
+    ///
+    /// >>> jets = clustering.jets
     /// >>> all(left.pt >= right.pt for left, right in zip(jets, jets[1:]))
     /// True
-    ///
     #[getter]
     fn jets(&self) -> Vec<PyJet> {
         self.inner
@@ -1287,8 +2011,9 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// >>> jet_multiplicity = len(result)
+    /// Using the setup in the ``ClusteringResult`` class example:
     ///
+    /// >>> jet_multiplicity = len(clustering)
     fn __len__(&self) -> usize {
         self.inner.len()
     }
@@ -1297,7 +2022,9 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// >>> leading_jet = result[0]
+    /// Using the setup in the ``ClusteringResult`` class example:
+    ///
+    /// >>> leading_jet = clustering[0]
     ///
     /// Parameters
     /// ----------
@@ -1318,8 +2045,9 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// >>> transverse_momenta = [jet.pt for jet in result]
+    /// Using the setup in the ``ClusteringResult`` class example:
     ///
+    /// >>> transverse_momenta = [jet.pt for jet in clustering]
     #[gen_stub(override_return_type(
         type_repr = "collections.abc.Iterator[Jet]",
         imports = ("collections.abc")
@@ -1332,8 +2060,9 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// >>> print(result)
+    /// Using the setup in the ``ClusteringResult`` class example:
     ///
+    /// >>> print(clustering)
     fn __repr__(&self) -> String {
         format!("ClusteringResult(jets={})", self.inner.len())
     }
@@ -1345,9 +2074,10 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// Leave ``result`` as the final expression in a notebook cell to display
-    /// the jet collection.
+    /// Using the setup in the ``ClusteringResult`` class example:
     ///
+    /// >>> from IPython.display import display
+    /// >>> display(clustering)
     fn _repr_html_(&self) -> String {
         const DISPLAY_LIMIT: usize = 20;
         let rows = self
@@ -1393,7 +2123,10 @@ impl PyClusteringResult {
     ///
     /// Examples
     /// --------
-    /// IPython invokes this method when only a text representation is supported.
+    /// Using the setup in the ``ClusteringResult`` class example:
+    ///
+    /// >>> from IPython.lib.pretty import pretty
+    /// >>> text = pretty(clustering)
     ///
     /// Parameters
     /// ----------
@@ -1421,9 +2154,14 @@ impl PyClusteringResult {
 ///
 /// Examples
 /// --------
-/// >>> import symbolica.community.feynkit as fk
-/// >>> definition = fk.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
-/// >>> result = definition.cluster(particles)
+/// >>> from symbolica import S, E
+/// >>> from symbolica.community import hepkit as hep
+/// >>> particles = [hep.FourMomentum(50.0, 30.0, 40.0, 0.0),
+/// ...              hep.FourMomentum(25.0, -15.0, -20.0, 0.0)]
+/// >>> definition = hep.JetDefinition.anti_kt(radius=0.4, minimum_pt=20.0)
+/// >>> clustering = definition.cluster(particles)
+/// >>> assert definition.radius == 0.4
+/// >>> assert len(clustering.jets) == 2
 ///
 /// Parameters
 /// ----------
@@ -1436,7 +2174,7 @@ impl PyClusteringResult {
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     name = "JetDefinition",
-    module = "symbolica.community.feynkit",
+    module = "symbolica.community.hepkit",
     frozen,
     from_py_object
 )]
@@ -1446,13 +2184,16 @@ pub struct PyJetDefinition {
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[spenso_macros::track_usage(crate::record_usage)]
 #[pymethods]
 impl PyJetDefinition {
     /// Construct a generalized-kT jet definition.
     ///
     /// Examples
     /// --------
-    /// >>> definition = JetDefinition(JetAlgorithm.AntiKt, 0.4, 20.0)
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> definition = hep.JetDefinition(hep.JetAlgorithm.AntiKt, 0.4, 20.0)
     ///
     /// Parameters
     /// ----------
@@ -1474,7 +2215,9 @@ impl PyJetDefinition {
     ///
     /// Examples
     /// --------
-    /// >>> definition = JetDefinition.kt(0.4)
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> definition = hep.JetDefinition.kt(0.4)
     ///
     /// Parameters
     /// ----------
@@ -1494,7 +2237,9 @@ impl PyJetDefinition {
     ///
     /// Examples
     /// --------
-    /// >>> definition = JetDefinition.cambridge_aachen(0.4)
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> definition = hep.JetDefinition.cambridge_aachen(0.4)
     ///
     /// Parameters
     /// ----------
@@ -1514,7 +2259,9 @@ impl PyJetDefinition {
     ///
     /// Examples
     /// --------
-    /// >>> definition = JetDefinition.anti_kt(0.4, minimum_pt=20.0)
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> definition = hep.JetDefinition.anti_kt(0.4, minimum_pt=20.0)
     ///
     /// Parameters
     /// ----------
@@ -1531,16 +2278,34 @@ impl PyJetDefinition {
     }
 
     /// Return the selected clustering algorithm.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> assert definition.algorithm == hep.JetAlgorithm.AntiKt
     #[getter]
     fn algorithm(&self) -> PyJetAlgorithm {
         self.inner.algorithm().into()
     }
     /// Return the jet-radius parameter.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> assert definition.radius == 0.4
     #[getter]
     fn radius(&self) -> f64 {
         *self.inner.radius()
     }
     /// Return the minimum transverse momentum for retained jets.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> assert definition.minimum_pt == 20.0
     #[getter]
     fn minimum_pt(&self) -> f64 {
         *self.inner.minimum_pt()
@@ -1550,9 +2315,10 @@ impl PyJetDefinition {
     ///
     /// Examples
     /// --------
-    /// >>> result = JetDefinition.anti_kt(0.4).cluster(momenta)
-    /// >>> leading_jet = result.jets[0]
-    /// >>> leading_jet.momentum
+    /// Using the setup in the ``JetDefinition`` class example:
+    ///
+    /// >>> result = definition.cluster(particles)
+    /// >>> assert len(result.jets) == 2
     ///
     /// Parameters
     /// ----------
@@ -1575,11 +2341,13 @@ impl PyJetDefinition {
 }
 
 pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
+    module.add_class::<PyKinematics>()?;
     module.add_class::<PyHelicity>()?;
     module.add_class::<PyAxis>()?;
     module.add_class::<PyJetAlgorithm>()?;
     module.add_class::<PyThreeMomentum>()?;
     module.add_class::<PyFourMomentum>()?;
+    module.add_class::<crate::PyWavefunction>()?;
     module.add_class::<PyRotation>()?;
     module.add_class::<PyBoost>()?;
     module.add_class::<PyJet>()?;

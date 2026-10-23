@@ -1,10 +1,11 @@
 //! Exact symbolic application of a separately loaded immutable publication.
 //!
-//! Masters denote unit-mass Minkowski integrals with unnormalized loop measures,
-//! qualified by the authenticated output-family fingerprint. Coefficients are
-//! exact in generic d=4-2*epsilon. Saved-program guards depend only on d;
-//! caller numerator and common-mass pole guards retain their scalar parameters.
-//! This adapter performs no scalar reduction, master substitution or IBP search.
+//! Masters denote unit-mass integrals in the FMFT/MATAD convention, qualified by
+//! the authenticated output-family fingerprint. The requested Minkowski measure
+//! and mass scaling are restored once. Coefficients are exact in d=4-2*epsilon.
+//! Saved-program guards depend only on d; caller numerator and common-mass pole
+//! guards retain their scalar parameters. RustRed owns scalar lowering and rule
+//! application; this adapter performs no IBP search or master substitution.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -41,6 +42,7 @@ use crate::{
 
 static PARENTS: LazyLock<Vec<ParentDescriptor>> = LazyLock::new(descriptors);
 
+mod mass_channels;
 #[path = "five_loop/witness_cache.rs"]
 mod witness_cache;
 pub use witness_cache::RustRedWitnessCacheStatistics;
@@ -61,6 +63,10 @@ mod entry_probe_diagnostics;
 #[cfg(test)]
 #[path = "five_loop/test_profiles.rs"]
 mod test_profiles;
+
+#[cfg(test)]
+#[path = "five_loop/partial_acceptance.rs"]
+mod partial_acceptance;
 
 #[cfg(all(
     test,
@@ -88,20 +94,24 @@ pub struct RustRedSymbolicEvaluation {
 }
 
 pub(crate) struct SavedApplication {
-    prepared: Mutex<PreparedSavedApplication<15>>,
+    pub(super) prepared: Mutex<PreparedSavedApplication<15>>,
+    pub(super) cache_digest: [u8; 32],
+    pub(super) cache: Mutex<Option<super::cache::SavedFiveLoopCache>>,
     fingerprint: String,
+    data_version: String,
     products: SavedApplicationProductStatistics,
     product_charts: SavedApplicationProductChartStatistics,
     product_reducer: Mutex<VacuumProductReducer<ShippedFactorProvider>>,
     witnesses: Mutex<WitnessCache>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct LoadedApplication {
-    path: PathBuf,
-    options: SavedApplicationOptions,
-    product_limits: VacuumProductReductionLimits,
-    application: Arc<SavedApplication>,
+    pub(super) path: PathBuf,
+    pub(super) options: SavedApplicationOptions,
+    pub(super) product_limits: VacuumProductReductionLimits,
+    pub(super) application: Arc<SavedApplication>,
+    bare: bool,
     catalogue: Arc<crate::topologies::FiveLoopCatalogue>,
 }
 
@@ -180,8 +190,8 @@ impl Vakint {
         }
         let matched = self.match_rustred_input_uncached(settings, integral, numerator)?;
         if let Some(witness) = &matched {
-            // The unchanged matcher may return a non-admitted fallback to
-            // preserve its precise error. Such a fallback is never memoized.
+            // A verified fallback outside recorded coverage remains usable by
+            // the partial reducer. Only covered witnesses enter this memo.
             if matches!(witness.canonical_topology, Topology::FiveLoop(_))
                 && let Some(accepted) =
                     self.rustred_matched_input_key(settings, numerator, witness)?
@@ -335,12 +345,15 @@ impl Vakint {
     /// Only successful loading prepares and publishes the five-loop catalogue;
     /// `Vakint::new` prepares just the ordinary lower-loop registry.
     pub fn with_rustred_application(
-        self,
+        mut self,
         settings: &mut VakintSettings,
         path: impl AsRef<Path>,
     ) -> Result<Self, VakintError> {
         let mut configured = settings.clone();
         configured.rustred_artifact_path = Some(path.as_ref().canonicalize().map_err(failure)?);
+        if let Some(root) = super::data::RustRedData::release_root(path.as_ref())? {
+            self.load_external_data(root, 5)?;
+        }
         self.saved_application(&configured)?;
         *settings = configured;
         Ok(self)
@@ -371,15 +384,30 @@ impl Vakint {
                 || current.options != options
                 || current.product_limits != settings.rustred_product_limits
         }) {
+            let bare = super::data::RustRedData::release_root(&path)?.is_none();
             let started = std::time::Instant::now();
+            let cache_digest = super::cache::saved_application_digest(&data, &path)?;
             log::debug!(target: "vakint::saved_application", "phase=native_load_begin");
             let prepared = load_saved_application::<15>(&path, options).map_err(failure)?;
+            if super::cache::saved_application_digest(&data, &path)? != cache_digest {
+                return Err(failure(
+                    "saved application changed while its native payload was loading",
+                )
+                .into());
+            }
             log::debug!(target: "vakint::saved_application", "phase=native_load_end elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
             let application = Arc::new(SavedApplication::new(
                 prepared,
                 settings.rustred_product_limits,
                 Arc::clone(&data),
+                cache_digest,
             )?);
+            if let Some(previous) = loaded.as_ref()
+                && previous.path == path
+                && previous.application.cache_digest == cache_digest
+            {
+                application.inherit_compatible_cache(&previous.application)?;
+            }
             // Only a fully authenticated, prepared publication can activate
             // the optional catalogue. Cache/options reloads reuse its Arc.
             let catalogue = match self
@@ -395,6 +423,7 @@ impl Vakint {
                 options,
                 product_limits: settings.rustred_product_limits,
                 application,
+                bare,
                 catalogue,
             });
         }
@@ -408,7 +437,7 @@ impl Vakint {
         Ok(Arc::clone(&loaded.application))
     }
 
-    fn loaded_application(&self) -> Result<Arc<SavedApplication>, VakintError> {
+    pub(super) fn loaded_application(&self) -> Result<Arc<SavedApplication>, VakintError> {
         let loaded = self.rustred_application.lock().map_err(failure)?;
         loaded
             .as_ref()
@@ -416,25 +445,53 @@ impl Vakint {
             .ok_or_else(|| RustRedEvaluationError::SavedApplicationUnavailable.into())
     }
 
-    /// Clear the explicitly loaded package's cache without changing its entry scope.
-    pub fn clear_rustred_application_cache(&self) -> Result<(), VakintError> {
-        let application = self.loaded_application()?;
-        application
-            .prepared
-            .lock()
-            .map_err(failure)?
-            .clear_cache()
-            .map_err(failure)?;
-        application
-            .product_reducer
-            .lock()
-            .map_err(failure)?
-            .clear_cache()
-            .map_err(failure)?;
-        if let Ok(mut cache) = application.witnesses.lock() {
-            cache.clear();
+    /// Inspect the already authenticated native inventory without loading data
+    /// or manufacturing coefficient/graph metadata for a bare application.
+    pub(crate) fn announced_bare_masters(
+        &self,
+    ) -> Result<super::masters::BareMasterDeclarations, VakintError> {
+        let (path, application) = {
+            let loaded = self.rustred_application.lock().map_err(failure)?;
+            let Some(source) = loaded.as_ref().filter(|source| source.bare) else {
+                return Ok(BTreeMap::new());
+            };
+            (source.path.clone(), Arc::clone(&source.application))
+        };
+        // Release the session lock before acquiring the native application.
+        // All declarations belong to this immutable prepared snapshot.
+        let data = self.rustred_data()?;
+        let prepared = application.prepared.lock().map_err(failure)?;
+        Ok(prepared
+            .remaining_terminals()
+            .iter()
+            .map(|terminal| {
+                (
+                    data.masters
+                        .symbol(terminal.family_fingerprint(), terminal.integral().powers()),
+                    super::masters::BareMasterDeclaration {
+                        application_path: path.clone(),
+                    },
+                )
+            })
+            .collect())
+    }
+
+    pub(crate) fn require_bare_master_coefficients(
+        &self,
+        expression: &Atom,
+    ) -> Result<(), VakintError> {
+        let announced = self.announced_bare_masters()?;
+        if !announced.is_empty() {
+            self.rustred_data()?
+                .masters
+                .require_coefficients(&super::combine_exact(expression.clone()), &announced)?;
         }
         Ok(())
+    }
+
+    /// Clear the explicitly loaded package's cache without changing its entry scope.
+    pub fn clear_rustred_application_cache(&self) -> Result<(), VakintError> {
+        self.loaded_application()?.clear_resident_cache()
     }
 
     /// Observe the optional frontend witness memo, not the IBP coefficient cache.
@@ -569,10 +626,28 @@ impl Vakint {
 }
 
 impl SavedApplication {
+    pub(in crate::rustred_evaluation) fn clear_resident_cache(&self) -> Result<(), VakintError> {
+        self.prepared
+            .lock()
+            .map_err(failure)?
+            .clear_cache()
+            .map_err(failure)?;
+        self.product_reducer
+            .lock()
+            .map_err(failure)?
+            .clear_cache()
+            .map_err(failure)?;
+        if let Ok(mut cache) = self.witnesses.lock() {
+            cache.clear();
+        }
+        Ok(())
+    }
+
     fn new(
         mut prepared: PreparedSavedApplication<15>,
         product_limits: VacuumProductReductionLimits,
         data: Arc<super::data::RustRedData>,
+        cache_digest: [u8; 32],
     ) -> Result<Self, RustRedEvaluationError> {
         let started = std::time::Instant::now();
         // Compile the same complete common basis through RustRed's existing
@@ -630,6 +705,7 @@ impl SavedApplication {
         let anchor = prepared
             .output_family_shared(prepared.family().fingerprint())
             .ok_or_else(|| failure("saved application does not expose its authenticated family"))?;
+        let data_version = data.masters.version.clone();
         let product_reducer = VacuumProductReducer::try_new(
             ShippedFactorProvider::with_data(data),
             anchor,
@@ -638,7 +714,10 @@ impl SavedApplication {
         .map_err(failure)?;
         Ok(Self {
             fingerprint: prepared.family().fingerprint().to_owned(),
+            data_version,
             prepared: Mutex::new(prepared),
+            cache_digest,
+            cache: Mutex::new(None),
             products,
             product_charts,
             product_reducer: Mutex::new(product_reducer),
@@ -660,6 +739,30 @@ impl SavedApplication {
         let mut arguments = vec![identity];
         arguments.extend(integral.powers().iter().map(|power| Atom::num(*power)));
         head.call(&arguments)
+    }
+
+    fn normalization(settings: &VakintSettings, loop_count: usize) -> Result<Atom, VakintError> {
+        let normalization = settings
+            .get_staged_integral_normalization_factor_atom()?
+            .replace(S.n_loops.to_pattern())
+            .with(Atom::num(loop_count).to_pattern())
+            .replace(Atom::var(vk_symbol!("log_mu_sq")).to_pattern())
+            .with(
+                Symbol::LOG
+                    .call(Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str())))
+                    .to_pattern(),
+            );
+        // Public masters use the unit-mass FMFT/MATAD convention, including
+        // lower-loop product factors. Normalize both sides of the measure
+        // conversion together so the two EulerGamma spellings cancel exactly.
+        let measure = crate::utils::vakint_macros::vk_parse!(format!(
+            "(𝑖*𝜋^(2-({eps}))*exp(-EulerGamma*({eps})))^{loop_count}",
+            eps = settings.epsilon_symbol
+        ))
+        .map_err(failure)?;
+        let factor =
+            Vakint::normalize_gamma_functions((normalization * measure).as_view()).expand();
+        Ok(crate::utils::simplify_real(factor.as_view()))
     }
 
     pub(super) fn evaluate(
@@ -709,15 +812,14 @@ impl SavedApplication {
             input.target.powers(), lowering.terms().len(),
             lowering.terms().iter().take(8).map(|term| term.integral().powers()).collect::<Vec<_>>());
         let mut batches = BTreeMap::<(Atom, i64), Vec<(IntegralKey, Coefficient)>>::new();
+        let mut uncovered = BTreeSet::new();
+        let mut mass_exponent_origin = None;
         for term in lowering.terms() {
             if !application
                 .routed_entry_is_admitted(term.integral())
                 .map_err(failure)?
             {
-                log::warn!(
-                    "RustRed 5L input {:?} is outside the recorded campaign coverage; there is no guarantee of a complete reduction to the known masters",
-                    term.integral().powers()
-                );
+                uncovered.insert(term.integral().clone());
             }
             // Unit-mass output masters include their full integration measure.
             // RustRed has already combined numerator mass factors and scalar
@@ -731,10 +833,29 @@ impl SavedApplication {
                 .ok_or_else(|| failure("saved application mass exponent overflow"))?;
             let exponent = i64::try_from(exponent)
                 .map_err(|_| RustRedEvaluationError::MassExponentOverflow { exponent })?;
+            let anchor = *mass_exponent_origin.get_or_insert(exponent);
+            let channel = Self::mass_channel(
+                term.scalar_spectator(),
+                &input.mass_squared,
+                exponent,
+                anchor,
+                settings
+                    .rustred_scalar_numerator_limits
+                    .max_scalar_product_degree,
+            );
             batches
-                .entry((term.scalar_spectator().clone(), exponent))
+                .entry(channel)
                 .or_default()
                 .push((term.integral().clone(), term.coefficient().clone()));
+        }
+        if let Some(first) = uncovered.first() {
+            log::warn!(
+                "RustRed 5L: {} scalar key(s) produced by numerator lowering are outside the recorded shifted-index entry predicates (data {}); reduction will be attempted, but complete reduction to the known masters is not guaranteed. First common-family powers: {:?}",
+                uncovered.len(),
+                self.data_version,
+                first.powers()
+            );
+            log::debug!(target: "vakint::five_loop_match", "phase=outside_coverage data={} keys={uncovered:?}; index convention: product_i D_i^(-a_i), D_i=q_i^2-M^2; negative a_i encode numerator powers, not the original physical dot-product rank", self.data_version);
         }
         let epsilon = Atom::var(vk_symbol!(settings.epsilon_symbol.as_str()));
         let physical_dimension = Atom::num(4) - Atom::num(2) * &epsilon;
@@ -754,9 +875,7 @@ impl SavedApplication {
         let mut families = BTreeMap::new();
         for ((spectator, exponent), terms) in batches {
             let application_started = std::time::Instant::now();
-            let reduced = application
-                .reduce_routed_linear_combination(terms)
-                .map_err(failure)?;
+            let reduced = self.reduce_saved(&mut application, terms)?;
             log::debug!(target: "vakint::saved_application", "phase=saved_rule_application elapsed_seconds={:.6}", application_started.elapsed().as_secs_f64());
             let products_started = std::time::Instant::now();
             let mut contribution = Atom::Zero;
@@ -908,28 +1027,10 @@ impl SavedApplication {
                 Atom::num((loop_count as i64, 2)) * &physical_dimension + Atom::num(exponent);
             value += contribution * spectator * input.mass_squared.clone().pow(mass_power);
         }
-        let normalization = settings
-            .get_staged_integral_normalization_factor_atom()?
-            .replace(S.n_loops.to_pattern())
-            .with(Atom::num(loop_count).to_pattern())
-            .replace(Atom::var(vk_symbol!("log_mu_sq")).to_pattern())
-            .with(
-                Symbol::LOG
-                    .call(Atom::var(vk_symbol!(settings.mu_r_sq_symbol.as_str())))
-                    .to_pattern(),
-            );
         if !matches!(input.mass_squared.as_view(), AtomView::Num(_)) {
             conditions.insert(input.mass_squared);
         }
-        // Public RustRedMaster symbols uniformly denote the unit-mass
-        // FMFT/MATAD-normalized integral, including lower-loop product factors.
-        let measure = crate::utils::vakint_macros::vk_parse!(format!(
-            "(𝑖*𝜋^(2-({eps}))*exp(-EulerGamma*({eps})))^{loop_count}",
-            eps = settings.epsilon_symbol
-        ))
-        .map_err(failure)?;
-        let measure = Vakint::normalize_gamma_functions(measure.as_view());
-        let value = value * normalization * measure;
+        let value = value * Self::normalization(settings, loop_count)?;
         let value = if settings.use_dot_product_notation {
             value
         } else {
@@ -950,6 +1051,23 @@ mod tests {
     use super::*;
     use crate::utils::vakint_macros::vk_parse;
     use crate::{EvaluationMethod, EvaluationOrder, RustRedEvaluationOptions};
+
+    #[test]
+    fn fmft_measure_conversion_cancels_exactly_in_each_epsilon_spelling() {
+        for epsilon_symbol in ["ep", "eps", "eta"] {
+            let settings = VakintSettings {
+                epsilon_symbol: epsilon_symbol.into(),
+                integral_normalization_factor: crate::LoopNormalizationFactor::FMFTandMATAD,
+                ..Default::default()
+            };
+            for loops in 1..=5 {
+                assert_eq!(
+                    SavedApplication::normalization(&settings, loops).unwrap(),
+                    Atom::one()
+                );
+            }
+        }
+    }
 
     #[test]
     fn saved_cache_policy_defaults_to_lru_and_participates_in_session_identity() {

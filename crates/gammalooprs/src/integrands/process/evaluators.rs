@@ -2,9 +2,10 @@ use bincode_trait_derive::{Decode, Encode};
 use color_eyre::{Result, Section};
 use eyre::{Context, eyre};
 use idenso::{
+    CookMode, CookSettings,
     color::{ColorSimplifier, ColorSimplifySettings},
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    dirac::GammaSimplifySettings,
+    tensor::{AlgebraSettings, SymbolicTensor},
 };
 use linnet::half_edge::{
     involution::{EdgeVec, Orientation},
@@ -498,17 +499,22 @@ impl EvaluatorStack {
                 // println!("Parsing {}", a.as_atom_view().log_print(Some(120)));
                 let instant = std::time::Instant::now();
                 let network_input = if settings.do_algebra {
-                    let color_simplified = a.as_atom_view().simplify_color_with(
-                        ColorSimplifySettings::default().with_cof_dimension_invariants(),
-                    );
-                    let gamma_simplified = color_simplified.simplify_gamma();
+                    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding).with_representation_payloads(true, true);
+                    let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(a.as_atom_view())?)?
+                        .simplify_algebra(&AlgebraSettings {
+                            color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+                            gamma: Some(GammaSimplifySettings::default()),
+                            epsilon: true,
+                            ..Default::default()
+                        })?
+                        .to_dots()?;
+                    let simplified = cooking.uncook(reduced.expression().as_view());
                     crate::debug_tags!(#generation, #profile, #compile, #term, #dump;
                         stage = "evaluator_stack_parse_atom_after_simplify_gamma",
                         atom_index,
-                        log.after_gamma = gamma_simplified,
+                        log.after_gamma = simplified,
                         "Evaluator atom after gamma simplification"
                     );
-                    let simplified = gamma_simplified.simplify_metrics().to_dots();
                     crate::debug_tags!(#generation, #profile, #compile, #term, #summary;
                         stage = "evaluator_stack_parse_atom_simplify_done",
                         atom_index,
@@ -1841,7 +1847,7 @@ impl GenericEvaluatorFloat for ArbPrec {
 #[cfg(test)]
 mod tests {
     use crate::graph::parse::IntoFinalizedRuntimeGraph;
-    use idenso::color::CS;
+    use idenso::{cof, color_cas};
     use symbolica::atom::Symbol;
 
     use super::*;
@@ -1849,8 +1855,13 @@ mod tests {
     #[test]
     fn pi_eval() {
         let params = vec![parse!("x"), parse!("y")];
-        let _evaluator = (parse!("x + y") + Symbol::PI / CS.cf)
+        let mut function_map = FunctionMap::default();
+        function_map
+            .add_aliases([(color_cas!(2, cof!(3)), Atom::num((4, 3)))])
+            .unwrap();
+        let _evaluator = (parse!("x + y") + Symbol::PI / color_cas!(2, cof!(3)))
             .evaluator(&params)
+            .function_map(function_map)
             .build()
             .unwrap();
         // assert_eq!(evaluator.evaluate_single(&[1.0, 2.0]), 3.0);

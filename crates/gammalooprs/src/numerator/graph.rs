@@ -48,16 +48,16 @@ pub trait GeneratePolarizations {
         &self,
         model: &Model,
         subgraph: &S,
-    ) -> Vec<Atom>;
+    ) -> eyre::Result<Vec<Atom>>;
     // fn generate_polarizations(&self) -> Atom;
-    // fn generate_polarization_params(&self) -> Vec<Atom>;
+    // fn generate_polarization_params(&self) -> eyre::Result<Vec<Atom>>;
 }
 
 impl Graph {
     pub fn generate_polarizations(&self, model: &Model) -> Atom {
         self.generate_polarizations_of(model, &self.underlying.external_filter::<SuBitGraph>())
     }
-    pub fn generate_polarization_params(&self, model: &Model) -> Vec<Atom> {
+    pub fn generate_polarization_params(&self, model: &Model) -> eyre::Result<Vec<Atom>> {
         self.generate_polarization_parameters_of(
             model,
             &self.underlying.external_filter::<SuBitGraph>(),
@@ -74,7 +74,7 @@ impl GeneratePolarizations for Graph {
         &self,
         model: &Model,
         subgraph: &S,
-    ) -> Vec<Atom> {
+    ) -> eyre::Result<Vec<Atom>> {
         self.underlying
             .generate_polarization_parameters_of(model, subgraph)
     }
@@ -82,11 +82,11 @@ impl GeneratePolarizations for Graph {
     // fn generate_polarizations(&self) -> Atom {
     //     self.generate_polarizations_of(&self.underlying.external_filter())
     // }
-    // fn generate_polarization_params(&self) -> Vec<Atom> {
+    // fn generate_polarization_params(&self) -> eyre::Result<Vec<Atom>> {
     //     self.generate_polarization_parameters_of(&self.underlying.external_filter())
     // }
 
-    // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
+    // pub(crate) fn polarizations_values(&self) -> eyre::Result<Vec<Atom>> {
     //     self.polarizations_of(&self.underlying.external_filter())
     // }
 }
@@ -115,7 +115,7 @@ where
         &self,
         model: &Model,
         subgraph: &S,
-    ) -> Vec<Atom> {
+    ) -> eyre::Result<Vec<Atom>> {
         let mut pols = Vec::new();
 
         for h in subgraph.included_iter() {
@@ -131,24 +131,24 @@ where
             };
 
             let (structure, layout) = pol.into_parts();
-            let concrete: ParamTensor<_> = structure.to_shell().concretize_logical(&layout);
+            let concrete: ParamTensor<_> = structure.to_shell().concretize_logical(&layout)?;
 
             for (_, i) in concrete.iter_flat() {
                 pols.push(i.to_owned());
             }
         }
 
-        pols
+        Ok(pols)
     }
 
     // fn generate_polarizations(&self) -> Atom {
     //     self.generate_polarizations_of(&self.external_filter())
     // }
-    // fn generate_polarization_params(&self) -> Vec<Atom> {
+    // fn generate_polarization_params(&self) -> eyre::Result<Vec<Atom>> {
     //     self.generate_polarization_parameters_of(&self.external_filter())
     // }
 
-    // pub(crate) fn polarizations_values(&self) -> Vec<Atom> {
+    // pub(crate) fn polarizations_values(&self) -> eyre::Result<Vec<Atom>> {
     //     self.polarizations_of(&self.underlying.external_filter())
     // }
 }
@@ -275,7 +275,11 @@ fn oriented_pdg(pdg: i64, orientation: Orientation) -> isize {
 mod test {
 
     // use env_logger::WriteStyle;
-    use idenso::{dirac::GammaSimplifier, tensor::SymbolicNetParse};
+    use idenso::{
+        CookMode, CookSettings,
+        dirac::GammaSimplifySettings,
+        tensor::{AlgebraSettings, SymbolicNetParse, SymbolicTensor},
+    };
 
     use spenso::network::parsing::ParseSettings;
     use symbolica::parse_lit;
@@ -352,6 +356,16 @@ mod test {
             .unwrap();
         println!("{}", net.dot_pretty());
 
-        let _ = expr.simplify_gamma();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let _ = SymbolicTensor::infer_indexed(cooking.try_cook(expr.as_view()).unwrap())
+            .unwrap()
+            .simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })
+            .unwrap();
     }
 }

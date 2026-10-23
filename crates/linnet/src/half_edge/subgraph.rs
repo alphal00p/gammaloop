@@ -496,19 +496,39 @@ pub trait SubSetLike<ID = Hedge>:
     /// Returns a Symbolica symbol whose name and formatter encode this selection's label.
     #[cfg(feature = "symbolica")]
     fn symbol(&self) -> symbolica::atom::Symbol {
+        Self::symbol_from_label(self.string_label())
+    }
+
+    /// Restore a selection's display symbol without reconstructing its topology.
+    #[cfg(feature = "symbolica")]
+    fn symbol_from_label(label: String) -> symbolica::atom::Symbol {
         use symbolica::{
             atom::{AtomCore, AtomView},
             get_symbol,
             printer::PrintState,
-            symbol,
+            try_symbol,
         };
         use symbolica_utils::{PrintSettingsExt, TypstMode};
 
-        let label = self.string_label();
         let name = format!("S_{label}");
 
-        get_symbol!(&name).unwrap_or_else(|| {
-            symbol!(
+        // Keep Symbolica initialization outside the registration lock.
+        if let Some(existing) = get_symbol!(&name) {
+            return existing;
+        }
+
+        let registration = {
+            // The static is shared across subset types. Symbolica rejects a
+            // second print callback, so lookup and creation must be serialized.
+            static REGISTRATION: std::sync::Mutex<()> = std::sync::Mutex::new(());
+            let _registration = REGISTRATION
+                .lock()
+                .expect("subset symbol registration lock is not poisoned");
+            if let Some(existing) = get_symbol!(&name) {
+                return existing;
+            }
+
+            try_symbol!(
                 &name,
                 print = move |a, opt, _state| {
                     let mut out = match opt.typst_mode()? {
@@ -535,7 +555,9 @@ pub trait SubSetLike<ID = Hedge>:
                     Some(out)
                 }
             )
-        })
+        };
+        // An invalid label must not poison subsequent symbol registration.
+        registration.unwrap_or_else(|error| panic!("{error}"))
     }
 
     /// Attempts to decode an implementation-specific compact label for a universe

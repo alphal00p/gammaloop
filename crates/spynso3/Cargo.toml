@@ -2,22 +2,29 @@
 name = "spynso3"
 version = "0.1.2"
 edition = "2024"
-description = "Pyo3 bindings for spenso"
+description = "Python tensor and simplification bindings for Spenso and Idenso"
 license = "MIT"
 repository = "https://github.com/alphal00p/gammaloop"
 
 [dependencies]
+linnet-render-py = { path = "../linnet-render-py", default-features = false }
 ahash = { workspace = true, features = ["serde"] }
-idenso = { workspace = true, features = ["python"] }
+idenso = { workspace = true }
 spenso = { workspace = true, features = ["portable-payload", "python", "shadowing"] }
 spenso-hep-lib = { workspace = true, default-features = false }
 spenso-macros = { workspace = true }
 xpct = "0.5.1"
 
 eyre = { workspace = true }
-pyo3 = { workspace = true, features = ["eyre"] }
+pyo3 = { workspace = true, features = ["eyre", "multiple-pymethods"] }
 
 itertools = "0.14.0"
+serde_json = { workspace = true }
+roxmltree = "0.21.1"
+ciborium = "0.2"
+linnet = { workspace = true }
+linnest = { workspace = true, features = ["svg"] }
+typst-renderer = { path = "../typst-renderer" }
 pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer_signature"], optional = true }
 pyo3-stub-gen-derive = { workspace = true }
 tabled = { workspace = true }
@@ -32,13 +39,14 @@ features = ["bincode", "python_export", "serde"]
 [features]
 default = ["native"]
 native = [
+  "linnet-render-py/native",
   "idenso/native",
-  "pyo3/multiple-pymethods",
   "spenso/native-code-generation",
   "spenso-hep-lib/native",
   "symbolica-typst-plugin/native",
 ]
 wasm = [
+  "linnet-render-py/wasm",
   "idenso/wasm",
   "spenso/wasm",
   "spenso-hep-lib/wasm",
@@ -46,11 +54,20 @@ wasm = [
   "symbolica-typst-plugin/wasm",
 ]
 python_stubgen = [
+  "linnet-render-py/python_stubgen",
   "dep:pyo3-stub-gen",
-  "idenso/python_stubgen",
   "spenso/python_stubgen",
   "symbolica/python_stubgen",
 ]
 
 # [patch.crates-io]
 # pyo3-stub-gen = { git = "https://github.com/benruijl/pyo3-stub-gen", branch = "patched" }
+
+[package.metadata.symbolica-data]
+manifest = "data.json"
+
+[dependencies.symbolica-data]
+path = "../symbolica-data"
+
+[build-dependencies.symbolica-data]
+path = "../symbolica-data"

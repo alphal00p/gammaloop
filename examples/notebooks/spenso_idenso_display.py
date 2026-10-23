@@ -16,8 +16,8 @@ def _(mo):
     mo.md(r"""
     # Spenso + Idenso, live
 
-    Build typed tensor expressions with **Spenso**, transform their ordinary
-    Symbolica atoms with **Idenso**, and render the same semantics through the
+    Build typed tensor expressions with **Spenso**, apply **Idenso** algebra
+    through their methods, and render the same semantics through the
     configurable Typst display. Change any control or edit any cell: Marimo
     recomputes only the affected section.
 
@@ -29,17 +29,17 @@ def _(mo):
 
 @app.cell
 def _():
-    import pydot
     import symbolica as sy
-    from symbolica.community import idenso, spenso
-    from symbolica.community.spenso import (
+    from symbolica.community import tensor
+    from symbolica.community.tensor import (
         AUTO,
         DisplaySettings,
+        PortPattern,
         Representation,
         Tensor,
         TensorExpression,
         TensorName,
-        as_tensor,
+        chain,
         dot,
         trace,
     )
@@ -47,16 +47,15 @@ def _():
     return (
         AUTO,
         DisplaySettings,
+        PortPattern,
         Representation,
         Tensor,
         TensorExpression,
         TensorName,
-        as_tensor,
+        chain,
         dot,
-        idenso,
-        pydot,
-        spenso,
         sy,
+        tensor,
         trace,
     )
 
@@ -155,7 +154,7 @@ def _(AUTO, Representation, TensorExpression, TensorName, dot, trace):
 
     p = TensorName.vector("p", is_linear=True, tags=["kinematics"])
     q = TensorName.vector("q", is_linear=True, tags=["kinematics"])
-    gamma = TensorExpression.gamma(4)
+    gamma = TensorExpression.dirac_gamma(4)
     mass = TensorName("m")()
 
     kinematic_factor = dot(p(1, mink), q(2, mink)) + mass * mass
@@ -177,7 +176,17 @@ def _(mo):
 
 
 @app.cell
-def _(Representation, TensorExpression, TensorName, sy):
+def _(
+    AUTO,
+    PortPattern,
+    Representation,
+    TensorExpression,
+    TensorName,
+    chain,
+    dot,
+    sy,
+    trace,
+):
     # `raw` keeps compact rank-one vectors in their contextual form. That is
     # what lets a vector appear inside a tensor port or a gamma factor, just as
     # it does in the Typst notation examples.
@@ -209,16 +218,16 @@ def _(Representation, TensorExpression, TensorName, sy):
     atlas_q = TensorName.vector("q", is_linear=True, tags=["kinematics"])
     atlas_chi = TensorName.vector("chi", is_linear=True)
 
-    atlas_gamma = TensorName.gamma().to_expression()
-    atlas_gamma0 = sy.S("spenso::gamma0")
+    atlas_gamma = TensorName.dirac_gamma().to_expression()
+    atlas_gamma0 = TensorName.gamma0().to_expression()
     atlas_gamma5 = TensorName.gamma5().to_expression()
     atlas_projp = TensorName.projp().to_expression()
-    atlas_in = sy.S("spenso::in")
-    atlas_out = sy.S("spenso::out")
+    atlas_in = PortPattern.chain_in()
+    atlas_out = PortPattern.chain_out()
 
     atlas_p1 = raw(atlas_p, 1, atlas_mink)
     atlas_q2 = raw(atlas_q, 2, atlas_mink)
-    atlas_dot = raw(sy.S("spenso::dot"), atlas_p1, atlas_q2)
+    atlas_dot = dot(atlas_p(1, atlas_mink), atlas_q(2, atlas_mink))
     atlas_interleaved = atlas_T(atlas_mu, atlas_a, atlas_nu, atlas_b)
     atlas_layout_expression = raw(
         atlas_A,
@@ -250,30 +259,20 @@ def _(Representation, TensorExpression, TensorName, sy):
         raw(atlas_q, 2, atlas_lor.dual()),
     )
 
+    atlas_gamma_tensor = TensorExpression.dirac_gamma(4)
+    atlas_slash = (
+        atlas_gamma_tensor(AUTO, AUTO, "lambda") * atlas_p(1, atlas_mink("lambda"))
+    ).contract()
     atlas_chain_factors = (
-        raw(atlas_gamma, atlas_in, atlas_out, atlas_mu),
-        raw(atlas_gamma, atlas_in, atlas_out, atlas_p1),
-        raw(atlas_gamma, atlas_in, atlas_out, atlas_nu),
+        atlas_gamma_tensor(AUTO, AUTO, atlas_mu),
+        atlas_slash,
+        atlas_gamma_tensor(AUTO, AUTO, atlas_nu),
     )
-    atlas_open_chain = raw(
-        sy.S("spenso::chain"),
-        atlas_bis("u"),
-        atlas_bis("v"),
-        *atlas_chain_factors,
-    )
-    atlas_explicit_chain = raw(
-        sy.S("spenso::chain"),
-        atlas_bis("a"),
-        atlas_bis("b"),
-        *atlas_chain_factors,
-    )
-    atlas_trace = raw(
-        sy.S("spenso::trace"),
-        atlas_bis,
-        raw(sy.S("spenso::cyclic"), *atlas_chain_factors),
-    )
+    atlas_open_chain = chain(atlas_bis("u"), atlas_bis("v"), *atlas_chain_factors)
+    atlas_explicit_chain = chain(atlas_bis("a"), atlas_bis("b"), *atlas_chain_factors)
+    atlas_trace = trace(atlas_bis, *atlas_chain_factors)
 
-    atlas_colour = TensorExpression.t(8, 3)(
+    atlas_colour = TensorExpression.color_t(8, 3)(
         atlas_coad("A"),
         atlas_cof("i"),
         atlas_cof("j").dual(),
@@ -330,12 +329,15 @@ def _(
     mo,
     parentheses,
     show_dimensions,
-    spenso,
     symbol_scripts,
+    tensor,
 ):
     def card(label, expression, settings=display_settings):
         return mo.vstack(
-            [mo.md(f"**{label}**"), mo.Html(spenso.to_html(expression, settings=settings))],
+            [
+                mo.md(f"**{label}**"),
+                mo.Html(tensor.to_html(expression, settings=settings)),
+            ],
             gap=0.5,
         )
 
@@ -362,7 +364,9 @@ def _(
     comparison = mo.hstack(
         [
             card("Ports", atlas_layout_expression, layout_settings("ports")),
-            card("Schoonschip", atlas_layout_expression, layout_settings("schoonschip")),
+            card(
+                "Schoonschip", atlas_layout_expression, layout_settings("schoonschip")
+            ),
             card("Function call", atlas_layout_expression, layout_settings("call")),
         ],
         widths="equal",
@@ -379,19 +383,24 @@ def _(
             mo.ui.tabs(
                 {
                     "Layout comparison": comparison,
-                    "Ports and vectors": gallery(atlas_groups["Ports and compact vectors"]),
+                    "Ports and vectors": gallery(
+                        atlas_groups["Ports and compact vectors"]
+                    ),
                     "Chains and traces": gallery(atlas_groups["Chains and traces"]),
                     "Dirac and colour": gallery(atlas_groups["Dirac and colour heads"]),
-                    "Representations": gallery(atlas_groups["Representations and labels"]),
+                    "Representations": gallery(
+                        atlas_groups["Representations and labels"]
+                    ),
                 }
             ),
             mo.accordion(
                 {
-                    "Why the compact examples are raw atoms": mo.md(
+                    "Typed construction and contextual notation": mo.md(
                         "A compact vector is contextual notation: it lives inside a "
                         "tensor or gamma factor rather than exposing its own port. "
-                        "The cell above constructs those exact Symbolica atoms and "
-                        "sends them straight to the same renderer."
+                        "Dots, chains, and traces use the typed API. The remaining "
+                        "raw examples illustrate contextual ports and go straight "
+                        "to the same renderer."
                     )
                 }
             ),
@@ -412,8 +421,9 @@ def _(amplitude, display_settings, mo, show_dimensions, source_block):
                 "## 2. Typed construction and three layouts\n\n"
                 "The scalar product, rank-zero mass, and closed gamma chain remain "
                 "one `TensorExpression`. Only the presentation changes.\n\n"
-                "The exact atom intentionally exposes `in` and `out`: `AUTO` "
-                "materializes the two chain endpoints. Gamma follows its storage "
+                "`AUTO` leaves spinor axes unresolved; `trace` assigns the "
+                "contextual `in` and `out` endpoints visible in the exact atom. "
+                "Gamma follows its storage "
                 "order everywhere: `(spinor-in, spinor-out, Lorentz)`."
             ),
             mo.ui.tabs(
@@ -430,14 +440,16 @@ def _(amplitude, display_settings, mo, show_dimensions, source_block):
 
 
 @app.cell
-def _(TensorName, as_tensor, idenso, mu, nu, p):
-    metric = TensorName.g()
+def _(TensorExpression, mu, nu, p):
+    metric = TensorExpression.g(mu, nu)
 
-    # Crossing to ordinary Symbolica explicitly leaves the repeated index visible
-    # to Idenso instead of asking Spenso to choose a tensor-aware contraction.
-    metric_product = metric(mu, nu).to_expression() * p(1, mu).to_expression()
-    simplified_atom = idenso.simplify_metrics(metric_product)
-    simplified_tensor = as_tensor(simplified_atom)
+    # Keep the repeated index explicit across the Symbolica boundary, then
+    # validate the tensor structure before contracting only the metric.
+    metric_product = metric.to_expression() * p(1, mu).to_expression()
+    simplified_tensor = TensorExpression(metric_product).contract(
+        rank_one=False, collect_chains=False, collect_traces=False
+    )
+    simplified_atom = simplified_tensor.to_expression()
     return metric_product, simplified_atom, simplified_tensor
 
 
@@ -449,17 +461,18 @@ def _(
     simplified_atom,
     simplified_tensor,
     source_block,
-    spenso,
+    tensor,
 ):
-    before_metric = spenso.to_html(metric_product, settings=display_settings)
+    before_metric = tensor.to_html(metric_product, settings=display_settings)
     after_metric = simplified_tensor.to_html(settings=display_settings)
     mo.vstack(
         [
             mo.md(
-                "## 3. Idenso transformation, then Spenso reinference\n\n"
-                "`simplify_metrics` accepts and returns an ordinary Symbolica "
-                "`Expression`. `as_tensor` validates the result and restores its "
-                "typed external interface."
+                "## 3. Idenso transformation on a TensorExpression\n\n"
+                "`TensorExpression` validates the Symbolica input. Calling "
+                "`contract(rank_one=False, collect_chains=False, collect_traces=False)` "
+                "contracts metrics while retaining the typed external interface. "
+                "`to_expression()` returns the ordinary Symbolica expression."
             ),
             mo.hstack(
                 [
@@ -489,10 +502,10 @@ def _(
 
 
 @app.cell
-def _(as_tensor, idenso, mu, p, q):
+def _(TensorExpression, mu, p, q):
     indexed_product = p(1, mu).to_expression() * q(2, mu).to_expression()
-    dotted_atom = idenso.to_dots(indexed_product)
-    dotted_tensor = as_tensor(dotted_atom)
+    dotted_tensor = TensorExpression(indexed_product).contract().to_dots()
+    dotted_atom = dotted_tensor.to_expression()
     return dotted_atom, dotted_tensor, indexed_product
 
 
@@ -526,16 +539,15 @@ def _(
 
 
 @app.cell
-def _(Representation, Tensor, TensorName, display_settings, pydot):
+def _(Representation, Tensor, TensorName, display_settings):
     euc = Representation.euc(2)
     u = Tensor.dense(TensorName.vector("u")(euc), [1.0, 2.0])
     v = Tensor.dense(TensorName.vector("v")(euc), [3.0, 4.0])
 
     contraction = u * v
-    contraction_math = contraction.to_html(settings=display_settings)
+    contraction_math = contraction.expression().to_html(settings=display_settings)
     contraction_dot = contraction.to_dot()
-    graph = pydot.graph_from_dot_data(contraction_dot)[0]
-    contraction_graph = graph.create_svg().decode()
+    contraction_graph = contraction.render().to_svg()
     contraction.execute()
     contraction_result = contraction.result_scalar()
     return (
@@ -582,13 +594,16 @@ def _(
 
 
 @app.cell(hide_code=True)
-def _(mo):
+def _(contraction_result, mo):
+    assert contraction_result == 11
     mo.md("""
     ---
 
     Edit the constructors, add an Idenso pass, or replace the dense vectors
     above. The display controls remain ordinary `DisplaySettings`, so the same
     code works in scripts and notebooks outside Marimo.
+
+    <p data-notebook-ready="spenso_idenso_display">Contraction checked: 11.</p>
     """)
     return
 

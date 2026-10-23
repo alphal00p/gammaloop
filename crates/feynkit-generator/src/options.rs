@@ -67,7 +67,6 @@ impl Default for GraphGroupingOptions {
 pub enum NumeratorGrouping {
     #[default]
     None,
-    OnlyDetectZeroes,
     Identical(GraphGroupingOptions),
     UpToSign(GraphGroupingOptions),
     UpToScalar(GraphGroupingOptions),
@@ -204,6 +203,9 @@ pub enum GenerationFilter {
     PerturbativeOrders(BTreeMap<String, usize>),
     FermionLoopCountRange((usize, usize)),
     FactorizedLoopTopologiesCountRange((usize, usize)),
+    /// Require positive-loop diagrams to be one-particle irreducible. Tree
+    /// exchange diagrams are retained; external legs never count as bridges.
+    LoopOneParticleIrreducible,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -240,6 +242,7 @@ pub enum GenerationFilterKind {
     PerturbativeOrders,
     FermionLoopCountRange,
     FactorizedLoopTopologiesCountRange,
+    LoopOneParticleIrreducible,
 }
 
 impl fmt::Display for GenerationFilterKind {
@@ -253,6 +256,7 @@ impl fmt::Display for GenerationFilterKind {
             Self::VertexAllow => "vertex_allow",
             Self::VertexVeto => "vertex_veto",
             Self::MaxNumberOfBridges => "max_number_of_bridges",
+            Self::LoopOneParticleIrreducible => "loop_one_particle_irreducible",
             Self::CouplingOrders => "coupling_orders",
             Self::LoopCountRange => "loop_count_range",
             Self::BlobRange => "blob_range",
@@ -275,6 +279,7 @@ impl GenerationFilter {
             Self::VertexAllow(_) => GenerationFilterKind::VertexAllow,
             Self::VertexVeto(_) => GenerationFilterKind::VertexVeto,
             Self::MaxNumberOfBridges(_) => GenerationFilterKind::MaxNumberOfBridges,
+            Self::LoopOneParticleIrreducible => GenerationFilterKind::LoopOneParticleIrreducible,
             Self::CouplingOrders(_) => GenerationFilterKind::CouplingOrders,
             Self::LoopCountRange(_) => GenerationFilterKind::LoopCountRange,
             Self::BlobRange(_) => GenerationFilterKind::BlobRange,
@@ -296,7 +301,15 @@ impl fmt::Display for GenerationFilter {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GenerationProgress {
-    pub generated_graphs: usize,
+    /// Stable pipeline stage; counts restart at each stage.
+    pub stage: &'static str,
+    /// Work items processed in this stage, not the number retained.
+    pub completed: usize,
+    /// Unknown while enumerating topologies or merging diagram groups;
+    /// numerator preparation, sampling, and comparison count input diagrams.
+    pub total: Option<usize>,
+    /// Cumulative zero numerators removed so far in this generation run.
+    pub zero_numerator_count: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -325,18 +338,25 @@ impl CancellationToken {
 
 type ProgressCallback =
     Arc<dyn Fn(GenerationProgress) -> GenerationControl + Send + Sync + 'static>;
+type TopologyFilter =
+    Arc<dyn Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static>;
 type CancellationCheck = Arc<dyn Fn() -> bool + Send + Sync + 'static>;
-type GraphFilter = Arc<dyn Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync>;
 
 #[derive(Clone)]
 pub struct GenerationOptions {
     pub(crate) threads: Option<usize>,
     pub(crate) max_vertices: Option<usize>,
+    symmetrize_initial: bool,
+    symmetrize_final: bool,
+    symmetrize_left_right: bool,
+    symmetrize_external_fermions: bool,
+
     pub(crate) allow_self_loops: bool,
     pub(crate) allow_zero_flow_edges: bool,
     pub(crate) graph_filters: Vec<GenerationFilter>,
     pub(crate) cut_amplitude_filters: Vec<GenerationFilter>,
     pub(crate) numerator_grouping: NumeratorGrouping,
+    pub(crate) filter_zero_color: bool,
     pub(crate) graph_prefix: String,
     pub(crate) selected_diagram_ids: Option<BTreeSet<DiagramId>>,
     pub(crate) selected_diagram_names: Option<BTreeSet<String>>,
@@ -350,7 +370,7 @@ pub struct GenerationOptions {
     pub(crate) cancellation: CancellationToken,
     pub(crate) cancellation_check: Option<CancellationCheck>,
     pub(crate) progress: Option<ProgressCallback>,
-    pub(crate) filter: Option<GraphFilter>,
+    pub(crate) filter: Option<TopologyFilter>,
 }
 
 /// Stable persistent portion of [`GenerationOptions`]. Callbacks and
@@ -367,11 +387,18 @@ pub struct GenerationOptions {
 struct GenerationOptionsPersistent {
     threads: Option<usize>,
     max_vertices: Option<usize>,
+    symmetrize_initial: bool,
+    symmetrize_final: bool,
+    symmetrize_left_right: bool,
+    symmetrize_external_fermions: bool,
+
     allow_self_loops: bool,
     allow_zero_flow_edges: bool,
     graph_filters: Vec<GenerationFilter>,
     cut_amplitude_filters: Vec<GenerationFilter>,
     numerator_grouping: NumeratorGrouping,
+    #[serde(default)]
+    filter_zero_color: bool,
     graph_prefix: String,
     selected_diagram_ids: Option<BTreeSet<u128>>,
     selected_diagram_names: Option<BTreeSet<String>>,
@@ -389,11 +416,17 @@ impl From<&GenerationOptions> for GenerationOptionsPersistent {
         Self {
             threads: options.threads,
             max_vertices: options.max_vertices,
+            symmetrize_initial: options.symmetrize_initial,
+            symmetrize_final: options.symmetrize_final,
+            symmetrize_left_right: options.symmetrize_left_right,
+            symmetrize_external_fermions: options.symmetrize_external_fermions,
+
             allow_self_loops: options.allow_self_loops,
             allow_zero_flow_edges: options.allow_zero_flow_edges,
             graph_filters: options.graph_filters.clone(),
             cut_amplitude_filters: options.cut_amplitude_filters.clone(),
             numerator_grouping: options.numerator_grouping.clone(),
+            filter_zero_color: options.filter_zero_color,
             graph_prefix: options.graph_prefix.clone(),
             selected_diagram_ids: options
                 .selected_diagram_ids
@@ -483,12 +516,18 @@ impl Default for GenerationOptions {
         Self {
             threads: None,
             max_vertices: None,
+            symmetrize_initial: false,
+            symmetrize_final: false,
+            symmetrize_left_right: false,
+            symmetrize_external_fermions: false,
+
             allow_self_loops: false,
             allow_zero_flow_edges: false,
             graph_filters: Vec::new(),
             cut_amplitude_filters: Vec::new(),
             numerator_grouping: NumeratorGrouping::None,
-            graph_prefix: "FK".to_owned(),
+            filter_zero_color: false,
+            graph_prefix: "D".to_owned(),
             selected_diagram_ids: None,
             selected_diagram_names: None,
             vetoed_diagram_ids: BTreeSet::new(),
@@ -507,6 +546,71 @@ impl Default for GenerationOptions {
 }
 
 impl GenerationOptions {
+    pub fn with_loop_count(
+        mut self,
+        minimum: usize,
+        maximum: usize,
+    ) -> Result<Self, crate::ProcessError> {
+        if minimum > maximum {
+            return Err(crate::ProcessError::InvalidLoopRange { minimum, maximum });
+        }
+        self.graph_filters
+            .retain(|filter| !matches!(filter, GenerationFilter::LoopCountRange(_)));
+        self.graph_filters
+            .push(GenerationFilter::LoopCountRange((minimum, maximum)));
+        Ok(self)
+    }
+
+    pub fn symmetrize_initial(mut self, enabled: bool) -> Self {
+        self.symmetrize_initial = enabled;
+        self
+    }
+
+    pub fn symmetrize_final(mut self, enabled: bool) -> Self {
+        self.symmetrize_final = enabled;
+        self
+    }
+
+    pub fn symmetrize_left_right(mut self, enabled: bool) -> Self {
+        self.symmetrize_left_right = enabled;
+        self
+    }
+
+    /// Include amplitude fermions in enabled external-state symmetry classes.
+    ///
+    /// This is disabled by default. Cross-section symmetry is unchanged by
+    /// this amplitude-specific policy switch.
+    pub fn symmetrize_external_fermions(mut self, enabled: bool) -> Self {
+        self.symmetrize_external_fermions = enabled;
+        self
+    }
+
+    pub fn loop_count(&self) -> RangeInclusive<usize> {
+        self.graph_filters
+            .iter()
+            .find_map(|filter| match filter {
+                GenerationFilter::LoopCountRange((minimum, maximum)) => Some(*minimum..=*maximum),
+                _ => None,
+            })
+            .unwrap_or(0..=0)
+    }
+
+    pub fn symmetrizes_initial(&self) -> bool {
+        self.symmetrize_initial
+    }
+
+    pub fn symmetrizes_final(&self) -> bool {
+        self.symmetrize_final
+    }
+
+    pub fn symmetrizes_left_right(&self) -> bool {
+        self.symmetrize_left_right
+    }
+
+    pub fn symmetrizes_external_fermions(&self) -> bool {
+        self.symmetrize_external_fermions
+    }
+
     fn from_persistent(persistent: GenerationOptionsPersistent) -> Result<Self, String> {
         let parse = |expression: String, field: &str| {
             Atom::parse(
@@ -519,11 +623,17 @@ impl GenerationOptions {
         Ok(Self {
             threads: persistent.threads,
             max_vertices: persistent.max_vertices,
+            symmetrize_initial: persistent.symmetrize_initial,
+            symmetrize_final: persistent.symmetrize_final,
+            symmetrize_left_right: persistent.symmetrize_left_right,
+            symmetrize_external_fermions: persistent.symmetrize_external_fermions,
+
             allow_self_loops: persistent.allow_self_loops,
             allow_zero_flow_edges: persistent.allow_zero_flow_edges,
             graph_filters: persistent.graph_filters,
             cut_amplitude_filters: persistent.cut_amplitude_filters,
             numerator_grouping: persistent.numerator_grouping,
+            filter_zero_color: persistent.filter_zero_color,
             graph_prefix: persistent.graph_prefix,
             selected_diagram_ids: persistent
                 .selected_diagram_ids
@@ -622,6 +732,7 @@ impl fmt::Debug for GenerationOptions {
             .field("graph_filters", &self.graph_filters)
             .field("cut_amplitude_filters", &self.cut_amplitude_filters)
             .field("numerator_grouping", &self.numerator_grouping)
+            .field("filter_zero_color", &self.filter_zero_color)
             .field("graph_prefix", &self.graph_prefix)
             .field("selected_diagram_ids", &self.selected_diagram_ids)
             .field("selected_diagram_names", &self.selected_diagram_names)
@@ -641,17 +752,8 @@ impl fmt::Debug for GenerationOptions {
 }
 
 impl GenerationOptions {
-    /// Prune partial topologies during enumeration. The first `completed_vertices`
-    /// nodes have all incident edges assigned; the others may still grow.
-    /// Like progress callbacks, this runtime predicate is not serialized.
-    pub fn filter(
-        mut self,
-        callback: impl Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static,
-    ) -> Self {
-        self.filter = Some(Arc::new(callback));
-        self
-    }
-
+    /// Set the generation thread count. One runs serially on the calling thread,
+    /// including numerator preparation and grouping, without creating a Rayon pool.
     pub fn threads(mut self, threads: usize) -> Self {
         self.threads = Some(threads);
         self
@@ -696,8 +798,60 @@ impl GenerationOptions {
         }
     }
 
+    /// Whether selection can remove diagrams within a complete covariant sector.
+    /// Complete loop and coupling orders preserve the partner sum; selecting
+    /// particular diagrams or restricting their particle content need not.
+    pub fn may_filter_covariant_partners(&self) -> bool {
+        self.selected_diagram_ids.is_some()
+            || self.selected_diagram_names.is_some()
+            || !self.vetoed_diagram_ids.is_empty()
+            || !self.vetoed_diagram_names.is_empty()
+            || self.max_vertices.is_some()
+            || self.filter.is_some()
+            || !self.forced_cuts.is_empty()
+            || self
+                .graph_filters
+                .iter()
+                .chain(&self.cut_amplitude_filters)
+                .any(|filter| match filter {
+                    GenerationFilter::CouplingOrders(_)
+                    | GenerationFilter::LoopCountRange(_)
+                    | GenerationFilter::PerturbativeOrders(_) => false,
+                    GenerationFilter::VertexAllow(_)
+                    | GenerationFilter::LoopOneParticleIrreducible => true,
+                    GenerationFilter::VertexVeto(vertices) => !vertices.is_empty(),
+                    GenerationFilter::ParticleVeto(particles) => !particles.is_empty(),
+                    GenerationFilter::FermionLoopCountRange((minimum, maximum))
+                    | GenerationFilter::FactorizedLoopTopologiesCountRange((minimum, maximum)) => {
+                        *minimum != 0 || *maximum != usize::MAX
+                    }
+                    GenerationFilter::BlobRange(range)
+                    | GenerationFilter::SpectatorRange(range) => {
+                        *range.start() != 0 || *range.end() != usize::MAX
+                    }
+                    GenerationFilter::MaxNumberOfBridges(maximum) => *maximum != usize::MAX,
+                    GenerationFilter::SelfEnergy(options) => {
+                        options.veto_massive || options.veto_massless
+                    }
+                    GenerationFilter::Tadpoles(options) => {
+                        options.veto_attached_to_massive || options.veto_attached_to_massless
+                    }
+                    GenerationFilter::ZeroSnails(options) => {
+                        options.veto_attached_to_massive || options.veto_attached_to_massless
+                    }
+                    GenerationFilter::Sewn(options) => options.filter_tadpoles,
+                })
+    }
+
     pub fn numerator_grouping(mut self, grouping: NumeratorGrouping) -> Self {
         self.numerator_grouping = grouping;
+        self
+    }
+
+    /// Remove diagrams whose numerators vanish under color algebra.
+    /// Disabled by default; unproved zeros are retained.
+    pub fn filter_zero_color(mut self, enabled: bool) -> Self {
+        self.filter_zero_color = enabled;
         self
     }
 
@@ -787,6 +941,8 @@ impl GenerationOptions {
     ///
     /// Passing `1` explicitly disables external wavefunctions; leaving the
     /// option unset generates the physical wavefunction for every external leg.
+    /// Wavefunction, momentum and represented index owners refer to process
+    /// external-leg labels; local tensor slots use the native one-based UFO frame.
     pub fn projector(mut self, projector: Atom) -> Self {
         self.projector = Some(projector);
         self
@@ -811,29 +967,220 @@ impl GenerationOptions {
         self
     }
 
-    pub(crate) fn max_bridges(&self) -> Option<usize> {
-        self.graph_filters.iter().find_map(|filter| match filter {
-            GenerationFilter::MaxNumberOfBridges(maximum) => Some(*maximum),
-            _ => None,
-        })
+    /// Prune partial topologies during enumeration. The first `completed_vertices`
+    /// nodes have all their incident edges assigned; the rest may still grow.
+    pub fn filter(
+        mut self,
+        callback: impl Fn(&Graph<NodeColor, EdgeColor>, usize) -> bool + Send + Sync + 'static,
+    ) -> Self {
+        self.filter = Some(Arc::new(callback));
+        self
+    }
+
+    pub(crate) fn report_progress(
+        &self,
+        stage: &'static str,
+        completed: usize,
+        total: Option<usize>,
+    ) {
+        self.report_progress_with_zero_count(stage, completed, total, 0);
+    }
+
+    pub(crate) fn report_progress_with_zero_count(
+        &self,
+        stage: &'static str,
+        completed: usize,
+        total: Option<usize>,
+        zero_numerator_count: usize,
+    ) {
+        if self.progress.as_ref().is_some_and(|callback| {
+            callback(GenerationProgress {
+                stage,
+                completed,
+                total,
+                zero_numerator_count,
+            }) == GenerationControl::Cancel
+        }) {
+            self.cancellation.cancel();
+        }
+    }
+
+    pub(crate) fn max_bridges(&self, minimum_loops: usize) -> Option<usize> {
+        // Early enumeration pruning is safe only if the requested range excludes
+        // trees. Mixed ranges apply the loop-only policy to each finished graph.
+        self.graph_filters
+            .iter()
+            .filter_map(|filter| match filter {
+                GenerationFilter::MaxNumberOfBridges(maximum) => Some(*maximum),
+                GenerationFilter::LoopOneParticleIrreducible if minimum_loops > 0 => Some(0),
+                _ => None,
+            })
+            .min()
     }
 
     pub(crate) fn cancellation_requested(&self) -> bool {
-        self.cancellation.is_cancelled()
-            || self
+        if !self.cancellation.is_cancelled()
+            && self
                 .cancellation_check
                 .as_ref()
                 .is_some_and(|check| check())
+        {
+            // Work skipped after a transient application signal must never be
+            // treated as completed if a later poll clears that signal.
+            self.cancellation.cancel();
+        }
+        self.cancellation.is_cancelled()
     }
 }
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn application_cancellation_remains_latched_after_the_signal_clears() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicBool, Ordering},
+        };
+
+        let signal = Arc::new(AtomicBool::new(true));
+        let checked = signal.clone();
+        let options = GenerationOptions::default()
+            .cancellation_check(move || checked.swap(false, Ordering::AcqRel));
+        assert!(options.cancellation_requested());
+        assert!(!signal.load(Ordering::Acquire));
+        assert!(options.cancellation_requested());
+    }
+
+    #[test]
+    fn cp_symmetrization_is_an_explicit_serialized_opt_in() {
+        let options = GenerationOptions::default();
+        assert!(!options.symmetrizes_left_right());
+        for enabled in [false, true] {
+            let options = options.clone().symmetrize_left_right(enabled);
+            let definition = serde_json::to_value(&options).unwrap();
+            assert_eq!(definition["symmetrize_left_right"], enabled);
+            let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
+            assert_eq!(decoded.symmetrizes_left_right(), enabled);
+        }
+    }
+
     use symbolica::atom::Atom;
 
     use super::{GenerationFilter, GenerationOptions, GraphGroupingOptions, NumeratorGrouping};
     use crate::{ParticleSelector, VertexSelector};
     use feynkit_graph::{DiagramId, EdgeId};
+
+    #[test]
+    fn covariant_partner_diagnostic_distinguishes_orders_from_subsets() {
+        use super::{FilterScope, SelfEnergyFilterOptions};
+
+        let complete = GenerationOptions::default().with_loop_count(0, 2).unwrap();
+        for scope in [FilterScope::Graph, FilterScope::CutAmplitude] {
+            let complete = complete
+                .clone()
+                .with_scoped_filter(scope, GenerationFilter::CouplingOrders(Default::default()))
+                .with_scoped_filter(scope, GenerationFilter::ParticleVeto(Vec::new()))
+                .with_scoped_filter(
+                    scope,
+                    GenerationFilter::SelfEnergy(SelfEnergyFilterOptions {
+                        veto_massive: false,
+                        veto_massless: false,
+                        only_scaleless: true,
+                    }),
+                );
+            assert!(!complete.may_filter_covariant_partners());
+            assert!(
+                complete
+                    .clone()
+                    .with_scoped_filter(scope, GenerationFilter::VertexAllow(Vec::new()))
+                    .may_filter_covariant_partners()
+            );
+            assert!(
+                complete
+                    .with_scoped_filter(
+                        scope,
+                        GenerationFilter::SelfEnergy(SelfEnergyFilterOptions::default())
+                    )
+                    .may_filter_covariant_partners()
+            );
+        }
+        assert!(
+            complete
+                .clone()
+                .select_diagram_ids([DiagramId(0)])
+                .may_filter_covariant_partners()
+        );
+        assert!(
+            complete
+                .clone()
+                .max_vertices(3)
+                .may_filter_covariant_partners()
+        );
+        assert!(complete.filter(|_, _| true).may_filter_covariant_partners());
+    }
+
+    #[test]
+    fn zero_color_filter_is_an_explicit_serialized_opt_in() {
+        let defaults = GenerationOptions::default();
+        assert!(!defaults.filter_zero_color);
+        let enabled = defaults.clone().filter_zero_color(true);
+        assert_ne!(defaults, enabled);
+        assert!(format!("{enabled:?}").contains("filter_zero_color: true"));
+        for enabled in [false, true] {
+            let options = defaults.clone().filter_zero_color(enabled);
+            let definition = serde_json::to_value(&options).unwrap();
+            assert_eq!(definition["filter_zero_color"], enabled);
+            let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
+            assert_eq!(decoded, options);
+        }
+        let mut definition = serde_json::to_value(&enabled).unwrap();
+        definition
+            .as_object_mut()
+            .unwrap()
+            .remove("filter_zero_color");
+        let decoded: GenerationOptions = serde_json::from_value(definition).unwrap();
+        assert_eq!(decoded, defaults);
+    }
+
+    #[test]
+    fn zero_count_progress_preserves_callback_cancellation() {
+        use std::sync::{Arc, Mutex};
+
+        let updates = Arc::new(Mutex::new(Vec::new()));
+        let captured = Arc::clone(&updates);
+        let options = GenerationOptions::default().progress(move |progress| {
+            captured.lock().unwrap().push(progress);
+            if progress.zero_numerator_count == 2 {
+                super::GenerationControl::Cancel
+            } else {
+                super::GenerationControl::Continue
+            }
+        });
+        options.report_progress("numerators", 4, Some(4));
+        options.report_progress_with_zero_count("filter_zero_color", 1, Some(4), 1);
+        assert!(!options.cancellation_requested());
+        options.report_progress_with_zero_count("filter_zero_color", 3, Some(4), 2);
+        assert!(options.cancellation_requested());
+        let updates = updates.lock().unwrap();
+        assert_eq!(updates[0].zero_numerator_count, 0);
+        assert_eq!(updates[1].zero_numerator_count, 1);
+        assert_eq!(updates[2].zero_numerator_count, 2);
+        assert_eq!(updates[2].completed, 3);
+        assert_eq!(updates[2].total, Some(4));
+    }
+
+    #[test]
+    fn runtime_callbacks_are_not_serialized() {
+        let options = GenerationOptions::default()
+            .filter(|_, _| false)
+            .progress(|_| super::GenerationControl::Cancel);
+        let encoded = bincode::encode_to_vec(&options, bincode::config::standard()).unwrap();
+        let (decoded, _): (GenerationOptions, usize) =
+            bincode::decode_from_slice(&encoded, bincode::config::standard()).unwrap();
+        assert_eq!(decoded, options);
+        assert!(decoded.filter.is_none());
+        assert!(decoded.progress.is_none());
+    }
 
     #[test]
     fn projector_serde_distinguishes_automatic_from_explicit_one() {
@@ -854,6 +1201,7 @@ mod tests {
     fn bincode_roundtrip_uses_native_enum_encoding() {
         let options = GenerationOptions::default()
             .threads(3)
+            .filter_zero_color(true)
             .with_graph_filter(GenerationFilter::ParticleVeto(vec![
                 ParticleSelector::from("g"),
                 ParticleSelector::from(5_i64),
@@ -867,7 +1215,7 @@ mod tests {
             .select_diagram_ids([DiagramId(17)])
             .veto_diagram_ids([DiagramId(23)])
             .with_loop_momentum_basis(DiagramId(17), [EdgeId(2), EdgeId(7)])
-            .with_named_loop_momentum_basis("FK0", [EdgeId(3), EdgeId(5)])
+            .with_named_loop_momentum_basis("D0", [EdgeId(3), EdgeId(5)])
             .forced_cuts([[EdgeId(1), EdgeId(4)]])
             .projector(Atom::one());
 

@@ -9,7 +9,7 @@ from pathlib import Path
 from time import perf_counter
 
 from symbolica import E
-from symbolica.community.feynkit import FeynmanDiagram, Kinematics, Model
+from symbolica.community.hepkit import FeynmanDiagram, Kinematics, Model
 from symbolica.community.hepkit.vakint import (
     Vakint,
     VakintEvaluationMethod,
@@ -34,7 +34,7 @@ def main():
     args = parser.parse_args()
 
     model = Model(Path(__file__).resolve().parents[1] / "tests/fixtures/phi_3_4.json")
-    diagram = FeynmanDiagram.from_topology_dot(model, args.dot.read_text())
+    diagram = FeynmanDiagram.from_dot(model, args.dot.read_text())
     family = diagram.propagator_family(kinematics=Kinematics())
     powers = None if args.powers is None else [int(p) for p in args.powers.split(",")]
     integral = integral_from_diagram(diagram, family, E("1"), powers=powers)

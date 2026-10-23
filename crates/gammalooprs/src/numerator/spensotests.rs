@@ -1,7 +1,10 @@
-use idenso::{dirac::GammaSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::{
+    CookMode, CookSettings,
+    tensor::{AlgebraSettings, ContractSettings, SymbolicTensor},
+};
 use symbolica::parse_lit;
 
-use crate::{initialisation::test_initialise, numerator::aind::Aind};
+use crate::initialisation::test_initialise;
 use spenso::shadowing::symbolica_utils::LogPrint;
 
 #[test]
@@ -46,16 +49,28 @@ fn algebra() {
 
     println!("{}", expr.log_print(Some(120)));
 
-    println!("{}", expr.schoonschip().log_print(Some(120)));
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(expr.as_view()).unwrap()).unwrap();
+    let contracted = tensor.contract(ContractSettings::default()).unwrap();
     println!(
         "{}",
-        expr.schoonschip().simplify_gamma().log_print(Some(120))
+        cooking
+            .uncook(contracted.expression().as_view())
+            .log_print(Some(120))
     );
+    let simplified = tensor
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(Default::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap();
     println!(
         "{}",
-        expr.schoonschip_net::<Aind>()
-            .expect("Schoonschip tensor-network simplification failed")
-            .simplify_gamma()
+        cooking
+            .uncook(simplified.expression().as_view())
             .log_print(Some(120))
     );
 }

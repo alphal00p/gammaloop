@@ -1,9 +1,13 @@
 #![allow(dead_code)]
 
 use aind::Aind;
-use idenso::color::ColorSimplifier;
-use idenso::dirac::GammaSimplifier;
 use idenso::representations::Bispinor;
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    dirac::GammaSimplifySettings,
+    tensor::{AlgebraSettings, SymbolicTensor},
+};
 use linnet::half_edge::involution::EdgeIndex;
 use schemars::JsonSchema;
 use tracing::warn;
@@ -705,16 +709,24 @@ impl ExpressionState for NonLocal {
 
 impl Numerator<Global> {
     #[instrument(skip(self))]
-    pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
+    pub(crate) fn color_simplify(self) -> Result<Numerator<ColorSimplified>> {
         // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(self.state.expr.as_view())?)?
+            .simplify_algebra(&AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })?;
         let state = ColorSimplified {
-            expr: self.state.expr.simplify_color(),
+            expr: cooking.uncook(reduced.expression().as_view()),
             state: Color::Fully,
         };
         // debug!("Color simplified numerator:{}", state.expr);
-        Numerator { state }
+        Ok(Numerator { state })
     }
 }
 
@@ -906,19 +918,27 @@ impl Numerator<AppliedFeynmanRule> {
     }
 
     #[instrument(skip(self), fields(expr=%self.state.expr.to_ordered_simple()))]
-    pub(crate) fn color_simplify(self) -> Numerator<ColorSimplified> {
+    pub(crate) fn color_simplify(self) -> Result<Numerator<ColorSimplified>> {
         // debug!("Color simplifying global numerator");
         // let mut fully_simplified = true;
 
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(self.state.expr.as_view())?)?
+            .simplify_algebra(&AlgebraSettings {
+                color: Some(ColorSimplifySettings::default()),
+                ..Default::default()
+            })?;
         let state = ColorSimplified {
-            expr: self.state.expr.simplify_color(),
+            expr: cooking.uncook(reduced.expression().as_view()),
             state: Color::Fully,
         };
         debug!(
             "Color simplified numerator:{}",
             state.expr.to_ordered_simple()
         );
-        Numerator { state }
+        Ok(Numerator { state })
     }
 }
 
@@ -929,21 +949,30 @@ impl Numerator<AppliedFeynmanRule> {
 // }
 
 impl Numerator<ColorSimplified> {
-    pub(crate) fn gamma_simplify(self) -> Numerator<GammaSimplified> {
+    pub(crate) fn gamma_simplify(self) -> Result<Numerator<GammaSimplified>> {
         debug!("Gamma simplifying color symplified numerator");
-        let expr = self.state.expr.simplify_gamma();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(self.state.expr.as_view())?)?
+            .simplify_algebra(&AlgebraSettings {
+                gamma: Some(GammaSimplifySettings::default()),
+                epsilon: true,
+                ..Default::default()
+            })?;
+        let expr = cooking.uncook(reduced.expression().as_view());
         crate::debug_tags!(#generation, #inspect, #dump;
             stage = "numerator_after_simplify_gamma",
             log.after_gamma = expr,
             "Numerator after gamma simplification"
         );
 
-        Numerator {
+        Ok(Numerator {
             state: GammaSimplified {
                 expr,
                 state: Default::default(),
             },
-        }
+        })
     }
 }
 

@@ -11,11 +11,11 @@ use gammalooprs::{
     },
 };
 use idenso::{
-    Cookable, IndexTooling, cof,
-    color::{CS, ColorSimplifier},
-    color_idx,
-    dirac::GammaSimplifier,
-    shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip},
+    CookMode, CookSettings, Cookable, IndexTooling, coad, cof,
+    color::{CS, ColorSimplifySettings},
+    color_cas, color_idx,
+    dirac::GammaSimplifySettings,
+    tensor::{AlgebraSettings, ContractSettings, SymbolicTensor},
 };
 use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
 use std::collections::{BTreeMap, BTreeSet};
@@ -86,19 +86,39 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
 // Their ghost-gluon momentum and color conventions differ as well, so the net
 // graph sign cannot be inferred from the ghost-edge count or applied globally.
 pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
-    (model
-        .apply_parameter_replacement_rules(&model.expand_couplings(&atom.simplify_color().expand()))
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let color = SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view()).unwrap())
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap();
+    let color = cooking.uncook(color.expression().as_view()).expand();
+    let expression = model
+        .apply_parameter_replacement_rules(&model.expand_couplings(&color))
         .replace(parse_lit!(gammalooprs::dim))
         .with(parse_lit!(4))
-        .collect_factors()
-        .simplify_metrics()
-        .simplify_gamma()
-        .simplify_color()
+        .collect_factors();
+    let expression = SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view()).unwrap())
+        .unwrap()
+        .contract(ContractSettings::default().without_rank_one_tensors())
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::default()),
+            color: Some(ColorSimplifySettings::default()),
+            epsilon: true,
+            ..Default::default()
+        })
+        .unwrap()
         .to_dots()
-        .replace(CS.tr)
-        .with(Atom::num((1, 2)))
+        .unwrap();
+    (cooking
+        .uncook(expression.expression().as_view())
         .replace(CS.nc)
-        .with(CS.ca)
+        .with(color_cas!(2, coad!(8)))
         // RQFT writes the fundamental Dynkin index as T_F = n_f / 2.
         .replace(color_idx!(2, cof!(3)))
         .with(parse!("nf") / Atom::num(2))
@@ -182,11 +202,24 @@ fn finite_part_ghost_2loop() {
         new_settings: &UVgenerationSettings,
     ) -> ForestStatsSnapshot {
         let normalize = |atom: &Atom| {
-            atom.replace(parse_lit!(gammalooprs::dim))
-                .with(parse_lit!(4))
-                .simplify_metrics()
-                .to_dots()
-                .simplify_color()
+            let expression = atom
+                .replace(parse_lit!(gammalooprs::dim))
+                .with(parse_lit!(4));
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced =
+                SymbolicTensor::infer_indexed(cooking.try_cook(expression.as_view()).unwrap())
+                    .unwrap()
+                    .simplify_algebra(&AlgebraSettings {
+                        color: Some(ColorSimplifySettings::default()),
+                        ..Default::default()
+                    })
+                    .unwrap()
+                    .to_dots()
+                    .unwrap();
+            cooking
+                .uncook(reduced.expression().as_view())
                 .expand_num()
                 .collect_factors()
         };
@@ -615,8 +648,12 @@ mod failing {
                     .canonize::<AbstractIndex>(AbstractIndex::Dummy)
                     .expect("test expression should canonicalize")
             })
-            .collect_factors()
-            .to_dots();
+            .collect_factors();
+        let aligned = SymbolicTensor::infer_indexed(aligned)
+            .unwrap()
+            .to_dots()
+            .unwrap()
+            .into_expression();
         insta::assert_snapshot!(
            aligned.to_bare_ordered_string(),@"(-1/16+5/192*ε)*(cas(2,coad(8)))^3*dot(P(0,mink(4)),P(0,mink(4)))*gs^6*ε^(-2)"
         );

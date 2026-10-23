@@ -18,7 +18,7 @@ python -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install "symbolica==2.2.0"
-python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
+python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 There is no separate `spenso` Python wheel. The installed `symbolica` distribution owns the
@@ -32,17 +32,17 @@ Save this as `spenso_quickstart.py`:
 
 // docs-example: compile spenso-community-quickstart
 ```python
-from symbolica.community.spenso import Representation, Tensor, TensorIndices
+from symbolica.community.tensor import Representation, Tensor, TensorName
 
 rep = Representation.euc(2)
 matrix = Tensor.dense(
-    TensorIndices(rep("i"), rep("j")),
+    TensorName("I")(rep("i"), rep("j")),
     [1.0, 0.0, 0.0, 1.0],
 )
 
 assert matrix[0, 0] == 1.0
 assert matrix[1, 1] == 1.0
-matrix.to_sparse()
+matrix = matrix.to_sparse()
 print(matrix)
 ```
 

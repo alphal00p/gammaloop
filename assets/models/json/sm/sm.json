@@ -1729,7 +1729,7 @@
   }, {
     "antiname": "u~",
     "antitexname": "{\\overline{u}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1743,7 +1743,7 @@
   }, {
     "antiname": "u",
     "antitexname": "{u}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1757,7 +1757,7 @@
   }, {
     "antiname": "c~",
     "antitexname": "{\\overline{c}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1771,7 +1771,7 @@
   }, {
     "antiname": "c",
     "antitexname": "{c}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1785,7 +1785,7 @@
   }, {
     "antiname": "t~",
     "antitexname": "{\\overline{t}}",
-    "charge": 0.6666666666666666,
+    "charge": "2/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1799,7 +1799,7 @@
   }, {
     "antiname": "t",
     "antitexname": "{t}",
-    "charge": -0.6666666666666666,
+    "charge": "-2/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1813,7 +1813,7 @@
   }, {
     "antiname": "d~",
     "antitexname": "{\\overline{d}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1827,7 +1827,7 @@
   }, {
     "antiname": "d",
     "antitexname": "{d}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1841,7 +1841,7 @@
   }, {
     "antiname": "s~",
     "antitexname": "{\\overline{s}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1855,7 +1855,7 @@
   }, {
     "antiname": "s",
     "antitexname": "{s}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1869,7 +1869,7 @@
   }, {
     "antiname": "b~",
     "antitexname": "{\\overline{b}}",
-    "charge": -0.3333333333333333,
+    "charge": "-1/3",
     "color": 3,
     "ghost_number": 0,
     "lepton_number": 0,
@@ -1883,7 +1883,7 @@
   }, {
     "antiname": "b",
     "antitexname": "{b}",
-    "charge": 0.3333333333333333,
+    "charge": "1/3",
     "color": -3,
     "ghost_number": 0,
     "lepton_number": 0,

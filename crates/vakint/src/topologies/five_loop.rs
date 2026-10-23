@@ -476,7 +476,7 @@ mod tests {
     #[test_log::test]
     fn generated_scalar_vacuum_graphs_match_registered_integral_classes() {
         use crate::{Vakint, VakintExpression, diagram_integral::DiagramIntegralOptions};
-        use feynkit_generator::{GenerationOptions, Generator, Process};
+        use feynkit_generator::{GenerationOptions, Process};
         use feynkit_graph::FeynmanDiagram;
         use feynkit_kinematics::Kinematics;
         use feynkit_model::Model;
@@ -485,20 +485,14 @@ mod tests {
             .threads(1)
             .allow_self_loops(true)
             .max_vertices(8);
-        let generated = Generator::new(
-            Model::from_json(include_str!(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/tests/fixtures/phi_3_4.json"
-            )))
-            .expect("valid phi_3_4 fixture"),
-        )
-        .generate(
-            &Process::amplitude(Vec::<&str>::new(), Vec::<&str>::new())
-                .with_loop_count(5, 5)
-                .unwrap(),
-            &options,
-        )
-        .unwrap();
+        let model = Model::from_json(include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/tests/fixtures/phi_3_4.json"
+        )))
+        .expect("valid phi_3_4 fixture");
+        let generated = Process::new(Vec::<&str>::new(), Vec::<&str>::new())
+            .generate_diagrams(model, &options.with_loop_count(5, 5).unwrap())
+            .unwrap();
         assert!(!generated.diagrams.is_empty());
         let vakint = Vakint::new().unwrap();
         vakint
@@ -588,7 +582,7 @@ mod tests {
                         format!("v{source} -> v{target} [particle=\"phi\"];")
                     })
                     .collect::<String>();
-                FeynmanDiagram::from_topology_dot(
+                FeynmanDiagram::from_dot(
                     Model::from_json(include_str!(concat!(
                         env!("CARGO_MANIFEST_DIR"),
                         "/tests/fixtures/phi_3_4.json"

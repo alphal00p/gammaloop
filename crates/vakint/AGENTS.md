@@ -16,7 +16,7 @@ taskset -c CPU cargo run --locked --release -p vakint --example benchmark_reduct
   --features feynkit-ingress,experimental-rustred,weighted-lowering-diagnostics,symbolica_community_module -- \
   --form /path/to/form \
   --work-dir /path/to/workspace/vakint-benchmark \
-  --output crates/vakint/docs/benchmark/data/results.json
+  --output crates/vakint/docs/benchmark/data/results.json --select-current
 typst compile crates/vakint/docs/benchmark/benchmark.typ \
   crates/vakint/docs/benchmark/benchmark.pdf
 ```
@@ -28,9 +28,15 @@ optionally selects an existing external-data checkout or installation directory;
 the default official `latest` loader downloads missing packs and reuses validated
 local data. The collector resolves one data version for the whole run.
 
+Completed, validated runs are appended under `reduction_runs`; original measurements,
+ingress records, raw samples and protocol metadata remain unchanged. `--select-current`
+selects the new run for the report. Omit it to record a run while retaining the
+existing selection. An initially empty output selects its first run. The selected
+identifier is recorded explicitly as `selected_reduction_run` in the JSON.
+
 Preserve the exact-agreement and cache-hit checks, report the measured source,
 compiler, FORM and data versions, and keep setup outside the reduction timer.
 Never hand-edit timings or carry old measurements forward as new results.
-Review the rendered one-page PDF and commit its source, measured JSON and PDF
+Review the rendered PDF and commit its source, measured JSON and PDF
 together. Keep the large coloured comparison cells and the explicit
 RustRed/FMFT ratio convention when changing the layout.

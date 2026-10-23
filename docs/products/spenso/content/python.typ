@@ -21,7 +21,7 @@ Install the current assembly and check the environment before building a workflo
 // docs-example: syntax
 ```sh
 python -m pip install --upgrade symbolica
-python -c "import symbolica.community.spenso as spenso; print(spenso.__name__)"
+python -c "import symbolica.community.tensor as spenso; print(spenso.__name__)"
 ```
 
 Source embedders can build a custom
@@ -97,7 +97,7 @@ native module.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import Representation, Tensor, TensorName
+from symbolica.community.tensor import Representation, Tensor, TensorName
 
 rep = Representation.euc(2)
 i = rep("i")
@@ -107,7 +107,7 @@ matrix = Tensor.dense(structure, [1.0, 0.0, 0.0, 1.0])
 
 assert len(matrix) == 4
 assert matrix[0, 0] == 1.0
-matrix.to_sparse()
+matrix = matrix.to_sparse()
 assert matrix[1, 1] == 1.0
 ```
 
@@ -133,14 +133,14 @@ they are not scalar arguments and do not add fields to tensor-library keys.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import _, TensorExpression
+from symbolica.community.tensor import _, TensorExpression
 
-gamma = TensorExpression.gamma(4)
+gamma = TensorExpression.dirac_gamma(4)
 gamma_ijmu = gamma("i", "j", "mu")
 line = gamma(_, _, "mu") * gamma(_, _, "nu")
 dirac_trace = line.trace()
 
-generator = TensorExpression.t(8, 3)
+generator = TensorExpression.color_t(8, 3)
 T_aij = generator("a", "i", "j")
 ```
 
@@ -155,10 +155,10 @@ Patterns retain ordinary Symbolica wildcard behavior, including wildcard dimensi
 // docs-example: compile
 ```python
 from symbolica import S
-from symbolica.community.spenso import TensorPattern
+from symbolica.community.tensor import TensorPattern
 
 D_, i_, j_, mu_ = S("D_", "i_", "j_", "mu_")
-gamma_pattern = TensorPattern.gamma(D_, i_, j_, mu_)
+gamma_pattern = TensorPattern.dirac_gamma(D_, i_, j_, mu_)
 ```
 
 `TensorPattern` shortcuts follow the same index order as concrete factories. General patterns
@@ -174,7 +174,7 @@ the expression with the same name and compatible slots, then execute and request
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     ExecutionMode,
     Representation,
     Tensor,
@@ -220,7 +220,7 @@ and `formatted(True)` still request dimensions.
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import DisplaySettings, TensorExpression
+from symbolica.community.tensor import DisplaySettings, TensorExpression
 
 trace = TensorExpression.gamma5(4).trace()
 source = trace.to_typst(
@@ -242,7 +242,7 @@ pip install 'gammaloop[typst-display]'
 
 // docs-example: compile
 ```python
-from symbolica.community.spenso import DisplaySettings, TensorExpression
+from symbolica.community.tensor import DisplaySettings, TensorExpression
 
 trace = TensorExpression.gamma5(4).trace()
 compact = DisplaySettings.schoonschip()

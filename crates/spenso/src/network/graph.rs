@@ -13,7 +13,7 @@ use linnet::{
         builder::HedgeGraphBuilder,
         involution::{EdgeData, Flow, Hedge},
         nodestore::NodeStorageOps,
-        subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
+        subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike, SubSetOps},
         tree::SimpleTraversalTree,
     },
     permutation::Permutation,
@@ -25,7 +25,8 @@ use thiserror::Error;
 use crate::{
     network::NetworkState,
     structure::{
-        ApplyPendingIndexPermutation, Canonicalized, HasStructure, TensorStructure,
+        ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasStructure, StructureError,
+        TensorStructure,
         abstract_index::AbstractIndex,
         representation::{LibrarySlot, RepName},
         slot::{AbsInd, DualSlotTo, IsAbstractSlot},
@@ -54,12 +55,16 @@ use super::{
 )]
 pub struct NetworkGraph<K, FK = i8, Aind = AbstractIndex> {
     pub graph: NetworkHedgeGraph<K, FK, Aind>,
+    /// Axes of the stored component payload; never changed by logical relabeling.
     pub slot_order: Vec<u8>,
+    /// Source logical positions, independent of storage axes. Newly computed
+    /// component results have no witness until their result owner installs one.
+    pub logical_slot_order: Vec<Option<u8>>,
     // #[bincode(with_serde)]
     // uncontracted: SuBitGraph,
 }
 
-type NetworkGraphBuilder<K, FK, Aind> =
+pub(super) type NetworkGraphBuilder<K, FK, Aind> =
     HedgeGraphBuilder<NetworkEdge<Aind>, NetworkNode<K, FK, Aind>>;
 
 pub type NetworkNodeStore<K, FK, Aind> = Forest<NetworkNode<K, FK, Aind>, ParentChildStore<()>>;
@@ -78,7 +83,7 @@ pub struct NetworkOperationRef<'a, K, FK = i8, Aind = AbstractIndex> {
     op_node: NodeIndex,
     op: &'a NetworkOp<FK>,
     children: Vec<NodeIndex>,
-    subgraph: SuBitGraph,
+    hedges: Vec<Hedge>,
 }
 
 impl<'a, K, FK, Aind> NetworkOperationRef<'a, K, FK, Aind> {
@@ -98,8 +103,8 @@ impl<'a, K, FK, Aind> NetworkOperationRef<'a, K, FK, Aind> {
         &self.children
     }
 
-    pub fn subgraph(&self) -> &SuBitGraph {
-        &self.subgraph
+    pub fn hedges(&self) -> &[Hedge] {
+        &self.hedges
     }
 
     pub fn leaf_count(&self) -> usize {
@@ -111,7 +116,7 @@ pub struct NetworkOperation<FK = i8> {
     op_node: NodeIndex,
     op: NetworkOp<FK>,
     children: Vec<NodeIndex>,
-    subgraph: SuBitGraph,
+    hedges: Vec<Hedge>,
 }
 
 impl<FK> NetworkOperation<FK> {
@@ -127,8 +132,8 @@ impl<FK> NetworkOperation<FK> {
         &self.children
     }
 
-    pub fn subgraph(&self) -> &SuBitGraph {
-        &self.subgraph
+    pub fn hedges(&self) -> &[Hedge] {
+        &self.hedges
     }
 
     pub fn leaf_count(&self) -> usize {
@@ -142,7 +147,7 @@ impl<K, FK: Clone, Aind> From<&NetworkOperationRef<'_, K, FK, Aind>> for Network
             op_node: op_ref.op_node(),
             op: op_ref.op().clone(),
             children: op_ref.children().to_vec(),
-            subgraph: op_ref.subgraph().clone(),
+            hedges: op_ref.hedges().to_vec(),
         }
     }
 }
@@ -208,6 +213,12 @@ pub enum NetworkEdge<Aind> {
     // Port,
     Head,
     Slot(LibrarySlot<Aind>),
+    /// An occurrence-local filled tensor port. Its payload lives in the existing
+    /// scalar store; this half-edge no longer participates in slot contraction.
+    BoundPort {
+        slot: LibrarySlot<Aind>,
+        value: ScalarRef,
+    },
 }
 
 impl<Aind: AbsInd> Display for NetworkEdge<Aind> {
@@ -215,6 +226,7 @@ impl<Aind: AbsInd> Display for NetworkEdge<Aind> {
         match self {
             NetworkEdge::Head => write!(f, "Head"),
             NetworkEdge::Slot(slot) => write!(f, "Slot({})", slot),
+            NetworkEdge::BoundPort { slot, value } => write!(f, "Bound({slot}, {value:?})"),
         }
     }
 }
@@ -298,7 +310,17 @@ impl<FunKey: Display> Display for NetworkOp<FunKey> {
 }
 
 #[derive(
-    Debug, Clone, Copy, PartialEq, Eq, Encode, bincode_trait_derive::Decode, Serialize, Deserialize,
+    Debug,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Encode,
+    bincode_trait_derive::Decode,
+    Serialize,
+    Deserialize,
 )]
 pub enum ScalarRef {
     Store(usize),
@@ -443,6 +465,24 @@ impl<K, Aind> NetworkLeaf<K, Aind> {
             | NetworkLeaf::LibraryKey { .. } => {}
         }
     }
+
+    pub fn map_tensor_refs(&mut self, mut f: impl FnMut(usize) -> usize) {
+        match self {
+            NetworkLeaf::LocalTensor(index) => *index = f(*index),
+            NetworkLeaf::TensorSum(indices) => {
+                for index in indices {
+                    *index = f(*index);
+                }
+            }
+            NetworkLeaf::ScaledTensor(term) => term.tensor = f(term.tensor),
+            NetworkLeaf::ScaledTensorSum(terms) => {
+                for term in terms {
+                    term.tensor = f(term.tensor);
+                }
+            }
+            NetworkLeaf::Scalar(_) | NetworkLeaf::LibraryKey { .. } => {}
+        }
+    }
 }
 
 impl<K: Display, Aind> Display for NetworkLeaf<K, Aind> {
@@ -477,11 +517,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd>
         let graph: NetworkHedgeGraph<K, FK, Aind> = builder.build();
         let slot_order = vec![0; graph.n_hedges()];
         let mut g = Self {
+            logical_slot_order: slot_order.iter().copied().map(Some).collect(),
             slot_order,
             graph,
             // uncontracted,
         };
         g.sync_order();
+        g.logical_slot_order = g.slot_order.iter().copied().map(Some).collect();
         g
     }
 }
@@ -532,6 +574,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
 
         self.graph[node] = node_data;
+        self.invalidate_logical_layout(node);
         self.delete(&traced_slots);
         self.graph.node_store.check_and_set_nodes().unwrap();
     }
@@ -549,47 +592,209 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
 
         self.graph[node] = node_data;
+        self.invalidate_logical_layout(node);
         self.graph.node_store.check_and_set_nodes().unwrap();
     }
 
-    fn set_tensor_slot_order(&mut self, node: NodeIndex, slots: &[LibrarySlot<Aind>]) {
-        let mut slot_hedges = self
+    /// Reconcile component axes using their established source storage order.
+    /// Internal edges share one payload for dual endpoints, so labels on the
+    /// sewn edge cannot identify each original component axis independently.
+    pub(crate) fn set_tensor_slot_order(
+        &mut self,
+        node: NodeIndex,
+        source: &[LibrarySlot<Aind>],
+        target: &[LibrarySlot<Aind>],
+    ) -> Result<(), StructureError> {
+        let mut hedges = self
             .graph
             .iter_crown(node)
             .filter(|hedge| matches!(self.graph[[hedge]], NetworkEdge::Slot(_)))
             .collect::<Vec<_>>();
-
-        for (order, slot) in slots.iter().enumerate() {
-            let Some(position) = slot_hedges
-                .iter()
-                .position(|hedge| self.graph[[hedge]] == NetworkEdge::Slot(*slot))
-            else {
-                panic!(
-                    "tensor graph is missing slot {slot} while assigning structural slot order; node crown: {:?}",
-                    self.graph
-                        .iter_crown(node)
-                        .map(|hedge| self.graph[[&hedge]])
-                        .collect::<Vec<_>>()
-                );
+        hedges.sort_by_key(|hedge| self.slot_order[hedge.0]);
+        if hedges.len() != source.len()
+            || source.len() != target.len()
+            || target.len() > usize::from(u8::MAX) + 1
+        {
+            return Err(StructureError::InvalidIndexPermutation(
+                "mapped occurrence has a different rank".into(),
+            ));
+        }
+        let mut available = source.iter().copied().zip(hedges).collect::<Vec<_>>();
+        let mut order = Vec::with_capacity(target.len());
+        for slot in target {
+            let Some(position) = available.iter().position(|(source, _)| source == slot) else {
+                return Err(StructureError::InvalidIndexPermutation(
+                    "mapped occurrence changed its ports".into(),
+                ));
             };
-            let hedge = slot_hedges.remove(position);
-            self.slot_order[hedge.0] = u8::try_from(order).unwrap_or_else(|_| {
-                panic!(
-                    "tensor graph slot order {order} for slot {slot} exceeds u8 storage; tensor has {} slots",
-                    slots.len()
-                )
-            });
+            order.push(available.remove(position).1);
+        }
+        for (position, hedge) in order.into_iter().enumerate() {
+            self.slot_order[hedge.0] = position as u8;
+        }
+        Ok(())
+    }
+
+    /// Carry the inference owner's source layout through stored hedge positions.
+    /// Self-loop sewing can replace dual endpoint labels with one edge payload;
+    /// the per-hedge storage ordinal still identifies each original occurrence.
+    pub fn set_logical_layout(
+        &mut self,
+        node: NodeIndex,
+        layout: &CanonicalLayout,
+    ) -> Result<(), StructureError> {
+        let mut hedges = self
+            .graph
+            .iter_crown(node)
+            .filter(|hedge| matches!(self.graph[[hedge]], NetworkEdge::Slot(_)))
+            .collect::<Vec<_>>();
+        hedges.sort_by_key(|hedge| self.slot_order[hedge.0]);
+        if layout.order() != hedges.len() {
+            return Err(StructureError::WrongNumberOfArguments(
+                layout.order(),
+                hedges.len(),
+            ));
+        }
+        if hedges
+            .iter()
+            .enumerate()
+            .any(|(position, hedge)| usize::from(self.slot_order[hedge.0]) != position)
+        {
+            return Err(StructureError::InvalidIndexPermutation(
+                "storage positions are not a complete tensor interface".into(),
+            ));
+        }
+        if hedges.len() > usize::from(u8::MAX) + 1 {
+            return Err(StructureError::InvalidIndexPermutation(
+                "logical port order exceeds u8 storage".into(),
+            ));
+        }
+        for (position, hedge) in layout.canonical_to_logical(&hedges).into_iter().enumerate() {
+            self.logical_slot_order[hedge.0] = Some(position as u8);
+        }
+        Ok(())
+    }
+
+    /// Read a structural leaf's established logical interface. Bound ports are
+    /// omitted because they no longer contribute an external slot.
+    pub fn logical_slots(&self, node: NodeIndex) -> Result<Vec<LibrarySlot<Aind>>, StructureError> {
+        Ok(self
+            .logical_port_hedges(node)?
+            .into_iter()
+            .filter_map(|hedge| match self.graph[[&hedge]] {
+                NetworkEdge::Slot(slot) => Some(slot),
+                _ => None,
+            })
+            .collect())
+    }
+
+    /// Storage positions in source logical order, including filled ports. This
+    /// witness lets symbolic occurrence mappers reuse inference instead of
+    /// rediscovering argument order in the expression.
+    pub fn logical_port_order(&self, node: NodeIndex) -> Result<Vec<usize>, StructureError> {
+        Ok(self
+            .logical_port_hedges(node)?
+            .into_iter()
+            .map(|hedge| usize::from(self.slot_order[hedge.0]))
+            .collect())
+    }
+
+    fn logical_port_hedges(&self, node: NodeIndex) -> Result<Vec<Hedge>, StructureError> {
+        if !matches!(self.graph[node], NetworkNode::Leaf(_)) {
+            return Err(StructureError::InvalidIndexPermutation(
+                "logical layout requires a tensor leaf".into(),
+            ));
+        }
+        let mut ports = Vec::new();
+        for hedge in self.graph.iter_crown(node) {
+            if !self.graph[[&hedge]].is_head() {
+                let position = self.logical_slot_order[hedge.0].ok_or_else(|| {
+                    StructureError::InvalidIndexPermutation(
+                        "component result has no established logical layout".into(),
+                    )
+                })?;
+                ports.push((position, hedge));
+            }
+        }
+        ports.sort_by_key(|(position, _)| *position);
+        if ports.windows(2).any(|pair| pair[0].0 == pair[1].0) {
+            return Err(StructureError::InvalidIndexPermutation(
+                "logical positions do not identify distinct tensor ports".into(),
+            ));
+        }
+        Ok(ports.into_iter().map(|(_, hedge)| hedge).collect())
+    }
+
+    /// Partition the supplied occurrences by existing slot edges. Expression
+    /// heads and compact port bindings are not contractions; scalar and foreign
+    /// disconnected leaves therefore remain independent components.
+    pub fn slot_components(
+        &self,
+        tree: &SimpleTraversalTree<linnet::tree::child_vec::ChildVecStore<()>>,
+        roots: &[NodeIndex],
+    ) -> Vec<Vec<NodeIndex>> {
+        let mut owner = BTreeMap::new();
+        let mut members = BTreeMap::new();
+        for &root in roots {
+            let nodes = tree
+                .iter_preorder_tree_nodes(&self.graph, root)
+                .collect::<Vec<_>>();
+            for &node in &nodes {
+                assert!(
+                    owner.insert(node, root).is_none(),
+                    "factor subtrees must be disjoint"
+                );
+            }
+            members.insert(root, nodes);
+        }
+        let mut seen = BTreeSet::new();
+        let mut components = Vec::new();
+        for &start in roots {
+            if !seen.insert(start) {
+                continue;
+            }
+            let mut component = vec![start];
+            let mut position = 0;
+            while position < component.len() {
+                for &node in &members[&component[position]] {
+                    for hedge in self.graph.iter_crown(node) {
+                        if self.graph[[&hedge]].is_slot() {
+                            let neighbor = self.graph.node_id(self.graph.inv(hedge));
+                            if let Some(&root) = owner.get(&neighbor)
+                                && seen.insert(root)
+                            {
+                                component.push(root);
+                            }
+                        }
+                    }
+                }
+                position += 1;
+            }
+            components.push(component);
+        }
+        components
+    }
+
+    /// Generic component execution knows the replacement's storage value, not
+    /// its source logical layout. Never inherit unrelated leaf-local ordinals.
+    pub(crate) fn invalidate_logical_layout(&mut self, node: NodeIndex) {
+        for hedge in self.graph.iter_crown(node) {
+            self.logical_slot_order[hedge.0] = None;
         }
     }
 
     pub fn slots(&self, nodeid: NodeIndex) -> Vec<LibrarySlot<Aind>> {
+        self.slots_in_order(nodeid, &self.slot_order)
+    }
+
+    fn slots_in_order(&self, nodeid: NodeIndex, order: &[u8]) -> Vec<LibrarySlot<Aind>> {
         let mut slots = Vec::new();
         let mut ord = Vec::new();
         if let NetworkNode::Leaf(_) = &self.graph[nodeid] {
             for n in self.graph.iter_crown(nodeid) {
                 if let NetworkEdge::Slot(s) = self.graph[[&n]] {
                     slots.push(s);
-                    ord.push(self.slot_order[n.0]);
+                    ord.push(order[n.0]);
                 }
             }
         }
@@ -696,6 +901,8 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         //     replacement.dot_simple()
         // );
         //
+        self.logical_slot_order
+            .extend(replacement.logical_slot_order);
         self.slot_order.extend(replacement.slot_order);
         self.graph
             .join_mut(
@@ -736,6 +943,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 if !subgraph.includes(&extracted) {
                     //only with an extracted that is in the wrong spot
                     self.slot_order.swap(left.0, extracted.0);
+                    self.logical_slot_order.swap(left.0, extracted.0);
                     left.0 += 1;
                 }
             }
@@ -753,11 +961,297 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         );
 
         let slot_order = self.slot_order.split_off(left.0);
+        let logical_slot_order = self.logical_slot_order.split_off(left.0);
 
         Self {
             slot_order,
+            logical_slot_order,
             graph: extracted,
         }
+    }
+
+    /// Close tensor boundaries before materializing the arms of a tensor sum.
+    ///
+    /// This is finite tensor execution preparation, not symbolic parsing: callers
+    /// returning a factorized graph numerator must not apply this transformation.
+    /// Only ready tensor leaves and sum boundaries with self-dual slots qualify.
+    /// Each move consumes all of that leaf's free slots and strictly reduces the
+    /// existing sum's rank; it never copies a sum, scalar spectator, power, or
+    /// function. Compatible leaves of disjoint outermost Sums move in one wave,
+    /// sharing tensor storage through the original references. Return the number
+    /// of moved leaves.
+    pub fn contract_ready_sum_boundaries(&mut self) -> usize
+    where
+        K: Clone + Display,
+        FK: Clone + Display,
+    {
+        self.merge_ops();
+        let mut contractions = 0;
+        loop {
+            let tree: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree().cast();
+            let root = self.graph.node_id(self.head());
+            let mut selected_sums = BTreeSet::new();
+            let mut targets = Vec::new();
+            for node in tree.iter_preorder_tree_nodes(&self.graph, root) {
+                if !matches!(self.graph[node], NetworkNode::Op(NetworkOp::Product))
+                    || tree
+                        .ancestor_iter_node(node, self.graph.as_ref())
+                        .any(|ancestor| selected_sums.contains(&ancestor))
+                {
+                    continue;
+                }
+                for (tensors, sum) in self.ready_sum_boundaries(node, &tree) {
+                    selected_sums.insert(sum);
+                    targets.push((tensors, sum));
+                }
+            }
+            if targets.is_empty() {
+                return contractions;
+            }
+
+            let mut additions = Vec::new();
+            let mut head_connections = Vec::new();
+            let mut slot_connections = Vec::new();
+            let mut removed = Vec::new();
+            for (tensors, sum) in targets {
+                contractions += tensors.len();
+                let mut builder = NetworkGraphBuilder::new();
+                let product = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+                let mut slot_order = Vec::new();
+                let mut logical_slot_order = Vec::new();
+                let output = Hedge(slot_order.len());
+                builder.add_external_edge(product, NetworkEdge::Head, true, Flow::Source);
+                slot_order.push(0);
+                logical_slot_order.push(Some(0));
+                let input = Hedge(slot_order.len());
+                builder.add_external_edge(product, NetworkEdge::Head, true, Flow::Sink);
+                slot_order.push(0);
+                logical_slot_order.push(Some(0));
+                let mut closing_slots = BTreeMap::new();
+
+                // The leaves all meet this Sum exclusively. Copy only their
+                // crowns and expression heads into a small Product wrapper,
+                // retaining traced loops and references to their stored data.
+                for tensor in tensors {
+                    let copy = builder.add_node(self.graph[tensor].clone());
+                    for hedge in self.graph.iter_crown(tensor) {
+                        let other = self.graph.inv(hedge);
+                        removed.extend([hedge, other]);
+                        let data = self.graph.get_edge_data_full(hedge);
+                        if data.data.is_head() {
+                            let (source, sink, source_hedge, sink_hedge) =
+                                if self.graph.flow(hedge) == Flow::Source {
+                                    (copy, product, hedge, other)
+                                } else {
+                                    (product, copy, other, hedge)
+                                };
+                            builder.add_edge(source, sink, *data.data, data.orientation);
+                            slot_order.extend([
+                                self.slot_order[source_hedge.0],
+                                self.slot_order[sink_hedge.0],
+                            ]);
+                            logical_slot_order.extend([
+                                self.logical_slot_order[source_hedge.0],
+                                self.logical_slot_order[sink_hedge.0],
+                            ]);
+                        } else if self.graph.node_id(other) == tensor {
+                            if self.graph.flow(hedge) == Flow::Source {
+                                builder.add_edge(copy, copy, *data.data, data.orientation);
+                                slot_order
+                                    .extend([self.slot_order[hedge.0], self.slot_order[other.0]]);
+                                logical_slot_order.extend([
+                                    self.logical_slot_order[hedge.0],
+                                    self.logical_slot_order[other.0],
+                                ]);
+                            }
+                        } else {
+                            let NetworkEdge::Slot(slot) = *data.data else {
+                                unreachable!("a tensor crown contains only heads and slots");
+                            };
+                            assert!(
+                                closing_slots
+                                    .insert(slot, Hedge(slot_order.len()))
+                                    .is_none(),
+                                "each consumed Sum boundary slot has one closing leaf",
+                            );
+                            builder.add_external_edge(
+                                copy,
+                                *data.data,
+                                data.orientation,
+                                self.graph.flow(hedge),
+                            );
+                            slot_order.push(self.slot_order[hedge.0]);
+                            logical_slot_order.push(self.logical_slot_order[hedge.0]);
+                        }
+                    }
+                }
+                assert!(
+                    !closing_slots.is_empty(),
+                    "closing a Sum strictly lowers its rank"
+                );
+                let closing = Self {
+                    graph: builder.build(),
+                    slot_order,
+                    logical_slot_order,
+                };
+                let arms: BTreeMap<_, _> = tree
+                    .iter_children(sum, &self.graph)
+                    .enumerate()
+                    .map(|(index, arm)| (arm, index))
+                    .collect();
+                assert!(!arms.is_empty(), "sum has an arm");
+                let mut inputs = vec![BTreeMap::new(); arms.len()];
+                for hedge in self.graph.iter_crown(sum) {
+                    let NetworkEdge::Slot(slot) = self.graph[[&hedge]] else {
+                        continue;
+                    };
+                    if !closing_slots.contains_key(&slot) {
+                        continue;
+                    }
+                    let other = self.graph.inv(hedge);
+                    if let Some(arm) = tree
+                        .ancestor_iter_node(self.graph.node_id(other), self.graph.as_ref())
+                        .take_while(|ancestor| *ancestor != sum)
+                        .find_map(|ancestor| arms.get(&ancestor))
+                    {
+                        assert!(inputs[*arm].insert(slot, (hedge, other)).is_none());
+                        removed.push(hedge);
+                    }
+                }
+                for (arm, index) in arms {
+                    // Splitting an input leaves both original head endpoints
+                    // available: the Sum keeps its shell and the arm keeps its
+                    // expression root. Neither native arm is extracted or copied.
+                    let arm_head = tree.root_hedge(arm);
+                    head_connections.push((self.graph.inv(arm_head), arm_head, output, input));
+                    assert_eq!(
+                        inputs[index].len(),
+                        closing_slots.len(),
+                        "every arm has exactly the complete consumed Sum boundary",
+                    );
+                    slot_connections.push(
+                        closing_slots
+                            .iter()
+                            .map(|(slot, copied)| {
+                                let (sum_slot, arm_slot) = inputs[index][slot];
+                                (sum_slot, arm_slot, *copied)
+                            })
+                            .collect::<Vec<_>>(),
+                    );
+                    additions.push(closing.clone());
+                }
+            }
+
+            // Rewire only certified Sum inputs and closing leaves. In particular,
+            // spinor and other non-self-dual spectator contractions keep their
+            // incidence. Original Sum outputs can be sinks when an outside factor
+            // was joined first; keeping their exact residual seam also preserves
+            // their flow and slot order, independently of operand ordering.
+            let shifts = self.append_disconnected_many_mut(additions).unwrap();
+            for (((sum_head, arm_head, output, input), slots), shift) in head_connections
+                .into_iter()
+                .zip(slot_connections)
+                .zip(shifts)
+            {
+                let data = self.graph.get_edge_data_full(sum_head).map(|data| *data);
+                self.graph.split_edge(sum_head, data).unwrap();
+                self.connect_identities(sum_head, output + shift);
+                self.connect_identities(arm_head, input + shift);
+                for (sum_slot, arm_slot, copied) in slots {
+                    let data = self.graph.get_edge_data_full(sum_slot).map(|data| *data);
+                    self.graph.split_edge(sum_slot, data).unwrap();
+                    // Match product assembly's first-operand convention: the
+                    // closing leaf supplies its descriptor, flow and orientation.
+                    self.connect_identities(copied + shift, arm_slot);
+                }
+            }
+            // The original Sum head remains the single Product input replacing
+            // it and its closing leaves. Delete both old leaf/parent head halves
+            // and the consumed Sum slot halves together, after every stable-id
+            // connection is complete. The rest of the Sum boundary is untouched.
+            let mut redundant: SuBitGraph = self.graph.empty_subgraph();
+            for hedge in removed {
+                redundant.add(hedge);
+            }
+            self.delete(&redundant);
+            // Make closing leaves available alongside each intact arm's factors
+            // before it could become a large open tensor, with one global merge
+            // and traversal per wave rather than one extraction per arm or Sum.
+            self.merge_ops();
+        }
+    }
+
+    fn ready_sum_boundaries(
+        &self,
+        product: NodeIndex,
+        tree: &SimpleTraversalTree<ChildVecStore<()>>,
+    ) -> Vec<(Vec<NodeIndex>, NodeIndex)> {
+        if !matches!(self.graph[product], NetworkNode::Op(NetworkOp::Product)) {
+            return Vec::new();
+        }
+        let children: BTreeSet<_> = tree.iter_children(product, &self.graph).collect();
+        let candidates: Vec<_> = children
+            .iter()
+            .filter_map(|tensor| {
+                if !matches!(
+                    self.graph[*tensor],
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(_) | NetworkLeaf::LibraryKey { .. })
+                ) {
+                    return None;
+                }
+                let boundary: Vec<_> = self
+                    .graph
+                    .iter_crown(*tensor)
+                    .filter(|h| {
+                        matches!(self.graph[[h]], NetworkEdge::Slot(_))
+                            && (self.graph.inv(*h) == *h
+                                || self.graph.node_id(self.graph.inv(*h)) != *tensor)
+                    })
+                    .collect();
+                let first = boundary.first()?;
+                let sum = self.graph.node_id(self.graph.inv(*first));
+                (children.contains(&sum)
+                    && matches!(self.graph[sum], NetworkNode::Op(NetworkOp::Sum))
+                    && boundary.iter().all(|h| {
+                        // Edge descriptors are shared by both endpoints. Splitting a
+                        // dualizable edge would need endpoint variance restoration;
+                        // self-dual slots can be rejoined without that extra data.
+                        matches!(self.graph[[h]], NetworkEdge::Slot(slot) if slot.matches(&slot))
+                            && self.graph.inv(*h) != *h
+                            && self.graph.node_id(self.graph.inv(*h)) == sum
+                    }))
+                .then_some((*tensor, sum))
+            })
+            .collect();
+        let mut by_sum: BTreeMap<_, Vec<_>> = BTreeMap::new();
+        for (tensor, sum) in candidates {
+            by_sum.entry(sum).or_default().push(tensor);
+        }
+        by_sum
+            .into_iter()
+            .filter_map(|(sum, tensors)| {
+                let mut exposed_slots = BTreeSet::new();
+                self.graph
+                    .iter_crown(sum)
+                    .all(|h| {
+                        let NetworkEdge::Slot(slot) = self.graph[[&h]] else {
+                            return true;
+                        };
+                        // A unique descriptor identifies each exposed endpoint; consumed
+                        // inputs are routed by arm and residual flow/order stay in place.
+                        slot.matches(&slot)
+                            && ((self.graph.inv(h) != h
+                                && tree
+                                    .ancestor_iter_node(
+                                        self.graph.node_id(self.graph.inv(h)),
+                                        self.graph.as_ref(),
+                                    )
+                                    .any(|node| node == sum))
+                                || exposed_slots.insert(slot))
+                    })
+                    .then_some((tensors, sum))
+            })
+            .collect()
     }
 
     pub fn find_all_ready_ops(&mut self) -> Vec<ReadyNetworkOp<K, FK, Aind>>
@@ -885,7 +1379,11 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     {
         let (subgraph, op) = {
             let ready = self.ready_operation_ref_in_expr_tree_order()?;
-            (ready.subgraph().clone(), ready.op().clone())
+            let mut subgraph: SuBitGraph = self.graph.empty_subgraph();
+            for &hedge in ready.hedges() {
+                subgraph.add(hedge);
+            }
+            (subgraph, ready.op().clone())
         };
 
         self.graph.check().unwrap();
@@ -918,13 +1416,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
 
             if all_leaves && !children.is_empty() {
-                let subgraph = self.operation_subgraph(nid, &children);
+                let hedges = self.operation_hedges(nid, &children);
                 return Some(NetworkOperationRef {
                     graph: self,
                     op_node: nid,
                     op,
                     children,
-                    subgraph,
+                    hedges,
                 });
             }
         }
@@ -941,14 +1439,17 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     where
         S: SubSetLike<Base = SuBitGraph>,
     {
-        let tt: SimpleTraversalTree<ChildVecStore<()>> = self.expr_tree_ignoring(hidden).cast();
-        let head = self.head();
-        let root_node = self.graph.node_id(head);
-        let new_roots = tt
-            .iter_preorder_tree_nodes(&self.graph, root_node)
-            .map(|node| tt.root_hedge(node).into())
-            .collect::<Vec<_>>();
+        let new_roots = {
+            let tt = self.expr_tree_ignoring(hidden);
+            // Each visited node supplies one independent crown root. Discovery
+            // order therefore needs no child-vector copy of the traversal forest.
+            tt.node_order()
+                .into_iter()
+                .map(|node| tt.root_hedge(node).into())
+                .collect::<Vec<_>>()
+        };
 
+        // Release the traversal forest before converting the graph's node store.
         self.graph.node_store.reroot_many(new_roots)
     }
 
@@ -1042,13 +1543,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 continue;
             };
 
-            let subgraph = self.operation_subgraph_ignoring(nid, &children, hidden);
+            let hedges = self.operation_hedges_ignoring(nid, &children, hidden);
             return Some(NetworkOperationRef {
                 graph: self,
                 op_node: nid,
                 op,
                 children,
-                subgraph,
+                hedges,
             });
         }
 
@@ -1063,7 +1564,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     /// Return owned ready operations from the cached expression tree.
     ///
     /// This is the execution fast path: it avoids building borrowed
-    /// `NetworkOperationRef`s and then cloning their child lists and subgraphs
+    /// `NetworkOperationRef`s and then cloning their child and half-edge lists
     /// into owned operations before mutating the graph.
     pub fn ready_operations_from_tree_ignoring<S>(&self, hidden: &S) -> Vec<NetworkOperation<FK>>
     where
@@ -1089,22 +1590,24 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 continue;
             };
 
-            let subgraph = {
+            let hedges = {
                 let _span = profile::span(Timer::ExecuteReadySubgraph);
-                self.operation_subgraph_ignoring(nid, &children, hidden)
+                self.operation_hedges_ignoring(nid, &children, hidden)
             };
 
             #[cfg(debug_assertions)]
             {
-                debug_assert!(subgraph.empty_intersection(&used));
-                used.union_with(&subgraph);
+                for &hedge in &hedges {
+                    debug_assert!(!used.includes(&hedge));
+                    used.add(hedge);
+                }
             }
 
             ready.push(NetworkOperation {
                 op_node: nid,
                 op: op.clone(),
                 children,
-                subgraph,
+                hedges,
             });
         }
 
@@ -1141,15 +1644,17 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 continue;
             };
 
-            let subgraph = {
+            let hedges = {
                 let _span = profile::span(Timer::ExecuteReadySubgraph);
-                self.operation_subgraph_ignoring(nid, &children, hidden)
+                self.operation_hedges_ignoring(nid, &children, hidden)
             };
 
             #[cfg(debug_assertions)]
             {
-                debug_assert!(subgraph.empty_intersection(&used));
-                used.union_with(&subgraph);
+                for &hedge in &hedges {
+                    debug_assert!(!used.includes(&hedge));
+                    used.add(hedge);
+                }
             }
 
             ready.push(NetworkOperationRef {
@@ -1157,7 +1662,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 op_node: nid,
                 op,
                 children,
-                subgraph,
+                hedges,
             });
         }
 
@@ -1188,13 +1693,13 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 continue;
             };
 
-            let subgraph = {
+            let hedges = {
                 let _span = profile::span(Timer::ExecuteReadySubgraph);
-                self.operation_subgraph_ignoring(nid, &children, hidden)
+                self.operation_hedges_ignoring(nid, &children, hidden)
             };
             let overlaps_used = {
                 let _span = profile::span(Timer::ExecuteReadyIntersection);
-                !subgraph.empty_intersection(&used)
+                hedges.iter().any(|hedge| used.includes(hedge))
             };
             if overlaps_used {
                 continue;
@@ -1202,14 +1707,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
 
             {
                 let _span = profile::span(Timer::ExecuteReadyUnion);
-                used.union_with(&subgraph);
+                for &hedge in &hedges {
+                    used.add(hedge);
+                }
             }
             ready.push(NetworkOperationRef {
                 graph: self,
                 op_node: nid,
                 op,
                 children,
-                subgraph,
+                hedges,
             });
         }
 
@@ -1232,7 +1739,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let mut subgraph: SuBitGraph = self.graph.empty_subgraph();
         for op_ref in &operations {
             let _span = profile::span(Timer::ExecuteReadyUnion);
-            subgraph.union_with(op_ref.subgraph());
+            for &hedge in op_ref.hedges() {
+                subgraph.add(hedge);
+            }
         }
 
         NetworkOperationBatchRef {
@@ -1298,49 +1807,37 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
     }
 
-    pub fn operation_subgraph(&self, op_node: NodeIndex, children: &[NodeIndex]) -> SuBitGraph {
+    /// Sorted visible half-edges preserve the dense subset's traversal order
+    /// while retaining only the operation's incidence, not a graph-sized mask.
+    pub fn operation_hedges(&self, op_node: NodeIndex, children: &[NodeIndex]) -> Vec<Hedge> {
         let hidden: SuBitGraph = self.graph.empty_subgraph();
-        self.operation_subgraph_ignoring(op_node, children, &hidden)
+        self.operation_hedges_ignoring(op_node, children, &hidden)
     }
 
-    pub fn operation_subgraph_ignoring<S>(
+    pub fn operation_hedges_ignoring<S>(
         &self,
         op_node: NodeIndex,
         children: &[NodeIndex],
         hidden: &S,
-    ) -> SuBitGraph
+    ) -> Vec<Hedge>
     where
         S: SubSetLike<Base = SuBitGraph>,
     {
-        let mut subgraph: SuBitGraph = self.graph.empty_subgraph();
-        self.add_visible_crown_to_subgraph(op_node, hidden, &mut subgraph);
-        for child in children {
-            self.add_visible_crown_to_subgraph(*child, hidden, &mut subgraph);
-        }
-        subgraph
-    }
-
-    fn add_visible_crown_to_subgraph<S>(
-        &self,
-        node: NodeIndex,
-        hidden: &S,
-        subgraph: &mut SuBitGraph,
-    ) where
-        S: SubSetLike<Base = SuBitGraph>,
-    {
-        for hedge in self.graph.iter_crown(node) {
-            let other = self.graph.inv(hedge);
-            if !hidden.includes(&hedge) && !hidden.includes(&other) {
-                subgraph.add(hedge);
-            }
-        }
+        let mut hedges = std::iter::once(op_node)
+            .chain(children.iter().copied())
+            .flat_map(|node| self.graph.iter_crown(node))
+            .filter(|hedge| !hidden.includes(hedge) && !hidden.includes(&self.graph.inv(*hedge)))
+            .collect::<Vec<_>>();
+        hedges.sort_unstable();
+        hedges.dedup();
+        hedges
     }
 
     pub fn sub_expression(&self, nid: NodeIndex) -> Result<SimpleTraversalTree, NetworkGraphError> {
         let include_hedge = self
             .graph
             .iter_crown(nid)
-            .find(|i| !matches!(self.graph[[i]], NetworkEdge::Slot(_)));
+            .find(|i| matches!(self.graph[[i]], NetworkEdge::Head));
 
         let headgraph: SuBitGraph = self.graph.from_filter(|a| matches!(a, NetworkEdge::Head));
 
@@ -1372,30 +1869,30 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 leaf.map_scalar_refs(&mut f);
             }
         });
+        let bound = self
+            .graph
+            .iter_edges()
+            .filter_map(|(_, edge, data)| {
+                matches!(data.data, NetworkEdge::BoundPort { .. }).then_some(edge)
+            })
+            .collect::<Vec<_>>();
+        for edge in bound {
+            if let NetworkEdge::BoundPort { value, .. } = &mut self.graph[edge] {
+                *value = f(*value);
+            }
+        }
     }
 
     pub fn shift_tensors(&mut self, shift: usize) {
         let _span = profile::span(Timer::ShiftTensors);
         profile::bump(Counter::ShiftTensors, 1);
+        self.map_tensor_refs(|index| index + shift);
+    }
+
+    pub fn map_tensor_refs(&mut self, mut f: impl FnMut(usize) -> usize) {
         self.graph.iter_nodes_mut().for_each(|(_, _, d)| {
             if let NetworkNode::Leaf(leaf) = d {
-                match leaf {
-                    NetworkLeaf::LocalTensor(tensor) => *tensor += shift,
-                    NetworkLeaf::TensorSum(tensors) => {
-                        for tensor in tensors {
-                            *tensor += shift;
-                        }
-                    }
-                    NetworkLeaf::ScaledTensor(term) => {
-                        term.tensor += shift;
-                    }
-                    NetworkLeaf::ScaledTensorSum(terms) => {
-                        for term in terms {
-                            term.tensor += shift;
-                        }
-                    }
-                    NetworkLeaf::LibraryKey { .. } | NetworkLeaf::Scalar(_) => {}
-                }
+                leaf.map_tensor_refs(&mut f);
             }
         });
     }
@@ -1414,12 +1911,14 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     // println!("{extracted}<=>{left}");
                     //only with an extracted that is in the wrong spot
                     self.slot_order.swap(left.0, extracted.0);
+                    self.logical_slot_order.swap(left.0, extracted.0);
                     left.0 += 1;
                 }
             }
         }
         self.graph.delete_hedges(subgraph);
         self.slot_order.truncate(left.0);
+        self.logical_slot_order.truncate(left.0);
         debug_assert_eq!(self.slot_order.len(), self.graph.n_hedges());
     }
     pub fn identify_nodes_without_self_edges(
@@ -1431,6 +1930,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let (n, sub) = self
             .graph
             .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
+        self.invalidate_logical_layout(n);
 
         self.graph.forget_identification_history();
         self.graph.node_store.check_and_set_nodes().unwrap();
@@ -1444,18 +1944,22 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         n
     }
 
-    pub fn identify_subgraph_nodes_without_deleting_self_edges<S>(
+    pub fn identify_subgraph_nodes_without_deleting_self_edges(
         &mut self,
-        subgraph: &S,
+        hedges: &[Hedge],
         node_data: NetworkNode<K, FK, Aind>,
         ignored: &mut SuBitGraph,
-    ) -> Option<NodeIndex>
-    where
-        S: SubSetLike<Base = SuBitGraph>,
-    {
+    ) -> Option<NodeIndex> {
         let _span = profile::span(Timer::IdentifyNodes);
-        self.graph
-            .identify_nodes_of_subgraph_marking_self_edges(subgraph, node_data, ignored)
+        debug_assert!(hedges.windows(2).all(|pair| pair[0] < pair[1]));
+        let node = self.graph.identify_nodes_of_subgraph_marking_self_edges(
+            hedges.iter().copied(),
+            |hedge| hedges.binary_search(&hedge).is_ok(),
+            node_data,
+            ignored,
+        )?;
+        self.invalidate_logical_layout(node);
+        Some(node)
     }
 
     pub fn identify_nodes_marking_self_edges_and_duplicate_heads(
@@ -1468,6 +1972,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let (node, self_edges) = self
             .graph
             .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
+        self.invalidate_logical_layout(node);
         ignored.union_with(&self_edges);
 
         let mut seen_head_neighbors = BTreeSet::new();
@@ -1505,6 +2010,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         let (n, mut sub) = self
             .graph
             .identify_nodes_without_self_edges::<SuBitGraph>(nodes, node_data);
+        self.invalidate_logical_layout(n);
 
         let mut first = true;
         for h in self.graph.iter_crown(n) {
@@ -1584,7 +2090,9 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     {
         self.graph.dot_impl(
             &self.graph.full_filter(),
-            format!("tree = {}", self.expression_subgraph().string_label()),
+            // Base62 labels may start with a digit; DOT otherwise splits `1H`
+            // into a numeric value and a spurious node named `H`.
+            format!("tree = \"{}\"", self.expression_subgraph().string_label()),
             &|_| None,
             &|e| {
                 if let NetworkEdge::Slot(s) = e {
@@ -1788,6 +2296,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .map(|a| a.to_lib())
             .collect::<Vec<_>>();
 
+        let layout = key.layout().clone();
         let (mut graph, head) =
             Self::head_builder(NetworkNode::Leaf(NetworkLeaf::library_key(key)));
 
@@ -1796,7 +2305,12 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             graph.add_external_edge(head, NetworkEdge::Slot(*lib), orientation, Flow::Source);
         }
         let mut graph = Self::from(graph);
-        graph.set_tensor_slot_order(head, &slots);
+        graph
+            .set_tensor_slot_order(head, &slots, &slots)
+            .expect("tensor slots must match their new graph crown");
+        graph
+            .set_logical_layout(head, &layout)
+            .expect("key layout matches its slots");
         graph.sew_internal_tensor_slots();
         graph
     }
@@ -1808,6 +2322,10 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     where
         T::Slot: IsAbstractSlot<Aind = Aind>,
     {
+        let layout = match &node {
+            NetworkLeaf::LibraryKey { key, .. } => Some(key.layout().clone()),
+            _ => None,
+        };
         let (mut graph, head) = Self::head_builder(NetworkNode::Leaf(node));
         let mut slots = Vec::new();
 
@@ -1819,7 +2337,16 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             graph.add_external_edge(head, NetworkEdge::Slot(lib), orientation, Flow::Source);
         }
         let mut graph = Self::from(graph);
-        graph.set_tensor_slot_order(head, &slots);
+        graph
+            .set_tensor_slot_order(head, &slots, &slots)
+            .expect("tensor slots must match their new graph crown");
+        // A mismatched library key remains the materialization owner's error.
+        // Its layout cannot describe this tensor's axes before that check.
+        if let Some(layout) = layout.filter(|layout| layout.order() == slots.len()) {
+            graph
+                .set_logical_layout(head, &layout)
+                .expect("tensor layout matches its slots");
+        }
         graph.sew_internal_tensor_slots();
         graph
     }
@@ -1899,24 +2426,210 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             .collect()
     }
 
-    /// Relabel one exact dangling slot without changing its structural order.
+    /// Relabel external slots simultaneously, including their incidence through sums.
     ///
-    /// Returns `false` when the source slot is not a unique external edge.
-    pub fn relabel_dangling_slot(
+    /// Resolve every source in the original graph before changing an edge. Equal
+    /// labels on unrelated internal contractions are not part of that incidence.
+    pub fn relabel_dangling_slots(
         &mut self,
-        from: LibrarySlot<Aind>,
-        to: LibrarySlot<Aind>,
-    ) -> bool {
+        replacements: &[(LibrarySlot<Aind>, LibrarySlot<Aind>)],
+    ) -> Result<(), StructureError> {
         let external: SuBitGraph = self.graph.external_filter();
-        let matches = external
-            .included_iter()
-            .filter(|hedge| self.graph[[hedge]] == NetworkEdge::Slot(from))
+        let mut starts = Vec::new();
+        for &(from, to) in replacements {
+            if from == to {
+                continue;
+            }
+            if from.rep() != to.rep() {
+                return Err(StructureError::InvalidIndexPermutation(
+                    "relabeling changed a port representation".into(),
+                ));
+            }
+            let mut matches = external
+                .included_iter()
+                .filter(|hedge| self.graph[[hedge]] == NetworkEdge::Slot(from));
+            let Some(start) = matches.next() else {
+                return Err(StructureError::InvalidIndexPermutation(
+                    "source port is not external".into(),
+                ));
+            };
+            if matches.next().is_some() {
+                return Err(StructureError::InvalidIndexPermutation(
+                    "source port is not unique".into(),
+                ));
+            }
+            starts.push((start, to));
+        }
+        self.relabel_slot_components(&starts).map(|_| ())
+    }
+
+    /// Relabel selected slot incidences, following sewn edges and sum seams.
+    /// Each starting hedge identifies one scope; unrelated equal labels remain
+    /// untouched. All requests are resolved before mutation. The returned hedges
+    /// include identity requests, allowing a caller to protect boundary incidences
+    /// while freshening the remaining internal components.
+    pub fn relabel_slot_components(
+        &mut self,
+        replacements: &[(Hedge, LibrarySlot<Aind>)],
+    ) -> Result<BTreeSet<Hedge>, StructureError> {
+        let mut updates = BTreeMap::new();
+        for &(start, to) in replacements {
+            if start.0 >= self.graph.n_hedges() {
+                return Err(StructureError::InvalidIndexPermutation(
+                    "source hedge is outside the graph".into(),
+                ));
+            }
+            let NetworkEdge::Slot(from) = self.graph[[&start]] else {
+                return Err(StructureError::InvalidIndexPermutation(
+                    "source hedge is not a slot".into(),
+                ));
+            };
+            if from.rep() != to.rep() {
+                return Err(StructureError::InvalidIndexPermutation(
+                    "relabeling changed a port representation".into(),
+                ));
+            }
+            let mut pending = vec![start];
+            let mut visited = BTreeSet::new();
+            while let Some(hedge) = pending.pop() {
+                if !visited.insert(hedge) {
+                    continue;
+                }
+                let NetworkEdge::Slot(current) = self.graph[[&hedge]] else {
+                    unreachable!("slot components only follow slot incidences")
+                };
+                // A sewn Sum boundary can retain its opposite endpoint's
+                // descriptor. Preserve each edge's variance while relabelling
+                // the common index through every branch of that boundary.
+                let target = current.rep().slot(to.aind());
+                if let Some(previous) = updates.insert(hedge, target)
+                    && previous != target
+                {
+                    return Err(StructureError::InvalidIndexPermutation(
+                        "conflicting port replacements".into(),
+                    ));
+                }
+                let opposite = self.graph.inv(hedge);
+                if opposite != hedge {
+                    pending.push(opposite);
+                }
+                let node = self.graph.node_id(hedge);
+                if matches!(self.graph[node], NetworkNode::Op(NetworkOp::Sum)) {
+                    pending.extend(self.graph.iter_crown(node).filter(|candidate| {
+                        matches!(self.graph[[candidate]], NetworkEdge::Slot(slot)
+                                    if slot == from || slot.matches(&from))
+                    }));
+                }
+            }
+        }
+        let affected = updates.keys().copied().collect();
+        for (hedge, slot) in updates {
+            self.graph[[&hedge]] = NetworkEdge::Slot(slot);
+        }
+        Ok(affected)
+    }
+
+    /// Fill one external port of one leaf occurrence without rebuilding its payload.
+    ///
+    /// The port is identified by its established structural position. Internal edges,
+    /// including both endpoints of self-loops, are left for the contraction owner.
+    pub fn bind_dangling_port(&mut self, node: NodeIndex, port: usize, value: ScalarRef) -> bool {
+        if !matches!(
+            self.graph[node],
+            NetworkNode::Leaf(NetworkLeaf::LocalTensor(_))
+        ) {
+            return false;
+        }
+        let external: SuBitGraph = self.graph.external_filter();
+        let matching = self
+            .graph
+            .iter_crown(node)
+            .filter(|hedge| {
+                self.slot_order[hedge.0] as usize == port
+                    && external.includes(hedge)
+                    && matches!(self.graph[[hedge]], NetworkEdge::Slot(_))
+            })
             .collect::<Vec<_>>();
-        let [hedge] = matches.as_slice() else {
+        let [hedge] = matching.as_slice() else {
             return false;
         };
-        self.graph[[hedge]] = NetworkEdge::Slot(to);
+        let NetworkEdge::Slot(slot) = self.graph[[hedge]] else {
+            unreachable!()
+        };
+        self.graph[[hedge]] = NetworkEdge::BoundPort { slot, value };
         true
+    }
+
+    /// Read all occurrence ports in their established structural order.
+    /// Bound values belong to this occurrence, not its shared tensor-store entry.
+    pub fn port_bindings(
+        &self,
+        node: NodeIndex,
+    ) -> Vec<(usize, LibrarySlot<Aind>, Option<ScalarRef>)> {
+        let mut ports = self
+            .graph
+            .iter_crown(node)
+            .filter_map(|hedge| {
+                let (slot, value) = match self.graph[[&hedge]] {
+                    NetworkEdge::Slot(slot) => (slot, None),
+                    NetworkEdge::BoundPort { slot, value } => (slot, Some(value)),
+                    NetworkEdge::Head => return None,
+                };
+                Some((self.slot_order[hedge.0] as usize, slot, value))
+            })
+            .collect::<Vec<_>>();
+        ports.sort_unstable_by_key(|(position, _, _)| *position);
+        ports
+    }
+
+    /// Read filled ports for diagnostics without exposing an additional graph.
+    pub fn bound_ports(&self, node: NodeIndex) -> Vec<(usize, LibrarySlot<Aind>, ScalarRef)> {
+        self.port_bindings(node)
+            .into_iter()
+            .filter_map(|(position, slot, value)| value.map(|value| (position, slot, value)))
+            .collect()
+    }
+
+    pub fn has_bound_ports(&self) -> bool {
+        self.graph
+            .iter_edges()
+            .any(|(_, _, edge)| matches!(edge.data, NetworkEdge::BoundPort { .. }))
+    }
+
+    /// Remove consumed bindings after occurrence-aware leaf materialization.
+    pub(crate) fn clear_bound_ports(&mut self) {
+        let bound: SuBitGraph = self
+            .graph
+            .from_filter(|edge| matches!(edge, NetworkEdge::BoundPort { .. }));
+        for (_, crown, _) in self.graph.iter_nodes() {
+            if !crown.clone().any(|hedge| bound.includes(&hedge)) {
+                continue;
+            }
+            let mut ports = crown
+                .clone()
+                .filter(|hedge| matches!(self.graph[[hedge]], NetworkEdge::Slot(_)))
+                .collect::<Vec<_>>();
+            ports.sort_unstable_by_key(|hedge| self.slot_order[hedge.0]);
+            for (position, hedge) in ports.iter().enumerate() {
+                self.slot_order[hedge.0] = position
+                    .try_into()
+                    .expect("materialization cannot increase the leaf rank");
+            }
+            if ports
+                .iter()
+                .all(|hedge| self.logical_slot_order[hedge.0].is_some())
+            {
+                ports.sort_unstable_by_key(|hedge| self.logical_slot_order[hedge.0]);
+                for (position, hedge) in ports.into_iter().enumerate() {
+                    self.logical_slot_order[hedge.0] = Some(
+                        position
+                            .try_into()
+                            .expect("materialization cannot increase the leaf rank"),
+                    );
+                }
+            }
+        }
+        self.delete(&bound);
     }
 
     /// Sew any newly equal dangling slots after an intentional relabeling.
@@ -1978,7 +2691,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
     }
 
-    fn join_heads(
+    pub(super) fn join_heads(
         self_flow: Flow,
         self_data: EdgeData<NetworkEdge<Aind>>,
         _other_flow: Flow,
@@ -1998,8 +2711,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     }
 
     pub fn expression_subgraph(&self) -> SuBitGraph {
-        self.graph
-            .from_filter(|a| !matches!(a, NetworkEdge::Slot(_)))
+        self.graph.from_filter(|a| matches!(a, NetworkEdge::Head))
     }
 
     pub fn expression_subgraph_ignoring<S>(&self, hidden: &S) -> SuBitGraph
@@ -2055,7 +2767,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
 
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!(
                 "spenso_profile merge_ops.start nodes={} hedges={}",
                 self.graph.n_nodes(),
@@ -2064,7 +2776,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         }
         // build a traversal over *all* internal edges
         let tt: SimpleTraversalTree<ParentChildStore<()>> = self.expr_tree().cast();
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!("spenso_profile merge_ops.after_expr_tree");
         }
         let head = self.head();
@@ -2101,7 +2813,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             }
         }
 
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             let sums = op_nodes
                 .iter()
                 .filter(|(_, op)| *op == MergeOp::Sum)
@@ -2126,13 +2838,26 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                     MergeOp::Sum => NetworkOp::Sum,
                     MergeOp::Product => NetworkOp::Product,
                 };
-                let (_, sub) = self
-                    .graph
-                    .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, NetworkNode::Op(op));
-                to_del.union_with(&sub);
+                // The union roots already identify every endpoint which this
+                // group will merge. Mark only its new self-edges, preserving
+                // existing loops without allocating or unioning graph-sized
+                // masks for each group.
+                for node in &nodes {
+                    for hedge in self.graph.iter_crown(*node) {
+                        let other = self.graph.node_id(self.graph.inv(hedge));
+                        if other != *node
+                            && op_index
+                                .get(&other)
+                                .is_some_and(|index| parents[*index] == root)
+                        {
+                            to_del.add(hedge);
+                        }
+                    }
+                }
+                self.graph.identify_nodes(&nodes, NetworkNode::Op(op));
             }
         }
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!(
                 "spenso_profile merge_ops.after_components to_del={}",
                 to_del.n_included()
@@ -2142,11 +2867,11 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         // println!("{}", self.graph.dot(&to_del));
 
         self.graph.forget_identification_history();
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!("spenso_profile merge_ops.after_forget");
         }
         self.delete(&to_del);
-        if profile::enabled() {
+        if profile::enabled() && profile::verbose() {
             eprintln!(
                 "spenso_profile merge_ops.end nodes={} hedges={}",
                 self.graph.n_nodes(),
@@ -2194,6 +2919,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
                 );
             }
         }
+        self.logical_slot_order.extend(other.logical_slot_order);
         self.slot_order.extend(other.slot_order);
         // self.uncontracted.join_mut(other.uncontracted);
         Ok(())
@@ -2205,6 +2931,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
     {
         let mut graphs = Vec::new();
         for other in others {
+            self.logical_slot_order.extend(other.logical_slot_order);
             self.slot_order.extend(other.slot_order);
             graphs.push(other.graph);
         }
@@ -2212,7 +2939,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         self.graph.append_disconnected_many_mut(graphs)
     }
 
-    fn connect_identities(&mut self, source: Hedge, sink: Hedge) {
+    pub(super) fn connect_identities(&mut self, source: Hedge, sink: Hedge) {
         self.graph
             .connect_identities(source, sink, NetworkGraph::<K, FK, Aind>::join_heads);
     }
@@ -2222,12 +2949,12 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
         exts.included_iter()
             .filter_map(|hedge| match self.graph[[&hedge]] {
                 NetworkEdge::Slot(slot) => Some((slot, hedge)),
-                NetworkEdge::Head => None,
+                NetworkEdge::Head | NetworkEdge::BoundPort { .. } => None,
             })
             .collect()
     }
 
-    fn sum_input_hedges(
+    fn operator_input_hedges(
         &self,
         n_operands: usize,
     ) -> (Vec<Hedge>, BTreeMap<LibrarySlot<Aind>, Vec<Hedge>>) {
@@ -2243,6 +2970,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NetworkGraph<K, FK, Aind> {
             match self.graph[[&hedge]] {
                 NetworkEdge::Head => head_inputs.push(hedge),
                 NetworkEdge::Slot(slot) => slot_inputs.entry(slot).or_default().push(hedge),
+                NetworkEdge::BoundPort { .. } => {}
             }
         }
 
@@ -2300,20 +3028,36 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NMul for NetworkGraph<K, FK, Aind> {
         }
         let mut mul = Self::mul_graph(all.len() + 1);
 
-        mul.join_mut(
-            self,
-            NetworkGraph::<K, FK, Aind>::match_heads,
-            NetworkGraph::<K, FK, Aind>::join_heads,
-        )
-        .unwrap();
-
-        for rhs in all {
-            mul.join_mut(
-                rhs,
-                NetworkGraph::<K, FK, Aind>::prod_match,
-                NetworkGraph::<K, FK, Aind>::join_heads,
-            )
-            .unwrap();
+        let (mut head_inputs, _) = mul.operator_input_hedges(all.len() + 1);
+        let operands = std::iter::once(self).chain(all).collect::<Vec<_>>();
+        let seams = operands
+            .iter()
+            .map(|operand| (operand.head(), operand.dangling_slot_hedges()))
+            .collect::<Vec<_>>();
+        let shifts = mul.append_disconnected_many_mut(operands).unwrap();
+        let mut pending: Vec<(LibrarySlot<Aind>, Hedge)> = Vec::new();
+        for ((head, slots), shift) in seams.into_iter().zip(shifts) {
+            let mut slots = slots
+                .into_iter()
+                .map(|(slot, hedge)| Some((slot, hedge + shift)))
+                .collect::<Vec<_>>();
+            // Match the sequential join's last old endpoint and first new
+            // endpoint. Only different operands can contract here; internal
+            // contractions already belong to each operand's graph.
+            for index in (0..pending.len()).rev() {
+                let (left, source) = pending[index];
+                if let Some(right) = slots
+                    .iter_mut()
+                    .find(|right| right.as_ref().is_some_and(|(right, _)| left.matches(right)))
+                {
+                    let (_, sink) = right.take().unwrap();
+                    mul.connect_identities(source, sink);
+                    pending.remove(index);
+                }
+            }
+            pending.extend(slots.into_iter().flatten());
+            // join_mut chooses the last remaining product head input too.
+            mul.connect_identities(head_inputs.pop().unwrap(), head + shift);
         }
 
         mul
@@ -2353,7 +3097,7 @@ impl<K: Debug, FK: Debug, Aind: AbsInd> NAdd for NetworkGraph<K, FK, Aind> {
 
         let n_operands = all.len() + 1;
         let mut add = Self::add_graph(n_operands, &slots);
-        let (head_inputs, mut slot_inputs) = add.sum_input_hedges(n_operands);
+        let (head_inputs, mut slot_inputs) = add.operator_input_hedges(n_operands);
         let mut operand_heads = Vec::with_capacity(n_operands);
         let mut operand_slots = Vec::with_capacity(n_operands);
         let mut operands = Vec::with_capacity(n_operands);
@@ -2712,9 +3456,10 @@ impl<K: Clone + Debug, FK: Clone + Debug, Aind: AbsInd> Sub<NetworkGraph<K, FK, 
 
 #[cfg(test)]
 pub mod test {
+    use std::collections::{BTreeMap, BTreeSet};
 
     use linnet::{
-        half_edge::subgraph::{ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
+        half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
         tree::child_vec::ChildVecStore,
     };
 
@@ -2730,6 +3475,165 @@ pub mod test {
     };
 
     use super::{NetworkGraph, NetworkNode, NetworkOp};
+
+    #[test]
+    fn batch_product_preserves_sequential_join_endpoints_and_layouts() {
+        use super::{NMul, NetworkEdge};
+        use crate::structure::slot::DualSlotTo;
+
+        type Graph = NetworkGraph<i8>;
+        let tensor = |id, labels: &[usize]| {
+            let structure = Canonicalized::<OrderedStructure>::from_iter(
+                labels.iter().map(|&index| Minkowski {}.new_slot(4, index)),
+            )
+            .into_canonical();
+            Graph::tensor(&structure, NetworkLeaf::LocalTensor(id))
+        };
+        let self_loop = tensor(7, &[3, 3]);
+        let bound = {
+            let mut graph = tensor(8, &[4, 5]);
+            let node = graph.graph.node_id(graph.head());
+            assert!(graph.bind_dangling_port(node, 0, 2.into()));
+            graph
+        };
+        let upper = Lorentz {}.new_slot(4, 31).to_lib();
+        let lower = upper.dual();
+        let dual = |id, slot| {
+            Graph::tensor(
+                &Canonicalized::<OrderedStructure>::from_iter([slot]).into_canonical(),
+                NetworkLeaf::LocalTensor(id),
+            )
+        };
+        let mut fixtures = vec![
+            vec![Graph::scalar(0)],
+            vec![Graph::scalar(0), tensor(1, &[]), Graph::scalar(1)],
+            vec![tensor(0, &[1, 2]), tensor(1, &[2, 3]), tensor(2, &[3, 1])],
+            vec![tensor(0, &[1]), tensor(1, &[1]), tensor(2, &[1])],
+            vec![self_loop, bound, tensor(9, &[5])],
+            vec![dual(0, upper), dual(1, lower)],
+            vec![tensor(0, &[1]) + tensor(1, &[1]), tensor(2, &[1])],
+        ];
+        fixtures.push((0..32).map(Graph::scalar).collect());
+        for operands in fixtures {
+            let mut expected = Graph::mul_graph(operands.len());
+            for (index, operand) in operands.iter().cloned().enumerate() {
+                expected
+                    .join_mut(
+                        operand,
+                        if index == 0 {
+                            Graph::match_heads
+                        } else {
+                            Graph::prod_match
+                        },
+                        Graph::join_heads,
+                    )
+                    .unwrap();
+            }
+            let mut iter = operands.into_iter();
+            let actual = iter.next().unwrap().n_mul(iter);
+            assert_eq!(actual.graph.n_nodes(), expected.graph.n_nodes());
+            assert_eq!(actual.graph.n_hedges(), expected.graph.n_hedges());
+            assert_eq!(actual.slot_order, expected.slot_order);
+            assert_eq!(actual.logical_slot_order, expected.logical_slot_order);
+            for index in 0..actual.graph.n_hedges() {
+                let hedge = super::Hedge(index);
+                assert_eq!(actual.graph.inv(hedge), expected.graph.inv(hedge));
+                assert_eq!(actual.graph.flow(hedge), expected.graph.flow(hedge));
+                let actual_edge: &NetworkEdge<_> = &actual.graph[[&hedge]];
+                assert_eq!(actual_edge, &expected.graph[[&hedge]]);
+                assert_eq!(actual.graph.node_id(hedge), expected.graph.node_id(hedge));
+            }
+        }
+    }
+
+    #[test]
+    fn bound_ports_keep_occurrence_order_and_follow_scalar_remapping() {
+        use super::{NetworkEdge, ScalarRef};
+        let slots = [
+            Minkowski {}.new_slot(4, 17).to_lib(),
+            Minkowski {}.new_slot(4, 29).to_lib(),
+            Minkowski {}.new_slot(4, 83).to_lib(),
+        ];
+        let structure = Canonicalized::<OrderedStructure>::from_iter(slots).into_canonical();
+        let mut graph = NetworkGraph::<i8>::tensor(&structure, NetworkLeaf::LocalTensor(0));
+        let node = graph.graph.node_id(graph.head());
+        graph
+            .set_logical_layout(
+                node,
+                Canonicalized::<OrderedStructure>::from_iter([slots[2], slots[0], slots[1]])
+                    .layout(),
+            )
+            .unwrap();
+        assert!(graph.bind_dangling_port(node, 1, ScalarRef::Store(2)));
+        assert!(!graph.bind_dangling_port(node, 1, ScalarRef::Store(9)));
+        assert_eq!(graph.slots(node), vec![slots[0], slots[2]]);
+        assert_eq!(
+            graph.bound_ports(node),
+            vec![(1, slots[1], ScalarRef::Store(2))]
+        );
+        assert!(
+            graph
+                .expression_subgraph()
+                .included_iter()
+                .all(|hedge| matches!(graph.graph[[&hedge]], NetworkEdge::Head))
+        );
+        let mut other = graph.clone();
+        other.shift_scalars(5);
+        assert_eq!(
+            other.bound_ports(node),
+            vec![(1, slots[1], ScalarRef::Store(7))]
+        );
+        assert_eq!(
+            graph.bound_ports(node),
+            vec![(1, slots[1], ScalarRef::Store(2))]
+        );
+        let mut consumed = graph.clone();
+        consumed.clear_bound_ports();
+        let root = consumed.graph.node_id(consumed.head());
+        assert_eq!(consumed.slots(root), vec![slots[0], slots[2]]);
+        assert_eq!(
+            consumed.logical_slots(root).unwrap(),
+            vec![slots[2], slots[0]]
+        );
+        assert_eq!(consumed.logical_slot_order.len(), consumed.graph.n_hedges());
+        consumed.graph.check().unwrap();
+        let mut unavailable = graph.clone();
+        unavailable.invalidate_logical_layout(node);
+        unavailable.clear_bound_ports();
+        let root = unavailable.graph.node_id(unavailable.head());
+        assert!(unavailable.logical_slots(root).is_err());
+        assert_eq!(unavailable.slots(root), vec![slots[0], slots[2]]);
+        let remaining = graph.graph.external_filter::<SuBitGraph>();
+        let extracted = graph.extract(&remaining);
+        let bound = extracted
+            .graph
+            .iter_edges()
+            .filter_map(|(_, _, edge)| {
+                if let NetworkEdge::BoundPort { slot, value } = edge.data {
+                    Some((*slot, *value))
+                } else {
+                    None
+                }
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(bound, vec![(slots[1], ScalarRef::Store(2))]);
+        extracted.graph.check().unwrap();
+    }
+
+    #[test]
+    fn binding_does_not_erase_either_self_loop_port() {
+        use super::ScalarRef;
+        let slot = Minkowski {}.new_slot(4, 91).to_lib();
+        let structure = Canonicalized::<OrderedStructure>::from_iter([slot, slot]).into_canonical();
+        let mut graph = NetworkGraph::<i8>::tensor(&structure, NetworkLeaf::LocalTensor(0));
+        let node = graph.graph.node_id(graph.head());
+        let before = graph.clone();
+        assert!(!graph.bind_dangling_port(node, 0, ScalarRef::Store(0)));
+        assert!(!graph.bind_dangling_port(node, 1, ScalarRef::Store(0)));
+        assert_eq!(graph, before);
+        assert_eq!(graph.slots(node), vec![slot, slot]);
+        assert!(graph.bound_ports(node).is_empty());
+    }
 
     #[cfg(feature = "shadowing")]
     #[test]
@@ -2816,6 +3720,371 @@ pub mod test {
                 actual: 2
             }
         ));
+    }
+
+    #[test]
+    fn deleting_hedges_keeps_tensor_slot_order_aligned() {
+        let structure = Canonicalized::<OrderedStructure>::from_iter([
+            Euclidean {}.new_slot(2, 1),
+            Euclidean {}.new_slot(3, 2),
+            Euclidean {}.new_slot(4, 3),
+        ])
+        .into_canonical();
+        let mut graph = NetworkGraph::<i8>::tensor(&structure, NetworkLeaf::LocalTensor(0));
+        let root = graph.graph.node_id(graph.head());
+        let original_slots = graph.slots(root);
+        let logical = original_slots.iter().copied().rev().collect::<Vec<_>>();
+        graph
+            .set_logical_layout(
+                root,
+                Canonicalized::<OrderedStructure>::from_iter(logical.clone()).layout(),
+            )
+            .unwrap();
+        let removed_slot = original_slots[1];
+        let removed_hedge = graph.graph.iter_crown(root).find(|hedge| {
+            matches!(graph.graph[[hedge]], super::NetworkEdge::Slot(slot) if slot == removed_slot)
+        }).unwrap();
+        let mut removed = SuBitGraph::empty(graph.graph.n_hedges());
+        removed.add(removed_hedge);
+        graph.delete(&removed);
+        let root = graph.graph.node_id(graph.head());
+        assert_eq!(
+            graph.slots(root),
+            original_slots
+                .into_iter()
+                .filter(|slot| *slot != removed_slot)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(
+            graph.logical_slots(root).unwrap(),
+            logical
+                .into_iter()
+                .filter(|slot| *slot != removed_slot)
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(graph.logical_slot_order.len(), graph.graph.n_hedges());
+        graph.graph.check().unwrap();
+    }
+
+    #[test]
+    fn extracted_sum_relabelling_preserves_dual_seams_and_other_ports() {
+        use super::NetworkEdge;
+        use crate::structure::{abstract_index::AbstractIndex, slot::DualSlotTo};
+
+        type Graph = NetworkGraph<i8>;
+        let upper = Lorentz {}.new_slot(4, 31).to_lib();
+        let spectator = Minkowski {}.new_slot(4, 31).to_lib();
+        let target = AbstractIndex::Normal(47);
+        let tensor = |id, slots: Vec<_>| {
+            Graph::tensor(
+                &Canonicalized::<OrderedStructure>::from_iter(slots).into_canonical(),
+                NetworkLeaf::LocalTensor(id),
+            )
+        };
+        let mut mixed_seams = 0;
+        for slot in [upper, upper.dual()] {
+            for sum_first in [false, true] {
+                let sum = tensor(0, vec![slot, spectator]) + tensor(1, vec![slot, spectator]);
+                let partner = tensor(2, vec![slot.dual()]);
+                let mut whole = if sum_first {
+                    sum * partner
+                } else {
+                    partner * sum
+                };
+                let tree = whole.expr_tree().cast::<ChildVecStore<()>>();
+                let sum = whole
+                    .graph
+                    .iter_nodes()
+                    .find_map(|(node, _, data)| {
+                        matches!(data, NetworkNode::Op(NetworkOp::Sum)).then_some(node)
+                    })
+                    .unwrap();
+                let mut subset: SuBitGraph = whole.graph.empty_subgraph();
+                for node in tree.iter_preorder_tree_nodes(&whole.graph, sum) {
+                    for hedge in whole.graph.iter_crown(node) {
+                        subset.add(hedge);
+                    }
+                }
+                let mut graph = whole.extract(&subset);
+                let original = (0..graph.graph.n_hedges())
+                    .filter_map(|index| {
+                        let hedge = super::Hedge(index);
+                        if let NetworkEdge::Slot(value) = graph.graph[[&hedge]] {
+                            Some((hedge, value))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                let (start, boundary) = original
+                    .iter()
+                    .copied()
+                    .find(|(hedge, value)| {
+                        graph.graph.inv(*hedge) == *hedge
+                            && (*value == slot || value.matches(&slot))
+                    })
+                    .unwrap();
+                mixed_seams +=
+                    usize::from(original.iter().any(|(_, value)| {
+                        value.aind() == boundary.aind() && value.matches(&boundary)
+                    }));
+                let unchanged = format!("{graph:?}");
+                assert!(
+                    graph
+                        .relabel_slot_components(&[(start, boundary.dual())])
+                        .is_err()
+                );
+                assert_eq!(format!("{graph:?}"), unchanged);
+                let visited = graph
+                    .relabel_slot_components(&[(start, boundary.rep().slot(target))])
+                    .unwrap();
+                let mut branch_nodes = BTreeSet::new();
+                for (hedge, original) in original {
+                    let NetworkEdge::Slot(actual) = graph.graph[[&hedge]] else {
+                        unreachable!()
+                    };
+                    assert_eq!(actual.rep(), original.rep());
+                    if original == slot || original.matches(&slot) {
+                        assert!(
+                            visited.contains(&hedge),
+                            "every Sum branch must share its boundary index"
+                        );
+                        assert_eq!(actual.aind(), target);
+                        let node = graph.graph.node_id(hedge);
+                        if matches!(graph.graph[node], NetworkNode::Leaf(_)) {
+                            branch_nodes.insert(node);
+                        }
+                    } else {
+                        assert_eq!(
+                            actual, spectator,
+                            "another representation with the same index is unrelated"
+                        );
+                        assert!(!visited.contains(&hedge));
+                    }
+                }
+                assert_eq!(branch_nodes.len(), 2);
+                graph.graph.check().unwrap();
+            }
+        }
+        assert!(
+            mixed_seams > 0,
+            "exercise an actual cut with opposite Sum descriptors"
+        );
+    }
+
+    #[test]
+    fn extracting_and_splicing_preserve_logical_port_witnesses() {
+        let structure = Canonicalized::<OrderedStructure>::from_iter([
+            Minkowski {}.new_slot(4, 31),
+            Minkowski {}.new_slot(4, 7),
+        ])
+        .into_canonical();
+        let mut graph = NetworkGraph::<i8>::tensor(&structure, NetworkLeaf::LocalTensor(0));
+        let root = graph.graph.node_id(graph.head());
+        let storage = graph.slots(root);
+        let logical = storage.iter().copied().rev().collect::<Vec<_>>();
+        graph
+            .set_logical_layout(
+                root,
+                Canonicalized::<OrderedStructure>::from_iter(logical.clone()).layout(),
+            )
+            .unwrap();
+        let entire = SuBitGraph::full(graph.graph.n_hedges());
+        let extracted = graph.extract(&entire);
+        let node = extracted.graph.node_id(extracted.head());
+        assert_eq!(extracted.slots(node), storage);
+        assert_eq!(extracted.logical_slots(node).unwrap(), logical);
+        let mut outer = NetworkGraph::<i8>::mul_graph(1);
+        outer.splice_descendents_of(extracted);
+        let leaf = outer
+            .graph
+            .iter_nodes()
+            .find_map(|(node, _, data)| {
+                matches!(data, NetworkNode::Leaf(NetworkLeaf::LocalTensor(0))).then_some(node)
+            })
+            .unwrap();
+        assert_eq!(outer.logical_slots(leaf).unwrap(), logical);
+        assert_eq!(outer.slots(leaf), storage);
+        assert_eq!(outer.logical_slot_order.len(), outer.graph.n_hedges());
+    }
+
+    #[test]
+    fn component_execution_does_not_expose_inherited_logical_positions() {
+        use crate::{
+            network::{
+                ExecutionResult, Network, Sequential, SequentialExtract, SequentialRef,
+                SmallestDegree,
+                graph::NMul,
+                library::{DummyKey, DummyLibrary, DummyLibraryTensor, panicing::ErroringLibrary},
+                store::NetworkStore,
+            },
+            structure::{HasStructure, TensorStructure},
+            tensors::data::DenseTensor,
+        };
+
+        type Tensor = DenseTensor<f64, OrderedStructure>;
+        type Net = Network<NetworkStore<Tensor, f64>, DummyKey, DummyKey>;
+        type LibTensor = DummyLibraryTensor<Tensor>;
+        type Lib = DummyLibrary<Tensor, DummyKey>;
+        type FnLib = ErroringLibrary<DummyKey>;
+        let lib = Lib::new();
+        let fn_lib = FnLib::new();
+        let left_slot = Euclidean {}.new_slot(2, 31).to_lib();
+        let right_slot = Euclidean {}.new_slot(2, 7).to_lib();
+        let vector = |slot, data| {
+            Net::from_tensor(
+                DenseTensor::from_storage_data(
+                    data,
+                    OrderedStructure::new(vec![slot]).into_canonical(),
+                )
+                .unwrap(),
+            )
+        };
+        let left = vector(left_slot, vec![1.0, 2.0]);
+        let right = vector(right_slot, vec![3.0, 4.0]);
+        for net in [&left, &right] {
+            let node = net.graph.graph.node_id(net.graph.head());
+            assert_eq!(
+                net.graph.logical_slots(node).unwrap(),
+                net.graph.slots(node)
+            );
+        }
+        let product = left.n_mul([right]);
+        let trace_structure = OrderedStructure::new(vec![right_slot, right_slot, left_slot]);
+        let mut trace_data = vec![0.0; 8];
+        for linear in 0..8 {
+            let logical = vec![(linear >> 2) & 1, (linear >> 1) & 1, linear & 1];
+            let canonical = trace_structure.layout().logical_to_canonical(&logical);
+            let flat: usize = trace_structure
+                .canonical()
+                .flat_index(canonical)
+                .unwrap()
+                .into();
+            trace_data[flat] = (linear + 1) as f64;
+        }
+        let trace = Net::from_tensor(
+            DenseTensor::from_storage_data(trace_data, trace_structure.into_canonical()).unwrap(),
+        );
+
+        macro_rules! check {
+            ($strategy:ty) => {{
+                for (mut net, self_loop) in [(product.clone(), false), (trace.clone(), true)] {
+                    net.execute::<$strategy, SmallestDegree, LibTensor, Lib, FnLib>(&lib, &fn_lib)
+                        .unwrap();
+                    let ExecutionResult::Val(result) =
+                        net.result_tensor::<LibTensor, Lib>(&lib).unwrap()
+                    else {
+                        panic!("component operation must return a tensor");
+                    };
+                    if self_loop {
+                        assert_eq!(result.data, vec![8.0, 10.0]);
+                    } else {
+                        let slots = result.structure().external_structure();
+                        let expected = (0..4)
+                            .map(|linear| {
+                                slots.iter().enumerate().fold(1.0, |value, (axis, slot)| {
+                                    let component = (linear >> (1 - axis)) & 1;
+                                    value
+                                        * if *slot == left_slot {
+                                            [1.0, 2.0][component]
+                                        } else {
+                                            assert_eq!(*slot, right_slot);
+                                            [3.0, 4.0][component]
+                                        }
+                                })
+                            })
+                            .collect::<Vec<_>>();
+                        assert_eq!(result.data, expected);
+                    }
+                    let (_, node, _) = net.graph.result().unwrap();
+                    assert!(net.graph.logical_slots(node).is_err());
+                }
+            }};
+        }
+        check!(Sequential);
+        check!(SequentialRef);
+        check!(SequentialExtract);
+    }
+
+    #[test]
+    fn merge_ops_preserves_existing_loops_and_cross_group_slots() {
+        use super::{Flow, NetworkEdge};
+
+        // Structural network fixture: three operator islands, with slot edges
+        // testing incidence independently of any physical tensor numerator.
+        for directed in [false, true] {
+            let (mut builder, root) =
+                NetworkGraph::<i8>::head_builder(NetworkNode::Op(NetworkOp::Product));
+            let product = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            let product_child = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            let sum = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+            let sum_child = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+            let inner_product = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            let inner_child = builder.add_node(NetworkNode::Op(NetworkOp::Product));
+            for (child, parent) in [
+                (product, root),
+                (product_child, product),
+                (sum, root),
+                (sum_child, sum),
+                (inner_product, sum),
+                (inner_child, inner_product),
+            ] {
+                builder.add_edge(child, parent, NetworkEdge::Head, directed);
+            }
+            for (index, parent) in [product_child, sum_child, inner_child]
+                .into_iter()
+                .enumerate()
+            {
+                let leaf = builder.add_node(NetworkNode::Leaf(NetworkLeaf::Scalar(index.into())));
+                builder.add_edge(leaf, parent, NetworkEdge::Head, directed);
+            }
+            let slot = NetworkEdge::Slot(Minkowski {}.new_slot(4, 1).to_lib());
+            builder.add_edge(product, product, slot, directed);
+            builder.add_edge(sum_child, sum_child, slot, directed);
+            builder.add_edge(product_child, inner_child, slot, directed);
+            builder.add_edge(product, product_child, slot, directed);
+            builder.add_external_edge(root, slot, directed, Flow::Sink);
+            let mut graph: NetworkGraph<i8> = builder.into();
+            graph.slot_order = (0..graph.graph.n_hedges()).map(|i| i as u8).collect();
+            let mut expected = graph.clone();
+            let mut removed: SuBitGraph = expected.graph.empty_subgraph();
+            for (nodes, op) in [
+                (vec![root, product, product_child], NetworkOp::Product),
+                (vec![sum, sum_child], NetworkOp::Sum),
+                (vec![inner_product, inner_child], NetworkOp::Product),
+            ] {
+                let (_, edges) = expected
+                    .graph
+                    .identify_nodes_without_self_edges::<SuBitGraph>(&nodes, NetworkNode::Op(op));
+                removed.union_with(&edges);
+            }
+            expected.graph.forget_identification_history();
+            expected.delete(&removed);
+            graph.merge_ops();
+            graph.graph.check().unwrap();
+            for _ in 0..2 {
+                assert_eq!(
+                    graph
+                        .graph
+                        .iter_nodes()
+                        .map(|(node, _, _)| node)
+                        .collect::<BTreeSet<_>>(),
+                    expected
+                        .graph
+                        .iter_nodes()
+                        .map(|(node, _, _)| node)
+                        .collect::<BTreeSet<_>>(),
+                );
+                for (node, _, data) in graph.graph.iter_nodes() {
+                    assert_eq!(data, &expected.graph[node]);
+                    assert_eq!(graph.slots(node), expected.slots(node));
+                    let actual_crown = graph.graph.iter_crown(node).collect::<BTreeSet<_>>();
+                    let expected_crown = expected.graph.iter_crown(node).collect::<BTreeSet<_>>();
+                    assert_eq!(actual_crown, expected_crown);
+                }
+                graph.merge_ops();
+            }
+        }
     }
 
     #[test]
@@ -2914,6 +4183,83 @@ pub mod test {
     }
 
     #[test]
+    fn root_alignment_matches_preorder_on_shared_expression_cycles() {
+        // A structural traversal fixture, not an evaluable numerator: a shared
+        // child closes a diamond, with an additional head self-loop.
+        let (mut builder, root) =
+            NetworkGraph::<i8>::head_builder(NetworkNode::Op(NetworkOp::Product));
+        let left = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+        let right = builder.add_node(NetworkNode::Op(NetworkOp::Sum));
+        let shared = builder.add_node(NetworkNode::Leaf(NetworkLeaf::Scalar(0.into())));
+        for (child, parent) in [
+            (left, root),
+            (right, root),
+            (shared, left),
+            (shared, right),
+            (shared, shared),
+        ] {
+            builder.add_edge(child, parent, super::NetworkEdge::Head, true);
+        }
+        let original: NetworkGraph<i8> = builder.into();
+        let cycle_hedge = original
+            .graph
+            .iter_crown(shared)
+            .find(|hedge| original.graph.node_id(original.graph.inv(*hedge)) == right)
+            .unwrap();
+        for hidden_hedges in [
+            vec![],
+            vec![cycle_hedge],
+            vec![original.graph.inv(cycle_hedge)],
+            vec![cycle_hedge, original.graph.inv(cycle_hedge)],
+        ] {
+            let mut graph = original.clone();
+            let mut hidden: SuBitGraph = graph.graph.empty_subgraph();
+            for hedge in hidden_hedges {
+                hidden.add(hedge);
+            }
+            for _ in 0..2 {
+                let mut oracle = graph.clone();
+                let roots = {
+                    let tree = oracle
+                        .expr_tree_ignoring(&hidden)
+                        .cast::<ChildVecStore<()>>();
+                    tree.iter_preorder_tree_nodes(&oracle.graph, root)
+                        .map(|node| tree.root_hedge(node).into())
+                        .collect::<Vec<_>>()
+                };
+                oracle.graph.node_store.reroot_many(roots);
+                graph.cache_expr_tree_roots_ignoring(&hidden);
+                assert_eq!(
+                    graph
+                        .graph
+                        .iter_nodes()
+                        .map(|(node, _, _)| node)
+                        .collect::<BTreeSet<_>>(),
+                    oracle
+                        .graph
+                        .iter_nodes()
+                        .map(|(node, _, _)| node)
+                        .collect::<BTreeSet<_>>(),
+                );
+                for (node, _, data) in graph.graph.iter_nodes() {
+                    assert_eq!(data, &oracle.graph[node]);
+                    assert_eq!(
+                        graph
+                            .cached_expr_children_ignoring(node, &hidden)
+                            .into_iter()
+                            .collect::<BTreeSet<_>>(),
+                        oracle
+                            .cached_expr_children_ignoring(node, &hidden)
+                            .into_iter()
+                            .collect::<BTreeSet<_>>(),
+                    );
+                }
+                graph.graph.check().unwrap();
+            }
+        }
+    }
+
+    #[test]
     fn hidden_expression_edges_are_ignored_by_cached_children() {
         let scalar = NetworkGraph::<i8>::scalar(2);
         let scalar_b = NetworkGraph::<i8>::scalar(3);
@@ -3000,9 +4346,9 @@ pub mod test {
                 .all(|child| matches!(&expr.graph[*child], NetworkNode::Leaf(_)))
         );
 
-        let expected = expr.operation_subgraph(op_ref.op_node(), op_ref.children());
-        assert_eq!(op_ref.subgraph(), &expected);
-        assert!(op_ref.subgraph().n_included() >= op_ref.leaf_count());
+        let expected = expr.operation_hedges(op_ref.op_node(), op_ref.children());
+        assert_eq!(op_ref.hedges(), &expected);
+        assert!(op_ref.hedges().len() >= op_ref.leaf_count());
         assert_eq!(op_ref.graph().n_nodes(), node_count);
         assert_eq!(expr.n_nodes(), node_count);
         assert_eq!(expr.graph.n_hedges(), hedge_count);
@@ -3039,14 +4385,212 @@ pub mod test {
         let mut used: SuBitGraph = expr.graph.empty_subgraph();
         for op_ref in &ready {
             assert!(matches!(op_ref.op(), NetworkOp::Sum));
-            assert!(op_ref.subgraph().empty_intersection(&used));
-            used.union_with(op_ref.subgraph());
+            for &hedge in op_ref.hedges() {
+                assert!(!used.includes(&hedge));
+                used.add(hedge);
+            }
             assert!(
                 op_ref
                     .children()
                     .iter()
                     .all(|child| matches!(&expr.graph[*child], NetworkNode::Leaf(_)))
             );
+        }
+    }
+
+    #[test]
+    fn sparse_ready_batches_match_dense_conflict_filter_with_hidden_edges() {
+        let tensor_a = NetworkGraph::<i8>::tensor(
+            &Canonicalized::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .into_canonical(),
+            NetworkLeaf::LocalTensor(1),
+        );
+        let tensor_b = NetworkGraph::<i8>::tensor(
+            &Canonicalized::<OrderedStructure>::from_iter([
+                Minkowski {}.new_slot(1, 2),
+                Minkowski {}.new_slot(2, 2),
+            ])
+            .into_canonical(),
+            NetworkLeaf::LocalTensor(2),
+        );
+        let mut expr = (tensor_a + tensor_b) * (NetworkGraph::scalar(2) + NetworkGraph::scalar(3));
+        expr.merge_ops();
+        expr.cache_expr_tree_roots();
+
+        let tree = expr.expr_tree().cast::<ChildVecStore<()>>();
+        let root = expr.graph.node_id(expr.head());
+        let child = tree.iter_children(root, &expr.graph).next().unwrap();
+        let expression_hedge = tree.root_hedge(child);
+        let slot_hedge = expr
+            .graph
+            .iter_hedges()
+            .map(|(hedge, _)| hedge)
+            .find(|hedge| expr.graph[[hedge]].is_slot() && expr.graph.inv(*hedge) != *hedge)
+            .unwrap();
+
+        for hidden_hedges in [
+            vec![],
+            vec![expression_hedge],
+            vec![expression_hedge, expr.graph.inv(expression_hedge)],
+            vec![slot_hedge],
+            vec![slot_hedge, expr.graph.inv(slot_hedge)],
+        ] {
+            let mut graph = expr.clone();
+            let mut hidden: SuBitGraph = graph.graph.empty_subgraph();
+            for hedge in hidden_hedges {
+                hidden.add(hedge);
+            }
+            for _ in 0..2 {
+                let mut preorder_oracle = graph.clone();
+                let old_roots = {
+                    let tree = preorder_oracle
+                        .expr_tree_ignoring(&hidden)
+                        .cast::<ChildVecStore<()>>();
+                    let root = preorder_oracle.graph.node_id(preorder_oracle.head());
+                    tree.iter_preorder_tree_nodes(&preorder_oracle.graph, root)
+                        .map(|node| tree.root_hedge(node).into())
+                        .collect::<Vec<_>>()
+                };
+                preorder_oracle.graph.node_store.reroot_many(old_roots);
+                graph.cache_expr_tree_roots_ignoring(&hidden);
+                assert_eq!(
+                    graph
+                        .graph
+                        .iter_nodes()
+                        .map(|(node, _, _)| node)
+                        .collect::<BTreeSet<_>>(),
+                    preorder_oracle
+                        .graph
+                        .iter_nodes()
+                        .map(|(node, _, _)| node)
+                        .collect::<BTreeSet<_>>(),
+                );
+                for (node, _, data) in graph.graph.iter_nodes() {
+                    assert_eq!(data, &preorder_oracle.graph[node]);
+                    assert_eq!(
+                        graph
+                            .cached_expr_children_ignoring(node, &hidden)
+                            .into_iter()
+                            .collect::<BTreeSet<_>>(),
+                        preorder_oracle
+                            .cached_expr_children_ignoring(node, &hidden)
+                            .into_iter()
+                            .collect::<BTreeSet<_>>(),
+                    );
+                }
+            }
+
+            // Retain the dense intersection/union admission rule as an oracle
+            // for complete operation payloads, independently of traversal order.
+            let mut used: SuBitGraph = graph.graph.empty_subgraph();
+            let mut expected = Vec::new();
+            for node in graph.cached_expr_preorder_nodes_ignoring(&hidden) {
+                let Some((op, children)) = graph.ready_operation_parts_ignoring(node, &hidden)
+                else {
+                    continue;
+                };
+                let mut subgraph: SuBitGraph = graph.graph.empty_subgraph();
+                for hedge in std::iter::once(node)
+                    .chain(children.iter().copied())
+                    .flat_map(|node| graph.graph.iter_crown(node))
+                {
+                    if !hidden.includes(&hedge) && !hidden.includes(&graph.graph.inv(hedge)) {
+                        subgraph.add(hedge);
+                    }
+                }
+                if !subgraph.empty_intersection(&used) {
+                    continue;
+                }
+                used.union_with(&subgraph);
+                expected.push((
+                    node,
+                    *op,
+                    children,
+                    subgraph.included_iter().collect::<Vec<_>>(),
+                ));
+            }
+            assert!(!expected.is_empty());
+            let expected = expected
+                .into_iter()
+                .map(|(node, op, children, hedges)| {
+                    (
+                        node,
+                        (
+                            op,
+                            children.into_iter().collect::<BTreeSet<_>>(),
+                            hedges.into_iter().collect::<BTreeSet<_>>(),
+                        ),
+                    )
+                })
+                .collect::<BTreeMap<_, _>>();
+
+            for operations in [
+                graph.ready_operations_from_tree_ignoring(&hidden),
+                graph
+                    .ready_operation_tree_refs_ignoring(&hidden)
+                    .iter()
+                    .map(super::NetworkOperation::from)
+                    .collect(),
+                graph
+                    .ready_operation_refs_ignoring(&hidden)
+                    .iter()
+                    .map(super::NetworkOperation::from)
+                    .collect(),
+            ] {
+                let actual = operations
+                    .into_iter()
+                    .map(|op| {
+                        (
+                            op.op_node(),
+                            (
+                                *op.op(),
+                                op.children().iter().copied().collect::<BTreeSet<_>>(),
+                                op.hedges().iter().copied().collect::<BTreeSet<_>>(),
+                            ),
+                        )
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                assert_eq!(actual, expected);
+            }
+        }
+    }
+
+    #[test]
+    fn ready_batch_reports_complete_visible_incidence() {
+        for count in [16, 4096] {
+            let mut terms = (0..count)
+                .map(|_| NetworkGraph::<i8>::scalar(2) * NetworkGraph::scalar(3))
+                .collect::<Vec<_>>();
+            while terms.len() > 1 {
+                let mut pairs = terms.into_iter();
+                terms =
+                    std::iter::from_fn(|| pairs.next().map(|left| left + pairs.next().unwrap()))
+                        .collect();
+            }
+            let mut graph = terms.pop().unwrap();
+            graph.merge_ops();
+            graph.cache_expr_tree_roots();
+            let hidden: SuBitGraph = graph.graph.empty_subgraph();
+            let operations = graph.ready_operations_from_tree_ignoring(&hidden);
+            assert!(!operations.is_empty());
+            assert!(
+                operations
+                    .iter()
+                    .all(|op| matches!(op.op(), NetworkOp::Product))
+            );
+            for op in &operations {
+                let expected = std::iter::once(op.op_node())
+                    .chain(op.children().iter().copied())
+                    .flat_map(|node| graph.graph.iter_crown(node))
+                    .collect::<BTreeSet<_>>();
+                assert_eq!(
+                    op.hedges().iter().copied().collect::<BTreeSet<_>>(),
+                    expected
+                );
+            }
         }
     }
 
@@ -3130,8 +4674,10 @@ pub mod test {
 
         let mut union: SuBitGraph = expr.graph.empty_subgraph();
         for op_ref in batch.iter() {
-            assert!(op_ref.subgraph().empty_intersection(&union));
-            union.union_with(op_ref.subgraph());
+            for &hedge in op_ref.hedges() {
+                assert!(!union.includes(&hedge));
+                union.add(hedge);
+            }
         }
 
         assert_eq!(batch.subgraph(), &union);

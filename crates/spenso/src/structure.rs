@@ -56,6 +56,13 @@ pub mod representation;
 pub mod slot;
 pub use ordered::OrderedStructure;
 
+/// Explicit-index canonical storage with its original logical axis order.
+///
+/// Use the checked conversion from `PartialStructure` when unresolved ports
+/// must be rejected rather than assigned fresh indices.
+pub type IndexedStructure =
+    Canonicalized<OrderedStructure<representation::LibraryRep, abstract_index::AbstractIndex>>;
+
 pub mod smart_shadow;
 pub use smart_shadow::SmartShadowStructure;
 
@@ -82,6 +89,14 @@ pub trait HasStructure {
     fn structure(&self) -> &Self::Structure;
     fn mut_structure(&mut self) -> &mut Self::Structure;
     fn scalar(self) -> Option<Self::Scalar>;
+
+    /// Extract a scalar while preserving contraction boundaries under powers.
+    fn scalar_power_base(self) -> Option<Self::Scalar>
+    where
+        Self: Sized,
+    {
+        self.scalar()
+    }
     fn scalar_ref(&self) -> Option<Self::ScalarRef<'_>>;
     fn map_same_structure(self, f: impl FnOnce(Self::Structure) -> Self::Structure) -> Self;
 
@@ -854,6 +869,10 @@ pub enum StructureError {
     EmptyStructure(SlotError),
     #[error("wrong number of arguments {0}, expected {1}")]
     WrongNumberOfArguments(usize, usize),
+    #[error("axis {axis} is unresolved; slots() requires an explicit index on every axis")]
+    ExpectedExplicitSlot { axis: usize },
+    #[error("axis {axis} has an explicit index; representations() requires unresolved axes")]
+    ExpectedRepresentation { axis: usize },
     #[error("invalid pending index permutation: {0}")]
     InvalidIndexPermutation(String),
     // #[error("Non traced out indices before merger {0}")]

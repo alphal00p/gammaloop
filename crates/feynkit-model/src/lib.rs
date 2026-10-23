@@ -11,6 +11,7 @@ mod card;
 mod error;
 mod evaluation;
 mod model;
+mod scalar_bindings;
 
 pub use card::{ComplexValue, ParameterCard};
 pub use error::{EntityKind, ModelError, ModelValidationError};
@@ -19,8 +20,9 @@ pub use evaluation::{
     ModelExpression, RecomputeError,
 };
 pub use model::{
-    Coupling, CouplingId, LorentzStructure, LorentzStructureId, Model, ModelFingerprint,
-    ModelFormFactor, ModelFormFactorId, ModelFunction, ModelFunctionId, Order, OrderId, Parameter,
-    ParameterId, ParameterNature, ParameterType, Particle, ParticleId, Propagator, PropagatorId,
-    VertexRule, VertexRuleId,
+    Coupling, CouplingId, LineKind, LineStyle, LorentzStructure, LorentzStructureId, Model,
+    ModelFingerprint, ModelFormFactor, ModelFormFactorId, ModelFunction, ModelFunctionId, Order,
+    OrderId, Parameter, ParameterId, ParameterNature, ParameterType, Particle, ParticleId,
+    Propagator, PropagatorId, VertexRule, VertexRuleId,
 };
+pub use scalar_bindings::resolve_scalar_bindings;

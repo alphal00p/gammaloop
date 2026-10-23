@@ -11,7 +11,7 @@ fn normalized_scalar_and_standard_model_fixtures_load() {
         .expect("the normalized Standard Model fixture should remain compatible");
     assert_eq!(standard_model.name(), "sm");
     assert_eq!(standard_model.particles().len(), 43);
-    assert_eq!(standard_model.vertex_rules().len(), 153);
+    assert_eq!(standard_model.vertex_rules().len(), 163);
 }
 
 #[test]

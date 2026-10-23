@@ -73,7 +73,7 @@ Linnet types:
 ```python
 from dataclasses import dataclass
 
-from linnet_py import build, edge, node, sink, source
+from symbolica.community.graph import build, edge, node, sink, source
 
 
 @dataclass
@@ -136,7 +136,7 @@ index, or live-node key. Incremental endpoints resolve a current live `Node`, na
 named `NodeSpec`:
 
 ```python
-from linnet_py import Compass, Graph, edge, node, sink, source
+from symbolica.community.graph import Compass, Graph, edge, node, sink, source
 
 graph = Graph()
 graph.add_node(node("in", data=UserNodeData(object()), label="incoming"))
@@ -177,7 +177,7 @@ or indexed nodes and edges, exact half-edge indices, or live-view predicates, th
 object with Linnet's topology algorithms and owning transformations:
 
 ```python
-from linnet_py import DirectionBasis
+from symbolica.community.graph import DirectionBasis
 
 # Explicit selections are unioned. Selecting a node includes its incident crown.
 selected = graph.subgraph(nodes=["in"], edges=["propagator"])
@@ -281,24 +281,24 @@ surfaces. `DrawingSelectors` maps arbitrary Python data to detached typed drawin
 time. Layout passes retain their order:
 
 ```python
-from linnet_py import (
+from symbolica.community.graph import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
     LayoutAlgorithm,
     LayoutDirection,
-    LayoutOptions,
+    LayoutSettings,
     Length,
-    RenderConfig,
+    RenderSettings,
     Stroke,
 )
 
-layouts = LayoutOptions(
+layouts = LayoutSettings(
     algorithm=LayoutAlgorithm.Force,
     direction=LayoutDirection.Right,
     steps=200,
 ).then(label_steps=80)
-graph.render_config = RenderConfig(
+graph.render_config = RenderSettings(
     title="Example",
     layouts=layouts,
     selectors=DrawingSelectors(
@@ -314,7 +314,7 @@ graph.render_config = RenderConfig(
     ),
 )
 
-output = graph.render("diagram.pdf")
+output = graph.render().save("diagram.pdf")
 svg = graph.to_svg()
 graph  # the final expression in a notebook renders inline
 ```
@@ -345,7 +345,7 @@ closed native settings through `RenderConfig.template_options`. `INHERIT` leaves
 configuration layer unchanged, while `None` becomes Typst `none`.
 
 ```python
-domain_template = RenderConfig(
+domain_template = RenderSettings(
     template="templates/domain-figure.typ",
     source_root=".",
     template_options={
@@ -381,13 +381,13 @@ payload; custom particle styling works the same way and is not a special Linnet 
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from symbolica.community.graph import (
     Color,
     DrawingSelectors,
     EdgeDrawing,
     Length,
     MathSymbol,
-    RenderConfig,
+    RenderSettings,
     Stroke,
 )
 
@@ -407,7 +407,7 @@ def particle_drawing(value):
     )
 
 
-particle_style_example = RenderConfig(
+particle_style_example = RenderSettings(
     selectors=DrawingSelectors(edge=particle_drawing),
 )
 ```
@@ -429,7 +429,7 @@ once, then updates coordinates from `LayoutStream.from_dot(...)` frames. It also
 in an exported Marimo WebAssembly notebook with the bundled Emscripten wheel.
 
 ```python
-from linnet_py import LayoutStream
+from symbolica.community.graph import LayoutStream
 
 stream = LayoutStream.from_dot("digraph { a -> b; b -> c; c -> a; }", every=4)
 node_names, endpoints = stream.node_names, stream.endpoints
@@ -451,7 +451,7 @@ existing Python `Graph` or its payloads.
 Typst callbacks that require measured geometry use an explicit module function reference:
 
 ```python
-from linnet_py import TypstModule
+from symbolica.community.graph import TypstModule
 
 styles = TypstModule.file("styles.typ")
 graph.node("in").drawing.label = styles.content("incoming_label")
@@ -500,7 +500,7 @@ unique DOT representation. Supply a `DotCodec` to `Graph.from_dot`, `Graph.from_
 ```python
 from dataclasses import dataclass
 
-from linnet_py import (
+from symbolica.community.graph import (
     DotCodec,
     DotEdgeData,
     DotHalfEdgeData,

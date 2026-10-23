@@ -5,7 +5,11 @@
 
 #![forbid(unsafe_code)]
 
-use std::path::{Path, PathBuf};
+use std::{
+    collections::BTreeMap,
+    ffi::CString,
+    path::{Path, PathBuf},
+};
 
 use feynkit_model::{Model, ModelError, ParameterCard};
 use pyo3::{
@@ -144,6 +148,8 @@ pub enum UfoLoadError {
     },
 }
 
+type DisplayNames = (Option<String>, Option<String>);
+
 fn load_model(
     py: Python<'_>,
     path: &Path,
@@ -152,6 +158,26 @@ fn load_model(
     let input_model_path = path.to_str().ok_or_else(|| UfoLoadError::NonUtf8Path {
         path: path.to_path_buf(),
     })?;
+    // The Python loader creates symbols while parsing parameter expressions.
+    // Declare their printers first, before even a forward reference can do so.
+    let metadata_source = CString::new(include_str!("model_metadata.py")).unwrap();
+    let (labels, source_model) = (|| {
+        PyModule::from_code(
+            py,
+            &metadata_source,
+            c"model_metadata.py",
+            c"_model_metadata",
+        )?
+        .getattr("model_metadata")?
+        .call1((input_model_path,))?
+        .extract::<(Vec<(String, DisplayNames)>, Option<Py<PyAny>>)>()
+    })()
+    .map_err(|source| UfoLoadError::Load { source })?;
+    let labels: BTreeMap<_, _> = labels.into_iter().collect();
+    for (name, (texname, typstname)) in &labels {
+        Model::register_parameter_symbol(name, texname.as_deref(), typstname.as_deref())
+            .map_err(|source| UfoLoadError::ModelJson { source })?;
+    }
     let commands = PyModule::import(py, "ufo_model_loader.commands")
         .map_err(|source| UfoLoadError::Import { source })?;
     let loader = commands
@@ -186,8 +212,116 @@ fn load_model(
         .map_err(|source| UfoLoadError::Output { source })?;
 
     // to_json() -> String
-    let model_json = to_json(py, &py_model)?;
+    let mut model_json = to_json(py, &py_model)?;
     let card_json = to_json(py, &py_card)?;
+
+    // Preserve metadata from the captured source module. The loader restores
+    // Python's import cache, which may contain another UFO with the same name.
+    // Keep unknown hypercharge as null rather than inventing a zero.
+    let metadata = (|| -> Result<Option<String>, PyErr> {
+        let Some(module) = source_model.as_ref() else {
+            return Ok(None);
+        };
+        let module = module.bind(py);
+        let metadata = PyDict::new(py);
+        if module.hasattr("covariant_cut_multiplets")? {
+            metadata.set_item(
+                "covariant_cut_multiplets",
+                module.getattr("covariant_cut_multiplets")?,
+            )?;
+        }
+        let particles = PyDict::new(py);
+        if module.hasattr("all_particles")? {
+            let fraction = py.import("fractions")?.getattr("Fraction")?;
+            for particle in module.getattr("all_particles")?.try_iter()? {
+                let particle = particle?;
+                let numbers = PyDict::new(py);
+                if particle.hasattr("chemical_potential")?
+                    && !particle.getattr("chemical_potential")?.is_none()
+                {
+                    numbers.set_item(
+                        "chemical_potential",
+                        particle.getattr("chemical_potential")?.getattr("name")?,
+                    )?;
+                }
+                for field in ["typstname", "antitypstname"] {
+                    if particle.hasattr(field)? {
+                        numbers.set_item(field, particle.getattr(field)?)?;
+                    }
+                }
+                for (field, attribute) in [
+                    ("charge", "charge"),
+                    ("y_charge", "Y"),
+                    ("y_charge_right", "YRight"),
+                ] {
+                    let attribute = if field == "charge" && particle.hasattr("charge_exact")? {
+                        "charge_exact"
+                    } else {
+                        attribute
+                    };
+                    if particle.hasattr(attribute)? && !particle.getattr(attribute)?.is_none() {
+                        // Fraction strings stay exact. Existing float-valued UFO
+                        // metadata retains its decimal value; never guess a charge
+                        // from PDG codes or silently round to a small denominator.
+                        let value = particle.getattr(attribute)?.str()?;
+                        let exact = fraction.call1((value,))?.str()?;
+                        numbers.set_item(field, exact)?;
+                    } else {
+                        numbers.set_item(field, py.None())?;
+                    }
+                }
+                particles.set_item(particle.getattr("name")?, numbers)?;
+            }
+        }
+        metadata.set_item("particles", particles)?;
+        py.import("json")?
+            .call_method1("dumps", (metadata,))?
+            .extract()
+            .map(Some)
+    })()
+    .map_err(|source| UfoLoadError::Output { source })?;
+    let enrich = || -> Result<String, serde_json::Error> {
+        let mut serialized: serde_json::Value = serde_json::from_str(&model_json)?;
+        let metadata: serde_json::Value =
+            serde_json::from_str(metadata.as_deref().unwrap_or("{}"))?;
+        if let Some(declaration) = metadata.get("covariant_cut_multiplets") {
+            serialized["covariant_cut_multiplets"] = declaration.clone();
+        }
+        if let Some(particles) = serialized["particles"].as_array_mut() {
+            for particle in particles {
+                if let Some(numbers) =
+                    metadata["particles"].get(particle["name"].as_str().unwrap_or_default())
+                {
+                    for field in [
+                        "charge",
+                        "y_charge",
+                        "y_charge_right",
+                        "typstname",
+                        "antitypstname",
+                        "chemical_potential",
+                    ] {
+                        if let Some(value) = numbers.get(field) {
+                            particle[field] = value.clone();
+                        }
+                    }
+                }
+            }
+        }
+        if let Some(parameters) = serialized["parameters"].as_array_mut() {
+            for parameter in parameters {
+                if let Some((texname, typstname)) =
+                    labels.get(parameter["name"].as_str().unwrap_or_default())
+                {
+                    parameter["texname"] = serde_json::to_value(texname)?;
+                    parameter["typstname"] = serde_json::to_value(typstname)?;
+                }
+            }
+        }
+        serde_json::to_string(&serialized)
+    };
+    model_json = enrich().map_err(|source| UfoLoadError::ModelJson {
+        source: source.into(),
+    })?;
 
     // Deserialize into the standalone Rust types.
     let model =
@@ -260,8 +394,22 @@ mod tests {
     fn forwards_options_and_deserializes_json() {
         Python::initialize();
         Python::attach(|py| {
+            let temporary = PyModule::import(py, "tempfile")
+                .unwrap()
+                .getattr("TemporaryDirectory")
+                .unwrap()
+                .call0()
+                .unwrap();
+            let directory = temporary
+                .getattr("name")
+                .unwrap()
+                .extract::<PathBuf>()
+                .unwrap();
+            let model_path = directory.join("scalar.json");
+            std::fs::write(&model_path, MODEL_JSON).unwrap();
             let code = format!(
                 r#"
+import contextlib
 import sys
 import types
 
@@ -281,12 +429,26 @@ def load_model(**kwargs):
     return JsonValue(MODEL_JSON), JsonValue(CARD_JSON)
 
 package = types.ModuleType("ufo_model_loader")
+package.__path__ = []
+common = types.ModuleType("ufo_model_loader.common")
+common.DATA_PATH = ""
+raw = types.ModuleType("ufo_model_loader.raw")
+
+@contextlib.contextmanager
+def imported_ufo_module(source):
+    yield sys.modules[source.name]
+
+raw.imported_ufo_module = imported_ufo_module
 commands = types.ModuleType("ufo_model_loader.commands")
 commands.load_model = load_model
 commands.seen = seen
 package.commands = commands
+package.common = common
+package.raw = raw
 sys.modules["ufo_model_loader"] = package
 sys.modules["ufo_model_loader.commands"] = commands
+sys.modules["ufo_model_loader.common"] = common
+sys.modules["ufo_model_loader.raw"] = raw
 "#
             );
             PyModule::from_code(
@@ -301,7 +463,7 @@ sys.modules["ufo_model_loader.commands"] = commands
                 .restriction_name("massless")
                 .simplify_model(false)
                 .wrap_indices_in_lorentz_structures(false);
-            let loaded = loader.load(py, "/models/scalar").unwrap();
+            let loaded = loader.load(py, &model_path).unwrap();
             assert_eq!(loaded.model.name(), "scalar");
             assert_eq!(loaded.parameters["mass"].re, 2.5);
             assert!(loaded.model.particle("s").unwrap().is_propagating());
@@ -310,7 +472,7 @@ sys.modules["ufo_model_loader.commands"] = commands
             assert_eq!(
                 loaded.diagnostics,
                 UfoLoadDiagnostics {
-                    source: PathBuf::from("/models/scalar"),
+                    source: model_path.clone(),
                     options: loader.options().clone(),
                     order_count: 1,
                     model_parameter_count: 2,
@@ -337,7 +499,7 @@ sys.modules["ufo_model_loader.commands"] = commands
                     .unwrap()
                     .extract::<String>()
                     .unwrap(),
-                "/models/scalar"
+                model_path.to_str().unwrap()
             );
             assert_eq!(
                 seen.get_item("restriction_name")
@@ -370,8 +532,49 @@ sys.modules["ufo_model_loader.commands"] = commands
                 .unwrap()
                 .cast_into::<PyDict>()
                 .unwrap();
+            let source = PyModule::from_code(
+                py,
+                c"from types import SimpleNamespace\nall_parameters = [SimpleNamespace(name='ZERO'), SimpleNamespace(name='mass')]\nall_particles = [SimpleNamespace(name='s', charge=0.6666666666666666, charge_exact='2/3', Y='1/3', YRight='4/3')]",
+                c"scalar.py", c"scalar",
+            ).unwrap();
+            modules.set_item("scalar", &source).unwrap();
+            let model_directory = directory.join("scalar");
+            std::fs::create_dir(&model_directory).unwrap();
+            let exact = loader.load(py, &model_directory).unwrap();
+            let particle = exact.model.particle("s").unwrap();
+            assert_eq!(particle.charge.to_string(), "2/3");
+            assert_eq!(particle.y_charge.as_ref().unwrap().to_string(), "1/3");
+            assert_eq!(particle.y_charge_right.as_ref().unwrap().to_string(), "4/3");
+            let particle = source
+                .getattr("all_particles")
+                .unwrap()
+                .get_item(0)
+                .unwrap();
+            particle.delattr("Y").unwrap();
+            particle.setattr("YRight", py.None()).unwrap();
+            let unknown = loader.load(py, &model_directory).unwrap();
+            assert!(
+                unknown
+                    .model
+                    .particle("s")
+                    .unwrap()
+                    .weak_isospin()
+                    .is_none()
+            );
+            assert!(
+                unknown
+                    .model
+                    .particle("s")
+                    .unwrap()
+                    .weak_isospin_right()
+                    .is_none()
+            );
+            modules.del_item("scalar").unwrap();
             modules.del_item("ufo_model_loader.commands").unwrap();
+            modules.del_item("ufo_model_loader.raw").unwrap();
+            modules.del_item("ufo_model_loader.common").unwrap();
             modules.del_item("ufo_model_loader").unwrap();
+            temporary.call_method0("cleanup").unwrap();
         });
     }
 }

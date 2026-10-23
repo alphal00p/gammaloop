@@ -91,12 +91,9 @@ pub(super) fn render(
         ));
     }
     if let Some(graph) = graph {
-        let object = Py::new(py, PyFeynmanDiagram::from(graph.clone()))?;
-        match object.bind(py).call_method0("to_html") {
-            Ok(value) => html.push_str(&format!(
-                "<div class=\"vk-graph\">{}</div>",
-                value.extract::<String>()?
-            )),
+        let object = PyFeynmanDiagram::from(graph.clone());
+        match object.to_html(py, None, None, false, None, None) {
+            Ok(value) => html.push_str(&format!("<div class=\"vk-graph\">{}</div>", value)),
             Err(error) if error.is_instance_of::<PyImportError>(py) => html.push_str(&format!(
                 "<div class=\"vk-warning\">Graph preview unavailable: {}</div>",
                 escape(&error.to_string())

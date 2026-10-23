@@ -473,13 +473,39 @@ impl<V> ForestNodeStore for ParentChildStore<V> {
             return;
         }
 
-        // Reuse the proven swap logic from ChildVecStore to keep parent/child links consistent.
-        let tmp = ParentChildStore {
-            nodes: std::mem::take(&mut self.nodes),
+        // Apply the same pointer renaming as ChildVecStore's swap without converting
+        // the whole store. Only these nodes can contain references to a or b.
+        let mut affected = vec![a, b];
+        for id in [a, b] {
+            affected.extend(self.iter_children(id));
+            let node = &self.nodes[id.0];
+            affected.extend([node.neighbor_left, node.neighbor_right]);
+            if let ParentId::Node(parent) = node.parent_pointer.parent {
+                affected.push(parent);
+            }
+        }
+        affected.sort_unstable();
+        affected.dedup();
+
+        let rename = |id: &mut TreeNodeId| {
+            if *id == a {
+                *id = b;
+            } else if *id == b {
+                *id = a;
+            }
         };
-        let mut as_vec: ChildVecStore<V> = tmp.into();
-        as_vec.swap(a, b);
-        *self = ParentChildStore::from(as_vec);
+        for id in affected {
+            let node = &mut self.nodes[id.0];
+            if let ParentId::Node(parent) = &mut node.parent_pointer.parent {
+                rename(parent);
+            }
+            if let Some(child) = &mut node.child {
+                rename(child);
+            }
+            rename(&mut node.neighbor_left);
+            rename(&mut node.neighbor_right);
+        }
+        self.nodes.swap(a.0, b.0);
     }
 
     fn to_store(self) -> Self::Store<Self::NodeData> {
@@ -704,12 +730,265 @@ impl<V> From<ParentChildStore<V>> for ParentPointerStore<V> {
 
 impl<V> From<ParentPointerStore<V>> for ParentChildStore<V> {
     fn from(value: ParentPointerStore<V>) -> Self {
-        ChildVecStore::from(value).into()
+        let mut nodes: Vec<_> = value
+            .nodes
+            .into_iter()
+            .enumerate()
+            .map(|(index, parent_pointer)| {
+                let id = TreeNodeId(index);
+                PCNode {
+                    parent_pointer,
+                    child: None,
+                    neighbor_left: id,
+                    neighbor_right: id,
+                }
+            })
+            .collect();
+
+        // Parent-pointer conversion orders siblings by their original node ID.
+        // Link that same cyclic list directly, without per-parent child vectors
+        // or moving the payload through an intermediate forest store.
+        for index in 0..nodes.len() {
+            if let ParentId::Node(parent) = nodes[index].parent_pointer.parent {
+                let id = TreeNodeId(index);
+                if let Some(first) = nodes[parent.0].child {
+                    let last = nodes[first.0].neighbor_left;
+                    nodes[last.0].neighbor_right = id;
+                    nodes[index].neighbor_left = last;
+                    nodes[index].neighbor_right = first;
+                    nodes[first.0].neighbor_left = id;
+                } else {
+                    nodes[parent.0].child = Some(id);
+                }
+            }
+        }
+        Self { nodes }
     }
 }
 
 #[cfg(test)]
 mod test {
+    use crate::{
+        half_edge::{
+            involution::Hedge,
+            nodestore::NodeStorageOps,
+            subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
+        },
+        tree::{
+            child_vec::ChildVecStore, Forest, ForestNodeStore, ForestNodeStoreDown, RootId,
+            TreeNodeId,
+        },
+    };
+    use std::collections::BTreeSet;
+
+    use super::ParentChildStore;
+
+    #[test]
+    fn parent_pointer_conversion_preserves_all_node_fields() {
+        use crate::tree::parent_pointer::{PPNode, ParentId, ParentPointerStore};
+
+        // Include forward parents, cycles, self-parents, dataless nodes and
+        // pointing roots. Conversion preserves these raw fields; validation of
+        // a tree's shape remains the existing separate boundary.
+        for count in 0..=5usize {
+            let choices = count + 4;
+            for mut code in 0..choices.pow(count as u32) {
+                let source: ParentPointerStore<_> = (0..count)
+                    .map(|index| {
+                        let choice = code % choices;
+                        code /= choices;
+                        let parent = match choice.checked_sub(count) {
+                            None => ParentId::Node(TreeNodeId(choice)),
+                            Some(0) => ParentId::Root(RootId(0)),
+                            Some(1) => ParentId::Root(RootId(usize::MAX)),
+                            Some(2) => ParentId::PointingRoot(TreeNodeId(0)),
+                            _ => ParentId::PointingRoot(TreeNodeId(usize::MAX)),
+                        };
+                        PPNode {
+                            parent,
+                            data: (index % 2 == 0).then_some(index),
+                        }
+                    })
+                    .collect();
+                let expected: ParentChildStore<_> = ChildVecStore::from(source.clone()).into();
+                let actual = ParentChildStore::from(source);
+                assert_eq!(actual.nodes, expected.nodes);
+            }
+        }
+    }
+
+    #[test]
+    fn parent_pointer_conversion_preserves_nonclone_payloads_and_invalid_parent_drop() {
+        use crate::tree::parent_pointer::{PPNode, ParentId, ParentPointerStore};
+        use std::{cell::RefCell, panic::AssertUnwindSafe, rc::Rc};
+
+        struct Payload(usize, Rc<RefCell<Vec<usize>>>);
+        impl Drop for Payload {
+            fn drop(&mut self) {
+                self.1.borrow_mut().push(self.0);
+            }
+        }
+        for parent in [0, 1, 2, 3, usize::MAX] {
+            let mut results = Vec::new();
+            for direct in [false, true] {
+                let drops = Rc::new(RefCell::new(Vec::new()));
+                let source: ParentPointerStore<_> = (0..3)
+                    .map(|index| PPNode {
+                        parent: if index == 1 {
+                            ParentId::Node(TreeNodeId(parent))
+                        } else {
+                            ParentId::Root(RootId(index))
+                        },
+                        data: Some(Payload(index, drops.clone())),
+                    })
+                    .collect();
+                let outcome = std::panic::catch_unwind(AssertUnwindSafe(|| {
+                    let converted: ParentChildStore<_> = if direct {
+                        ParentChildStore::from(source)
+                    } else {
+                        ChildVecStore::from(source).into()
+                    };
+                    assert!(drops.borrow().is_empty());
+                    drop(converted);
+                }));
+                results.push((outcome.is_ok(), drops.borrow().clone()));
+            }
+            assert_eq!(results[0], results[1], "parent {parent}");
+            assert_eq!(results[0].0, parent < 3);
+            assert_eq!(results[0].1, [0, 1, 2]);
+        }
+    }
+
     #[test]
     fn create() {}
+
+    #[test]
+    fn swaps_match_child_vec_for_all_small_forests() {
+        // Each node is either a new root or a child of an earlier node. Enumerate
+        // all such six-node forests, then also change their index order serially.
+        for forest_code in 0..720 {
+            let mut code = forest_code;
+            let mut original = ParentChildStore { nodes: Vec::new() };
+            let mut roots = 0;
+            for id in 0..6 {
+                let parent = code % (id + 1);
+                code /= id + 1;
+                if parent == id {
+                    original.add_root(id, RootId(roots));
+                    roots += 1;
+                } else {
+                    original.add_child(id, TreeNodeId(parent));
+                }
+            }
+            let mut serial = original.clone();
+            let mut serial_oracle = ChildVecStore::from(original.clone());
+            for a in 0..6 {
+                for b in 0..6 {
+                    let a = TreeNodeId(a);
+                    let b = TreeNodeId(b);
+                    let mut actual = original.clone();
+                    let mut oracle = ChildVecStore::from(original.clone());
+                    actual.swap(a, b);
+                    oracle.swap(a, b);
+                    assert_eq!(
+                        actual
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                        oracle
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                    );
+                    for (node, data) in actual.iter_nodes() {
+                        assert_eq!(data, oracle[node].as_ref());
+                        assert_eq!(actual.parent(node), oracle.parent(node));
+                        assert_eq!(
+                            actual.iter_children(node).collect::<BTreeSet<_>>(),
+                            oracle.iter_children(node).collect::<BTreeSet<_>>(),
+                        );
+                    }
+                    actual.validate().unwrap();
+
+                    serial.swap(a, b);
+                    serial_oracle.swap(a, b);
+                    assert_eq!(
+                        serial
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                        serial_oracle
+                            .iter_nodes()
+                            .map(|(node, _)| node)
+                            .collect::<BTreeSet<_>>(),
+                    );
+                    for (node, data) in serial.iter_nodes() {
+                        assert_eq!(data, serial_oracle[node].as_ref());
+                        assert_eq!(serial.parent(node), serial_oracle.parent(node));
+                        assert_eq!(
+                            serial.iter_children(node).collect::<BTreeSet<_>>(),
+                            serial_oracle.iter_children(node).collect::<BTreeSet<_>>(),
+                        );
+                    }
+                    serial.validate().unwrap();
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn deletion_matches_child_vec_for_every_subset() {
+        let mut forest: Forest<usize, ParentChildStore<usize>> = Forest::new();
+        let (root, _) = forest.add_root(0, 0);
+        let first = forest.add_child(root, 1);
+        forest.add_child(root, 2);
+        forest.add_child(first, 3);
+        forest.add_child(first, 4);
+        let (other, _) = forest.add_root(5, 1);
+        forest.add_child(other, 6);
+        forest.add_child(other, 7);
+        forest.add_root(8, 2);
+
+        // Include empty/full deletion, deleted roots, split trees and isolated roots.
+        for mask in 0..512 {
+            let mut deleted = SuBitGraph::empty(9);
+            for id in 0..9 {
+                if mask & (1 << id) != 0 {
+                    deleted.add(Hedge(id));
+                }
+            }
+            let mut actual = forest.clone();
+            let mut oracle = forest.clone().cast::<ChildVecStore<usize>>();
+            actual.delete(&deleted);
+            oracle.delete(&deleted);
+            let actual_values = actual
+                .iter_nodes()
+                .map(|(node, data)| {
+                    (
+                        data.copied(),
+                        actual[actual.root(node)],
+                        actual
+                            .iter_children(node)
+                            .map(|child| actual[child])
+                            .collect::<BTreeSet<_>>(),
+                    )
+                })
+                .collect::<BTreeSet<_>>();
+            let expected_values = oracle
+                .iter_nodes()
+                .map(|(node, data)| {
+                    (
+                        data.copied(),
+                        oracle[oracle.root(node)],
+                        oracle
+                            .iter_children(node)
+                            .map(|child| oracle[child])
+                            .collect::<BTreeSet<_>>(),
+                    )
+                })
+                .collect::<BTreeSet<_>>();
+            assert_eq!(actual_values, expected_values);
+            actual.validate_structure().unwrap();
+        }
+    }
 }

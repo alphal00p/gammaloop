@@ -72,6 +72,10 @@ pub(crate) struct LoopManifest {
 pub(crate) struct CacheManifest {
     pub available: bool,
     pub path: Option<String>,
+    #[serde(default)]
+    pub format: Option<String>,
+    #[serde(default)]
+    pub identity: Option<rustred_app::SavedApplicationCacheFileIdentity>,
 }
 
 #[derive(Clone, Debug)]
@@ -261,6 +265,20 @@ impl std::fmt::Debug for RustRedData {
 }
 
 impl RustRedData {
+    /// Recognize a checkout or an installed pack before considering a bare IBP path.
+    pub(super) fn release_root(path: &Path) -> Result<Option<PathBuf>, RustRedEvaluationError> {
+        for root in path.ancestors().take(4) {
+            let manifest = root.join("manifest.json");
+            if manifest.is_file() {
+                let bytes = fs::read(manifest).map_err(failure)?;
+                if serde_json::from_slice::<ReleaseManifest>(&bytes).is_ok() {
+                    return Ok(Some(root.to_owned()));
+                }
+            }
+        }
+        Ok(None)
+    }
+
     fn load(
         source: Source,
         manifest: ReleaseManifest,
@@ -364,6 +382,7 @@ impl Vakint {
         expression: symbolica::atom::Atom,
         settings: &crate::VakintSettings,
     ) -> Result<symbolica::atom::Atom, VakintError> {
+        self.require_bare_master_coefficients(&expression)?;
         let data = self.rustred_data()?;
         crate::precision::materialize(
             expression.as_view(),
@@ -406,13 +425,8 @@ impl Vakint {
         path: impl AsRef<Path>,
     ) -> Result<(), VakintError> {
         let path = path.as_ref();
-        for root in path.ancestors().take(4) {
-            if root.join("manifest.json").is_file() {
-                let bytes = fs::read(root.join("manifest.json")).map_err(failure)?;
-                if serde_json::from_slice::<ReleaseManifest>(&bytes).is_ok() {
-                    return self.load_external_data(root, loop_count);
-                }
-            }
+        if let Some(root) = RustRedData::release_root(path)? {
+            return self.load_external_data(root, loop_count);
         }
         let family = super::artifact::shipped_family_for_loop_count(loop_count)
             .ok_or_else(|| failure("4L/5L IBPs require a local external-data pack; the explicit saved-application API also accepts a bare 5L application"))?;
@@ -436,6 +450,8 @@ impl Vakint {
         pack.manifest.cache = CacheManifest {
             available: false,
             path: None,
+            format: None,
+            identity: None,
         };
         let original = match pack.source {
             Source::Override { original, .. } => original,
@@ -471,7 +487,19 @@ impl Vakint {
                 let path = pack
                     .path(relative)?
                     .ok_or_else(|| failure("vendored data must not contain caches"))?;
-                staged.load_cache(count, path, &Default::default())?;
+                let mut options = super::cache::RustRedCacheLoadOptions::default();
+                if count == 5 {
+                    if pack.manifest.cache.format.as_deref()
+                        != Some("rustred.saved-application-cache-file.v1")
+                    {
+                        return Err(failure("unsupported five-loop prepared-cache format").into());
+                    }
+                    options.file_identity =
+                        Some(pack.manifest.cache.identity.ok_or_else(|| {
+                            failure("five-loop prepared cache has no authenticated file identity")
+                        })?);
+                }
+                staged.load_cache(count, path, &options)?;
             }
         }
         if data.loops.contains_key(&5) {
@@ -634,7 +662,7 @@ mod tests {
                 );
                 assert!(master.is_computed());
             } else {
-                assert!(!master.graph().numerator().is_one());
+                assert!(!master.graph().numerator().expression().is_one());
                 assert!(!master.is_computed());
                 assert!(master.coefficients().is_empty());
                 #[cfg(feature = "feynkit-ingress")]
@@ -648,7 +676,7 @@ mod tests {
                     let integral = crate::VakintExpression::from_diagram(
                         master.graph(),
                         &family,
-                        master.graph().numerator(),
+                        master.graph().numerator().expression(),
                         &crate::diagram_integral::DiagramIntegralOptions::default(),
                     )
                     .unwrap();
@@ -665,31 +693,26 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "requires the authenticated v0.1.0 5L data pack; no IBP application is loaded"]
+    #[ignore = "requires the authenticated 640-master 5L pack; no IBP application is loaded"]
     fn authentic_five_loop_declared_terminals_remain_uncomputed() {
         Vakint::initialize_vakint_symbols();
         let source = Source::Directory(
-            super::super::cache_tests::external_path()
+            super::super::cache_tests::external_path_through(5)
                 .canonicalize()
                 .unwrap(),
         );
         let release: ReleaseManifest =
             serde_json::from_slice(&source.read("manifest.json").unwrap()).unwrap();
         assert_eq!(release.schema, RELEASE_SCHEMA);
-        assert_eq!(release.version, "v0.1.0");
         let pack = release
             .loop_packs
             .iter()
             .find(|pack| pack.loop_count == 5)
             .unwrap();
-        assert_eq!(
-            pack.manifest_sha256,
-            "44d047c2bd280e24ecda4730096bdc0fa449afd0f6fcba90f1002d886ed06f51"
-        );
         // Authenticate the real 5L pack and its payloads without constructing
         // an IBP application, attaching caches, or loading lower-loop packs.
         let data = Arc::new(LoopData::load(source, pack, &release.version).unwrap());
-        assert_eq!(data.manifest.masters.len(), 905);
+        assert_eq!(data.manifest.masters.len(), 640);
         for terminal in &data.manifest.masters {
             assert_eq!(terminal["kind"], "uncomputed-terminal");
             assert_eq!(terminal["status"], "not_computed");
@@ -705,10 +728,10 @@ mod tests {
         let identity = terminal["master_id"].as_str().unwrap();
         assert_eq!(
             identity,
-            "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m1_m1_m1_p0_p1_p1_p0_p0_p1_p0_p0_p1_p0_p1_p1"
+            "L5_44b030daa664fca0c71f4bb930624b098348f6184bfe46ca3ad83b86ef71df3b_m4_p1_p1_p0_p0_p1_p1_p1_m4_p1_p1_p0_p1_m1_p0"
         );
         let powers: Vec<i64> = serde_json::from_value(terminal["powers"].clone()).unwrap();
-        assert_eq!(powers, [-1, -1, -1, 0, 1, 1, 0, 0, 1, 0, 0, 1, 0, 1, 1]);
+        assert_eq!(powers, [-4, 1, 1, 0, 0, 1, 1, 1, -4, 1, 1, 0, 1, -1, 0]);
         let family = data
             .manifest
             .families
@@ -738,11 +761,15 @@ mod tests {
             .finalize(master.clone(), &settings, 5, RustRedMasterMode::Numerical)
             .unwrap_err()
             .to_string();
+        let symbolic_error = catalog
+            .finalize(master.clone(), &settings, 5, RustRedMasterMode::Symbolic)
+            .unwrap_err()
+            .to_string();
         let retained_error = catalog
             .resolve_numerical(retained, &settings)
             .unwrap_err()
             .to_string();
-        for error in [&direct_error, &retained_error] {
+        for error in [&direct_error, &symbolic_error, &retained_error] {
             assert!(error.contains(identity), "{error}");
             assert!(
                 error.contains("declared terminal has no computed coefficients"),

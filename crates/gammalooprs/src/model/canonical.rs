@@ -1017,7 +1017,7 @@ impl ParticleGammaLoopExt for Particle {
         } else {
             "massive"
         };
-        let color = if self.charge.abs() > 0.0 {
+        let color = if !self.charge.is_zero() {
             "blue"
         } else {
             "black"
@@ -1029,9 +1029,9 @@ impl ParticleGammaLoopExt for Particle {
                 format!("source-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
                 format!("sink-stroke(c: {color}, thickness: {thickness}, dash: dotted)"),
             )
-        } else if self.is_vector() && self.charge == 0.0 && self.color == 1 {
+        } else if self.is_vector() && self.charge.is_zero() && self.color == 1 {
             (format!("{source} + wave"), format!("{sink} + wave"))
-        } else if self.is_vector() && self.charge == 0.0 && self.color == 8 {
+        } else if self.is_vector() && self.charge.is_zero() && self.color == 8 {
             (format!("{source} + coil"), format!("{sink} + coil"))
         } else if self.is_vector() {
             (format!("{source} + zigzag"), format!("{sink} + zigzag"))

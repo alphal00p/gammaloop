@@ -69,7 +69,7 @@ rust_components = [
   { id = "linnet", package = "linnet", kind = "library", version_source = "crates/linnet/Cargo.toml", features = ["native", "nodestore-vec", "serde", "bincode", "drawing", "symbolica"] },
 ]
 python_components = [
-  { id = "linnet-py", package = "linnet-py", kind = "maturin-distribution", version_source = "crates/linnet-py/pyproject.toml", module = "linnet_py", features = ["extension-module", "abi3-py310"] },
+  { id = "linnet-graph", package = "linnet-py", kind = "symbolica-community-module", version_source = "crates/linnet-py/Cargo.toml", module = "symbolica.community.graph", features = ["python_stubgen"] },
 ]
 
 [[product]]
@@ -102,7 +102,7 @@ rust_components = [
   { id = "spenso-hep-lib", package = "spenso-hep-lib", kind = "domain-library", version_source = "crates/spenso-hep-lib/Cargo.toml", features = ["native"] },
 ]
 python_components = [
-  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.spenso", features = ["python_stubgen"] },
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.tensor", features = ["python_stubgen"] },
 ]
 
 [[product]]
@@ -129,7 +129,7 @@ rust_components = [
   { id = "idenso", package = "idenso", kind = "library", version_source = "crates/idenso/Cargo.toml", features = ["native", "bincode", "reference-cases"] },
 ]
 python_components = [
-  { id = "idenso-community", package = "idenso", kind = "symbolica-community-module", version_source = "crates/idenso/Cargo.toml", module = "symbolica.community.idenso", features = ["python", "python_stubgen"] },
+  { id = "spynso3", package = "spynso3", kind = "symbolica-community-module", version_source = "crates/spynso3/Cargo.toml", module = "symbolica.community.tensor", features = ["python_stubgen"] },
 ]
 
 [[product]]

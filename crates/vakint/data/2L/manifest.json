@@ -1,6 +1,6 @@
 {
   "schema": "vakint.external-data.loop.v1",
-  "version": "v0.1.1",
+  "version": "v0.1.2",
   "loop_count": 2,
   "dimension": "4-2*epsilon",
   "normalization": "FMFTandMATAD",
@@ -193,7 +193,7 @@
         },
         "graph.dot": {
           "path": "masters/P1/graph.dot",
-          "sha256": "72f6112a818ffae2d014b1b90a7523a097c2dbe7d99ac249321972726fbf65ae"
+          "sha256": "f66d1d29011e49a67193afe4f9cb9614a943e70e936267668a4c43e9ed948d4f"
         }
       },
       "acceptance_sha256": {
@@ -383,7 +383,7 @@
         },
         "graph.dot": {
           "path": "masters/P2/graph.dot",
-          "sha256": "c77afa9ddb870818ae7327b71cd53b15e9598bab17fa3bcfd6a9decc015ad41f"
+          "sha256": "c106c3b24e7de38846707dddf226fa94c55ec3f55ed9ba3acfa377ecd1efd7f5"
         }
       },
       "acceptance_sha256": {
@@ -480,7 +480,7 @@
       "bytes": 5875
     },
     "graphs/ecdff6f39047e4dae21704b4de33a15ea53d9826e823496f7bdf62c1af498db1.dot": {
-      "sha256": "c77afa9ddb870818ae7327b71cd53b15e9598bab17fa3bcfd6a9decc015ad41f",
+      "sha256": "c106c3b24e7de38846707dddf226fa94c55ec3f55ed9ba3acfa377ecd1efd7f5",
       "bytes": 1435
     },
     "ibps/rules.rrbin": {
@@ -488,7 +488,7 @@
       "bytes": 36692
     },
     "masters/P1/graph.dot": {
-      "sha256": "72f6112a818ffae2d014b1b90a7523a097c2dbe7d99ac249321972726fbf65ae",
+      "sha256": "f66d1d29011e49a67193afe4f9cb9614a943e70e936267668a4c43e9ed948d4f",
       "bytes": 1087
     },
     "masters/P1/numerical.json": {
@@ -500,7 +500,7 @@
       "bytes": 344
     },
     "masters/P2/graph.dot": {
-      "sha256": "c77afa9ddb870818ae7327b71cd53b15e9598bab17fa3bcfd6a9decc015ad41f",
+      "sha256": "c106c3b24e7de38846707dddf226fa94c55ec3f55ed9ba3acfa377ecd1efd7f5",
       "bytes": 1435
     },
     "masters/P2/numerical.json": {
@@ -516,8 +516,8 @@
       "bytes": 6697
     },
     "producer-update.json": {
-      "sha256": "e7c37dc5f53299698b5168897f9d8a876bad64f2a9b62bdfaf5073475dba03e4",
-      "bytes": 11959
+      "sha256": "b753df19bd48c359e4427ceb78791eb08af747c7556a89e0f72de28ddb07b47d",
+      "bytes": 17971
     }
   },
   "producer_update": "producer-update.json"

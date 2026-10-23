@@ -61,7 +61,7 @@ assembly and invoke its `SymbolicaCommunityModule` registration while building t
 building the Rust crate alone does not inject the module into another Symbolica wheel.
 
 ```python
-from symbolica.community.spenso import (
+from symbolica.community.tensor import (
     Representation,
     Tensor,
     TensorName,

@@ -9,7 +9,12 @@ use std::cmp::Reverse;
 use ahash::AHashMap;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::LogMessage;
-use idenso::{color::ColorSimplifier, shorthands::schoonschip::Schoonschip};
+use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use idenso::{
+    CookMode, CookSettings,
+    color::ColorSimplifySettings,
+    tensor::{AlgebraSettings, SymbolicTensor},
+};
 use itertools::Itertools;
 use linnet::half_edge::{
     HedgeGraph, NoData, NodeIndex,
@@ -21,6 +26,7 @@ use linnet::half_edge::{
     nodestore::{NodeStorageOps, NodeStorageVec},
     subgraph::{Inclusion, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
 };
+use spenso::shadowing::TensorCollectExt;
 use symbolica::{
     atom::{Atom, AtomCore, FunctionBuilder},
     function,
@@ -1266,7 +1272,16 @@ impl Forests {
                     .cut(operation, cutset)?
                     .final_integrands
                     .iter()
-                    .map(|(index, integrand)| (*index, integrand.clone().collect_color()))
+                    .map(|(index, integrand)| {
+                        (
+                            *index,
+                            integrand.clone().collect_reps([
+                                ColorAdjoint {}.into(),
+                                ColorFundamental {}.into(),
+                                ColorSextet {}.into(),
+                            ]),
+                        )
+                    })
                     .collect();
                 sum = Some(match sum {
                     Some(sum) => sum.zip_add(&terms).wrap_err_with(|| {
@@ -1376,13 +1391,20 @@ impl Forests {
                 key=%key,
                expr = % atom.expand_num().log_print(None),"Term before simplification"
             );
-            let atom = (&atom
+            let atom = &atom
                 * &graph.global_prefactor.projector
                 * &graph.global_prefactor.num
-                * &graph.overall_factor)
-                .simplify_color()
-                .expand_num()
-                .to_dots();
+                * &graph.overall_factor;
+            let cooking = CookSettings::indices()
+                .with_mode(CookMode::ReversibleEncoding)
+                .with_representation_payloads(true, true);
+            let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(atom.as_view())?)?
+                .simplify_algebra(&AlgebraSettings {
+                    color: Some(ColorSimplifySettings::default()),
+                    ..Default::default()
+                })?
+                .to_dots()?;
+            let atom = cooking.uncook(reduced.expression().as_view()).expand_num();
 
             debug!(
                 key=%key,
@@ -1912,10 +1934,18 @@ mod tests {
         let wild = Atom::var(W_.x___);
         let replacements =
             graph.integrand_replacement(&graph.full_filter(), &graph.loop_momentum_basis, &[wild]);
-        let expected = expected
-            .simplify_color()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(expected.as_view())?)?
+            .simplify_algebra(&AlgebraSettings {
+                color: Some(Default::default()),
+                ..Default::default()
+            })?
+            .to_dots()?;
+        let expected = cooking
+            .uncook(reduced.expression().as_view())
             .expand_num()
-            .to_dots()
             .replace_multiple(&replacements)
             .replace(GS.m_uv_expansion)
             .with(GS.m_uv_vacuum);

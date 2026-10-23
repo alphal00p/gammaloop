@@ -34,7 +34,7 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "9a3abbeaac5c6499048bc4600a348762f356cec9", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+numerica = { git = "https://github.com/alphal00p/symbolica", rev = "1205ec30890f32f6d0083e3bf1e55976b8e07bdd", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -46,14 +46,13 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "9a3abbeaac5c6499048bc4600a348762f356cec9", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "1205ec30890f32f6d0083e3bf1e55976b8e07bdd", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
 toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
-typed-index-collections = { version = "3", features = ["bincode", "serde-alloc"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }
@@ -78,7 +77,9 @@ num-bigint = { version = "0.4" }
 num-complex = { version = "0.4" }
 num-integer = { version = "0.1", features = ["i128"] }
 num-traits = { version = "0.2", features = ["i128", "libm"] }
-numerica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "9a3abbeaac5c6499048bc4600a348762f356cec9", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+numerica = { git = "https://github.com/alphal00p/symbolica", rev = "1205ec30890f32f6d0083e3bf1e55976b8e07bdd", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "serde"] }
+proc-macro2 = { version = "1" }
+quote = { version = "1" }
 rand = { version = "0.8", features = ["small_rng"] }
 regex = { version = "1" }
 regex-automata = { version = "0.4", default-features = false, features = ["dfa-build", "dfa-onepass", "hybrid", "meta", "nfa", "perf", "std", "unicode"] }
@@ -90,7 +91,7 @@ serde_json = { version = "1", features = ["alloc", "float_roundtrip"] }
 serde_spanned = { version = "1" }
 smallvec = { version = "1", default-features = false, features = ["const_new", "serde"] }
 smartstring = { version = "1", features = ["serde"] }
-symbolica = { git = "https://github.com/ValentinHirschi/symbolica", rev = "9a3abbeaac5c6499048bc4600a348762f356cec9", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
+symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "1205ec30890f32f6d0083e3bf1e55976b8e07bdd", default-features = false, features = ["bincode", "float-mpfr", "integer-gmp", "native_code_generation", "serde"] }
 syn = { version = "2", features = ["extra-traits", "fold", "full", "visit-mut"] }
 time = { version = "0.3", features = ["formatting", "local-offset", "parsing"] }
 toml_datetime = { version = "1", features = ["serde"] }
@@ -98,7 +99,6 @@ toml_parser = { version = "1" }
 toml_writer = { version = "1" }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json", "time"] }
-typed-index-collections = { version = "3", features = ["bincode", "serde-alloc"] }
 winnow-ca01ad9e24f5d932 = { package = "winnow", version = "0.7" }
 winnow-dff4ba8e3ae991db = { package = "winnow", version = "1" }
 zerocopy = { version = "0.8", default-features = false, features = ["derive", "simd"] }

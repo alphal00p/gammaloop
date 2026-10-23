@@ -7,6 +7,7 @@ use feynkit_graph::{
 };
 use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
+use idenso::tensor::SymbolicTensor;
 use rustred::algebra::CoefficientContext;
 use rustred::family::{AffineDenominator, IntegralFamily, IntegralKey};
 use rustred::scalar_numerator::FamilyScalarNumeratorService;
@@ -74,11 +75,11 @@ fn ordered_physical_slots(diagram: &FeynmanDiagram) -> Result<(Vec<EdgeId>, Vec<
     let mut ids = Vec::new();
     for (id, endpoints, _) in edges {
         let source = &diagram
-            .vertex(endpoints.source)
+            .vertex(endpoints.source.ok_or("vacuum edge lacks a source")?)
             .ok_or("missing source vertex")?
             .name;
         let target = &diagram
-            .vertex(endpoints.target)
+            .vertex(endpoints.target.ok_or("vacuum edge lacks a target")?)
             .ok_or("missing target vertex")?
             .name;
         let (slot, sign) = data::PARENTS[0]
@@ -177,8 +178,7 @@ fn pinched_diagram(model: &Model) -> Result<(FeynmanDiagram, String)> {
     let vertex = builder.add_vertex(DiagramVertex {
         name: "pinched".into(),
         interaction: None,
-        external: None,
-        numerator: Atom::one(),
+        numerator: SymbolicTensor::infer(Atom::one())?,
     });
     for _ in 0..5 {
         builder.add_edge(vertex, vertex, DiagramEdge::new(particle, false))?;
@@ -205,8 +205,8 @@ pub fn fixtures(_initialized_vakint: &Vakint) -> Result<Vec<CancellationFixture>
     .expect("valid phi_3_4 fixture");
     let mass = model
         .particle_by_id(model.particle_id("phi")?)?
-        .symbolic_mass_parameter(&model)?;
-    let diagram = FeynmanDiagram::from_topology_dot(model.clone(), &full_parent_dot())?;
+        .symbolic_mass(&model);
+    let diagram = FeynmanDiagram::from_dot(model.clone(), &full_parent_dot())?;
     let physical = diagram.propagator_family(&Kinematics::new())?;
     let (edge_ids, physical_slots, edge_signs) = ordered_physical_slots(&diagram)?;
     let completed = physical.complete(&[])?;

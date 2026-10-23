@@ -44,6 +44,26 @@ pub struct LoopMomentumBasis {
     pub edge_signatures: EdgeVec<LoopExtSignature>,
 }
 
+impl From<feynkit_graph::routing::MomentumBasis> for LoopMomentumBasis {
+    fn from(basis: feynkit_graph::routing::MomentumBasis) -> Self {
+        Self {
+            tree: basis.tree,
+            loop_edges: basis.loop_edges.into(),
+            ext_edges: basis.ext_edges.into(),
+            edge_signatures: basis
+                .edge_signatures
+                .iter()
+                .map(|(edge, signature)| {
+                    (
+                        edge,
+                        LoopExtSignature::from(signature.integer_coefficients()),
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
 pub type LmbResult<T> = std::result::Result<T, LmbError>;
 
 #[derive(Debug, Error)]
@@ -1000,7 +1020,7 @@ impl<E, V, H> LMBext for HedgeGraph<E, V, H> {
                             })?;
                             let cycle_is_circuit = cycle.is_circuit(self);
                             let cycle_dot = self.dot(&cycle.filter);
-                            cycles.push(SignedCycle::from_cycle(cycle, source, self).ok_or_else(
+                            cycles.push(SignedCycle::from_cycle(&cycle, source, self).ok_or_else(
                                 || LmbError::InvalidCycle {
                                     is_circuit: cycle_is_circuit,
                                     cycle_dot,

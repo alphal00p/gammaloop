@@ -7,23 +7,34 @@ external Symbolica community host builds and installs the single native wheel.
 import sys
 
 from symbolica import Expression, S
-from symbolica.community import feynkit
+from symbolica.community import hepkit as feynkit
+from symbolica.community.tensor import TensorName
 
-
-assert feynkit.__name__ == "symbolica.community.feynkit"
-assert "symbolica.community.feynkit_native" in sys.modules
+assert feynkit.__name__ == "symbolica.community.hepkit"
+# The host chooses the private registration name; public classes must have
+# exactly one loaded native owner, without importing the GammaLoop application.
+native_owners = [
+    module
+    for name, module in sys.modules.items()
+    if name.startswith("symbolica.community.")
+    and name.endswith("_native")
+    and getattr(module, "FeynmanDiagram", None) is feynkit.FeynmanDiagram
+]
+assert len(native_owners) == 1
 assert "_gammaloop" not in sys.modules
 
 for exported_type in (
     feynkit.Model,
-    feynkit.Generator,
     feynkit.Process,
     feynkit.FeynmanDiagram,
     feynkit.TensorReducer,
-    feynkit.CffGenerator,
+    feynkit.CffRepresentation,
+    feynkit.LtdRepresentation,
     feynkit.FourMomentum,
+    feynkit.JetDefinition,
+    feynkit.Helicity,
 ):
-    assert exported_type.__module__ == "symbolica.community.feynkit"
+    assert exported_type.__module__ == "symbolica.community.hepkit"
 
 momentum = feynkit.ThreeMomentum(3.0, 4.0, 0.0).on_shell()
 assert momentum.components() == (5.0, 3.0, 4.0, 0.0)
@@ -34,18 +45,16 @@ mu = S("feynkit_install_test::mu")
 nu = S("feynkit_install_test::nu")
 mink = S("spenso::mink")
 dot = S("spenso::dot")
-loop_momentum = S("feynkit_install_test::k")
-projector_momentum = S("feynkit_install_test::p")
+loop_momentum = TensorName.vector("feynkit_install_test::k").to_expression()
+projector_momentum = TensorName.vector("feynkit_install_test::p").to_expression()
 tensor_input = (
     loop_momentum(mink(dimension, mu))
     * loop_momentum(mink(dimension, nu))
     * projector_momentum(mink(dimension, mu))
     * projector_momentum(mink(dimension, nu))
 )
-tensor_reduced = (
-    feynkit.TensorReducer(dimension)
-    .with_integrated_head("feynkit_install_test::k")
-    .reduce(tensor_input)
+tensor_reduced = feynkit.TensorReducer(dimension, integrated=[loop_momentum]).reduce(
+    tensor_input
 )
 tensor_expected = (
     dot(loop_momentum(mink(dimension)), loop_momentum(mink(dimension)))

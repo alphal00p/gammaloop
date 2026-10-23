@@ -1,6 +1,6 @@
-//! Spenso-facing tensor reduction of vacuum numerators.
+//! Spenso-facing covariant tensor reduction of loop numerators.
 //!
-//! The reducer consumes ordinary Symbolica atoms whose rank-one tensors use
+//! The reducer consumes admitted symbolic tensors whose declared heads use
 //! Spenso slots, for example
 //! `K(1, spenso::mink(D, mu))`.  Integrated vectors are selected by their head
 //! or by their compact indexed-free form `K(1, spenso::mink(D))`.  Results use
@@ -34,17 +34,31 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use feynkit_graph::FeynmanDiagram;
-use idenso::shorthands::metric::MetricSimplifier;
+use idenso::tensor::{ContractSettings, SymbolicTensor};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use spenso::network::{library::symbolic::ETS, tags::SPENSO_TAG};
-use spenso::structure::representation::{BaseRepName, Minkowski};
+use spenso::{
+    shadowing::TensorCollectFilter,
+    structure::{
+        partial::{PartialStructure, PartialStructureExt},
+        representation::{BaseRepName, LibraryRep, Minkowski},
+        slot::IsAbstractSlot,
+    },
+};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
 use thiserror::Error;
+
+mod blocks;
+mod external;
 
 use crate::{
     OrthogonalWeingarten, WeingartenError,
     orbit_projector::{OrbitProjector, OrbitProjectorError},
 };
 
+// Closed single-vector angular moments need no universal Weingarten table.
+// 31!! still fits the reducer's signed 64-bit multiplicity conversion.
+const MAX_ISOTROPIC_RANK: usize = 32;
 const DEFAULT_PAIRING_LIMIT: u128 = 20_000;
 const DEFAULT_PAIRING_PRODUCT_LIMIT: u128 = 120_000_000;
 const DEFAULT_OUTPUT_TERM_LIMIT: usize = 100_000;
@@ -66,6 +80,7 @@ const DEFAULT_OUTPUT_TERM_LIMIT: usize = 100_000;
 /// use feynkit_tensor::TensorReducer;
 /// use symbolica::{parse, symbol};
 ///
+/// let _ = (spenso::vector_symbol!("k"), spenso::vector_symbol!("q"), spenso::vector_symbol!("p"));
 /// let numerator = parse!(
 ///     "k(spenso::mink(D,m1))*k(spenso::mink(D,m2))
 ///      *q(spenso::mink(D,m3))*q(spenso::mink(D,m4))
@@ -77,7 +92,7 @@ const DEFAULT_OUTPUT_TERM_LIMIT: usize = 100_000;
 /// let reduced = TensorReducer::new(parse!("D"))
 ///     .with_integrated_head(symbol!("k"))
 ///     .with_integrated_head(symbol!("q"))
-///     .reduce(numerator.as_view())?;
+///     .reduce(&idenso::tensor::SymbolicTensor::infer(numerator)?)?;
 /// let orbit = reduced.terms()[0].integrated_orbit().unwrap();
 /// println!("alpha = {:?}", orbit.alpha());
 /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
@@ -146,21 +161,22 @@ impl ContractionOrbit {
 /// use feynkit_tensor::TensorReducer;
 /// use symbolica::{parse, symbol};
 ///
+/// let _ = (spenso::vector_symbol!("k"), spenso::vector_symbol!("q"), spenso::vector_symbol!("p"));
 /// let numerator = parse!(
 ///     "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))
 ///      *p(spenso::mink(D,mu))*p(spenso::mink(D,nu))"
 /// );
 /// let reduction = TensorReducer::new(parse!("D"))
 ///     .with_integrated_head(symbol!("k"))
-///     .reduce(numerator.as_view())?;
-/// let scalar_graph_numerator = reduction.terms()[0].expression();
+///     .reduce(&idenso::tensor::SymbolicTensor::infer(numerator)?)?;
+/// let scalar_graph_numerator = reduction.terms()[0].expression()?;
 /// println!("{scalar_graph_numerator}");
 /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
 /// ```
 #[derive(Clone, Debug)]
 pub struct TensorReductionTerm {
     coefficient: Atom,
-    tensor: Atom,
+    tensor: SymbolicTensor<PartialStructure>,
     integrated_orbit: Option<ContractionOrbit>,
     projector_orbit: Option<ContractionOrbit>,
 }
@@ -172,7 +188,7 @@ impl TensorReductionTerm {
     }
 
     /// Scalar invariant or residual metric tensor multiplying the coefficient.
-    pub fn tensor(&self) -> &Atom {
+    pub fn tensor(&self) -> &SymbolicTensor<PartialStructure> {
         &self.tensor
     }
 
@@ -186,9 +202,11 @@ impl TensorReductionTerm {
         self.projector_orbit.as_ref()
     }
 
-    /// Materialize this contribution as an ordinary Symbolica expression.
-    pub fn expression(&self) -> Atom {
-        &self.coefficient * &self.tensor
+    /// Apply the scalar weight without discarding the retained tensor interface.
+    pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
+        Ok(self
+            .tensor
+            .with_checked_expression(&self.coefficient * self.tensor.expression())?)
     }
 }
 
@@ -203,26 +221,28 @@ impl TensorReductionTerm {
 /// use feynkit_tensor::TensorReducer;
 /// use symbolica::{parse, symbol};
 ///
+/// let _ = (spenso::vector_symbol!("k"), spenso::vector_symbol!("q"), spenso::vector_symbol!("p"));
 /// let numerator = parse!(
 ///     "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))
 ///      *p(spenso::mink(D,mu))*p(spenso::mink(D,nu))"
 /// );
 /// let scalar = TensorReducer::new(parse!("D"))
 ///     .with_integrated_head(symbol!("k"))
-///     .reduce(numerator.as_view())?
-///     .into_expression();
+///     .reduce(&idenso::tensor::SymbolicTensor::infer(numerator)?)?
+///     .into_expression()?;
 /// println!("{scalar}");
 /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
 /// ```
 #[derive(Clone, Debug)]
 pub struct TensorReduction {
     terms: Vec<TensorReductionTerm>,
+    zero: SymbolicTensor<PartialStructure>,
     max_rank: usize,
     fully_contracted: bool,
 }
 
 impl TensorReduction {
-    /// Compact reduction terms before their final sum is expanded.
+    /// Compact reduction terms before their final sum is materialized.
     pub fn terms(&self) -> &[TensorReductionTerm] {
         &self.terms
     }
@@ -248,21 +268,21 @@ impl TensorReduction {
     /// use feynkit_tensor::TensorReduction;
     /// use symbolica::atom::Atom;
     ///
-    /// fn scalar_numerator(reduction: &TensorReduction) -> Atom {
-    ///     reduction.expression()
+    /// fn scalar_numerator(reduction: &TensorReduction) -> Result<Atom, feynkit_tensor::TensorReductionError> {
+    ///     Ok(reduction.expression()?.into_expression())
     /// }
     /// ```
-    pub fn expression(&self) -> Atom {
-        self.terms
-            .iter()
-            .fold(Atom::Zero, |sum, term| sum + term.expression())
+    pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
+        self.terms.iter().try_fold(self.zero.clone(), |sum, term| {
+            Ok(sum.try_add(&term.expression()?)?)
+        })
     }
 
     /// Consume the compact result and materialize its expression.
-    pub fn into_expression(self) -> Atom {
+    pub fn into_expression(self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
         self.terms
             .into_iter()
-            .fold(Atom::Zero, |sum, term| sum + term.coefficient * term.tensor)
+            .try_fold(self.zero, |sum, term| Ok(sum.try_add(&term.expression()?)?))
     }
 }
 
@@ -284,37 +304,23 @@ impl TensorReduction {
 /// use feynkit_tensor::TensorReducer;
 /// use symbolica::{parse, symbol};
 ///
+/// let _ = (spenso::vector_symbol!("k"), spenso::vector_symbol!("q"), spenso::vector_symbol!("p"));
 /// let numerator = parse!(
 ///     "spenso::g(spenso::mink(D,mu),spenso::mink(D,nu))
 ///      *k(spenso::mink(D,mu))*k(spenso::mink(D,nu))"
 /// );
 /// let reduced = TensorReducer::new(parse!("D"))
 ///     .with_integrated_head(symbol!("k"))
-///     .reduce(numerator.as_view())?;
-/// println!("{}", reduced.expression());
+///     .reduce(&idenso::tensor::SymbolicTensor::infer(numerator)?)?;
+/// println!("{}", reduced.expression()?);
 /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
 /// ```
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum RepeatedIndexCompatibility {
-    /// Reject an index occurring more than twice in one monomial.
-    #[default]
-    Strict,
-    /// Interpret `2n` identical integrated-vector occupants of one index as
-    /// `n` already-contracted scalar products.
-    ///
-    /// This is an explicit compatibility mode for legacy front ends whose
-    /// parser represents `(k(mu) k(mu))^n` as `2n` occurrences of the same
-    /// indexed vector. It deliberately does not accept mixed vectors, odd
-    /// multiplicities, external occupants, metrics, or opaque index uses.
-    LegacyIdenticalIntegratedPowers,
-}
-
 #[derive(Clone, Debug)]
 pub struct TensorReducer {
     dimension: Atom,
     integrated_heads: BTreeSet<String>,
     integrated_vectors: BTreeSet<Atom>,
-    repeated_index_compatibility: RepeatedIndexCompatibility,
+    external_vectors: BTreeSet<Atom>,
     pairing_limit: u128,
     pairing_product_limit: u128,
     output_term_limit: usize,
@@ -323,13 +329,18 @@ pub struct TensorReducer {
 impl TensorReducer {
     /// Construct a reducer in `dimension` with no integrated vectors selected.
     ///
-    /// `dimension` must exactly match the first argument of every input
-    /// `spenso::mink(dimension,index)` slot.  Thus generated four-dimensional
+    /// `dimension` must exactly match the source dimension of every input
+    /// `spenso::mink(dimension,index)` slot, including reversibly encoded
+    /// compound dimensions. Thus generated four-dimensional
     /// FeynKit rules use `4`, while a symbolic R-operation numerator whose
     /// slots carry `D` uses `D`. Mixed high-rank projectors should retain a
     /// symbolic dimension until after reduction: a fixed positive integer
     /// dimension below half the tensor rank makes the universal metric basis
     /// singular. The all-equal isotropic fast path remains available there.
+    ///
+    /// Fully contracted vacuum monomials with one repeated integrated vector
+    /// additionally support even ranks through 32. General and external-basis
+    /// projectors retain the rank-20 limit.
     ///
     /// Add selectors with [`Self::with_integrated_head`] or
     /// [`Self::with_integrated_vector`].
@@ -338,20 +349,20 @@ impl TensorReducer {
             dimension,
             integrated_heads: BTreeSet::new(),
             integrated_vectors: BTreeSet::new(),
-            repeated_index_compatibility: RepeatedIndexCompatibility::Strict,
+            external_vectors: BTreeSet::new(),
             pairing_limit: DEFAULT_PAIRING_LIMIT,
             pairing_product_limit: DEFAULT_PAIRING_PRODUCT_LIMIT,
             output_term_limit: DEFAULT_OUTPUT_TERM_LIMIT,
         }
     }
 
-    /// Construct a reducer for every `FeynKit::Momentum` vector.
+    /// Construct a reducer for every canonical diagram `gammalooprs::Q` vector.
     ///
     /// This constructor stores the qualified head name without registering a
     /// bare Symbolica symbol, so FeynKit's tensor tags remain initialization
     /// order independent.
     pub fn feynkit(dimension: Atom) -> Self {
-        Self::new(dimension).with_integrated_head_name("FeynKit::Momentum")
+        Self::new(dimension).with_integrated_head(feynkit_graph::momentum_symbol())
     }
 
     /// Select every vector with this Symbolica function head.
@@ -366,23 +377,28 @@ impl TensorReducer {
         self
     }
 
-    /// Select one exact compact vector, such as `K(1,spenso::mink(D))`.
-    pub fn with_integrated_vector(mut self, vector: Atom) -> Self {
-        self.integrated_vectors.insert(vector);
-        self
+    /// Admit one exact compact source vector, such as `K(1,spenso::mink(D))`.
+    /// Shared source admission normalizes encoded dimensions and index labels
+    /// before the selector is compared with retained native tensor expressions.
+    pub fn with_integrated_vector(mut self, vector: Atom) -> Result<Self, TensorReductionError> {
+        let vector = feynkit_graph::NumeratorInterface::admit(vector, None)?;
+        self.integrated_vectors.insert(vector.into_expression());
+        Ok(self)
     }
 
-    /// Select how repeated occurrences of the same explicit index are parsed.
+    /// Add an independent external momentum appearing in the denominators.
     ///
-    /// The default is [`RepeatedIndexCompatibility::Strict`]. Front ends that
-    /// must preserve the historical `(k(mu) k(mu))^n` spelling can opt into
-    /// [`RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers`].
-    pub fn with_repeated_index_compatibility(
-        mut self,
-        compatibility: RepeatedIndexCompatibility,
-    ) -> Self {
-        self.repeated_index_compatibility = compatibility;
-        self
+    /// Pass compact Spenso vectors such as `p(spenso::mink(D))`. The reducer
+    /// resolves loop vectors along this basis and averages only their
+    /// transverse components, reusing the vacuum projector in `D - n`
+    /// dimensions. The external Gram matrix must be invertible. Include an
+    /// auxiliary vector for a degenerate basis, such as one lightlike momentum.
+    /// The resulting scalar products are left for integral-family reduction.
+    /// External vectors take precedence over integrated-head selectors.
+    pub fn with_external_vector(mut self, vector: Atom) -> Result<Self, TensorReductionError> {
+        let vector = feynkit_graph::NumeratorInterface::admit(vector, None)?;
+        self.external_vectors.insert(vector.into_expression());
+        Ok(self)
     }
 
     /// Bound labeled pairings generated by the generic/free-index path.
@@ -410,28 +426,29 @@ impl TensorReducer {
         &self.dimension
     }
 
-    /// Distribute additive factors into independently reducible summands.
+    /// Admit a newly constructed numerator at an external source boundary.
     ///
-    /// The same output-term limit configured on this reducer is enforced
-    /// while distributing, so callers can attach term-local tensor metadata
-    /// without first performing an unbounded symbolic expansion.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use feynkit_tensor::TensorReducer;
-    /// use symbolica::parse;
-    ///
-    /// let reducer = TensorReducer::new(parse!("D"));
-    /// let terms = reducer.distribute_summands(parse!("(a+b)*(c+d)").as_view())?;
-    /// assert_eq!(terms.len(), 4);
-    /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
-    /// ```
-    pub fn distribute_summands(
+    /// The expression must already use native Spenso representation syntax,
+    /// with compound dimensions and indices encoded by their source adapter.
+    /// This method does not cook source notation or reduce a tensor. Native
+    /// admission remains authoritative; rejected inputs receive the reducer's
+    /// established index and power diagnostics when its parser can refine them.
+    pub fn admit(
+        &self,
+        expression: Atom,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
+        SymbolicTensor::infer(expression.clone())
+            .map_err(|error| self.input_error(expression.as_view(), error))
+    }
+
+    fn input_error(
         &self,
         expression: AtomView<'_>,
-    ) -> Result<Vec<Atom>, TensorReductionError> {
-        bounded_expand_summands(expression, self.output_term_limit)
+        error: idenso::tensor::inference::TensorInferenceError,
+    ) -> TensorReductionError {
+        self.parse_monomial(expression)
+            .err()
+            .unwrap_or_else(|| TensorReductionError::TensorAlgebra(error.to_string()))
     }
 
     /// Reduce a tensor expression to compact invariant terms.
@@ -439,7 +456,14 @@ impl TensorReducer {
     /// Explicit Spenso metric contractions are normalized first with Idenso.
     /// This contracts chains such as `g(mu,nu) K(mu) K(nu)` while preserving
     /// any residual free index in its full `spenso::mink(D,index)` slot.  Each
-    /// summand is then treated independently.  Odd-rank vacuum tensors vanish;
+    /// selected Lorentz sector is then treated independently; its scalar and
+    /// foreign-representation coefficient remains factored. Compact Spenso dots between an
+    /// integrated vector and a spectator are projected directly, including
+    /// nonnegative integer powers, without allocating dummy indices. Dots
+    /// between integrated vectors or with declared external basis vectors stay
+    /// scalar invariants. Negative or noninteger powers of spectator contractions
+    /// are not polynomial tensor numerators and are rejected.
+    /// Odd-rank vacuum tensors vanish;
     /// already-contracted integrated pairs become Spenso dots before the
     /// projector is built. A single index occurrence inside an otherwise
     /// opaque tensor is retained as an external projector leg; expressions
@@ -452,64 +476,89 @@ impl TensorReducer {
     /// use feynkit_tensor::TensorReducer;
     /// use symbolica::{parse, symbol};
     ///
+    /// let _ = (spenso::vector_symbol!("k"), spenso::vector_symbol!("q"), spenso::vector_symbol!("p"));
     /// let numerator = parse!(
     ///     "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))
     ///      *p(spenso::mink(D,mu))*p(spenso::mink(D,nu))"
     /// );
     /// let reduction = TensorReducer::new(parse!("D"))
     ///     .with_integrated_head(symbol!("k"))
-    ///     .reduce(numerator.as_view())?;
+    ///     .reduce(&idenso::tensor::SymbolicTensor::infer(numerator)?)?;
     /// assert!(reduction.is_fully_contracted());
     /// # Ok::<(), feynkit_tensor::TensorReductionError>(())
     /// ```
     pub fn reduce(
         &self,
-        expression: AtomView<'_>,
+        source: &SymbolicTensor<PartialStructure>,
     ) -> Result<TensorReduction, TensorReductionError> {
         if self.integrated_heads.is_empty() && self.integrated_vectors.is_empty() {
             return Err(TensorReductionError::NoIntegratedVectorsSelected);
         }
-        // Generated Feynman rules commonly contain products of vertex sums.
-        // Distribute those sums before metric simplification so Idenso sees
-        // each complete tensor monomial and can sew all propagator indices.
-        // The local distributor enforces the configured term budget while it
-        // works, rather than allocating an unbounded global `expand()` first.
-        let distributed = bounded_expand_summands(expression, self.output_term_limit)?;
-        let mut summands = Vec::with_capacity(distributed.len());
-        for summand in distributed {
-            let summand = self.preprocess_repeated_indices(summand.as_view())?;
-            let normalized = summand.simplify_metrics().metric_shorthand_to_dot();
-            let normalized = bounded_expand_summands(normalized.as_view(), self.output_term_limit)?;
-            let term_count = summands.len().checked_add(normalized.len()).ok_or(
-                TensorReductionError::ExpansionLimit {
-                    terms: usize::MAX,
-                    limit: self.output_term_limit,
-                },
-            )?;
-            if term_count > self.output_term_limit {
-                return Err(TensorReductionError::ExpansionLimit {
-                    terms: term_count,
-                    limit: self.output_term_limit,
-                });
-            }
-            summands.extend(normalized);
+        let external = self.external_projector()?;
+        // The shared collector distributes only selected Lorentz structures.
+        // Scalar and foreign-representation coefficients retain their original
+        // factorization, and a capped selection cannot publish partial rows.
+        let normalized = source
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                expand: false,
+                ..Default::default()
+            })
+            // Contract validates through the shared cached owner; diagnostic
+            // refinement never accepts a source that native validation rejects.
+            .map_err(|error| self.input_error(source.expression().as_view(), error))?;
+        let normalized = normalized
+            .to_dots()
+            .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
+        if Self::has_tensor_sum(normalized.expression().as_view()) {
+            return self.reduce_blocks(&normalized, external.as_ref());
+        }
+        let rows = normalized
+            .coefficient_list(TensorCollectFilter::Reps([LibraryRep::from(Minkowski {})]))
+            .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
+        if rows.len() > self.output_term_limit {
+            return Err(TensorReductionError::OutputLimit {
+                terms: rows.len(),
+                limit: self.output_term_limit,
+            });
         }
 
         let mut terms = Vec::new();
         let mut max_rank = 0;
-        for summand in summands {
-            let monomial = self.parse_monomial(summand.as_view())?;
+        for (selected, coefficient) in rows {
+            let monomial = self.parse_monomial(selected.expression().as_view())?;
             max_rank = max_rank.max(monomial.integrated.len());
-            if monomial.integrated.len() > OrthogonalWeingarten::MAX_RANK {
+            let extended_isotropic = external.is_none()
+                && monomial.integrated.len() <= MAX_ISOTROPIC_RANK
+                && monomial.integrated.len() % 2 == 0
+                && monomial
+                    .integrated
+                    .windows(2)
+                    .all(|pair| pair[0] == pair[1])
+                && monomial
+                    .outside
+                    .iter()
+                    .all(|outside| matches!(outside, Outside::Vector(_)));
+            if monomial.integrated.len() > OrthogonalWeingarten::MAX_RANK && !extended_isotropic {
                 return Err(TensorReductionError::UnsupportedRank {
                     rank: monomial.integrated.len(),
                     maximum: OrthogonalWeingarten::MAX_RANK,
                 });
             }
-            if monomial.integrated.len() % 2 == 1 {
-                continue;
+            let projected = if let Some(external) = &external {
+                self.reduce_external_monomial(monomial, external)?
+            } else if monomial.integrated.len() % 2 == 0 {
+                self.reduce_monomial(monomial)?
+            } else {
+                Vec::new()
+            };
+            for mut term in projected {
+                let tensor = coefficient.multiply(&term.tensor)?;
+                term.tensor = source.with_checked_expression(tensor.expression().clone())?;
+                terms.push(term);
             }
-            terms.extend(self.reduce_monomial(monomial)?);
             if terms.len() > self.output_term_limit {
                 return Err(TensorReductionError::OutputLimit {
                     terms: terms.len(),
@@ -517,122 +566,19 @@ impl TensorReducer {
                 });
             }
         }
-        let fully_contracted = terms.iter().try_fold(true, |fully_contracted, term| {
-            Ok::<bool, TensorReductionError>(
-                fully_contracted && !has_dangling_minkowski_indices(&term.tensor, &self.dimension)?,
-            )
-        })?;
+        let zero = source.with_checked_expression(Atom::Zero)?;
+        let fully_contracted = zero
+            .structure()
+            .logical_slots()
+            .iter()
+            .all(|slot| slot.rep().rep != LibraryRep::from(Minkowski {}));
 
         Ok(TensorReduction {
             terms,
+            zero,
             max_rank,
             fully_contracted,
         })
-    }
-
-    /// Apply the opt-in legacy repeated-index convention before Idenso can
-    /// contract the ambiguous spelling and erase how many occupants shared
-    /// the index. Strict mode therefore rejects `k(mu)^4` at the public
-    /// boundary, while the compatibility mode lowers exactly `2n` identical
-    /// integrated occupants to `dot(k,k)^n`.
-    fn preprocess_repeated_indices(
-        &self,
-        term: AtomView<'_>,
-    ) -> Result<Atom, TensorReductionError> {
-        let factors = match term {
-            AtomView::Mul(product) => product.iter().collect::<Vec<_>>(),
-            factor => vec![factor],
-        };
-        let mut retained = Vec::new();
-        let mut by_index: BTreeMap<Atom, IndexOccupants> = BTreeMap::new();
-        for factor in factors {
-            let (vector, multiplicity) = if let AtomView::Pow(power) = factor
-                && let Some(vector) = self.indexed_vector(power.get_base())?
-            {
-                let exponent = i64::try_from(power.get_exp()).map_err(|_| {
-                    TensorReductionError::InvalidVectorPower(power.get_exp().to_owned())
-                })?;
-                let exponent = usize::try_from(exponent).map_err(|_| {
-                    TensorReductionError::InvalidVectorPower(power.get_exp().to_owned())
-                })?;
-                if exponent > OrthogonalWeingarten::MAX_RANK {
-                    return Err(TensorReductionError::UnsupportedRank {
-                        rank: exponent,
-                        maximum: OrthogonalWeingarten::MAX_RANK,
-                    });
-                }
-                (Some(vector), exponent)
-            } else {
-                (self.indexed_vector(factor)?, 1)
-            };
-            let Some(vector) = vector else {
-                retained.push(factor.to_owned());
-                continue;
-            };
-            let integrated = self.is_integrated(&vector);
-            let occupants = by_index.entry(vector.index).or_default();
-            let destination = if integrated {
-                &mut occupants.integrated
-            } else {
-                &mut occupants.outside
-            };
-            destination.extend(std::iter::repeat_n(vector.compact, multiplicity));
-        }
-
-        for (index, occupants) in by_index {
-            let opaque_occurrences = retained.iter().try_fold(0_usize, |count, factor| {
-                Ok::<usize, TensorReductionError>(count.saturating_add(count_minkowski_index(
-                    factor.as_view(),
-                    &self.dimension,
-                    &index,
-                    1,
-                )?))
-            })?;
-            let total_occurrences = occupants
-                .integrated
-                .len()
-                .saturating_add(occupants.outside.len())
-                .saturating_add(opaque_occurrences);
-            if total_occurrences > 2 {
-                let compatible = self.repeated_index_compatibility
-                    == RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers
-                    && opaque_occurrences == 0
-                    && occupants.outside.is_empty()
-                    && occupants.integrated.len() % 2 == 0
-                    && occupants
-                        .integrated
-                        .windows(2)
-                        .all(|pair| pair[0] == pair[1]);
-                if compatible {
-                    let pair_count = i64::try_from(occupants.integrated.len() / 2)
-                        .expect("tensor rank bound fits in i64");
-                    let vector = &occupants.integrated[0];
-                    retained.push(dot(vector, vector).pow(Atom::num(pair_count)));
-                    continue;
-                }
-                if opaque_occurrences > 0 {
-                    return Err(TensorReductionError::AmbiguousMinkowskiIndex {
-                        index,
-                        occurrences: total_occurrences,
-                    });
-                }
-                return Err(TensorReductionError::AmbiguousIndex {
-                    index,
-                    integrated: occupants.integrated.len(),
-                    outside: occupants.outside.len(),
-                });
-            }
-            retained.extend(
-                occupants
-                    .integrated
-                    .iter()
-                    .chain(&occupants.outside)
-                    .map(|vector| indexed_vector(vector, &index)),
-            );
-        }
-        Ok(retained
-            .into_iter()
-            .fold(Atom::one(), |product, factor| product * factor))
     }
 
     fn parse_monomial(&self, term: AtomView<'_>) -> Result<TensorMonomial, TensorReductionError> {
@@ -644,8 +590,58 @@ impl TensorReducer {
         let mut indexed_vectors = Vec::new();
         let mut opaque_factors = Vec::new();
         let mut integrated_rank = 0_usize;
+        let mut integrated = Vec::new();
+        let mut outside = Vec::new();
 
         for factor in factors {
+            let (base, exponent) = match factor {
+                AtomView::Pow(power) => (power.get_base(), power.get_exp().to_owned()),
+                base => (base, Atom::one()),
+            };
+            if let AtomView::Fun(function) = base
+                && function.get_symbol() == SPENSO_TAG.dot
+                && function.get_nargs() == 2
+            {
+                // Reuse the indexed-vector parser solely to validate compact
+                // slots and classify the two endpoints. No dummy index enters
+                // the numerator: the contraction is already explicit in dot.
+                let vectors = function
+                    .iter()
+                    .map(|argument| {
+                        let compact = argument.to_owned();
+                        let indexed = indexed_vector(&compact, &Atom::Zero);
+                        self.indexed_vector(indexed.as_view())
+                    })
+                    .collect::<Result<Vec<_>, _>>()?;
+                if let [Some(left), Some(right)] = vectors.as_slice() {
+                    let pair = match (self.is_integrated(left), self.is_integrated(right)) {
+                        (true, false) => Some((left, right)),
+                        (false, true) => Some((right, left)),
+                        _ => None,
+                    };
+                    if let Some((internal, external)) = pair
+                        && !self.external_vectors.contains(&external.compact)
+                    {
+                        let count = i64::try_from(exponent.as_view())
+                            .ok()
+                            .and_then(|count| usize::try_from(count).ok())
+                            .ok_or(TensorReductionError::InvalidVectorPower(exponent))?;
+                        integrated_rank = integrated_rank.saturating_add(count);
+                        if integrated_rank > MAX_ISOTROPIC_RANK {
+                            return Err(TensorReductionError::UnsupportedRank {
+                                rank: integrated_rank,
+                                maximum: MAX_ISOTROPIC_RANK,
+                            });
+                        }
+                        integrated.extend(std::iter::repeat_n(internal.compact.clone(), count));
+                        outside.extend(std::iter::repeat_n(
+                            Outside::Vector(external.compact.clone()),
+                            count,
+                        ));
+                        continue;
+                    }
+                }
+            }
             if let AtomView::Pow(power) = factor
                 && let Some(vector) = self.indexed_vector(power.get_base())?
             {
@@ -656,23 +652,23 @@ impl TensorReducer {
                     TensorReductionError::InvalidVectorPower(power.get_exp().to_owned())
                 })?;
                 let integrated = self.is_integrated(&vector);
-                if exponent > OrthogonalWeingarten::MAX_RANK {
+                if exponent > MAX_ISOTROPIC_RANK {
                     return Err(TensorReductionError::UnsupportedRank {
                         rank: exponent,
-                        maximum: OrthogonalWeingarten::MAX_RANK,
+                        maximum: MAX_ISOTROPIC_RANK,
                     });
                 }
                 if integrated {
                     integrated_rank = integrated_rank.checked_add(exponent).ok_or(
                         TensorReductionError::UnsupportedRank {
                             rank: usize::MAX,
-                            maximum: OrthogonalWeingarten::MAX_RANK,
+                            maximum: MAX_ISOTROPIC_RANK,
                         },
                     )?;
-                    if integrated_rank > OrthogonalWeingarten::MAX_RANK {
+                    if integrated_rank > MAX_ISOTROPIC_RANK {
                         return Err(TensorReductionError::UnsupportedRank {
                             rank: integrated_rank,
-                            maximum: OrthogonalWeingarten::MAX_RANK,
+                            maximum: MAX_ISOTROPIC_RANK,
                         });
                     }
                 }
@@ -682,10 +678,10 @@ impl TensorReducer {
             if let Some(vector) = self.indexed_vector(factor)? {
                 if self.is_integrated(&vector) {
                     integrated_rank += 1;
-                    if integrated_rank > OrthogonalWeingarten::MAX_RANK {
+                    if integrated_rank > MAX_ISOTROPIC_RANK {
                         return Err(TensorReductionError::UnsupportedRank {
                             rank: integrated_rank,
-                            maximum: OrthogonalWeingarten::MAX_RANK,
+                            maximum: MAX_ISOTROPIC_RANK,
                         });
                     }
                 }
@@ -700,7 +696,14 @@ impl TensorReducer {
         let mut by_index: BTreeMap<Atom, IndexOccupants> = BTreeMap::new();
         for vector in indexed_vectors {
             let integrated = self.is_integrated(&vector);
-            let occupants = by_index.entry(vector.index.clone()).or_default();
+            let occupants =
+                by_index
+                    .entry(vector.index.clone())
+                    .or_insert_with(|| IndexOccupants {
+                        slot: vector.slot.clone(),
+                        integrated: Vec::new(),
+                        outside: Vec::new(),
+                    });
             if integrated {
                 occupants.integrated.push(vector.compact);
             } else {
@@ -708,8 +711,6 @@ impl TensorReducer {
             }
         }
 
-        let mut integrated = Vec::new();
-        let mut outside = Vec::new();
         for (index, occupants) in by_index {
             let opaque_occurrences =
                 opaque_factors
@@ -740,7 +741,7 @@ impl TensorReducer {
                 ([vector], []) => {
                     integrated.push(vector.clone());
                     outside.push(Outside::Index {
-                        slot: minkowski_slot(&self.dimension, &index),
+                        slot: occupants.slot.clone(),
                         index,
                     });
                 }
@@ -768,8 +769,9 @@ impl TensorReducer {
     }
 
     fn is_integrated(&self, vector: &IndexedVector) -> bool {
-        self.integrated_heads.contains(vector.head.get_name())
-            || self.integrated_vectors.contains(&vector.compact)
+        !self.external_vectors.contains(&vector.compact)
+            && (self.integrated_heads.contains(vector.head.get_name())
+                || self.integrated_vectors.contains(&vector.compact))
     }
 
     fn indexed_vector(
@@ -796,10 +798,14 @@ impl TensorReducer {
             return Ok(None);
         }
         let representation_arguments = representation.iter().collect::<Vec<_>>();
-        if representation_arguments[0] != self.dimension.as_view() {
+        let dimension = representation_arguments[0]
+            .get_symbol()
+            .and_then(idenso::CookSettings::dimension_payload)
+            .unwrap_or_else(|| representation_arguments[0].to_owned());
+        if dimension != self.dimension {
             return Err(TensorReductionError::DimensionMismatch {
                 expected: self.dimension.clone(),
-                found: representation_arguments[0].to_owned(),
+                found: dimension,
             });
         }
 
@@ -818,6 +824,7 @@ impl TensorReducer {
             head: function.get_symbol(),
             compact,
             index: representation_arguments[1].to_owned(),
+            slot: representation.as_view().to_owned(),
         }))
     }
 
@@ -829,7 +836,7 @@ impl TensorReducer {
         if rank == 0 {
             return Ok(vec![TensorReductionTerm {
                 coefficient: Atom::one(),
-                tensor: monomial.scalar,
+                tensor: SymbolicTensor::infer(monomial.scalar)?,
                 integrated_orbit: None,
                 projector_orbit: None,
             }]);
@@ -936,9 +943,11 @@ impl TensorReducer {
                 }
                 terms.push(TensorReductionTerm {
                     coefficient,
-                    tensor: monomial.scalar.clone()
-                        * integrated_orbit.invariant()
-                        * outside_classes.atoms[outside_index].clone(),
+                    tensor: SymbolicTensor::infer(
+                        monomial.scalar.clone()
+                            * integrated_orbit.invariant()
+                            * outside_classes.atoms[outside_index].clone(),
+                    )?,
                     integrated_orbit: Some(integrated_orbit.clone()),
                     projector_orbit: outside_classes.orbits[outside_index].clone(),
                 });
@@ -967,7 +976,7 @@ impl TensorReducer {
             self.output_term_limit,
         )?;
 
-        Ok(projector
+        projector
             .terms()
             .iter()
             .map(|term| {
@@ -983,16 +992,18 @@ impl TensorReducer {
                     alpha: term.projector_alpha().to_vec().into_boxed_slice(),
                     labeled_pairings: term.projector_labeled_pairings(),
                 };
-                TensorReductionTerm {
+                Ok(TensorReductionTerm {
                     coefficient: term.coefficient().clone(),
-                    tensor: monomial.scalar.clone()
-                        * integrated_orbit.invariant()
-                        * projector_orbit.invariant(),
+                    tensor: SymbolicTensor::infer(
+                        monomial.scalar.clone()
+                            * integrated_orbit.invariant()
+                            * projector_orbit.invariant(),
+                    )?,
                     integrated_orbit: Some(integrated_orbit),
                     projector_orbit: Some(projector_orbit),
-                }
+                })
             })
-            .collect())
+            .collect()
     }
 
     fn reduce_isotropic_internal(
@@ -1014,9 +1025,11 @@ impl TensorReducer {
                     Ok(TensorReductionTerm {
                         coefficient: coefficient.clone()
                             * atom_from_count(projector_orbit.labeled_pairings)?,
-                        tensor: monomial.scalar.clone()
-                            * internal.clone()
-                            * projector_orbit.invariant(),
+                        tensor: SymbolicTensor::infer(
+                            monomial.scalar.clone()
+                                * internal.clone()
+                                * projector_orbit.invariant(),
+                        )?,
                         integrated_orbit: Some(integrated_orbit.clone()),
                         projector_orbit: Some(projector_orbit),
                     })
@@ -1034,7 +1047,9 @@ impl TensorReducer {
             .map(|(tensor, multiplicity)| {
                 Ok(TensorReductionTerm {
                     coefficient: coefficient.clone() * atom_from_count(multiplicity)?,
-                    tensor: monomial.scalar.clone() * internal.clone() * tensor,
+                    tensor: SymbolicTensor::infer(
+                        monomial.scalar.clone() * internal.clone() * tensor,
+                    )?,
                     integrated_orbit: Some(integrated_orbit.clone()),
                     projector_orbit: None,
                 })
@@ -1058,9 +1073,9 @@ impl TensorReducer {
                 Ok(TensorReductionTerm {
                     coefficient: coefficient.clone()
                         * atom_from_count(integrated_orbit.labeled_pairings)?,
-                    tensor: monomial.scalar.clone()
-                        * integrated_orbit.invariant()
-                        * projector.clone(),
+                    tensor: SymbolicTensor::infer(
+                        monomial.scalar.clone() * integrated_orbit.invariant() * projector.clone(),
+                    )?,
                     integrated_orbit: Some(integrated_orbit),
                     projector_orbit: Some(projector_orbit.clone()),
                 })
@@ -1084,7 +1099,8 @@ impl TensorReducer {
 /// fn scalar_numerator(diagram: &FeynmanDiagram) -> Result<Atom, TensorReductionError> {
 ///     diagram
 ///         .reduce_tensor_numerator(&TensorReducer::feynkit(parse!("4")))
-///         .map(|reduction| reduction.into_expression())
+///         .and_then(|reduction| reduction.into_expression())
+///         .map(idenso::tensor::SymbolicTensor::into_expression)
 /// }
 ///
 /// fn scalar_graphs(
@@ -1094,10 +1110,28 @@ impl TensorReducer {
 /// }
 /// ```
 pub trait FeynmanDiagramTensorExt {
+    /// Reduce the numerator and projector, selecting exactly the graph's internal edge momenta.
+    /// Four-dimensional Lorentz slots are promoted to `dimension` before reduction.
+    /// External momenta remain projector vectors; the scalar numerator prefactor is separate.
+    /// As with `TensorReducer`, reduction requires at least one integrated vector.
+    fn tensor_reduce(&self, dimension: Atom) -> Result<TensorReduction, TensorReductionError>;
+
+    /// Reduce a selected region using an explicitly supplied projector and its
+    /// paired internal momenta; boundary and external-state momenta stay fixed.
+    /// A supplied expression replaces the selected numerator and projector,
+    /// allowing reduction after tensor contractions or a UV expansion.
+    fn tensor_reduce_of(
+        &self,
+        subgraph: &SuBitGraph,
+        dimension: Atom,
+        projector: &SymbolicTensor<PartialStructure>,
+        expression: Option<&SymbolicTensor<PartialStructure>>,
+    ) -> Result<TensorReduction, TensorReductionError>;
+
     /// Reduce the finalized diagram numerator and external-state projector.
     ///
-    /// The request-wide numerator prefactor is scalar by construction and is
-    /// intentionally kept separate from the returned tensor reduction.
+    /// The request-wide numerator prefactor is intentionally kept separate
+    /// from the returned tensor reduction.
     fn reduce_tensor_numerator(
         &self,
         reducer: &TensorReducer,
@@ -1122,12 +1156,62 @@ pub trait FeynmanDiagramTensorExt {
 }
 
 impl FeynmanDiagramTensorExt for FeynmanDiagram {
+    fn tensor_reduce(&self, dimension: Atom) -> Result<TensorReduction, TensorReductionError> {
+        self.tensor_reduce_of(
+            &self.underlying().full_filter(),
+            dimension,
+            self.projector(),
+            None,
+        )
+    }
+
+    fn tensor_reduce_of(
+        &self,
+        subgraph: &SuBitGraph,
+        dimension: Atom,
+        projector: &SymbolicTensor<PartialStructure>,
+        expression: Option<&SymbolicTensor<PartialStructure>>,
+    ) -> Result<TensorReduction, TensorReductionError> {
+        let representation = FunctionBuilder::new(Minkowski::selfless_symbol())
+            .add_arg(&dimension)
+            .finish();
+        let mut reducer = TensorReducer::new(dimension.clone());
+        for (pair, edge, data) in self.underlying().iter_edges_of(subgraph) {
+            if pair.is_paired() && data.data.external.is_none() && !data.data.is_dummy {
+                let vector = FunctionBuilder::new(feynkit_graph::momentum_symbol())
+                    .add_arg(edge.0)
+                    .add_arg(&representation)
+                    .finish();
+                reducer = reducer.with_integrated_vector(vector)?;
+            }
+        }
+        let projected = if let Some(expression) = expression {
+            expression.clone()
+        } else {
+            let numerator = if *subgraph == self.underlying().full_filter() {
+                self.numerator().clone()
+            } else {
+                self.numerator_of(subgraph, &SuBitGraph::empty(self.underlying().n_hedges()))?
+            };
+            numerator.multiply(projector)?
+        };
+        let projected = projected.map_representation_dimensions(|representation, current| {
+            if representation == LibraryRep::from(Minkowski {}) && current == Atom::num(4).as_view()
+            {
+                dimension.clone()
+            } else {
+                current.to_owned()
+            }
+        })?;
+        reducer.reduce(&projected)
+    }
+
     fn reduce_tensor_numerator(
         &self,
         reducer: &TensorReducer,
     ) -> Result<TensorReduction, TensorReductionError> {
-        let projected_numerator = self.numerator() * self.projector();
-        reducer.reduce(projected_numerator.as_view())
+        let projected_numerator = self.numerator().multiply(self.projector())?;
+        reducer.reduce(&projected_numerator)
     }
 
     fn reduce_tensor_graphs(
@@ -1142,12 +1226,14 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
             .terms
             .into_iter()
             .map(|term| term.expression())
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter()
             .filter(|numerator| !numerator.is_zero())
             .enumerate()
             .map(|(index, numerator)| {
                 self.clone()
                     .with_name(format!("{}.tensor[{index}]", self.name()))
-                    .with_projector(Atom::one())
+                    .with_projector(SymbolicTensor::infer(Atom::one())?)
                     .with_numerator(numerator)
                     .map_err(TensorReductionError::Diagram)
             })
@@ -1158,6 +1244,14 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
 /// Failures while parsing or materializing a tensor reduction.
 #[derive(Debug, Error)]
 pub enum TensorReductionError {
+    /// External basis entries must be compact Lorentz vectors.
+    #[error("invalid compact external vector: {0}")]
+    InvalidExternalVector(Atom),
+    /// A nondegenerate external span is required for covariant projection.
+    #[error(
+        "cannot invert the external Gram matrix; choose an independent nondegenerate basis: {0}"
+    )]
+    ExternalGram(String),
     /// A reduction requires at least one loop/integrated-momentum selector.
     #[error("no integrated vectors selected; add a head or exact-vector selector")]
     NoIntegratedVectorsSelected,
@@ -1197,9 +1291,9 @@ pub enum TensorReductionError {
     /// Symmetry reduction still produced too many distinct invariant terms.
     #[error("tensor reduction produces at least {terms} terms, above limit {limit}")]
     OutputLimit { terms: usize, limit: usize },
-    /// Distributing factored tensor sums exceeded the materialization budget.
-    #[error("tensor numerator expansion produces at least {terms} terms, above limit {limit}")]
-    ExpansionLimit { terms: usize, limit: usize },
+    /// Checked tensor admission, contraction, or complete coefficient collection failed.
+    #[error("tensor reduction algebra failed: {0}")]
+    TensorAlgebra(String),
     /// A combinatorial multiplicity did not fit Symbolica's integer boundary.
     #[error("pairing multiplicity {0} does not fit a signed 64-bit coefficient")]
     MultiplicityOverflow(u128),
@@ -1222,6 +1316,18 @@ pub enum TensorReductionError {
     /// Internal and projector color lists must describe the same tensor rank.
     #[error("internal colors have rank {internal}, but projector colors have rank {projector}")]
     ProjectorRankMismatch { internal: usize, projector: usize },
+}
+
+impl From<idenso::tensor::inference::TensorInferenceError> for TensorReductionError {
+    fn from(error: idenso::tensor::inference::TensorInferenceError) -> Self {
+        Self::TensorAlgebra(error.to_string())
+    }
+}
+
+impl From<idenso::tensor::composition::TensorCompositionError> for TensorReductionError {
+    fn from(error: idenso::tensor::composition::TensorCompositionError) -> Self {
+        Self::TensorAlgebra(error.to_string())
+    }
 }
 
 impl From<OrbitProjectorError> for TensorReductionError {
@@ -1253,10 +1359,11 @@ struct IndexedVector {
     head: Symbol,
     compact: Atom,
     index: Atom,
+    slot: Atom,
 }
 
-#[derive(Default)]
 struct IndexOccupants {
+    slot: Atom,
     integrated: Vec<Atom>,
     outside: Vec<Atom>,
 }
@@ -1284,105 +1391,6 @@ struct ClassifiedOutside {
     class_of_pairing: Vec<usize>,
 }
 
-fn bounded_expand_summands(
-    expression: AtomView<'_>,
-    limit: usize,
-) -> Result<Vec<Atom>, TensorReductionError> {
-    if limit == 0 {
-        return Err(TensorReductionError::ExpansionLimit { terms: 1, limit });
-    }
-    match expression {
-        AtomView::Add(sum) => {
-            let mut terms = Vec::new();
-            for summand in sum.iter() {
-                let expanded = bounded_expand_summands(summand, limit)?;
-                let term_count = terms.len().checked_add(expanded.len()).ok_or(
-                    TensorReductionError::ExpansionLimit {
-                        terms: usize::MAX,
-                        limit,
-                    },
-                )?;
-                if term_count > limit {
-                    return Err(TensorReductionError::ExpansionLimit {
-                        terms: term_count,
-                        limit,
-                    });
-                }
-                terms.extend(expanded);
-            }
-            Ok(terms)
-        }
-        AtomView::Mul(product) => {
-            let mut terms = vec![Atom::one()];
-            for factor in product.iter() {
-                let expanded = bounded_expand_summands(factor, limit)?;
-                terms = bounded_term_product(&terms, &expanded, limit)?;
-            }
-            Ok(terms)
-        }
-        AtomView::Pow(power) => {
-            let Ok(exponent) = i64::try_from(power.get_exp()) else {
-                return Ok(vec![expression.to_owned()]);
-            };
-            let Ok(mut exponent) = usize::try_from(exponent) else {
-                return Ok(vec![expression.to_owned()]);
-            };
-            let mut factor = bounded_expand_summands(power.get_base(), limit)?;
-            if exponent == 0 {
-                return Ok(vec![Atom::one()]);
-            }
-            if factor.len() == 1 {
-                return Ok(vec![
-                    factor
-                        .pop()
-                        .expect("one expanded base term")
-                        .pow(power.get_exp().to_owned()),
-                ]);
-            }
-
-            let mut terms = vec![Atom::one()];
-            while exponent != 0 {
-                if exponent & 1 == 1 {
-                    terms = bounded_term_product(&terms, &factor, limit)?;
-                }
-                exponent >>= 1;
-                if exponent != 0 {
-                    factor = bounded_term_product(&factor, &factor, limit)?;
-                }
-            }
-            Ok(terms)
-        }
-        _ => Ok(vec![expression.to_owned()]),
-    }
-}
-
-fn bounded_term_product(
-    left: &[Atom],
-    right: &[Atom],
-    limit: usize,
-) -> Result<Vec<Atom>, TensorReductionError> {
-    let term_count =
-        left.len()
-            .checked_mul(right.len())
-            .ok_or(TensorReductionError::ExpansionLimit {
-                terms: usize::MAX,
-                limit,
-            })?;
-    if term_count > limit {
-        return Err(TensorReductionError::ExpansionLimit {
-            terms: term_count,
-            limit,
-        });
-    }
-    let mut terms = Vec::with_capacity(term_count);
-    for left in left {
-        for right in right {
-            terms.push(left * right);
-        }
-    }
-    Ok(terms)
-}
-
 fn contains_representation(argument: &AtomView<'_>) -> bool {
     matches!(argument, AtomView::Fun(function) if function.get_symbol().has_tag(&SPENSO_TAG.representation))
 }
@@ -1398,8 +1406,16 @@ fn count_minkowski_index(
         && function.get_symbol().get_stripped_name() == "mink"
     {
         let arguments = function.iter().collect::<Vec<_>>();
-        if arguments.as_slice() == [dimension.as_view(), index.as_view()] {
-            return Ok(multiplicity);
+        if let [slot_dimension, slot_index] = arguments.as_slice()
+            && *slot_index == index.as_view()
+        {
+            let source_dimension = slot_dimension
+                .get_symbol()
+                .and_then(idenso::CookSettings::dimension_payload)
+                .unwrap_or_else(|| slot_dimension.to_owned());
+            if source_dimension == *dimension {
+                return Ok(multiplicity);
+            }
         }
     }
     if let AtomView::Pow(power) = expression {
@@ -1424,62 +1440,6 @@ fn count_minkowski_index(
                 multiplicity,
             )?))
         })
-}
-
-fn has_dangling_minkowski_indices(
-    expression: &Atom,
-    dimension: &Atom,
-) -> Result<bool, TensorReductionError> {
-    fn collect(
-        expression: AtomView<'_>,
-        dimension: &Atom,
-        multiplicity: usize,
-        counts: &mut BTreeMap<Atom, usize>,
-    ) -> Result<(), TensorReductionError> {
-        if let AtomView::Fun(function) = expression
-            && function.get_symbol().get_namespace() == "spenso"
-            && function.get_symbol().get_stripped_name() == "mink"
-            && function.get_nargs() == 2
-        {
-            let arguments = function.iter().collect::<Vec<_>>();
-            if arguments[0] != dimension.as_view() {
-                return Err(TensorReductionError::DimensionMismatch {
-                    expected: dimension.clone(),
-                    found: arguments[0].to_owned(),
-                });
-            }
-            let count = counts.entry(arguments[1].to_owned()).or_default();
-            *count = count.saturating_add(multiplicity);
-            return Ok(());
-        }
-        if let AtomView::Pow(power) = expression
-            && let Ok(exponent) = i64::try_from(power.get_exp())
-            && let Ok(exponent) = usize::try_from(exponent)
-        {
-            return collect(
-                power.get_base(),
-                dimension,
-                multiplicity.saturating_mul(exponent),
-                counts,
-            );
-        }
-        for child in expression.children() {
-            collect(child, dimension, multiplicity, counts)?;
-        }
-        Ok(())
-    }
-
-    let mut counts = BTreeMap::new();
-    collect(expression.as_view(), dimension, 1, &mut counts)?;
-    for (index, occurrences) in &counts {
-        if *occurrences > 2 {
-            return Err(TensorReductionError::AmbiguousMinkowskiIndex {
-                index: index.clone(),
-                occurrences: *occurrences,
-            });
-        }
-    }
-    Ok(counts.values().any(|occurrences| *occurrences == 1))
 }
 
 #[cfg(test)]
@@ -1550,6 +1510,7 @@ fn outside_pair(left: &Outside, right: &Outside) -> Atom {
     }
 }
 
+#[cfg(test)]
 fn minkowski_slot(dimension: &Atom, index: &Atom) -> Atom {
     FunctionBuilder::new(Minkowski::selfless_symbol())
         .add_arg(dimension)
@@ -1885,8 +1846,10 @@ fn atom_from_count(count: u128) -> Result<Atom, TensorReductionError> {
 mod tests {
     use super::*;
     use crate::CosetType;
-    use feynkit_graph::{DiagramEdge, DiagramVertex};
+    use feynkit_graph::{DiagramEdge, DiagramVertex, NumeratorInterface};
     use feynkit_model::Model;
+    use idenso::shorthands::UndoShorthands;
+    use spenso::structure::abstract_index::AbstractIndex;
     use spenso::vector_symbol;
     use symbolica::symbol;
 
@@ -1929,6 +1892,227 @@ mod tests {
             .finish()
     }
 
+    #[test]
+    fn source_admission_preserves_domain_errors_without_accepting_invalid_tensors() {
+        let (k, q, p, _) = vectors();
+        let dimension = Atom::num(4);
+        let mu = Atom::var(symbol!("feynkit_tensor_test::admission_mu"));
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let vector = indexed(k, 1, &dimension, &mu);
+        let source = reducer.admit(vector.clone()).unwrap();
+        assert_eq!(source.rank(), 1);
+        assert_eq!(source.expression(), &vector);
+        let odd = reducer.reduce(&source).unwrap().into_expression().unwrap();
+        assert!(odd.is_zero());
+        assert_eq!(odd.structure(), source.structure());
+
+        let malformed = vector * indexed(p, 1, &dimension, &mu) * indexed(q, 1, &dimension, &mu);
+        assert!(SymbolicTensor::infer(malformed.clone()).is_err());
+        assert!(matches!(
+            reducer.admit(malformed),
+            Err(TensorReductionError::AmbiguousIndex {
+                index,
+                integrated: 1,
+                outside: 2,
+            }) if index == mu
+        ));
+        let invalid_rank_one = FunctionBuilder::new(
+            SPENSO_TAG.rank_one_tensor_symbol("feynkit_tensor_test::invalid_admission_vector"),
+        )
+        .add_arg(1)
+        .finish();
+        assert!(
+            matches!(
+                reducer.admit(invalid_rank_one),
+                Err(TensorReductionError::TensorAlgebra(message))
+                    if message.contains("requires exactly one final structural port")
+            ),
+            "a successful monomial parse must never override failed native admission"
+        );
+    }
+
+    #[test]
+    fn encoded_dimensions_keep_native_slots_and_scalar_projector_coefficients() {
+        let (k, q, _, _) = vectors();
+        let epsilon = Atom::var(symbol!("feynkit_tensor_test::encoded_epsilon"));
+        let dimension = Atom::num(4) - Atom::num(2) * &epsilon;
+        let mu = Atom::num(0);
+        let nu = Atom::num(1);
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let expected = cooking
+            .try_cook(
+                (metric(&dimension, &mu, &nu)
+                    * dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
+                    / &dimension)
+                    .as_view(),
+            )
+            .unwrap();
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        for second in [
+            indexed(k, 1, &dimension, &nu),
+            indexed(k, 1, &dimension, &nu) + indexed(q, 1, &dimension, &nu),
+        ] {
+            let source = reducer
+                .admit(
+                    cooking
+                        .try_cook((indexed(k, 1, &dimension, &mu) * second).as_view())
+                        .unwrap(),
+                )
+                .unwrap();
+            let result = reducer.reduce(&source).unwrap().into_expression().unwrap();
+            assert_eq!(
+                result.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+            assert_eq!(result.rank(), 2);
+            assert!((result.expression() - &expected).together().is_zero());
+            let zero = source.with_checked_expression(Atom::Zero).unwrap();
+            let reduced_zero = reducer.reduce(&zero).unwrap().into_expression().unwrap();
+            assert!(reduced_zero.is_zero());
+            assert_eq!(reduced_zero.structure(), source.structure());
+            assert!(matches!(
+                TensorReducer::new(Atom::num(6) - Atom::num(2) * &epsilon)
+                    .with_integrated_head(k)
+                    .reduce(&source),
+                Err(TensorReductionError::DimensionMismatch { .. })
+            ));
+        }
+        let opaque = spenso::tensor_symbol!("feynkit_tensor_test::encoded_opaque");
+        let opaque = FunctionBuilder::new(opaque)
+            .add_arg(minkowski_slot(&dimension, &mu))
+            .finish();
+        let opaque = cooking.try_cook(opaque.as_view()).unwrap();
+        assert_eq!(
+            count_minkowski_index(opaque.as_view(), &dimension, &mu, 1).unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn reduction_keeps_declared_spectator_axes_and_zero_interfaces() {
+        use idenso::representations::Bispinor;
+        use spenso::structure::representation::RepName;
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::num(4);
+        let mu = Atom::var(symbol!("retained_reduction_mu"));
+        let nu = Atom::var(symbol!("retained_reduction_nu"));
+        let left = Atom::var(symbol!("retained_reduction_left"));
+        let right = Atom::var(symbol!("retained_reduction_right"));
+        let spectator = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("retained_reduction_spin"))
+            .add_arg(Bispinor {}.new_rep(4).to_symbolic([left]))
+            .add_arg(Bispinor {}.new_rep(4).to_symbolic([right]))
+            .finish();
+        let source = SymbolicTensor::infer(
+            &spectator * indexed(k, 1, &dimension, &mu) * indexed(k, 1, &dimension, &nu),
+        )
+        .unwrap();
+        let mut slots = source.structure().logical_slots();
+        slots.reverse();
+        let source = SymbolicTensor::from_declared_parts(
+            source.expression().clone(),
+            PartialStructure::from_logical_slots(slots),
+        )
+        .unwrap();
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let reduced = reducer.reduce(&source).unwrap();
+        let result = reduced.expression().unwrap();
+        assert_eq!(result.structure(), source.structure());
+        assert_eq!(result.rank(), 4);
+        assert!(result.expression().contains(&spectator));
+        for term in reduced.terms() {
+            assert_eq!(term.tensor().structure(), source.structure());
+        }
+        let vector = compact(k, 1, &dimension);
+        let expected =
+            &spectator * dot(&vector, &vector) * metric(&dimension, &mu, &nu) / &dimension;
+        assert!((result.expression() - expected).together().is_zero());
+
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let result = reducer.reduce(&zero).unwrap().into_expression().unwrap();
+        assert!(result.is_zero());
+        assert_eq!(result.structure(), source.structure());
+        let odd = SymbolicTensor::infer(&spectator * indexed(k, 1, &dimension, &mu)).unwrap();
+        let reduced = reducer.reduce(&odd).unwrap();
+        assert!(!reduced.is_fully_contracted());
+        let result = reduced.into_expression().unwrap();
+        assert!(result.is_zero());
+        assert_eq!(result.structure(), odd.structure());
+    }
+
+    #[test]
+    fn closed_single_vector_rank_32_preserves_general_rank_20_limit() {
+        let (k, q, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_isotropic_32"));
+        let kc = compact(k, 1, &dimension);
+        let qc = compact(q, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q);
+        let input = dot(&kc, &pc).pow(32);
+        let actual = reducer
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .unwrap();
+        let multiplicity = (1..32)
+            .step_by(2)
+            .fold(Atom::one(), |a, n| a * Atom::num(n));
+        let expected = multiplicity
+            * dot(&kc, &kc).pow(16)
+            * dot(&pc, &pc).pow(16)
+            * OrthogonalWeingarten::isotropic_pairing_coefficient(16, dimension);
+        assert!(actual.is_fully_contracted());
+        assert!(
+            (actual.expression().unwrap().into_expression() - expected)
+                .together()
+                .is_zero()
+        );
+        let mixed = dot(&kc, &pc).pow(2) * dot(&qc, &pc).pow(20);
+        assert!(matches!(
+            reducer.reduce(&SymbolicTensor::infer((mixed.as_view()).to_owned()).unwrap()),
+            Err(TensorReductionError::UnsupportedRank {
+                rank: 22,
+                maximum: 20
+            })
+        ));
+        assert!(matches!(
+            reducer.reduce(
+                &SymbolicTensor::infer((dot(&kc, &pc).pow(34).as_view()).to_owned()).unwrap()
+            ),
+            Err(TensorReductionError::UnsupportedRank {
+                rank: 34,
+                maximum: 32
+            })
+        ));
+    }
+
+    #[test]
+    fn weighted_compact_dots_use_the_isotropic_second_moment() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("weighted_dot_D"));
+        let k_vector = compact(k, 1, &dimension);
+        let p_vector = compact(p, 1, &dimension);
+        let inner = dot(&k_vector, &p_vector);
+        let coefficient = (Atom::var(symbol!("weighted_dot_coefficient")) + Atom::one()).pow(20);
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        // Rotational invariance gives <k_mu k_nu> = k^2 g_mu_nu / D.
+        let expected =
+            &coefficient * dot(&k_vector, &k_vector) * dot(&p_vector, &p_vector) / &dimension;
+        let mu = Atom::var(symbol!("weighted_dot_mu"));
+        let components = indexed(k, 1, &dimension, &mu) * indexed(p, 1, &dimension, &mu);
+        for scalar in [inner, components] {
+            let input = dot(&(&coefficient * scalar * &k_vector), &p_vector);
+            let result = reducer
+                .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+                .unwrap()
+                .into_expression()
+                .unwrap()
+                .into_expression();
+            assert_eq!(result, expected);
+        }
+    }
+
     fn diagram_with_numerator(name: &str, numerator: Atom) -> FeynmanDiagram {
         diagram_with_payload(name, numerator, Atom::one(), Atom::one())
     }
@@ -1946,11 +2130,12 @@ mod tests {
         let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
         let particle = model.particle_id("scalar_0").unwrap();
         let mut left = DiagramVertex::interaction("left", rule);
+        let numerator = NumeratorInterface::admit(numerator, None).unwrap();
         left.numerator = numerator.clone();
         let mut builder = FeynmanDiagram::builder(model, name)
             .numerator(numerator)
-            .numerator_prefactor(numerator_prefactor)
-            .projector(projector);
+            .numerator_prefactor(NumeratorInterface::admit(numerator_prefactor, None).unwrap())
+            .projector(NumeratorInterface::admit(projector, None).unwrap());
         let left = builder.add_vertex(left);
         let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
         for _ in 0..3 {
@@ -1994,7 +2179,7 @@ mod tests {
     fn reduction_requires_an_integrated_vector_selector() {
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_no_selector"));
         let error = TensorReducer::new(dimension)
-            .reduce(Atom::one().as_view())
+            .reduce(&SymbolicTensor::infer((Atom::one().as_view()).to_owned()).unwrap())
             .unwrap_err();
         assert!(matches!(
             error,
@@ -2014,6 +2199,263 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn exact_compound_dimension_selectors_preserve_unselected_vectors_and_open_ports() {
+        let (k, _, _, _) = vectors();
+        let dimension = Atom::num(4)
+            - Atom::num(2) * Atom::var(symbol!("feynkit_tensor_test::selector_epsilon"));
+        let [mu, nu] = [Atom::num(7), Atom::num(11)];
+        let k0 = compact(k, 0, &dimension);
+        let k1 = compact(k, 1, &dimension);
+        let unselected = indexed(k, 1, &dimension, &mu) * indexed(k, 1, &dimension, &nu);
+        let source = NumeratorInterface::admit(
+            indexed(k, 0, &dimension, &mu) * indexed(k, 0, &dimension, &nu) + &unselected,
+            None,
+        )
+        .unwrap();
+        let source = SymbolicTensor::from_declared_parts(
+            source.expression().clone(),
+            PartialStructure::from_logical_slots(
+                source.structure().logical_slots().into_iter().rev(),
+            ),
+        )
+        .unwrap();
+        let reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_vector(k0.clone())
+            .unwrap();
+        let result = reducer.reduce(&source).unwrap().into_expression().unwrap();
+        let expected = NumeratorInterface::admit(
+            dot(&k0, &k0) * metric(&dimension, &mu, &nu) / &dimension + &unselected,
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            result.structure().logical_slots(),
+            source.structure().logical_slots()
+        );
+        assert!(
+            (result.expression() - expected.expression())
+                .together()
+                .is_zero()
+        );
+        let head = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .reduce(&source)
+            .unwrap()
+            .into_expression()
+            .unwrap();
+        let expected_head = NumeratorInterface::admit(
+            (dot(&k0, &k0) + dot(&k1, &k1)) * metric(&dimension, &mu, &nu) / &dimension,
+            None,
+        )
+        .unwrap();
+        assert!(
+            (head.expression() - expected_head.expression())
+                .together()
+                .is_zero()
+        );
+        assert_ne!(
+            result.expression(),
+            head.expression(),
+            "the exact selector must leave k(1) outside"
+        );
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let zero_result = reducer.reduce(&zero).unwrap().into_expression().unwrap();
+        assert!(zero_result.is_zero());
+        assert_eq!(zero_result.structure(), source.structure());
+
+        let vector = NumeratorInterface::admit(indexed(k, 0, &dimension, &mu), None).unwrap();
+        let external = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_external_vector(k1.clone())
+            .unwrap();
+        let actual = external.reduce(&vector).unwrap().into_expression().unwrap();
+        let expected = NumeratorInterface::admit(
+            dot(&k0, &k1) / dot(&k1, &k1) * indexed(k, 1, &dimension, &mu),
+            None,
+        )
+        .unwrap();
+        assert_eq!(actual.structure(), vector.structure());
+        assert!(
+            (actual.expression() - expected.expression())
+                .together()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn graph_compound_dimension_preserves_selected_edge_and_declared_ports() {
+        use linnet::half_edge::{involution::EdgeIndex, subgraph::ModifySubSet};
+        let momentum = feynkit_graph::momentum_symbol();
+        let [mu, nu] = [Atom::num(7), Atom::num(11)];
+        let four = Atom::num(4);
+        let numerator = indexed(momentum, 0, &four, &mu) * indexed(momentum, 0, &four, &nu)
+            + indexed(momentum, 1, &four, &mu) * indexed(momentum, 1, &four, &nu);
+        let diagram = diagram_with_numerator("compound-selected-edge", numerator);
+        let source = SymbolicTensor::from_declared_parts(
+            diagram.numerator().expression().clone(),
+            PartialStructure::from_logical_slots(
+                diagram
+                    .numerator()
+                    .structure()
+                    .logical_slots()
+                    .into_iter()
+                    .rev(),
+            ),
+        )
+        .unwrap();
+        let mut selected: SuBitGraph = diagram.underlying().empty_subgraph();
+        selected.add(diagram.underlying()[&EdgeIndex(0)].1);
+        let dimension = Atom::num(4)
+            - Atom::num(2) * Atom::var(symbol!("feynkit_tensor_test::graph_selector_epsilon"));
+        let result = diagram
+            .tensor_reduce_of(
+                &selected,
+                dimension.clone(),
+                diagram.projector(),
+                Some(&source),
+            )
+            .unwrap()
+            .into_expression()
+            .unwrap();
+        let k = compact(momentum, 0, &dimension);
+        let expected = NumeratorInterface::admit(
+            dot(&k, &k) * metric(&dimension, &mu, &nu) / &dimension
+                + indexed(momentum, 1, &dimension, &mu) * indexed(momentum, 1, &dimension, &nu),
+            None,
+        )
+        .unwrap();
+        let expected_ports = expected
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>();
+        assert_eq!(result.structure().logical_slots(), expected_ports);
+        assert!(
+            (result.expression() - expected.expression())
+                .together()
+                .is_zero()
+        );
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let zero = diagram
+            .tensor_reduce_of(&selected, dimension, diagram.projector(), Some(&zero))
+            .unwrap()
+            .into_expression()
+            .unwrap();
+        assert!(zero.is_zero());
+        assert_eq!(zero.structure().logical_slots(), expected_ports);
+        assert_eq!(source.rank(), 2);
+        assert!(
+            source
+                .structure()
+                .logical_slots()
+                .iter()
+                .all(|slot| slot.dim().to_symbolic() == four)
+        );
+    }
+
+    #[test]
+    fn graph_tensor_reduce_selects_internal_edges_and_promotes_lorentz_slots() {
+        let model = Model::from_json(include_str!(
+            "../../feynkit-model/tests/fixtures/scalars_2p_3p.json"
+        ))
+        .unwrap();
+        let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
+        let particle = model.particle_id("scalar_0").unwrap();
+        let mut builder = FeynmanDiagram::builder(model, "internal-selection");
+        let left = builder.add_vertex(DiagramVertex::interaction("left", rule));
+        let right = builder.add_vertex(DiagramVertex::interaction("right", rule));
+        let mut incoming = DiagramEdge::new(particle, false);
+        incoming.external = Some(feynkit_graph::ExternalLeg {
+            name: "in".into(),
+            index: 0,
+            state: feynkit_graph::ExternalState::Incoming,
+            connection: 0,
+        });
+        let internal = builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        builder
+            .add_edge(left, right, DiagramEdge::new(particle, false))
+            .unwrap();
+        let outside = builder.add_edge(None, left, incoming).unwrap();
+        let mut outgoing = DiagramEdge::new(particle, false);
+        outgoing.external = Some(feynkit_graph::ExternalLeg {
+            name: "out".into(),
+            index: 1,
+            state: feynkit_graph::ExternalState::Outgoing,
+            connection: 1,
+        });
+        builder.add_edge(right, None, outgoing).unwrap();
+        let momentum = feynkit_graph::momentum_symbol();
+        let d = Atom::var(symbol!("graph_reduce_D"));
+        let mu = Atom::var(symbol!("graph_reduce_mu"));
+        let nu = Atom::var(symbol!("graph_reduce_nu"));
+        let four = Atom::num(4);
+        let numerator = indexed(momentum, internal.0 as i64, &four, &mu)
+            * indexed(momentum, internal.0 as i64, &four, &nu);
+        let projector = indexed(momentum, outside.0 as i64, &four, &mu)
+            * indexed(momentum, outside.0 as i64, &four, &nu);
+        let diagram = builder
+            .numerator(NumeratorInterface::admit(numerator, None).unwrap())
+            .projector(NumeratorInterface::admit(projector, None).unwrap())
+            .numerator_prefactor(SymbolicTensor::infer(Atom::num(7)).unwrap())
+            .build()
+            .unwrap();
+        let result = diagram
+            .tensor_reduce(d.clone())
+            .unwrap()
+            .into_expression()
+            .unwrap()
+            .into_expression();
+        let k = compact(momentum, internal.0 as i64, &d);
+        let p = compact(momentum, outside.0 as i64, &d);
+        let expected = dot(&k, &k) * dot(&p, &p) / &d;
+        assert_eq!(result, expected);
+        assert_eq!(diagram.numerator_prefactor().expression(), &Atom::num(7));
+
+        use linnet::half_edge::{
+            involution::{EdgeIndex, HedgePair},
+            subgraph::ModifySubSet,
+        };
+        let pair = diagram.underlying()[&EdgeIndex(internal.0)].1;
+        let mut selected: SuBitGraph = diagram.underlying().empty_subgraph();
+        selected.add(pair);
+        let partial = diagram
+            .tensor_reduce_of(
+                &selected,
+                d.clone(),
+                diagram.projector(),
+                Some(&diagram.numerator().multiply(diagram.projector()).unwrap()),
+            )
+            .unwrap()
+            .into_expression()
+            .unwrap()
+            .into_expression();
+        assert_eq!(partial, expected);
+        let product = diagram.numerator().multiply(diagram.projector()).unwrap();
+        let expanded = product
+            .with_checked_expression(Atom::num(3) + Atom::num(2) * product.expression())
+            .unwrap();
+        let reduced_expansion = diagram
+            .tensor_reduce_of(&selected, d.clone(), diagram.projector(), Some(&expanded))
+            .unwrap()
+            .into_expression()
+            .unwrap()
+            .into_expression();
+        assert_eq!(reduced_expansion, Atom::num(3) + Atom::num(2) * &expected);
+        let HedgePair::Paired { source, .. } = pair else {
+            panic!("internal propagator")
+        };
+        let mut boundary: SuBitGraph = diagram.underlying().empty_subgraph();
+        boundary.add(source);
+        assert!(matches!(
+            diagram.tensor_reduce_of(&boundary, d, diagram.projector(), None),
+            Err(TensorReductionError::NoIntegratedVectorsSelected)
+        ));
     }
 
     #[test]
@@ -2038,7 +2480,8 @@ mod tests {
             .terms()
             .iter()
             .map(TensorReductionTerm::expression)
-            .collect::<Vec<_>>();
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap();
         let graphs = diagram.reduce_tensor_graphs(&reducer).unwrap();
 
         assert_eq!(graphs.len(), 2);
@@ -2081,14 +2524,14 @@ mod tests {
             / dimension;
 
         let reduction = diagram.reduce_tensor_numerator(&reducer).unwrap();
-        assert!((reduction.expression() - &expected).together().is_zero());
+        assert_eq!(reduction.expression().unwrap().into_expression(), expected);
         let graphs = diagram.reduce_tensor_graphs(&reducer).unwrap();
         assert_eq!(graphs.len(), 1);
         let graph = &graphs[0];
-        assert_eq!(graph.projector(), &Atom::one());
-        assert_eq!(graph.numerator_prefactor(), &prefactor);
-        assert!((graph.numerator() - expected).together().is_zero());
-        assert_eq!(diagram.projector(), &projector);
+        assert_eq!(graph.projector().expression(), &Atom::one());
+        assert_eq!(graph.numerator_prefactor().expression(), &prefactor);
+        assert_eq!(graph.numerator().expression(), &expected);
+        assert_eq!(diagram.projector().expression(), &projector);
         graph.validate().unwrap();
         FeynmanDiagram::from_json(graph.model_arc(), &graph.to_json().unwrap()).unwrap();
         FeynmanDiagram::from_dot(graph.model_arc(), &graph.to_dot().unwrap()).unwrap();
@@ -2124,13 +2567,164 @@ mod tests {
             * indexed(r, 1, &dimension, &nu);
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         let expected = dot(&compact(k, 1, &dimension), &compact(k, 2, &dimension))
             * dot(&compact(p, 1, &dimension), &compact(r, 1, &dimension))
             / dimension;
-        assert_eq!(result.expression().expand(), expected.expand());
+        assert_eq!(result.expression().unwrap().into_expression(), expected);
         assert!(result.is_fully_contracted());
+    }
+
+    #[test]
+    fn squared_dot_expansion_preserves_rank_two_angular_average() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_squared_dot"));
+        let loop_vector = compact(k, 1, &dimension);
+        let external_vector = compact(p, 1, &dimension);
+        let input = dot(&loop_vector, &external_vector)
+            .pow(Atom::num(2))
+            .undo_dots::<AbstractIndex>()
+            .unwrap();
+        let result = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .unwrap();
+        // Independent contractions in (k.p)^2 give <k_mu k_nu> = k^2 g_mu_nu / D.
+        let expected =
+            dot(&loop_vector, &loop_vector) * dot(&external_vector, &external_vector) / dimension;
+        assert_eq!(result.expression().unwrap().into_expression(), expected);
+    }
+
+    #[test]
+    fn compact_spectator_dots_match_explicit_projection_through_rank_eight() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let mut even_expected = Atom::one();
+        for rank in 1..=8 {
+            let input = dot(&kc, &pc).pow(Atom::num(rank));
+            let compact_result = reducer
+                .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+                .unwrap();
+            let explicit = input.undo_dots::<AbstractIndex>().unwrap();
+            let explicit_result = reducer
+                .reduce(&SymbolicTensor::infer((explicit.as_view()).to_owned()).unwrap())
+                .unwrap();
+            assert_eq!(
+                compact_result.expression().unwrap().into_expression(),
+                explicit_result.expression().unwrap().into_expression()
+            );
+            let expected = if rank % 2 == 0 {
+                even_expected *= Atom::num(rank - 1) * dot(&kc, &kc) * dot(&pc, &pc)
+                    / (&dimension + Atom::num(rank - 2));
+                even_expected.clone()
+            } else {
+                Atom::Zero
+            };
+            assert!(
+                (compact_result.expression().unwrap().into_expression() - expected)
+                    .together()
+                    .is_zero()
+            );
+            assert_eq!(compact_result.max_rank(), rank as usize);
+        }
+    }
+
+    #[test]
+    fn compact_dots_mix_with_free_indices_and_preserve_scalar_weights() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact_free"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::mu_compact_free"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone()).with_integrated_head(k);
+        let weight = (Atom::one() + dot(&kc, &kc)).pow(Atom::num(-2));
+        let input = &weight * dot(&kc, &pc) * indexed(k, 1, &dimension, &mu);
+        let expected = weight * dot(&kc, &kc) * indexed(p, 1, &dimension, &mu) / dimension;
+        let result = reducer
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .unwrap();
+        assert!(
+            (result.expression().unwrap().into_expression() - expected)
+                .together()
+                .is_zero()
+        );
+        assert!(!result.is_fully_contracted());
+    }
+
+    #[test]
+    fn compact_dot_external_projection_is_idempotent() {
+        let (k, q, p, r) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact_external"));
+        let kc = compact(k, 1, &dimension);
+        let qc = compact(q, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let rc = compact(r, 1, &dimension);
+        let reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q)
+            .with_external_vector(pc.clone())
+            .unwrap();
+        let input = dot(&kc, &rc) * dot(&qc, &rc);
+        let parallel = dot(&kc, &pc) * dot(&qc, &pc) * dot(&rc, &pc).pow(Atom::num(2))
+            / dot(&pc, &pc).pow(Atom::num(2));
+        let transverse = (dot(&kc, &qc) - dot(&kc, &pc) * dot(&qc, &pc) / dot(&pc, &pc))
+            * (dot(&rc, &rc) - dot(&rc, &pc).pow(Atom::num(2)) / dot(&pc, &pc))
+            / (dimension - Atom::one());
+        let result = reducer
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .unwrap()
+            .expression()
+            .unwrap()
+            .into_expression();
+        assert!((&result - parallel - transverse).together().is_zero());
+        let repeated = reducer
+            .reduce(&SymbolicTensor::infer((result.as_view()).to_owned()).unwrap())
+            .unwrap()
+            .expression()
+            .unwrap()
+            .into_expression();
+        assert!((result - repeated).together().is_zero());
+        // Rational longitudinal weights are invariants of the transverse average.
+        let invariant = dot(&kc, &pc).pow(Atom::num(-1)) * dot(&kc, &qc);
+        assert_eq!(
+            reducer
+                .reduce(&SymbolicTensor::infer((invariant.as_view()).to_owned()).unwrap())
+                .unwrap()
+                .expression()
+                .unwrap()
+                .into_expression(),
+            invariant
+        );
+    }
+
+    #[test]
+    fn compact_spectator_dots_enforce_power_rank_and_dimension_limits() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact_limits"));
+        let kc = compact(k, 1, &dimension);
+        let pc = compact(p, 1, &dimension);
+        let reducer = TensorReducer::new(dimension).with_integrated_head(k);
+        for exponent in [Atom::num(-1), Atom::num(1) / Atom::num(2)] {
+            let input = dot(&kc, &pc).pow(exponent);
+            assert!(matches!(
+                reducer.reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap()),
+                Err(TensorReductionError::InvalidVectorPower(_))
+            ));
+        }
+        let input = dot(&kc, &pc).pow(Atom::num(OrthogonalWeingarten::MAX_RANK + 1));
+        assert!(matches!(
+            reducer.reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap()),
+            Err(TensorReductionError::UnsupportedRank { .. })
+        ));
+        let wrong_dimension = dot(&kc, &compact(p, 1, &Atom::num(3)));
+        assert!(matches!(
+            reducer.parse_monomial(wrong_dimension.as_view()),
+            Err(TensorReductionError::DimensionMismatch { .. })
+        ));
     }
 
     #[test]
@@ -2149,7 +2743,7 @@ mod tests {
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
             .with_integrated_head(q)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         assert_eq!(result.terms().len(), 2);
         let multiplicities = result
@@ -2177,7 +2771,7 @@ mod tests {
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
             .with_integrated_head(q)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
 
         let k = compact(k, 1, &dimension);
@@ -2197,11 +2791,11 @@ mod tests {
             + Atom::num(2) * crossed.clone() * &aa_bb * &pr_pr
             + Atom::num(2) * crossed.clone() * &ab_ab * &pp_rr
             + Atom::num(2) * (diagonal + crossed) * ab_ab * pr_pr;
-        let difference = (result.expression() - &expected).together();
+        let difference = (result.expression().unwrap().into_expression() - &expected).together();
         assert!(
             difference.is_zero(),
             "result: {}\nexpected: {expected}\ndifference: {difference}",
-            result.expression()
+            result.expression().unwrap().into_expression()
         );
     }
 
@@ -2217,7 +2811,7 @@ mod tests {
         }
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         assert_eq!(result.max_rank(), 20);
         assert_eq!(result.terms().len(), 1);
@@ -2237,7 +2831,11 @@ mod tests {
             * dot(&k, &k).pow(Atom::num(10))
             * dot(&p, &p).pow(Atom::num(10))
             / denominator;
-        assert!((result.expression() - expected).together().is_zero());
+        assert!(
+            (result.expression().unwrap().into_expression() - expected)
+                .together()
+                .is_zero()
+        );
     }
 
     #[test]
@@ -2258,7 +2856,7 @@ mod tests {
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
             .with_integrated_head(q)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         let elapsed = started.elapsed();
 
@@ -2320,9 +2918,13 @@ mod tests {
         }
         let isotropic_internal = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(isotropic_internal_input.as_view())
+            .reduce(
+                &SymbolicTensor::infer((isotropic_internal_input.as_view()).to_owned()).unwrap(),
+            )
             .unwrap()
-            .expression();
+            .expression()
+            .unwrap()
+            .into_expression();
         let brute_internal =
             brute_projected_expression(&internal_compact, &projector_compact, &dimension);
         assert!((isotropic_internal - brute_internal).together().is_zero());
@@ -2339,9 +2941,13 @@ mod tests {
         let isotropic_projector = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
             .with_integrated_head(q)
-            .reduce(isotropic_projector_input.as_view())
+            .reduce(
+                &SymbolicTensor::infer((isotropic_projector_input.as_view()).to_owned()).unwrap(),
+            )
             .unwrap()
-            .expression();
+            .expression()
+            .unwrap()
+            .into_expression();
         let brute_projector =
             brute_projected_expression(&integrated_compact, &projector_compact, &dimension);
         assert!((isotropic_projector - brute_projector).together().is_zero());
@@ -2367,7 +2973,7 @@ mod tests {
             .with_integrated_head(k)
             .with_integrated_head(q)
             .with_integrated_head(third)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         assert!(result.terms().len() < 100);
         assert_eq!(
@@ -2397,9 +3003,9 @@ mod tests {
         let result = TensorReducer::new(dimension)
             .with_integrated_head(k)
             .with_integrated_head(q)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
-        let materialized = result.expression();
+        let materialized = result.expression().unwrap().into_expression();
         eprintln!(
             "generic rank-12 output: {} compact terms, {} canonical characters",
             result.terms().len(),
@@ -2419,117 +3025,11 @@ mod tests {
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
             .with_integrated_head(q)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         assert_eq!(
-            result.expression(),
+            result.expression().unwrap().into_expression(),
             dot(&compact(k, 1, &dimension), &compact(q, 2, &dimension))
-        );
-    }
-
-    #[test]
-    fn strict_repeated_index_policy_rejects_four_identical_occupants() {
-        let (k, _, _, _) = vectors();
-        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_strict_repeated"));
-        let mu = Atom::var(symbol!("feynkit_tensor_test::strict_repeated_mu"));
-        let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(4));
-
-        let error = TensorReducer::new(dimension)
-            .with_integrated_head(k)
-            .reduce(input.as_view())
-            .expect_err("strict parsing must reject four occupants of one index");
-        assert!(
-            matches!(
-                error,
-                TensorReductionError::AmbiguousIndex {
-                    integrated: 4,
-                    outside: 0,
-                    ..
-                }
-            ),
-            "unexpected strict repeated-index error: {error:?}"
-        );
-    }
-
-    #[test]
-    fn opted_in_identical_contracted_integrated_vectors_preserve_legacy_power_semantics() {
-        let (k, _, _, _) = vectors();
-        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_repeated_contraction"));
-        let mu = Atom::var(symbol!("feynkit_tensor_test::repeated_contraction_mu"));
-        let compact_k = compact(k, 1, &dimension);
-
-        for pair_count in 2..=OrthogonalWeingarten::MAX_RANK / 2 {
-            let exponent = i64::try_from(2 * pair_count).unwrap();
-            let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(exponent));
-            let result = TensorReducer::new(dimension.clone())
-                .with_integrated_head(k)
-                .with_repeated_index_compatibility(
-                    RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
-                )
-                .reduce(input.as_view())
-                .unwrap();
-            let expected =
-                dot(&compact_k, &compact_k).pow(Atom::num(i64::try_from(pair_count).unwrap()));
-
-            assert_eq!(result.expression(), expected);
-            assert_eq!(result.max_rank(), 0);
-            assert!(result.is_fully_contracted());
-        }
-    }
-
-    #[test]
-    fn repeated_mixed_integrated_vectors_remain_ambiguous() {
-        let (k, q, _, _) = vectors();
-        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_mixed_contraction"));
-        let mu = Atom::var(symbol!("feynkit_tensor_test::mixed_contraction_mu"));
-        let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(2))
-            * indexed(q, 1, &dimension, &mu).pow(Atom::num(2));
-
-        let error = TensorReducer::new(dimension)
-            .with_integrated_head(k)
-            .with_integrated_head(q)
-            .with_repeated_index_compatibility(
-                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
-            )
-            .reduce(input.as_view())
-            .expect_err("mixed contraction must be rejected");
-        assert!(
-            matches!(
-                error,
-                TensorReductionError::AmbiguousIndex {
-                    integrated: 4,
-                    outside: 0,
-                    ..
-                }
-            ),
-            "unexpected mixed-contraction error: {error:?}"
-        );
-    }
-
-    #[test]
-    fn opted_in_repeated_index_compatibility_rejects_odd_multiplicity() {
-        let (k, _, _, _) = vectors();
-        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_odd_repeated"));
-        let mu = Atom::var(symbol!("feynkit_tensor_test::odd_repeated_mu"));
-        let input = indexed(k, 1, &dimension, &mu).pow(Atom::num(3));
-
-        let error = TensorReducer::new(dimension)
-            .with_integrated_head(k)
-            .with_repeated_index_compatibility(
-                RepeatedIndexCompatibility::LegacyIdenticalIntegratedPowers,
-            )
-            .reduce(input.as_view())
-            .expect_err("legacy compatibility must not infer odd contractions");
-        assert!(
-            matches!(
-                error,
-                TensorReductionError::AmbiguousIndex {
-                    integrated: 3,
-                    outside: 0,
-                    ..
-                }
-            ),
-            "unexpected odd repeated-index error: {error:?}"
         );
     }
 
@@ -2541,11 +3041,11 @@ mod tests {
         let input = indexed(p, 1, &dimension, &mu) * indexed(r, 2, &dimension, &mu);
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
 
         assert_eq!(
-            result.expression(),
+            result.expression().unwrap().into_expression(),
             dot(&compact(p, 1, &dimension), &compact(r, 2, &dimension))
         );
         assert!(result.is_fully_contracted());
@@ -2560,7 +3060,9 @@ mod tests {
         let diagram = diagram_with_numerator("external-free", input.clone());
         let reducer = TensorReducer::new(dimension).with_integrated_head(k);
 
-        let result = reducer.reduce(input.as_view()).unwrap();
+        let result = reducer
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .unwrap();
         assert!(!result.is_fully_contracted());
         assert!(matches!(
             diagram.reduce_tensor_graphs(&reducer),
@@ -2577,10 +3079,12 @@ mod tests {
         let input = indexed(p, 1, &dimension, &mu)
             * indexed(r, 1, &dimension, &mu)
             * indexed(third, 1, &dimension, &mu);
+        assert!(SymbolicTensor::infer(input.clone()).is_err());
         assert!(matches!(
             TensorReducer::new(dimension)
                 .with_integrated_head(k)
-                .reduce(input.as_view()),
+                .parse_monomial(input.as_view())
+                .map(|_| ()),
             Err(TensorReductionError::AmbiguousIndex {
                 integrated: 0,
                 outside: 3,
@@ -2594,13 +3098,15 @@ mod tests {
         let (k, _, p, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_free"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_free_mu"));
-        let opaque = FunctionBuilder::new(symbol!("feynkit_tensor_test::opaque"))
+        let opaque = FunctionBuilder::new(spenso::broadcast_symbol!("feynkit_tensor_test::opaque"))
             .add_arg(indexed(p, 1, &dimension, &mu))
             .finish();
         let diagram = diagram_with_numerator("opaque-free", opaque.clone());
         let reducer = TensorReducer::new(dimension).with_integrated_head(k);
 
-        let result = reducer.reduce(opaque.as_view()).unwrap();
+        let result = reducer
+            .reduce(&SymbolicTensor::infer((opaque.as_view()).to_owned()).unwrap())
+            .unwrap();
         assert!(!result.is_fully_contracted());
         assert!(matches!(
             diagram.reduce_tensor_graphs(&reducer),
@@ -2613,13 +3119,17 @@ mod tests {
         let (k, _, p, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_consumer"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_consumer_mu"));
-        let opaque = FunctionBuilder::new(symbol!("feynkit_tensor_test::opaque_consumer"))
-            .add_arg(indexed(p, 1, &dimension, &mu))
-            .finish();
+        let opaque = FunctionBuilder::new(spenso::broadcast_symbol!(
+            "feynkit_tensor_test::opaque_consumer"
+        ))
+        .add_arg(indexed(p, 1, &dimension, &mu))
+        .finish();
         let input = indexed(k, 1, &dimension, &mu) * indexed(k, 2, &dimension, &mu) * opaque;
+        assert!(SymbolicTensor::infer(input.clone()).is_err());
         let result = TensorReducer::new(dimension)
             .with_integrated_head(k)
-            .reduce(input.as_view());
+            .parse_monomial(input.as_view())
+            .map(|_| ());
         assert!(
             matches!(
                 result,
@@ -2635,7 +3145,7 @@ mod tests {
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_projector"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_projector_mu"));
         let nu = Atom::var(symbol!("feynkit_tensor_test::opaque_projector_nu"));
-        let tensor = symbol!("feynkit_tensor_test::opaque_projector_tensor");
+        let tensor = spenso::tensor_symbol!("feynkit_tensor_test::opaque_projector_tensor");
         let tensor_mu = FunctionBuilder::new(tensor)
             .add_arg(minkowski_slot(&dimension, &mu))
             .finish();
@@ -2659,9 +3169,9 @@ mod tests {
 
         let result = TensorReducer::new(dimension)
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
-        let difference = (result.expression() - expected).together();
+        let difference = (result.expression().unwrap().into_expression() - expected).together();
         assert!(
             difference.is_zero(),
             "opaque external tensor projector differs by {difference}"
@@ -2675,15 +3185,19 @@ mod tests {
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_opaque_power"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_power_mu"));
         let spin = Atom::var(symbol!("feynkit_tensor_test::opaque_power_spin"));
-        let tensor = FunctionBuilder::new(symbol!("feynkit_tensor_test::opaque_power_tensor"))
-            .add_arg(minkowski_slot(&dimension, &spin))
-            .add_arg(minkowski_slot(&dimension, &mu))
-            .finish();
+        let tensor = FunctionBuilder::new(spenso::tensor_symbol!(
+            "feynkit_tensor_test::opaque_power_tensor"
+        ))
+        .add_arg(minkowski_slot(&dimension, &spin))
+        .add_arg(minkowski_slot(&dimension, &mu))
+        .finish();
         let input = indexed(k, 1, &dimension, &mu) * tensor.pow(Atom::num(2));
 
+        assert!(SymbolicTensor::infer(input.clone()).is_err());
         let result = TensorReducer::new(dimension)
             .with_integrated_head(k)
-            .reduce(input.as_view());
+            .parse_monomial(input.as_view())
+            .map(|_| ());
         assert!(
             matches!(
                 result,
@@ -2700,17 +3214,20 @@ mod tests {
         let mu = Atom::var(symbol!("feynkit_tensor_test::opaque_symbolic_power_mu"));
         let spin = Atom::var(symbol!("feynkit_tensor_test::opaque_symbolic_power_spin"));
         let exponent = Atom::var(symbol!("feynkit_tensor_test::opaque_symbolic_power_n"));
-        let tensor =
-            FunctionBuilder::new(symbol!("feynkit_tensor_test::opaque_symbolic_power_tensor"))
-                .add_arg(minkowski_slot(&dimension, &spin))
-                .add_arg(minkowski_slot(&dimension, &mu))
-                .finish();
+        let tensor = FunctionBuilder::new(spenso::tensor_symbol!(
+            "feynkit_tensor_test::opaque_symbolic_power_tensor"
+        ))
+        .add_arg(minkowski_slot(&dimension, &spin))
+        .add_arg(minkowski_slot(&dimension, &mu))
+        .finish();
         let input = indexed(k, 1, &dimension, &mu) * tensor.pow(exponent);
 
+        assert!(SymbolicTensor::infer(input.clone()).is_err());
         assert!(matches!(
             TensorReducer::new(dimension)
                 .with_integrated_head(k)
-                .reduce(input.as_view()),
+                .parse_monomial(input.as_view())
+                .map(|_| ()),
             Err(TensorReductionError::InvalidVectorPower(_))
         ));
     }
@@ -2727,13 +3244,13 @@ mod tests {
             &result,
             Err(TensorReductionError::UnsupportedRank {
                 rank: 1_000_000,
-                maximum: 20
+                maximum: 32
             })
         ));
     }
 
     #[test]
-    fn factored_sum_expansion_obeys_the_output_budget_while_distributing() {
+    fn scalar_spectators_do_not_consume_the_selected_term_budget() {
         let (k, _, _, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_expansion_budget"));
         let variables = (0..6)
@@ -2746,15 +3263,64 @@ mod tests {
         let input = (variables[0].clone() + &variables[1])
             * (variables[2].clone() + &variables[3])
             * (variables[4].clone() + &variables[5]);
-        let error = TensorReducer::new(dimension)
+        let result = TensorReducer::new(dimension)
             .with_integrated_head(k)
             .with_output_term_limit(7)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .unwrap();
+        assert_eq!(result.terms().len(), 1);
+        assert_eq!(result.expression().unwrap().into_expression(), input);
+        assert!(result.is_fully_contracted());
+    }
+
+    #[test]
+    fn reduction_keeps_factored_scalar_and_foreign_tensor_spectators() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_factored_coefficient"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::coefficient_mu"));
+        let nu = Atom::var(symbol!("feynkit_tensor_test::coefficient_nu"));
+        let x = Atom::var(symbol!("feynkit_tensor_test::coefficient_x"));
+        let y = Atom::var(symbol!("feynkit_tensor_test::coefficient_y"));
+        let foreign = spenso::tensor!(
+            spenso::tensor_symbol!("feynkit_tensor_test::coefficient_foreign"),
+            spenso::euc!(3, 93201)
+        );
+        let spectator = (&x + &y).pow(30) * foreign;
+        let input = &spectator
+            * indexed(k, 1, &dimension, &mu)
+            * indexed(k, 1, &dimension, &nu)
+            * indexed(p, 1, &dimension, &mu)
+            * indexed(p, 1, &dimension, &nu);
+        let result = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .unwrap();
+        let expected = spectator
+            * dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
+            * dot(&compact(p, 1, &dimension), &compact(p, 1, &dimension))
+            / dimension;
+        assert_eq!(result.expression().unwrap().into_expression(), expected);
+        assert!(result.is_fully_contracted());
+    }
+
+    #[test]
+    fn incomplete_selected_tensor_collection_is_refused() {
+        let (k, q, p, r) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_refused_collection"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::refused_mu"));
+        let nu = Atom::var(symbol!("feynkit_tensor_test::refused_nu"));
+        let left = indexed(k, 1, &dimension, &mu) * indexed(p, 1, &dimension, &mu);
+        let right = indexed(q, 1, &dimension, &nu) * indexed(r, 1, &dimension, &nu);
+        let input = (left + right).pow(32);
+        let error = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap_err();
-        assert!(matches!(
-            error,
-            TensorReductionError::ExpansionLimit { terms: 8, limit: 7 }
-        ));
+        assert!(
+            matches!(error, TensorReductionError::TensorAlgebra(ref message)
+            if message.contains("did not complete")),
+            "{error}"
+        );
     }
 
     #[test]
@@ -2768,17 +3334,17 @@ mod tests {
             * indexed(k, 1, &dimension, &nu);
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         assert_eq!(
-            result.expression(),
+            result.expression().unwrap().into_expression(),
             dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
         );
         assert!(result.is_fully_contracted());
     }
 
     #[test]
-    fn products_of_generated_vertex_sums_are_expanded_before_metric_sewing() {
+    fn products_of_generated_vertex_sums_are_sewn_by_the_shared_collector() {
         let (k, _, p, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_vertex_sums"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::vertex_sums_mu"));
@@ -2795,14 +3361,16 @@ mod tests {
 
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap()
-            .expression();
+            .expression()
+            .unwrap()
+            .into_expression();
         let expected = Atom::num(4)
             * dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
             * dot(&compact(p, 1, &dimension), &compact(p, 1, &dimension))
             / dimension;
-        assert!((result - expected).together().is_zero());
+        assert_eq!(result, expected);
     }
 
     #[test]
@@ -2817,13 +3385,13 @@ mod tests {
             * indexed(k, 1, &dimension, &right_free);
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         let expected = dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
             * metric(&dimension, &left_free, &right_free)
             / dimension.clone();
-        let expression = result.expression().expand();
-        assert_eq!(expression, expected.expand());
+        let expression = result.expression().unwrap().into_expression();
+        assert_eq!(expression, expected);
         assert!(
             count_minkowski_index(expression.as_view(), &dimension, &left_free, 1).unwrap() > 0
         );
@@ -2842,7 +3410,7 @@ mod tests {
         let input = indexed(k, 1, &dimension, &mu) * indexed(k, 1, &dimension, &nu);
         let result = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
-            .reduce(input.as_view())
+            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
             .unwrap();
         let expected = dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
             * FunctionBuilder::new(ETS.metric)
@@ -2850,8 +3418,8 @@ mod tests {
                 .add_arg(minkowski_slot(&dimension, &nu))
                 .finish()
             / dimension.clone();
-        let expression = result.expression();
-        assert_eq!(expression.expand(), expected.expand());
+        let expression = result.expression().unwrap().into_expression();
+        assert_eq!(expression, expected);
         assert!(contains_metric_pair(
             expression.as_view(),
             &dimension,

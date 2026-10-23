@@ -20,7 +20,7 @@ modules, and verify the actual environment first:
 // docs-example: syntax
 ```sh
 python -m pip install --upgrade symbolica
-python -c "import symbolica.community.idenso; import symbolica.community.spenso"
+python -c "import symbolica.community.tensor"
 ```
 
 If that fails, check the installed Symbolica version before continuing. Generating a `.pyi`
@@ -33,20 +33,19 @@ Save the following as `metric_first.py`:
 
 // docs-example: compile idenso-controlled-identity
 ```python
-from symbolica.community.idenso import list_dangling, simplify_metrics
-from symbolica.community.spenso import Representation, TensorExpression, TensorName
+from symbolica.community.tensor import Representation, TensorExpression, TensorName
 
 rep = Representation.mink(4)
 mu = rep("mu")
 nu = rep("nu")
 
 g = TensorExpression.g(rep)
-q = TensorName("q")
+q = TensorName.vector("q")
 expression = g(mu, nu) * q(mu)
 
-free_before = list_dangling(expression)
-reduced = simplify_metrics(expression)
-free_after = list_dangling(reduced)
+free_before = expression.list_dangling()
+reduced = expression.contract()
+free_after = reduced.list_dangling()
 
 assert len(free_before) == 1
 assert len(free_after) == 1

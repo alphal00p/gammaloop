@@ -17,19 +17,19 @@ use super::vakint::{
     Vakint, VakintExpression, diagram_integral::DiagramIntegralOptions, symbols::S,
 };
 use feynkit_generator::{
-    EdgeColor, GenerationFilter, GenerationOptions, Generator, NodeColor, Process, VertexSelector,
+    EdgeColor, GenerationFilter, GenerationOptions, NodeColor, Process, VertexSelector,
 };
 use feynkit_graph::IntegralFamily;
 use feynkit_graph::{
-    DiagramEdge, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram, VertexId, symbols,
+    DiagramEdge, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram, NumeratorInterface,
+    VertexId, symbols,
 };
 use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
 use idenso::{
     IndexTooling,
-    color::{ColorSimplifier, ColorSimplifySettings},
-    dirac::GammaSimplifier,
-    shorthands::schoonschip::Schoonschip,
+    color::ColorSimplifySettings,
+    tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus, SymbolicTensor},
 };
 use rustred::algebra::CoefficientContext;
 use spenso::{
@@ -45,12 +45,44 @@ use symbolica::{
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
+// An earlier fully indexed adapter exceeded the native 100,000-term default.
+// Keep this finite allowance explicit; it changes only the work ceiling.
+pub const ANGULAR_OUTPUT_TERM_LIMIT: usize = 1_000_000;
+
+#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Projection {
+    QuadraticTransverse,
+    ZeroMomentumMetric,
+}
+
+impl Projection {
+    pub fn unlowered_degree(self) -> i32 {
+        match self {
+            Self::QuadraticTransverse => 10,
+            Self::ZeroMomentumMetric => 9,
+        }
+    }
+}
+
+#[derive(Default, serde::Serialize)]
+pub struct PreparationTimings {
+    pub graph_generation_seconds: f64,
+    pub scalar_contraction_seconds: f64,
+    pub taylor_seconds: f64,
+    pub angular_seconds: f64,
+    pub ingress_seconds: f64,
+    pub total_seconds: f64,
+}
+
 pub struct LadderFixture {
     pub input: Atom,
     pub preparation_seconds: f64,
     pub scalar_terms: usize,
     pub contributions: usize,
     pub nonzero_conditions: Vec<Atom>,
+    pub projection: Projection,
+    pub timings: PreparationTimings,
 }
 
 type Shape = Graph<u8, i64>;
@@ -74,15 +106,8 @@ fn evaluate_overall_factor(factor: AtomView<'_>) -> Atom {
     result.expand()
 }
 
-fn is_external_edge(diagram: &FeynmanDiagram, ends: feynkit_graph::EdgeEndpoints) -> bool {
-    diagram
-        .vertex(ends.source)
-        .expect("valid source")
-        .is_external()
-        || diagram
-            .vertex(ends.target)
-            .expect("valid target")
-            .is_external()
+fn is_external_edge(_diagram: &FeynmanDiagram, ends: feynkit_graph::EdgeEndpoints) -> bool {
+    ends.source.is_none() || ends.target.is_none()
 }
 
 fn external_color(state: ExternalState) -> u8 {
@@ -96,21 +121,24 @@ fn diagram_labeling(diagram: &FeynmanDiagram) -> Result<(Shape, BTreeMap<VertexI
     let mut graph = Shape::new();
     let vertices = diagram
         .vertices()
-        .map(|(id, vertex)| {
-            (
-                id,
-                graph.add_node(
-                    vertex
-                        .external
-                        .as_ref()
-                        .map_or(0, |leg| external_color(leg.state)),
-                ),
-            )
-        })
+        .map(|(id, _)| (id, graph.add_node(0)))
         .collect::<BTreeMap<_, _>>();
     for (_, ends, edge) in diagram.edges() {
-        let source = vertices[&ends.source];
-        let target = vertices[&ends.target];
+        let mut endpoint = |vertex: Option<VertexId>| {
+            vertex.map_or_else(
+                || {
+                    graph.add_node(external_color(
+                        edge.external
+                            .as_ref()
+                            .expect("external edge metadata")
+                            .state,
+                    ))
+                },
+                |id| vertices[&id],
+            )
+        };
+        let source = endpoint(ends.source);
+        let target = endpoint(ends.target);
         let pdg = diagram.model().particle_by_id(edge.particle)?.pdg_code;
         let (source, target) = if pdg < 0 {
             (target, source)
@@ -156,7 +184,10 @@ fn compact_rail_basis(diagram: FeynmanDiagram, target: &FeynmanDiagram) -> Resul
                     if pdg.abs() != 1 || is_external_edge(&diagram, ends) {
                         return None;
                     }
-                    let (left, right) = (actual_labels[&ends.source], actual_labels[&ends.target]);
+                    let (left, right) = (
+                        actual_labels[&ends.source.expect("internal edge")],
+                        actual_labels[&ends.target.expect("internal edge")],
+                    );
                     let (left, right) = if pdg < 0 {
                         (right, left)
                     } else {
@@ -207,15 +238,8 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
         )))
         .expect("valid qcd fixture"),
     );
-    let target = FeynmanDiagram::from_topology_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
-    if target.loop_count() != 5
-        || target.edges().count() != 16
-        || target
-            .vertices()
-            .filter(|(_, vertex)| !vertex.is_external())
-            .count()
-            != 10
-    {
+    let target = FeynmanDiagram::from_dot(Arc::clone(&model), include_str!("ladder.dot"))?;
+    if target.loop_count() != 5 || target.edges().count() != 16 || target.vertices().count() != 10 {
         return Err("the source QCD ladder must have ten vertices, fourteen internal lines, and two external legs".into());
     }
     let shape = diagram_shape(&target)?;
@@ -240,6 +264,7 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
     }
     let filter_model = Arc::clone(&model);
     let options = GenerationOptions::default()
+        .with_loop_count(5, 5)?
         .max_vertices(10)
         .threads(1)
         .with_graph_filter(GenerationFilter::VertexAllow(rules))
@@ -255,10 +280,7 @@ fn dressed_diagram() -> Result<feynkit_generator::GenerationResult> {
                 && graph.edges().len() == 16
                 && generated_shape(graph, &filter_model) == shape
         });
-    let mut generated = Generator::new(model).generate(
-        &Process::amplitude(["g"], ["g"]).with_loop_count(5, 5)?,
-        &options,
-    )?;
+    let mut generated = Process::new(["g"], ["g"]).generate_diagrams(model, &options)?;
     if !generated.report.completed || generated.diagrams.len() != 1 {
         return Err(format!(
             "native exact ladder selection returned {} diagrams, completed={}",
@@ -283,11 +305,10 @@ pub fn dress(evidence: &Path) -> Result<feynkit_generator::GenerationResult> {
     Vakint::initialize_vakint_symbols();
     let generated = dressed_diagram()?;
     let diagram = &generated.diagrams[0];
-    if diagram.numerator().is_one()
+    if diagram.numerator().expression().is_one()
         || diagram
             .vertices()
-            .filter(|(_, vertex)| !vertex.is_external())
-            .any(|(_, vertex)| vertex.numerator.is_one())
+            .any(|(_, vertex)| vertex.numerator.expression().is_one())
     {
         return Err("bare structural DOT was mistaken for a dressed QCD numerator".into());
     }
@@ -362,35 +383,50 @@ fn loop_rows(diagram: &FeynmanDiagram) -> BTreeMap<EdgeId, Atom> {
         .collect()
 }
 
-pub fn prepare(evidence: &Path) -> Result<LadderFixture> {
+pub fn prepare(evidence: &Path, projection: Projection) -> Result<LadderFixture> {
     let started = Instant::now();
     std::fs::create_dir_all(evidence)?;
     Vakint::initialize_vakint_symbols();
     let generated = dress(evidence)?;
-    let projected = physical::prepare(generated, &dimension()?, evidence)?;
+    let mut timings = PreparationTimings {
+        graph_generation_seconds: started.elapsed().as_secs_f64(),
+        ..Default::default()
+    };
+    let projected =
+        physical::prepare(generated, &dimension()?, evidence, projection, &mut timings)?;
+    let ingress_started = Instant::now();
     let mut input = Atom::Zero;
     let mut scalar_terms = 0usize;
-    let mut inventory = String::from("# contribution A R Dphysical explicit_powers\n");
+    let mut inventory =
+        String::from("# unlowered contribution A r_mom D_source=A-r_mom explicit_powers\n");
     for (index, contribution) in projected.contributions.iter().enumerate() {
-        let expanded = contribution.numerator.expand();
-        scalar_terms += if let AtomView::Add(sum) = expanded.as_view() {
+        // Count the stored representation without an optional expansion pass.
+        scalar_terms += if let AtomView::Add(sum) = contribution.numerator.as_view() {
             sum.get_nargs()
         } else {
             1
         };
         let total_power = contribution.powers.iter().sum::<i32>();
         inventory.push_str(&format!(
-            "{index} {total_power} {} 10 {:?}\n",
-            total_power - 10,
+            "{index} {total_power} {} {} {:?}\n",
+            total_power - projection.unlowered_degree(),
+            projection.unlowered_degree(),
             contribution.powers
         ));
         let routed_numerator = projected.vacuum.mapping.apply(&contribution.numerator);
         let diagram = projected
             .vacuum
             .diagram
-            .clone()
-            .with_name(format!("qcd_ladder_quadratic_{index:03}"))
-            .with_numerator(routed_numerator)?;
+            .map_data(
+                |_, vertex| vertex.clone(),
+                |id, _, edge| {
+                    let mut edge = edge.clone();
+                    edge.propagator_power = contribution.powers[id.0];
+                    edge
+                },
+            )?
+            .with_name(format!("qcd_ladder_{projection:?}_{index:03}"))
+            .with_numerator(NumeratorInterface::admit(routed_numerator, None)?)?;
         std::fs::write(
             evidence.join(format!("projected-vacuum-{index:03}.dot")),
             diagram.to_dot()?,
@@ -415,7 +451,23 @@ pub fn prepare(evidence: &Path) -> Result<LadderFixture> {
     )?;
     std::fs::write(
         evidence.join("conventions.txt"),
-        "Native GammaLoop/FeynKit model-rule generation; bare DOT does not dress its numerator.\nMassless down-quark, Feynman gauge, fixed SU(3), tr_Dirac(1)=4, all Lorentz tags d.\nHomogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; NOT the q=0 masslike trace and NOT a complete beta function.\nAuxiliary angular q average is normalized at fixed q^2: no sixth physical loop.\nL=5, twelve incidence edges after two insertion collapses; nine distinct denominator forms with five fermion dots after native duplicate coalescing; initial A=14; Taylor terms have A=14..16 and A-R=10.\nCommon UV mass is inserted only into final denominators; original slash numerators remain massless.\nAll preparation is rerun inside the slow test; these generated outputs are evidence, not a test shortcut.\n",
+        "Native GammaLoop/FeynKit model-rule generation; bare DOT does not dress its numerator.\nMassless down-quark, Feynman gauge, fixed SU(3), tr_Dirac(1)=4, all Lorentz tags d.\nHomogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; NOT the q=0 masslike trace and NOT a complete beta function.\nAuxiliary angular q average is normalized at fixed q^2: no sixth physical loop.\nL=5, twelve incidence edges after two insertion collapses; nine distinct denominator forms with five fermion dots after native duplicate coalescing; initial A=14; Taylor terms have A=14..16 and unlowered A-r_mom=10.\nCommon UV mass is inserted only into final denominators; original slash numerators remain massless.\nAll preparation is rerun inside the slow test; these generated outputs are evidence, not a test shortcut.\n",
+    )?;
+    if matches!(projection, Projection::ZeroMomentumMetric) {
+        std::fs::write(
+            evidence.join("conventions.txt"),
+            "Native massless QCD four-rung quark loop, fixed SU(3), tr_Dirac(1)=4, generic Lorentz dimension d.\nBoth external current vertices retained; unaveraged g_munu*delta_ab contraction at q=0.\nNo transverse projector, no division by 8(d-1), and no auxiliary angular integration.\nCommon UV mass inserted only into denominators; original slash numerators remain massless.\nFive loops, twelve vacuum incidence edges, nine distinct quadratics; unlowered A=14,r_mom=5,D_source=9; omega_UV(d=4)=2.\n",
+        )?;
+    }
+    timings.ingress_seconds = ingress_started.elapsed().as_secs_f64();
+    timings.total_seconds = started.elapsed().as_secs_f64();
+    std::fs::write(
+        evidence.join("preparation.json"),
+        serde_json::to_vec_pretty(&serde_json::json!({
+            "projection": projection, "timings": timings, "scalar_terms": scalar_terms,
+            "contributions": projected.contributions.len(), "unlowered_A_minus_r_mom": projection.unlowered_degree(),
+            "fresh_native_preparation": true,
+        }))?,
     )?;
     Ok(LadderFixture {
         input,
@@ -423,5 +475,7 @@ pub fn prepare(evidence: &Path) -> Result<LadderFixture> {
         scalar_terms,
         contributions: projected.contributions.len(),
         nonzero_conditions: projected.conditions.into_iter().collect(),
+        projection,
+        timings,
     })
 }

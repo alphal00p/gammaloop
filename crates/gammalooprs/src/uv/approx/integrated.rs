@@ -2,15 +2,9 @@ use color_eyre::Result;
 use eyre::{WrapErr, eyre};
 use gammaloop_tracing_filter::debug_instrument;
 use idenso::{
-    color::ColorSimplifier,
-    dirac::{GammaSimplifier, GammaSimplifySettings},
-    representations::Bispinor,
-    shorthands::{
-        UndoShorthands,
-        chain::Chain,
-        metric::MetricSimplifier,
-        schoonschip::{Schoonschip, SchoonschipSettings},
-    },
+    CookMode, CookSettings,
+    dirac::GammaSimplifySettings,
+    tensor::{AlgebraSettings, ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor},
 };
 
 use linnet::half_edge::{
@@ -20,8 +14,11 @@ use linnet::half_edge::{
     subgraph::{ModifySubSet, SuBitGraph, SubGraphLike, SubSetLike},
 };
 use spenso::{
-    network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    shadowing::TensorCollectExt,
+    network::{
+        library::symbolic::ETS,
+        parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
+        tags::SPENSO_TAG,
+    },
     structure::representation::{Minkowski, RepName},
 };
 use symbolica::{
@@ -139,54 +136,23 @@ impl Rooted for IntegratedCts {
 }
 
 fn simplify(integrand: &Atom) -> Result<Atom> {
-    let collected = integrand
-        .collect_rep(Minkowski {}.into())
-        .simplify_metrics()
-        .collect_rep((Bispinor {}).into())
-        .collect_gamma_chains();
-    debug_tags!(#uv,#integrated,#collect;log.expr = collected, "After gamma chain collection");
-
-    let schoonschip = collected
-        .schoonschip_with_settings(&SchoonschipSettings {
-            simplify_chain_like_functions: true,
-            schoonschip_rank1_tensors: true,
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let simplified = SymbolicTensor::infer_indexed(cooking.try_cook(integrand.as_view())?)?
+        .simplify_algebra(&AlgebraSettings {
+            gamma: Some(GammaSimplifySettings::canonical()),
+            epsilon: true,
             ..Default::default()
-        })
-        .normalize_chains();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = schoonschip,
-        "After gamma schoonschip"
-    );
-    let collected = schoonschip
-        .collect_chains_and_traces()
-        .simplify_metrics()
-        .collect_gamma_chains()
-        .collect_color()
-        .collect_factors();
-    debug_tags!(#uv, #integrated, #profile, #trace, #start, #collect;
-        log.expr = collected,
-        "After gamma collection"
-    );
-
-    let simplified = collected
-        .simplify_gamma_with(GammaSimplifySettings::canonical())
-        .collect_rep(Minkowski {}.into())
+        })?
+        .to_dots()?;
+    let dotted = cooking
+        .uncook(simplified.expression().as_view())
         .expand_num();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #start, #gamma;
-        log.expr = simplified,
-        "After gamma simplification"
-    );
-    let schoonschipped = simplified.schoonschip_net::<Aind>()?;
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace,#schoonschip, #start;
-        log.expr = schoonschipped,
-        "After Schoonschip net"
-    );
-    let dotted = schoonschipped.to_dots().normalize_dots();
-    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #dots;
+    debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #gamma;
         log.expr = dotted,
-        "After dots"
+        "Shared tensor and Dirac simplification of integrated UV numerator"
     );
-
     Ok(dotted)
 }
 
@@ -362,32 +328,24 @@ impl Integrated<'_> {
 
         res = Self::restore_numerator(res, current.topo_order());
 
-        res = Self::dimensionally_regularized(&res.simplify_metrics().metric_shorthand_to_dot());
-
-        debug_tags!(#uv, #integrated, #vakint, #inspect, #trace, #replace;
-            log.res = res,
-            "Replaced post vakint "
-        );
-
-        // This strips as many dummies as possible after undoing chains and traces,
-        // so that terms can merge later on.
-        let bispinor_rep = Bispinor {}.into();
-        let after_chainify = res.chainify(bispinor_rep);
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #chainify;
-            log.expr = after_chainify,
-            "Integrated UV chain cleanup after chainify"
-        );
-
-        let after_collect_chains = after_chainify.collect_chains(bispinor_rep);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let reduced = SymbolicTensor::infer_indexed(cooking.try_cook(res.as_view())?)?
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })?
+            .to_dots()?;
+        res = Self::dimensionally_regularized(&cooking.uncook(reduced.expression().as_view()));
+        let collected = SymbolicTensor::infer_indexed(cooking.try_cook(res.as_view())?)?
+            .contract(ContractSettings::default())?;
+        res = cooking.uncook(collected.expression().as_view());
         debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #collect;
-            log.expr = after_collect_chains,
-            "Integrated UV chain cleanup after collect_chains"
-        );
-
-        res = after_collect_chains.undo_single_length();
-        debug_tags!(#uv, #integrated, #vakint, #profile, #trace, #undo_single_length;
             log.expr = res,
-            "Integrated UV chain cleanup after undo_single_length"
+            "Integrated UV chain cleanup through native tensor contraction"
         );
 
         if res
@@ -534,9 +492,19 @@ pub(crate) fn to_vakint_integrand<
     let reduced_label = reduced.string_label();
     let dependent_subgraph_label = dependent_subgraph.string_label();
     let mut integrand_vakint = integrand
-        .undo_schoonschip::<Aind>()?
-        .undo_chain::<Aind>()?
-        .undo_trace::<Aind>()?;
+        .parse_to_symbolic_net::<Aind>(&ParseSettings {
+            shorthand_parsing: ShorthandParsing::Expand {
+                schoonschip: SchoonschipExpansionMode {
+                    inner_products: false,
+                    expand_inside_chains: true,
+                    expand_schoonship: true,
+                },
+                trace: true,
+                chain: true,
+            },
+            ..Default::default()
+        })?
+        .simple_execute::<()>()?;
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_undo_shorthands",
         reduced = %reduced_label,
@@ -568,7 +536,17 @@ pub(crate) fn to_vakint_integrand<
     // Nested counterterms can expose a boundary metric next to the propagator
     // metric of the reduced graph. Contract those metric-only structures before
     // the expression is split into Vakint terms.
-    integrand_vakint = integrand_vakint.simplify_metrics();
+    let cooking = CookSettings::indices()
+        .with_mode(CookMode::ReversibleEncoding)
+        .with_representation_payloads(true, true);
+    let contracted = SymbolicTensor::infer_indexed(cooking.try_cook(integrand_vakint.as_view())?)?
+        .contract(ContractSettings {
+            rank_one: false,
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })?;
+    integrand_vakint = cooking.uncook(contracted.expression().as_view());
     debug_tags!(#uv, #integrated, #vakint, #trace;
         stage = "to_vakint_integrand_after_simplify_metrics",
         reduced = %reduced_label,
@@ -969,7 +947,7 @@ pub(crate) fn to_vakint_integrand<
         let momentum_solution =
             VakintMomentumSolution::solve(&system, &momentum_variables, &add_additional_args)
                 .wrap_err("could not solve momentum system for Vakint integrand")?;
-        t.numerator = momentum_solution.rewrite_numerator(&t.numerator);
+        t.numerator = momentum_solution.rewrite_numerator(&t.numerator)?;
         t.integral = momentum_solution.rewrite_integral(&t.integral, &add_additional_args);
         momentum_solution.ensure_free_variables_eliminated(
             term_index,
@@ -1008,7 +986,9 @@ pub(crate) fn to_vakint_integrand<
 
         // Vakint needs explicit tensor indices; only translate metric shorthands
         // to dot notation here, without reintroducing Schoonschip rank-1 factors.
-        t.numerator = t.numerator.metric_shorthand_to_dot();
+        let notation =
+            SymbolicTensor::infer_indexed(cooking.try_cook(t.numerator.as_view())?)?.to_dots()?;
+        t.numerator = cooking.uncook(notation.expression().as_view());
         debug_tags!(#uv, #integrated, #vakint, #trace;
             stage = "to_vakint_integrand_term_after_metric_shorthand_to_dot",
             term_index = %term_index,
@@ -1192,10 +1172,14 @@ impl VakintMomentumSolution {
         Ok(())
     }
 
-    fn rewrite_numerator(&self, numerator: &Atom) -> Atom {
-        numerator
-            .replace_multiple(&self.replacements)
-            .normalize_dots()
+    fn rewrite_numerator(&self, numerator: &Atom) -> Result<Atom> {
+        let replaced = numerator.replace_multiple(&self.replacements);
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let normalized =
+            SymbolicTensor::infer_indexed(cooking.try_cook(replaced.as_view())?)?.to_dots()?;
+        Ok(cooking.uncook(normalized.expression().as_view()))
     }
 
     fn rewrite_integral(&self, integral: &Atom, add_additional_args: &[Replacement]) -> Atom {
@@ -1256,6 +1240,7 @@ impl VakintMomentumSolution {
 #[cfg(test)]
 mod tests {
     use crate::initialisation::test_initialise;
+    use idenso::representations::Bispinor;
     use spenso::structure::slot::{DummyAind, ParseableAind};
 
     use super::*;
@@ -1293,7 +1278,21 @@ mod tests {
         );
         let expanded = series(&normalized, 1).unwrap().to_atom();
         assert!(!expanded.contains_symbol(symbolica::atom::Symbol::DERIVATIVE));
-        let restored = Integrated::restore_numerator(expanded, 0).simplify_metrics();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let restored = Integrated::restore_numerator(expanded, 0);
+        let contracted =
+            SymbolicTensor::infer_indexed(cooking.try_cook(restored.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap();
+        let restored = cooking.uncook(contracted.expression().as_view());
         let regularized = Integrated::dimensionally_regularized(&restored);
         let expected = Atom::num(-2) * function!(idenso::dirac::AGS.gamma, &a, &b, &mu);
         assert!(
@@ -1361,7 +1360,21 @@ mod tests {
             * function!(idenso::dirac::AGS.gamma, &a, &b, &dummy)
             * function!(vakint::symbols::S.g, &dummy, regulated_mu)
             + &gamma;
-        let restored = Integrated::restore_numerator(source, 0).simplify_metrics();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let restored = Integrated::restore_numerator(source, 0);
+        let contracted =
+            SymbolicTensor::infer_indexed(cooking.try_cook(restored.as_view()).unwrap())
+                .unwrap()
+                .contract(ContractSettings {
+                    rank_one: false,
+                    collect_chains: false,
+                    collect_traces: false,
+                    ..Default::default()
+                })
+                .unwrap();
+        let restored = cooking.uncook(contracted.expression().as_view());
         assert!(
             (restored.clone() - (&scalar + 1) * &gamma)
                 .expand()
@@ -1464,10 +1477,17 @@ mod tests {
         // A nested counterterm has restored source labels beside still-native
         // propagator slots. Both summands must have the same closed interface
         // before the next subgraph is materialized as a tensor network.
-        let restored = Integrated::restore_numerator(source, 19)
-            .undo_schoonschip::<Aind>()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let restored = Integrated::restore_numerator(source, 19);
+        let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(restored.as_view()).unwrap())
             .unwrap()
-            .to_dots();
+            .contract(ContractSettings::default())
+            .unwrap()
+            .to_dots()
+            .unwrap();
+        let restored = cooking.uncook(tensor.expression().as_view());
         let expected =
             (function!(SPENSO_TAG.dot, &q1, &q1) + 1) * function!(SPENSO_TAG.dot, &q1, &q4);
         assert!((restored - expected).expand().is_zero());
@@ -1557,9 +1577,17 @@ mod tests {
             function!(GS.loop_mom, 1, mink.clone())
         );
 
-        let converted = numerator
-            .simplify_metrics()
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let tensor = SymbolicTensor::infer_indexed(cooking.try_cook(numerator.as_view()).unwrap())
+            .unwrap()
+            .contract(ContractSettings::default())
+            .unwrap()
             .to_dots()
+            .unwrap();
+        let converted = cooking
+            .uncook(tensor.expression().as_view())
             .replace(function!(GS.loop_mom, W_.x___))
             .with(function!(vakint::symbols::S.k, W_.x___))
             .replace(function!(GS.emr_mom, W_.x___))
