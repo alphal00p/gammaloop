@@ -469,9 +469,15 @@ impl FeynmanDiagramBuilder {
                     } else {
                         mapped
                     };
+                    let local_arguments =
+                        if kind <= 3 && arguments.len() == 2 && arguments[1].is_zero() {
+                            &arguments[2..]
+                        } else {
+                            &arguments[1..]
+                        };
                     let value = FunctionBuilder::new(symbol)
                         .add_arg(index)
-                        .add_args(arguments[1..].iter().copied())
+                        .add_args(local_arguments.iter().copied())
                         .finish();
                     **out = if kind == 4 && signs[&EdgeId(owner)] < 0 {
                         -value
