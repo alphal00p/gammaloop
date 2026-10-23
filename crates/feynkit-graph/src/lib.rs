@@ -11,6 +11,8 @@ mod compact_dot;
 mod display;
 pub mod expressions;
 mod finalization;
+#[cfg(test)]
+mod integral_annotation_tests;
 mod integrals;
 mod numerator_interface;
 mod power_counting;
@@ -194,18 +196,26 @@ pub struct DiagramEdge {
     pub is_dummy: bool,
     pub particle: ParticleId,
     pub directed: bool,
+    /// Positive power of this physical propagator. Contract absent edges and
+    /// place negative powers in the numerator instead.
+    pub propagator_power: i32,
     pub numerator: SymbolicTensor<PartialStructure>,
     source_slot: VertexSlot,
     target_slot: VertexSlot,
 }
 
 impl DiagramEdge {
+    const fn unit_power() -> i32 {
+        1
+    }
+
     pub fn new(particle: ParticleId, directed: bool) -> Self {
         Self {
             external: None,
             is_dummy: false,
             particle,
             directed,
+            propagator_power: 1,
             numerator: SymbolicTensor::infer(Atom::one()).expect("literal one is scalar"),
             source_slot: VertexSlot(0),
             target_slot: VertexSlot(0),
@@ -543,6 +553,10 @@ pub enum DiagramError {
     MissingLoopMomentumBasis,
     #[error("invalid loop-momentum basis: {0}")]
     InvalidLoopMomentumBasis(String),
+    #[error(
+        "physical edge {edge} has nonpositive propagator power {power}; contract absent edges and place negative powers in the numerator"
+    )]
+    InvalidPropagatorPower { edge: usize, power: i32 },
     #[error("serialized diagram ID {serialized} does not match its content-derived ID {actual}")]
     DiagramIdMismatch {
         serialized: DiagramId,
@@ -598,6 +612,8 @@ struct DiagramEdgeSerde {
     orientation: Orientation,
     particle: ParticleId,
     directed: bool,
+    #[serde(default = "DiagramEdge::unit_power")]
+    propagator_power: i32,
     numerator: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     num_interface: Option<NumeratorInterface>,
@@ -722,7 +738,8 @@ impl FeynmanDiagram {
     /// dimension `gammalooprs::dim` and the same momenta as the numerator. Masses
     /// remain symbolic except the UFO `ZERO` parameter. External carriers,
     /// widths, and an imaginary prescription are excluded. Custom UFO
-    /// propagator denominators are not instantiated here.
+    /// propagator denominators are not instantiated here. Stored positive
+    /// propagator powers raise each tagged denominator accordingly.
     pub fn denominator_expression(&self) -> Result<Atom, DiagramError> {
         self.denominator_of(&self.internal_subgraph(), &BTreeMap::new())
     }
@@ -1714,6 +1731,12 @@ impl FeynmanDiagram {
         let mut vertex_slots = vec![BTreeSet::new(); self.graph.n_nodes()];
         let vertex_half_edges = self.vertex_half_edges();
         for (edge_id, endpoints, edge) in self.edges() {
+            if edge.propagator_power <= 0 {
+                return Err(DiagramError::InvalidPropagatorPower {
+                    edge: edge_id.0,
+                    power: edge.propagator_power,
+                });
+            }
             self.resolve_particle(edge_id, edge)?;
             if let Some(external) = &edge.external {
                 if !external_indices.insert(external.index) {
@@ -2069,9 +2092,16 @@ impl FeynmanDiagram {
                 })
                 .transpose()?
                 .unwrap_or_default();
+            let lmb_id = self
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .position(|candidate| *candidate == id)
+                .map(|slot| format!(", lmb_id={slot}"))
+                .unwrap_or_default();
             writeln!(
                 output,
-                "  {source} -> {target} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}, dir={}, external={}, is_dummy={}, numerator={}{}];",
+                "  {source} -> {target} [id={}, particle_id={}, pdg={}, particle={}, directed={}, source_slot={}, target_slot={}, power={}, dir={}, external={}, is_dummy={}, numerator={}{}{}];",
                 id.0,
                 edge.particle.index(),
                 particle.pdg_code,
@@ -2079,11 +2109,13 @@ impl FeynmanDiagram {
                 edge.directed,
                 edge.source_slot.0,
                 edge.target_slot.0,
+                edge.propagator_power,
                 direction,
                 Self::dot_string(&serde_json::to_string(&edge.external)?)?,
                 edge.is_dummy,
                 Self::dot_string(&numerator.to_canonical_string())?,
                 interface,
+                lmb_id,
             )?;
         }
         writeln!(output, "}}")?;
@@ -2332,6 +2364,15 @@ impl FeynmanDiagram {
         }
         for (pair, edge_id, data) in parsed.iter_edges() {
             let target = format!("edge {}", edge_id.0);
+            if let Some(value) = data.data.statements.get("id")
+                && value.parse::<usize>().ok() != Some(edge_id.0)
+            {
+                return Err(DiagramError::InvalidDotAttribute {
+                    target: target.clone(),
+                    attribute: "id",
+                    value: value.clone(),
+                });
+            }
             let _pdg: i64 = data
                 .data
                 .statements
@@ -2392,6 +2433,21 @@ impl FeynmanDiagram {
                     })
                     .transpose()?
                     .unwrap_or(false),
+                propagator_power: data
+                    .data
+                    .statements
+                    .get("power")
+                    .map(|value| {
+                        value
+                            .parse()
+                            .map_err(|_| DiagramError::InvalidDotAttribute {
+                                target: target.clone(),
+                                attribute: "power",
+                                value: value.clone(),
+                            })
+                    })
+                    .transpose()?
+                    .unwrap_or(1),
                 particle: model.particle_id_at(particle_id)?,
                 directed: data.orientation != Orientation::Undirected,
                 numerator: NumeratorInterface::admit(
@@ -2522,7 +2578,15 @@ impl FeynmanDiagram {
                     .collect(),
             });
         if let Some(basis) = parsed.global_data.statements.get("loop_momentum_basis") {
-            builder.loop_momentum_basis = Some(serde_json::from_str(basis)?);
+            let basis: LoopMomentumBasis = serde_json::from_str(basis)?;
+            if let Some(edges) = &loop_momentum_edges
+                && edges != &basis.loop_edges
+            {
+                return Err(DiagramError::InvalidLoopMomentumBasis(
+                    "loop_momentum_edges disagrees with the serialized basis".into(),
+                ));
+            }
+            builder.loop_momentum_basis = Some(basis);
         }
         let stored_basis = builder.loop_momentum_basis.is_some();
         let diagram = builder.build()?;
@@ -2530,6 +2594,26 @@ impl FeynmanDiagram {
             Some(edges) => diagram.with_loop_momentum_edges(&edges),
             None => Ok(diagram),
         }?;
+        let mut declared_slots = BTreeSet::new();
+        for (_, id, edge) in parsed.iter_edges() {
+            if let Some(value) = edge.data.statements.get("lmb_id") {
+                let slot: usize = value
+                    .parse()
+                    .map_err(|_| DiagramError::InvalidDotAttribute {
+                        target: format!("edge {}", id.0),
+                        attribute: "lmb_id",
+                        value: value.clone(),
+                    })?;
+                if !declared_slots.insert(slot)
+                    || diagram.loop_momentum_basis.loop_edges.get(slot) != Some(&EdgeId(id.0))
+                {
+                    return Err(DiagramError::InvalidLoopMomentumBasis(format!(
+                        "lmb_id {slot} on edge {} disagrees with the stored basis",
+                        id.0,
+                    )));
+                }
+            }
+        }
         diagram.validate()?;
         Ok(diagram)
     }
@@ -2641,6 +2725,7 @@ impl FeynmanDiagram {
                             ),
                             particle: edge.particle,
                             directed: edge.directed,
+                            propagator_power: edge.propagator_power,
                             numerator: numerator.to_canonical_string(),
                             num_interface,
                             source_slot: edge.source_slot,
@@ -2720,6 +2805,7 @@ impl FeynmanDiagram {
                     is_dummy: edge.is_dummy,
                     particle: edge.particle,
                     directed: edge.directed,
+                    propagator_power: edge.propagator_power,
                     numerator: NumeratorInterface::admit(
                         Self::parse_expression("edge numerator", edge.numerator)?,
                         edge.num_interface,
