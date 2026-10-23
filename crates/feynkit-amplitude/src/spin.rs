@@ -75,10 +75,7 @@ impl SpinSum {
         let massless = particle.is_massless(model);
         Ok(Self {
             spin: particle.spin,
-            mass: particle
-                .symbolic_mass(model)
-                .replace(symbolica::symbol!("UFO::ZERO"))
-                .with(Atom::Zero),
+            mass: particle.symbolic_mass(model),
             massless,
             antiparticle: particle.is_antiparticle(),
             average: false,
@@ -336,6 +333,41 @@ mod tests {
     use super::*;
     use idenso::tensor::{ContractSettings, SymbolicTensor};
     use symbolica::parse;
+
+    #[test]
+    fn completeness_preserves_nonzero_mass_named_zero() {
+        let model = Model::from_json(
+            r#"{
+                "name":"mass_name_regression","restriction":null,"orders":[],
+                "parameters":[
+                    {"name":"ZERO","nature":"internal","parameter_type":"real","value":[3.0,0.0],"expression":"3"},
+                    {"name":"VACZERO","nature":"internal","parameter_type":"real","expression":"0"}
+                ],
+                "particles":[
+                    {"pdg_code":1,"name":"d","antiname":"d~","spin":2,"color":1,"mass":"ZERO","width":"VACZERO","chemical_potential":"VACZERO","texname":"d","antitexname":"dbar","charge":0,"ghost_number":0,"lepton_number":1,"y_charge":0},
+                    {"pdg_code":-1,"name":"d~","antiname":"d","spin":2,"color":1,"mass":"ZERO","width":"VACZERO","chemical_potential":"VACZERO","texname":"dbar","antitexname":"d","charge":0,"ghost_number":0,"lepton_number":-1,"y_charge":0}
+                ],
+                "propagators":[],"lorentz_structures":[],"couplings":[],"vertex_rules":[]
+            }"#,
+        ).unwrap();
+        let p = spenso::vector_symbol!("zero_mass_regression::p").to_atom();
+        let a = parse!("zero_mass_regression::a");
+        let b = parse!("zero_mass_regression::b");
+        let u = SpinSum::new(model.particle("d").unwrap(), &model)
+            .unwrap()
+            .expression(&p, [a.clone(), b.clone()], None, None)
+            .unwrap();
+        let v = SpinSum::new(model.particle("d~").unwrap(), &model)
+            .unwrap()
+            .expression(&p, [a.clone(), b.clone()], None, None)
+            .unwrap();
+        let spinor = Bispinor {}.new_rep(4);
+        let identity = function!(ETS.metric, spinor.pattern(a), spinor.pattern(b));
+        let expected = Atom::num(2) * Atom::var(symbolica::symbol!("UFO::ZERO")) * identity;
+        assert!((u - v - expected).expand().is_zero());
+        assert!(!model.particle("d").unwrap().is_massless(&model));
+        assert!(model.structural_zero_parameter_names().contains("VACZERO"));
+    }
 
     #[test]
     fn polarized_density_has_one_state_and_shared_wavefunction_replacement() {

@@ -256,10 +256,9 @@ impl crate::FeynmanDiagram {
             subgraph,
             |edge_id, edge| {
                 let particle = self.model.particle_by_id(edge.particle)?;
-                let mass = particle
-                    .symbolic_mass(&self.model)
-                    .replace(symbolica::symbol!("UFO::ZERO"))
-                    .with(Atom::Zero);
+                // Particle::symbolic_mass delegates structural zero proofs to
+                // the model. A parameter named ZERO may be nonzero.
+                let mass = particle.symbolic_mass(&self.model);
                 Ok(symbols.denominator(edge_id, &mass.pow(2), dimension))
             },
             |edge_id, _| {
