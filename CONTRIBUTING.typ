@@ -1109,6 +1109,18 @@ preferences; they protect behavior that has been easy to regress.
 - If the extension module environment is an issue when compiling the Python API,
   try `build-api-abi`.
 
+=== Symbolica Community Extensions
+<community-extensions>
+
+- Symbolica Community links FeynKit's Python bindings (`feynkit-py`, `spynso3`,
+  `linnet-render-py`) into `symbolica.community`; for example,
+  `hepkit.FeynmanDiagram` is `feynkit_py::PyFeynmanDiagram`. Extensions build
+  against a locked `feynkit` revision, so treat these types and their
+  registration modules as an external compatibility boundary.
+- To build an extension on these types, or to add an extension point to a
+  FeynKit-owned class, follow
+  #link("https://github.com/symbolica-dev/symbolica-community/blob/cad32c8f589c8a29531414f94b3fbe58020e0308/docs/writing-extensions.md")[Writing a Symbolica Community extension].
+
 === Environment And Build Quirks
 
 - The `gammaloop` CLI activates its crate-bound application (OEM) license with
