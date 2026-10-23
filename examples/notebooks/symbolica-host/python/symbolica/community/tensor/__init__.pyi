@@ -8994,9 +8994,10 @@ class TensorNetwork:
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        SVG export uses the optional Python package typst (typst-py).
+        Pass the returned markup to the notebook's SVG display facility.
+        Raises ImportError if the optional typst-py package is unavailable, or RuntimeError
+        if compilation fails.
 
         This formats the symbolic source expression, independent of execution
         progress. Use render() or to_html() for the network graph.

@@ -58,8 +58,8 @@ runtime's independent STIX font is owned by `linnet-render-py`.
 == Updating and validation
 
 Compare these directories against the published 0.15.1 crate sources to isolate
-the feature patch. On upgrade, reapply the feature boundaries, update both
-workspace lockfiles, regenerate the Cargo/Nix graph, and run both lean and full
+the feature patch. On upgrade, reapply the feature boundaries, update the root
+workspace lockfile, regenerate the Cargo/Nix graph, and run both lean and full
 `typst-renderer` tests. The full test exercises syntax highlighting, citations,
 PDF/PNG export, and PDF-to-SVG import; lean tests exercise math, text, SVG import,
 MathML, and diagnostics for omitted features. Runtime browser checks instead

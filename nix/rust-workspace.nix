@@ -120,7 +120,7 @@
     (workspaceRoot + "/crates/linnest/typst/typst.toml")
     (workspaceRoot + "/crates/linnet-py/README.md")
     (workspaceRoot + "/crates/linnet-py/typst/subgraph.css")
-    # Tensor export sources and the shared browser font are documentation inputs.
+    # Tensor export sources, browser runtime, and fonts are build inputs.
     (workspaceRoot + "/crates/spynso3/typst")
     (workspaceRoot + "/crates/linnet-render-py/data.json")
     (workspaceRoot + "/crates/linnet-render-py/fonts")

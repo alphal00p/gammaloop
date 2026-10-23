@@ -62,7 +62,7 @@ notebook rendering, and registration in the combined Symbolica host.
 
 Spenso's matching Typst, HTML, SVG, and notebook display API is documented in the
 [Python guide](https://alphal00p.github.io/gammaloop/products/spenso/latest/guides/python/),
-including its embedded Rust Typst renderer.
+including SVG export through the optional Python package typst (typst-py).
 
 See [www.alphaloop.ch](https://www.alphaloop.ch) for the broader project and literature.
 

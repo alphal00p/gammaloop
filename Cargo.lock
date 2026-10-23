@@ -6334,7 +6334,6 @@ name = "spynso3"
 version = "0.1.2"
 dependencies = [
  "ahash 0.8.12",
- "ciborium",
  "eyre",
  "idenso",
  "itertools 0.14.0",
@@ -6345,7 +6344,6 @@ dependencies = [
  "pyo3-stub-gen",
  "pyo3-stub-gen-derive",
  "roxmltree 0.21.1",
- "self_cell",
  "serde_json",
  "spenso",
  "spenso-hep-lib",
