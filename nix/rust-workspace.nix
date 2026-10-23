@@ -500,6 +500,7 @@
   };
 
   workspacePackageExtraSourceRoots.compileTimeTest = {
+    spynso3 = ["crates/spynso3/tests/installed_symbolic_preview.py"];
     idenso = [
       "crates/idenso/tests/fixtures/aa_aa_2l_gl16_odd_trace_term.sym"
       "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
@@ -536,6 +537,7 @@
       "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/feynkit-py/tests/native_forwarding.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"
       "crates/linnet-py/tests/rendering_metrics.py"

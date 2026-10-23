@@ -1,33 +1,28 @@
 #[cfg(test)]
 use std::sync::LazyLock;
 
-use spenso::{
-    network::{library::symbolic::ExplicitKey, tags::SPENSO_TAG as T},
-    shadowing::{
-        IntoAtom,
-        symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
-    },
-    structure::{
-        Canonicalized, TensorStructure,
-        abstract_index::{AIND_SYMBOLS, AbstractIndex},
-        dimension::Dimension,
-        representation::{IndexDisplay, RepName, RepresentationMetadata},
-        slot::AbsInd,
-    },
-    tensor_symbol,
+use spenso::network::library::symbolic::ExplicitKey;
+use spenso::network::tags;
+use spenso::network::tags::{SPENSO_TAG as T, mathml};
+use spenso::shadowing::IntoAtom;
+use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use spenso::structure::dimension::Dimension;
+use spenso::structure::representation::{IndexDisplay, RepName, RepresentationMetadata};
+use spenso::structure::slot::AbsInd;
+use spenso::structure::{Canonicalized, TensorStructure};
+use spenso::tensor_symbol;
+use symbolica::atom::{
+    Atom, AtomCore, AtomOrView, AtomView, EvaluationInfo, FunctionBuilder, Symbol,
 };
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, EvaluationInfo, FunctionBuilder, Symbol},
-    coefficient::CoefficientView,
-    domains::rational::Rational,
-    printer::{PrintOptions, PrintState, PrintUserData},
-    symbol,
-};
+use symbolica::coefficient::CoefficientView;
+use symbolica::domains::rational::Rational;
+use symbolica::printer::{PrintOptions, PrintState, PrintUserData};
+use symbolica::symbol;
 
-use crate::{
-    color::casimir::CofDimensionInvariantRewriter, representations::ColorAntiFundamental,
-    shorthands::metric::PermuteWithMetric,
-};
+use crate::color::casimir::CofDimensionInvariantRewriter;
+use crate::representations::ColorAntiFundamental;
+use crate::shorthands::metric::PermuteWithMetric;
 
 use super::rep_symbols::RS;
 use super::representations::{ColorAdjoint, ColorFundamental};
@@ -338,7 +333,7 @@ impl ColorInvariantPrintKind {
                 ..opt.clone()
             })
             .to_string();
-        spenso::network::tags::mathml::fragment(source)
+        mathml::fragment(source)
     }
 
     fn mathml_group(source: &str) -> String {
@@ -438,7 +433,7 @@ impl ColorInvariantPrintKind {
                 arguments.insert(0, degree);
             }
             format!(
-                "<mrow>{head}<mo>⁡</mo>{}</mrow>",
+                "<mrow>{head}<mo>\u{2061}</mo>{}</mrow>",
                 Self::mathml_group(&arguments.join("<mo>,</mo>"))
             )
         };
@@ -572,7 +567,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
     ColorSymbols {
         t: tensor_symbol!("spenso::t"; Real; print = |a, opt, state| {
             if opt.mode.is_mathml() {
-                return spenso::network::tags::tensor_print(a, opt, state);
+                return tags::tensor_print(a, opt, state);
             }
 
             match SpensoPrintSettings::resolve(opt) {
@@ -649,7 +644,7 @@ pub static CS, CS_INNER: ColorSymbols = || {
         }),
         f: tensor_symbol!("spenso::f"; Real, Antisymmetric; print = |a, opt, state| {
             if opt.mode.is_mathml() {
-                return spenso::network::tags::tensor_print(a, opt, state);
+                return tags::tensor_print(a, opt, state);
             }
 
             match SpensoPrintSettings::resolve(opt) {
@@ -918,12 +913,10 @@ mod test;
 #[cfg(test)]
 mod mathml_tests {
     use super::*;
-    use crate::test_support::test_initialize;
+    use crate::test_support;
     use spenso::structure::representation::{IndexPalette, IndexRow, RepresentationClass};
-    use symbolica::{
-        atom::{NamespacedSymbol, SymbolBuilder},
-        function,
-    };
+    use symbolica::atom::{NamespacedSymbol, SymbolBuilder};
+    use symbolica::function;
 
     fn options(settings: SpensoPrintSettings) -> PrintOptions {
         PrintOptions {
@@ -934,7 +927,7 @@ mod mathml_tests {
 
     #[test]
     fn mathml_quadratic_aliases_and_color_count_honor_symbol_scripts() {
-        test_initialize();
+        test_support::test_initialize();
         let fundamental = ColorFundamental {}.to_symbolic([Atom::num(3)]);
         let adjoint = ColorAdjoint {}.to_symbolic([Atom::num(8)]);
         for (kind, atom, script, plain) in [
@@ -997,7 +990,7 @@ mod mathml_tests {
 
     #[test]
     fn mathml_explicit_invariants_keep_degree_dimensions_and_duality() {
-        test_initialize();
+        test_support::test_initialize();
         let fundamental = ColorFundamental {}.to_symbolic([Atom::num(3)]);
         let adjoint = ColorAdjoint {}.to_symbolic([Atom::num(8)]);
         let opt = options(SpensoPrintSettings {
@@ -1066,7 +1059,7 @@ mod mathml_tests {
 
     #[test]
     fn mathml_representation_metadata_and_exponent_bases_are_grouped() {
-        test_initialize();
+        test_support::test_initialize();
         let label = IndexDisplay::math(
             "frac",
             vec![
@@ -1116,7 +1109,7 @@ mod mathml_tests {
 
     #[test]
     fn mathml_dimension_callbacks_preserve_literal_path_text() {
-        test_initialize();
+        test_support::test_initialize();
         let dimension = SymbolBuilder::new(NamespacedSymbol::parse(
             "idenso_color_mathml_tests::literal_path_dimension",
         ))
@@ -1153,7 +1146,7 @@ mod mathml_tests {
 
     #[test]
     fn mathml_invariant_callbacks_reject_large_or_malformed_inputs() {
-        test_initialize();
+        test_support::test_initialize();
         let representation = ColorFundamental {}.to_symbolic([Atom::num(3)]);
         let degree = (0..70)
             .fold(

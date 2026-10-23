@@ -24,6 +24,7 @@ pyo3-stub-gen = { workspace = true, default-features = false, features = ["infer
 pyo3-stub-gen-derive = { workspace = true, default-features = false }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+thiserror = { workspace = true }
 symbolica-data = { path = "../symbolica-data" }
 tempfile = "3.8"
 resvg = { version = "0.47.0", default-features = false }

@@ -1,24 +1,24 @@
 //! Prepared native scenes become immutable snapshots after real label measurement.
-use std::{
-    collections::BTreeMap,
-    ffi::CString,
-    path::PathBuf,
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc, OnceLock,
-    },
-};
+use std::collections::BTreeMap;
+use std::ffi::CString;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
 
 use linnest::svg::{LabelMetrics, LabelSource, Scene};
-use pyo3::{
-    exceptions::{PyRuntimeError, PyValueError},
-    prelude::*,
-    sync::PyOnceLock,
-    types::{PyBytes, PyDict},
-};
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::sync::PyOnceLock;
+use pyo3::types::{PyAny, PyAnyMethods, PyBytes, PyDict, PyDictMethods, PyModule};
+use pyo3::{pyclass, pymethods, Bound, Py, PyResult, Python};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+#[cfg(not(feature = "python_stubgen"))]
+use pyo3_stub_gen_derive::remove_gen_stub;
 use serde::Deserialize;
+use serde_json::json;
 
-use crate::PyDiagramRender;
+use crate::data_assets::{STIX_TWO_MATH, STIX_TWO_MATH_LICENSE};
+use crate::{typst_export, PyDiagramRender};
 
 type SvgMap = Arc<dyn Fn(String) -> String + Send + Sync>;
 
@@ -39,7 +39,38 @@ struct FontResource {
 }
 
 /// A resolved drawing awaiting its notebook browser's label measurements.
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pyclass)]
+///
+/// Clones retain the same scenes, receipt identity, and completion cells. A
+/// widget and its caller therefore observe the same completed snapshot. Each
+/// freshly constructed view has a new identity; receipts belong to that view,
+/// and a completed view rejects different measurements. SVG/HTML exports are
+/// immutable snapshots and never trigger implicit remeasurement.
+///
+/// ```no_run
+/// use linnest::svg::Scene;
+/// use linnet_render_py::PyDiagramView;
+/// use pyo3::{PyResult, Python};
+/// # fn example(scene: Scene) -> PyResult<()> {
+/// Python::initialize();
+/// Python::attach(|py| -> PyResult<()> {
+///     let view = PyDiagramView::from_scene(py, scene, None)?;
+///     let retained = view.clone(); // Shares completion with the notebook owner.
+///     let request = view.measurement_request(py)?;
+///     // Send request to the browser; measured() accepts its complete receipt.
+///     // Scripts can explicitly request Chromium instead (requires Playwright).
+///     let snapshot = view.measured(py, None, Some("chromium"))?;
+///     assert_eq!(retained.to_svg_pages(py)?, snapshot.to_svg_pages()?);
+///     let collection = PyDiagramView::from_views(vec![view], None)?;
+///     assert_eq!(collection.diagrams().len(), 1);
+///     let svg = snapshot.to_svg()?;
+///     // Optional vector compilation is separate from the measured snapshot.
+///     let outlined = collection.outlined(py)?;
+///     assert_eq!(snapshot.to_svg()?, svg);
+///     # Ok(())
+/// })
+/// # }
+/// ```
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     module = "symbolica.community.graph",
     name = "DiagramView",
@@ -90,16 +121,44 @@ impl PyDiagramView {
     }
 
     /// Collections retain child owners; their template slots contain child SVGs.
+    ///
+    /// See [`Self`] for an example. The collection gets its own receipt identity;
+    /// its ordered probes recursively include all children. Completing it also
+    /// completes those retained children. Construction itself is infallible;
+    /// the result type is retained as part of the external rendering API.
     pub fn from_views(views: Vec<Self>, html_template: Option<String>) -> PyResult<Self> {
         Ok(Self::new(Source::Views(views), html_template))
     }
 
     /// Include a captured render without reconstructing or measuring its geometry.
+    ///
+    /// ```no_run
+    /// use linnet_render_py::{PyDiagramRender, PyDiagramView};
+    /// # fn captured(snapshot: PyDiagramRender) {
+    /// let view = PyDiagramView::from_render(snapshot);
+    /// assert!(view.diagrams().is_empty());
+    /// # }
+    /// ```
+    #[must_use]
     pub fn from_render(snapshot: PyDiagramRender) -> Self {
         Self::new(Source::Captured(snapshot), None)
     }
 
     /// Slots are `<!--linnet-svg-0-->`, `<!--linnet-svg-1-->`, and so on.
+    /// Existing snapshots are reframed without rerunning layout or measurement.
+    /// Other clones retain their original wrappers.
+    ///
+    /// ```no_run
+    /// use linnet_render_py::PyDiagramView;
+    /// # fn wrap(view: PyDiagramView) {
+    /// let view = view.with_html("<figure><!--linnet-svg-0--></figure>".into());
+    /// # }
+    /// ```
+    ///
+    /// # Panics
+    /// Panics if a completed collection lacks its completed child snapshots;
+    /// that would violate the collection completion invariant.
+    #[must_use]
     pub fn with_html(mut self, template: String) -> Self {
         self.html_template = Some(template);
         let previous = self.completed.get().map(|done| Completed {
@@ -121,6 +180,19 @@ impl PyDiagramView {
         self
     }
 
+    /// Configure an owned SVG transformation before either completion route runs.
+    ///
+    /// ```no_run
+    /// use linnet_render_py::PyDiagramView;
+    /// use pyo3::PyResult;
+    /// # fn style(view: PyDiagramView) -> PyResult<PyDiagramView> {
+    /// view.map_svg(|svg| svg.replacen("<svg ", "<svg class=\"highlighted\" ", 1))
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns `ValueError` if this view is already measured or outlined. The
+    /// transformation must preserve SVG validity and any geometry it needs.
     pub fn map_svg(
         mut self,
         f: impl Fn(String) -> String + Send + Sync + 'static,
@@ -143,22 +215,27 @@ impl PyDiagramView {
                 .iter()
                 .map(|view| {
                     if vector {
-                        view.vector.get().expect("completed child vector").clone()
+                        view.vector
+                            .get()
+                            .expect("an outlined collection has outlined every child")
+                            .clone()
                     } else {
                         view.completed
                             .get()
-                            .expect("completed child measurement")
+                            .expect("a measured collection has completed every child")
                             .snapshot
                             .clone()
                     }
                 })
                 .collect();
-            return self.present(diagrams, true).expect("captured presentation");
+            return self
+                .present(diagrams, true)
+                .expect("reframing captured pages does not compile or measure them");
         }
         let html = self
             .html_template
             .as_ref()
-            .expect("HTML template")
+            .expect("with_html installs a template before reframing")
             .replace("<!--linnet-svg-0-->", &snapshot.pages().join("\n"));
         snapshot.with_html(html)
     }
@@ -195,7 +272,7 @@ impl PyDiagramView {
         if let Some(font) = FONT.get() {
             return Ok(font);
         }
-        let bytes = crate::data_assets::STIX_TWO_MATH
+        let bytes = STIX_TWO_MATH
             .bytes()
             .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
         let encoded: String = py
@@ -205,7 +282,7 @@ impl PyDiagramView {
             .extract()?;
         let css = format!(
             "/* {} */\n@font-face{{font-family:\"Linnet Offline Math\";src:url(\"data:font/woff2;base64,{encoded}\") format(\"woff2\");font-display:block}}\n.linnet-math-label,.linnet-math-label math{{font-family:\"Linnet Offline Math\";font-weight:400;font-style:normal;letter-spacing:normal}}",
-            crate::data_assets::STIX_TWO_MATH_LICENSE,
+            STIX_TWO_MATH_LICENSE,
         );
         // Include the rules as well as the font bytes in browser cache identity.
         let key = py
@@ -267,7 +344,9 @@ impl PyDiagramView {
                     height: label.height,
                     baseline: label.baseline,
                 };
-                metrics.validate().map_err(PyValueError::new_err)?;
+                metrics
+                    .validate()
+                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
                 Ok(metrics)
             })
             .collect()
@@ -279,18 +358,25 @@ impl PyDiagramView {
         metrics: &[LabelMetrics],
         css: &str,
     ) -> PyResult<PyDiagramRender> {
-        if let Some(done) = self.completed.get() {
-            if done.metrics.as_slice() != metrics {
-                return Err(PyValueError::new_err("view already has different label measurements; create a new view to measure again"));
-            }
-            return Ok(done.snapshot.clone());
+        if self.completed.get().is_none() {
+            let snapshot = self.capture(py, Some(metrics), css)?;
+            // Callbacks can reenter completion. The first published snapshot
+            // wins, and every caller must observe that same immutable result.
+            let _ = self.completed.set(Completed {
+                metrics: metrics.to_vec(),
+                snapshot,
+            });
         }
-        let snapshot = self.capture(py, Some(metrics), css)?;
-        let _ = self.completed.set(Completed {
-            metrics: metrics.to_vec(),
-            snapshot: snapshot.clone(),
-        });
-        Ok(snapshot)
+        let done = self
+            .completed
+            .get()
+            .expect("this call or a reentrant/concurrent caller published completion");
+        if done.metrics.as_slice() != metrics {
+            return Err(PyValueError::new_err(
+                "view already has different label measurements; create a new view to measure again",
+            ));
+        }
+        Ok(done.snapshot.clone())
     }
 
     fn capture(
@@ -308,12 +394,16 @@ impl PyDiagramView {
                     let typeset = if let Some(metrics) = metrics {
                         scene
                             .typeset_mathml(&metrics[offset..offset + count])
-                            .map_err(PyValueError::new_err)?
+                            .map_err(|error| PyValueError::new_err(error.to_string()))?
                     } else if count == 0 {
-                        scene.typeset(&[]).map_err(PyValueError::new_err)?
+                        scene
+                            .typeset(&[])
+                            .map_err(|error| PyValueError::new_err(error.to_string()))?
                     } else {
-                        let source = scene.label_document().map_err(PyValueError::new_err)?;
-                        let pages = crate::typst_export::compile_sources(
+                        let source = scene
+                            .label_document()
+                            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                        let pages = typst_export::compile_sources(
                             py,
                             &BTreeMap::from([("main.typ".into(), source.into_bytes())]),
                             "svg",
@@ -324,7 +414,9 @@ impl PyDiagramView {
                                 .map_err(|error| PyRuntimeError::new_err(error.to_string()))
                         })
                         .collect::<PyResult<Vec<_>>>()?;
-                        scene.typeset(&pages).map_err(PyValueError::new_err)?
+                        scene
+                            .typeset(&pages)
+                            .map_err(|error| PyValueError::new_err(error.to_string()))?
                     };
                     offset += count;
                     let svg = scene.render(&typeset).map_err(PyRuntimeError::new_err)?;
@@ -402,7 +494,7 @@ impl PyDiagramView {
             for (index, diagram) in diagrams.iter().enumerate() {
                 html = html.replace(
                     &format!("<!--linnet-svg-{index}-->"),
-                    &diagram.to_svg_pages()?.join("\n"),
+                    &diagram.pages().join("\n"),
                 );
             }
             html
@@ -425,11 +517,12 @@ impl PyDiagramView {
     }
 }
 
-#[cfg_attr(feature = "python_stubgen", pyo3_stub_gen::derive::gen_stub_pymethods)]
-#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), remove_gen_stub)]
 #[pymethods]
 impl PyDiagramView {
     /// Configured child views for a collection, retaining their original scenes.
+    /// See [`Self`] for an example. Returned clones share child completion state.
     #[getter]
     pub fn diagrams(&self) -> Vec<PyDiagramView> {
         match self.source.as_ref() {
@@ -439,20 +532,28 @@ impl PyDiagramView {
     }
 
     /// The exact ordered MathML probes, fixed font, and receipt identity.
+    ///
+    /// See [`Self`] for the measurement lifecycle. A receipt must echo this
+    /// request's `id` and contain one finite, nonnegative rectangle per label in
+    /// request order. All dimensions and the baseline are SVG user units (points).
+    ///
+    /// # Errors
+    /// Returns a Python error if bundled font loading, hashing, or request
+    /// serialization fails. No browser or notebook dependency is imported here.
     pub fn measurement_request(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
         let mut labels = Vec::new();
         self.labels(&mut labels);
         let labels = labels
             .iter()
             .enumerate()
-            .map(|(id, source)| serde_json::json!({"id": id, "mathml": source.mathml}))
+            .map(|(id, source)| json!({"id": id, "mathml": source.mathml}))
             .collect::<Vec<_>>();
         let font = if labels.is_empty() {
             None
         } else {
             Some(Self::font_resource(py)?)
         };
-        let request = serde_json::json!({
+        let request = json!({
             "id": self.id,
             "labels": labels,
             "font_css": font.map_or("", |font| font.css.as_str()),
@@ -467,6 +568,18 @@ impl PyDiagramView {
     }
 
     /// Obtain a completed immutable snapshot, or explicitly measure using Chromium.
+    ///
+    /// See [`Self`] for an example. Calling without arguments reuses completion;
+    /// pending labels need either an external receipt or explicit browser mode.
+    /// The same receipt is idempotent, including through a retained clone.
+    ///
+    /// # Errors
+    /// Returns `ValueError` for conflicting arguments, an unsupported browser,
+    /// stale/malformed receipts, changed measurements, or invalid label sources.
+    /// Returns `RuntimeError` while measurement is pending or native rendering
+    /// fails. Optional browser setup and execution errors propagate as Python
+    /// errors. Failed capture does not publish this view's completed snapshot;
+    /// child views already completed remain independently usable.
     #[pyo3(signature = (measurements=None, *, browser=None))]
     pub fn measured(
         &self,
@@ -501,32 +614,70 @@ impl PyDiagramView {
             return Err(PyRuntimeError::new_err("diagram measurement is pending; display this view in a live notebook, pass measurement_request() results to measured(measurements=...), or explicitly use measured(browser='chromium')"));
         };
         let css = if metrics.is_empty() {
-            String::new()
+            ""
         } else {
-            Self::font_resource(py)?.css.clone()
+            Self::font_resource(py)?.css.as_str()
         };
-        self.complete(py, &metrics, &css)
+        self.complete(py, &metrics, css)
     }
 
     /// Outline labels with the optional Python Typst compiler; no browser is used.
+    ///
+    /// See [`Self`] for an example. The vector snapshot has its own completion
+    /// cell, shared by clones, and never changes an existing measured export.
+    ///
+    /// # Errors
+    /// Returns `ValueError` if labels lack Typst sources or captured MathML has
+    /// no retained scene, `ImportError` if the optional `typst` package is absent,
+    /// or a Python error on compilation/rendering failure. Compiler exceptions
+    /// retain their Python cause via [`typst_export::compile_sources`].
     pub fn outlined(&self, py: Python<'_>) -> PyResult<PyDiagramRender> {
-        if let Some(snapshot) = self.vector.get() {
-            return Ok(snapshot.clone());
+        if self.vector.get().is_none() {
+            let snapshot = self.capture(py, None, "")?;
+            let _ = self.vector.set(snapshot);
         }
-        let snapshot = self.capture(py, None, "")?;
-        let _ = self.vector.set(snapshot.clone());
-        Ok(snapshot)
+        Ok(self
+            .vector
+            .get()
+            .expect("this call or a reentrant/concurrent caller published outlined completion")
+            .clone())
     }
 
+    /// Return the completed single-page SVG; see [`Self`] for an example.
+    ///
+    /// # Errors
+    /// Propagates [`Self::measured`] errors and rejects multipage snapshots.
     pub fn to_svg(&self, py: Python<'_>) -> PyResult<String> {
         self.measured(py, None, None)?.to_svg()
     }
+    /// Return independent strings for all completed pages; see [`Self`].
+    ///
+    /// # Errors
+    /// Propagates [`Self::measured`] errors if completion is unavailable.
     pub fn to_svg_pages(&self, py: Python<'_>) -> PyResult<Vec<String>> {
         self.measured(py, None, None)?.to_svg_pages()
     }
+    /// Return completed HTML with its font resource; see [`Self`].
+    ///
+    /// # Errors
+    /// Propagates [`Self::measured`] errors if completion is unavailable.
     pub fn to_html(&self, py: Python<'_>) -> PyResult<String> {
         self.measured(py, None, None)?.to_html()
     }
+    /// Save the completed snapshot, selecting the format by suffix.
+    ///
+    /// ```no_run
+    /// use linnet_render_py::PyDiagramView;
+    /// use pyo3::{PyResult, Python};
+    /// # fn save(py: Python<'_>, completed: PyDiagramView) -> PyResult<()> {
+    /// completed.save(py, "diagram.svg".into())?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Propagates [`Self::measured`] errors, filesystem/export errors, and
+    /// invalid format/page-count errors. PDF/PNG need an outlined snapshot.
     pub fn save(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
         Py::new(py, self.measured(py, None, None)?)?
             .call_method1(py, "save", (output,))?
@@ -534,6 +685,19 @@ impl PyDiagramView {
     }
 
     /// Optional notebook dependencies are imported only when displaying a view.
+    /// The widget retains a clone of the backend owner until it is closed.
+    ///
+    /// ```no_run
+    /// use linnet_render_py::PyDiagramView;
+    /// use pyo3::{PyResult, Python};
+    /// # fn notebook(py: Python<'_>, view: PyDiagramView) -> PyResult<()> {
+    /// let widget = view.widget(py)?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Propagates font/request errors and Python import or widget setup errors.
     pub fn widget(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let completed = self
             .completed
@@ -563,6 +727,10 @@ impl PyDiagramView {
             .map(Bound::unbind)
     }
 
+    /// Jupyter MIME bundle hook; see [`Self::widget`] for notebook construction.
+    ///
+    /// # Errors
+    /// Propagates widget setup and Python MIME protocol errors.
     #[pyo3(signature = (include=None, exclude=None))]
     pub fn _repr_mimebundle_(
         &self,
@@ -597,12 +765,20 @@ impl PyDiagramView {
             .call_method(py, "_repr_mimebundle_", (), Some(&kwargs))
     }
 
+    /// Marimo adapter for the retained widget; see [`Self::widget`].
+    ///
+    /// # Errors
+    /// Propagates widget errors and missing/failed Marimo imports or adapters.
     pub fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         py.import("marimo")?
             .getattr("ui")?
             .call_method1("anywidget", (self.widget(py)?,))
             .map(Bound::unbind)
     }
+    /// Marimo MIME hook for [`Self::_display_`]; see [`Self::widget`].
+    ///
+    /// # Errors
+    /// Propagates display adapter and Python MIME protocol errors.
     pub fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self._display_(py)?.call_method0(py, "_mime_")
     }
@@ -619,6 +795,96 @@ impl PyDiagramView {
 mod tests {
     use super::*;
     use linnest::svg::{Dash, Details, EdgeDrawing, NodeDrawing, Stroke};
+    use roxmltree::Document;
+    use std::sync::Weak;
+
+    #[test]
+    fn reentrant_completion_returns_the_first_published_snapshot() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            for mode in ["measured", "outlined"] {
+                let owner = Arc::new(OnceLock::<Weak<PyDiagramView>>::new());
+                let callback_owner = Arc::clone(&owner);
+                let calls = Arc::new(AtomicU64::new(0));
+                let callback_calls = Arc::clone(&calls);
+                let svg = r#"<svg xmlns="http://www.w3.org/2000/svg"/>"#;
+                let snapshot = PyDiagramRender::new(svg.into(), format!("<figure>{svg}</figure>"));
+                let view = Arc::new(PyDiagramView::from_render(snapshot).map_svg(move |svg| {
+                    let call = callback_calls.fetch_add(1, Ordering::Relaxed);
+                    if call == 0 {
+                        let view = callback_owner.get().unwrap().upgrade().unwrap();
+                        Python::attach(|py| {
+                            let snapshot = if mode == "measured" {
+                                view.measured(py, None, None)
+                            } else {
+                                view.outlined(py)
+                            }
+                            .unwrap();
+                            assert!(snapshot.to_svg().unwrap().contains("data-pass=\"1\""));
+                        });
+                    }
+                    svg.replacen("<svg ", &format!("<svg data-pass=\"{call}\" "), 1)
+                })?);
+                assert!(owner.set(Arc::downgrade(&view)).is_ok());
+                for _ in 0..2 {
+                    let snapshot = if mode == "measured" {
+                        view.measured(py, None, None)?
+                    } else {
+                        view.outlined(py)?
+                    };
+                    assert!(snapshot.to_svg()?.contains("data-pass=\"1\""));
+                    assert!(!snapshot.to_svg()?.contains("data-pass=\"0\""));
+                }
+                assert_eq!(calls.load(Ordering::Relaxed), 2);
+            }
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn reentrant_measurement_rejects_the_losing_receipt() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let prepared = channel_view(py, 1)?;
+            let Source::Scenes(mut scenes) = Arc::try_unwrap(prepared.source).ok().unwrap() else {
+                panic!("fixture must own prepared scenes");
+            };
+            scenes[0].title = Some(LabelSource::text("receipt"));
+            // Explicit external-metrics fixtures exercise receipt conflict,
+            // independently of browser/font setup.
+            let first = LabelMetrics {
+                width: 12.0,
+                height: 9.0,
+                baseline: 7.0,
+            };
+            let winner = LabelMetrics {
+                width: 13.0,
+                ..first
+            };
+            let owner = Arc::new(OnceLock::<Weak<PyDiagramView>>::new());
+            let callback_owner = Arc::clone(&owner);
+            let calls = AtomicU64::new(0);
+            let view = Arc::new(PyDiagramView::prepared(scenes).map_svg(move |svg| {
+                if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    let view = callback_owner.get().unwrap().upgrade().unwrap();
+                    Python::attach(|py| view.complete(py, &[winner], "")).unwrap();
+                }
+                svg
+            })?);
+            assert!(owner.set(Arc::downgrade(&view)).is_ok());
+            let Err(error) = view.complete(py, &[first], "") else {
+                panic!("a different winning receipt must reject the losing call");
+            };
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(error.to_string().contains("different label measurements"));
+            assert_eq!(view.completed.get().unwrap().metrics, [winner]);
+            let saved = view.measured(py, None, None)?.to_svg()?;
+            assert_eq!(view.complete(py, &[winner], "")?.to_svg()?, saved);
+            Ok(())
+        })
+        .unwrap();
+    }
 
     #[test]
     fn measurement_request_uses_the_saved_svgs_local_font_and_coordinate_system() {
@@ -733,7 +999,7 @@ assert widget._view is None and widget._font_css == ''
             details: Details::default(),
         };
         let scenes = (0..count).map(|_| Scene {
-                graph: serde_json::from_value(serde_json::json!({
+                graph: serde_json::from_value(json!({
                     "nodes": [{"index": 0}, {"index": 1}],
                     "edges": [{"id": 0, "source": {"node": 0, "id": 0}, "sink": {"node": 1, "id": 1}}],
                 })).unwrap(),
@@ -750,7 +1016,7 @@ assert widget._view is None and widget._font_css == ''
                 preamble: String::new(),
                 title: None,
                 pages: Vec::new(),
-                layout: serde_json::from_value(serde_json::json!({"layout-algo": "dot"})).unwrap(),
+                layout: serde_json::from_value(json!({"layout-algo": "dot"})).unwrap(),
                 layout_passes: Vec::new(),
                 layout_edges: None,
                 label_feedback: false,
@@ -764,7 +1030,7 @@ assert widget._view is None and widget._font_css == ''
         Python::attach(|py| -> PyResult<()> {
             let view = channel_view(py, 2)?;
             let svg = view.measured(py, None, None)?.to_svg()?;
-            let document = roxmltree::Document::parse(&svg).unwrap();
+            let document = Document::parse(&svg).unwrap();
             assert!(!document
                 .root_element()
                 .has_attribute("data-linnet-interactive"));

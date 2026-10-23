@@ -3,10 +3,30 @@
 //! The interactive callbacks replace bounded semantic leaves, leaving arithmetic
 //! and paging to Symbolica. Static exports walk the complete expression through
 //! the same notation owner and decline when their explicit limits are exceeded.
-use super::*;
+//!
+//! Use [`render`] to offer tensor notation to an interactive printer, [`expression`]
+//! to export an entire expression, and [`fragment`] to embed a printer's output.
+//! Each entry point has an example demonstrating its distinct boundary.
+use super::{
+    COMPONENT_LABELS_SUBSCRIPT_TAG, ChainOrientation, CompactPolarity, RepresentationValue,
+    SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX,
+};
+use crate::network::library::symbolic::ETS;
+use crate::network::tags;
+use crate::shadowing::symbolica_utils::SpensoPrintSettings;
+use crate::shadowing::{CYCLIC, SYM};
+use crate::structure::abstract_index::AIND_SYMBOLS;
+use crate::structure::representation::{
+    IndexDisplay, IndexRow, RepresentationClass, RepresentationMetadata,
+};
 use crate::structure::slot::{SlotMatch, SlotMatcher};
 use std::cell::Cell;
-use symbolica::printer::{AnsiHtmlFormatter, PrintMode, PrintUserData};
+use std::num::ParseFloatError;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, UserData};
+use symbolica::coefficient::CoefficientView;
+use symbolica::printer::{AnsiHtmlFormatter, PrintMode, PrintOptions, PrintState, PrintUserData};
+use symbolica::state::State;
+use thiserror::Error;
 
 const MAX_BYTES: usize = 4096;
 const MAX_EXPORT_NODES: usize = 1_000_000;
@@ -61,16 +81,13 @@ fn source_label(atom: AtomView<'_>) -> AtomView<'_> {
     // Nested payloads remain opaque, avoiding recursive metadata expansion.
     if let AtomView::Var(variable) = atom
         && variable.get_symbol().has_tag(&SPENSO_TAG.index)
-        && let symbolica::atom::UserData::Atom(payload) = variable.get_symbol().get_data()
+        && let UserData::Atom(payload) = variable.get_symbol().get_data()
         && let AtomView::Fun(label) = payload.as_view()
         && label.get_symbol().has_tag(&SPENSO_TAG.index)
         && fits(payload.as_view(), &mut 64, 0)
         && label.iter().all(|argument| match argument {
             AtomView::Num(_) => true,
-            AtomView::Var(variable) => matches!(
-                variable.get_symbol().get_data(),
-                symbolica::atom::UserData::None
-            ),
+            AtomView::Var(variable) => matches!(variable.get_symbol().get_data(), UserData::None),
             _ => false,
         })
     {
@@ -86,6 +103,18 @@ fn source_label(atom: AtomView<'_>) -> AtomView<'_> {
 /// `math` root or omission placeholder. Remove actual `data-symbolica-*`
 /// attributes while preserving token text and other attributes, including local
 /// visual slash and open-axis annotations. Malformed opening attributes decline.
+/// `None` means this fragment cannot be embedded under that contract; callers
+/// offering optional notation may defer to their ordinary structural printer.
+/// This removes viewer metadata, not arbitrary untrusted HTML.
+///
+/// # Examples
+///
+/// ```
+/// use spenso::network::tags::mathml;
+///
+/// let native = r#"<mi data-symbolica-path="0">x</mi>"#.to_owned();
+/// assert_eq!(mathml::fragment(native).as_deref(), Some("<mi>x</mi>"));
+/// ```
 pub fn fragment(value: String) -> Option<String> {
     bounded_fragment(value, MAX_BYTES)
 }
@@ -194,7 +223,7 @@ fn head(symbol: Symbol, options: Option<&PrintOptions>) -> Option<String> {
             if options.is_some_and(|options| {
                 !options.hide_all_namespaces
                     && options.hide_namespace.as_deref() != Some(symbol.get_namespace())
-                    && !symbolica::state::State::BUILTIN_SYMBOLS.contains(&symbol)
+                    && !State::BUILTIN_SYMBOLS.contains(&symbol)
             }) {
                 symbol.get_name()
             } else {
@@ -255,12 +284,12 @@ pub(crate) fn tensor(
         return None;
     };
     let values = function.iter().collect::<Vec<_>>();
-    if symbol == crate::network::library::symbolic::ETS.metric {
+    if symbol == ETS.metric {
         let [first, second] = values.as_slice() else {
             return None;
         };
-        let first = tensor_slot(*first)?;
-        let second = tensor_slot(*second)?;
+        let first = tags::tensor_slot(*first)?;
+        let second = tags::tensor_slot(*second)?;
         if first.representation != second.representation || first.dimension != second.dimension {
             return None;
         }
@@ -275,7 +304,7 @@ pub(crate) fn tensor(
         }
         let values = if matches!(label, "s" | "t")
             && values.len() == 2
-            && natural_index(values[1]) == Some(1)
+            && tags::natural_index(values[1]) == Some(1)
         {
             &values[..1]
         } else {
@@ -290,8 +319,8 @@ pub(crate) fn tensor(
     }
     if !symbol.has_tag(&SPENSO_TAG.tensor)
         || values.iter().any(|value| {
-            is_chain_marker(*value, SPENSO_TAG.chain_in)
-                || is_chain_marker(*value, SPENSO_TAG.chain_out)
+            tags::is_chain_marker(*value, SPENSO_TAG.chain_in)
+                || tags::is_chain_marker(*value, SPENSO_TAG.chain_out)
         })
     {
         return None;
@@ -301,8 +330,8 @@ pub(crate) fn tensor(
     let open_count = values
         .iter()
         .filter(|value| {
-            representation_value(**value).is_some()
-                || tensor_slot(**value).is_some_and(|slot| {
+            tags::representation_value(**value).is_some()
+                || tags::tensor_slot(**value).is_some_and(|slot| {
                     matches!(slot.index, AtomView::Fun(index)
                         if index.get_symbol() == AIND_SYMBOLS.openind && index.get_nargs() == 2)
                 })
@@ -310,8 +339,8 @@ pub(crate) fn tensor(
         .count();
     let mut axis = 0;
     for value in &values {
-        let slot = tensor_slot(*value);
-        let representation = representation_value(*value);
+        let slot = tags::tensor_slot(*value);
+        let representation = tags::representation_value(*value);
         if slot.is_some() || representation.is_some() {
             let (index, row) = if let Some(slot) = slot {
                 let open = matches!(slot.index, AtomView::Fun(index)
@@ -336,7 +365,9 @@ pub(crate) fn tensor(
         {
             if values.last().copied() != Some(*value)
                 || !columns.is_empty()
-                || component.iter().any(|index| natural_index(index).is_none())
+                || component
+                    .iter()
+                    .any(|index| tags::natural_index(index).is_none())
             {
                 return None;
             }
@@ -378,7 +409,7 @@ pub(crate) fn representation(
     if !fits(atom, &mut 64, 0) {
         return None;
     }
-    let (symbol, dimension, index, class, row) = if let Some(slot) = tensor_slot(atom) {
+    let (symbol, dimension, index, class, row) = if let Some(slot) = tags::tensor_slot(atom) {
         (
             slot.representation,
             slot.dimension,
@@ -387,7 +418,7 @@ pub(crate) fn representation(
             slot.row,
         )
     } else {
-        let value = representation_value(atom)?;
+        let value = tags::representation_value(atom)?;
         (value.symbol, value.dimension, None, value.class, value.row)
     };
     // A bare symbol defers to Symbolica, retaining its namespace/style options
@@ -397,7 +428,7 @@ pub(crate) fn representation(
         source(Atom::var(symbol).as_view(), options)?,
         source(dimension, options)?,
     );
-    let dual = matches!(unwrap_tensor_display(atom), AtomView::Fun(wrapper)
+    let dual = matches!(tags::unwrap_tensor_display(atom), AtomView::Fun(wrapper)
         if wrapper.get_symbol() == AIND_SYMBOLS.dind);
     if dual && class == RepresentationClass::Dualizable {
         body = format!("<msup>{body}<mo>*</mo></msup>");
@@ -423,7 +454,7 @@ fn vector<'a>(
     atom: AtomView<'a>,
     options: &PrintOptions,
 ) -> Option<(String, RepresentationValue<'a>)> {
-    let AtomView::Fun(function) = unwrap_tensor_display(atom) else {
+    let AtomView::Fun(function) = tags::unwrap_tensor_display(atom) else {
         return None;
     };
     let symbol = function.get_symbol();
@@ -436,10 +467,10 @@ fn vector<'a>(
     let mut representation = None;
     let mut labels = Vec::new();
     for value in function.iter() {
-        if tensor_slot(value).is_some() {
+        if tags::tensor_slot(value).is_some() {
             return None;
         }
-        if let Some(value) = representation_value(value) {
+        if let Some(value) = tags::representation_value(value) {
             if representation.replace(value).is_some() {
                 return None;
             }
@@ -488,6 +519,24 @@ pub(super) fn dot(
 /// The index resolver receives the representation and the original index Atom;
 /// returning `None` keeps its representation-owned palette or ordinary label.
 /// Arithmetic roots remain owned by Symbolica's structural expression viewer.
+/// `None` declines this notation offer for an unsupported leaf, invalid settings,
+/// or a leaf outside the interactive bounds. Use [`expression`] when a complete
+/// export or a diagnostic is required.
+///
+/// # Examples
+///
+/// ```
+/// use spenso::network::tags::mathml;
+/// use spenso::tensor_symbol;
+/// use symbolica::atom::{Atom, AtomCore};
+/// use symbolica::printer::{PrintOptions, PrintState};
+///
+/// let tensor = Atom::var(tensor_symbol!("mathml_example::T"));
+/// let html = mathml::render(
+///     tensor.as_view(), &PrintOptions::mathml(), &PrintState::new(), &|_, _| None,
+/// );
+/// assert_eq!(html.as_deref(), Some("<mi>T</mi>"));
+/// ```
 pub fn render(
     atom: AtomView<'_>,
     options: &PrintOptions,
@@ -497,8 +546,8 @@ pub fn render(
     if !fits(atom, &mut 256, 0) {
         return None;
     }
-    let context = Render::new(options, index)?;
-    let atom = unwrap_tensor_display(atom);
+    let context = Render::new(options, index).ok()?;
+    let atom = tags::unwrap_tensor_display(atom);
     fragment(context.leaf(atom, state).or_else(|| {
         let symbol = atom.get_symbol()?;
         if context.owns(atom) {
@@ -511,19 +560,42 @@ pub fn render(
 /// Render a complete static MathML fragment using the interactive tensor notation.
 ///
 /// No arithmetic or function argument is paged or replaced by an omission marker.
-/// `None` requires an export-limit error: the source is limited to 1,000,000 nodes
-/// and depth 256, and generated fragments share a 16 MiB rendering budget.
+/// The source is limited to 1,000,000 nodes and depth 256, and generated fragments
+/// share a 16 MiB rendering budget.
 /// Native numeric leaves retain their existing 4 KiB/precision bounds.
 /// The index resolver has the same contract as [`render`].
+///
+/// # Errors
+///
+/// Returns [`ExportError::InvalidSettings`] for an unsupported layout or invalid
+/// spacing, [`ExportError::SourceLimit`] for source bounds, and
+/// [`ExportError::IncompleteOutput`] when a complete supported fragment cannot be
+/// produced within the rendering bounds. No partial expression is returned.
+///
+/// # Examples
+///
+/// ```
+/// use spenso::network::tags::mathml;
+/// use spenso::network::tags::mathml::ExportError;
+/// use symbolica::atom::{Atom, AtomCore};
+/// use symbolica::printer::{PrintOptions, PrintState};
+///
+/// let value = Atom::num(7);
+/// let html = mathml::expression(
+///     value.as_view(), &PrintOptions::mathml(), &PrintState::new(), &|_, _| None,
+/// )?;
+/// assert!(html.contains("<mn>7</mn>"));
+/// # Ok::<(), ExportError>(())
+/// ```
 pub fn expression(
     atom: AtomView<'_>,
     options: &PrintOptions,
     state: &PrintState,
     index: &dyn for<'a> Fn(Symbol, AtomView<'a>) -> Option<String>,
-) -> Option<String> {
+) -> Result<String, ExportError> {
     let mut remaining = MAX_EXPORT_NODES;
     if !Render::expression_fits(atom, &mut remaining, 0) {
-        return None;
+        return Err(ExportError::SourceLimit);
     }
     let options = PrintOptions {
         mode: PrintMode::MathML,
@@ -535,8 +607,36 @@ pub fn expression(
         state: Cell::new(*state),
         failed: Cell::new(false),
     });
-    let body = context.visual(atom, state)?;
-    bounded_fragment(body, MAX_EXPORT_BYTES)
+    let body = context
+        .visual(atom, state)
+        .ok_or(ExportError::IncompleteOutput)?;
+    bounded_fragment(body, MAX_EXPORT_BYTES).ok_or(ExportError::IncompleteOutput)
+}
+
+/// Why a complete MathML export could not be produced.
+///
+/// See [`expression`] for successful export and error propagation. Semantic
+/// callback declines are instead represented by [`render`]'s optional result.
+#[derive(Clone, Debug, Error, PartialEq, Eq)]
+pub enum ExportError {
+    /// An unsupported layout or malformed/non-finite spacing setting.
+    #[error("invalid MathML rendering setting `{key}`")]
+    InvalidSettings {
+        /// The key in [`PrintOptions::custom_print_mode`] that could not be used.
+        key: &'static str,
+        /// The numeric parsing failure, when spacing failed to parse.
+        #[source]
+        source: Option<ParseFloatError>,
+    },
+    /// The input exceeds the source node, depth, byte, or symbol-name limits.
+    #[error("MathML export source exceeds the supported size or depth limits")]
+    SourceLimit,
+    /// A complete fragment could not be rendered within its output constraints.
+    ///
+    /// These include cumulative allocation and native numeric bounds, malformed
+    /// fragments, and unsupported index display metadata. See [`expression`].
+    #[error("MathML export could not produce a complete fragment within the rendering limits")]
+    IncompleteOutput,
 }
 
 struct Export {
@@ -545,7 +645,7 @@ struct Export {
     failed: Cell<bool>,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Layout {
     Ports,
     Schoonschip,
@@ -626,7 +726,7 @@ impl<'a> Render<'a> {
     fn new(
         options: &'a PrintOptions,
         index: &'a dyn for<'b> Fn(Symbol, AtomView<'b>) -> Option<String>,
-    ) -> Option<Self> {
+    ) -> Result<Self, ExportError> {
         let text = |key: &str| match options.custom_print_mode.get(key) {
             Some(PrintUserData::String(value)) => Some(value.as_str()),
             _ => None,
@@ -635,7 +735,12 @@ impl<'a> Render<'a> {
             "ports" => Layout::Ports,
             "schoonschip" => Layout::Schoonschip,
             "call" => Layout::Call,
-            _ => return None,
+            _ => {
+                return Err(ExportError::InvalidSettings {
+                    key: "spenso.tensor_layout",
+                    source: None,
+                });
+            }
         };
         let settings = SpensoPrintSettings::resolve(options)
             .map(|resolved| resolved.presentation)
@@ -648,11 +753,20 @@ impl<'a> Render<'a> {
             let value = text(key).unwrap_or(default);
             let (number, unit) = ["pt", "mm", "cm", "in", "em", "%", "ex", "px"]
                 .into_iter()
-                .find_map(|unit| value.strip_suffix(unit).map(|number| (number, unit)))?;
-            let number = number.parse::<f64>().ok()?;
-            number.is_finite().then(|| format!("{number}{unit}"))
+                .find_map(|unit| value.strip_suffix(unit).map(|number| (number, unit)))
+                .ok_or(ExportError::InvalidSettings { key, source: None })?;
+            let number = number
+                .parse::<f64>()
+                .map_err(|source| ExportError::InvalidSettings {
+                    key,
+                    source: Some(source),
+                })?;
+            if !number.is_finite() {
+                return Err(ExportError::InvalidSettings { key, source: None });
+            }
+            Ok(format!("{number}{unit}"))
         };
-        Some(Self {
+        Ok(Self {
             options,
             index,
             settings,
@@ -696,13 +810,13 @@ impl<'a> Render<'a> {
     }
 
     fn leaf(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
-        let atom = unwrap_tensor_display(atom);
+        let atom = tags::unwrap_tensor_display(atom);
         let symbol = atom.get_symbol()?;
         // Static scalar variables go straight to Symbol::format(), which owns
         // both their callback and native name. A declined callback runs once.
         if symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
             && !(self.export.is_some() && matches!(atom, AtomView::Var(_)) && !self.owns(atom))
-            && let Some(custom) = tensor_custom_print(atom, self.options, state)
+            && let Some(custom) = tags::tensor_custom_print(atom, self.options, state)
         {
             if let Some(custom) = self.fragment(custom) {
                 return Some(custom);
@@ -737,7 +851,7 @@ impl<'a> Render<'a> {
                 body
             });
         }
-        if tensor_slot(atom).is_some() || representation_value(atom).is_some() {
+        if tags::tensor_slot(atom).is_some() || tags::representation_value(atom).is_some() {
             return self.representation(atom, state);
         }
         if !symbol.has_tag(&SPENSO_TAG.tensor) && !symbol.has_tag(&SPENSO_TAG.index) {
@@ -781,7 +895,7 @@ impl<'a> Render<'a> {
             }
             let arguments = if matches!(label, "s" | "t")
                 && arguments.len() == 2
-                && natural_index(arguments[1]) == Some(1)
+                && tags::natural_index(arguments[1]) == Some(1)
             {
                 &arguments[..1]
             } else {
@@ -793,14 +907,16 @@ impl<'a> Render<'a> {
                 self.arguments(arguments, "<mo>.</mo>")?
             ));
         }
-        if symbol == crate::network::library::symbolic::ETS.metric {
+        if symbol == ETS.metric {
             let [first, second] = arguments.as_slice() else {
                 return None;
             };
             let mut matcher = SlotMatcher::default();
             let mut representation = |argument| {
-                let argument = unwrap_tensor_display(argument);
-                if tensor_slot(argument).is_none() && representation_value(argument).is_none() {
+                let argument = tags::unwrap_tensor_display(argument);
+                if tags::tensor_slot(argument).is_none()
+                    && tags::representation_value(argument).is_none()
+                {
                     return None;
                 }
                 match matcher.classify(argument) {
@@ -819,7 +935,7 @@ impl<'a> Render<'a> {
             let coordinates = component.iter().collect::<Vec<_>>();
             if coordinates
                 .iter()
-                .any(|index| natural_index(*index).is_none())
+                .any(|index| tags::natural_index(*index).is_none())
             {
                 return None;
             }
@@ -863,22 +979,20 @@ impl<'a> Render<'a> {
     }
 
     fn visual(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
-        let previous = self
-            .export
-            .as_ref()
-            .map(|export| export.state.replace(*state));
+        let Some(export) = &self.export else {
+            return self.visual_body(atom, state);
+        };
+        let previous = export.state.replace(*state);
         let body = self.visual_body(atom, state);
-        if let Some(export) = &self.export {
-            export.state.set(previous?);
-            if export.failed.get() {
-                return None;
-            }
+        export.state.set(previous);
+        if export.failed.get() {
+            return None;
         }
         body
     }
 
     fn visual_body(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
-        let atom = unwrap_tensor_display(atom);
+        let atom = tags::unwrap_tensor_display(atom);
         let body = match atom {
             AtomView::Add(sum) => {
                 let mut term_state = self.child_state();
@@ -1071,7 +1185,7 @@ impl<'a> Render<'a> {
         if let Some(alias) = (self.index)(symbol, index) {
             return self.fragment(alias);
         }
-        if let Some(index) = natural_index(index)
+        if let Some(index) = tags::natural_index(index)
             && let Some(display) = RepresentationMetadata::from_symbol(symbol)?
                 .index_palette
                 .resolve(index)
@@ -1112,7 +1226,7 @@ impl<'a> Render<'a> {
 
     fn open_columns(&self, arguments: &[AtomView<'_>]) -> Option<Vec<Option<(String, IndexRow)>>> {
         let open = |argument| {
-            representation_value(argument).is_some() || tensor_slot(argument).is_some_and(|slot| {
+            tags::representation_value(argument).is_some() || tags::tensor_slot(argument).is_some_and(|slot| {
             matches!(slot.index, AtomView::Fun(index) if index.get_symbol() == AIND_SYMBOLS.openind && index.get_nargs() == 2)
         })
         };
@@ -1121,8 +1235,8 @@ impl<'a> Render<'a> {
         arguments
             .iter()
             .map(|argument| {
-                let slot = tensor_slot(*argument);
-                let rep = representation_value(*argument);
+                let slot = tags::tensor_slot(*argument);
+                let rep = tags::representation_value(*argument);
                 let position = axis;
                 if slot.is_some() || rep.is_some() {
                     axis += 1;
@@ -1182,18 +1296,15 @@ impl<'a> Render<'a> {
             return base;
         }
         let gap = Self::space(&self.index_gap);
-        let separator = if self.settings.commas {
-            format!("<mo>,</mo>{gap}")
-        } else {
-            gap.clone()
-        };
+        let comma_separator = self.settings.commas.then(|| format!("<mo>,</mo>{gap}"));
+        let separator = comma_separator.as_deref().unwrap_or(&gap);
         let row = |row| {
             columns
                 .iter()
                 .filter(|(_, side)| *side == row)
                 .map(|(source, _)| source.as_str())
                 .collect::<Vec<_>>()
-                .join(&separator)
+                .join(separator)
         };
         let (top, bottom) = (row(IndexRow::Top), row(IndexRow::Bottom));
         let arguments = if bottom.is_empty() {
@@ -1207,7 +1318,7 @@ impl<'a> Render<'a> {
     }
 
     fn vector<'b>(&self, atom: AtomView<'b>) -> Option<(String, RepresentationValue<'b>)> {
-        let AtomView::Fun(function) = unwrap_tensor_display(atom) else {
+        let AtomView::Fun(function) = tags::unwrap_tensor_display(atom) else {
             return None;
         };
         let symbol = function.get_symbol();
@@ -1221,12 +1332,12 @@ impl<'a> Render<'a> {
         let mut labels = Vec::new();
         let mut matcher = SlotMatcher::default();
         for argument in function.iter() {
-            if tensor_slot(argument).is_some()
+            if tags::tensor_slot(argument).is_some()
                 || matches!(matcher.classify(argument), SlotMatch::Explicit(_))
             {
                 return None;
             }
-            if let Some(candidate) = representation_value(argument) {
+            if let Some(candidate) = tags::representation_value(argument) {
                 if rep.replace(candidate).is_some() {
                     return None;
                 }
@@ -1270,26 +1381,28 @@ impl<'a> Render<'a> {
         let mut ordinary = Vec::new();
         let mut bras = Vec::new();
         let mut kets = Vec::new();
-        let markers = chain_markers(arguments);
+        let markers = tags::chain_markers(arguments);
         // A malformed marker pair must not become a visible index or label.
         if markers.is_none()
             && arguments.iter().any(|argument| {
-                is_chain_marker(*argument, SPENSO_TAG.chain_in)
-                    || is_chain_marker(*argument, SPENSO_TAG.chain_out)
+                tags::is_chain_marker(*argument, SPENSO_TAG.chain_in)
+                    || tags::is_chain_marker(*argument, SPENSO_TAG.chain_out)
             })
         {
             return None;
         }
         let open_columns = self.open_columns(arguments)?;
-        for (position, argument) in arguments.iter().copied().enumerate() {
+        for ((position, argument), open_column) in
+            arguments.iter().copied().enumerate().zip(open_columns)
+        {
             if markers
                 .is_some_and(|markers| position == markers.input || position == markers.output)
             {
                 continue;
             }
-            if let Some(column) = &open_columns[position] {
-                columns.push(column.clone());
-            } else if let Some(slot) = tensor_slot(argument) {
+            if let Some(column) = open_column {
+                columns.push(column);
+            } else if let Some(slot) = tags::tensor_slot(argument) {
                 let source = self.index(slot.representation, slot.index)?;
                 columns.push((
                     self.qualified(source, slot.representation, slot.dimension)?,
@@ -1368,7 +1481,7 @@ impl<'a> Render<'a> {
     }
 
     fn representation(&self, atom: AtomView<'_>, state: &PrintState) -> Option<String> {
-        let (symbol, dimension, index, class, row) = if let Some(slot) = tensor_slot(atom) {
+        let (symbol, dimension, index, class, row) = if let Some(slot) = tags::tensor_slot(atom) {
             (
                 slot.representation,
                 slot.dimension,
@@ -1377,7 +1490,7 @@ impl<'a> Render<'a> {
                 slot.row,
             )
         } else {
-            let rep = representation_value(atom)?;
+            let rep = tags::representation_value(atom)?;
             (rep.symbol, rep.dimension, None, rep.class, rep.row)
         };
         let label = RepresentationMetadata::from_symbol(symbol)?
@@ -1385,7 +1498,7 @@ impl<'a> Render<'a> {
             .to_mathml()?;
         let dimension = self.visual(dimension, &self.child_state())?;
         let mut body = format!("<msub><mrow>{label}</mrow><mrow>{dimension}</mrow></msub>");
-        let dual = matches!(unwrap_tensor_display(atom), AtomView::Fun(wrapper) if wrapper.get_symbol() == AIND_SYMBOLS.dind)
+        let dual = matches!(tags::unwrap_tensor_display(atom), AtomView::Fun(wrapper) if wrapper.get_symbol() == AIND_SYMBOLS.dind)
             && class == RepresentationClass::Dualizable;
         if dual {
             body = format!("<msup>{body}<mo>*</mo></msup>");
@@ -1441,18 +1554,19 @@ impl<'a> Render<'a> {
         let mut columns = Vec::new();
         let mut labels = [None, None];
         let open = self.open_columns(&[*start, *end])?;
-        for (position, endpoint) in [*start, *end].into_iter().enumerate() {
-            if is_chain_marker(endpoint, SPENSO_TAG.chain_in)
-                || is_chain_marker(endpoint, SPENSO_TAG.chain_out)
+        for (position, (endpoint, open_column)) in [*start, *end].into_iter().zip(open).enumerate()
+        {
+            if tags::is_chain_marker(endpoint, SPENSO_TAG.chain_in)
+                || tags::is_chain_marker(endpoint, SPENSO_TAG.chain_out)
             {
                 continue;
             }
             if let Some((label, rep)) = self.vector(endpoint) {
                 labels[position] = Some(label);
                 columns.push((self.port(rep)?, rep.row));
-            } else if let Some(column) = &open[position] {
-                columns.push(column.clone());
-            } else if let Some(slot) = tensor_slot(endpoint) {
+            } else if let Some(column) = open_column {
+                columns.push(column);
+            } else if let Some(slot) = tags::tensor_slot(endpoint) {
                 let source = self.index(slot.representation, slot.index)?;
                 columns.push((
                     self.qualified(source, slot.representation, slot.dimension)?,
@@ -1463,11 +1577,7 @@ impl<'a> Render<'a> {
             }
         }
         body = self.attachment(body, &columns);
-        body = Self::ports(
-            body,
-            &labels[0].iter().cloned().collect::<Vec<_>>(),
-            &labels[1].iter().cloned().collect::<Vec<_>>(),
-        );
+        body = Self::ports(body, labels[0].as_slice(), labels[1].as_slice());
         Some(if state.in_exp_base { group(body) } else { body })
     }
 
@@ -1509,11 +1619,15 @@ impl<'a> Render<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        dind, euc, lor, mink,
-        structure::representation::{LibraryRep, Minkowski},
-    };
-    use symbolica::{function, printer::PrintMode};
+    use crate::network::tags::tensor_print;
+    use crate::structure::dimension::Dimension;
+    use crate::structure::representation::{IndexPalette, LibraryRep, Minkowski};
+    use crate::{dind, euc, lor, mink, tensor_symbol, vector_symbol};
+    use ahash::HashMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use symbolica::atom::{FunctionBuilder, NamespacedSymbol, SymbolAttribute, SymbolBuilder};
+    use symbolica::{function, symbol, wrap_symbol};
 
     fn options() -> PrintOptions {
         PrintOptions {
@@ -1529,7 +1643,7 @@ mod tests {
 
     #[test]
     fn static_expression_keeps_all_factors_past_native_arithmetic_and_page_limits() {
-        let head = crate::tensor_symbol!("static_mathml::Wide");
+        let head = tensor_symbol!("static_mathml::Wide");
         let index = symbol!("static_mathml::wide_index");
         let mut value = Atom::num(1);
         for label in 0..320 {
@@ -1558,7 +1672,7 @@ mod tests {
 
     #[test]
     fn static_expression_recurses_through_unsupported_calls_without_losing_tensors() {
-        let head = crate::tensor_symbol!("static_mathml::Nested");
+        let head = tensor_symbol!("static_mathml::Nested");
         let plain = symbol!("static_mathml::outer");
         let tensor = function!(head, mink!(4, symbol!("static_mathml::mu")));
         let mut value = FunctionBuilder::new(plain)
@@ -1661,14 +1775,14 @@ mod tests {
             state.in_exp_base = true;
             assert_eq!(
                 expression(value.as_view(), &options(), &state, &|_, _| None),
-                Some(group(html))
+                Ok(group(html))
             );
         }
     }
 
     #[test]
     fn static_expression_derivatives_keep_rich_orders_heads_arguments_and_aliases() {
-        let head = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::DerivativeHead"))
+        let head = SymbolBuilder::new(wrap_symbol!("static_mathml::DerivativeHead"))
             .with_tags([
                 SPENSO_TAG.tensor.as_str(),
                 "spenso::print-head:mathml:<mi mathcolor=\"purple\">𝒜</mi>",
@@ -1676,7 +1790,7 @@ mod tests {
             .with_print_function(tensor_print)
             .build()
             .unwrap();
-        let tensor = crate::tensor_symbol!("static_mathml::DerivativeArgument");
+        let tensor = tensor_symbol!("static_mathml::DerivativeArgument");
         let index = symbol!("static_mathml::derivative_index");
         let rich = function!(tensor, mink!(4, Atom::var(index)));
         // The native derivative shape admits any symbolic head. Its source
@@ -1705,7 +1819,7 @@ mod tests {
     fn static_expression_invalid_derivative_shapes_keep_structural_arguments() {
         let f = symbol!("static_mathml::InvalidDerivativeFunction");
         let same_name = symbol!("static_mathml::der");
-        let tensor = crate::tensor_symbol!("static_mathml::InvalidDerivativeArgument");
+        let tensor = tensor_symbol!("static_mathml::InvalidDerivativeArgument");
         let rich = function!(
             tensor,
             mink!(4, symbol!("static_mathml::invalid_derivative_index"))
@@ -1785,11 +1899,9 @@ mod tests {
 
     #[test]
     fn static_expression_preserves_callback_options_state_and_shared_leaf_notation() {
-        use std::sync::{Arc, Mutex};
-
         let states = Arc::new(Mutex::new(Vec::new()));
         let callback_states = Arc::clone(&states);
-        let callback = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::callback"))
+        let callback = SymbolBuilder::new(wrap_symbol!("static_mathml::callback"))
             .with_print_function(move |_, options, state| {
                 assert!(options.mode.is_mathml());
                 assert!(matches!(
@@ -1812,7 +1924,7 @@ mod tests {
         let value = Atom::var(callback);
         assert_eq!(
             expression(value.as_view(), &options, &state, &|_, _| None).as_deref(),
-            Some("<mi>custom</mi>")
+            Ok("<mi>custom</mi>")
         );
         let seen = states.lock().unwrap();
         assert_eq!(seen.len(), 1);
@@ -1835,7 +1947,7 @@ mod tests {
         assert!(seen[0].in_sum && seen[0].level == 18);
         drop(seen);
 
-        let head = crate::tensor_symbol!("static_mathml::Shared");
+        let head = tensor_symbol!("static_mathml::Shared");
         let value = function!(head, 3, mink!(4, symbol!("static_mathml::shared_index")));
         for layout in ["ports", "schoonschip", "call"] {
             options.custom_print_mode.insert(
@@ -1843,22 +1955,17 @@ mod tests {
                 PrintUserData::String(layout.to_owned()),
             );
             assert_eq!(
-                expression(value.as_view(), &options, &state, &|_, _| None),
-                render(value.as_view(), &options, &state, &|_, _| None)
+                expression(value.as_view(), &options, &state, &|_, _| None).unwrap(),
+                render(value.as_view(), &options, &state, &|_, _| None).unwrap()
             );
         }
     }
 
     #[test]
     fn static_expression_declined_scalar_callback_runs_once_per_render() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-
         let calls = Arc::new(AtomicUsize::new(0));
         let callback_calls = Arc::clone(&calls);
-        let symbol = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::declined_scalar"))
+        let symbol = SymbolBuilder::new(wrap_symbol!("static_mathml::declined_scalar"))
             .with_attributes(vec![SymbolAttribute::Scalar])
             .with_tags([TENSOR_PRINT_CALLBACK_TAG])
             .with_print_function(move |atom, options, state| {
@@ -1878,12 +1985,12 @@ mod tests {
         state.in_exp_base = true;
         assert_eq!(
             expression(value.as_view(), &options(), &state, &|_, _| None).as_deref(),
-            Some("<mi>declined_scalar</mi>")
+            Ok("<mi>declined_scalar</mi>")
         );
         assert_eq!(calls.load(Ordering::SeqCst), 1);
         assert_eq!(
             expression(value.as_view(), &options(), &state, &|_, _| None).as_deref(),
-            Some("<mi>later-render</mi>")
+            Ok("<mi>later-render</mi>")
         );
         assert_eq!(calls.load(Ordering::SeqCst), 2);
         assert_eq!(value.as_view().get_data(), original);
@@ -1891,11 +1998,6 @@ mod tests {
 
     #[test]
     fn static_expression_declined_function_callbacks_keep_source_namespaces_once() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-
         let calls = Arc::new(AtomicUsize::new(0));
         let symbols = [
             ("static_mathml_declined_left::γ", true),
@@ -1984,7 +2086,7 @@ mod tests {
                 let native = source(value.as_view(), &options).unwrap();
                 assert_eq!(
                     expression(value.as_view(), &options, &PrintState::new(), &|_, _| None),
-                    Some(native)
+                    Ok(native)
                 );
             }
         }
@@ -1997,11 +2099,11 @@ mod tests {
         for _ in 0..=MAX_EXPORT_DEPTH {
             value = function!(plain, value);
         }
-        assert!(
+        assert_eq!(
             expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
                 None
-            })
-            .is_none()
+            }),
+            Err(ExportError::SourceLimit)
         );
         assert!(!Render::expression_fits(
             function!(plain, 1, 2).as_view(),
@@ -2009,7 +2111,7 @@ mod tests {
             0
         ));
 
-        let callback = SymbolBuilder::new(symbolica::wrap_symbol!("static_mathml::oversized"))
+        let callback = SymbolBuilder::new(wrap_symbol!("static_mathml::oversized"))
             .with_tags([SPENSO_TAG.tensor.as_str(), TENSOR_PRINT_CALLBACK_TAG])
             .with_print_function(|_, _, _| {
                 Some(format!("<mtext>{}</mtext>", "x".repeat(MAX_EXPORT_BYTES)))
@@ -2018,18 +2120,46 @@ mod tests {
             .unwrap();
         let value = function!(callback, 1);
         let original = value.as_view().get_data().to_vec();
-        assert!(
+        assert_eq!(
             expression(value.as_view(), &options(), &PrintState::new(), &|_, _| {
                 None
-            })
-            .is_none()
+            }),
+            Err(ExportError::IncompleteOutput)
         );
         assert_eq!(value.as_view().get_data(), original);
         assert!(fragment(format!("<mtext>{}</mtext>", "x".repeat(MAX_BYTES))).is_none());
     }
 
+    #[test]
+    fn static_expression_reports_invalid_settings_and_retains_parse_errors() {
+        let value = Atom::var(tensor_symbol!("static_mathml::InvalidSettings"));
+        let state = PrintState::new();
+        for (key, setting, parse_error) in [
+            ("spenso.tensor_layout", "unknown", false),
+            ("spenso.index_gap", "1unknown", false),
+            ("spenso.factor_gap", "bad-em", true),
+            ("spenso.index_gap", "infem", false),
+        ] {
+            let mut options = options();
+            options
+                .custom_print_mode
+                .insert(key.to_owned(), PrintUserData::String(setting.to_owned()));
+            let error = expression(value.as_view(), &options, &state, &|_, _| None).unwrap_err();
+            let ExportError::InvalidSettings {
+                key: actual,
+                source,
+            } = error
+            else {
+                panic!("expected invalid settings for {key}={setting}");
+            };
+            assert_eq!(actual, key);
+            assert_eq!(source.is_some(), parse_error, "parse source for {setting}");
+            assert!(render(value.as_view(), &options, &state, &|_, _| None).is_none());
+        }
+    }
+
     fn gamma() -> Symbol {
-        register_tensor_symbol(
+        tags::register_tensor_symbol(
             NamespacedSymbol::parse("spenso::gamma"),
             vec![SymbolAttribute::Linear],
             false,
@@ -2072,8 +2202,6 @@ mod tests {
 
     #[test]
     fn scoped_metrics_accept_compatible_open_and_explicit_ports_only() {
-        use crate::network::library::symbolic::ETS;
-
         let rep = LibraryRep::new_dual("scoped_mathml::metric_open_space").unwrap();
         let open = |axis| function!(AIND_SYMBOLS.openind, 17, axis);
         let valid = [
@@ -2145,11 +2273,11 @@ mod tests {
     fn scoped_gamma_consumes_only_lorentz_port_and_styles_its_slash() {
         let spinor = LibraryRep::new_self_dual_with_index_palette_and_row(
             "scoped_mathml::spinor",
-            crate::structure::representation::IndexPalette::Numeric,
+            IndexPalette::Numeric,
             IndexRow::Bottom,
         )
         .unwrap();
-        let p = crate::vector_symbol!("scoped_mathml::p");
+        let p = vector_symbol!("scoped_mathml::p");
         let momentum = function!(p, 7, mink!(4));
         for (left, right, ports) in [
             (
@@ -2200,10 +2328,10 @@ mod tests {
     #[test]
     fn scoped_tensor_layouts_keep_bra_ket_polarity_and_representation_rows() {
         let rep = LibraryRep::new_dual("scoped_mathml::ports_space").unwrap();
-        let u = crate::vector_symbol!("scoped_mathml::u");
-        let v = crate::vector_symbol!("scoped_mathml::v");
+        let u = vector_symbol!("scoped_mathml::u");
+        let v = vector_symbol!("scoped_mathml::v");
         let value = function!(
-            crate::tensor_symbol!("scoped_mathml::A"),
+            tensor_symbol!("scoped_mathml::A"),
             function!(u, 1, dind!(function!(rep.symbol(), 3))),
             function!(v, 2, function!(rep.symbol(), 3))
         );
@@ -2307,23 +2435,18 @@ mod tests {
 
     #[test]
     fn scoped_aliases_receive_original_indices_and_symbolic_dimensions_survive() {
-        let head = crate::tensor_symbol!("scoped_mathml::Aliases");
+        let head = tensor_symbol!("scoped_mathml::Aliases");
         let original = symbol!("scoped_mathml::original_index");
         let dimension = symbol!("scoped_mathml::D");
         let value = function!(
             head,
-            mink!(
-                crate::structure::dimension::Dimension::Symbolic(dimension.into()),
-                Atom::var(original)
-            )
+            mink!(Dimension::Symbolic(dimension.into()), Atom::var(original))
         );
         let mut options = options();
         let mut settings = SpensoPrintSettings::typst();
         settings.with_dim = true;
-        options
-            .custom_print_mode
-            .extend(ahash::HashMap::from(settings));
-        let calls = std::cell::Cell::new(0);
+        options.custom_print_mode.extend(HashMap::from(settings));
+        let calls = Cell::new(0);
         let html = render(
             value.as_view(),
             &options,
@@ -2349,7 +2472,7 @@ mod tests {
 
     #[test]
     fn scoped_components_scripts_grouping_and_all_spacing_units() {
-        let head = SymbolBuilder::new(symbolica::wrap_symbol!("scoped_mathml::component"))
+        let head = SymbolBuilder::new(wrap_symbol!("scoped_mathml::component"))
             .with_tags([SPENSO_TAG.tensor.as_str(), COMPONENT_LABELS_SUBSCRIPT_TAG])
             .with_print_function(tensor_print)
             .build()
@@ -2369,9 +2492,7 @@ mod tests {
         );
         let mut settings = SpensoPrintSettings::typst();
         settings.array_components = true;
-        options
-            .custom_print_mode
-            .extend(ahash::HashMap::from(settings));
+        options.custom_print_mode.extend(HashMap::from(settings));
         let html = scoped(&component, &options);
         assert!(
             html.contains("<mo>[</mo>") && !html.contains("<msup>"),
@@ -2395,9 +2516,7 @@ mod tests {
         settings.symbol_scripts = false;
         settings.commas = true;
         settings.parens = false;
-        options
-            .custom_print_mode
-            .extend(ahash::HashMap::from(settings));
+        options.custom_print_mode.extend(HashMap::from(settings));
         let labels = function!(head, 5, 6, mink!(4, symbol!("scoped_mathml::i")));
         let html = scoped(&labels, &options);
         let positions = [
@@ -2449,7 +2568,7 @@ mod tests {
         let nested = function!(SPENSO_TAG.bracket, Atom::var(callback).pow(2));
         let nested = scoped(&nested, &options());
         assert!(nested.contains("<mi>power</mi>"), "{nested}");
-        let head = crate::tensor_symbol!("scoped_mathml::Bounded");
+        let head = tensor_symbol!("scoped_mathml::Bounded");
         let value = function!(head, mink!(4, symbol!("scoped_mathml::i")));
         let huge_alias =
             |_, _: AtomView<'_>| Some(format!("<mtext>{}</mtext>", "x".repeat(MAX_BYTES)));
@@ -2481,14 +2600,9 @@ mod tests {
 
     #[test]
     fn scoped_oversized_tensor_callable_falls_back_once_and_keeps_arguments() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-
         let calls = Arc::new(AtomicUsize::new(0));
         let callback_calls = Arc::clone(&calls);
-        let head = SymbolBuilder::new(symbolica::wrap_symbol!("scoped_mathml::oversized_callable"))
+        let head = SymbolBuilder::new(wrap_symbol!("scoped_mathml::oversized_callable"))
             .with_tags([SPENSO_TAG.tensor.as_str(), TENSOR_PRINT_CALLBACK_TAG])
             .with_print_function(move |_, options, _| {
                 assert!(options.mode.is_mathml());
@@ -2535,8 +2649,8 @@ mod tests {
                 assert_eq!(power, group(html));
             }
         }
-        let p = crate::vector_symbol!("scoped_mathml::dot_p");
-        let q = crate::vector_symbol!("scoped_mathml::dot_q");
+        let p = vector_symbol!("scoped_mathml::dot_p");
+        let q = vector_symbol!("scoped_mathml::dot_q");
         let value = function!(
             SPENSO_TAG.dot,
             function!(p, 1, mink!(4)),
@@ -2553,7 +2667,7 @@ mod tests {
 
     #[test]
     fn tensor_scripts_keep_rows_arguments_and_power_grouping() {
-        let head = crate::tensor_symbol!("native_mathml_print::T");
+        let head = tensor_symbol!("native_mathml_print::T");
         let value = function!(
             head,
             symbol!("native_mathml_print::parameter"),
@@ -2580,8 +2694,8 @@ mod tests {
 
     #[test]
     fn dots_only_hide_compatible_contracted_representations() {
-        let p = crate::vector_symbol!("native_mathml_print::p");
-        let q = crate::vector_symbol!("native_mathml_print::q");
+        let p = vector_symbol!("native_mathml_print::p");
+        let q = vector_symbol!("native_mathml_print::q");
         let options = options();
         let mut state = PrintState::new();
         let valid = function!(
@@ -2612,22 +2726,20 @@ mod tests {
 
     #[test]
     fn custom_head_fragments_remain_one_script_base() {
-        let symbol = SymbolBuilder::new(symbolica::wrap_symbol!(
-            "native_mathml_print::multi_root_head"
-        ))
-        .with_tags([
-            SPENSO_TAG.tensor.as_str(),
-            SPENSO_TAG.rank1.as_str(),
-            "spenso::print-head:mathml:<mi>A</mi><mo>′</mo>",
-        ])
-        .with_user_data(
-            IndexDisplay::math("overline", vec![IndexDisplay::symbol("B").unwrap()])
-                .unwrap()
-                .symbol_user_data(),
-        )
-        .with_print_function(tensor_print)
-        .build()
-        .unwrap();
+        let symbol = SymbolBuilder::new(wrap_symbol!("native_mathml_print::multi_root_head"))
+            .with_tags([
+                SPENSO_TAG.tensor.as_str(),
+                SPENSO_TAG.rank1.as_str(),
+                "spenso::print-head:mathml:<mi>A</mi><mo>′</mo>",
+            ])
+            .with_user_data(
+                IndexDisplay::math("overline", vec![IndexDisplay::symbol("B").unwrap()])
+                    .unwrap()
+                    .symbol_user_data(),
+            )
+            .with_print_function(tensor_print)
+            .build()
+            .unwrap();
         let value = function!(symbol, 7, mink!(4, symbol!("native_mathml_print::mu")));
         let original = value.as_view().get_data().to_vec();
         let head = "<mrow><mi>A</mi><mo>′</mo></mrow>";
@@ -2661,13 +2773,12 @@ mod tests {
     #[test]
     fn structured_tensor_heads_use_existing_mathml_bounds() {
         let display = IndexDisplay::Sequence(vec![IndexDisplay::Symbol("<".repeat(128)); 10]);
-        let symbol = SymbolBuilder::new(symbolica::wrap_symbol!(
-            "native_mathml_print::bounded_structured_head"
-        ))
-        .with_tags([SPENSO_TAG.tensor.as_str()])
-        .with_user_data(display.symbol_user_data())
-        .build()
-        .unwrap();
+        let symbol =
+            SymbolBuilder::new(wrap_symbol!("native_mathml_print::bounded_structured_head"))
+                .with_tags([SPENSO_TAG.tensor.as_str()])
+                .with_user_data(display.symbol_user_data())
+                .build()
+                .unwrap();
         assert_eq!(IndexDisplay::from_symbol(symbol), Some(display));
         assert!(head(symbol, None).is_none());
         assert!(
@@ -2683,23 +2794,21 @@ mod tests {
 
     #[test]
     fn dot_compaction_defers_to_callable_owned_vector_notation() {
-        let symbol = SymbolBuilder::new(symbolica::wrap_symbol!(
-            "native_mathml_print::callable_vector"
-        ))
-        .with_tags([
-            SPENSO_TAG.tensor.as_str(),
-            SPENSO_TAG.rank1.as_str(),
-            TENSOR_PRINT_CALLBACK_TAG,
-        ])
-        .with_print_function(|_, options, _| {
-            options
-                .mode
-                .is_mathml()
-                .then(|| "<mi>custom-vector</mi>".to_owned())
-        })
-        .build()
-        .unwrap();
-        let p = crate::vector_symbol!("native_mathml_print::ordinary_vector");
+        let symbol = SymbolBuilder::new(wrap_symbol!("native_mathml_print::callable_vector"))
+            .with_tags([
+                SPENSO_TAG.tensor.as_str(),
+                SPENSO_TAG.rank1.as_str(),
+                TENSOR_PRINT_CALLBACK_TAG,
+            ])
+            .with_print_function(|_, options, _| {
+                options
+                    .mode
+                    .is_mathml()
+                    .then(|| "<mi>custom-vector</mi>".to_owned())
+            })
+            .build()
+            .unwrap();
+        let p = vector_symbol!("native_mathml_print::ordinary_vector");
         let value = function!(
             SPENSO_TAG.dot,
             function!(symbol, 2, mink!(4)),
@@ -2713,8 +2822,6 @@ mod tests {
 
     #[test]
     fn native_metrics_keep_original_indices_variance_and_source_bytes() {
-        use crate::network::library::symbolic::ETS;
-
         let rep = LibraryRep::new_dual("native_mathml_print::metric_space").unwrap();
         let mu = symbol!("native_mathml_print::metric_mu");
         let nu = symbol!("native_mathml_print::metric_nu");
@@ -2761,10 +2868,8 @@ mod tests {
 
     #[test]
     fn native_metric_dispatch_defers_unsupported_calls() {
-        use crate::network::library::symbolic::ETS;
-
-        let p = crate::vector_symbol!("native_mathml_print::metric_p");
-        let q = crate::vector_symbol!("native_mathml_print::metric_q");
+        let p = vector_symbol!("native_mathml_print::metric_p");
+        let q = vector_symbol!("native_mathml_print::metric_q");
         let options = options();
 
         let mu = symbol!("native_mathml_print::unsupported_mu");

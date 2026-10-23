@@ -1,10 +1,26 @@
 //! Shared scope and explicit-index observation. This is a syntax-only pass:
 //! no normalization callback, materialization, or dummy allocation is permitted.
+#[cfg(test)]
+use super::tests::{OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS};
+use super::{InferenceResult, InterfaceInference, LeafInference, TensorInferenceError};
+use crate::tensor::composition;
+use crate::tensor::composition::ExplicitIndexOccurrences;
+use ahash::AHashMap;
+use spenso::network::parsing::{AtomStructureExt, ChainNestingError, StrictTensorFilter};
+use spenso::network::tags::SPENSO_TAG;
+use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
+use spenso::structure::TensorStructure;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, RepName, Representation};
+use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+use std::mem;
+#[cfg(test)]
+use symbolica::atom::AtomCore;
+use symbolica::atom::{AtomView, Symbol};
+use symbolica::domains::rational::Rational;
 
-use super::*;
-use spenso::network::parsing::ChainNestingError;
-
-#[derive(Clone, Copy, Default, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub(in crate::tensor) struct ObservationScope {
     pub(super) owner: Option<Symbol>,
     pub(super) inside_factor: bool,
@@ -86,7 +102,7 @@ impl InterfaceInference {
         slots: &mut SlotMatcher,
     ) -> InferenceResult<ExplicitIndexOccurrences> {
         #[cfg(test)]
-        super::tests::SCOPE_VALIDATIONS.with(|count| count.set(count.get() + 1));
+        SCOPE_VALIDATIONS.with(|count| count.set(count.get() + 1));
         Self::observe_indices(
             value,
             slots,
@@ -108,7 +124,7 @@ impl InterfaceInference {
         slots: &mut SlotMatcher,
     ) -> InferenceResult<PartialStructure> {
         let mut inference = InterfaceInference {
-            slots: std::mem::take(slots),
+            slots: mem::take(slots),
             leaf_inference: LeafInference::Observe,
             ..InterfaceInference::default()
         };
@@ -168,7 +184,7 @@ impl InterfaceInference {
     ) -> InferenceResult<ExplicitIndexOccurrences> {
         #[cfg(test)]
         if scope.count_indices && matches!(value, AtomView::Fun(_)) {
-            super::tests::OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
+            OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(count.get() + 1));
         }
         let mut result = ExplicitIndexOccurrences::default();
         if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(value) {
@@ -210,12 +226,12 @@ impl InterfaceInference {
                     {
                         return Err(error);
                     }
-                    result.branch_max(branch);
+                    result.branch_max(&branch);
                 }
             }
             AtomView::Mul(product) => {
                 for factor in product.iter() {
-                    result.append(Self::observe_indices(
+                    result.append(&Self::observe_indices(
                         factor,
                         slots,
                         cache,
@@ -260,7 +276,7 @@ impl InterfaceInference {
                             branch.repeat(repetitions);
                         }
                     }
-                    result.branch_max(branch);
+                    result.branch_max(&branch);
                 }
             }
             AtomView::Fun(function) => {
@@ -303,11 +319,11 @@ impl InterfaceInference {
                             || Representation::<LibraryRep>::try_from(argument).is_ok()
                             || argument.is_tensorial(StrictTensorFilter::Tagged)
                             || matches!(argument, AtomView::Fun(nested)
-                                if nested.get_symbol() == *shadowing::SYM
-                                || nested.get_symbol() == *shadowing::ANTISYM
-                                || nested.get_symbol() == *shadowing::CYCLIC));
+                                if nested.get_symbol() == *SYM
+                                || nested.get_symbol() == *ANTISYM
+                                || nested.get_symbol() == *CYCLIC));
                     if child.validate || child.count_indices {
-                        result.append(Self::observe_indices(
+                        result.append(&Self::observe_indices(
                             argument,
                             slots,
                             cache,
@@ -337,11 +353,18 @@ impl InterfaceInference {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spenso::structure::representation::ExtendibleReps;
+    use crate::tensor::SymbolicTensor;
+    use crate::test_support;
+    use spenso::network::library::symbolic::ETS;
+    use spenso::structure::dimension::Dimension;
+    use spenso::structure::representation::{ExtendibleReps, Minkowski};
+    use spenso::{bracket, mink, tensor_symbol};
+    use symbolica::atom::{Atom, FunctionBuilder};
+    use symbolica::{function, symbol};
 
     #[test]
     fn one_observation_checks_scopes_and_keeps_branch_multiplicity() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
         let a = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(99401));
         let leaf = |name| {
@@ -422,16 +445,16 @@ mod tests {
 
     #[test]
     fn admitted_slot_labels_are_not_chain_placeholder_syntax() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
-        let head = spenso::tensor_symbol!("slot_scope_label_T");
+        let head = tensor_symbol!("slot_scope_label_T");
         for label in [SPENSO_TAG.chain_in, SPENSO_TAG.chain_out] {
             for index in [
                 AbstractIndex::Symbol(label.into()),
-                AbstractIndex::Symbol(label.into()).scoped(symbolica::symbol!("slot_scope_label")),
+                AbstractIndex::Symbol(label.into()).scoped(symbol!("slot_scope_label")),
             ] {
                 let slot = rep.slot(index);
-                let expression = symbolica::function!(head, slot.to_atom());
+                let expression = function!(head, slot.to_atom());
                 let occurrences = InterfaceInference::scoped_occurrences(
                     expression.as_view(),
                     &mut SlotMatcher::default(),
@@ -448,9 +471,9 @@ mod tests {
                     expression
                 );
             }
-            let compact = symbolica::function!(head, Minkowski {}.new_rep(label).to_symbolic([]));
+            let compact = function!(head, Minkowski {}.new_rep(label).to_symbolic([]));
             SymbolicTensor::infer(compact).unwrap();
-            let actual_placeholder = symbolica::function!(head, label);
+            let actual_placeholder = function!(head, label);
             assert!(
                 InterfaceInference::scoped_occurrences(
                     actual_placeholder.as_view(),
@@ -463,7 +486,7 @@ mod tests {
 
     #[test]
     fn cached_scope_proof_is_local_and_scalar_metadata_is_opaque() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
         let input = Atom::var(SPENSO_TAG.chain_in);
         let output = Atom::var(SPENSO_TAG.chain_out);
@@ -513,7 +536,7 @@ mod tests {
             .add_arg(chain)
             .finish();
         assert!(InterfaceInference::scoped_occurrences(nested.as_view(), &mut slots).is_err());
-        let scalar = FunctionBuilder::new(symbolica::symbol!("observation_metadata"; Scalar))
+        let scalar = FunctionBuilder::new(symbol!("observation_metadata"; Scalar))
             .add_arg(nested)
             .add_arg(input)
             .finish();
@@ -525,7 +548,7 @@ mod tests {
     }
     #[test]
     fn scalar_inverse_scopes_keep_invalid_local_indices_and_placeholders_visible() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let rep = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
         let slot = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(99417));
         let leaf = |name| {
@@ -537,7 +560,7 @@ mod tests {
         let b = leaf("inverse_scope_B");
         let c = leaf("inverse_scope_C");
         for denominator in [&a * &b, a.pow(2), &a * &b + Atom::one()] {
-            let inverse = spenso::bracket!(denominator).pow(-1);
+            let inverse = bracket!(denominator).pow(-1);
             let value = &a * inverse;
             let occurrences = InterfaceInference::scoped_occurrences(
                 value.as_view(),
@@ -547,12 +570,12 @@ mod tests {
             assert_eq!(occurrences.count(slot), 1);
             occurrences.validate().unwrap();
         }
-        let invalid = spenso::bracket!(&a * &b * &c).pow(-1);
+        let invalid = bracket!(&a * &b * &c).pow(-1);
         let occurrences =
             InterfaceInference::scoped_occurrences(invalid.as_view(), &mut SlotMatcher::default())
                 .unwrap();
         assert!(occurrences.validate().is_err());
-        let malformed = spenso::bracket!(&a * &b * Atom::var(SPENSO_TAG.chain_in)).pow(-1);
+        let malformed = bracket!(&a * &b * Atom::var(SPENSO_TAG.chain_in)).pow(-1);
         assert!(
             InterfaceInference::scoped_occurrences(
                 malformed.as_view(),
@@ -564,8 +587,8 @@ mod tests {
 
     #[test]
     fn powers_share_closed_dummy_scopes_and_open_port_multiplicity() {
-        crate::test_support::test_initialize();
-        let slot = spenso::mink!(4, 99431);
+        test_support::test_initialize();
+        let slot = mink!(4, 99431);
         let leaf = |name| {
             FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
                 .add_arg(&slot)
@@ -574,7 +597,7 @@ mod tests {
         let a = leaf("power_scope_A");
         let b = leaf("power_scope_B");
         let outer = leaf("power_scope_outer");
-        let closed = spenso::bracket!(&a * &b);
+        let closed = bracket!(&a * &b);
         for exponent in [-2, -1, 2, 7] {
             let expression = closed.pow(exponent) * &outer;
             SymbolicTensor::<PartialStructure>::validate_atom(&expression).unwrap();

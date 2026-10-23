@@ -1,17 +1,31 @@
 //! Resolve drawing settings once, before browser measurement or vector export.
-use crate::{PyDiagramRender, PyRenderSettings};
+use std::sync::{Arc, OnceLock};
+
 use linnest::svg::Scene;
-use pyo3::{
-    exceptions::PyRuntimeError,
-    prelude::*,
-    types::{PyDict, PyDictMethods, PyList},
-};
+use linnest::TypstGraphSpec;
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyList, PyListMethods};
+use pyo3::{Bound, PyResult, Python};
+use serde_json::Map;
+
+use crate::typst::RenderSettingsTransport;
+use crate::{PyDiagramRender, PyDiagramView, PyRenderSettings};
 
 impl PyDiagramRender {
+    /// Replace the snapshot's wrapper without changing its captured SVG pages.
+    ///
+    /// See [`PyDiagramView::with_html`] for the equivalent preparation step.
+    #[must_use]
     pub fn with_html(mut self, html: String) -> Self {
         self.html = Some(html);
         self
     }
+    /// Transform independent page strings and update their occurrences in HTML.
+    /// Existing clones retain their original captured pages.
+    ///
+    /// See [`PyDiagramView::map_svg`] for an SVG transformation example. This
+    /// operation does not validate the resulting SVG; the result type is part
+    /// of the external rendering API.
     pub fn map_svg(mut self, f: impl Fn(String) -> String) -> PyResult<Self> {
         let pages: Vec<String> = self.pages().iter().cloned().map(f).collect();
         if let Some(html) = &mut self.html {
@@ -19,12 +33,18 @@ impl PyDiagramRender {
                 *html = html.replace(old, new);
             }
         }
-        self.pages = std::sync::Arc::new(pages);
+        self.pages = Arc::new(pages);
         Ok(self)
     }
 }
 
-impl crate::PyDiagramView {
+impl PyDiagramView {
+    /// Resolve one scene's settings and retain it for browser/vector completion.
+    /// See [`Self`] for a complete measurement example.
+    ///
+    /// # Errors
+    /// Returns a Python error for unsupported settings or failing selectors.
+    /// Selectors require the optional Linnet graph bindings to be registered.
     pub fn from_scene(
         py: Python<'_>,
         scene: Scene,
@@ -34,6 +54,12 @@ impl crate::PyDiagramView {
     }
 
     /// Resolve each channel once; measurement later combines their native SVGs.
+    ///
+    /// See [`Self`] for the lifecycle. Multiple channels share one presentation
+    /// while retaining separate graph identity and interaction targets.
+    ///
+    /// # Errors
+    /// Returns the same configuration/selector errors as [`Self::from_scene`].
     pub fn from_scenes(
         py: Python<'_>,
         scenes: Vec<Scene>,
@@ -51,7 +77,8 @@ impl crate::PyDiagramView {
         mut scene: Scene,
         settings: Option<&PyRenderSettings>,
     ) -> PyResult<Scene> {
-        let settings = settings.cloned().unwrap_or_default();
+        let defaults = PyRenderSettings::default();
+        let settings = settings.unwrap_or(&defaults);
         if settings.has_selectors() {
             let selector = SCENE_SELECTORS.get().ok_or_else(|| {
                 PyRuntimeError::new_err(
@@ -84,11 +111,7 @@ impl crate::PyDiagramView {
                     let data = py.import("json")?.call_method1(
                         "loads",
                         (serde_json::to_string(
-                            &details
-                                .fields()
-                                .iter()
-                                .cloned()
-                                .collect::<serde_json::Map<_, _>>(),
+                            &details.fields().iter().cloned().collect::<Map<_, _>>(),
                         )
                         .map_err(|error| PyRuntimeError::new_err(error.to_string()))?,),
                     )?;
@@ -98,7 +121,9 @@ impl crate::PyDiagramView {
                 }
                 elements.set_item(name, values)?;
             }
-            let transport = selector(py, &scene.graph, &elements, &settings)?;
+            let transport = selector(py, &scene.graph, &elements, settings)?;
+            // The transport needs its own editable topology while the consumed
+            // scene supplies the original drawing defaults.
             scene = transport.native_scene(scene.graph.clone(), None, Some(scene))?;
         } else {
             settings
@@ -113,11 +138,11 @@ impl crate::PyDiagramView {
 /// Optional graph bindings provide live views only when selectors need them.
 pub type SceneSelectors = fn(
     Python<'_>,
-    &linnest::TypstGraphSpec,
+    &TypstGraphSpec,
     &Bound<'_, PyDict>,
     &PyRenderSettings,
-) -> PyResult<crate::typst::RenderSettingsTransport>;
-static SCENE_SELECTORS: std::sync::OnceLock<SceneSelectors> = std::sync::OnceLock::new();
+) -> PyResult<RenderSettingsTransport>;
+static SCENE_SELECTORS: OnceLock<SceneSelectors> = OnceLock::new();
 pub fn register_scene_selectors(selectors: SceneSelectors) {
     let _ = SCENE_SELECTORS.set(selectors);
 }

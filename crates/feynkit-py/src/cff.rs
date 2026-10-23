@@ -2,35 +2,30 @@ mod display;
 mod kernel;
 use kernel::{CffKernel, CffOrientationData, CffTerm};
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use feynkit_cff::{
     CffExpression, CffOptions, CffReport, CffResult, CutPropagator, EdgeOrientation,
     FeynmanDiagramCffExt, SurfaceId, SurfacePole,
 };
-use linnet::half_edge::{involution::HedgePair, subgraph::SuBitGraph};
+use linnet::half_edge::involution::HedgePair;
+use linnet::half_edge::subgraph::SuBitGraph;
 use linnet_render_py::PyDiagramView;
-use pyo3::{
-    prelude::*,
-    types::{PyAny, PyModule},
+use pyo3::prelude::{
+    Bound, Py, PyAnyMethods, PyModuleMethods, PyResult, Python, pyclass, pymethods,
 };
+use pyo3::types::{PyAny, PyModule};
 use spynso3::expression::TensorExpression;
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
-    atom::{Atom, AtomCore, AtomView, Symbol},
-};
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
-use crate::{
-    energy::{PyEnergySurface, PyOnShellEnergy, PySurfaceFactor},
-    error,
-    graph::PyFeynmanDiagram,
-};
+use crate::energy::{PyEnergySurface, PyOnShellEnergy, PySurfaceFactor};
+use crate::error;
+use crate::graph::PyFeynmanDiagram;
 
 /// One acyclic energy-flow orientation in a CFF representation.
 ///

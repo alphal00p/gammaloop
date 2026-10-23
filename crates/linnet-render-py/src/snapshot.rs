@@ -1,9 +1,12 @@
 //! Immutable render snapshots, shared by generic graphs and domain renderers.
-use pyo3::{
-    exceptions::{PyRuntimeError, PyValueError},
-    prelude::*,
-};
-use std::{path::PathBuf, sync::Arc};
+use std::fs;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use pyo3::exceptions::{PyRuntimeError, PyValueError};
+use pyo3::{pyclass, pymethods, PyResult};
+
+use crate::typst_export;
 
 /// An immutable native SVG rendering with file exports and notebook display.
 /// Geometry and typeset labels are captured when the result is created.
@@ -88,7 +91,7 @@ impl PyDiagramRender {
         Ok(self
             .pages()
             .iter()
-            .map(|svg| crate::typst_export::svg_source(svg))
+            .map(|svg| typst_export::svg_source(svg))
             .collect::<Vec<_>>()
             .join("\n#pagebreak()\n"))
     }
@@ -107,16 +110,17 @@ impl PyDiagramRender {
             }
         };
         if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
-            std::fs::create_dir_all(parent).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            fs::create_dir_all(parent).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         }
         if let Some(text) = text {
-            std::fs::write(&output, text).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            fs::write(&output, text).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
             Ok(output)
         } else {
             let bytes = self.export_pages(extension)?;
             match bytes.as_slice() {
-                [page] => std::fs::write(&output, page)
-                    .map_err(|e| PyRuntimeError::new_err(e.to_string()))?,
+                [page] => {
+                    fs::write(&output, page).map_err(|e| PyRuntimeError::new_err(e.to_string()))?
+                }
                 _ => {
                     return Err(PyValueError::new_err(
                         "use save_pages() for multiple PNG pages",
@@ -143,13 +147,13 @@ impl PyDiagramRender {
                 ));
             }
         };
-        std::fs::create_dir_all(&directory).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        fs::create_dir_all(&directory).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
         pages
             .into_iter()
             .enumerate()
             .map(|(index, page)| {
                 let path = directory.join(format!("page-{}.{format}", index + 1));
-                std::fs::write(&path, page).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+                fs::write(&path, page).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
                 Ok(path)
             })
             .collect()

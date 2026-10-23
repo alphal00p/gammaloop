@@ -1,6 +1,8 @@
 //! Native SVG drawing of prepared graphs, the host-side counterpart of
 //! `draw.typ`: native layout, Kurvst geometry, the shared annotation search
 //! and SVG output. The host measures the MathML label pages a [`Scene`] lists.
+//!
+//! See [`Scene::typeset_mathml`] for the shared label/measurement contract.
 mod config;
 mod curves;
 pub use config::Config;
@@ -10,17 +12,16 @@ mod marks;
 mod output;
 
 use kurbo::{BezPath, Point};
-use linnet::half_edge::{
-    involution::EdgeIndex,
-    layout::impred::{EdgeLabel, ImpredConfig},
-    subgraph::{ModifySubSet, SuBitGraph},
-};
-use serde_json::Value;
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+use roxmltree::Document;
+use serde_json::{Map, Value};
 use std::sync::Arc;
 
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
 use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
-pub use labels::{LabelMetrics, LabelPage, LabelSource, Typeset};
+pub use labels::{LabelError, LabelMetrics, LabelPage, LabelSource, Typeset};
 pub use output::Details;
 
 /// Drawing unit in points: Linnest's default 1.5em at 9pt text.
@@ -29,6 +30,7 @@ const UNIT: f64 = 13.5;
 const NODE_RADIUS: f64 = 0.16;
 
 /// A prepared graph with its paint and label sources, drawn by [`Scene::render`].
+/// See [`Self::typeset_mathml`] for a complete measured-label example.
 pub struct Scene {
     /// Layout graph: sizes and pins as statements, in graph-spec form.
     pub graph: TypstGraphSpec,
@@ -42,9 +44,9 @@ pub struct Scene {
     /// Label source of each page, in measurement order after the title.
     pub pages: Vec<LabelSource>,
     /// Layout options; `layout-algo` selects `dot` or `impred` (the default).
-    pub layout: serde_json::Map<String, Value>,
+    pub layout: Map<String, Value>,
     /// Further passes, applied in order to the previous pass's geometry.
-    pub layout_passes: Vec<serde_json::Map<String, Value>>,
+    pub layout_passes: Vec<Map<String, Value>>,
     /// Edges defining the layered hierarchy, in spec order. Other edges are
     /// routed around it without changing the ranks. `None` uses all edges.
     pub layout_edges: Option<Vec<usize>>,
@@ -141,17 +143,24 @@ const FEEDBACK_STEPS: usize = 100;
 
 impl Scene {
     /// The optional vector-export document, with measured title first.
-    pub fn label_document(&self) -> Result<String, String> {
+    ///
+    /// See [`Self::typeset_mathml`] for constructing a scene, and [`Self::typeset`]
+    /// for importing the pages produced by an external Typst compiler.
+    ///
+    /// # Errors
+    /// Returns [`LabelError::MissingTypstSource`] if any label has only MathML.
+    pub fn label_document(&self) -> Result<String, LabelError> {
         let pages: Vec<String> = self
             .title
             .iter()
             .chain(&self.pages)
-            .map(|source| {
+            .enumerate()
+            .map(|(page, source)| {
                 source
                     .typst
                     .as_deref()
                     .map(LabelPage::measured)
-                    .ok_or_else(|| "label has no Typst source for vector export".to_owned())
+                    .ok_or(LabelError::MissingTypstSource { page })
             })
             .collect::<Result<_, _>>()?;
         Ok(format!(
@@ -162,11 +171,37 @@ impl Scene {
     }
 
     /// Import host-measured MathML boxes, title first, in points.
-    pub fn typeset_mathml(&self, metrics: &[LabelMetrics]) -> Result<Typeset, String> {
-        if metrics.len() != self.pages.len() + usize::from(self.title.is_some()) {
-            return Err(
-                "MathML measurements do not match the scene's title and label pages".into(),
-            );
+    ///
+    /// # Errors
+    /// Returns [`LabelError`] when the number of measurements is wrong, a
+    /// rectangle is invalid, or a label is malformed MathML or contains foreign
+    /// elements. MathML does not need a Typst source.
+    ///
+    /// ```
+    /// use linnest::svg::{LabelMetrics, LabelSource, Scene};
+    /// use serde_json;
+    /// use std::error::Error;
+    /// let scene = Scene {
+    ///     graph: serde_json::from_str(r#"{"nodes":[],"edges":[]}"#)?,
+    ///     nodes: Vec::new(), edges: Vec::new(), preamble: String::new(),
+    ///     title: Some(LabelSource::text("Measured title")), pages: Vec::new(),
+    ///     layout: Default::default(), layout_passes: Vec::new(),
+    ///     layout_edges: None, label_feedback: false,
+    /// };
+    /// // Supply the actual browser's measurements, in title/label order.
+    /// let metrics = LabelMetrics { width: 65.0, height: 9.0, baseline: 7.0 };
+    /// let labels = scene.typeset_mathml(&[metrics])?;
+    /// assert_eq!(labels.title.as_ref().map(|title| title.metrics), Some(metrics));
+    /// assert!(scene.label_document()?.contains("Measured title"));
+    /// # Ok::<(), Box<dyn Error>>(())
+    /// ```
+    pub fn typeset_mathml(&self, metrics: &[LabelMetrics]) -> Result<Typeset, LabelError> {
+        let expected = self.pages.len() + usize::from(self.title.is_some());
+        if metrics.len() != expected {
+            return Err(LabelError::MeasurementCount {
+                expected,
+                actual: metrics.len(),
+            });
         }
         let mut pages = self
             .title
@@ -175,7 +210,7 @@ impl Scene {
             .zip(metrics)
             .map(|(source, metrics)| source.typeset_mathml(*metrics));
         let title = if self.title.is_some() {
-            Some(pages.next().unwrap()?)
+            Some(pages.next().ok_or(LabelError::MissingTitle)??)
         } else {
             None
         };
@@ -187,10 +222,19 @@ impl Scene {
     }
 
     /// Read the SVG pages compiled from [`Scene::label_document`].
-    pub fn typeset(&self, svgs: &[String]) -> Result<Typeset, String> {
+    ///
+    /// See [`Typeset::read`] for an example of the measured SVG page protocol.
+    ///
+    /// # Errors
+    /// Returns [`LabelError`] for malformed or unmeasured SVG pages, a missing
+    /// title, or a page count that differs from this scene's labels.
+    pub fn typeset(&self, svgs: &[String]) -> Result<Typeset, LabelError> {
         let typeset = Typeset::read(svgs, self.title.is_some())?;
         if typeset.pages.len() != self.pages.len() {
-            return Err("typeset pages do not match the scene's label pages".to_owned());
+            return Err(LabelError::PageCount {
+                expected: self.pages.len(),
+                actual: typeset.pages.len(),
+            });
         }
         Ok(typeset)
     }
@@ -286,7 +330,7 @@ struct Laid {
 impl Laid {
     fn layered(
         graph: &mut TypstGraph,
-        options: &serde_json::Map<String, Value>,
+        options: &Map<String, Value>,
         edges: Option<&Vec<usize>>,
     ) -> Result<Self, String> {
         graph.layout_config = serde_json::from_value(Value::Object(options.clone()))
@@ -954,7 +998,7 @@ impl Scene {
         let mut body = String::new();
         let (mut width, mut height) = (0.0_f64, 0.0_f64);
         for figure in figures {
-            let document = roxmltree::Document::parse(figure).map_err(|e| e.to_string())?;
+            let document = Document::parse(figure).map_err(|e| e.to_string())?;
             let size = document
                 .root_element()
                 .attribute("viewBox")
@@ -1118,7 +1162,7 @@ mod tests {
             preamble: String::new(),
             title: Some(LabelSource::text("bubble")),
             pages: vec![LabelSource::text("x")],
-            layout: serde_json::Map::new(),
+            layout: Map::new(),
             layout_passes: Vec::new(),
             layout_edges: None,
             label_feedback: false,
@@ -1258,10 +1302,13 @@ mod tests {
         assert_eq!(typeset.title.as_ref().unwrap().metrics, measurements[0]);
         assert_eq!(typeset.pages[0].metrics, measurements[1]);
         assert!(typeset.defs.is_empty());
-        assert!(scene.label_document().unwrap_err().contains("Typst source"));
+        assert!(matches!(
+            scene.label_document(),
+            Err(LabelError::MissingTypstSource { page: 1 })
+        ));
 
         let svg = scene.render(&typeset).unwrap();
-        let document = roxmltree::Document::parse(&svg).unwrap();
+        let document = Document::parse(&svg).unwrap();
         let objects: Vec<_> = document
             .descendants()
             .filter(|node| node.has_tag_name(("http://www.w3.org/2000/svg", "foreignObject")))

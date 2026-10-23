@@ -2838,6 +2838,20 @@ class Tensor:
         r"""
         Return the source files of a complete Typst project without compiling it.
         Custom notation is source code for `notation.typ` in the returned mapping.
+
+        # Errors
+
+        Returns a Python exception if the tensor cannot be serialized. Registered
+        Python printer exceptions are logged and decline the override, allowing
+        native fallback. Exporting does not import or invoke a compiler.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, Tensor, TensorName
+        >>> tensor = Tensor.dense(TensorName("A")(Representation.euc(2)), [1., 2.])
+        >>> project = tensor.to_typst_project()
+        >>> sorted(project)
+        ['main.typ', 'notation.typ', 'render.typ', 'tree.cbor']
         """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
         r"""
@@ -2851,8 +2865,8 @@ class Tensor:
         settings : DisplaySettings, optional
             Tensor notation and display choices. Defaults to DisplaySettings().
         notation_source : str, optional
-            Custom Typst notation source used by the rich renderer. This is
-            Typst code, not a filename; omit it for the supplied tensor notation.
+            Unsupported for HTML and formatted output; raises ValueError.
+            Use to_typst_project() or to_svg() for custom Typst notation.
 
         Returns
         -------
@@ -2863,6 +2877,11 @@ class Tensor:
         -----
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
+
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
 
         Examples
         --------
@@ -2885,8 +2904,8 @@ class Tensor:
         settings : DisplaySettings, optional
             Tensor notation and display choices. Defaults to DisplaySettings().
         notation_source : str, optional
-            Custom Typst notation source used by the rich renderer. This is
-            Typst code, not a filename; omit it for the supplied tensor notation.
+            Unsupported for HTML and formatted output; raises ValueError.
+            Use to_typst_project() or to_svg() for custom Typst notation.
 
         Returns
         -------
@@ -2895,9 +2914,8 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        Mathematical rendering uses direct MathML without a Typst compiler.
+        Pass the returned fragment to the notebook's HTML display facility.
 
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
@@ -2906,6 +2924,11 @@ class Tensor:
         Matrix toggle. Dark mode follows the surrounding page. The color scale
         measures stored component payload bytes, not total process memory. Use
         DisplaySettings(tensor_view="matrix") for static mathematical HTML.
+
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
 
         Examples
         --------
@@ -2938,12 +2961,17 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        SVG export uses the optional Python package typst (typst-py).
+        Pass the returned markup to the notebook's SVG display facility.
 
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
+
+        # Errors
+
+        Returns ImportError if optional typst-py is unavailable, or RuntimeError if
+        compilation fails. Registered Python printer exceptions are logged and decline
+        the override, allowing native fallback.
 
         Examples
         --------
@@ -6176,6 +6204,11 @@ class TensorExpression(Expression):
         All rich layouts are supported. The optional Python package typst is
         needed only to compile the returned project.
 
+        # Errors
+
+        Returns a Python exception if payload export fails. Registered Python printer
+        exceptions are logged and decline the override, allowing native fallback.
+
         Examples
         --------
         >>> from symbolica.community.tensor import TensorExpression
@@ -6208,6 +6241,11 @@ class TensorExpression(Expression):
         Settings are captured here; custom printers run on the first request
         for each backend. Create a new formatted value after changing printers.
 
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
+
         Examples
         --------
         >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
@@ -6239,6 +6277,12 @@ class TensorExpression(Expression):
         object
             Notebook viewer retaining the expression and rendering pages on demand.
             Display it in marimo or Jupyter to navigate its widget.
+
+        # Errors
+
+        Returns ValueError for Typst notation or an invalid page size; viewer failures
+        propagate. Registered Python printer exceptions are logged and decline the
+        override, allowing native fallback.
 
         Examples
         --------
@@ -6294,6 +6338,11 @@ class TensorExpression(Expression):
         The complete expression is exported; oversized output raises an error.
         Pass the returned string to the notebook's HTML display facility.
 
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
+
         Examples
         --------
         >>> from symbolica.community.tensor import Representation, TensorName, TensorExpression
@@ -6325,6 +6374,12 @@ class TensorExpression(Expression):
         -----
         SVG export uses the optional Python package typst (typst-py).
         Pass the returned markup to the notebook's SVG display facility.
+
+        # Errors
+
+        Returns ImportError if optional typst-py is unavailable, or RuntimeError if
+        compilation fails. Registered Python printer exceptions are logged and decline
+        the override, allowing native fallback.
 
         Examples
         --------
@@ -10929,6 +10984,11 @@ def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.
     Settings are captured here; custom printers run on the first request
     for each backend. Create a new formatted value after changing printers.
 
+    # Errors
+
+    Returns ValueError for Typst notation or incomplete MathML. Registered Python
+    printer exceptions are logged and decline the override, allowing native fallback.
+
     Examples
     --------
     >>> from symbolica import S
@@ -11016,6 +11076,11 @@ def to_html(expression: Expression, show_dimensions: typing.Optional[builtins.bo
     The complete expression is exported; oversized output raises an error.
     Pass the returned string to the notebook's HTML display facility.
 
+    # Errors
+
+    Returns ValueError for Typst notation or incomplete MathML. Registered Python
+    printer exceptions are logged and decline the override, allowing native fallback.
+
     Examples
     --------
     >>> from symbolica import S
@@ -11051,6 +11116,12 @@ def to_svg(expression: Expression, show_dimensions: typing.Optional[builtins.boo
     -----
     SVG export uses the optional Python package typst (typst-py).
     Pass the returned markup to the notebook's SVG display facility.
+
+    # Errors
+
+    Returns ImportError if optional typst-py is unavailable, or RuntimeError if
+    compilation fails. Registered Python printer exceptions are logged and decline
+    the override, allowing native fallback.
 
     Examples
     --------
@@ -11122,6 +11193,11 @@ def to_typst_project(expression: Expression, show_dimensions: typing.Optional[bu
     -----
     Unlike to_typst(), the project supports all rich layouts and custom notation.
     The optional Python package typst is needed only to compile the result.
+
+    # Errors
+
+    Returns a Python exception if payload export fails. Registered Python printer
+    exceptions are logged and decline the override, allowing native fallback.
 
     Examples
     --------

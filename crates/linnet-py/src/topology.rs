@@ -11,11 +11,12 @@ use linnet::half_edge::tree::SimpleTraversalTree;
 use linnet::half_edge::NodeIndex;
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyReferenceError, PyValueError};
-use pyo3::prelude::*;
-use pyo3::types::PyAny;
+use pyo3::types::{PyAny, PyAnyMethods, PyModule, PyModuleMethods};
+use pyo3::{pyclass, pymethods, Bound, Py, PyRef, PyResult, Python};
 
 use crate::graph::{PyEdge, PyGraph, PyHalfEdge, PyNode, PyOrientation};
 use crate::native_graph::PyHedgeGraph;
+use crate::{render, PyDiagramView};
 
 /// Selects which notion of edge direction a directed algorithm follows.
 #[cfg_attr(
@@ -379,8 +380,8 @@ impl PySubgraph {
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
-    ) -> PyResult<crate::PyDiagramView> {
-        crate::render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self)).and_then(
+    ) -> PyResult<PyDiagramView> {
+        render::render_graph(py, self.owner(py)?.as_unbound(), config, Some(self)).and_then(
             |view| {
                 view.map_svg(|svg| {
                     svg.replacen("<svg ", "<svg class=\"linnet-subgraph\" ", 1)

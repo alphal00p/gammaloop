@@ -1,26 +1,22 @@
 //! Checked lowering from a symbolic carrier to finite component execution.
 
-use std::fmt::{Debug, Display};
-
-use spenso::{
-    network::{
-        Network, TensorNetworkError,
-        library::FunctionLibrary,
-        parsing::{ParseSettings, StructureFromAtom, TensorFromExpression, TensorLibraryFor},
-        store::NetworkStore,
-    },
-    structure::{
-        Canonicalized, HasStructure, OrderedStructure, ScalarStructure, TensorStructure,
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, LibrarySlot},
-        slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind},
-    },
-    tensors::data::SparseTensor,
-};
-use symbolica::atom::{Atom, Symbol};
-
 use super::SymbolicTensor;
 use crate::CookSettings;
+use spenso::network::library::FunctionLibrary;
+use spenso::network::parsing::{
+    ParseSettings, StructureFromAtom, TensorFromExpression, TensorLibraryFor,
+};
+use spenso::network::store::NetworkStore;
+use spenso::network::{Network, TensorNetworkError};
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, LibrarySlot};
+use spenso::structure::slot::{AbsInd, DummyAind, IsAbstractSlot, ParseableAind};
+use spenso::structure::{
+    Canonicalized, HasStructure, OrderedStructure, ScalarStructure, TensorStructure,
+};
+use spenso::tensors::data::SparseTensor;
+use std::fmt::{Debug, Display};
+use symbolica::atom::{Atom, Symbol};
 
 impl SymbolicTensor<PartialStructure> {
     /// Lower this admitted tensor into a component network, retaining its boundary.
@@ -150,23 +146,21 @@ impl SymbolicTensor<PartialStructure> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spenso::{
-        iterators::IteratableTensor,
-        network::{
-            ExecutionResult, Sequential, SmallestDegree,
-            library::{DummyKey, DummyLibrary, panicing::ErroringLibrary},
-            parsing::{ShadowedStructure, ShorthandParsing},
-        },
-        structure::{
-            abstract_index::AbstractIndex,
-            representation::{Euclidean, RepName},
-        },
-        tensors::parametric::ParamTensor,
-    };
-    use symbolica::{
-        atom::{AtomCore, AtomView},
-        function,
-    };
+    use crate::tensor::SymbolicNet;
+    use crate::{CookMode, CookSettings, test_support};
+    use spenso::iterators::IteratableTensor;
+    use spenso::network::library::panicing::ErroringLibrary;
+    use spenso::network::library::{DummyKey, DummyLibrary};
+    use spenso::network::parsing::{ShadowedStructure, ShorthandParsing};
+    use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::representation::{Euclidean, RepName};
+    use spenso::tensors::parametric::ParamTensor;
+    use spenso::{index_symbol, tensor_symbol};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::{Arc, Mutex, Weak};
+    use symbolica::atom::{AtomCore, AtomView};
+    use symbolica::function;
 
     type Structure = ShadowedStructure<AbstractIndex>;
     type Tensor = ParamTensor<Structure>;
@@ -319,11 +313,10 @@ mod tests {
 
     #[test]
     fn typed_component_lowering_checks_callbacks_after_index_decoding() {
-        crate::test_support::test_initialize();
-        let settings =
-            crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
-        let raw_index = function!(spenso::index_symbol!("typed_component_owned_index"), 7, 2);
-        let cooked_index = crate::CookSettings::reversible()
+        test_support::test_initialize();
+        let settings = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let raw_index = function!(index_symbol!("typed_component_owned_index"), 7, 2);
+        let cooked_index = CookSettings::reversible()
             .cook_function(raw_index.as_fun_view().unwrap())
             .unwrap();
         let rep = Euclidean {}.new_rep(2);
@@ -331,7 +324,7 @@ mod tests {
         let cooked_slot = rep.to_symbolic([cooked_index]);
         assert_ne!(cooked_slot, raw_slot);
         let ordinary = SymbolicTensor::infer(function!(
-            spenso::tensor_symbol!("typed_component_decoded_vector"),
+            tensor_symbol!("typed_component_decoded_vector"),
             &cooked_slot
         ))
         .unwrap();
@@ -348,7 +341,7 @@ mod tests {
             .into_canonical();
         assert_eq!(network.graph.dangling_indices().len(), 1);
         assert_eq!(network.graph.dangling_indices()[0].to_atom(), raw_slot);
-        let callback = spenso::tensor_symbol!(
+        let callback = tensor_symbol!(
             "typed_component_index_callback",
             norm = move |node, output| {
                 if let AtomView::Fun(fun) = node
@@ -382,29 +375,21 @@ mod tests {
 
     #[test]
     fn component_lowering_releases_symbolic_graph_before_decoding() {
-        use std::sync::{
-            Arc, Mutex, Weak,
-            atomic::{AtomicBool, Ordering},
-        };
-
-        crate::test_support::test_initialize();
-        let settings =
-            crate::CookSettings::indices().with_mode(crate::CookMode::ReversibleEncoding);
-        let raw_index = function!(spenso::index_symbol!("component_lifetime_index"), 11, 3);
-        let cooked_index = crate::CookSettings::reversible()
+        test_support::test_initialize();
+        let settings = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let raw_index = function!(index_symbol!("component_lifetime_index"), 11, 3);
+        let cooked_index = CookSettings::reversible()
             .cook_function(raw_index.as_fun_view().unwrap())
             .unwrap();
         let rep = Euclidean {}.new_rep(2);
         let raw_slot = rep.to_symbolic([raw_index]);
         let cooked_slot = rep.to_symbolic([cooked_index]);
         assert_ne!(cooked_slot, raw_slot);
-        let graph = Arc::new(Mutex::new(
-            None::<Weak<crate::tensor::SymbolicNet<AbstractIndex>>>,
-        ));
+        let graph = Arc::new(Mutex::new(None::<Weak<SymbolicNet<AbstractIndex>>>));
         let observed = Arc::clone(&graph);
         let decoded = Arc::new(AtomicBool::new(false));
         let did_decode = Arc::clone(&decoded);
-        let callback = spenso::tensor_symbol!(
+        let callback = tensor_symbol!(
             "component_lifetime_tensor",
             norm = move |node, _output| {
                 if let AtomView::Fun(function) = node

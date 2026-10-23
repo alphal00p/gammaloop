@@ -1,10 +1,8 @@
 use linnet_render_py::PyDiagramView;
 use linnet_render_py::PyRenderSettings;
-use std::{
-    collections::{BTreeMap, VecDeque},
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-};
+use std::collections::{BTreeMap, VecDeque};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use symbolica::atom::Atom;
 
 use feynkit_generator::{
@@ -16,31 +14,29 @@ use feynkit_generator::{
 };
 use feynkit_graph::{DiagramId, EdgeId};
 use feynkit_model::Model;
-use pyo3::{
-    FromPyObject, IntoPyObjectExt,
-    exceptions::{PyIndexError, PyTypeError, PyValueError},
-    prelude::*,
-    types::{PyAny, PyBool, PyEllipsis, PyList, PyModule, PyString},
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::prelude::{
+    Bound, IntoPyObject, Py, PyAnyMethods, PyErr, PyModuleMethods, PyResult, Python, pyclass,
+    pymethods,
 };
+use pyo3::types::{PyAny, PyBool, PyEllipsis, PyList, PyModule, PyString};
+use pyo3::{FromPyObject, IntoPyObjectExt};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{
-    PyStubType, TypeInfo,
-    derive::{gen_stub_pyclass, gen_stub_pymethods},
-};
+use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{PyStubType, TypeInfo};
 
-use crate::{
-    amplitude::PyAmplitude,
-    error,
-    graph::PyFeynmanDiagram,
-    model::{PyModel, PyParticle, PyVertexRule},
-    progress::MarimoProgress,
-    render_settings::PyDiagramStyle,
-};
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression, PythonGraph},
-    graph::Graph,
-};
+use crate::amplitude::PyAmplitude;
+use crate::display;
+use crate::display::PREVIEW_LIMIT;
+use crate::error;
+use crate::graph::PyFeynmanDiagram;
+use crate::model::{PyModel, PyParticle, PyVertexRule};
+use crate::progress::MarimoProgress;
+use crate::render_settings::PyDiagramStyle;
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression, PythonGraph};
+use symbolica::graph::Graph;
 
 /// A model-independent way to identify an external particle.
 ///
@@ -637,11 +633,10 @@ impl PyProcess {
             .iter()
             .map(|state| resolve(state))
             .collect::<PyResult<Vec<_>>>()?;
-        let view =
-            crate::display::process_view(py, &self.model, &incoming, &outgoing, config, style)?;
+        let view = display::process_view(py, &self.model, &incoming, &outgoing, config, style)?;
         let html = format!(
             "<figure class=\"feynkit-process\" style=\"max-width:100%;margin:.5rem 0\"><div style=\"width:360px;max-width:100%;overflow-x:auto\"><!--linnet-svg-0--></div><figcaption style=\"font-size:.85em;opacity:.75\">{}</figcaption></figure>",
-            crate::display::escape_html(&self.__repr__())
+            display::escape_html(&self.__repr__())
         );
         Ok(view.with_html(html))
     }
@@ -2799,7 +2794,7 @@ impl PyGenerationResult {
                 "incomplete"
             },
         );
-        crate::display::collection_view(
+        display::collection_view(
             py,
             title,
             &subtitle,
@@ -2838,7 +2833,7 @@ impl PyGenerationResult {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        let view = self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT))?;
+        let view = self.render(py, None, None, Some(PREVIEW_LIMIT))?;
         view._repr_mimebundle_(py, include, exclude)
     }
 
@@ -2852,7 +2847,7 @@ impl PyGenerationResult {
     /// >>> view  # notebook display measures labels before mounting diagrams
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT))?;
+        let view = self.render(py, None, None, Some(PREVIEW_LIMIT))?;
         view._mime_(py)
     }
 
@@ -3195,7 +3190,7 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 mod tests {
     use std::ffi::CString;
 
-    use pyo3::types::PyDict;
+    use pyo3::types::{PyDict, PyDictMethods};
 
     use super::*;
 

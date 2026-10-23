@@ -1,20 +1,16 @@
 //! Canonical GammaLoop energy symbols, also used by standalone FeynKit.
 
+use spenso::network::tags::mathml;
 use std::sync::LazyLock;
 
-use spenso::{
-    network::tags::TENSOR_PRINT_CALLBACK_TAG,
-    shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
-    structure::abstract_index::AIND_SYMBOLS,
-    symbolica_init::SymbolicaInitLazy,
-    utils::to_subscript,
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    function,
-    printer::{PrintOptions, PrintState},
-    symbol,
-};
+use spenso::network::tags::TENSOR_PRINT_CALLBACK_TAG;
+use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::symbolica_init::SymbolicaInitLazy;
+use spenso::utils;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::printer::{PrintOptions, PrintState};
+use symbolica::{function, symbol};
 
 use crate::EdgeId;
 
@@ -37,18 +33,13 @@ fn print_energy(
         if index.get_byte_size() > 1024 {
             return None;
         }
-        let id = spenso::network::tags::mathml::expression(
-            index,
-            options,
-            &PrintState::new(),
-            &|_, _| None,
-        )?;
+        let id = mathml::expression(index, options, &PrintState::new(), &|_, _| None).ok()?;
         let value = if on_shell {
             format!("<msubsup><mi>E</mi><mrow>{id}</mrow><mtext>os</mtext></msubsup>")
         } else {
             format!("<msub><mi>E</mi><mrow>{id}</mrow></msub>")
         };
-        return spenso::network::tags::mathml::fragment(if on_shell && state.in_exp_base {
+        return mathml::fragment(if on_shell && state.in_exp_base {
             format!("<mrow><mo>(</mo>{value}<mo>)</mo></mrow>")
         } else {
             value
@@ -89,7 +80,7 @@ fn print_energy(
         SpensoPrintBackend::Plain => {
             let head = if on_shell { "Eᵒˢ" } else { "E" };
             let index = usize::try_from(index).ok()?;
-            format!("{head}{}", to_subscript(index as isize))
+            format!("{head}{}", utils::to_subscript(index as isize))
         }
     })
 }

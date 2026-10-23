@@ -1,31 +1,26 @@
 mod display;
 
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap},
-    sync::Arc,
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::sync::Arc;
 
+use feynkit_cff::generalized::graph_io::EnergyEdgeIndexMap;
 use feynkit_cff::generalized::{
     Generate3DExpressionOptions, GeneratedThreeDExpression, ParsedGraph, RepresentationMode,
-    generate_3d_expression, graph_io::EnergyEdgeIndexMap,
+    generate_3d_expression,
 };
 use feynkit_graph::FeynmanDiagram;
 use linnet_render_py::PyDiagramView;
-use pyo3::prelude::*;
+use pyo3::prelude::{Py, PyAny, PyResult, Python, pyclass, pymethods};
 use spynso3::expression::TensorExpression;
-use symbolica::{
-    api::python::PythonExpression,
-    atom::{Atom, AtomCore},
-};
+use symbolica::api::python::PythonExpression;
+use symbolica::atom::{Atom, AtomCore};
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
-use crate::{
-    energy::{PyEnergySurface, PyOnShellEnergy, PySurfaceFactor},
-    error,
-    graph::PyFeynmanDiagram,
-};
+use crate::energy::{PyEnergySurface, PyOnShellEnergy, PySurfaceFactor};
+use crate::error;
+use crate::graph::PyFeynmanDiagram;
 use feynkit_cff::generalized::{LinearEnergyExpr, OrientationID};
 use linnet::half_edge::involution::{EdgeIndex, Orientation};
 

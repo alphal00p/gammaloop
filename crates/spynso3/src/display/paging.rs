@@ -1,8 +1,23 @@
 //! Tensor notation leaves in Symbolica's responsive MathML renderer.
-use super::*;
+use crate::display;
+use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
+use idenso::tensor::{SymbolicTensor, composition};
+use pyo3::exceptions::PyValueError;
+use pyo3::{Py, PyAny, PyErr, PyResult, Python};
+use spenso::network::tags::mathml;
+use spenso::network::tags::mathml::ExportError;
+use spenso::network::tags::{SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX};
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::RepresentationMetadata;
+use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::sync::Arc;
 use symbolica::api::python::MathMLViewer;
-use symbolica::printer::{PrintMode, PrintUserData};
+use symbolica::api::python::PythonExpression;
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
+use symbolica::domains::SelfRing;
+use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
 
 pub(crate) const DEFAULT_PAGE_SIZE: usize = 25;
 const MAX_LEAF_NODES: usize = 256;
@@ -32,7 +47,7 @@ type LeafCacheKey = (Atom, [u16; 10]);
 impl DisplaySettings {
     /// Tensor presentation options shared by static exports and scoped paging.
     pub(crate) fn mathml_options(&self) -> PrintOptions {
-        let mut options = display_options_with_settings(TensorDisplayMode::Typst, self);
+        let mut options = display::display_options_with_settings(TensorDisplayMode::Typst, self);
         options.mode = PrintMode::MathML;
         for (key, value) in [
             ("spenso.tensor_layout", &self.tensor_layout),
@@ -74,8 +89,8 @@ fn html(
     aliases: &IndexAliases,
 ) -> PyResult<String> {
     let options = settings.mathml_options();
-    let invalid_label = std::cell::Cell::new(false);
-    let body = spenso::network::tags::mathml::expression(
+    let label_error = RefCell::new(None);
+    let body = mathml::expression(
         atom.as_view(),
         &options,
         &PrintState::new(),
@@ -83,30 +98,50 @@ fn html(
             let key = (representation, index.to_owned());
             if let Some((_, display)) = aliases.entries.get(&key) {
                 let rendered = display.to_mathml();
-                invalid_label.set(invalid_label.get() || rendered.is_none());
+                if rendered.is_none() {
+                    label_error
+                        .borrow_mut()
+                        .get_or_insert(ExportError::IncompleteOutput);
+                }
                 return rendered;
             }
             aliases.source_indices.get(&key).and_then(|source| {
-                let rendered = spenso::network::tags::mathml::expression(
-                    source.as_view(),
-                    &options,
-                    &PrintState::new(),
-                    &|_, _| None,
-                );
-                invalid_label.set(invalid_label.get() || rendered.is_none());
-                rendered
+                let rendered =
+                    mathml::expression(source.as_view(), &options, &PrintState::new(), &|_, _| {
+                        None
+                    });
+                match rendered {
+                    Ok(rendered) => Some(rendered),
+                    Err(error) => {
+                        label_error.borrow_mut().get_or_insert(error);
+                        None
+                    }
+                }
             })
         },
     );
     if let Some(error) = PyErr::take(py) {
         return Err(error);
     }
-    let body = body.filter(|_| !invalid_label.get()).ok_or_else(|| {
-        PyValueError::new_err(
-            "complete MathML export exceeds its resource limit or contains an unsupported label; use paged() to inspect it",
-        )
-    })?;
-    Ok(notebook_html_fragment(&format!(
+    // A callback's missing fragment must not silently fall back to an encoded
+    // index. Preserve its typed failure until this Python export boundary.
+    let body = label_error
+        .into_inner()
+        .map_or(body, Err)
+        .map_err(|error| {
+            let exception = PyValueError::new_err(format!(
+                "complete MathML export failed: {error}; use paged() for bounded inspection"
+            ));
+            if let ExportError::InvalidSettings {
+                source: Some(source),
+                ..
+            } = error
+            {
+                exception.set_cause(py, Some(PyValueError::new_err(source.to_string())));
+            }
+            exception
+        })?;
+    Ok(display::notebook_html_fragment(&format!(
         "<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow>{body}</mrow></math>"
     )))
 }
@@ -115,6 +150,8 @@ struct TensorLeaves {
     settings: DisplaySettings,
     aliases: IndexAliases,
     // Responsive alternatives share direct fragments, with bounded retention.
+    // A cached fragment and the returned viewer response need independent owned
+    // strings. Tensor metadata itself remains shared through the viewer's Arc.
     cache: VecDeque<(LeafCacheKey, Option<String>)>,
 }
 
@@ -165,27 +202,27 @@ impl TensorLeaves {
         let root = value.expression().as_view().get_data();
         // Custom printers receive the complete state. Reusing a fragment must
         // preserve every observable flag and level, including exponent context.
-        let key = (
-            view.to_owned(),
-            [
-                u16::from(state.in_sum),
-                u16::from(state.in_product),
-                u16::from(state.suppress_one),
-                u16::from(state.in_exp),
-                u16::from(state.in_exp_base),
-                u16::from(state.top_level_add_child),
-                u16::from(state.superscript),
-                state.level,
-                state.bracket_level,
-                state.indentation_level,
-            ],
-        );
+        let context = [
+            u16::from(state.in_sum),
+            u16::from(state.in_product),
+            u16::from(state.suppress_one),
+            u16::from(state.in_exp),
+            u16::from(state.in_exp_base),
+            u16::from(state.top_level_add_child),
+            u16::from(state.superscript),
+            state.level,
+            state.bracket_level,
+            state.indentation_level,
+        ];
         if let Some(index) = self
             .cache
             .iter()
-            .position(|(candidate, _)| *candidate == key)
+            .position(|((atom, flags), _)| atom.as_view() == view && *flags == context)
         {
-            let entry = self.cache.remove(index).unwrap();
+            let entry = self
+                .cache
+                .remove(index)
+                .expect("the cache position was found without intervening mutation");
             let result = entry.1.clone();
             self.cache.push_back(entry);
             return Ok(result);
@@ -199,8 +236,7 @@ impl TensorLeaves {
         };
         let mut aliases = IndexAliases::for_atom(&atom, &self.settings.index_style);
         // Reserve the public free ports without walking the original expression.
-        let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind)
-            .add_arg(&atom);
+        let mut bundle = FunctionBuilder::new(AIND_SYMBOLS.aind).add_arg(&atom);
         for slot in value.structure().logical_slots() {
             bundle = bundle.add_arg(composition::port_atom(slot));
         }
@@ -275,32 +311,28 @@ impl TensorLeaves {
         let options = self.settings.mathml_options();
         // Aliases remain borrowed viewer state, rather than serialized options
         // or symbols inserted into the expression being paged.
-        let result = spenso::network::tags::mathml::render(
-            atom.as_view(),
-            &options,
-            state,
-            &|representation, index| {
-                let key = (representation, index.to_owned());
-                aliases
-                    .entries
-                    .get(&key)
-                    .and_then(|(_, display)| display.to_mathml())
-                    .or_else(|| {
-                        let source = aliases.source_indices.get(&key)?;
-                        if !fits(source.as_view(), &mut { MAX_LEAF_NODES }, 0) {
-                            return None;
-                        }
-                        Some(source.printer(options.clone()).to_string())
-                    })
-            },
-        );
+        let result = mathml::render(atom.as_view(), &options, state, &|representation, index| {
+            let key = (representation, index.to_owned());
+            aliases
+                .entries
+                .get(&key)
+                .and_then(|(_, display)| display.to_mathml())
+                .or_else(|| {
+                    let source = aliases.source_indices.get(&key)?;
+                    if !fits(source.as_view(), &mut { MAX_LEAF_NODES }, 0) {
+                        return None;
+                    }
+                    Some(source.format_string(&options, PrintState::new()))
+                })
+        });
         if let Some(error) = PyErr::take(py) {
             return Err(error);
         }
         // Oversized calls defer to structural rendering so their arguments can
         // still be paged and inspected, rather than becoming an atomic loop.
         let result = result.filter(|html| html.len() <= MAX_LEAF_BYTES);
-        self.cache.push_back((key, result.clone()));
+        self.cache
+            .push_back(((view.to_owned(), context), result.clone()));
         if self.cache.len() > 128 {
             self.cache.pop_front();
         }
@@ -354,11 +386,42 @@ pub(crate) fn static_html(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+    use symbolica::atom::{NamespacedSymbol, SymbolBuilder};
+    use symbolica::{parse, symbol};
+
     #[test]
     fn semantic_leaf_work_is_bounded_before_notation_callbacks() {
-        let small = symbolica::parse!("f(x,y)");
+        let small = parse!("f(x,y)");
         assert!(fits(small.as_view(), &mut { MAX_LEAF_NODES }, 0));
         assert!(!fits(small.as_view(), &mut 1, 0));
         assert!(!fits(small.as_view(), &mut { MAX_LEAF_NODES }, 33));
+    }
+
+    #[test]
+    fn complete_export_preserves_decoded_label_errors() {
+        let representation = LibraryRep::from(Minkowski {});
+        let index = Atom::var(symbol!("paging_mathml_tests::i"));
+        let tensor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("paging_mathml_tests::T"))
+            .add_arg(representation.to_symbolic([Atom::num(4), index.clone()]))
+            .finish();
+        let source = Atom::var(
+            SymbolBuilder::new(NamespacedSymbol::parse(&format!(
+                "paging_mathml_tests::{}",
+                "x".repeat(5000)
+            )))
+            .build()
+            .unwrap(),
+        );
+        let mut aliases = IndexAliases::default();
+        aliases
+            .source_indices
+            .insert((representation.symbol(), index), source);
+        Python::initialize();
+        Python::attach(|py| {
+            let error = html(py, &tensor, &DisplaySettings::default(), &aliases).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(error.to_string().contains("source exceeds"), "{error}");
+        });
     }
 }

@@ -1,9 +1,8 @@
 use linnet_render_py::PyDiagramView;
 use linnet_render_py::PyRenderSettings;
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use linnet_render_py::typst_export;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sync::Arc;
 
 use feynkit_generator::FeynmanDiagramRulesExt;
 use feynkit_graph::expressions::{GraphExpressions, PropagatorSymbols};
@@ -15,45 +14,46 @@ use feynkit_graph::{
 use feynkit_model::Model;
 use feynkit_tensor::FeynmanDiagramTensorExt;
 use idenso::tensor::SymbolicTensor;
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{EdgeIndex, Flow, Hedge},
-    subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
-    tree::SimpleTraversalTree,
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge};
+use linnet::half_edge::subgraph::{Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::tree::SimpleTraversalTree;
+use pyo3::exceptions::{PyIndexError, PyTypeError, PyValueError};
+use pyo3::prelude::{
+    Bound, FromPyObject, IntoPyObject, Py, PyAnyMethods, PyModuleMethods, PyRef, PyResult, Python,
+    pyclass, pymethods,
 };
-use pyo3::{
-    PyTraverseError, PyVisit,
-    exceptions::{PyIndexError, PyTypeError, PyValueError},
-    prelude::*,
-    types::{PyAny, PyModule},
-};
+use pyo3::types::{PyAny, PyModule};
+use pyo3::{PyTraverseError, PyVisit};
 use spenso::structure::partial::PartialStructure;
-use spynso3::{expression::TensorExpression, structure::SpensoName};
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
-    atom::Atom,
-    parser::ParseSettings,
-    wrap_input,
+use spynso3::expression::TensorExpression;
+use spynso3::structure::SpensoName;
+use symbolica::api::python::{
+    ConvertibleToExpression, ConvertibleToPattern, ConvertibleToReplaceWith, PythonExpression,
+    PythonReplacement,
 };
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::id::{ReplaceWith, Replacement};
+use symbolica::parser::ParseSettings;
+use symbolica::wrap_input;
+use symbolica::{function, symbol};
 
 #[cfg(feature = "python_stubgen")]
-use pyo3_stub_gen::{
-    PyStubType, TypeInfo,
-    derive::{gen_methods_from_python, gen_stub_pyclass, gen_stub_pymethods},
-    inventory::submit,
-};
+use pyo3_stub_gen::derive::{gen_methods_from_python, gen_stub_pyclass, gen_stub_pymethods};
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::inventory::submit;
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::{PyStubType, TypeInfo};
 
-use crate::{
-    cff::{PyCffRepresentation, PyCutPropagator},
-    display::escape_html,
-    error,
-    integrals::PyIntegralFamily,
-    kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum},
-    ltd::PyLtdRepresentation,
-    model::{PyModel, PyParticle, PyPropagator},
-    render_settings::PyDiagramStyle,
-    tensor::PyTensorReducer,
-};
+use crate::cff::{PyCffRepresentation, PyCutPropagator};
+use crate::display;
+use crate::error;
+use crate::integrals::PyIntegralFamily;
+use crate::kinematics::{PyFourMomentum, PyKinematics, PyThreeMomentum};
+use crate::ltd::PyLtdRepresentation;
+use crate::model::{PyModel, PyParticle, PyPropagator};
+use crate::render_settings::PyDiagramStyle;
+use crate::tensor::PyTensorReducer;
 
 #[cfg(feature = "linnet-python")]
 use crate::graph_interop::LinnetCache;
@@ -1434,22 +1434,24 @@ impl PyLoopMomentumBasis {
     /// >>> rules = diagram.loop_momentum_basis.momentum_replacements()
     /// >>> routed = diagram.numerator_expression().to_expression().replace_multiple(rules)
     fn momentum_replacements(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
-        let constructor = py.import("symbolica.core")?.getattr("Replacement")?;
         self.inner
             .momentum_replacements()
             .into_iter()
             .map(|rule| {
                 let pattern = rule.pat.to_atom().map_err(error::DiagramError::new_err)?;
-                let symbolica::id::ReplaceWith::Pattern(rhs) = rule.rhs else {
+                let ReplaceWith::Pattern(rhs) = rule.rhs else {
                     unreachable!("momentum substitutions are symbolic patterns")
                 };
-                let rhs = rhs.to_atom().map_err(error::DiagramError::new_err)?;
-                Ok(constructor
-                    .call1((
-                        PythonExpression { expr: pattern },
-                        PythonExpression { expr: rhs },
-                    ))?
-                    .unbind())
+                let pattern = Py::new(py, PythonExpression { expr: pattern })?;
+                let pattern = pattern.extract::<ConvertibleToExpression>(py)?;
+                let rhs = ConvertibleToReplaceWith::Pattern(ConvertibleToPattern::Held(
+                    rhs.yield_owned().into(),
+                ));
+                // Match the canonical constructor's validation and defaults.
+                let replacement = PythonReplacement::new(
+                    pattern, rhs, None, None, 0, None, false, true, false, 100,
+                )?;
+                Py::new(py, replacement).map(Py::into_any)
             })
             .collect()
     }
@@ -1480,8 +1482,6 @@ impl PyLoopMomentumBasis {
         loop_momenta: Option<Vec<SpensoName>>,
         external_momenta: Option<Vec<SpensoName>>,
     ) -> PyResult<Py<PyAny>> {
-        use symbolica::{atom::AtomCore, function, id::Replacement, symbol};
-
         let arguments = symbol!("feynkit_py::routing_ports___");
         let mut replacements = Vec::new();
         for (parameter, names, head, positions) in [
@@ -1718,7 +1718,7 @@ impl PyLoopMomentumBasis {
                     "<tr><td style=\"padding:.2rem .6rem\">{}</td>\
                      <td style=\"padding:.2rem .6rem\"><code>{}</code></td></tr>",
                     edge.0,
-                    escape_html(&signature.format_momentum()),
+                    display::escape_html(&signature.format_momentum()),
                 )
             })
             .collect::<String>();
@@ -2063,8 +2063,14 @@ pub struct PyFeynmanDiagram {
 
 impl From<FeynmanDiagram> for PyFeynmanDiagram {
     fn from(inner: FeynmanDiagram) -> Self {
+        Self::from(Arc::new(inner))
+    }
+}
+
+impl From<Arc<FeynmanDiagram>> for PyFeynmanDiagram {
+    fn from(inner: Arc<FeynmanDiagram>) -> Self {
         Self {
-            inner: Arc::new(inner),
+            inner,
             #[cfg(feature = "linnet-python")]
             linnet: LinnetCache::default(),
             owner: Arc::new(()),
@@ -2433,6 +2439,10 @@ impl PyFeynmanDiagram {
     ///
     /// As with family construction, partial subgraphs must first be excised
     /// into independent diagrams; complete selections retain their graph.
+    /// See [`Self::as_shared_diagram`] for borrowed native-owner access.
+    ///
+    /// # Errors
+    /// Returns a Python `DiagramError` when the selection omits part of the diagram.
     pub fn as_diagram(&self) -> PyResult<&FeynmanDiagram> {
         self.require_complete()?;
         Ok(&self.inner)
@@ -2470,6 +2480,23 @@ impl PyFeynmanDiagram {
 
     /// Borrow the shared native owner for computations that outlive this wrapper.
     /// Partial selections must first be excised into independent diagrams.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use feynkit_py::PyFeynmanDiagram;
+    /// use pyo3::PyResult;
+    /// use std::sync::Arc;
+    /// use std::ptr;
+    /// # fn retain(diagram: &PyFeynmanDiagram) -> PyResult<()> {
+    /// let shared = Arc::clone(diagram.as_shared_diagram()?);
+    /// assert!(ptr::eq(diagram.as_diagram()?, shared.as_ref()));
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a Python `DiagramError` when the selection omits part of the diagram.
     pub fn as_shared_diagram(&self) -> PyResult<&Arc<FeynmanDiagram>> {
         self.require_complete()?;
         Ok(&self.inner)
@@ -4452,7 +4479,7 @@ impl PyFeynmanDiagram {
         let view = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
         let drawing = view.outlined(py)?;
         let svg = drawing.to_svg()?;
-        Ok(linnet_render_py::typst_export::svg_source(&svg))
+        Ok(typst_export::svg_source(&svg))
     }
 
     /// Prepare a browser-measured view using the shared physics renderer.
@@ -4505,7 +4532,7 @@ impl PyFeynmanDiagram {
         >,
     ) -> PyResult<PyDiagramView> {
         let drawing = self.render_drawing(py, config, style, momenta, lmb, highlight)?;
-        let html = crate::display::render_diagram_html(&self.inner, "<!--linnet-svg-0-->");
+        let html = display::render_diagram_html(&self.inner, "<!--linnet-svg-0-->");
         Ok(drawing.with_html(html))
     }
 
@@ -4535,7 +4562,7 @@ impl PyFeynmanDiagram {
     ///     For notebook measurements, use ``render().measured().to_html()`` on
     ///     the displayed view instead.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, browser=None))]
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments)] // Mirrors render's Python keywords plus explicit browser selection.
     fn to_html(
         &self,
         py: Python<'_>,
@@ -5030,7 +5057,7 @@ impl PyFeynmanDiagram {
                 &options,
             )
             .map_err(error::diagram)?;
-        PyDiagramView::from_scene(py, scene, config)?.map_svg(crate::display::themed_svg)
+        PyDiagramView::from_scene(py, scene, config)?.map_svg(display::themed_svg)
     }
 
     /// The highlighted region: the argument, or this subgraph's own region.
@@ -5048,26 +5075,28 @@ impl PyFeynmanDiagram {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_symbolic_annotation;
+    use super::{DiagramSelection, PyFeynmanDiagram, parse_symbolic_annotation};
+    use feynkit_graph::FeynmanDiagram;
+    use feynkit_model::Model;
+    use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+    use std::ptr;
+    use std::sync::Arc;
 
     #[test]
     fn native_diagram_borrow_preserves_complete_selection_semantics() {
-        use super::{DiagramSelection, PyFeynmanDiagram};
-        use feynkit_graph::FeynmanDiagram;
-        use feynkit_model::Model;
-        use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
-
         let native = FeynmanDiagram::from_dot(
             Model::phi4(),
             r#"digraph { a -> a [particle="phi"]; a -> a [particle="phi"]; }"#,
         )
         .unwrap();
-        let mut diagram = PyFeynmanDiagram::from(native);
-        assert!(std::ptr::eq(
+        let shared = Arc::new(native);
+        let mut diagram = PyFeynmanDiagram::from(Arc::clone(&shared));
+        assert!(Arc::ptr_eq(&diagram.inner, &shared));
+        assert!(ptr::eq(
             diagram.as_diagram().unwrap(),
             diagram.inner.as_ref()
         ));
-        assert!(std::sync::Arc::ptr_eq(
+        assert!(Arc::ptr_eq(
             diagram.as_shared_diagram().unwrap(),
             &diagram.inner
         ));
@@ -5086,12 +5115,12 @@ mod tests {
             hedges: complete,
             isolated: Default::default(),
         });
-        assert!(std::ptr::eq(
+        assert!(ptr::eq(
             diagram.as_diagram().unwrap(),
             diagram.inner.as_ref()
         ));
-        let retained = std::sync::Arc::clone(diagram.as_shared_diagram().unwrap());
-        assert!(std::sync::Arc::ptr_eq(&retained, &diagram.inner));
+        let retained = Arc::clone(diagram.as_shared_diagram().unwrap());
+        assert!(Arc::ptr_eq(&retained, &diagram.inner));
         drop(diagram);
         retained.validate().unwrap();
     }

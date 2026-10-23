@@ -1,46 +1,43 @@
-use std::{
-    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
-    fmt,
-    hash::{Hash, Hasher},
-    sync::{Arc, Mutex, RwLock},
-};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::fmt;
+use std::hash::{Hash, Hasher};
+use std::sync::{Arc, Mutex, RwLock};
 
+use feynkit_graph::symbols;
 use feynkit_graph::{
     DiagramCut, DiagramCutSide, DiagramEdge, DiagramEndpoint, DiagramError, DiagramHalfEdge,
     DiagramId, DiagramThresholdCandidate, DiagramVertex, EdgeId, ExternalState, FeynmanDiagram,
     NumeratorInterface, VertexSlot,
 };
 use feynkit_model::{Model, ModelError, Particle, ParticleId, VertexRule, VertexRuleId};
-use idenso::{
-    CookMode, CookSettings,
-    color::CS,
-    dirac::AGS,
-    epsilon::EPSILON_SYMBOL,
-    representations::Bispinor,
-    tensor::{SymbolicTensor, composition::interface_in_atom_order, inference::InterfaceInference},
-};
+use idenso::color::CS;
+use idenso::dirac::AGS;
+use idenso::epsilon::EPSILON_SYMBOL;
+use idenso::representations::Bispinor;
+use idenso::tensor::SymbolicTensor;
+use idenso::tensor::composition;
+use idenso::tensor::inference::InterfaceInference;
+use idenso::{CookMode, CookSettings};
 use linnet::half_edge::involution::Flow;
 use linnet::half_edge::subgraph::{InternalSubGraph, SuBitGraph, SubSetLike};
 use linnet::half_edge::{HedgeGraph, NodeIndex};
 use linnet::permutation::Permutation;
 use rayon::ThreadPoolBuildError;
 #[cfg(not(target_arch = "wasm32"))]
-use rayon::{ThreadPoolBuilder, prelude::*};
+use rayon::ThreadPoolBuilder;
+#[cfg(not(target_arch = "wasm32"))]
+use rayon::iter::{
+    IndexedParallelIterator, IntoParallelIterator, IntoParallelRefIterator, ParallelIterator,
+};
 use serde::{Deserialize, Serialize};
-use spenso::{
-    network::library::symbolic::ETS,
-    structure::{
-        abstract_index::AbstractIndex,
-        partial::{PartialIndex, PartialStructure, PartialStructureExt},
-        representation::{LibraryRep, Minkowski, RepName},
-        slot::{IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder, UserData},
-    graph::{GenerationSettings, Graph, HalfEdge},
-    symbol,
-};
+use spenso::network::library::symbolic::ETS;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+use spenso::structure::slot::{IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, UserData};
+use symbolica::graph::{GenerationSettings, Graph, HalfEdge};
+use symbolica::symbol;
 use thiserror::Error;
 
 use feynkit_amplitude::ColorRepresentation;
@@ -382,25 +379,26 @@ impl NumeratorInstantiation<'_> {
             };
             let head = function.get_symbol();
             let mut arguments = function.iter();
-            let owner =
-                if head == feynkit_graph::symbols::hedge_index() || head == momentum_symbol() {
-                    let leg = usize::try_from(arguments.next().expect("template leg ID"))
-                        .expect("canonical template leg ID");
-                    if head == momentum_symbol() {
-                        self.legs[leg].edge
-                    } else {
-                        self.legs[leg].hedge
-                    }
-                } else if head == feynkit_graph::symbols::vertex_index()
-                    || head == feynkit_graph::symbols::edge_index()
-                {
-                    arguments.next();
-                    match self.owner {
-                        NumeratorOwner::Vertex(owner) | NumeratorOwner::Edge(owner) => owner,
-                    }
+            let owner = if head == symbols::hedge_index() || head == symbols::momentum() {
+                let leg = usize::try_from(
+                    arguments
+                        .next()
+                        .expect("localized template momentum and half-edge heads carry a leg ID"),
+                )
+                .expect("localized template leg IDs are nonnegative integers");
+                if head == symbols::momentum() {
+                    self.legs[leg].edge
                 } else {
-                    return;
-                };
+                    self.legs[leg].hedge
+                }
+            } else if head == symbols::vertex_index() || head == symbols::edge_index() {
+                arguments.next();
+                match self.owner {
+                    NumeratorOwner::Vertex(owner) | NumeratorOwner::Edge(owner) => owner,
+                }
+            } else {
+                return;
+            };
             match i64::try_from(owner) {
                 Ok(owner) => {
                     **out = FunctionBuilder::new(head)
@@ -735,8 +733,8 @@ impl NumeratorInstantiation<'_> {
             });
         }
         let dummy_symbol = match self.owner {
-            NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
-            NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
+            NumeratorOwner::Vertex(_) => symbols::vertex_index(),
+            NumeratorOwner::Edge(_) => symbols::edge_index(),
         };
         // Contract identities touching a local dummy before assigning oriented
         // slots. Each step removes one identity, including chains of identities;
@@ -1081,8 +1079,8 @@ impl NumeratorInstantiation<'_> {
                 return;
             };
             let expected = match self.owner {
-                NumeratorOwner::Vertex(_) => feynkit_graph::symbols::vertex_index(),
-                NumeratorOwner::Edge(_) => feynkit_graph::symbols::edge_index(),
+                NumeratorOwner::Vertex(_) => symbols::vertex_index(),
+                NumeratorOwner::Edge(_) => symbols::edge_index(),
             };
             if function.get_symbol() != expected || function.get_nargs() != 2 {
                 return;
@@ -1153,7 +1151,7 @@ impl NumeratorInstantiation<'_> {
     ) -> Result<(), GenerationError> {
         let key = Self::index_key(index);
         let local_dummy = matches!(index, AtomView::Fun(function)
-            if [feynkit_graph::symbols::vertex_index(), feynkit_graph::symbols::edge_index()]
+            if [symbols::vertex_index(), symbols::edge_index()]
                 .contains(&function.get_symbol()));
         match representations.insert(key, representation) {
             // A contracted fundamental index joins dual slots. External ports
@@ -1333,13 +1331,13 @@ impl NumeratorInstantiation<'_> {
     fn index(&self, leg: NumeratorHalfEdge, shift: i64) -> Result<Atom, GenerationError> {
         let hedge = i64::try_from(leg.hedge)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic half-edge identifier"))?;
-        Ok(feynkit_graph::symbols::hedge_index().call((hedge, shift)))
+        Ok(symbols::hedge_index().call((hedge, shift)))
     }
 
     fn dummy(&self, local: usize) -> Result<Atom, GenerationError> {
         let (symbol, owner) = match self.owner {
-            NumeratorOwner::Vertex(vertex) => (feynkit_graph::symbols::vertex_index(), vertex),
-            NumeratorOwner::Edge(edge) => (feynkit_graph::symbols::edge_index(), edge),
+            NumeratorOwner::Vertex(vertex) => (symbols::vertex_index(), vertex),
+            NumeratorOwner::Edge(edge) => (symbols::edge_index(), edge),
         };
         let owner = i64::try_from(owner)
             .map_err(|_| GenerationError::ArithmeticOverflow("a symbolic numerator owner"))?;
@@ -1419,16 +1417,15 @@ impl NumeratorTemplate {
                 // The occurrence-order owner cannot enumerate ports hidden in
                 // bundles. Reject them before an additive term can move first
                 // under owner-dependent normalization.
-                supported &=
-                    function.get_symbol() != spenso::structure::abstract_index::AIND_SYMBOLS.aind;
+                supported &= function.get_symbol() != AIND_SYMBOLS.aind;
                 // These labels must originate in localization. Literal graph
                 // IDs could capture a generated label in the canonical frame.
                 supported &= ![
-                    feynkit_graph::symbols::hedge_index(),
-                    feynkit_graph::symbols::vertex_index(),
-                    feynkit_graph::symbols::edge_index(),
-                    momentum_symbol(),
-                    spenso::structure::abstract_index::AIND_SYMBOLS.openind,
+                    symbols::hedge_index(),
+                    symbols::vertex_index(),
+                    symbols::edge_index(),
+                    symbols::momentum(),
+                    AIND_SYMBOLS.openind,
                 ]
                 .contains(&function.get_symbol());
             }
@@ -1451,7 +1448,8 @@ impl NumeratorTemplate {
         // owner. Intrinsic explicit templates have a complete label bijection.
         if !tensor.structure().open_positions().is_empty()
             || !InterfaceInference::normalization_is_intrinsic(tensor.expression().as_view())
-            || interface_in_atom_order(tensor.expression(), tensor.structure()).is_err()
+            || composition::interface_in_atom_order(tensor.expression(), tensor.structure())
+                .is_err()
         {
             return Ok(Self::Dynamic);
         }
@@ -1494,7 +1492,7 @@ impl NumeratorTemplate {
             label.visitor(&mut |node| {
                 // An opaque index depending on a momentum ID could itself
                 // alias when incident legs share an edge.
-                fixed_labels &= node.get_symbol() != Some(momentum_symbol());
+                fixed_labels &= node.get_symbol() != Some(symbols::momentum());
                 fixed_labels
             });
         }
@@ -1572,10 +1570,6 @@ impl NumeratorTemplate {
             unreachable!("dynamic rules are constructed at their actual owner")
         };
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let invalid = |message: String| DiagramError::Invariant {
-            operation: "instantiating an admitted numerator template",
-            message,
-        };
         let mut renaming = HashMap::with_capacity(labels.len());
         let mut encoded = HashMap::new();
         for (index, decoded) in labels {
@@ -1595,13 +1589,20 @@ impl NumeratorTemplate {
                     mapped = (*inner).to_owned();
                 }
                 if let Some(function) = mapped.as_fun_view() {
-                    mapped = cooking
-                        .cook_function(function)
-                        .map_err(|error| invalid(error.to_string()))?;
+                    mapped = cooking.cook_function(function).map_err(|source| {
+                        DiagramError::TensorCooking {
+                            operation: "instantiating an admitted numerator template",
+                            source,
+                        }
+                    })?;
                 }
                 scopes.into_iter().rev().fold(
-                    AbstractIndex::try_from(mapped.as_view())
-                        .map_err(|error| invalid(error.to_string()))?,
+                    AbstractIndex::try_from(mapped.as_view()).map_err(|source| {
+                        DiagramError::TensorIndex {
+                            operation: "instantiating an admitted numerator template",
+                            source,
+                        }
+                    })?,
                     |index, scope| index.scoped(scope),
                 )
             };
@@ -3413,16 +3414,16 @@ impl Generator {
         // Process-level expressions cannot know a topology's provisional IDs.
         // Resolve their external-leg owners before the finalizer transports the
         // resulting edge/half-edge chart. Native local UFO slots are unchanged.
-        let hedge_head = feynkit_graph::symbols::hedge_index();
-        let edge_head = feynkit_graph::symbols::edge_index();
+        let hedge_head = symbols::hedge_index();
+        let edge_head = symbols::edge_index();
         let carriers = [
             momentum_symbol(),
-            feynkit_graph::symbols::u(),
-            feynkit_graph::symbols::ubar(),
-            feynkit_graph::symbols::v(),
-            feynkit_graph::symbols::vbar(),
-            feynkit_graph::symbols::epsilon(),
-            feynkit_graph::symbols::epsilonbar(),
+            symbols::u(),
+            symbols::ubar(),
+            symbols::v(),
+            symbols::vbar(),
+            symbols::epsilon(),
+            symbols::epsilonbar(),
         ];
         projector = supplied.clone();
         for carrier_pass in [false, true] {
@@ -3466,22 +3467,22 @@ impl Generator {
         edge: usize,
         hedge: usize,
     ) -> Result<Atom, GenerationError> {
-        let index = feynkit_graph::symbols::hedge_index().call((hedge, 1_i64));
+        let index = symbols::hedge_index().call((hedge, 1_i64));
         let particle = self.model.particle_by_id(particle)?;
         let (head, index) = match particle.spin {
             2 => {
                 let head = match (state, particle.is_antiparticle()) {
-                    (ExternalState::Incoming, false) => feynkit_graph::symbols::u(),
-                    (ExternalState::Incoming, true) => feynkit_graph::symbols::vbar(),
-                    (ExternalState::Outgoing, false) => feynkit_graph::symbols::ubar(),
-                    (ExternalState::Outgoing, true) => feynkit_graph::symbols::v(),
+                    (ExternalState::Incoming, false) => symbols::u(),
+                    (ExternalState::Incoming, true) => symbols::vbar(),
+                    (ExternalState::Outgoing, false) => symbols::ubar(),
+                    (ExternalState::Outgoing, true) => symbols::v(),
                 };
                 (head, Bispinor {}.new_rep(4).to_symbolic([index]))
             }
             3 => {
                 let head = match state {
-                    ExternalState::Incoming => feynkit_graph::symbols::epsilon(),
-                    ExternalState::Outgoing => feynkit_graph::symbols::epsilonbar(),
+                    ExternalState::Incoming => symbols::epsilon(),
+                    ExternalState::Outgoing => symbols::epsilonbar(),
                 };
                 (head, Minkowski {}.new_rep(4).to_symbolic([index]))
             }
@@ -3546,7 +3547,13 @@ impl Generator {
             owner: instantiation.owner,
             legs: instantiation.legs.to_vec(),
         };
-        if let Some(numerator) = self.numerators.interactions.read().unwrap().get(&key) {
+        if let Some(numerator) = self
+            .numerators
+            .interactions
+            .read()
+            .expect("numerator cache was poisoned; its retained tensors cannot be reused")
+            .get(&key)
+        {
             return Ok(numerator.clone());
         }
         let legs = instantiation
@@ -3572,9 +3579,11 @@ impl Generator {
                 let numerator = template.instantiate(instantiation)?;
                 // Raw model rules have no declared axis order: retain the
                 // normalized occurrence order used by actual-owner admission.
-                let structure =
-                    interface_in_atom_order(numerator.expression(), numerator.structure())
-                        .expect("template admission established enumerable explicit ports");
+                let structure = composition::interface_in_atom_order(
+                    numerator.expression(),
+                    numerator.structure(),
+                )
+                .expect("template admission established enumerable explicit ports");
                 let logical = numerator.structure().logical_slots();
                 let axes = structure
                     .logical_slots()
@@ -3583,7 +3592,7 @@ impl Generator {
                         logical
                             .iter()
                             .position(|original| original == slot)
-                            .unwrap()
+                            .expect("template transport preserves every explicit interface slot")
                     })
                     .collect::<Vec<_>>();
                 numerator.permuted(&axes).map_err(DiagramError::from)?
@@ -3592,7 +3601,7 @@ impl Generator {
         self.numerators
             .interactions
             .write()
-            .unwrap()
+            .expect("numerator cache was poisoned; its retained tensors cannot be reused")
             .insert(key, numerator.clone());
         Ok(numerator)
     }
@@ -3611,7 +3620,7 @@ impl Generator {
             .numerators
             .interaction_templates
             .read()
-            .unwrap()
+            .expect("numerator cache was poisoned; its retained tensors cannot be reused")
             .get(&key)
         {
             return Ok(template.clone());
@@ -3632,10 +3641,6 @@ impl Generator {
         } else {
             None
         };
-        let mut templates = self.numerators.interaction_templates.write().unwrap();
-        if let Some(template) = templates.get(&key) {
-            return Ok(template.clone());
-        }
         let instantiation = NumeratorInstantiation {
             owner: key.owner,
             legs: &key.legs,
@@ -3674,9 +3679,17 @@ impl Generator {
                 NumeratorTemplate::Dynamic
             }
         };
-        let template = Arc::new(template);
-        templates.insert(key, template.clone());
-        Ok(template)
+        // Build outside the lock: symbolic normalization may invoke callbacks.
+        // Concurrent cold callers may compute the same immutable rule; only the
+        // first completed template is retained and returned to all callers.
+        let mut templates = self
+            .numerators
+            .interaction_templates
+            .write()
+            .expect("numerator template cache was poisoned while publishing a rule");
+        Ok(Arc::clone(
+            templates.entry(key).or_insert_with(|| Arc::new(template)),
+        ))
     }
 
     fn interaction_expression(
@@ -3721,7 +3734,13 @@ impl Generator {
             edge,
             hedges,
         };
-        if let Some(numerator) = self.numerators.propagators.read().unwrap().get(&key) {
+        if let Some(numerator) = self
+            .numerators
+            .propagators
+            .read()
+            .expect("numerator cache was poisoned; its retained tensors cannot be reused")
+            .get(&key)
+        {
             return Ok(numerator.clone());
         }
         let particle = self.model.particle_by_id(particle_id)?;
@@ -3746,40 +3765,44 @@ impl Generator {
             .numerators
             .propagator_templates
             .read()
-            .unwrap()
+            .expect("numerator cache was poisoned; its retained tensors cannot be reused")
             .get(&particle_id)
             .cloned();
         let template = if let Some(template) = cached {
             template
         } else {
-            let mut templates = self.numerators.propagator_templates.write().unwrap();
-            if let Some(template) = templates.get(&particle_id) {
-                template.clone()
-            } else {
-                let template = if NumeratorTemplate::supports(&propagator) {
-                    let canonical = legs
-                        .iter()
-                        .enumerate()
-                        .map(|(index, leg)| NumeratorHalfEdge {
-                            edge: 0,
-                            hedge: index,
-                            ..*leg
-                        })
-                        .collect::<Vec<_>>();
-                    let instantiation = NumeratorInstantiation {
-                        owner: NumeratorOwner::Edge(0),
-                        legs: &canonical,
-                    };
-                    let expression =
-                        instantiation.propagator_expression(&propagator, particle.color)?;
-                    NumeratorTemplate::admitted(NumeratorInterface::admit(expression, None)?)?
-                } else {
-                    NumeratorTemplate::Dynamic
+            let template = if NumeratorTemplate::supports(&propagator) {
+                let canonical = legs
+                    .iter()
+                    .enumerate()
+                    .map(|(index, leg)| NumeratorHalfEdge {
+                        edge: 0,
+                        hedge: index,
+                        ..*leg
+                    })
+                    .collect::<Vec<_>>();
+                let instantiation = NumeratorInstantiation {
+                    owner: NumeratorOwner::Edge(0),
+                    legs: &canonical,
                 };
-                let template = Arc::new(template);
-                templates.insert(particle_id, template.clone());
-                template
-            }
+                let expression =
+                    instantiation.propagator_expression(&propagator, particle.color)?;
+                NumeratorTemplate::admitted(NumeratorInterface::admit(expression, None)?)?
+            } else {
+                NumeratorTemplate::Dynamic
+            };
+            // Publish only after normalization, without holding a lock across
+            // a callback. Reuse the winner if another cold caller raced us.
+            let mut templates = self
+                .numerators
+                .propagator_templates
+                .write()
+                .expect("propagator template cache was poisoned while publishing a rule");
+            Arc::clone(
+                templates
+                    .entry(particle_id)
+                    .or_insert_with(|| Arc::new(template)),
+            )
         };
         let numerator = match &*template {
             NumeratorTemplate::Dynamic => NumeratorInterface::admit(
@@ -3788,9 +3811,11 @@ impl Generator {
             )?,
             NumeratorTemplate::Admitted { .. } => {
                 let numerator = template.instantiate(&instantiation)?;
-                let structure =
-                    interface_in_atom_order(numerator.expression(), numerator.structure())
-                        .expect("template admission established enumerable explicit ports");
+                let structure = composition::interface_in_atom_order(
+                    numerator.expression(),
+                    numerator.structure(),
+                )
+                .expect("template admission established enumerable explicit ports");
                 let logical = numerator.structure().logical_slots();
                 let axes = structure
                     .logical_slots()
@@ -3799,7 +3824,7 @@ impl Generator {
                         logical
                             .iter()
                             .position(|original| original == slot)
-                            .unwrap()
+                            .expect("template transport preserves every explicit interface slot")
                     })
                     .collect::<Vec<_>>();
                 numerator.permuted(&axes).map_err(DiagramError::from)?
@@ -3808,7 +3833,7 @@ impl Generator {
         self.numerators
             .propagators
             .write()
-            .unwrap()
+            .expect("numerator cache was poisoned; its retained tensors cannot be reused")
             .insert(key, numerator.clone());
         Ok(numerator)
     }
@@ -5393,6 +5418,11 @@ mod tests {
     use symbolica::parser::ParseSettings;
 
     use super::*;
+    use idenso::tensor::composition::TensorCompositionError;
+    use idenso::tensor::inference::TensorInferenceError;
+    use serde_json::json;
+    use spenso::tensor_symbol;
+    use std::array;
 
     fn test_atom(expression: &str) -> Atom {
         Atom::parse(expression, "UFO", ParseSettings::default()).unwrap()
@@ -7513,7 +7543,7 @@ mod tests {
     #[test]
     fn interaction_numerator_rejects_incompatible_color_summands() {
         let mut definition = serde_json::to_value(fermion_model()).unwrap();
-        definition["vertex_rules"][0]["color_structures"] = serde_json::json!(["1", "T(3,2,1)"]);
+        definition["vertex_rules"][0]["color_structures"] = json!(["1", "T(3,2,1)"]);
         let model = Model::from_json(&definition.to_string()).unwrap();
         let generator = Generator::new(model.clone());
         let legs = tensor_test_legs();
@@ -7549,7 +7579,7 @@ mod tests {
     fn interaction_templates_reuse_admission_and_localize_shifted_bound_indices() {
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
         definition["lorentz_structures"][0]["structure"] =
-            serde_json::json!("Metric(idx(2,1),dummy(1))*P(dummy(1),2)");
+            json!("Metric(idx(2,1),dummy(1))*P(dummy(1),2)");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -7580,7 +7610,7 @@ mod tests {
             assert_eq!(
                 actual.structure().logical_slots()[0].aind,
                 PartialIndex::Explicit(AbstractIndex::Named(
-                    feynkit_graph::symbols::hedge_index().into(),
+                    symbols::hedge_index().into(),
                     legs[0].hedge,
                     2,
                 ))
@@ -7598,11 +7628,8 @@ mod tests {
 
     #[test]
     fn interaction_template_cache_retains_dummy_metadata_across_owners() {
-        use idenso::tensor::composition::TensorCompositionError;
-
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
-        definition["lorentz_structures"][0]["structure"] =
-            serde_json::json!("P(dummy(1),1)*P(dummy(1),2)");
+        definition["lorentz_structures"][0]["structure"] = json!("P(dummy(1),1)*P(dummy(1),2)");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -7610,7 +7637,7 @@ mod tests {
         for leg in &mut legs {
             leg.color = 1;
         }
-        let head = spenso::tensor_symbol!("generation_template_cache_probe");
+        let head = tensor_symbol!("generation_template_cache_probe");
         let mut numerators = Vec::new();
         for owner in [7, 12] {
             let instantiation = NumeratorInstantiation {
@@ -7620,8 +7647,7 @@ mod tests {
             let numerator = generator
                 .interaction_numerator(rule, &instantiation)
                 .unwrap();
-            let index =
-                AbstractIndex::Named(feynkit_graph::symbols::vertex_index().into(), owner, 1);
+            let index = AbstractIndex::Named(symbols::vertex_index().into(), owner, 1);
             let probe = SymbolicTensor::infer(
                 FunctionBuilder::new(head)
                     .add_arg(Minkowski {}.new_rep(4).to_symbolic([index.to_atom()]))
@@ -7662,11 +7688,9 @@ mod tests {
 
     #[test]
     fn cancelled_alias_templates_keep_hidden_dummy_labels_and_cached_metadata() {
-        use idenso::tensor::composition::TensorCompositionError;
-
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
         definition["lorentz_structures"][0]["structure"] =
-            serde_json::json!("Metric(idx(2,3),dummy(1))*(P(dummy(1),1)+P(dummy(1),2))");
+            json!("Metric(idx(2,3),dummy(1))*(P(dummy(1),1)+P(dummy(1),2))");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -7675,7 +7699,7 @@ mod tests {
             leg.color = 1;
         }
         legs[1].edge = legs[0].edge;
-        let head = spenso::tensor_symbol!("generation_cancelled_template_probe");
+        let head = tensor_symbol!("generation_cancelled_template_probe");
         for owner in [4, 9] {
             let instantiation = NumeratorInstantiation {
                 owner: NumeratorOwner::Vertex(owner),
@@ -7690,8 +7714,7 @@ mod tests {
             assert!(zero.is_zero());
             assert_eq!(zero.rank(), 1);
             assert!(zero.same_reduction_state(&cached));
-            let index =
-                AbstractIndex::Named(feynkit_graph::symbols::vertex_index().into(), owner, 1);
+            let index = AbstractIndex::Named(symbols::vertex_index().into(), owner, 1);
             let probe = |index: AbstractIndex| {
                 SymbolicTensor::infer(
                     FunctionBuilder::new(head)
@@ -7708,11 +7731,7 @@ mod tests {
                         occurrences: 3,
                     }) if collision == index
                 ));
-                let other = AbstractIndex::Named(
-                    feynkit_graph::symbols::vertex_index().into(),
-                    owner + 1,
-                    1,
-                );
+                let other = AbstractIndex::Named(symbols::vertex_index().into(), owner + 1, 1);
                 let product = numerator.multiply(&probe(other)).unwrap();
                 assert!(product.is_zero());
                 assert_eq!(product.rank(), 2);
@@ -7720,7 +7739,7 @@ mod tests {
         }
         let templates = generator.numerators.interaction_templates.read().unwrap();
         assert_eq!(templates.len(), 2);
-        let dummy = AbstractIndex::Named(feynkit_graph::symbols::vertex_index().into(), 0, 1);
+        let dummy = AbstractIndex::Named(symbols::vertex_index().into(), 0, 1);
         for template in templates.values() {
             let NumeratorTemplate::Admitted { labels, .. } = &**template else {
                 panic!("explicit rule must retain its admitted template");
@@ -7732,8 +7751,7 @@ mod tests {
     #[test]
     fn interaction_templates_preserve_rank_when_incident_momenta_cancel() {
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
-        definition["lorentz_structures"][0]["structure"] =
-            serde_json::json!("P(idx(2,1),1)+P(idx(2,1),2)");
+        definition["lorentz_structures"][0]["structure"] = json!("P(idx(2,1),1)+P(idx(2,1),2)");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -7755,7 +7773,7 @@ mod tests {
             assert_eq!(
                 zero.structure().logical_slots()[0].aind,
                 PartialIndex::Explicit(AbstractIndex::Named(
-                    feynkit_graph::symbols::hedge_index().into(),
+                    symbols::hedge_index().into(),
                     legs[0].hedge,
                     2,
                 ))
@@ -7781,7 +7799,7 @@ mod tests {
     fn propagator_templates_reuse_reversed_spin_and_color_interfaces() {
         let mut definition = serde_json::to_value(fermion_model()).unwrap();
         for particle in definition["particles"].as_array_mut().unwrap() {
-            particle["color"] = serde_json::json!(match particle["name"].as_str() {
+            particle["color"] = json!(match particle["name"].as_str() {
                 Some("f") => 3,
                 Some("f~") => -3,
                 _ => 1,
@@ -7844,7 +7862,7 @@ mod tests {
             "Metric(1,2)*(P(3,1)-P(3,2))",
         ] {
             let mut definition = serde_json::to_value(scalar_model()).unwrap();
-            definition["lorentz_structures"][0]["structure"] = serde_json::json!(expression);
+            definition["lorentz_structures"][0]["structure"] = json!(expression);
             let model = Model::from_json(&definition.to_string()).unwrap();
             let rule = model.vertex_rule_id("V1").unwrap();
             let generator = Generator::new(model);
@@ -7897,7 +7915,7 @@ mod tests {
     fn propagator_template_order_matches_actual_owner_admission() {
         for expression in ["Metric(1,2)", "P(idx(1,1))*P(idx(1,2))"] {
             let mut definition = serde_json::to_value(scalar_model()).unwrap();
-            definition["propagators"][0]["numerator"] = serde_json::json!(expression);
+            definition["propagators"][0]["numerator"] = json!(expression);
             let model = Model::from_json(&definition.to_string()).unwrap();
             let particle_id = particle(&model, 25);
             let generator = Generator::new(model);
@@ -7946,7 +7964,7 @@ mod tests {
 
     #[test]
     fn interaction_scoped_pairs_do_not_reorder_public_ports() {
-        let _ = spenso::tensor_symbol!("UFO::generation_scoped_order_tensor");
+        let _ = tensor_symbol!("UFO::generation_scoped_order_tensor");
         let _ = Minkowski {}.new_rep(4).to_symbolic([]);
         for scalar in [
             "(P(1,1)*P(1,2)+P(1,2)*P(1,3))",
@@ -7956,12 +7974,12 @@ mod tests {
                 "{scalar}*generation_scoped_order_tensor(spenso::mink(4,idx(1,2)),spenso::mink(4,idx(1,1)))"
             );
             let mut definition = serde_json::to_value(scalar_model()).unwrap();
-            definition["lorentz_structures"][0]["structure"] = serde_json::json!(expression);
+            definition["lorentz_structures"][0]["structure"] = json!(expression);
             let model = Model::from_json(&definition.to_string()).unwrap();
             let rule = model.vertex_rule_id("V1").unwrap();
             let generator = Generator::new(model);
             for hedges in [[0, 1, 2], [27, 11, 19]] {
-                let legs = std::array::from_fn::<_, 3, _>(|index| NumeratorHalfEdge {
+                let legs = array::from_fn::<_, 3, _>(|index| NumeratorHalfEdge {
                     edge: index + 3,
                     hedge: hedges[index],
                     flow: Flow::Sink,
@@ -7992,7 +8010,7 @@ mod tests {
                     expected_indices,
                     [hedges[1], hedges[0]].map(|hedge| {
                         PartialIndex::Explicit(AbstractIndex::Named(
-                            feynkit_graph::symbols::hedge_index().into(),
+                            symbols::hedge_index().into(),
                             hedge,
                             1,
                         ))
@@ -8020,14 +8038,14 @@ mod tests {
 
     #[test]
     fn propagator_scoped_pairs_do_not_reorder_public_ports() {
-        let _ = spenso::tensor_symbol!("UFO::generation_scoped_prop_tensor");
+        let _ = tensor_symbol!("UFO::generation_scoped_prop_tensor");
         let _ = Minkowski {}.new_rep(4).to_symbolic([]);
         for scalar in ["(P(1,1)*P(1,2)+1)", "spenso::bracket(P(1,1),P(1,2))^2"] {
             let expression = format!(
                 "{scalar}*generation_scoped_prop_tensor(spenso::mink(4,idx(1,2)),spenso::mink(4,idx(1,1)))"
             );
             let mut definition = serde_json::to_value(scalar_model()).unwrap();
-            definition["propagators"][0]["numerator"] = serde_json::json!(expression);
+            definition["propagators"][0]["numerator"] = json!(expression);
             let model = Model::from_json(&definition.to_string()).unwrap();
             let particle_id = particle(&model, 25);
             let generator = Generator::new(model);
@@ -8064,7 +8082,7 @@ mod tests {
                     expected_indices,
                     [hedges[1], hedges[0]].map(|hedge| {
                         PartialIndex::Explicit(AbstractIndex::Named(
-                            feynkit_graph::symbols::hedge_index().into(),
+                            symbols::hedge_index().into(),
                             hedge,
                             1,
                         ))
@@ -8097,7 +8115,7 @@ mod tests {
             norm = |node, out| {
                 if let AtomView::Fun(function) = node
                     && let Some(AtomView::Fun(index)) = function.iter().next()
-                    && index.get_symbol() == feynkit_graph::symbols::hedge_index()
+                    && index.get_symbol() == symbols::hedge_index()
                 {
                     **out = index.iter().next().expect("owner ID").to_owned();
                 }
@@ -8105,7 +8123,7 @@ mod tests {
         );
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
         definition["lorentz_structures"][0]["structure"] =
-            serde_json::json!("generation_owner_callback(idx(1,1))");
+            json!("generation_owner_callback(idx(1,1))");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -8139,13 +8157,13 @@ mod tests {
     #[test]
     fn compact_rule_powers_allocate_independent_dummies_for_each_owner() {
         let _ = Minkowski {}.new_rep(4).to_symbolic([]);
-        let _ = spenso::tensor_symbol!("UFO::generation_template_auto_tensor");
+        let _ = tensor_symbol!("UFO::generation_template_auto_tensor");
         for expression in [
             "generation_template_auto_tensor(spenso::mink(4))^2",
             "P(spenso::mink(4))^4",
         ] {
             let mut definition = serde_json::to_value(scalar_model()).unwrap();
-            definition["lorentz_structures"][0]["structure"] = serde_json::json!(expression);
+            definition["lorentz_structures"][0]["structure"] = json!(expression);
             let model = Model::from_json(&definition.to_string()).unwrap();
             let rule = model.vertex_rule_id("V1").unwrap();
             let generator = Generator::new(model);
@@ -8214,7 +8232,7 @@ mod tests {
         let encoded = CookSettings::reversible()
             .cook_function(scoped.as_fun_view().unwrap())
             .unwrap();
-        let head = spenso::tensor_symbol!("generation_template_open_tensor");
+        let head = tensor_symbol!("generation_template_open_tensor");
         for index in [open.to_atom(), scoped, encoded] {
             let expression = FunctionBuilder::new(head)
                 .add_arg(Minkowski {}.new_rep(4).to_symbolic([index]))
@@ -8225,14 +8243,11 @@ mod tests {
 
     #[test]
     fn bundled_rule_ports_preserve_actual_owner_rejection() {
-        let head = spenso::tensor_symbol!("UFO::generation_template_bundle_tensor");
+        let head = tensor_symbol!("UFO::generation_template_bundle_tensor");
         let slot = Minkowski {}.new_rep(4).to_symbolic([test_atom("idx(1,1)")]);
-        let expression = head.call((spenso::structure::abstract_index::AIND_SYMBOLS
-            .aind
-            .call((slot,)),));
+        let expression = head.call((AIND_SYMBOLS.aind.call((slot,)),));
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
-        definition["lorentz_structures"][0]["structure"] =
-            serde_json::json!(expression.to_canonical_string());
+        definition["lorentz_structures"][0]["structure"] = json!(expression.to_canonical_string());
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -8256,7 +8271,7 @@ mod tests {
         // that actual-owner rejection rather than publish a trusted carrier.
         assert!(matches!(
             &expected,
-            DiagramError::Tensor(idenso::tensor::inference::TensorInferenceError::Invalid(message))
+            DiagramError::Tensor(TensorInferenceError::Invalid(message))
                 if message.contains("carries structural ports but is not tagged as a tensor")
         ));
         let GenerationError::Diagram(actual) = actual else {
@@ -8279,7 +8294,7 @@ mod tests {
         let _ = Minkowski {}.new_rep(4).to_symbolic([]);
         let mut definition = serde_json::to_value(scalar_model()).unwrap();
         definition["lorentz_structures"][0]["structure"] =
-            serde_json::json!("generation_opaque_metadata(spenso::mink(4,x+y))");
+            json!("generation_opaque_metadata(spenso::mink(4,x+y))");
         let model = Model::from_json(&definition.to_string()).unwrap();
         let rule = model.vertex_rule_id("V1").unwrap();
         let generator = Generator::new(model);
@@ -8315,15 +8330,12 @@ mod tests {
 
     #[test]
     fn template_transport_retains_declared_order_scoped_labels_and_zero_ports() {
-        use spenso::structure::representation::LibraryRep;
-
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let scope = symbol!("generation_template_scope");
         let labels = |hedges: [usize; 2]| {
-            let plain =
-                AbstractIndex::Named(feynkit_graph::symbols::hedge_index().into(), hedges[0], 2);
+            let plain = AbstractIndex::Named(symbols::hedge_index().into(), hedges[0], 2);
             let payload = symbol!("generation_template_label")
-                .call((feynkit_graph::symbols::hedge_index().call((hedges[1], 3)),));
+                .call((symbols::hedge_index().call((hedges[1], 3)),));
             let encoded = cooking
                 .cook_function(payload.as_fun_view().unwrap())
                 .unwrap();
@@ -8338,7 +8350,7 @@ mod tests {
             })
         };
         let original = labels([0, 1]);
-        let head = spenso::tensor_symbol!("generation_template_order");
+        let head = tensor_symbol!("generation_template_order");
         let expression = FunctionBuilder::new(head)
             .add_args(original.map(|slot| match slot.aind {
                 PartialIndex::Explicit(index) => {

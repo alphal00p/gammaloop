@@ -57,39 +57,38 @@ pub fn momentum_symbol() -> symbolica::atom::Symbol {
     symbols::momentum()
 }
 
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    fmt::{self, Write},
-    str::FromStr,
-    sync::{Arc, OnceLock},
-};
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::fmt::Write;
+use std::str::FromStr;
+use std::sync::{Arc, OnceLock};
 
 pub use feynkit_kinematics::MomentumSignature;
 use feynkit_kinematics::Signature;
 use feynkit_model::{Model, ModelError, ModelFingerprint, Particle, ParticleId, VertexRuleId};
+use idenso::cook::CookingError;
 use idenso::tensor::SymbolicTensor;
-use linnet::{
-    half_edge::{
-        HedgeGraph, NodeIndex,
-        builder::HedgeGraphBuilder,
-        involution::{EdgeIndex, Flow, HedgePair, Orientation},
-        subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps},
-        tree::SimpleTraversalTree,
-    },
-    parser::{DotGraph, set::DotGraphSet},
-};
+use idenso::tensor::composition::TensorCompositionError;
+use idenso::tensor::inference::TensorInferenceError;
+use linnet::half_edge::builder::HedgeGraphBuilder;
+use linnet::half_edge::involution::{EdgeIndex, Flow, HedgePair, Orientation};
+use linnet::half_edge::subgraph::{Inclusion, SuBitGraph, SubSetLike, SubSetOps};
+use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::half_edge::{HedgeGraph, NodeIndex};
+use linnet::parser::DotGraph;
+use linnet::parser::set::DotGraphSet;
 use serde::{Deserialize, Serialize};
+use spenso::structure::abstract_index::AbstractIndexError;
 use spenso::structure::partial::PartialStructure;
 #[cfg(test)]
 use spenso::structure::partial::PartialStructureExt;
 use spenso::structure::representation::{Minkowski, RepName};
-use symbolica::{
-    atom::{Atom, AtomCore, UserData},
-    graph::Graph as CanonicalGraph,
-    parser::{ParseSettings, Token},
-    state::{State, Workspace},
-    with_default_namespace,
-};
+use spenso::structure::slot::SlotError;
+use symbolica::atom::{Atom, AtomCore, UserData};
+use symbolica::graph::Graph as CanonicalGraph;
+use symbolica::parser::{ParseSettings, Token};
+use symbolica::state::{State, Workspace};
+use symbolica::with_default_namespace;
 use thiserror::Error;
 
 /// Stable vertex identifier in a [`FeynmanDiagram`].
@@ -431,6 +430,7 @@ impl LoopMomentumBasis {
 }
 
 /// Errors produced while constructing or transforming diagrams.
+/// See [`NumeratorInterface`] for fallible source admission and a complete round trip.
 #[derive(Debug, Error)]
 pub enum DiagramError {
     #[error(transparent)]
@@ -526,10 +526,31 @@ pub enum DiagramError {
         "diagram-wide numerator differs from the product of the vertex and edge numerator fragments"
     )]
     NumeratorFragmentMismatch,
+    /// Source notation could not be encoded during tensor admission or transport.
+    #[error("{operation}: {source}")]
+    TensorCooking {
+        operation: &'static str,
+        #[source]
+        source: CookingError,
+    },
+    /// A declared source port is not a supported tensor slot.
+    #[error("{operation}: {source}")]
+    TensorSlot {
+        operation: &'static str,
+        #[source]
+        source: SlotError,
+    },
+    /// A transported tensor label is not a valid abstract index.
+    #[error("{operation}: {source}")]
+    TensorIndex {
+        operation: &'static str,
+        #[source]
+        source: AbstractIndexError,
+    },
     #[error("invalid diagram tensor: {0}")]
-    Tensor(#[from] idenso::tensor::inference::TensorInferenceError),
+    Tensor(#[from] TensorInferenceError),
     #[error("incompatible diagram tensor product: {0}")]
-    TensorComposition(#[from] idenso::tensor::composition::TensorCompositionError),
+    TensorComposition(#[from] TensorCompositionError),
     #[error("cannot replace the numerator of a diagram without an interaction vertex")]
     MissingNumeratorAnchor,
     #[error("diagram invariant failed while {operation}: {message}")]
@@ -537,6 +558,9 @@ pub enum DiagramError {
         operation: &'static str,
         message: String,
     },
+    /// Native drawing settings were rejected by the scene configuration owner.
+    #[error("invalid scene configuration: {0}")]
+    SceneConfiguration(String),
     #[error("failed to format DOT")]
     Formatting(#[from] std::fmt::Error),
     #[error("the diagram has no loop-momentum basis")]

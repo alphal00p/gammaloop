@@ -1,27 +1,29 @@
 //! Persist authoritative tensor metadata and operation flags, never planner caches.
-
+use super::SymbolicTensor;
+use super::composition::ExplicitIndexOccurrences;
+use super::inference::BorrowedTensorParts;
+use crate::CookSettings;
+use crate::tensor::TensorProofs;
+use bincode::de::Decoder;
+use bincode::enc::Encoder;
+use bincode::error::{DecodeError, EncodeError};
 use bincode::{Decode, Encode};
-use spenso::structure::{
-    abstract_index::AbstractIndex,
-    partial::{PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
-    representation::{LibrarySlot, RepName},
-    slot::IsAbstractSlot,
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{
+    PartialIndex, PartialSlot, PartialStructure, PartialStructureExt,
 };
-use symbolica::{atom::Atom, state::HasStateMap};
-
-use super::{
-    SymbolicTensor, composition::ExplicitIndexOccurrences, inference::BorrowedTensorParts,
-};
+use spenso::structure::representation::{LibrarySlot, RepName};
+use spenso::structure::slot::IsAbstractSlot;
+use std::sync::Arc;
+use symbolica::atom::Atom;
+use symbolica::state::HasStateMap;
 
 pub(super) const TENSOR_ARCHIVE_VERSION: u8 = 1;
 
 impl Encode for ExplicitIndexOccurrences {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.validate()
-            .map_err(|error| bincode::error::EncodeError::OtherString(error.to_string()))?;
+            .map_err(|error| EncodeError::OtherString(error.to_string()))?;
         let mut indices = Vec::new();
         let mut dummies = Vec::new();
         let mut orientations = Vec::new();
@@ -37,21 +39,19 @@ impl Encode for ExplicitIndexOccurrences {
 }
 
 impl<C: HasStateMap> Decode<C> for ExplicitIndexOccurrences {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    fn decode<D: Decoder<Context = C>>(decoder: &mut D) -> Result<Self, DecodeError> {
         let indices = Vec::<LibrarySlot<AbstractIndex>>::decode(decoder)?;
         let dummies = Vec::<bool>::decode(decoder)?;
         let orientations = Vec::<u8>::decode(decoder)?;
         if indices.len() != dummies.len() || indices.len() != orientations.len() {
-            return Err(bincode::error::DecodeError::OtherString(
+            return Err(DecodeError::OtherString(
                 "serialized tensor index identities, dummy mask and orientation bounds have different lengths".into(),
             ));
         }
         let mut occurrences = Self::default();
         for ((slot, dummy), orientations) in indices.into_iter().zip(dummies).zip(orientations) {
             if occurrences.count(slot) != 0 {
-                return Err(bincode::error::DecodeError::OtherString(
+                return Err(DecodeError::OtherString(
                     "serialized tensor index identities must have unique collision keys".into(),
                 ));
             }
@@ -72,7 +72,7 @@ impl<C: HasStateMap> Decode<C> for ExplicitIndexOccurrences {
                 || representative == 0
                 || (slot.rep().rep.is_self_dual() && dual != 0)
             {
-                return Err(bincode::error::DecodeError::OtherString(
+                return Err(DecodeError::OtherString(
                     "serialized tensor orientation bounds disagree with its index multiplicity or representative".into(),
                 ));
             }
@@ -85,13 +85,10 @@ impl<C: HasStateMap> Decode<C> for ExplicitIndexOccurrences {
 }
 
 impl Encode for BorrowedTensorParts<'_> {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         let occurrences = self
             .explicit_index_occurrences()
-            .map_err(|error| bincode::error::EncodeError::OtherString(error.to_string()))?;
+            .map_err(|error| EncodeError::OtherString(error.to_string()))?;
         let _ = self.product_is_normalized();
         TENSOR_ARCHIVE_VERSION.encode(encoder)?;
         self.expression.encode(encoder)?;
@@ -113,20 +110,15 @@ impl Encode for BorrowedTensorParts<'_> {
 }
 
 impl Encode for SymbolicTensor<PartialStructure> {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> Result<(), bincode::error::EncodeError> {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> Result<(), EncodeError> {
         self.borrowed_parts().encode(encoder)
     }
 }
 
 impl<C: HasStateMap> Decode<C> for SymbolicTensor<PartialStructure> {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> Result<Self, bincode::error::DecodeError> {
+    fn decode<D: Decoder<Context = C>>(decoder: &mut D) -> Result<Self, DecodeError> {
         if u8::decode(decoder)? != TENSOR_ARCHIVE_VERSION {
-            return Err(bincode::error::DecodeError::OtherString(
+            return Err(DecodeError::OtherString(
                 "unsupported symbolic tensor archive version".into(),
             ));
         }
@@ -138,7 +130,7 @@ impl<C: HasStateMap> Decode<C> for SymbolicTensor<PartialStructure> {
         let occurrences = ExplicitIndexOccurrences::decode(decoder)?;
         let structure = PartialStructure::from_logical_slots(slots.iter().copied());
         if structure.logical_slots() != slots {
-            return Err(bincode::error::DecodeError::OtherString(
+            return Err(DecodeError::OtherString(
                 "serialized tensor interface has noncanonical open-port identities".into(),
             ));
         }
@@ -146,14 +138,11 @@ impl<C: HasStateMap> Decode<C> for SymbolicTensor<PartialStructure> {
             for slot in &slots {
                 let open = match slot.aind {
                     PartialIndex::Open(_) => true,
-                    PartialIndex::Explicit(index) => {
-                        crate::CookSettings::index_has_open_port(index).map_err(|error| {
-                            bincode::error::DecodeError::OtherString(error.to_string())
-                        })?
-                    }
+                    PartialIndex::Explicit(index) => CookSettings::index_has_open_port(index)
+                        .map_err(|error| DecodeError::OtherString(error.to_string()))?,
                 };
                 if open {
-                    return Err(bincode::error::DecodeError::OtherString(
+                    return Err(DecodeError::OtherString(
                         "serialized tensor product readiness cannot include unresolved public ports".into(),
                     ));
                 }
@@ -162,9 +151,9 @@ impl<C: HasStateMap> Decode<C> for SymbolicTensor<PartialStructure> {
         let boundary = ExplicitIndexOccurrences::from_interface(&structure);
         boundary
             .validate()
-            .map_err(|error| bincode::error::DecodeError::OtherString(error.to_string()))?;
+            .map_err(|error| DecodeError::OtherString(error.to_string()))?;
         if !boundary.is_bounded_by(&occurrences) {
-            return Err(bincode::error::DecodeError::OtherString(
+            return Err(DecodeError::OtherString(
                 "serialized tensor index metadata does not cover its free interface".into(),
             ));
         }
@@ -173,9 +162,9 @@ impl<C: HasStateMap> Decode<C> for SymbolicTensor<PartialStructure> {
         // power coalescence changes the normalized payload's apparent indices.
         // Retained uses and independent variance maxima are construction
         // history, so they need not equal the exposed free-port inventory.
-        let proofs = super::TensorProofs::default();
+        let proofs = TensorProofs::default();
         let _ = proofs.validated.set(true);
-        let _ = proofs.occurrences.set(std::sync::Arc::new(occurrences));
+        let _ = proofs.occurrences.set(Arc::new(occurrences));
         if let Some(normalized) = normalized_product {
             let _ = proofs.normalized_product.set(normalized);
         }
@@ -191,25 +180,30 @@ impl<C: HasStateMap> Decode<C> for SymbolicTensor<PartialStructure> {
 
 #[cfg(test)]
 mod tests {
+    use super::super::inference::tests::{
+        INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
+    };
+    use super::{ExplicitIndexOccurrences, SymbolicTensor, TENSOR_ARCHIVE_VERSION};
+    use crate::representations::ColorFundamental;
+    use crate::tensor::composition::TensorCompositionError;
+    use crate::test_support;
+    use base64::Engine;
+    use base64::engine::general_purpose::STANDARD;
+    use bincode::config;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::partial::{
+        OpenPortId, PartialIndex, PartialStructure, PartialStructureExt,
+    };
+    use spenso::structure::representation::{Euclidean, LibrarySlot, Minkowski, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::{bracket, tensor_symbol};
+    use std::env;
     use std::io::Cursor;
-
-    use base64::{Engine, engine::general_purpose::STANDARD};
-    use spenso::{
-        structure::{
-            partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
-            representation::{Euclidean, Minkowski, RepName},
-            slot::IsAbstractSlot,
-        },
-        tensor_symbol,
-    };
-    use symbolica::{
-        atom::{Atom, Symbol},
-        function,
-        state::{State, StateMap},
-        symbol,
-    };
-
-    use super::{SymbolicTensor, TENSOR_ARCHIVE_VERSION};
+    use std::process::Command;
+    use std::sync::Arc;
+    use symbolica::atom::{Atom, AtomCore, Symbol};
+    use symbolica::state::{State, StateMap};
+    use symbolica::{function, symbol};
 
     #[test]
     fn tensor_archive_preserves_ranked_zero_and_logical_open_port_order() {
@@ -224,11 +218,11 @@ mod tests {
                 .slot(PartialIndex::Open(OpenPortId(1))),
         ]);
         let source = SymbolicTensor::checked_parts(Atom::Zero, structure).unwrap();
-        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (decoded, consumed): (SymbolicTensor<PartialStructure>, _) =
             bincode::decode_from_slice_with_context(
                 &bytes,
-                bincode::config::standard(),
+                config::standard(),
                 StateMap::default(),
             )
             .unwrap();
@@ -256,14 +250,11 @@ mod tests {
             .to_lib()
             .slot(PartialIndex::Open(OpenPortId(0)))]);
         let raw = SymbolicTensor::from_normalized_parts(Atom::one(), structure);
-        assert!(bincode::encode_to_vec(raw, bincode::config::standard()).is_err());
+        assert!(bincode::encode_to_vec(raw, config::standard()).is_err());
     }
 
     #[test]
     fn tensor_archive_rejects_malformed_index_metadata() {
-        use crate::representations::ColorFundamental;
-        use spenso::structure::abstract_index::AbstractIndex;
-
         let slot = Minkowski {}
             .new_rep(4)
             .to_lib()
@@ -352,14 +343,14 @@ mod tests {
                     dummies,
                     orientations,
                 ),
-                bincode::config::standard(),
+                config::standard(),
             )
             .unwrap();
             let error = bincode::decode_from_slice_with_context::<
                 _,
                 SymbolicTensor<PartialStructure>,
                 _,
-            >(&bytes, bincode::config::standard(), StateMap::default())
+            >(&bytes, config::standard(), StateMap::default())
             .unwrap_err()
             .to_string();
             assert!(error.contains(expected), "{error}");
@@ -368,11 +359,7 @@ mod tests {
 
     #[test]
     fn tensor_archive_preserves_independent_orientation_maxima() {
-        use super::ExplicitIndexOccurrences;
-        use crate::representations::ColorFundamental;
-        use spenso::structure::abstract_index::AbstractIndex;
-
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let rep = ColorFundamental {}.new_rep(3).to_lib();
         let base = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(97151));
         let dual = rep
@@ -388,11 +375,11 @@ mod tests {
         source.add_oriented(base, 2, 2, 1);
         source.add_oriented(dual, 1, 0, 1);
         source.add_oriented(self_dual, 2, 2, 0);
-        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (restored, used): (ExplicitIndexOccurrences, _) =
             bincode::decode_from_slice_with_context(
                 &bytes,
-                bincode::config::standard(),
+                config::standard(),
                 StateMap::default(),
             )
             .unwrap();
@@ -408,11 +395,7 @@ mod tests {
 
     #[test]
     fn tensor_archive_rejects_malformed_orientation_bounds() {
-        use super::ExplicitIndexOccurrences;
-        use crate::representations::ColorFundamental;
-        use spenso::structure::abstract_index::AbstractIndex;
-
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let base = ColorFundamental {}
             .new_rep(3)
             .to_lib()
@@ -435,15 +418,13 @@ mod tests {
             (self_dual, true, vec![5]),
             (base, false, vec![17]),
         ] {
-            let bytes = bincode::encode_to_vec(
-                (vec![slot], vec![dummy], bounds),
-                bincode::config::standard(),
-            )
-            .unwrap();
+            let bytes =
+                bincode::encode_to_vec((vec![slot], vec![dummy], bounds), config::standard())
+                    .unwrap();
             assert!(
                 bincode::decode_from_slice_with_context::<_, ExplicitIndexOccurrences, _>(
                     &bytes,
-                    bincode::config::standard(),
+                    config::standard(),
                     StateMap::default(),
                 )
                 .is_err()
@@ -466,13 +447,13 @@ mod tests {
                 vec![false],
                 vec![1u8],
             ),
-            bincode::config::standard(),
+            config::standard(),
         )
         .unwrap();
         assert!(
             bincode::decode_from_slice_with_context::<_, SymbolicTensor<PartialStructure>, _>(
                 &bytes,
-                bincode::config::standard(),
+                config::standard(),
                 StateMap::default(),
             )
             .is_err()
@@ -481,27 +462,25 @@ mod tests {
 
     #[test]
     fn tensor_archive_retains_product_readiness_without_finishing_the_payload() {
-        use spenso::structure::abstract_index::AbstractIndex;
-
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slot = Minkowski {}
             .new_rep(4)
             .to_lib()
             .slot(AbstractIndex::Normal(97143));
         let expression = function!(tensor_symbol!("archive_unfinished_product"), slot.to_atom());
         let source = SymbolicTensor::from_declared_parts(
-            spenso::bracket!(expression),
+            bracket!(expression),
             PartialStructure::from_logical_slots([slot
                 .rep()
                 .slot(PartialIndex::Explicit(slot.aind))]),
         )
         .unwrap();
         assert_eq!(source.proofs.normalized_product.get(), Some(&false));
-        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (restored, used): (SymbolicTensor<PartialStructure>, _) =
             bincode::decode_from_slice_with_context(
                 &bytes,
-                bincode::config::standard(),
+                config::standard(),
                 StateMap::default(),
             )
             .unwrap();
@@ -512,8 +491,6 @@ mod tests {
 
     #[test]
     fn tensor_archive_rejects_product_readiness_with_unresolved_public_ports() {
-        use spenso::structure::{abstract_index::AbstractIndex, representation::LibrarySlot};
-
         let representation = Minkowski {}.new_rep(4).to_lib();
         for index in [
             PartialIndex::Open(OpenPortId(0)),
@@ -534,14 +511,14 @@ mod tests {
                     Vec::<bool>::new(),
                     Vec::<u8>::new(),
                 ),
-                bincode::config::standard(),
+                config::standard(),
             )
             .unwrap();
             let error = bincode::decode_from_slice_with_context::<
                 _,
                 SymbolicTensor<PartialStructure>,
                 _,
-            >(&bytes, bincode::config::standard(), StateMap::default())
+            >(&bytes, config::standard(), StateMap::default())
             .unwrap_err()
             .to_string();
             assert!(error.contains("readiness"), "{error}");
@@ -550,10 +527,7 @@ mod tests {
 
     #[test]
     fn tensor_archive_preserves_retained_dual_orientation() {
-        use crate::representations::ColorFundamental;
-        use spenso::structure::abstract_index::AbstractIndex;
-
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slot = ColorFundamental {}
             .new_rep(3)
             .to_lib()
@@ -577,11 +551,11 @@ mod tests {
                 .collect::<Vec<_>>(),
             [(slot, 1)],
         );
-        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (restored, used): (SymbolicTensor<PartialStructure>, _) =
             bincode::decode_from_slice_with_context(
                 &bytes,
-                bincode::config::standard(),
+                config::standard(),
                 StateMap::default(),
             )
             .unwrap();
@@ -595,12 +569,7 @@ mod tests {
 
     #[test]
     fn tensor_archive_preserves_scalar_singletons_and_conservative_free_port_counts() {
-        use super::super::inference::tests::{
-            INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
-        };
-        use spenso::structure::abstract_index::AbstractIndex;
-
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slot = Minkowski {}
             .new_rep(4)
             .to_lib()
@@ -621,11 +590,11 @@ mod tests {
             INFERENCE_CALLS.with(|count| count.set(0));
             OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
             SCOPE_VALIDATIONS.with(|count| count.set(0));
-            let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+            let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
             let (restored, used): (SymbolicTensor<PartialStructure>, _) =
                 bincode::decode_from_slice_with_context(
                     &bytes,
-                    bincode::config::standard(),
+                    config::standard(),
                     StateMap::default(),
                 )
                 .unwrap();
@@ -643,13 +612,7 @@ mod tests {
 
     #[test]
     fn tensor_archive_and_clones_retain_cancelled_dummy_collisions_without_observation() {
-        use super::super::inference::tests::{
-            INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
-        };
-        use spenso::structure::abstract_index::AbstractIndex;
-        use symbolica::atom::AtomCore;
-
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slot = Minkowski {}
             .new_rep(4)
             .to_lib()
@@ -672,11 +635,11 @@ mod tests {
         INFERENCE_CALLS.with(|count| count.set(0));
         OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
         SCOPE_VALIDATIONS.with(|count| count.set(0));
-        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (restored, used): (SymbolicTensor<PartialStructure>, _) =
             bincode::decode_from_slice_with_context(
                 &bytes,
-                bincode::config::standard(),
+                config::standard(),
                 StateMap::default(),
             )
             .unwrap();
@@ -684,17 +647,14 @@ mod tests {
         assert!(restored.same_value(&source));
         assert_eq!(restored.proofs.normalized_product.get(), Some(&true));
         let cloned = restored.clone();
-        assert!(std::sync::Arc::ptr_eq(
+        assert!(Arc::ptr_eq(
             restored.proofs.occurrences.get().unwrap(),
             cloned.proofs.occurrences.get().unwrap(),
         ));
         for value in [source, restored, cloned] {
             assert!(matches!(
                 value.multiply(&extra),
-                Err(super::super::composition::TensorCompositionError::InvalidExplicitMultiplicity {
-                    occurrences: 3,
-                    ..
-                })
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
             ));
         }
         assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
@@ -738,17 +698,14 @@ mod tests {
 
     #[test]
     fn tensor_archive_remaps_symbols_in_both_payload_and_interface() {
-        use spenso::structure::abstract_index::AbstractIndex;
-        use symbolica::atom::AtomCore;
-
         const CHILD: &str = "IDENSO_TENSOR_ARCHIVE_CHILD";
-        if std::env::var_os(CHILD).is_some() {
+        if env::var_os(CHILD).is_some() {
             let dimension = symbol!("idenso::persistence_test::dimension");
             let index = symbol!("idenso::persistence_test::index");
             let source = indexed_tensor(dimension, index);
             let other_index = symbol!("idenso::persistence_test::other_index");
             let other = indexed_tensor(dimension, other_index);
-            let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+            let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
             let x = Atom::var(symbol!("idenso::persistence_test::cancel_x"));
             let polynomial = (&x + 1).pow(2) - &x * &x - Atom::num(2) * &x - 1;
             let coefficient = SymbolicTensor::<PartialStructure>::infer(polynomial).unwrap();
@@ -763,7 +720,7 @@ mod tests {
                 .unwrap();
             assert!(hidden.is_zero());
             assert!(hidden.is_scalar());
-            let hidden = bincode::encode_to_vec(hidden, bincode::config::standard()).unwrap();
+            let hidden = bincode::encode_to_vec(hidden, config::standard()).unwrap();
             let mut state = Vec::new();
             State::export(&mut state).unwrap();
             println!("TENSOR_INDEX={}", index.get_id());
@@ -773,7 +730,7 @@ mod tests {
             return;
         }
 
-        let output = std::process::Command::new(std::env::current_exe().unwrap())
+        let output = Command::new(env::current_exe().unwrap())
             .args([
                 "--exact",
                 "tensor::persistence::tests::tensor_archive_remaps_symbols_in_both_payload_and_interface",
@@ -811,8 +768,7 @@ mod tests {
         let map = State::import(&mut Cursor::new(&state), None).unwrap();
         let bytes = STANDARD.decode(field("TENSOR_BYTES=")).unwrap();
         let (decoded, consumed): (SymbolicTensor<PartialStructure>, _) =
-            bincode::decode_from_slice_with_context(&bytes, bincode::config::standard(), map)
-                .unwrap();
+            bincode::decode_from_slice_with_context(&bytes, config::standard(), map).unwrap();
         assert_eq!(consumed, bytes.len());
         assert!(decoded.same_value(&expected));
         assert_eq!(decoded, expected);
@@ -823,8 +779,7 @@ mod tests {
         let map = State::import(&mut Cursor::new(state), None).unwrap();
         let bytes = STANDARD.decode(field("TENSOR_HIDDEN_BYTES=")).unwrap();
         let (hidden, used): (SymbolicTensor<PartialStructure>, _) =
-            bincode::decode_from_slice_with_context(&bytes, bincode::config::standard(), map)
-                .unwrap();
+            bincode::decode_from_slice_with_context(&bytes, config::standard(), map).unwrap();
         assert_eq!(used, bytes.len());
         assert!(hidden.is_zero());
         assert!(hidden.is_scalar());

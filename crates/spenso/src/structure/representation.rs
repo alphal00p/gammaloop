@@ -9,6 +9,7 @@ use append_only_vec::AppendOnlyVec;
 use linnet::half_edge::involution::Orientation;
 use serde::{Deserialize, Serialize};
 use spenso_macros::SimpleRepresentation;
+use std::borrow::Cow;
 use std::ops::Index;
 use std::{
     cmp::Ordering,
@@ -38,6 +39,9 @@ use symbolica::{
     printer::PrintUserData,
     symbol,
 };
+
+#[cfg(feature = "shadowing")]
+use crate::network::tags::mathml;
 
 use thiserror::Error;
 
@@ -807,6 +811,7 @@ fn representation_typst_body(label: &IndexDisplay) -> String {
 /// The tree is deliberately small: plugins may deserialize it from Symbolica
 /// symbol metadata and turn it into Typst source without evaluating arbitrary
 /// source supplied by an Atom payload.
+/// See [`Self::to_mathml`] for an example rendering a structured label.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum IndexDisplay {
     Symbol(String),
@@ -1170,8 +1175,23 @@ impl IndexDisplay {
     }
 
     /// Render a complete MathML fragment, without a `math` root or source paths.
-    /// Public enum variants can bypass the constructors, so validate the whole
-    /// borrowed tree before allocating any recursively rendered children.
+    ///
+    /// This is a bounded notation offer: `None` declines unsupported or malformed
+    /// display nodes, invalid XML characters, or trees exceeding depth 16, 256
+    /// nodes, 64 children per sequence, or 4096 UTF-8 source/output bytes. Callers
+    /// may then retain the index's ordinary symbolic label. Public enum variants
+    /// can bypass constructors, so the borrowed tree is checked before allocating
+    /// recursively rendered children.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use spenso::structure::representation::{IndexDisplay, RepLibraryError};
+    ///
+    /// let label = IndexDisplay::symbol("mu")?.with_bottom(IndexDisplay::Number(2));
+    /// assert_eq!(label.to_mathml().as_deref(), Some("<msub><mi>μ</mi><mn>2</mn></msub>"));
+    /// # Ok::<(), RepLibraryError>(())
+    /// ```
     pub fn to_mathml(&self) -> Option<String> {
         self.mathml_fits(0, &mut 256, &mut 4096)
             .then(|| self.mathml_source())?
@@ -1269,22 +1289,22 @@ impl IndexDisplay {
         format!("<mrow><mo>(</mo>{source}<mo>)</mo></mrow>")
     }
 
-    fn mathml_operand(&self, source: &str) -> String {
+    fn mathml_operand<'a>(&self, source: &'a str) -> Cow<'a, str> {
         if matches!(self, Self::Sequence(items) | Self::List(items) if items.len() > 1)
             || matches!(self, Self::Math { head, .. }
                 if matches!(head.as_str(), "arg" | "add" | "sub" | "plus" | "neg" | "times" | "dot" | "mul"))
         {
-            Self::mathml_group(source)
+            Cow::Owned(Self::mathml_group(source))
         } else {
-            source.to_owned()
+            Cow::Borrowed(source)
         }
     }
 
-    fn mathml_script_base(&self, source: &str) -> String {
+    fn mathml_script_base<'a>(&self, source: &'a str) -> Cow<'a, str> {
         if matches!(self, Self::Attach { .. } | Self::Number(..=-1))
             || matches!(self, Self::Math { head, .. } if head == "pow")
         {
-            Self::mathml_group(source)
+            Cow::Owned(Self::mathml_group(source))
         } else {
             self.mathml_operand(source)
         }
@@ -1292,10 +1312,6 @@ impl IndexDisplay {
 
     fn mathml_attachment(base: &Self, top: Option<&Self>, bottom: Option<&Self>) -> Option<String> {
         let source = base.mathml_source()?;
-        if top.is_none() && bottom.is_none() {
-            return Some(source);
-        }
-        let base = base.mathml_script_base(&source);
         let (tag, scripts) = match (top, bottom) {
             (Some(top), Some(bottom)) => (
                 "msubsup",
@@ -1303,8 +1319,9 @@ impl IndexDisplay {
             ),
             (Some(top), None) => ("msup", top.mathml_source()?),
             (None, Some(bottom)) => ("msub", bottom.mathml_source()?),
-            (None, None) => unreachable!(),
+            (None, None) => return Some(source),
         };
+        let base = base.mathml_script_base(&source);
         Some(format!("<{tag}>{base}{scripts}</{tag}>"))
     }
 
@@ -1390,7 +1407,7 @@ impl IndexDisplay {
             "arg" => joined("<mo>,</mo>"),
             "add" => joined("<mo>+</mo>"),
             "sub" if !sources.is_empty() => {
-                let mut terms = vec![sources[0].clone()];
+                let mut terms = vec![Cow::Borrowed(sources[0].as_str())];
                 terms.extend(
                     arguments[1..]
                         .iter()
@@ -1408,7 +1425,7 @@ impl IndexDisplay {
                 let separator = match head {
                     "times" => "<mo>×</mo>",
                     "dot" => "<mo>⋅</mo>",
-                    _ => "<mo>⁢</mo>",
+                    _ => "<mo>\u{2062}</mo>",
                 };
                 format!("<mrow>{}</mrow>", terms.join(separator))
             }
@@ -1420,7 +1437,7 @@ impl IndexDisplay {
             "root" if sources.len() == 1 => format!("<msqrt>{}</msqrt>", sources[0]),
             "root" if sources.len() == 2 => format!("<mroot>{}{}</mroot>", sources[1], sources[0]),
             "call" | "op-call" if !sources.is_empty() => format!(
-                "<mrow>{}<mo>⁡</mo>{}</mrow>",
+                "<mrow>{}<mo>\u{2061}</mo>{}</mrow>",
                 sources[0],
                 Self::mathml_group(&sources[1..].join("<mo>,</mo>"))
             ),
@@ -1513,7 +1530,7 @@ impl IndexDisplay {
                             .strip_suffix(&format!("</{old}>"))?;
                         format!("<{new}>{body}</{new}>")
                     } else {
-                        sources[0].clone()
+                        sources.into_iter().next()?
                     }
                 } else {
                     format!("<mrow>{}</mrow>", sources[0])
@@ -1976,7 +1993,7 @@ impl LibraryRep {
             .with_user_data(metadata.to_user_data())
             .with_print_function(move |a, opt, state| {
                 if opt.mode.is_mathml() {
-                    return crate::network::tags::mathml::representation(a, opt, state);
+                    return mathml::representation(a, opt, state);
                 }
                 if matches!(
                     opt.custom_print_mode.get("typst"),

@@ -8,8 +8,11 @@ use linnest::svg::{
     Dash, Details, EdgeDrawing, LabelMetrics, LabelSource, NodeDrawing, Scene, Stroke,
 };
 use linnet_render_py::PyDiagramView;
-use pyo3::{exceptions::PyValueError, prelude::*, types::PyDict};
-use serde_json::json;
+use pyo3::exceptions::PyValueError;
+use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods, PyModule, PyModuleMethods};
+use pyo3::{pyfunction, wrap_pyfunction, Py, PyResult, Python};
+use roxmltree::Document;
+use serde_json::{json, Value};
 
 fn fixture_scene(marker: &str) -> Scene {
     // Scale the certified EC embedding uniformly instead of constraining its
@@ -111,7 +114,7 @@ fn fresh_view(py: Python<'_>, marker: &str) -> PyResult<PyDiagramView> {
 /// dimensions. This checks that the retained view reaches Scene::render intact.
 #[pyfunction]
 fn native_oracle(marker: &str, receipt: &str) -> PyResult<String> {
-    let receipt: serde_json::Value =
+    let receipt: Value =
         serde_json::from_str(receipt).map_err(|error| PyValueError::new_err(error.to_string()))?;
     let metrics = receipt["metrics"]
         .as_array()
@@ -127,7 +130,7 @@ fn native_oracle(marker: &str, receipt: &str) -> PyResult<String> {
     let scene = fixture_scene(marker);
     let typeset = scene
         .typeset_mathml(&metrics)
-        .map_err(PyValueError::new_err)?;
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
     scene.render(&typeset).map_err(PyValueError::new_err)
 }
 
@@ -179,7 +182,7 @@ fn mathml_view_fixture_seed_scale_reaches_native_scene_geometry() {
         }
         let typeset = scene.typeset_mathml(&[]).unwrap();
         let svg = scene.render(&typeset).unwrap();
-        let document = roxmltree::Document::parse(&svg).unwrap();
+        let document = Document::parse(&svg).unwrap();
         let mut centers: Vec<[f64; 2]> = (0..3)
             .map(|id| {
                 let id = id.to_string();
@@ -263,7 +266,7 @@ fn mathml_view_fixture_seed_scale_reaches_native_scene_geometry() {
     let svg = scene
         .render(&scene.typeset_mathml(&metrics).unwrap())
         .unwrap();
-    let document = roxmltree::Document::parse(&svg).unwrap();
+    let document = Document::parse(&svg).unwrap();
     let boxes: Vec<[f64; 4]> = document
         .descendants()
         .filter(|node| node.tag_name().name() == "foreignObject")

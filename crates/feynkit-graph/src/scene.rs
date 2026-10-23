@@ -3,15 +3,13 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use feynkit_model::{LineKind, Model, Particle, ParticleId};
-use linnest::{
-    TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
-    svg::{Config, Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Pattern, Scene, Stroke},
+use linnest::svg::{
+    Config, Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Pattern, Scene, Stroke,
 };
-use linnet::half_edge::{
-    EdgeAccessors,
-    involution::{EdgeIndex, Orientation},
-    subgraph::{SuBitGraph, SubSetLike},
-};
+use linnest::{TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec};
+use linnet::half_edge::EdgeAccessors;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use serde_json::{Map, Value};
 
 use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
@@ -25,6 +23,8 @@ const OUTSIDE: &str = "#77777773";
 const EXTERNAL_SPACING: f64 = 10.0;
 
 /// Physics drawing options the native renderer honours.
+/// See [`Self::process_scene`] for a process schematic and
+/// [`FeynmanDiagram::to_scene`] for retained diagram rendering.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneOptions {
     /// Momentum arrows beside every edge.
@@ -64,6 +64,24 @@ impl FeynmanDiagram {
     /// Typst: particle lines and flow arrows, momentum arrows, highlighting and
     /// inspection details. Cross sections open their initial states before
     /// layout while retaining the original inspection identities.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use feynkit_graph::{DiagramError, FeynmanDiagram, SceneOptions};
+    /// use std::collections::BTreeSet;
+    /// # fn scene(diagram: &FeynmanDiagram) -> Result<(), DiagramError> {
+    /// let scene = diagram.to_scene(None, &BTreeSet::new(), None, &SceneOptions::default())?;
+    /// assert_eq!(scene.graph.edges.len(), diagram.edges().count());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a diagram error when a supplied momentum basis is inconsistent.
+    ///
+    /// # Panics
+    /// Panics if `highlight` contains half-edges outside this diagram's arena.
     pub fn to_scene(
         &self,
         highlight: Option<&SuBitGraph>,
@@ -533,13 +551,32 @@ impl SceneOptions {
     }
 
     /// A process is a star graph with a finite interaction region.
+    /// Incoming and outgoing slices preserve their external-state order.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use feynkit_graph::SceneOptions;
+    /// use feynkit_model::Model;
+    /// let model = Model::phi4();
+    /// let phi = model.particle_id("phi")?;
+    /// let scene = SceneOptions::default().process_scene(
+    ///     &model, &[phi, phi], &[phi, phi], &Default::default(),
+    /// )?;
+    /// assert_eq!(scene.edges.len(), 4);
+    /// # Ok::<(), feynkit_graph::DiagramError>(())
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a model error for unknown particle IDs, or
+    /// [`DiagramError::SceneConfiguration`] for invalid drawing settings.
     pub fn process_scene(
         &self,
         model: &Model,
         incoming: &[ParticleId],
         outgoing: &[ParticleId],
         config: &Config,
-    ) -> Result<Scene, String> {
+    ) -> Result<Scene, DiagramError> {
         let node = TypstNodeSpec {
             name: Some("process".into()),
             index: Some(0),
@@ -588,9 +625,7 @@ impl SceneOptions {
         for (is_incoming, particles) in [(true, incoming), (false, outgoing)] {
             for (rank, id) in particles.iter().enumerate() {
                 let index = scene.edges.len();
-                let particle = model
-                    .particle_by_id(*id)
-                    .expect("validated process particle");
+                let particle = model.particle_by_id(*id)?;
                 let orientation = if particle.antiparticle == *id {
                     "undirected"
                 } else if particle.is_antiparticle() {
@@ -645,7 +680,9 @@ impl SceneOptions {
                 scene.edges.push(drawing);
             }
         }
-        config.apply(&mut scene)?;
+        config
+            .apply(&mut scene)
+            .map_err(DiagramError::SceneConfiguration)?;
         // A process has a finite interaction region, not a point vertex. Place
         // straight legs around its final styled radius, leaving visible line
         // outside even when the caller enlarges the blob. Mixed states occupy
@@ -682,16 +719,17 @@ impl SceneOptions {
 
 #[cfg(test)]
 mod tests {
+    use crate::DiagramError;
+    use feynkit_model::{Model, ParticleId};
     use std::collections::BTreeSet;
 
     use linnest::svg::Dash;
-    use linnet::half_edge::{
-        involution::Hedge,
-        subgraph::{ModifySubSet, SuBitGraph},
-    };
+    use linnet::half_edge::involution::Hedge;
+    use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 
     use super::{HIGHLIGHT, INK, OUTSIDE};
-    use crate::{SceneOptions, display::tests::one_loop};
+    use crate::SceneOptions;
+    use crate::display::tests::one_loop;
 
     #[test]
     fn describes_amplitudes_as_the_typst_layout_prepares_them() {
@@ -825,11 +863,20 @@ mod tests {
         )
         .unwrap();
         definition["particles"][0]["typstname"] = "overline(phi)_\"custom\"".into();
-        let model = feynkit_model::Model::from_json(&definition.to_string()).unwrap();
+        let model = Model::from_json(&definition.to_string()).unwrap();
         let particle = model.particle_id("p<&").unwrap();
         let scene = SceneOptions::default()
             .process_scene(&model, &[particle], &[particle], &Default::default())
             .unwrap();
+        assert!(matches!(
+            SceneOptions::default().process_scene(
+                &model,
+                &[ParticleId::from_index(usize::MAX)],
+                &[],
+                &Default::default(),
+            ),
+            Err(DiagramError::Model(_))
+        ));
         assert_eq!(scene.pages.len(), 2);
         for label in &scene.pages {
             assert_eq!(label.mathml, "<mtext>p&lt;&amp;</mtext>");

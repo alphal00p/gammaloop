@@ -1,9 +1,15 @@
-use feynkit_graph::FeynmanDiagram;
+use crate::error;
+use crate::graph::PyFeynmanDiagram;
+use feynkit_graph::{FeynmanDiagram, SceneOptions};
 use feynkit_model::{Model, ParticleId};
 use linnet_render_py::PyRenderSettings;
+use pyo3::exceptions::PyValueError;
+use spynso3::display as tensor_display;
+use spynso3::display::DisplaySettings;
+use symbolica::api::python::PythonExpression;
 
 use crate::render_settings::PyDiagramStyle;
-use pyo3::prelude::*;
+use pyo3::{PyResult, Python};
 use std::fmt::Write;
 
 use linnet_render_py::PyDiagramView;
@@ -12,9 +18,9 @@ use linnet_render_py::PyDiagramView;
 pub(crate) fn energy_graph_view(
     py: Python<'_>,
     diagram: &FeynmanDiagram,
-    style: &feynkit_graph::SceneOptions,
+    style: &SceneOptions,
 ) -> PyResult<PyDiagramView> {
-    let options = feynkit_graph::SceneOptions {
+    let options = SceneOptions {
         show_particle: false,
         show_edge_index: true,
         show_node_index: true,
@@ -24,7 +30,7 @@ pub(crate) fn energy_graph_view(
     };
     let mut scene = diagram
         .to_scene(None, &Default::default(), None, &options)
-        .map_err(crate::error::diagram)?;
+        .map_err(error::diagram)?;
     scene.title = None;
     // Particle-flow arrows would compete with the energy-routing annotations.
     for edge in &mut scene.edges {
@@ -103,18 +109,23 @@ pub(crate) const PREVIEW_LIMIT: usize = 6;
 
 /// Compact collections share the graph renderer and Spenso's expression printer.
 /// SVG templates remain inert until a row or thumbnail is selected.
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)] // One shared collection boundary for title, terms and graph presentation.
 pub(crate) fn collection_view(
     py: Python<'_>,
     title: &str,
     subtitle: &str,
-    diagrams: impl ExactSizeIterator<Item = crate::graph::PyFeynmanDiagram>,
+    diagrams: impl ExactSizeIterator<Item = PyFeynmanDiagram>,
     terms: Option<&[String]>,
     config: Option<&PyRenderSettings>,
     style: Option<&PyDiagramStyle>,
     limit: usize,
 ) -> PyResult<PyDiagramView> {
     let count = diagrams.len();
+    if terms.is_some_and(|terms| terms.len() < count.min(limit)) {
+        return Err(PyValueError::new_err(
+            "each displayed diagram requires a contribution",
+        ));
+    }
     let mut html = format!(
         "<style>{}</style><section class=\"feynkit-collection\" data-feynkit-notebook data-linnet-frame-owner><header><strong>{}</strong><small>{}</small></header>",
         include_str!("collection.css"),
@@ -132,7 +143,7 @@ pub(crate) fn collection_view(
             templates,
             "<template data-feynkit-drawing><!--linnet-svg-{index}--></template>"
         )
-        .unwrap();
+        .expect("formatting into a String cannot fail");
         drawings.push(drawing);
         let label = format!("Diagram {}", index + 1);
         let mut caption = format!(
@@ -147,14 +158,15 @@ pub(crate) fn collection_view(
         );
         let cuts = diagram.inner.cuts().len();
         if cuts > 0 {
-            write!(caption, " · {cuts} cut{}", if cuts == 1 { "" } else { "s" }).unwrap();
+            write!(caption, " · {cuts} cut{}", if cuts == 1 { "" } else { "s" })
+                .expect("formatting into a String cannot fail");
         }
         let caption = escape_html(&caption);
         let thumbnail = format!("<img class=\"fk-thumbnail\" alt=\"{label}\">");
         if let Some(terms) = terms {
-            write!(html, "<details class=\"fk-row\"><summary>{thumbnail}<div class=\"fk-term\"><small>{label} · Contribution</small>{}</div></summary><div class=\"fk-stage\"></div><div class=\"fk-caption\">{caption}</div></details>", terms[index]).unwrap();
+            write!(html, "<details class=\"fk-row\"><summary>{thumbnail}<div class=\"fk-term\"><small>{label} · Contribution</small>{}</div></summary><div class=\"fk-stage\"></div><div class=\"fk-caption\">{caption}</div></details>", terms[index]).expect("formatting into a String cannot fail");
         } else {
-            write!(html, "<button type=\"button\" aria-pressed=\"false\" data-caption=\"{caption}\">{thumbnail}{label}</button>").unwrap();
+            write!(html, "<button type=\"button\" aria-pressed=\"false\" data-caption=\"{caption}\">{thumbnail}{label}</button>").expect("formatting into a String cannot fail");
         }
     }
     if terms.is_none() {
@@ -164,7 +176,7 @@ pub(crate) fn collection_view(
         html.push_str("<p>No diagrams retained.</p>");
     }
     if count > limit {
-        write!(html, "<small>Showing {limit} of {count} diagrams. The source collection retains all diagrams.</small>").unwrap();
+        write!(html, "<small>Showing {limit} of {count} diagrams. The source collection retains all diagrams.</small>").expect("formatting into a String cannot fail");
     }
     write!(
         html,
@@ -172,7 +184,7 @@ pub(crate) fn collection_view(
         include_str!("collection.js"),
         include_str!("notebook.js")
     )
-    .unwrap();
+    .expect("formatting into a String cannot fail");
     PyDiagramView::from_views(drawings, Some(html))
 }
 
@@ -186,13 +198,14 @@ pub(crate) fn process_view(
     style: Option<&PyDiagramStyle>,
 ) -> PyResult<PyDiagramView> {
     let options = PyDiagramStyle::resolve(style, false);
-    let resolved_config = config.cloned().unwrap_or_default().config()?;
+    let defaults = PyRenderSettings::default();
+    let resolved_config = config.unwrap_or(&defaults).config()?;
     let scenes = outgoing
         .iter()
         .map(|state| {
             options
                 .process_scene(model, incoming, state, &resolved_config)
-                .map_err(pyo3::exceptions::PyValueError::new_err)
+                .map_err(|error| PyValueError::new_err(error.to_string()))
         })
         .collect::<PyResult<Vec<_>>>()?;
     // process_scene resolves these settings before pinning legs around the blob.
@@ -207,21 +220,15 @@ pub(crate) fn record_html(kind: &str, name: &str, rows: &[(&str, String)]) -> St
         escape_html(kind)
     );
     for (label, value) in rows {
-        write!(html, r#"<tr><th scope="row" style="text-align:left;vertical-align:top;font-weight:500;opacity:.7;padding:.25rem 1rem .25rem 0;white-space:nowrap">{}</th><td style="text-align:left;padding:.25rem 0;overflow-wrap:anywhere">{value}</td></tr>"#, escape_html(label)).unwrap();
+        write!(html, r#"<tr><th scope="row" style="text-align:left;vertical-align:top;font-weight:500;opacity:.7;padding:.25rem 1rem .25rem 0;white-space:nowrap">{}</th><td style="text-align:left;padding:.25rem 0;overflow-wrap:anywhere">{value}</td></tr>"#, escape_html(label)).expect("formatting into a String cannot fail");
     }
     html.push_str("</tbody></table></section>");
     html
 }
 
 /// Domain formulas use Spenso's existing MathML/Typst printer without recooking indices.
-pub(crate) fn expression_html(
-    py: Python<'_>,
-    expression: symbolica::api::python::PythonExpression,
-) -> PyResult<String> {
-    py.import("symbolica.community.tensor")?
-        .getattr("to_html")?
-        .call1((expression,))?
-        .extract()
+pub(crate) fn expression_html(py: Python<'_>, expression: PythonExpression) -> PyResult<String> {
+    tensor_display::atom_to_html(py, &expression.expr, &DisplaySettings::default(), None)
 }
 
 #[cfg(test)]

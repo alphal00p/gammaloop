@@ -1,26 +1,20 @@
 //! Whole tensor-leaf substitutions with locally checked interfaces.
 
-use std::{
-    collections::{HashMap, HashSet, hash_map::Entry},
-    sync::Arc,
+use super::composition::ExplicitIndexOccurrences;
+use super::inference::{InterfaceInference, TensorInferenceError};
+use super::{SymbolicTensor, composition};
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::slot::SlotMatcher;
+use std::collections::hash_map::Entry;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+use symbolica::atom::{Atom, AtomOrView, AtomView, Symbol};
+use symbolica::id::{
+    AtomMatchIterator, Condition, Match, MatchSettings, Pattern, PatternRestriction, ReplaceWith,
+    WrappedMatchStack,
 };
-
-use spenso::structure::{partial::PartialStructure, slot::SlotMatcher};
-use symbolica::{
-    atom::{Atom, AtomOrView, AtomView, Symbol},
-    id::{
-        AtomMatchIterator, Condition, Match, MatchSettings, Pattern, PatternRestriction,
-        ReplaceWith, WrappedMatchStack,
-    },
-    state::Workspace,
-    transformer::TransformerError,
-};
-
-use super::{
-    SymbolicTensor,
-    composition::{self, ExplicitIndexOccurrences},
-    inference::{InterfaceInference, TensorInferenceError},
-};
+use symbolica::state::Workspace;
+use symbolica::transformer::TransformerError;
 
 type Result<T> = std::result::Result<T, TensorInferenceError>;
 
@@ -156,6 +150,38 @@ impl SymbolicTensor<PartialStructure> {
     /// misses. Set the rule's `rhs_cache_size` to zero for side-effecting callbacks.
     /// As with the other certified algebra operations, `self` must already have
     /// a valid established interface and explicit-index multiplicities.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unsupported source syntax, invalid source metadata, malformed rule bindings,
+    /// or a replacement that changes the matched interface or introduces index uses.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use std::slice;
+    /// use idenso::tensor::{SymbolicTensor, TensorRule};
+    /// use idenso::tensor::inference::TensorInferenceError;
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    /// use spenso::structure::slot::IsAbstractSlot;
+    /// use spenso::tensor_symbol;
+    /// use symbolica::atom::AtomCore;
+    /// use symbolica::function;
+    ///
+    /// let slot = Euclidean {}
+    ///     .new_rep(3)
+    ///     .to_lib()
+    ///     .slot::<AbstractIndex, _>(AbstractIndex::Normal(7));
+    /// let from = function!(tensor_symbol!("docs::rule_from"), slot.to_atom());
+    /// let to = function!(tensor_symbol!("docs::rule_to"), slot.to_atom());
+    /// let source = SymbolicTensor::infer(from.clone())?.finish_parts()?;
+    /// let rule = TensorRule::new(from.to_pattern(), to.clone().into(), None, 0)?;
+    /// let replaced = source.replace(&rule)?;
+    /// assert_eq!(replaced.expression(), &to);
+    /// assert!(source.replace_rules(slice::from_ref(&rule))?.same_value(&replaced));
+    /// # Ok::<(), TensorInferenceError>(())
+    /// ```
     pub fn replace(&self, rule: &TensorRule<'_>) -> Result<Self> {
         self.replace_rules(std::slice::from_ref(rule))
     }
@@ -164,6 +190,11 @@ impl SymbolicTensor<PartialStructure> {
     /// The first matching rule owns a leaf, including identity replacements;
     /// emitted RHS leaves are not matched again in the same stage. Conditions
     /// and bounded RHS caches remain local to each rule and this application.
+    /// See the [single-rule example](Self::replace), including ordered rule application.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same admission and per-binding errors as [`Self::replace`].
     pub fn replace_rules(&self, rules: &[TensorRule<'_>]) -> Result<Self> {
         if rules.is_empty() {
             return Ok(self.clone());
@@ -391,26 +422,28 @@ impl<'source> TensorReplacement<'source, '_, '_> {
 
 #[cfg(test)]
 mod tests {
+
+    use super::super::composition::TensorCompositionError;
+    use super::super::inference::tests::{
+        INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
+    };
     use super::*;
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        structure::{
-            abstract_index::AbstractIndex,
-            dimension::Dimension,
-            partial::{PartialIndex, PartialStructureExt},
-            representation::{ExtendibleReps, RepName},
-            slot::IsAbstractSlot,
-        },
-    };
+    use crate::test_support;
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::structure::dimension::Dimension;
+    use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+    use spenso::structure::representation::{ExtendibleReps, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::structure::{HasStructure, OrderedStructure, TensorStructure};
+    use spenso::tensor_symbol;
     use std::cell::Cell;
-    use std::sync::{
-        Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
-    };
-    use symbolica::{
-        atom::{AtomCore, FunctionBuilder},
-        id::ConditionResult,
-    };
+    use std::slice;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex};
+    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::id::ConditionResult;
+    use symbolica::symbol;
 
     thread_local! {
         pub(super) static SIGNATURE_OBSERVATIONS: Cell<usize> = const { Cell::new(0) };
@@ -718,21 +751,16 @@ mod tests {
 
     #[test]
     fn tensor_replacement_cancellation_retains_source_dummy_history_without_output_observation() {
-        use super::super::{
-            composition::TensorCompositionError,
-            inference::tests::{INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS},
-        };
-
-        crate::test_support::test_initialize();
-        let f = spenso::tensor_symbol!("rule_cancellation_f");
-        let g = spenso::tensor_symbol!("rule_cancellation_g");
+        test_support::test_initialize();
+        let f = tensor_symbol!("rule_cancellation_f");
+        let g = tensor_symbol!("rule_cancellation_g");
         let index = AbstractIndex::Normal(81321);
         let port = ExtendibleReps::MINKOWSKI
             .new_rep(Dimension::Concrete(4))
             .slot(index);
         let a = port.to_atom();
         let diagonal = leaf(f, &[a.clone(), a.clone()]);
-        let x = Atom::var(symbolica::symbol!("rule_cancellation_x"));
+        let x = Atom::var(symbol!("rule_cancellation_x"));
         let admitted = typed(&diagonal * &x);
         // Producers may certify admission before populating the index summary.
         let source = SymbolicTensor::from_validated_parts(admitted.expression, admitted.structure);
@@ -773,12 +801,10 @@ mod tests {
 
     #[test]
     fn tensor_replacement_carries_coalesced_powers_and_rejects_source_powers_before_rhs() {
-        use super::super::inference::tests::{INFERENCE_CALLS, SCOPE_VALIDATIONS};
-
-        let f = spenso::tensor_symbol!("safe_replace_power_f");
-        let g = spenso::tensor_symbol!("safe_replace_power_g");
+        let f = tensor_symbol!("safe_replace_power_f");
+        let g = tensor_symbol!("safe_replace_power_g");
         let a = slot(81301);
-        let fa = leaf(f, std::slice::from_ref(&a));
+        let fa = leaf(f, slice::from_ref(&a));
         let ga = leaf(g, &[a]);
         let source = typed(&fa * &ga);
         let rule = TensorRule::new(fa.to_pattern(), ga.clone().into(), None, 0).unwrap();
@@ -1425,14 +1451,11 @@ mod tests {
 
     #[test]
     fn carried_rule_proof_survives_identity_and_is_cleared_by_mutable_structure() {
-        use super::super::inference::tests::SCOPE_VALIDATIONS;
-        use spenso::structure::{HasStructure, OrderedStructure, TensorStructure};
-
-        let f = spenso::tensor_symbol!("carried_rule_source");
-        let g = spenso::tensor_symbol!("carried_rule_result");
+        let f = tensor_symbol!("carried_rule_source");
+        let g = tensor_symbol!("carried_rule_result");
         let a = slot(81941);
         let inferred =
-            SymbolicTensor::<PartialStructure>::infer(leaf(f, std::slice::from_ref(&a))).unwrap();
+            SymbolicTensor::<PartialStructure>::infer(leaf(f, slice::from_ref(&a))).unwrap();
         assert_eq!(inferred.proofs.validated.get(), Some(&true));
         let (expression, structure) = inferred.into_parts();
         // Detached storage must establish its own facts even when its parts

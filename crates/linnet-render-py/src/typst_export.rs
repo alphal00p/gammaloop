@@ -1,18 +1,41 @@
 //! Optional Python Typst compilation and source-only figure exports.
-use std::{
-    collections::BTreeMap,
-    path::{Component, Path},
-};
+//!
+//! [`svg_source`] produces a standalone document without a compiler;
+//! [`compile_sources`] shows how to explicitly compile an owned source project.
+use std::collections::BTreeMap;
+use std::fs;
+use std::path::{Component, Path};
 
-use pyo3::{
-    exceptions::{PyImportError, PyRuntimeError, PyValueError},
-    prelude::*,
-    types::{PyBytes, PyDict, PyList},
+use pyo3::exceptions::{PyImportError, PyRuntimeError, PyValueError};
+use pyo3::types::{
+    PyAnyMethods, PyBytes, PyBytesMethods, PyDict, PyDictMethods, PyList, PyListMethods, PyModule,
 };
+use pyo3::{Bound, PyResult, Python};
 
 /// Compile named source files, importing the optional Python compiler on demand.
 /// Files are staged byte-for-byte in a scoped project rooted at `main.typ`.
 /// Byte output is one document; list output retains every SVG or PNG page.
+///
+/// # Errors
+/// Returns `ImportError` when the optional `typst` package is unavailable,
+/// `ValueError` for a missing `main.typ` or non-relative project path, and Python
+/// filesystem/type errors for staging or invalid compiler output. Compiler
+/// exceptions become `RuntimeError` with the original Python exception as their
+/// cause. The temporary project is removed on both success and failure.
+///
+/// ```no_run
+/// use linnet_render_py::typst_export;
+/// use pyo3::{PyErr, PyResult, Python};
+/// use std::collections::BTreeMap;
+/// Python::initialize();
+/// Python::attach(|py| -> PyResult<()> {
+///     let files = BTreeMap::from([("main.typ".into(), b"$ x^2 $".to_vec())]);
+///     let pages = typst_export::compile_sources(py, &files, "svg")?;
+///     assert_eq!(pages.len(), 1);
+///     Ok(())
+/// })?;
+/// # Ok::<(), PyErr>(())
+/// ```
 pub fn compile_sources(
     py: Python<'_>,
     files: &BTreeMap<String, Vec<u8>>,
@@ -60,9 +83,9 @@ fn compile(
     for (name, bytes) in files {
         let path = root.join(name);
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)?;
+            fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, bytes)?;
+        fs::write(path, bytes)?;
     }
     let main = root.join("main.typ");
     let kwargs = PyDict::new(py);
@@ -86,6 +109,13 @@ fn compile(
 }
 
 /// A self-contained Typst export of an already drawn SVG figure.
+///
+/// ```
+/// use linnet_render_py::typst_export;
+/// let source = typst_export::svg_source("<svg/>");
+/// assert!(source.contains("#image(bytes(\"<svg/>\"))"));
+/// ```
+#[must_use]
 pub fn svg_source(svg: &str) -> String {
     format!("#set page(width: auto, height: auto, margin: 0pt)\n#image(bytes({svg:?}))")
 }
@@ -94,6 +124,7 @@ pub fn svg_source(svg: &str) -> String {
 mod tests {
     use super::*;
     use pyo3::exceptions::{PyRuntimeError, PyTypeError};
+    use pyo3::types::PyStringMethods;
     use std::path::PathBuf;
 
     #[test]

@@ -437,9 +437,10 @@ transformations that could change them.
 
 An identity dimension mapping retains completed reductions and cached
 observations through `finish_parts`, after running the mapper and establishing
-that both the native payload and logical layout are unchanged. Admitted carriers
-reuse their facts; raw carriers still undergo admission. An unchanged zero
-expression alone does not establish an unchanged interface.
+that the native payload, logical layout and oriented index-usage metadata are
+unchanged. Admitted carriers reuse their facts; raw carriers still undergo
+admission. An unchanged zero expression or free interface alone cannot establish
+that hidden index history is unchanged.
 The color-construction macros have a separate syntax trap: a bare `object.field`
 is representation-pattern shorthand. Literal chain placeholder symbols must use
 `Atom::var`, rather than that field shorthand.
@@ -778,6 +779,12 @@ unsupported symbol metadata are rejected. Index/function cooking keeps its
 existing registry-dependent behavior; construction and cooking remain separate
 from reduction.
 
+Index-only cooking preserves validated native named, Open and scoped index forms
+in both flattened and reversible modes. It interns opaque function-valued labels
+with expression-local reuse, retaining their shared identity across representation
+kinds. Malformed native index forms fail instead of becoming opaque symbols.
+The separate all-function cooking mode retains its own source/tag policy.
+
 == Ownership and error boundaries
 
 The public tensor operations retain the logical interface, typed zeros and
@@ -793,6 +800,11 @@ network errors. `dirac_adjoint` reports `AdjointError`, cooking reports
 queries report `IndexToolingError`. A raw-expression escape hatch does not
 retain a separately declared logical layout automatically. Callers restoring
 that layout must supply the original structure.
+
+Composition, inference and cooking preserve underlying admission, slot and
+index errors as typed sources. Python bindings translate those errors at the
+presentation boundary. The Bincode custom-error interface accepts a diagnostic
+string, so formatting is confined to that serialization boundary.
 
 Admission establishes the logical interface and scoped index metadata once.
 Typed algebra uses those facts as the tensor's meaning, even when the resulting

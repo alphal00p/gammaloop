@@ -1,25 +1,21 @@
 use std::ffi::CString;
 
-use pyo3::{
-    prelude::*,
-    types::{PyCFunction, PyDict, PyList, PyModule},
+use pyo3::types::{PyAnyMethods, PyDictMethods, PyModuleMethods};
+use pyo3::types::{PyCFunction, PyDict, PyList, PyModule};
+use pyo3::{Bound, PyResult, Python};
+use spenso::portable_payload;
+use spenso::portable_payload::{
+    MATH_DISPLAY_ATTACHMENT_SCHEMA, MathDisplayDeclaration, MathDisplayDeclarations,
+    PortableRepresentationClass, REPRESENTATION_ATTACHMENT_SCHEMA, RepresentationDeclaration,
+    RepresentationDeclarations,
 };
-use spenso::{
-    portable_payload::{
-        MATH_DISPLAY_ATTACHMENT_SCHEMA, MathDisplayDeclaration, MathDisplayDeclarations,
-        PortableRepresentationClass, REPRESENTATION_ATTACHMENT_SCHEMA, RepresentationDeclaration,
-        RepresentationDeclarations, attachments_for_atom, canonical_math_display_symbol_name,
-        register_math_display_symbol,
-    },
-    structure::representation::{IndexDisplay, IndexPalette, IndexRow, LibraryRep},
-};
+use spenso::structure::representation::{IndexDisplay, IndexPalette, IndexRow, LibraryRep};
 use spynso3::SpensoModule;
-use symbolica::{
-    api::python::{SymbolicaCommunityModule, create_symbolica_module},
-    atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder},
-    parse,
-};
-use symbolica_typst_plugin::payload::{encode_atom_from_set, parse_payload};
+use symbolica::api::python;
+use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::atom::{Atom, FunctionBuilder, NamespacedSymbol, SymbolBuilder};
+use symbolica::parse;
+use symbolica_typst_plugin::payload;
 
 const SPENSO_WRAPPER: &str = r#"
 from ..tensor_native import *
@@ -78,7 +74,7 @@ fn combined_core_exposes_rich_display_with_one_expression_type() {
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;
@@ -204,7 +200,19 @@ else:
 "##,
         )
         .expect("Python assertions contain a null byte");
-        py.run(&assertions, Some(&locals), Some(&locals))
+        py.run(&assertions, Some(&locals), Some(&locals))?;
+        for name in ["E", "FormattedOutput", "PrintMode"] {
+            symbolica.add(name, core.getattr(name)?)?;
+        }
+        locals.set_item("__name__", "symbolic_preview_tests")?;
+        let preview_tests = CString::new(include_str!("installed_symbolic_preview.py"))
+            .expect("symbolic preview fixture contains no null bytes");
+        py.run(&preview_tests, Some(&locals), Some(&locals))?;
+        py.run(
+            c"assert unittest.TextTestRunner().run(unittest.defaultTestLoader.loadTestsFromTestCase(SymbolicDisplayTests)).wasSuccessful()",
+            Some(&locals),
+            Some(&locals),
+        )
     })
     .unwrap();
 }
@@ -237,8 +245,10 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
         .unwrap()
         .with_bottom(IndexDisplay::Number(2));
     let math_display_declaration = MathDisplayDeclaration::new(manual_display.clone()).unwrap();
-    let display_name = canonical_math_display_symbol_name(&manual_display, namespace).unwrap();
-    let display_symbol = register_math_display_symbol(&manual_display, namespace).unwrap();
+    let display_name =
+        portable_payload::canonical_math_display_symbol_name(&manual_display, namespace).unwrap();
+    let display_symbol =
+        portable_payload::register_math_display_symbol(&manual_display, namespace).unwrap();
 
     let nested = parse!("f(2*g(r-x))");
     let envelope_name = format!("{namespace}::payload");
@@ -251,7 +261,7 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
         .add_arg(Atom::var(display_symbol))
         .finish();
 
-    let attachments = attachments_for_atom(&atom).unwrap();
+    let attachments = portable_payload::attachments_for_atom(&atom).unwrap();
     assert_eq!(attachments.len(), 2);
     assert!(
         attachments
@@ -264,8 +274,8 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
             .any(|attachment| attachment.schema() == MATH_DISPLAY_ATTACHMENT_SCHEMA)
     );
 
-    let payload = encode_atom_from_set(&atom, &attachments).unwrap();
-    let parsed = parse_payload(&payload).unwrap();
+    let payload = payload::encode_atom_from_set(&atom, &attachments).unwrap();
+    let parsed = payload::parse_payload(&payload).unwrap();
     let imported_attachments = parsed.attachment_set();
     assert_eq!(imported_attachments, attachments);
     let representations =
@@ -288,5 +298,8 @@ fn native_payload_round_trip_preserves_nested_calls_and_spenso_attachments() {
 
     let imported = parsed.import_atom().unwrap();
     assert_eq!(imported, atom);
-    assert_eq!(attachments_for_atom(&imported).unwrap(), attachments);
+    assert_eq!(
+        portable_payload::attachments_for_atom(&imported).unwrap(),
+        attachments
+    );
 }

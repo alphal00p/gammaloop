@@ -11,8 +11,10 @@ use linnet::half_edge::NodeIndex;
 use linnet::permutation::Permutation;
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
-use pyo3::prelude::*;
-use pyo3::types::{PyAny, PyDict, PyTuple, PyType};
+use pyo3::types::{
+    PyAny, PyAnyMethods, PyDict, PyModule, PyModuleMethods, PyTuple, PyTupleMethods, PyType,
+};
+use pyo3::{pyclass, pyfunction, pymethods, wrap_pyfunction, Bound, Py, PyRef, PyResult, Python};
 
 use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
@@ -21,6 +23,8 @@ use crate::drawing::{
 };
 use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
+
+use crate::{render, PyDiagramView};
 
 static SPEC_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -1606,8 +1610,8 @@ impl PyGraph {
         #[gen_stub(override_type(type_repr = "RenderSettings | None"))] config: Option<
             &Bound<'_, PyAny>,
         >,
-    ) -> PyResult<crate::PyDiagramView> {
-        crate::render::render_graph(py, &slf, config, None)
+    ) -> PyResult<PyDiagramView> {
+        render::render_graph(py, &slf, config, None)
     }
 
     #[pyo3(signature = (*, config=None, browser=None))]
@@ -1619,13 +1623,13 @@ impl PyGraph {
         >,
         browser: Option<&str>,
     ) -> PyResult<String> {
-        crate::render::render_graph(py, &slf, config, None)?
+        render::render_graph(py, &slf, config, None)?
             .measured(py, None, browser)?
             .to_svg()
     }
 
     fn _mime_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        crate::render::render_graph(py, &slf, None, None)?._mime_(py)
+        render::render_graph(py, &slf, None, None)?._mime_(py)
     }
 
     #[pyo3(signature = (include=None, exclude=None))]
@@ -1635,7 +1639,7 @@ impl PyGraph {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        crate::render::render_graph(py, &slf, None, None)?._repr_mimebundle_(py, include, exclude)
+        render::render_graph(py, &slf, None, None)?._repr_mimebundle_(py, include, exclude)
     }
 
     #[pyo3(name = "full_subgraph", signature = ())]

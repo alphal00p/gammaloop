@@ -2,18 +2,16 @@
 
 use std::collections::{HashMap, HashSet};
 
-use idenso::{
-    CookMode, CookSettings,
-    tensor::{SymbolicTensor, inference::InterfaceInference},
-};
+use idenso::tensor::SymbolicTensor;
+use idenso::tensor::inference::InterfaceInference;
+use idenso::{CookMode, CookSettings};
+use serde::de::Error as DeserializeError;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use spenso::structure::{
-    Canonicalized, OrderedStructure, TensorStructure,
-    abstract_index::AbstractIndex,
-    partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
-    representation::LibraryRep,
-    slot::{AbsInd, IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher},
-};
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt};
+use spenso::structure::representation::LibraryRep;
+use spenso::structure::slot::{AbsInd, IsAbstractSlot, ParseableAind, SlotMatch, SlotMatcher};
+use spenso::structure::{Canonicalized, OrderedStructure, TensorStructure};
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 
 use crate::{DiagramError, FeynmanDiagram};
@@ -21,6 +19,23 @@ use crate::{DiagramError, FeynmanDiagram};
 /// Optional source-artifact ports that cannot be recovered from the expression,
 /// notably a computed zero's rank. Entries retain logical axis order; compact
 /// representations denote distinct unresolved ports.
+///
+/// # Example
+///
+/// ```
+/// use feynkit_graph::NumeratorInterface;
+/// use symbolica::atom::Atom;
+///
+/// let ports = NumeratorInterface::parse(r#"["spenso::mink(4)"]"#)?;
+/// let zero = NumeratorInterface::admit(Atom::Zero, Some(ports))?;
+/// let (expression, interface) = NumeratorInterface::export(&zero);
+/// let interface = interface.expect("zero syntax cannot carry its axis");
+/// let restored = NumeratorInterface::admit(
+///     expression, Some(NumeratorInterface::parse(&interface.to_json())?),
+/// )?;
+/// assert!(restored.same_value(&zero));
+/// # Ok::<(), feynkit_graph::DiagramError>(())
+/// ```
 #[derive(Clone, Debug)]
 pub struct NumeratorInterface(
     /// Source port declarations in logical order. `admit` validates them before
@@ -29,6 +44,11 @@ pub struct NumeratorInterface(
 );
 
 impl NumeratorInterface {
+    /// Decode source port declarations from their JSON string-array representation.
+    /// See the round trip in [`NumeratorInterface`].
+    ///
+    /// # Errors
+    /// Returns a JSON or symbolic parse error for malformed declarations.
     pub fn parse(source: &str) -> Result<Self, DiagramError> {
         let ports: Vec<String> = serde_json::from_str(source)?;
         Ok(Self(
@@ -39,11 +59,18 @@ impl NumeratorInterface {
         ))
     }
 
+    /// Encode logical ports in canonical source notation; see [`NumeratorInterface`].
+    #[must_use]
     pub fn to_json(&self) -> String {
         serde_json::to_string(self).expect("strings always serialize to JSON")
     }
 
     /// Admit authored source notation once, checking any declared logical ports.
+    /// See [`NumeratorInterface`] for a zero with a retained axis.
+    ///
+    /// # Errors
+    /// Returns the cooking, slot, or tensor-inference error when notation or
+    /// declared ports are invalid or inconsistent with the expression.
     pub fn admit(
         expression: Atom,
         interface: Option<Self>,
@@ -54,9 +81,9 @@ impl NumeratorInterface {
         let cook = |value: &Atom| {
             cooking
                 .try_cook(value.as_view())
-                .map_err(|error| DiagramError::Invariant {
+                .map_err(|error| DiagramError::TensorCooking {
                     operation: "admitting tensor source notation",
-                    message: error.to_string(),
+                    source: error,
                 })
         };
         let expression = cook(&expression)?;
@@ -69,19 +96,19 @@ impl NumeratorInterface {
             .into_iter()
             .map(|port| {
                 let port = cook(&port)?;
-                let invalid = |error: String| DiagramError::Invariant {
+                let invalid = |source| DiagramError::TensorSlot {
                     operation: "admitting tensor source interface",
-                    message: error,
+                    source,
                 };
                 if matcher.compact_representation(port.as_view()).is_some() {
                     Ok(matcher
                         .parse_representation::<LibraryRep>(port.as_view())
-                        .map_err(|error| invalid(error.to_string()))?
+                        .map_err(invalid)?
                         .slot(PartialIndex::Open(OpenPortId(0))))
                 } else {
                     let slot = matcher
                         .parse::<LibraryRep, AbstractIndex>(port.as_view())
-                        .map_err(|error| invalid(error.to_string()))?;
+                        .map_err(invalid)?;
                     Ok(slot.rep().slot(PartialIndex::Explicit(slot.aind)))
                 }
             })
@@ -93,6 +120,8 @@ impl NumeratorInterface {
     }
 
     /// Export source notation, retaining metadata whenever syntax loses ports.
+    /// See the round trip in [`NumeratorInterface`].
+    #[must_use]
     pub fn export<A>(
         tensor: &SymbolicTensor<Canonicalized<OrderedStructure<LibraryRep, A>>>,
     ) -> (Atom, Option<Self>)
@@ -154,7 +183,12 @@ impl NumeratorInterface {
                         Ok(index) => {
                             indices.insert(index);
                         }
-                        Err(error) => failure = Some(invalid(error.to_string())),
+                        Err(source) => {
+                            failure = Some(DiagramError::TensorIndex {
+                                operation: "collecting transported tensor indices",
+                                source,
+                            })
+                        }
                     }
                 }
                 if let AtomView::Var(variable) = node {
@@ -198,15 +232,22 @@ impl NumeratorInterface {
                     mapped = (*inner).to_owned();
                 }
                 let mapped = if let Some(function) = mapped.as_fun_view() {
-                    cooking
-                        .cook_function(function)
-                        .map_err(|error| invalid(error.to_string()))?
+                    cooking.cook_function(function).map_err(|source| {
+                        DiagramError::TensorCooking {
+                            operation: "encoding transported tensor indices",
+                            source,
+                        }
+                    })?
                 } else {
                     mapped
                 };
                 scopes.into_iter().rev().fold(
-                    AbstractIndex::try_from(mapped.as_view())
-                        .map_err(|error| invalid(error.to_string()))?,
+                    AbstractIndex::try_from(mapped.as_view()).map_err(|source| {
+                        DiagramError::TensorIndex {
+                            operation: "parsing transported tensor indices",
+                            source,
+                        }
+                    })?,
                     |index, scope| index.scoped(scope),
                 )
             };
@@ -298,19 +339,25 @@ impl<'de> Deserialize<'de> for NumeratorInterface {
             .map(|port| FeynmanDiagram::parse_expression("numerator interface", port))
             .collect::<Result<Vec<_>, _>>()
             .map(Self)
-            .map_err(serde::de::Error::custom)
+            .map_err(DeserializeError::custom)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::symbols;
     use spenso::structure::representation::{Euclidean, Minkowski, RepName};
-    use symbolica::{function, id::Replacement};
+    use spenso::tensor_symbol;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use symbolica::function;
+    use symbolica::id::Replacement;
+    use symbolica::symbol;
 
     #[test]
     fn source_codec_preserves_anonymous_axes_and_ranked_zero() {
-        let matrix = spenso::tensor_symbol!("feynkit_graph::source_matrix");
+        let matrix = tensor_symbol!("feynkit_graph::source_matrix");
         let input = function!(
             matrix,
             Minkowski {}.new_rep(4).to_symbolic([]),
@@ -335,8 +382,8 @@ mod tests {
 
     #[test]
     fn native_label_permutations_retain_zero_ports_and_reject_collisions() {
-        let matrix = spenso::tensor_symbol!("feynkit_graph::indexed_source_matrix");
-        let indices = [1, 2].map(|owner| function!(crate::symbols::hedge_index(), owner, 1));
+        let matrix = tensor_symbol!("feynkit_graph::indexed_source_matrix");
+        let indices = [1, 2].map(|owner| function!(symbols::hedge_index(), owner, 1));
         let input = function!(
             matrix,
             Minkowski {}.new_rep(4).to_symbolic([indices[0].clone()]),
@@ -377,16 +424,16 @@ mod tests {
 
     #[test]
     fn native_owner_transport_preserves_scopes_and_declared_logical_order() {
-        let head = spenso::tensor_symbol!("feynkit_graph::native_owner_transport");
-        let scope = symbolica::symbol!("feynkit_graph::source_scope");
+        let head = tensor_symbol!("feynkit_graph::native_owner_transport");
+        let scope = symbol!("feynkit_graph::source_scope");
         let rep = LibraryRep::from(Minkowski {}).new_rep(4);
         let source_indices = [
-            AbstractIndex::Named(crate::symbols::hedge_index().into(), 1, 0),
-            AbstractIndex::Named(crate::symbols::edge_index().into(), 2, 0).scoped(scope),
+            AbstractIndex::Named(symbols::hedge_index().into(), 1, 0),
+            AbstractIndex::Named(symbols::edge_index().into(), 2, 0).scoped(scope),
         ];
         let target_indices = [
-            AbstractIndex::Named(crate::symbols::hedge_index().into(), 7, 0),
-            AbstractIndex::Named(crate::symbols::edge_index().into(), 8, 0).scoped(scope),
+            AbstractIndex::Named(symbols::hedge_index().into(), 7, 0),
+            AbstractIndex::Named(symbols::edge_index().into(), 8, 0).scoped(scope),
         ];
         let expression = function!(
             head,
@@ -442,11 +489,11 @@ mod tests {
     #[test]
     fn native_transport_keeps_anonymous_and_interface_only_ports() {
         let rep = Minkowski {}.new_rep(4);
-        let source_index = AbstractIndex::Named(crate::symbols::hedge_index().into(), 1, 0);
-        let target_index = AbstractIndex::Named(crate::symbols::hedge_index().into(), 9, 0);
+        let source_index = AbstractIndex::Named(symbols::hedge_index().into(), 1, 0);
+        let target_index = AbstractIndex::Named(symbols::hedge_index().into(), 9, 0);
         let source = NumeratorInterface::admit(
             function!(
-                spenso::tensor_symbol!("feynkit_graph::mixed_source_ports"),
+                tensor_symbol!("feynkit_graph::mixed_source_ports"),
                 rep.to_symbolic([]),
                 rep.slot::<AbstractIndex, _>(source_index).to_atom(),
                 Euclidean {}.new_rep(2).to_symbolic([])
@@ -481,7 +528,7 @@ mod tests {
     #[test]
     fn anonymous_owner_transport_rejects_ambiguous_factor_reordering() {
         let rep = Minkowski {}.new_rep(4);
-        let momentum = crate::symbols::momentum();
+        let momentum = symbols::momentum();
         let source_momenta = [0, 1].map(|owner| function!(momentum, owner, rep.to_symbolic([])));
         let target_momenta = [3, 2].map(|owner| function!(momentum, owner, rep.to_symbolic([])));
         let source =
@@ -499,11 +546,11 @@ mod tests {
 
     #[test]
     fn reversible_labels_remain_supported_and_can_transport_to_native_indices() {
-        let head = spenso::tensor_symbol!("feynkit_graph::encoded_source_ports");
+        let head = tensor_symbol!("feynkit_graph::encoded_source_ports");
         let rep = Minkowski {}.new_rep(4);
-        let source_index = function!(crate::symbols::hedge_index(), 1, 0);
-        let target_index = function!(crate::symbols::hedge_index(), 9, 0);
-        let opaque = symbolica::symbol!("feynkit_graph::opaque_source_label");
+        let source_index = function!(symbols::hedge_index(), 1, 0);
+        let target_index = function!(symbols::hedge_index(), 9, 0);
+        let opaque = symbol!("feynkit_graph::opaque_source_label");
         let translate = |atom: &Atom| {
             Ok(atom
                 .replace(source_index.to_pattern())
@@ -553,15 +600,15 @@ mod tests {
     #[test]
     fn scoped_encoded_labels_transport_their_inner_owner_and_zero_ports() {
         let rep = Minkowski {}.new_rep(4);
-        let head = spenso::tensor_symbol!("feynkit_graph::scoped_encoded_transport");
-        let scope = symbolica::symbol!("feynkit_graph::encoded_transport_scope");
+        let head = tensor_symbol!("feynkit_graph::scoped_encoded_transport");
+        let scope = symbol!("feynkit_graph::encoded_transport_scope");
         let original = function!(
-            symbolica::symbol!("feynkit_graph::scoped_opaque_label"),
-            function!(crate::symbols::hedge_index(), 1, 0)
+            symbol!("feynkit_graph::scoped_opaque_label"),
+            function!(symbols::hedge_index(), 1, 0)
         );
         let translated = original
-            .replace(function!(crate::symbols::hedge_index(), 1, 0).to_pattern())
-            .with(function!(crate::symbols::hedge_index(), 9, 0));
+            .replace(function!(symbols::hedge_index(), 1, 0).to_pattern())
+            .with(function!(symbols::hedge_index(), 9, 0));
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let encoded = cooking
             .cook_function(original.as_fun_view().unwrap())
@@ -594,8 +641,8 @@ mod tests {
                     .unwrap();
                 let mapped = NumeratorInterface::translate(&value, |atom| {
                     Ok(atom
-                        .replace(function!(crate::symbols::hedge_index(), 1, 0).to_pattern())
-                        .with(function!(crate::symbols::hedge_index(), 9, 0)))
+                        .replace(function!(symbols::hedge_index(), 1, 0).to_pattern())
+                        .with(function!(symbols::hedge_index(), 9, 0)))
                 })
                 .unwrap();
                 assert!(mapped.same_value(&expected));
@@ -609,10 +656,10 @@ mod tests {
 
     #[test]
     fn native_and_encoded_indices_cannot_capture_each_other() {
-        let head = spenso::tensor_symbol!("feynkit_graph::mixed_identity_collision");
+        let head = tensor_symbol!("feynkit_graph::mixed_identity_collision");
         let rep = Minkowski {}.new_rep(4);
-        let native = function!(crate::symbols::edge_index(), 2, 0);
-        let opaque = function!(symbolica::symbol!("feynkit_graph::collision_label"), 7);
+        let native = function!(symbols::edge_index(), 2, 0);
+        let opaque = function!(symbol!("feynkit_graph::collision_label"), 7);
         let source = NumeratorInterface::admit(
             function!(
                 head,
@@ -641,9 +688,9 @@ mod tests {
     fn native_transport_keeps_internal_contractions_and_rejects_capture() {
         let rep = Minkowski {}.new_rep(4);
         let [dummy, external, new_dummy, new_external] =
-            [1, 2, 7, 8].map(|owner| function!(crate::symbols::hedge_index(), owner, 0));
-        let left = spenso::tensor_symbol!("feynkit_graph::contracted_left");
-        let right = spenso::tensor_symbol!("feynkit_graph::contracted_right");
+            [1, 2, 7, 8].map(|owner| function!(symbols::hedge_index(), owner, 0));
+        let left = tensor_symbol!("feynkit_graph::contracted_left");
+        let right = tensor_symbol!("feynkit_graph::contracted_right");
         let input = function!(left, rep.to_symbolic([dummy.clone()]))
             * function!(
                 right,
@@ -674,17 +721,13 @@ mod tests {
 
     #[test]
     fn native_transport_checks_callback_port_loss_without_replaying_normalization() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-        let source_index = function!(crate::symbols::edge_index(), 1, 0);
-        let target_index = function!(crate::symbols::edge_index(), 2, 0);
+        let source_index = function!(symbols::edge_index(), 1, 0);
+        let target_index = function!(symbols::edge_index(), 2, 0);
         let rep = Minkowski {}.new_rep(4);
         let target = rep.to_symbolic([target_index.clone()]);
         let calls = Arc::new(AtomicUsize::new(0));
         let observed = Arc::clone(&calls);
-        let head = spenso::tensor_symbol!(
+        let head = tensor_symbol!(
             "feynkit_graph::transport_callback_port_loss",
             norm = move |node, output| {
                 observed.fetch_add(1, Ordering::Relaxed);

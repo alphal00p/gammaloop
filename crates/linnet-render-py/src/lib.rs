@@ -1,9 +1,25 @@
 //! Shared graph presentation bindings, independent of Python graph construction.
+/// Bundled offline math font shared by graph and tensor presentation.
+///
+/// ```no_run
+/// use linnet_render_py::data_assets::{STIX_TWO_MATH, STIX_TWO_MATH_LICENSE};
+/// use std::error::Error;
+/// let font = STIX_TWO_MATH.bytes()?;
+/// assert!(!font.is_empty());
+/// assert!(STIX_TWO_MATH_LICENSE.contains("SIL OPEN FONT LICENSE"));
+/// # Ok::<(), Box<dyn Error>>(())
+/// ```
 pub mod data_assets {
+    /// License text accompanying the embedded font; see the [`crate::data_assets`] example.
     pub const STIX_TWO_MATH_LICENSE: &str = include_str!("../fonts/STIX-Two-OFL.txt");
     include!(concat!(env!("OUT_DIR"), "/data_assets.rs"));
 }
-use pyo3::prelude::*;
+#[cfg(feature = "python_stubgen")]
+use pyo3::types::{PyAnyMethods, PyStringMethods, PyTypeMethods};
+use pyo3::types::{PyModule, PyModuleMethods};
+#[cfg(feature = "python_stubgen")]
+use pyo3::Python;
+use pyo3::{Bound, PyResult};
 pub mod drawing;
 mod scene;
 mod snapshot;
@@ -317,7 +333,14 @@ pub fn canonical_stub() -> pyo3_stub_gen::Result<String> {
 mod tests {
     use super::*;
     use linnest::svg::{Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Scene, Stroke};
-    use pyo3::types::{PyDict, PyType};
+    use pyo3::exceptions::PyRuntimeError;
+    use pyo3::types::{
+        PyAnyMethods, PyDict, PyDictMethods, PyStringMethods, PyType, PyTypeMethods,
+    };
+    use pyo3::{Py, PyRef, Python};
+    use serde_json::json;
+    use std::fs;
+    use std::path::PathBuf;
     use symbolica::api::python::SymbolicaCommunityModule;
 
     #[test]
@@ -427,7 +450,7 @@ config = graph.RenderSettings(
                 details: Details::default(),
             };
             let scene = Scene {
-                graph: serde_json::from_value(serde_json::json!({
+                graph: serde_json::from_value(json!({
                     "nodes": [{"index": 0}, {"index": 1}],
                     "edges": [{"id": 0, "source": {"node": 0, "id": 0}, "sink": {"node": 1, "id": 1}}],
                 })).unwrap(),
@@ -489,7 +512,7 @@ assert "awaiting browser measurement" in repr(view)
             let error = result.bind(py)
                 .call_method1("save", (output.path().join("scene.pdf"),))
                 .unwrap_err();
-            assert!(error.is_instance_of::<pyo3::exceptions::PyRuntimeError>(py));
+            assert!(error.is_instance_of::<PyRuntimeError>(py));
             assert!(error.to_string().contains("require outlined labels"));
             Ok(())
         })
@@ -513,7 +536,7 @@ assert "awaiting browser measurement" in repr(view)
             for suffix in ["pdf", "png", "typ"] {
                 let path = output.path().join(format!("vector.{suffix}"));
                 result.bind(py).call_method1("save", (&path,))?;
-                let bytes = std::fs::read(path)?;
+                let bytes = fs::read(path)?;
                 match suffix {
                     "pdf" => assert!(bytes.starts_with(b"%PDF")),
                     "png" => assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n")),
@@ -523,15 +546,15 @@ assert "awaiting browser measurement" in repr(view)
             let collection = Py::new(py, collection)?;
             let pdf = output.path().join("collection.pdf");
             collection.bind(py).call_method1("save", (&pdf,))?;
-            assert!(std::fs::read(pdf)?.starts_with(b"%PDF"));
+            assert!(fs::read(pdf)?.starts_with(b"%PDF"));
             let kwargs = PyDict::new(py);
             kwargs.set_item("format", "png")?;
             let pages = collection.bind(py)
                 .call_method("save_pages", (output.path().join("pages"),), Some(&kwargs))?
-                .extract::<Vec<std::path::PathBuf>>()?;
+                .extract::<Vec<PathBuf>>()?;
             assert_eq!(pages.len(), 2);
             for page in pages {
-                assert!(std::fs::read(page)?.starts_with(b"\x89PNG\r\n\x1a\n"));
+                assert!(fs::read(page)?.starts_with(b"\x89PNG\r\n\x1a\n"));
             }
             Ok(())
         })

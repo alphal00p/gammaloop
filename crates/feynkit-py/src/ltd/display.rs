@@ -2,23 +2,26 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 
-use feynkit_cff::generalized::{
-    HybridSurfaceID, LinearEnergyExpr, LinearSurfaceKind,
-    graph_io::{EnergyEdgeIndexMap, ParsedGraphExternalEdge},
-};
+use feynkit_cff::generalized::graph_io::{EnergyEdgeIndexMap, ParsedGraphExternalEdge};
+use feynkit_cff::generalized::{HybridSurfaceID, LinearEnergyExpr, LinearSurfaceKind};
 use linnet::half_edge::involution::EdgeIndex;
 use linnet_render_py::PyDiagramView;
 use pyo3::exceptions::PyRuntimeError;
-use pyo3::prelude::*;
+use pyo3::{PyResult, Python};
 use serde_json::{Value, json};
-use symbolica::{
-    api::python::PythonExpression,
-    atom::{Atom, Symbol},
-    printer::{PrintMode, PrintOptions, PrintState},
-};
+use symbolica::api::python::PythonExpression;
+use symbolica::atom::{Atom, Symbol};
+use symbolica::printer::{PrintMode, PrintOptions, PrintState};
 
 use super::PyLtdRepresentation;
-use crate::display::{energy_graph_view, escape_html};
+use crate::display;
+use feynkit_cff::generalized::graph_io;
+use feynkit_cff::symbols as energy_symbols;
+use feynkit_graph::SceneOptions;
+use feynkit_graph::symbols;
+use spenso::network::tags::mathml;
+use spynso3::display::NOTEBOOK_STYLE;
+use symbolica::symbol;
 
 impl PyLtdRepresentation {
     fn graph_labels(
@@ -30,19 +33,14 @@ impl PyLtdRepresentation {
             ..PrintOptions::default()
         };
         let mathml = |atom: Atom| {
-            spenso::network::tags::mathml::render(
-                atom.as_view(),
-                &options,
-                &PrintState::new(),
-                &|_, _| None,
-            )
-            .ok_or_else(|| PyRuntimeError::new_err("LTD label exceeds native MathML limits"))
+            mathml::render(atom.as_view(), &options, &PrintState::new(), &|_, _| None)
+                .ok_or_else(|| PyRuntimeError::new_err("LTD label exceeds native MathML limits"))
         };
         let mut labels = Vec::new();
         for edge in indices.internal.values() {
-            let momentum = mathml(feynkit_graph::symbols::momentum().call(*edge))?;
-            let component = mathml(feynkit_cff::symbols::external_energy_atom(EdgeIndex(*edge)))?;
-            let energy = mathml(feynkit_cff::symbols::on_shell_atom(EdgeIndex(*edge)))?;
+            let momentum = mathml(symbols::momentum().call(*edge))?;
+            let component = mathml(energy_symbols::external_energy_atom(EdgeIndex(*edge)))?;
+            let energy = mathml(energy_symbols::on_shell_atom(EdgeIndex(*edge)))?;
             labels.push((format!("q-{edge}"), momentum.clone()));
             for (name, sign) in [("plus", "+"), ("minus", "−")] {
                 labels.push((
@@ -58,14 +56,14 @@ impl PyLtdRepresentation {
         for edge in external_edges {
             let coordinate = edge.edge_id - indices.internal.len();
             let physical = indices.external[&coordinate];
-            let momentum = mathml(feynkit_graph::symbols::external_momentum().call(coordinate))?;
+            let momentum = mathml(symbols::external_momentum().call(coordinate))?;
             labels.push((format!("p-{physical}"), momentum));
         }
         // Inert fragments share Symbolica/Spenso notation. The browser measures
         // the selected fragment in its visible label slot, including pole rows.
         let mut svg = String::from("<svg data-ltd-labels><defs>");
         for (key, fragment) in labels {
-            write!(svg, "<g id=\"ltd-label-{key}\" data-label-key=\"{key}\"><foreignObject width=\"1\" height=\"1\" overflow=\"visible\" pointer-events=\"none\"><div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display:flex;font-size:9px;line-height:1;width:max-content;white-space:nowrap\"><math xmlns=\"http://www.w3.org/1998/Math/MathML\">{fragment}</math></div></foreignObject></g>").unwrap();
+            write!(svg, "<g id=\"ltd-label-{key}\" data-label-key=\"{key}\"><foreignObject width=\"1\" height=\"1\" overflow=\"visible\" pointer-events=\"none\"><div xmlns=\"http://www.w3.org/1999/xhtml\" style=\"display:flex;font-size:9px;line-height:1;width:max-content;white-space:nowrap\"><math xmlns=\"http://www.w3.org/1998/Math/MathML\">{fragment}</math></div></foreignObject></g>").expect("formatting into a String cannot fail");
         }
         svg.push_str("</defs></svg>");
         Ok(svg)
@@ -83,9 +81,9 @@ impl PyLtdRepresentation {
         let cache = &self.inner.expression.surfaces.linear_surface_cache;
         let surface_ids: HashMap<_, _> = cache
             .iter_enumerated()
-            .map(|(id, s)| (s.expression.clone(), id.0))
+            .map(|(id, s)| (&s.expression, id.0))
             .collect();
-        let repeated = feynkit_cff::generalized::graph_io::repeated_groups(&self.parsed);
+        let repeated = graph_io::repeated_groups(&self.parsed);
         let residues: Vec<_> = self.inner.expression.orientations.iter().enumerate().filter(|(id, _)| residue.is_none_or(|selected| selected == *id)).map(|(id, r)| {
             // Raised poles repeat half-energy factors. Preserve these powers in
             // the expression, but count each actual cut only once in the graph.
@@ -131,18 +129,18 @@ impl PyLtdRepresentation {
             .map(|edge| {
                 Ok((
                     *edge,
-                    crate::display::expression_html(
+                    display::expression_html(
                         py,
                         PythonExpression {
-                            expr: feynkit_cff::symbols::on_shell_atom(EdgeIndex(*edge)),
+                            expr: energy_symbols::on_shell_atom(EdgeIndex(*edge)),
                         },
                     )?,
                 ))
             })
             .collect::<PyResult<BTreeMap<_, _>>>()?;
-        let component = symbolica::symbol!("spenso::cind").call(0);
+        let component = symbol!("spenso::cind").call(0);
         let momentum_html = |symbol: Symbol, id: usize| {
-            crate::display::expression_html(
+            display::expression_html(
                 py,
                 PythonExpression {
                     expr: symbol.call_args([Atom::num(id), component.clone()]),
@@ -151,18 +149,13 @@ impl PyLtdRepresentation {
         };
         let edge_momenta = edges
             .iter()
-            .map(|edge| {
-                Ok((
-                    *edge,
-                    momentum_html(feynkit_graph::symbols::momentum(), *edge)?,
-                ))
-            })
+            .map(|edge| Ok((*edge, momentum_html(symbols::momentum(), *edge)?)))
             .collect::<PyResult<BTreeMap<_, _>>>()?;
         let loop_momenta = (0..self.parsed.loop_names.len())
-            .map(|id| momentum_html(feynkit_graph::symbols::loop_momentum(), id))
+            .map(|id| momentum_html(symbols::loop_momentum(), id))
             .collect::<PyResult<Vec<_>>>()?;
         let external_momenta = (0..self.indices.external.len())
-            .map(|id| momentum_html(feynkit_graph::symbols::external_momentum(), id))
+            .map(|id| momentum_html(symbols::external_momentum(), id))
             .collect::<PyResult<Vec<_>>>()?;
         Ok(json!({
             "name": self.diagram.name(), "loops": self.parsed.loop_names.len(),
@@ -187,10 +180,10 @@ impl PyLtdRepresentation {
         py: Python<'_>,
         residue: Option<usize>,
     ) -> PyResult<PyDiagramView> {
-        let drawing = energy_graph_view(
+        let drawing = display::energy_graph_view(
             py,
             &self.diagram,
-            &feynkit_graph::SceneOptions {
+            &SceneOptions {
                 momentum_arrows: true,
                 // Leave room for the pole chevrons on the propagator itself.
                 momentum_arrow_offset: 0.7,
@@ -202,10 +195,10 @@ impl PyLtdRepresentation {
         let data = data.to_string().replace('<', "\\u003c");
         Ok(drawing.with_html(format!(
             "<style>{}{}{}</style><section class=\"feynkit-ltd-result feynkit-expression\" data-feynkit-notebook data-linnet-frame-owner aria-label=\"{} LTD\"><div class=\"ltd-product\"></div><template data-drawing><!--linnet-svg-0-->{labels}</template><script type=\"application/json\" data-ltd>{data}</script><noscript>Enable notebook JavaScript to inspect LTD residues, or use to_expression().</noscript></section><script>{}</script><script>{}</script><script>{}</script>",
-            spynso3::display::NOTEBOOK_STYLE,
+            NOTEBOOK_STYLE,
             include_str!("../expression.css"),
             include_str!("display.css"),
-            escape_html(self.diagram.name()),
+            display::escape_html(self.diagram.name()),
             include_str!("../expression.js"),
             include_str!("display.js"),
             include_str!("../notebook.js"),

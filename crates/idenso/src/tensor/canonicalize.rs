@@ -5,36 +5,24 @@
 //! incidence graph so that a negative automorphism of antisymmetric tensor
 //! slots can be detected. Symbolica still owns the final dummy-index names and
 //! expression rebuilding.
-
-use std::collections::BTreeMap;
-
-use linnet::half_edge::{
-    NodeIndex,
-    involution::{Hedge, HedgePair},
-    subgraph::{ModifySubSet, SuBitGraph},
-    tree::SimpleTraversalTree,
-};
-use linnet::permutation::Permutation;
-use linnet::tree::child_pointer::ParentChildStore;
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        store::NetworkStoreAccess,
-    },
-    structure::{
-        HasName, OrderedStructure, TensorStructure,
-        representation::{LibraryRep, LibrarySlot, RepName, Representation},
-        slot::{AbsInd, DualSlotTo, IsAbstractSlot, ParseableAind},
-    },
-};
-use symbolica::{
-    atom::{Atom, AtomView, Symbol},
-    graph::{Graph, HiddenData},
-};
-
 use super::{SymbolicNet, SymbolicTensor};
 use crate::{CanonicalizationError, IndexTooling};
-use spenso::structure::{abstract_index::AbstractIndex, partial::PartialStructure};
+use linnet::half_edge::NodeIndex;
+use linnet::half_edge::involution::{Hedge, HedgePair};
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::permutation::Permutation;
+use linnet::tree::child_pointer::ParentChildStore;
+use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
+use spenso::network::store::NetworkStoreAccess;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::representation::{LibraryRep, LibrarySlot, RepName, Representation};
+use spenso::structure::slot::{AbsInd, DualSlotTo, IsAbstractSlot, ParseableAind};
+use spenso::structure::{HasName, OrderedStructure, TensorStructure};
+use std::collections::BTreeMap;
+use symbolica::atom::{Atom, AtomView, Symbol};
+use symbolica::graph::{Graph, HiddenData};
 
 impl SymbolicTensor<PartialStructure> {
     /// Canonically label internal indices while retaining the ordered external interface.
@@ -754,22 +742,16 @@ fn generator_is_odd<Aind: AbsInd>(graph: &TensorGraph<Aind>, cycles: &[Vec<usize
 mod typed_tests {
     use super::*;
     use crate::tensor::SymbolicNetParse;
+    use crate::test_support;
     use spenso::network::parsing::ParseSettings;
-    use spenso::structure::{
-        partial::{PartialIndex, PartialStructureExt},
-        representation::Minkowski,
-    };
-    use std::{
-        collections::HashMap,
-        sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        },
-    };
-    use symbolica::{
-        atom::{AtomCore, FunctionBuilder},
-        function, symbol,
-    };
+    use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+    use spenso::structure::representation::Minkowski;
+    use spenso::{tensor_symbol, vector_symbol};
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use symbolica::atom::{AtomCore, FunctionBuilder};
+    use symbolica::{function, symbol};
 
     #[test]
     fn signed_zero_projection_visits_only_incident_slots() {
@@ -979,7 +961,7 @@ mod typed_tests {
 
     #[test]
     fn typed_canonize_retains_authoritative_ports_through_callbacks() {
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let calls = Arc::new(AtomicUsize::new(0));
         let seen = Arc::clone(&calls);
         // Dummy indices serialize as ordinary named symbols; parsing that atom
@@ -988,7 +970,7 @@ mod typed_tests {
             .new_rep(4)
             .slot::<AbstractIndex, _>(AbstractIndex::Dummy(0))
             .to_atom();
-        let head = spenso::tensor_symbol!(
+        let head = tensor_symbol!(
             "typed_canonize_callback_T",
             norm = move |view, out| {
                 if let AtomView::Fun(function) = view
@@ -1007,7 +989,7 @@ mod typed_tests {
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(86302))
             .to_atom();
         let expression = FunctionBuilder::new(head).add_arg(&a).add_arg(&b).finish()
-            * function!(spenso::vector_symbol!("typed_canonize_callback_p"), a);
+            * function!(vector_symbol!("typed_canonize_callback_p"), a);
         let source = SymbolicTensor::infer(expression).unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 0);
         let canonical = source.canonize().unwrap();

@@ -1,38 +1,33 @@
 //! Native SVG network drawing with direct MathML node and port labels.
-use super::{DisplaySettings, IndexAliases, TensorDisplayMode, format_atom_with_mode};
-use crate::{
-    metadata::SpensoRepresentationName,
-    network::{SpensoNet, execution::ExecutionStatus},
-};
-use linnest::{
-    TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
-    svg::{Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Scene, Stroke},
-};
+use crate::display;
+use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode, metadata};
+use crate::metadata::SpensoRepresentationName;
+use crate::network::SpensoNet;
+use crate::network::execution::ExecutionStatus;
+use linnest::svg::{Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Scene, Stroke};
+use linnest::{TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec};
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
-use pyo3::{
-    prelude::*,
-    types::{PyDict, PyList},
-};
-use serde_json::Value;
-use spenso::{
-    network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
-        parsing::ShadowedStructure,
-        store::TensorScalarStore,
-    },
-    structure::{
-        HasName,
-        abstract_index::AbstractIndex,
-        partial::PartialIndex,
-        slot::{IsAbstractSlot, ParseableAind},
-    },
-    tensors::{complex::RealOrComplexTensor, data::DataTensor, parametric::MixedTensor},
-};
+use linnet_render_py::{PyDiagramView, PyRenderSettings};
+use pyo3::exceptions::PyRuntimeError;
+use pyo3::types::{PyAnyMethods, PyDictMethods, PyListMethods};
+use pyo3::types::{PyDict, PyList};
+use pyo3::{Bound, PyErr, PyResult, Python};
+use serde_json::{Value, json};
+use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
+use spenso::network::parsing::ShadowedStructure;
+use spenso::network::store::TensorScalarStore;
+use spenso::network::tags::mathml;
+use spenso::structure::HasName;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::PartialIndex;
+use spenso::structure::slot::{IsAbstractSlot, ParseableAind};
+use spenso::tensors::complex::RealOrComplexTensor;
+use spenso::tensors::data::DataTensor;
+use spenso::tensors::parametric::MixedTensor;
+use std::cell::Cell;
 use std::collections::BTreeMap;
-use symbolica::{
-    atom::{Atom, FunctionBuilder, Symbol},
-    printer::PrintState,
-};
+use symbolica::atom::{Atom, FunctionBuilder, Symbol};
+use symbolica::printer::PrintState;
 
 /// Domain details feed Linnet's common hover and click inspector.
 struct NetworkLabel {
@@ -60,34 +55,38 @@ impl NetworkLabel {
     }
 
     fn atom(&mut self, atom: &Atom, settings: &DisplaySettings, aliases: &IndexAliases) {
-        self.value = format_atom_with_mode(atom, TensorDisplayMode::Plain, false);
+        self.value = display::format_atom_with_mode(atom, TensorDisplayMode::Plain, false);
         let options = settings.mathml_options();
-        let mathml = spenso::network::tags::mathml::expression(
+        let invalid_label = Cell::new(false);
+        let mathml = mathml::expression(
             atom.as_view(),
             &options,
             &PrintState::new(),
             &|representation, index| {
                 let key = (representation, index.to_owned());
-                aliases
-                    .entries
-                    .get(&key)
-                    .and_then(|(_, display)| display.to_mathml())
-                    .or_else(|| {
-                        let source = aliases.source_indices.get(&key)?;
-                        spenso::network::tags::mathml::expression(
-                            source.as_view(),
-                            &options,
-                            &PrintState::new(),
-                            &|_, _| None,
-                        )
-                    })
+                if let Some((_, display)) = aliases.entries.get(&key) {
+                    let rendered = display.to_mathml();
+                    invalid_label.set(invalid_label.get() || rendered.is_none());
+                    return rendered;
+                }
+                let source = aliases.source_indices.get(&key)?;
+                let rendered =
+                    mathml::expression(source.as_view(), &options, &PrintState::new(), &|_, _| {
+                        None
+                    });
+                invalid_label.set(invalid_label.get() || rendered.is_err());
+                rendered.ok()
             },
         );
         self.source = LabelSource {
-            mathml: mathml.unwrap_or_else(|| LabelSource::text(&self.value).mathml),
+            // Graph labels are bounded offers: a rejected export keeps literal text.
+            mathml: mathml
+                .ok()
+                .filter(|_| !invalid_label.get())
+                .unwrap_or_else(|| LabelSource::text(&self.value).mathml),
             typst: Some(format!(
                 "${}$",
-                format_atom_with_mode(atom, TensorDisplayMode::Typst, false)
+                display::format_atom_with_mode(atom, TensorDisplayMode::Typst, false)
             )),
         };
     }
@@ -221,7 +220,7 @@ impl SpensoNet {
                             label.source = LabelSource {
                                 mathml: format!(
                                     "<msup><mrow><mo>(</mo><mo>·</mo><mo>)</mo></mrow><mn>{}</mn></msup>",
-                                    super::escape_html(&power.to_string())
+                                    display::escape_html(&power.to_string())
                                 ),
                                 typst: Some(format!("$(dot.c)^({power})$")),
                             };
@@ -322,6 +321,12 @@ impl SpensoNet {
                         .join(", "),
                 );
             }
+            // Preserve any pending Python exception at the snapshot boundary.
+            // Registered Python printer failures are instead logged by Symbolica
+            // and decline the override without leaving a pending exception.
+            if let Some(error) = PyErr::take(py) {
+                return Err(error);
+            }
             let record = PyDict::new(py);
             record.set_item("id", id.0)?;
             record.set_item("kind", label.kind)?;
@@ -371,7 +376,7 @@ impl SpensoNet {
                 NetworkEdge::Head => None,
                 NetworkEdge::Slot(slot) | NetworkEdge::BoundPort { slot, .. } => {
                     let slot = slot.rep().slot(PartialIndex::Explicit(slot.aind()));
-                    let (index, display) = aliases.port_display(slot, &settings);
+                    let (index, display) = aliases.port_display(slot);
                     let mut label = NetworkLabel::new("slot", "Tensor port", "");
                     label.atom(&index, &settings, &aliases);
                     if let Some(display) = display {
@@ -383,6 +388,9 @@ impl SpensoNet {
                     Some(label.source)
                 }
             };
+            if let Some(error) = PyErr::take(py) {
+                return Err(error);
+            }
             record.set_item(
                 "label-mathml",
                 port_source.as_ref().map(|source| &source.mathml),
@@ -426,7 +434,7 @@ impl SpensoNet {
                     detail.property("Dimension", rep.dim);
                     detail.property("Index", slot.aind().to_atom().to_plain_string());
                     detail.property("Duality", name.duality());
-                    detail.property("Metric", super::metadata::metric(rep));
+                    detail.property("Metric", metadata::metric(rep));
                     detail
                 }
             };
@@ -435,6 +443,9 @@ impl SpensoNet {
             }
             if let Some(h) = sink {
                 detail.property("Sink half-edge", h.0);
+            }
+            if let Some(error) = PyErr::take(py) {
+                return Err(error);
             }
             record.set_item("inspection", detail.inspection(py)?)?;
             edges.append(record)?;
@@ -449,18 +460,18 @@ impl SpensoNet {
     pub(crate) fn render_graph(
         &self,
         py: Python<'_>,
-        config: Option<&linnet_render_py::PyRenderSettings>,
-    ) -> PyResult<linnet_render_py::PyDiagramView> {
+        config: Option<&PyRenderSettings>,
+    ) -> PyResult<PyDiagramView> {
         let json = py.import("json")?;
         let snapshot: Value = serde_json::from_str(
             &json
                 .call_method1("dumps", (self.render_snapshot(py)?,))?
                 .extract::<String>()?,
         )
-        .map_err(|e| pyo3::exceptions::PyRuntimeError::new_err(e.to_string()))?;
-        let runtime = pyo3::exceptions::PyRuntimeError::new_err;
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        let runtime = PyRuntimeError::new_err;
         let scene = Self::network_scene(&snapshot).map_err(runtime)?;
-        linnet_render_py::PyDiagramView::from_scene(py, scene, config)
+        PyDiagramView::from_scene(py, scene, config)
     }
 
     fn network_scene(snapshot: &Value) -> Result<Scene, String> {
@@ -485,7 +496,7 @@ impl SpensoNet {
             preamble: "#set text(size: 9pt, fill: rgb(\"#000000\"))".into(),
             title: None,
             pages: vec![],
-            layout: serde_json::from_value(serde_json::json!({
+            layout: serde_json::from_value(json!({
                 "layout-algo": "dot",
                 "tree-dx": 0.35,
                 "tree-dy": 2.2,
@@ -494,7 +505,7 @@ impl SpensoNet {
                 "internal-label-length-scale": 0.35,
                 "external-label-length-scale": 0.35,
             }))
-            .unwrap(),
+            .expect("the built-in network layout settings are valid"),
             layout_passes: Vec::new(),
             layout_edges: Some(Vec::new()),
             label_feedback: false,
@@ -548,9 +559,7 @@ impl SpensoNet {
         }
         let root = snapshot["root"].as_u64().ok_or("missing network root")? as usize;
         let root = *indices.get(&root).ok_or("unknown network root")?;
-        scene
-            .layout
-            .insert("layout-roots".into(), serde_json::json!([root]));
+        scene.layout.insert("layout-roots".into(), json!([root]));
         for (index, record) in edges.iter().enumerate() {
             let tree = record["tree"] == true;
             if tree {
@@ -715,18 +724,17 @@ pub(crate) fn svg_theme(svg: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use spenso::{
-        network::tags::SPENSO_TAG,
-        structure::representation::{LibraryRep, Minkowski, RepName},
-    };
-    use symbolica::atom::{AtomCore, SymbolBuilder};
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+    use symbolica::atom::{AtomCore, NamespacedSymbol, SymbolBuilder};
+    use symbolica::{symbol, wrap_symbol};
 
     #[test]
     fn network_labels_keep_literal_and_complete_expression_sources() {
         let text = "<&>\" #import \"evil.typ\"";
         let label = NetworkLabel::new("tensor", "Tensor", text);
         assert_eq!(label.source, LabelSource::text(text));
-        let atom = Atom::num(2) + Atom::var(symbolica::symbol!("network_mathml_tests::x"));
+        let atom = Atom::num(2) + Atom::var(symbol!("network_mathml_tests::x"));
         let mut label = NetworkLabel::new("scalar", "Scalar", "");
         label.atom(&atom, &DisplaySettings::default(), &IndexAliases::default());
         assert!(
@@ -739,7 +747,7 @@ mod tests {
         assert!(!label.source.mathml.contains("<math"));
 
         let large = Atom::var(
-            SymbolBuilder::new(symbolica::atom::NamespacedSymbol::parse(&format!(
+            SymbolBuilder::new(NamespacedSymbol::parse(&format!(
                 "network_mathml_tests::{}",
                 "x".repeat(5000)
             )))
@@ -757,7 +765,7 @@ mod tests {
 
     #[test]
     fn network_aliases_are_shared_without_rewriting_source_atoms() {
-        let head = SymbolBuilder::new(symbolica::wrap_symbol!("network_mathml_tests::hedge"))
+        let head = SymbolBuilder::new(wrap_symbol!("network_mathml_tests::hedge"))
             .with_tags([SPENSO_TAG.index.clone()])
             .build()
             .unwrap();
@@ -786,12 +794,30 @@ mod tests {
         }
         assert!(!label.source.mathml.contains("hedge"));
         assert_eq!(tensor.to_canonical_string(), original);
+
+        // A decoded index which cannot be exported must decline the entire
+        // label offer, rather than silently displaying its encoded identity.
+        let mut aliases = aliases;
+        let key = aliases.entries.keys().next().unwrap().clone();
+        aliases.entries.remove(&key);
+        let source = Atom::var(
+            SymbolBuilder::new(NamespacedSymbol::parse(&format!(
+                "network_mathml_tests::{}",
+                "s".repeat(5000)
+            )))
+            .build()
+            .unwrap(),
+        );
+        aliases.source_indices.insert(key, source);
+        label.atom(&tensor, &DisplaySettings::default(), &aliases);
+        assert_eq!(label.source.mathml, LabelSource::text(&label.value).mathml);
+        assert_eq!(tensor.to_canonical_string(), original);
     }
 
     #[test]
     fn mathml_network_scene_preserves_topology_styles_and_inspection() {
         let source = LabelSource::text("A <&>");
-        let snapshot = serde_json::json!({
+        let snapshot = json!({
             "root": 19,
             "nodes": [
                 {"id": 19, "kind": "operator", "label-mathml": "<mo>∏</mo>", "label-typst": "$product$", "inspection": {"title": "Product", "summary": "2 inputs"}},
@@ -832,7 +858,7 @@ mod tests {
         assert_eq!(scene.graph.edges[1].source.as_ref().unwrap().id, Some(53));
         assert!(scene.graph.edges[1].sink.is_none());
         assert_eq!(scene.layout_edges, Some(vec![0]));
-        assert_eq!(scene.layout["layout-roots"], serde_json::json!([0]));
+        assert_eq!(scene.layout["layout-roots"], json!([0]));
         assert_eq!(scene.pages[1], source);
         assert_eq!(scene.pages[2].mathml, "<mi>μ</mi>");
         assert_eq!(scene.pages[2].typst.as_deref(), Some("$mu$"));
@@ -840,21 +866,12 @@ mod tests {
         assert_eq!(scene.nodes[1].fill, "#ffffff");
         assert_eq!(scene.edges[0].stroke.paint, "#555555");
         assert_eq!(scene.edges[1].stroke.paint, "#7f95b8");
-        assert_eq!(
-            scene.nodes[0].details.get("title"),
-            Some(&serde_json::json!("Product"))
-        );
+        assert_eq!(scene.nodes[0].details.get("title"), Some(&json!("Product")));
         assert_eq!(
             scene.nodes[1].details.get("properties"),
-            Some(&serde_json::json!([["Rank", "1"]]))
+            Some(&json!([["Rank", "1"]]))
         );
-        assert_eq!(
-            scene.edges[1].details.get("edge"),
-            Some(&serde_json::json!(41))
-        );
-        assert_eq!(
-            scene.edges[1].details.get("source-hedge"),
-            Some(&serde_json::json!(53))
-        );
+        assert_eq!(scene.edges[1].details.get("edge"), Some(&json!(41)));
+        assert_eq!(scene.edges[1].details.get("source-hedge"), Some(&json!(53)));
     }
 }

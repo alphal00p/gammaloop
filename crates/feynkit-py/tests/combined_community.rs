@@ -7,16 +7,13 @@ use feynkit_py::{FeynkitModule, PyFeynmanDiagram, PyModel};
 use linnet_py::GraphModule;
 #[cfg(not(feature = "linnet-python"))]
 use linnet_render_py::GraphModule;
-use pyo3::{
-    prelude::*,
-    types::{PyCFunction, PyDict, PyList, PyModule},
-};
+use pyo3::prelude::{Bound, Py, PyAnyMethods, PyDictMethods, PyModuleMethods, PyResult, Python};
+use pyo3::types::{PyCFunction, PyDict, PyList, PyModule};
 use spynso3::SpensoModule;
-use symbolica::{
-    api::python::{SymbolicaCommunityModule, create_symbolica_module},
-    atom::Atom,
-    parser::ParseSettings,
-};
+use symbolica::api::python;
+use symbolica::api::python::SymbolicaCommunityModule;
+use symbolica::atom::Atom;
+use symbolica::parser::ParseSettings;
 
 const FEYNKIT_WRAPPER: &str = include_str!("../python/symbolica/community/hepkit/__init__.py");
 #[cfg(feature = "linnet-python")]
@@ -34,7 +31,7 @@ fn shared_numeric_external_states_in_installed_host() {
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;
@@ -62,7 +59,7 @@ fn qcd_rich_display_requires_no_python_rendering_packages() {
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;
@@ -131,6 +128,43 @@ assert "typst" not in sys.modules
             Some(&locals),
         )?;
         Ok(())
+    })
+    .unwrap();
+}
+
+#[test]
+fn community_native_forwarding_uses_registered_owners() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let symbolica = install_package(py, "symbolica")?;
+        let core = PyModule::new(py, "symbolica.core")?;
+        python::create_symbolica_module(&core)?;
+        py.import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.core", &core)?;
+        symbolica.add("core", &core)?;
+        let community = install_package(py, "symbolica.community")?;
+        symbolica.add("community", &community)?;
+        register_native::<GraphModule>(&core)?;
+        register_native::<FeynkitModule>(&core)?;
+        register_native::<SpensoModule>(&core)?;
+        let graph = import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
+        let fk = import_wrapper(
+            py,
+            &community,
+            "symbolica.community.hepkit",
+            FEYNKIT_WRAPPER,
+        )?;
+        let tensor = import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
+        let locals = PyDict::new(py);
+        locals.set_item("fk", fk)?;
+        locals.set_item("tensor", tensor)?;
+        locals.set_item("graph", graph)?;
+        locals.set_item("core", core)?;
+        locals.set_item("MODEL_JSON", MODEL_JSON)?;
+        locals.set_item("standalone_host", false)?;
+        let code = CString::new(include_str!("native_forwarding.py")).unwrap();
+        py.run(&code, Some(&locals), Some(&locals))
     })
     .unwrap();
 }
@@ -223,7 +257,7 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
     Python::attach(|py| -> PyResult<()> {
         let symbolica = install_package(py, "symbolica")?;
         let core = PyModule::new(py, "symbolica.core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         py.import("sys")?
             .getattr("modules")?
             .set_item("symbolica.core", &core)?;

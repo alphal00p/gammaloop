@@ -1,19 +1,29 @@
-use linnet_render_py::PyDiagramView;
-use std::{collections::BTreeMap, sync::Arc};
+use crate::display;
+use crate::display::PREVIEW_LIMIT;
+use crate::render_settings::PyDiagramStyle;
+use linnet_render_py::{PyDiagramView, PyRenderSettings};
+use spynso3::display as tensor_display;
+use spynso3::display::DisplaySettings;
+use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use feynkit_amplitude::{Amplitude, AmplitudeLeg, AmplitudeOptions, SquaredAmplitude};
 use feynkit_graph::ExternalState;
-use pyo3::{prelude::*, types::PyModule};
-use spynso3::{expression::TensorExpression, structure::SpensoSlot};
-use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
-    atom::Atom,
+use pyo3::prelude::{
+    Bound, Py, PyAny, PyAnyMethods, PyModuleMethods, PyResult, Python, pyclass, pymethods,
 };
+use pyo3::types::PyModule;
+use spynso3::expression::TensorExpression;
+use spynso3::structure::SpensoSlot;
+use symbolica::api::python::{ConvertibleToExpression, PythonExpression};
+use symbolica::atom::Atom;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
-use crate::{error, graph::PyFeynmanDiagram, model::PyParticle};
+use crate::error;
+use crate::graph::PyFeynmanDiagram;
+use crate::model::PyParticle;
 
 /// One physical external state of a symbolic amplitude.
 ///
@@ -399,29 +409,22 @@ impl PyAmplitude {
     fn render(
         &self,
         py: Python<'_>,
-        config: Option<&linnet_render_py::PyRenderSettings>,
-        style: Option<&crate::render_settings::PyDiagramStyle>,
+        config: Option<&PyRenderSettings>,
+        style: Option<&PyDiagramStyle>,
         max_diagrams: Option<usize>,
-        term_settings: Option<&spynso3::display::DisplaySettings>,
+        term_settings: Option<&DisplaySettings>,
     ) -> PyResult<PyDiagramView> {
         let limit = max_diagrams.unwrap_or(self.inner.diagrams().len());
-        let kwargs = pyo3::types::PyDict::new(py);
-        if let Some(settings) = term_settings {
-            kwargs.set_item("settings", settings.clone())?;
-        }
+        let defaults = DisplaySettings::default();
+        let settings = term_settings.unwrap_or(&defaults);
         let terms = self
             .inner
             .terms()
             .iter()
             .take(limit)
-            .map(|term| {
-                TensorExpression::from_structured(py, term.clone())?
-                    .bind(py)
-                    .call_method("to_html", (), Some(&kwargs))?
-                    .extract::<String>()
-            })
+            .map(|term| tensor_display::structured_to_html(py, term, settings, None))
             .collect::<PyResult<Vec<_>>>()?;
-        crate::display::collection_view(
+        display::collection_view(
             py,
             if self.inner.is_conjugated() {
                 "Conjugate amplitude"
@@ -436,7 +439,7 @@ impl PyAmplitude {
             self.inner
                 .diagrams()
                 .iter()
-                .map(|diagram| PyFeynmanDiagram::from(diagram.as_ref().clone())),
+                .map(|diagram| PyFeynmanDiagram::from(Arc::clone(diagram))),
             Some(&terms),
             config,
             style,
@@ -465,7 +468,7 @@ impl PyAmplitude {
         include: Option<Vec<String>>,
         exclude: Option<Vec<String>>,
     ) -> PyResult<Py<PyAny>> {
-        let view = self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT), None)?;
+        let view = self.render(py, None, None, Some(PREVIEW_LIMIT), None)?;
         view._repr_mimebundle_(py, include, exclude)
     }
 
@@ -479,7 +482,7 @@ impl PyAmplitude {
     /// >>> view  # notebook display measures labels before mounting diagrams
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let view = self.render(py, None, None, Some(crate::display::PREVIEW_LIMIT), None)?;
+        let view = self.render(py, None, None, Some(PREVIEW_LIMIT), None)?;
         view._mime_(py)
     }
 }

@@ -1,19 +1,21 @@
 use super::*;
-use symbolica::function;
+use crate::test_support;
+use spenso::tensor_symbol;
+use symbolica::{function, symbol};
 
 #[test]
 fn expansion_keeps_coalesced_oriented_tensor_copies() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let slot = LibraryRep::from(ColorFundamental {})
         .new_rep(3)
         .slot::<AbstractIndex, _>(AbstractIndex::Normal(99489));
     let vector = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::expanded_copy"),
+        tensor_symbol!("authoritative_metadata::expanded_copy"),
         slot.to_atom()
     ))
     .unwrap();
-    let x = Atom::var(symbolica::symbol!("authoritative_metadata::expanded_x"));
-    let y = Atom::var(symbolica::symbol!("authoritative_metadata::expanded_y"));
+    let x = Atom::var(symbol!("authoritative_metadata::expanded_x"));
+    let y = Atom::var(symbol!("authoritative_metadata::expanded_y"));
     let coefficient = SymbolicTensor::infer(&x + &y).unwrap();
     let weighted = vector
         .multiply(&vector)
@@ -43,7 +45,7 @@ fn expansion_keeps_coalesced_oriented_tensor_copies() {
 
 #[test]
 fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let index = AbstractIndex::Normal(99471);
     let minkowski = LibraryRep::from(Minkowski {});
     let physical = minkowski.new_rep(4).slot::<AbstractIndex, _>(index);
@@ -51,21 +53,21 @@ fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
     // Ordinary tensor heads keep the admitted pair in product notation.
     let source = SymbolicTensor::infer(
         function!(
-            spenso::tensor_symbol!("authoritative_metadata::hidden_a"),
+            tensor_symbol!("authoritative_metadata::hidden_a"),
             physical.to_atom()
         ) * function!(
-            spenso::tensor_symbol!("authoritative_metadata::hidden_b"),
+            tensor_symbol!("authoritative_metadata::hidden_b"),
             physical.to_atom()
         ),
     )
     .unwrap();
     let physical_leaf = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::physical_leaf"),
+        tensor_symbol!("authoritative_metadata::physical_leaf"),
         physical.to_atom()
     ))
     .unwrap();
     let extended_leaf = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::extended_leaf"),
+        tensor_symbol!("authoritative_metadata::extended_leaf"),
         extended.to_atom()
     ))
     .unwrap();
@@ -125,17 +127,17 @@ fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
 
 #[test]
 fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let index = AbstractIndex::Normal(99473);
     let dual_three = LibraryRep::from(ColorAntiFundamental {}).new_rep(3);
     let dual_four = LibraryRep::from(ColorAntiFundamental {}).new_rep(4);
     let source_slot = dual_three.slot::<AbstractIndex, _>(index);
     let mapped_slot = dual_four.slot::<AbstractIndex, _>(index);
     let partner_slot = dual_four.dual().slot::<AbstractIndex, _>(index);
-    let head = spenso::tensor_symbol!("authoritative_metadata::dual_free");
+    let head = tensor_symbol!("authoritative_metadata::dual_free");
     let source = SymbolicTensor::infer(function!(head, source_slot.to_atom())).unwrap();
     let partner = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::base_partner"),
+        tensor_symbol!("authoritative_metadata::base_partner"),
         partner_slot.to_atom()
     ))
     .unwrap();
@@ -199,7 +201,7 @@ fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history
 
 #[test]
 fn admitted_arithmetic_keeps_logical_ports_and_composes_without_observation() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let minkowski = LibraryRep::from(Minkowski {}).new_rep(4);
     let indices = [99479, 99477].map(AbstractIndex::Normal);
     let slots = indices.map(|index| minkowski.slot(index));
@@ -207,7 +209,7 @@ fn admitted_arithmetic_keeps_logical_ports_and_composes_without_observation() {
     // Include a callback-sensitive leaf and a logical order different from the
     // other operand's order. Admission owns both before the counters are reset.
     let a = SymbolicTensor::from_declared_parts(
-        FunctionBuilder::new(spenso::tensor_symbol!(
+        FunctionBuilder::new(tensor_symbol!(
             "authoritative_metadata::arithmetic_a",
             norm = |_, _| {}
         ))
@@ -217,21 +219,17 @@ fn admitted_arithmetic_keeps_logical_ports_and_composes_without_observation() {
     )
     .unwrap();
     let b = SymbolicTensor::from_declared_parts(
-        FunctionBuilder::new(spenso::tensor_symbol!(
-            "authoritative_metadata::arithmetic_b"
-        ))
-        .add_args(ports.into_iter().rev().map(composition::port_atom))
-        .finish(),
+        FunctionBuilder::new(tensor_symbol!("authoritative_metadata::arithmetic_b"))
+            .add_args(ports.into_iter().rev().map(composition::port_atom))
+            .finish(),
         PartialStructure::from_logical_slots(ports.into_iter().rev()),
     )
     .unwrap();
-    let scalar = SymbolicTensor::infer(Atom::var(symbolica::symbol!(
-        "authoritative_metadata::weight"
-    )))
-    .unwrap();
+    let scalar =
+        SymbolicTensor::infer(Atom::var(symbol!("authoritative_metadata::weight"))).unwrap();
     let scalar_zero = SymbolicTensor::infer(Atom::Zero).unwrap();
     let probe = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::arithmetic_probe"),
+        tensor_symbol!("authoritative_metadata::arithmetic_probe"),
         slots[0].to_atom()
     ))
     .unwrap();
@@ -282,19 +280,19 @@ fn admitted_arithmetic_keeps_logical_ports_and_composes_without_observation() {
 
 #[test]
 fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let index = AbstractIndex::Normal(99481);
     let slot = LibraryRep::from(Minkowski {})
         .new_rep(4)
         .slot::<AbstractIndex, _>(index);
     let scalar = SymbolicTensor::infer(slot.to_atom()).unwrap();
     let vector = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::branch_vector"),
+        tensor_symbol!("authoritative_metadata::branch_vector"),
         slot.to_atom()
     ))
     .unwrap();
     let extra = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::branch_extra"),
+        tensor_symbol!("authoritative_metadata::branch_extra"),
         slot.to_atom()
     ))
     .unwrap();
@@ -338,7 +336,7 @@ fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
 
 #[test]
 fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
-    crate::test_support::test_initialize();
+    test_support::test_initialize();
     let index = AbstractIndex::Normal(99483);
     let base_three = LibraryRep::from(ColorFundamental {}).new_rep(3);
     let base_four = LibraryRep::from(ColorFundamental {}).new_rep(4);
@@ -346,10 +344,10 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
     let mapped_base_slot = base_four.slot::<AbstractIndex, _>(index);
     let dual_slot = base_three.dual().slot::<AbstractIndex, _>(index);
     let scalar_base = SymbolicTensor::infer(base_slot.to_atom()).unwrap();
-    let head = spenso::tensor_symbol!("authoritative_metadata::hidden_base_dual");
+    let head = tensor_symbol!("authoritative_metadata::hidden_base_dual");
     let free_dual = SymbolicTensor::infer(function!(head, dual_slot.to_atom())).unwrap();
     let compatible = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::hidden_base_compatible"),
+        tensor_symbol!("authoritative_metadata::hidden_base_compatible"),
         base_slot.to_atom()
     ))
     .unwrap();
@@ -414,7 +412,7 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
 
     // Protect the exact external variance, rather than hiding the opposite
     // orientation's use merely because it shares this collision key.
-    let scope = symbolica::symbol!("authoritative_metadata::hidden_base_scope");
+    let scope = symbol!("authoritative_metadata::hidden_base_scope");
     let scoped_slot = base_three.slot::<AbstractIndex, _>(index.scoped(scope));
     let scoped = source.wrap_indices(scope, true).unwrap();
     assert_eq!(scoped.structure.logical_slots(), interface);
@@ -437,7 +435,7 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
         &(function!(head, dual_slot.to_atom()) * scoped_slot.to_atom())
     );
     let probe = SymbolicTensor::infer(function!(
-        spenso::tensor_symbol!("authoritative_metadata::scoped_base_probe"),
+        tensor_symbol!("authoritative_metadata::scoped_base_probe"),
         scoped_slot.to_atom()
     ))
     .unwrap();

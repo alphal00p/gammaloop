@@ -88,7 +88,8 @@ their full representation, dimension, variance and index, so a change in
 normalized factor order need not change logical axis order. Anonymous ports are
 occurrence-local ordered axes; equal rank and representation do not make them
 interchangeable. A ranked zero has no payload slots and therefore requires its
-retained interface.
+retained interface. Scoped index-usage metadata also survives cancellation in
+typed algebra; a printed scalar alone cannot recover that construction history.
 
 `feynkit_graph::NumeratorInterface` is the shared source codec for diagrams and
 runtime graph import. Expression strings remain ordinary Spenso notation;
@@ -97,15 +98,18 @@ optional `num_interface`, `numerator_prefactor_interface` and
 cannot recover. `from_declared_parts` validates such declarations. A declaration
 does not authorize a mismatched nonzero payload.
 
-Native tensor operations transport the interface with the payload. The checked
-`rename_symbols` operation uses one simultaneous injective map, permits swaps,
+Native tensor operations transport the interface and scoped index history with
+the payload. The checked `rename_symbols` operation uses one simultaneous
+injective map, permits swaps,
 and rejects collisions with unmapped existing names, including names retained
 only by zero metadata. `map_representation_dimensions` changes representation
-dimensions in both places, decoding portable dimension payloads individually.
+dimensions in the payload, interface and scoped usage, decoding portable
+dimension payloads individually.
 Ordinary Atom substitution cannot update dimensions hidden inside encoded
-symbols or ports stored only in metadata. Callback-sensitive output remains
-checked; these operations do not grant a general interface-preservation proof
-to arbitrary replacements.
+symbols or ports stored only in metadata. These operations derive their result
+metadata from the admitted source; normalizers triggered while rebuilding must
+preserve that mapped tensor meaning. Arbitrary replacements still require a
+checked raw-expression boundary.
 
 For same-representation anonymous axes, checked expression mapping retains the
 ordered tensor witnesses. Unstructured scalar weights are opaque to that

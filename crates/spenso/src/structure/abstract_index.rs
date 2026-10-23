@@ -25,7 +25,7 @@ use nu_ansi_term::Color::DarkGray;
 use symbolica::coefficient::CoefficientView;
 
 #[cfg(feature = "shadowing")]
-use crate::network::tags::SPENSO_TAG;
+use crate::network::tags::{SPENSO_TAG, mathml};
 #[cfg(feature = "shadowing")]
 use crate::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 #[cfg(feature = "shadowing")]
@@ -491,7 +491,7 @@ let args = arg.pos().map(to-eq).join("")
             tag = SPENSO_TAG.lower,
             print = |a, opt, state| {
                 if opt.mode.is_mathml() {
-                    return crate::network::tags::mathml::representation(a, opt, state);
+                    return mathml::representation(a, opt, state);
                 }
                 if matches!(
                     opt.custom_print_mode.get("typst"),
@@ -859,7 +859,7 @@ impl From<i32> for AbstractIndex {
     }
 }
 
-#[derive(Error, Debug)]
+#[derive(Clone, Debug, Error, PartialEq, Eq, Hash)]
 pub enum AbstractIndexError {
     #[error("Argument is not a natural number")]
     NotNatural,

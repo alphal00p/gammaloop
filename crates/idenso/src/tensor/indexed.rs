@@ -6,42 +6,44 @@
 //! planner. Remaining borrowed adapters still clone the full owned Atom before
 //! invoking their existing engine operations; index metadata is also O(rank).
 //! No conversion re-infers an admitted payload or discards completion facts.
-
-use std::{collections::HashMap, hash::Hasher};
-
-use spenso::{
-    network::{
-        Network, TensorNetworkError,
-        library::FunctionLibrary,
-        parsing::{
-            ParseSettings, ParseState, StructureFromAtom, TensorFromExpression, TensorLibraryFor,
-        },
-        store::NetworkStore,
-    },
-    shadowing::TensorCollectFilter,
-    structure::{
-        Canonicalized, HasStructure, IndexedStructure, OrderedStructure, ScalarStructure,
-        TensorStructure,
-        abstract_index::AbstractIndex,
-        dimension::Dimension,
-        partial::PartialStructure,
-        representation::{LibraryRep, LibrarySlot},
-        slot::{AbsInd, DummyAind, ParseableAind},
-    },
-    tensors::data::SparseTensor,
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    id::ConditionResult,
-};
-
-use super::{
-    AlgebraSettings, ContractSettings, SymbolicTensor,
-    composition::TensorCompositionError,
-    inference::{BorrowedTensorParts, TensorInferenceError},
-    simplification::{ReductionRequest, ReductionStatus},
-};
+use super::composition::TensorCompositionError;
+use super::inference::{BorrowedTensorParts, TensorInferenceError};
+use super::simplification::{ReductionRequest, ReductionStatus};
+use super::{AlgebraSettings, ContractSettings, SymbolicTensor};
 use crate::{AdjointError, CanonicalizationError};
+#[cfg(feature = "bincode")]
+use bincode::de::Decoder;
+#[cfg(feature = "bincode")]
+use bincode::enc::Encoder;
+#[cfg(feature = "bincode")]
+use bincode::error::{DecodeError, EncodeError};
+#[cfg(feature = "bincode")]
+use bincode::{Decode, Encode};
+use spenso::network::library::FunctionLibrary;
+use spenso::network::parsing::{
+    ParseSettings, ParseState, StructureFromAtom, TensorFromExpression, TensorLibraryFor,
+};
+use spenso::network::store::NetworkStore;
+use spenso::network::{Network, TensorNetworkError};
+use spenso::shadowing::TensorCollectFilter;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::dimension::Dimension;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::representation::{LibraryRep, LibrarySlot};
+use spenso::structure::slot::{AbsInd, DummyAind, ParseableAind};
+use spenso::structure::{
+    Canonicalized, HasStructure, IndexedStructure, OrderedStructure, ScalarStructure,
+    TensorStructure,
+};
+use spenso::tensors::data::SparseTensor;
+use std::collections::HashMap;
+use std::hash::Hasher;
+#[cfg(feature = "bincode")]
+use std::result::Result as StdResult;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::id::ConditionResult;
+#[cfg(feature = "bincode")]
+use symbolica::state::HasStateMap;
 
 type IndexedTensor = SymbolicTensor<IndexedStructure>;
 type PartialTensor = SymbolicTensor<PartialStructure>;
@@ -420,48 +422,53 @@ impl std::hash::Hash for IndexedTensor {
 }
 
 #[cfg(feature = "bincode")]
-impl bincode::Encode for IndexedTensor {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> std::result::Result<(), bincode::error::EncodeError> {
+impl Encode for IndexedTensor {
+    fn encode<E: Encoder>(&self, encoder: &mut E) -> StdResult<(), EncodeError> {
         let structure = self.structure.clone().into_partial();
         self.borrowed_parts(&structure).encode(encoder)
     }
 }
 
 #[cfg(feature = "bincode")]
-impl<C: symbolica::state::HasStateMap> bincode::Decode<C> for IndexedTensor {
-    fn decode<D: bincode::de::Decoder<Context = C>>(
-        decoder: &mut D,
-    ) -> std::result::Result<Self, bincode::error::DecodeError> {
+impl<C: HasStateMap> Decode<C> for IndexedTensor {
+    fn decode<D: Decoder<Context = C>>(decoder: &mut D) -> StdResult<Self, DecodeError> {
         PartialTensor::decode(decoder)?
             .try_into_indexed()
-            .map_err(|error| bincode::error::DecodeError::OtherString(error.to_string()))
+            .map_err(|error| DecodeError::OtherString(error.to_string()))
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use spenso::{
-        iterators::IteratableTensor,
-        network::{
-            ExecutionResult, Sequential, SmallestDegree,
-            library::{
-                DummyKey, DummyLibrary,
-                panicing::ErroringLibrary,
-                symbolic::{ExplicitKey, TensorLibrary},
-            },
-            parsing::ShadowedStructure,
-        },
-        structure::{
-            partial::{PartialIndex, PartialStructureExt},
-            representation::{Euclidean, Minkowski, RepName},
-            slot::IsAbstractSlot,
-        },
-        tensors::parametric::ParamTensor,
+
+    #[cfg(feature = "bincode")]
+    use super::super::composition::ExplicitIndexOccurrences;
+    #[cfg(feature = "bincode")]
+    use super::super::inference::tests::{
+        INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
     };
+    #[cfg(feature = "bincode")]
+    use super::super::persistence::TENSOR_ARCHIVE_VERSION;
+    use super::*;
+    use crate::{CookSettings, test_support};
+    #[cfg(feature = "bincode")]
+    use bincode::config;
+    use spenso::iterators::IteratableTensor;
+    use spenso::network::library::panicing::ErroringLibrary;
+    use spenso::network::library::symbolic::{ExplicitKey, TensorLibrary};
+    use spenso::network::library::{DummyKey, DummyLibrary};
+    use spenso::network::parsing::ShadowedStructure;
+    use spenso::network::{ExecutionResult, Sequential, SmallestDegree};
+    use spenso::structure::abstract_index::AIND_SYMBOLS;
+    use spenso::structure::partial::{PartialIndex, PartialStructureExt};
+    use spenso::structure::representation::{Euclidean, Minkowski, RepName};
+    use spenso::structure::slot::IsAbstractSlot;
+    use spenso::tensors::parametric::ParamTensor;
+    use spenso::{index_symbol, tensor_symbol};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    #[cfg(feature = "bincode")]
+    use symbolica::state::StateMap;
     use symbolica::{function, symbol};
 
     #[test]
@@ -690,12 +697,8 @@ mod tests {
 
     #[test]
     fn indexed_admission_rejects_cooked_open_ports_without_rewriting_explicit_labels() {
-        use std::sync::{
-            Arc,
-            atomic::{AtomicUsize, Ordering},
-        };
-        crate::test_support::test_initialize();
-        let cooking = crate::CookSettings::reversible().preserve_tags();
+        test_support::test_initialize();
+        let cooking = CookSettings::reversible().preserve_tags();
         let rep = Minkowski {}.new_rep(4).to_lib();
         let scope = symbol!("indexed_cooked_open_scope");
         let open = AbstractIndex::Open {
@@ -721,7 +724,7 @@ mod tests {
                 let interface: IndexedStructure = [slot].into_iter().collect();
                 assert!(IndexedTensor::from_indexed_parts(Atom::Zero, interface.clone()).is_err());
                 let nonzero = PartialTensor::infer(function!(
-                    spenso::tensor_symbol!("indexed_encoded_open_vector"),
+                    tensor_symbol!("indexed_encoded_open_vector"),
                     slot.to_atom()
                 ))
                 .unwrap();
@@ -737,11 +740,11 @@ mod tests {
                 observed.fetch_add(1, Ordering::Relaxed);
             }
         );
-        let named = spenso::index_symbol!("indexed_named_label");
+        let named = index_symbol!("indexed_named_label");
         for label in [
             function!(arbitrary, 17),
             function!(named, 7, 9),
-            function!(spenso::structure::abstract_index::AIND_SYMBOLS.cind, 0),
+            function!(AIND_SYMBOLS.cind, 0),
             function!(arbitrary, open.to_atom()),
         ] {
             let encoded = cooking.try_cook(label.as_view()).unwrap();
@@ -951,11 +954,7 @@ mod tests {
     #[cfg(feature = "bincode")]
     #[test]
     fn indexed_archive_keeps_zero_layout_and_rejects_unresolved_or_invalid_parts() {
-        use super::super::{
-            composition::ExplicitIndexOccurrences, persistence::TENSOR_ARCHIVE_VERSION,
-        };
-        use symbolica::state::StateMap;
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let rep = Euclidean {}.new_rep(2).to_lib();
         let slots = [
             rep.slot(AbstractIndex::Normal(103)),
@@ -963,10 +962,10 @@ mod tests {
         ];
         let source =
             IndexedTensor::from_indexed_parts(Atom::Zero, slots.into_iter().collect()).unwrap();
-        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (restored, used): (IndexedTensor, _) = bincode::decode_from_slice_with_context(
             &bytes,
-            bincode::config::standard(),
+            config::standard(),
             StateMap::default(),
         )
         .unwrap();
@@ -974,7 +973,7 @@ mod tests {
         assert_eq!(restored, source);
         assert_eq!(restored.structure.logical_slots(), slots);
         assert!(restored.proofs.shallow_graph.get().is_none());
-        let cooked_open = crate::CookSettings::reversible()
+        let cooked_open = CookSettings::reversible()
             .preserve_tags()
             .try_cook(
                 AbstractIndex::Open { owner: 47, axis: 1 }
@@ -995,12 +994,7 @@ mod tests {
         ] {
             let structure = slots
                 .iter()
-                .map(|slot| {
-                    slot.rep()
-                        .slot(spenso::structure::partial::PartialIndex::Explicit(
-                            slot.aind,
-                        ))
-                })
+                .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind)))
                 .collect::<Vec<_>>();
             let metadata = if expression.is_zero() {
                 ExplicitIndexOccurrences::from_interface(&PartialStructure::from_logical_slots(
@@ -1019,13 +1013,13 @@ mod tests {
                     None::<bool>,
                     metadata,
                 ),
-                bincode::config::standard(),
+                config::standard(),
             )
             .unwrap();
             assert!(
                 bincode::decode_from_slice_with_context::<_, IndexedTensor, _>(
                     &bytes,
-                    bincode::config::standard(),
+                    config::standard(),
                     StateMap::default()
                 )
                 .is_err()
@@ -1036,12 +1030,7 @@ mod tests {
     #[cfg(feature = "bincode")]
     #[test]
     fn indexed_archive_retains_cancelled_dummy_history_without_raw_readmission() {
-        use super::super::inference::tests::{
-            INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
-        };
-        use symbolica::state::StateMap;
-
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let slot = Euclidean {}
             .new_rep(3)
             .to_lib()
@@ -1050,7 +1039,7 @@ mod tests {
         let polynomial = (&x + 1).pow(2) - &x * &x - Atom::num(2) * &x - 1;
         let source = PartialTensor::infer(
             function!(
-                spenso::tensor_symbol!("indexed_archive_cancel_pair"),
+                tensor_symbol!("indexed_archive_cancel_pair"),
                 slot.to_atom(),
                 slot.to_atom()
             ) * polynomial,
@@ -1066,24 +1055,24 @@ mod tests {
                 .unwrap();
         assert!(fresh.proofs.occurrences.get().unwrap().is_empty());
         let extra = IndexedTensor::infer_indexed(function!(
-            spenso::tensor_symbol!("indexed_archive_cancel_extra"),
+            tensor_symbol!("indexed_archive_cancel_extra"),
             slot.to_atom()
         ))
         .unwrap();
         INFERENCE_CALLS.with(|count| count.set(0));
         OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
         SCOPE_VALIDATIONS.with(|count| count.set(0));
-        let bytes = bincode::encode_to_vec(&source, bincode::config::standard()).unwrap();
+        let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (restored, used): (IndexedTensor, _) = bincode::decode_from_slice_with_context(
             &bytes,
-            bincode::config::standard(),
+            config::standard(),
             StateMap::default(),
         )
         .unwrap();
         assert_eq!(used, bytes.len());
         assert!(restored.same_value(&source));
         let cloned = restored.clone();
-        assert!(std::sync::Arc::ptr_eq(
+        assert!(Arc::ptr_eq(
             restored.proofs.occurrences.get().unwrap(),
             cloned.proofs.occurrences.get().unwrap(),
         ));
