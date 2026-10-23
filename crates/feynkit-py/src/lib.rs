@@ -52,6 +52,7 @@ pub use model::{
 };
 pub use progress::MarimoProgress;
 pub use render_settings::PyDiagramStyle;
+pub use sector_decomposition::{SectorDecomposeFn, set_sector_decomposition_function};
 pub use tensor::PyTensorReducer;
 #[cfg(feature = "ufo")]
 pub use ufo::{PyLoadedModel, PyUfoLoadDiagnostics, PyUfoLoader};
