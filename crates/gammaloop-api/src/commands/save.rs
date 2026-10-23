@@ -13,7 +13,6 @@ use gammalooprs::{
         StandaloneExportSettings, StandaloneNumericTarget,
     },
     settings::RuntimeSettings,
-    utils::serde_utils::ShowDefaultsGuard,
     uv::export::UVForestExportSettings,
 };
 use schemars::JsonSchema;
@@ -373,7 +372,6 @@ impl SaveState {
         let _serialize_commands_guard = SerializeCommandsAsStringsGuard::new(
             self.try_strings.unwrap_or(global_settings.try_strings),
         );
-        let _show_defaults_guard = ShowDefaultsGuard::new(true);
         state.save(
             &selected_root_folder,
             StateSaveContext {
@@ -391,19 +389,27 @@ impl SaveState {
 #[cfg(test)]
 mod tests {
     use super::{Save, SaveState};
-    use crate::state::{StateSaveContext, StateSaveMode};
+    use crate::state;
+    use crate::state::{
+        CommandHistory, CommandsBlock, ResolvedStateSnapshot, StateSaveContext, StateSaveMode,
+    };
     use crate::{
         commands::generate::ProcessArgs,
         state::{RunHistory, State},
         CLISettings,
     };
-    use gammalooprs::settings::RuntimeSettings;
+    use crate::{DEFAULT_RUNTIME_SETTINGS_FILENAME, GLOBAL_SETTINGS_FILENAME};
+    use gammalooprs::processes::{Process, ProcessCollection, ProcessDefinition};
+    use gammalooprs::settings::{GlobalSettings, RuntimeSettings};
+    use gammalooprs::utils::serde_utils::{SmartSerde, SHOWDEFAULTS};
     use std::collections::BTreeMap;
     use std::fs;
     #[cfg(unix)]
     use std::os::unix::fs as unix_fs;
     use std::path::PathBuf;
+    use std::sync::atomic::Ordering;
     use tempfile::tempdir;
+    use toml::Value as TomlValue;
     use walkdir::WalkDir;
 
     fn dot_export(path: PathBuf) -> Save {
@@ -569,6 +575,124 @@ mod tests {
             fs::read(protected.join("state_manifest.toml")).unwrap(),
             original
         );
+    }
+
+    #[test]
+    fn command_save_reload_preserves_full_defaults_and_history_modes() {
+        let temporary = tempfile::tempdir().unwrap();
+        for (index, (try_strings, fallback, expected_strings)) in [
+            (Some(false), true, false),
+            (Some(true), false, true),
+            (None, true, true),
+            (None, false, false),
+        ]
+        .into_iter()
+        .enumerate()
+        {
+            let destination = temporary.path().join(format!("state-{index}"));
+            let mut state = State::new_test();
+            state.process_list.add_process(Process {
+                definition: ProcessDefinition {
+                    folder_name: "history".into(),
+                    ..ProcessDefinition::default()
+                },
+                settings_history: Some(GlobalSettings::default()),
+                collection: ProcessCollection::Amplitudes(BTreeMap::new()),
+            });
+            let mut history = RunHistory::default();
+            history.default_runtime_settings.general.mu_r = 29.0;
+            history
+                .commands
+                .push(CommandHistory::from_raw_string("display settings global").unwrap());
+            history.command_blocks.push(CommandsBlock {
+                name: "inspect".into(),
+                commands: vec![CommandHistory::from_raw_string("display settings global").unwrap()],
+            });
+            let mut runtime = RuntimeSettings::default();
+            runtime.general.mu_r = 11.0;
+            let mut cli = CLISettings::default();
+            cli.state.folder = destination;
+            cli.try_strings = fallback;
+            let previous_defaults = SHOWDEFAULTS.load(Ordering::Relaxed);
+            let previous_commands = state::get_serialize_commands_as_strings();
+            SaveState {
+                try_strings,
+                ..SaveState::default()
+            }
+            .save(&mut state, &history, &runtime, &cli)
+            .unwrap();
+            assert_eq!(SHOWDEFAULTS.load(Ordering::Relaxed), previous_defaults);
+            assert_eq!(
+                state::get_serialize_commands_as_strings(),
+                previous_commands
+            );
+
+            let snapshot = ResolvedStateSnapshot::open(&cli.state.folder).unwrap();
+            let root = snapshot.payload_root();
+            let loaded = State::load_snapshot(&snapshot, None, None, None).unwrap();
+            assert_eq!(loaded.process_list.processes.len(), 1);
+            assert_eq!(
+                loaded.process_list.processes[0].definition.folder_name,
+                "history"
+            );
+            assert_eq!(
+                loaded.process_list.processes[0].settings_history.as_ref(),
+                Some(&GlobalSettings::default())
+            );
+            assert_eq!(
+                RuntimeSettings::from_file(root.join(DEFAULT_RUNTIME_SETTINGS_FILENAME), "runtime")
+                    .unwrap(),
+                runtime
+            );
+            let saved_cli =
+                CLISettings::from_file(root.join(GLOBAL_SETTINGS_FILENAME), "CLI settings")
+                    .unwrap();
+            assert_eq!(saved_cli.state, cli.state);
+            assert_eq!(saved_cli.global, cli.global);
+            assert_eq!(saved_cli.try_strings, fallback);
+            let defaults: TomlValue = toml::from_str(
+                &fs::read_to_string(root.join(DEFAULT_RUNTIME_SETTINGS_FILENAME)).unwrap(),
+            )
+            .unwrap();
+            assert!(defaults["general"]["m_uv"].as_float().is_some());
+            assert!(defaults["general"]["debug_cache"].as_bool().is_some());
+            let global: TomlValue =
+                toml::from_str(&fs::read_to_string(root.join(GLOBAL_SETTINGS_FILENAME)).unwrap())
+                    .unwrap();
+            assert_eq!(global["global"]["display_directive"].as_str(), Some("info"));
+            assert_eq!(global["global"]["logfile_directive"].as_str(), Some("off"));
+            let process: TomlValue = toml::from_str(
+                &fs::read_to_string(
+                    root.join("processes/amplitudes/history/settings_history.toml"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            assert!(process["generation"]["evaluator"]["horner_iterations"]
+                .as_integer()
+                .is_some());
+            let document: TomlValue =
+                toml::from_str(&fs::read_to_string(root.join("run.toml")).unwrap()).unwrap();
+            assert!(document["default_runtime_settings"]["general"]["m_uv"]
+                .as_float()
+                .is_some());
+            for command in [
+                &document["commands"][0],
+                &document["command_blocks"][0]["commands"][0],
+            ] {
+                assert_eq!(command.as_str().is_some(), expected_strings);
+                assert_eq!(command.as_table().is_some(), !expected_strings);
+            }
+            let restored = RunHistory::load(root.join("run.toml")).unwrap();
+            assert_eq!(
+                restored.default_runtime_settings,
+                history.default_runtime_settings
+            );
+            assert_eq!(restored.commands.len(), 1);
+            assert!(restored.commands[0].semantically_eq(&history.commands[0]));
+            assert_eq!(restored.command_blocks.len(), 1);
+            assert!(restored.command_blocks[0].semantically_eq(&history.command_blocks[0]));
+        }
     }
 
     #[test]

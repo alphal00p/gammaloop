@@ -3786,6 +3786,9 @@ impl State {
         Self::validate_save_destination(root, mode)?;
         let stage = writer.begin()?;
         let path = stage.path();
+        // The complete payload phase owns default rendering; command wrappers
+        // must not hold the same non-reentrant serialization guard.
+        let show_defaults = ShowDefaultsGuard::new(true);
         let processes = self.process_list.write_snapshot(path)?;
         #[cfg(test)]
         snapshot_faults::step("processes")?;
@@ -3802,7 +3805,6 @@ impl State {
         session.run_history.save_toml(path, false, false)?;
         #[cfg(test)]
         snapshot_faults::step("history")?;
-        let _show_defaults = ShowDefaultsGuard::new(true);
         session
             .default_runtime_settings
             .to_file(path.join(DEFAULT_RUNTIME_SETTINGS_FILENAME), false)?;
@@ -3813,6 +3815,7 @@ impl State {
             .to_file(path.join(GLOBAL_SETTINGS_FILENAME), false)?;
         #[cfg(test)]
         snapshot_faults::step("global settings")?;
+        drop(show_defaults);
         let mut symbols = File::create_new(path.join("symbolica_state.bin"))?;
         SymbolicaState::export(&mut symbols)?;
         symbols.flush()?;
