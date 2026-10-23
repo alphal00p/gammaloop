@@ -231,11 +231,34 @@ try:
     drawing = renamed.render()
     assert renamed.name in drawing.to_html()
     assert drawing.to_svg() == diagram.render().to_svg()
-    untitled_bounds = ET.fromstring(drawing.to_svg()).get("viewBox").split()
+    # This diagram already has a native numerator caption. An explicit title
+    # changes its displayed content while preserving every graph target.
+    titled_svg = renamed.render(
+        config=render.RenderSettings(title="Explicit title")
+    ).to_svg()
+    assert titled_svg != drawing.to_svg()
+
+    def native_targets(svg):
+        return sorted(
+            (
+                element.get("data-linnet-kind"),
+                element.get("data-linnet-id"),
+                element.get("data-linnet-detail"),
+            )
+            for element in ET.fromstring(svg).iter()
+            if element.get("data-linnet-kind") in {"node", "edge", "halfedge"}
+        )
+
+    assert native_targets(titled_svg) == native_targets(drawing.to_svg())
+    # A genuinely untitled generic graph retains the original height contract.
+    untitled = render.build(
+        render.node("caption-height", label=render.MathSymbol("p", subscript=1))
+    )
+    untitled_bounds = ET.fromstring(untitled.render().to_svg()).get("viewBox").split()
     titled_bounds = (
         ET.fromstring(
-            renamed.render(
-                config=render.RenderSettings(title="Explicit title")
+            untitled.render(
+                config=render.RenderSettings(title=render.TextLabel("Explicit title"))
             ).to_svg()
         )
         .get("viewBox")
@@ -307,12 +330,14 @@ try:
         assert selected.half_edge_indices() == [half.id]
         assert selected.denominator_expression() == spenso.TensorExpression(1)
         assert cross.filter(
-            half_edge=lambda item: item.id == half.id
+            half_edge=lambda item, selected_id=half.id: item.id == selected_id
         ).half_edge_indices() == [half.id]
         assert half.vertex in {half.edge.source, half.edge.target}
     for vertex in cross.vertices:
         assert (
-            cross.filter(node=lambda item: item.id == vertex.id).half_edge_indices()
+            cross.filter(
+                node=lambda item, selected_id=vertex.id: item.id == selected_id
+            ).half_edge_indices()
             == cross.subgraph(nodes=[vertex.id]).half_edge_indices()
         )
     internal = cross.filter(edge=lambda edge: not edge.is_external)

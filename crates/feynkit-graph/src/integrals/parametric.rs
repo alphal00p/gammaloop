@@ -7,6 +7,7 @@ use symbolica::domains::atom::AtomField;
 use symbolica::graph::{CanonicalForm, Graph};
 use symbolica::poly::PolyVariable;
 use symbolica::tensors::matrix::{Matrix, MatrixError};
+use symbolica::utils::resources::{self, ResourceBudget, ResourceLimits};
 
 use super::{IntegralFamily, IntegralFamilyError, IntegralMapping, PropagatorMapping};
 
@@ -82,75 +83,96 @@ impl IntegralFamily {
     /// [`Self::find_mapping`] must verify every denominator and the Jacobian.
     ///
     /// All families must have compatible external kinematics and nonsingular
-    /// quadratic forms. Search limitations and candidate-budget exhaustion are
-    /// errors, not proofs of inequivalence. `max_candidates` applies per pair.
+    /// quadratic forms. Search limitations and resource exhaustion are errors,
+    /// not proofs of inequivalence. `max_candidates` is an opt-in diagnostic
+    /// count bound per pair; `None` is unlimited. One cooperative process-RSS
+    /// and elapsed-time budget covers the complete collection and its searches.
     /// Different propagator counts remain separate; subtopology embeddings,
     /// external-momentum exchanges and scalelessness are separate operations.
     pub fn find_mappings(
         families: &[Self],
-        max_candidates: usize,
+        max_candidates: Option<usize>,
+        resources: ResourceLimits,
     ) -> Result<Vec<(usize, IntegralMapping)>, IntegralFamilyError> {
-        let Some(first) = families.first() else {
-            return Ok(Vec::new());
-        };
-        let mut occupied = Vec::new();
-        for family in families {
-            first.compatible_kinematics(family)?;
-            occupied.extend(family.denominators.iter().cloned());
-            occupied.extend(
-                family
-                    .loop_momenta
-                    .iter()
-                    .chain(&family.external_momenta)
-                    .cloned(),
-            );
-            for (i, p) in family.external_momenta.iter().enumerate() {
-                for q in &family.external_momenta[i..] {
-                    occupied.push(family.kinematics.scalar_product(p, q)?);
+        ResourceBudget::new(resources).run(|| {
+            resources::checkpoint()?;
+            let Some(first) = families.first() else {
+                return Ok(Vec::new());
+            };
+            let mut occupied = Vec::new();
+            for family in families {
+                resources::checkpoint()?;
+                first.compatible_kinematics(family)?;
+                occupied.extend(family.denominators.iter().cloned());
+                occupied.extend(
+                    family
+                        .loop_momenta
+                        .iter()
+                        .chain(&family.external_momenta)
+                        .cloned(),
+                );
+                for (i, p) in family.external_momenta.iter().enumerate() {
+                    for q in &family.external_momenta[i..] {
+                        occupied.push(family.kinematics.scalar_product(p, q)?);
+                    }
                 }
             }
-        }
-        let parameter_count = families.iter().map(|f| f.denominators.len()).max().unwrap();
-        let parameters = (0..)
-            .map(|i: usize| {
-                symbolica::function!(
-                    symbolica::symbol!("feynkit::topology_parameter"),
-                    Atom::num(i)
-                )
-            })
-            .filter(|label| {
-                !occupied
-                    .iter()
-                    .any(|expression| expression.contains(label.as_view()))
-            })
-            .take(parameter_count)
-            .collect::<Vec<_>>();
-        let mut groups: BTreeMap<Graph<ParametricVertex, u32>, Vec<usize>> = BTreeMap::new();
-        let mut mappings = Vec::with_capacity(families.len());
-        for (source, family) in families.iter().enumerate() {
-            let canonical = family.canonical_symanzik(&parameters[..family.denominators.len()])?;
-            let representatives = groups.entry(canonical.graph).or_default();
-            let mut found = None;
-            for &target in representatives.iter() {
-                if let Some(mapping) = family.find_mapping(&families[target], max_candidates)? {
-                    found = Some((target, mapping));
+            let parameter_count = families.iter().map(|f| f.denominators.len()).max().unwrap();
+            let mut parameters = Vec::with_capacity(parameter_count);
+            for index in 0usize.. {
+                resources::checkpoint()?;
+                if parameters.len() == parameter_count {
                     break;
                 }
-            }
-            mappings.push(match found {
-                Some(mapping) => mapping,
-                None => {
-                    let identity = family
-                        .mapping_to(family, &family.loop_momenta)?
-                        .ok_or_else(|| {
-                            IntegralFamilyError::InvalidMapping("family has no identity map".into())
-                        })?;
-                    representatives.push(source);
-                    (source, identity)
+                let label = symbolica::function!(
+                    symbolica::symbol!("feynkit::topology_parameter"),
+                    Atom::num(index)
+                );
+                if !occupied
+                    .iter()
+                    .any(|expression| expression.contains(label.as_view()))
+                {
+                    parameters.push(label);
                 }
-            });
-        }
-        Ok(mappings)
+            }
+            let mut groups: BTreeMap<Graph<ParametricVertex, u32>, Vec<usize>> = BTreeMap::new();
+            let mut mappings = Vec::with_capacity(families.len());
+            for (source, family) in families.iter().enumerate() {
+                resources::checkpoint()?;
+                let canonical =
+                    family.canonical_symanzik(&parameters[..family.denominators.len()])?;
+                resources::checkpoint()?;
+                let representatives = groups.entry(canonical.graph).or_default();
+                let mut found = None;
+                for &target in representatives.iter() {
+                    resources::checkpoint()?;
+                    if let Some(mapping) = family.find_mapping(
+                        &families[target],
+                        max_candidates,
+                        ResourceLimits::default(),
+                    )? {
+                        found = Some((target, mapping));
+                        break;
+                    }
+                }
+                mappings.push(match found {
+                    Some(mapping) => mapping,
+                    None => {
+                        let identity = family
+                            .mapping_to(family, &family.loop_momenta)?
+                            .ok_or_else(|| {
+                                IntegralFamilyError::InvalidMapping(
+                                    "family has no identity map".into(),
+                                )
+                            })?;
+                        representatives.push(source);
+                        (source, identity)
+                    }
+                });
+            }
+            resources::checkpoint()?;
+            Ok(mappings)
+        })
     }
 
     /// Find a real loop direction with an unconstrained transverse integral.
@@ -461,7 +483,9 @@ mod tests {
     use super::*;
     use feynkit_kinematics::Kinematics;
     use itertools::Itertools;
+    use std::time::Duration;
     use symbolica::parse;
+    use symbolica::utils::resources::ResourceLimitError;
 
     #[test]
     fn collection_maps_directly_to_first_verified_representatives() {
@@ -504,7 +528,8 @@ mod tests {
         )
         .unwrap();
         let families = [first.clone(), shifted, different.clone(), different];
-        let mappings = IntegralFamily::find_mappings(&families, 100).unwrap();
+        let mappings =
+            IntegralFamily::find_mappings(&families, None, ResourceLimits::default()).unwrap();
         assert_eq!(
             mappings
                 .iter()
@@ -523,11 +548,55 @@ mod tests {
                 );
             }
         }
-        assert!(IntegralFamily::find_mappings(&[], 0).unwrap().is_empty());
+        assert!(
+            IntegralFamily::find_mappings(&[], None, ResourceLimits::default())
+                .unwrap()
+                .is_empty()
+        );
         assert!(matches!(
-            IntegralFamily::find_mappings(&[first.clone(), first.clone()], 0),
+            IntegralFamily::find_mappings(
+                &[first.clone(), first.clone()],
+                Some(0),
+                ResourceLimits::default()
+            ),
             Err(IntegralFamilyError::MappingSearchLimit(0))
         ));
+        let memory = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..ResourceLimits::default()
+            },
+            || Ok(2),
+        );
+        assert!(matches!(
+            memory.run(|| IntegralFamily::find_mappings(
+                &families,
+                None,
+                ResourceLimits::default()
+            )),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(matches!(
+            IntegralFamily::find_mappings(
+                &families,
+                None,
+                ResourceLimits {
+                    max_elapsed: Some(Duration::ZERO),
+                    ..ResourceLimits::default()
+                },
+            ),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Elapsed { .. } | ResourceLimitError::MonitorUnavailable { .. }
+            ))
+        ));
+        assert_eq!(
+            IntegralFamily::find_mappings(&families, None, ResourceLimits::default())
+                .unwrap()
+                .len(),
+            families.len()
+        );
         let singular = IntegralFamily::new(
             vec![k.clone()],
             vec![p.clone()],
@@ -535,12 +604,17 @@ mod tests {
             &kin,
         )
         .unwrap();
-        assert!(IntegralFamily::find_mappings(&[singular], 100).is_err());
+        assert!(
+            IntegralFamily::find_mappings(&[singular], None, ResourceLimits::default()).is_err()
+        );
         let different_kin = kin.with_mass_squared(&p, parse!("2*s")).unwrap();
         let incompatible =
             IntegralFamily::new(vec![k], vec![p], first.denominators.clone(), &different_kin)
                 .unwrap();
-        assert!(IntegralFamily::find_mappings(&[first, incompatible], 100).is_err());
+        assert!(
+            IntegralFamily::find_mappings(&[first, incompatible], None, ResourceLimits::default())
+                .is_err()
+        );
     }
 
     #[test]
@@ -698,9 +772,18 @@ mod tests {
             &kin,
         )
         .unwrap();
-        assert!(source.find_mapping(&target, 10_000).unwrap().is_none());
-        let grouped =
-            IntegralFamily::find_mappings(&[source.clone(), target.clone()], 10_000).unwrap();
+        assert!(
+            source
+                .find_mapping(&target, None, ResourceLimits::default())
+                .unwrap()
+                .is_none()
+        );
+        let grouped = IntegralFamily::find_mappings(
+            &[source.clone(), target.clone()],
+            None,
+            ResourceLimits::default(),
+        )
+        .unwrap();
         assert_eq!(
             grouped
                 .iter()

@@ -21,12 +21,13 @@
 //! factorial-squared labeled-pairing loop.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::mem;
 
 use symbolica::atom::{Atom, AtomCore};
+use symbolica::solve::SolveError;
 use symbolica::symbol;
+use symbolica::utils::resources::{self, ResourceLimitError};
 use thiserror::Error;
-
-use crate::OrthogonalWeingarten;
 
 /// One symmetry-reduced coefficient in a fully contracted tensor projector.
 #[derive(Clone, Debug)]
@@ -75,14 +76,15 @@ impl OrbitProjector {
     /// Build coefficients for two colorings of the same tensor indices.
     ///
     /// Equal labels identify repeated vectors.  Labels need not be dense; they
-    /// are canonicalized independently on both sides.  `output_limit` bounds
-    /// intermediate and final orbit maps, not labeled matchings.
+    /// are canonicalized independently on both sides. An explicit `output_limit`
+    /// bounds intermediate and final orbit maps, not labeled matchings.
     pub(crate) fn new(
         internal_colors: &[usize],
         projector_colors: &[usize],
         dimension: Atom,
-        output_limit: usize,
+        output_limit: Option<usize>,
     ) -> Result<Self, OrbitProjectorError> {
+        resources::checkpoint()?;
         if internal_colors.len() != projector_colors.len() {
             return Err(OrbitProjectorError::ColorLengthMismatch {
                 internal: internal_colors.len(),
@@ -93,15 +95,9 @@ impl OrbitProjector {
         if !rank.is_multiple_of(2) {
             return Err(OrbitProjectorError::OddRank(rank));
         }
-        if rank > OrthogonalWeingarten::MAX_RANK {
-            return Err(OrbitProjectorError::UnsupportedRank {
-                rank,
-                maximum: OrthogonalWeingarten::MAX_RANK,
-            });
-        }
-
         let (internal_colors, internal_class_count) = dense_colors(internal_colors);
         let (projector_colors, projector_class_count) = dense_colors(projector_colors);
+        resources::checkpoint()?;
         let intersections = MatchingIntersections::new(
             &internal_colors,
             internal_class_count,
@@ -127,26 +123,46 @@ impl OrbitProjector {
             .len()
             .checked_mul(projector_alphas.len())
             .ok_or(OrbitProjectorError::CounterOverflow)?;
-        if term_bound > output_limit {
+        if let Some(limit) = output_limit
+            && term_bound > limit
+        {
             return Err(OrbitProjectorError::OutputLimit {
                 terms: term_bound,
-                limit: output_limit,
+                limit,
             });
         }
+        let matrix_bytes = term_bound
+            .checked_mul(mem::size_of::<u128>() + mem::size_of::<Atom>())
+            .and_then(|bytes| u64::try_from(bytes).ok())
+            .ok_or(OrbitProjectorError::CounterOverflow)?;
+        resources::check_allocation(matrix_bytes)?;
         let internal_positions = orbit_positions(&internal_alphas);
         let projector_positions = orbit_positions(&projector_alphas);
         let mut incidence = vec![vec![0_u128; projector_alphas.len()]; internal_alphas.len()];
         for (key, count) in intersections.counts {
+            resources::checkpoint()?;
             incidence[internal_positions[&key.internal]][projector_positions[&key.projector]] =
                 count;
         }
         let internal_sizes = incidence
             .iter()
-            .map(|row| row.iter().sum::<u128>())
-            .collect::<Vec<_>>();
+            .map(|row| {
+                row.iter().try_fold(0_u128, |sum, count| {
+                    resources::checkpoint()?;
+                    sum.checked_add(*count)
+                        .ok_or(OrbitProjectorError::CounterOverflow)
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
         let projector_sizes = (0..projector_alphas.len())
-            .map(|column| incidence.iter().map(|row| row[column]).sum::<u128>())
-            .collect::<Vec<_>>();
+            .map(|column| {
+                incidence.iter().try_fold(0_u128, |sum, row| {
+                    resources::checkpoint()?;
+                    sum.checked_add(row[column])
+                        .ok_or(OrbitProjectorError::CounterOverflow)
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         let mut coefficients =
             vec![vec![Atom::Zero; projector_alphas.len()]; internal_alphas.len()];
@@ -158,13 +174,16 @@ impl OrbitProjector {
                 output_limit,
             )?;
             for projector in 0..projector_alphas.len() {
+                resources::checkpoint()?;
                 let right_hand_side = incidence
                     .iter()
                     .map(|row| atom_from_count(row[projector]))
                     .collect::<Result<Vec<_>, _>>()?;
                 let column = solve_transposed(&gram, &right_hand_side, rank)?;
                 for (internal, coefficient) in column.into_iter().enumerate() {
+                    resources::checkpoint()?;
                     coefficients[internal][projector] = coefficient.cancel();
+                    resources::checkpoint()?;
                 }
             }
         } else {
@@ -175,6 +194,7 @@ impl OrbitProjector {
                 output_limit,
             )?;
             for internal in 0..internal_alphas.len() {
+                resources::checkpoint()?;
                 let right_hand_side = incidence[internal]
                     .iter()
                     .copied()
@@ -182,14 +202,17 @@ impl OrbitProjector {
                     .collect::<Result<Vec<_>, _>>()?;
                 let row = solve_transposed(&gram, &right_hand_side, rank)?;
                 for (projector, coefficient) in row.into_iter().enumerate() {
+                    resources::checkpoint()?;
                     coefficients[internal][projector] = coefficient.cancel();
+                    resources::checkpoint()?;
                 }
             }
         }
 
-        let mut terms = Vec::with_capacity(internal_alphas.len() * projector_alphas.len());
+        let mut terms = Vec::with_capacity(term_bound);
         for (internal, internal_alpha) in internal_alphas.iter().enumerate() {
             for (projector, projector_alpha) in projector_alphas.iter().enumerate() {
+                resources::checkpoint()?;
                 let coefficient = coefficients[internal][projector].clone();
                 if coefficient.is_zero() {
                     continue;
@@ -204,6 +227,7 @@ impl OrbitProjector {
             }
         }
 
+        resources::checkpoint()?;
         Ok(Self { terms })
     }
 
@@ -215,23 +239,21 @@ impl OrbitProjector {
 /// Failures detected before a symmetry-reduced projector can be constructed.
 #[derive(Debug, Error)]
 pub(crate) enum OrbitProjectorError {
+    #[error("{0}")]
+    Resource(#[from] ResourceLimitError),
     #[error("internal colors have rank {internal}, but projector colors have rank {projector}")]
     ColorLengthMismatch { internal: usize, projector: usize },
     #[error("tensor rank {0} is odd; vacuum tensor reduction requires an even rank")]
     OddRank(usize),
-    #[error("tensor rank {rank} exceeds the supported maximum {maximum}")]
-    UnsupportedRank { rank: usize, maximum: usize },
     #[error("symmetry reduction produced {terms} orbit terms, above limit {limit}")]
     OutputLimit { terms: usize, limit: usize },
-    #[error("pairing multiplicity {0} does not fit a signed 64-bit coefficient")]
-    MultiplicityOverflow(u128),
-    #[error("pairing multiplicity overflowed the rank-20 exact counter")]
+    #[error("orbit multiplicity or representation counter overflowed")]
     CounterOverflow,
     #[error("could not solve the rank-{rank} symmetry-reduced projector: {source}")]
     Solve {
         rank: usize,
         #[source]
-        source: symbolica::solve::SolveError,
+        source: SolveError,
     },
 }
 
@@ -251,15 +273,26 @@ impl MatchingIntersections {
         internal_class_count: usize,
         projector: &[usize],
         projector_class_count: usize,
-        limit: usize,
+        limit: Option<usize>,
     ) -> Result<Self, OrbitProjectorError> {
-        let mut joint_counts = vec![0_u8; internal_class_count * projector_class_count];
+        resources::checkpoint()?;
+        let joint_len = internal_class_count
+            .checked_mul(projector_class_count)
+            .ok_or(OrbitProjectorError::CounterOverflow)?;
+        resources::check_allocation(
+            u64::try_from(joint_len).map_err(|_| OrbitProjectorError::CounterOverflow)?,
+        )?;
+        let mut joint_counts = vec![0_u8; joint_len];
         for (&internal, &projector) in internal.iter().zip(projector) {
-            joint_counts[internal * projector_class_count + projector] += 1;
+            resources::checkpoint()?;
+            let count = &mut joint_counts[internal * projector_class_count + projector];
+            *count = count
+                .checked_add(1)
+                .ok_or(OrbitProjectorError::CounterOverflow)?;
         }
         let alpha_lengths = (
-            triangle_len(internal_class_count),
-            triangle_len(projector_class_count),
+            triangle_len(internal_class_count)?,
+            triangle_len(projector_class_count)?,
         );
         let mut cache = HashMap::new();
         let counts = matching_intersections(
@@ -279,9 +312,10 @@ fn matching_intersections(
     internal_class_count: usize,
     projector_class_count: usize,
     alpha_lengths: (usize, usize),
-    limit: usize,
+    limit: Option<usize>,
     cache: &mut HashMap<Vec<u8>, BTreeMap<OrbitPairKey, u128>>,
 ) -> Result<BTreeMap<OrbitPairKey, u128>, OrbitProjectorError> {
+    resources::checkpoint()?;
     if let Some(cached) = cache.get(counts) {
         return Ok(cached.clone());
     }
@@ -300,6 +334,7 @@ fn matching_intersections(
     let (anchor_internal, anchor_projector) = split_joint(anchor, projector_class_count);
     let mut result = BTreeMap::<OrbitPairKey, u128>::new();
     for partner in 0..after_anchor.len() {
+        resources::checkpoint()?;
         let choices = after_anchor[partner];
         if choices == 0 {
             continue;
@@ -315,14 +350,16 @@ fn matching_intersections(
             limit,
             cache,
         )? {
-            key.internal
-                [upper_triangle_index(anchor_internal, partner_internal, internal_class_count)] +=
-                1;
-            key.projector[upper_triangle_index(
-                anchor_projector,
-                partner_projector,
-                projector_class_count,
-            )] += 1;
+            let internal = &mut key.internal
+                [upper_triangle_index(anchor_internal, partner_internal, internal_class_count)];
+            *internal = internal
+                .checked_add(1)
+                .ok_or(OrbitProjectorError::CounterOverflow)?;
+            let projector = &mut key.projector
+                [upper_triangle_index(anchor_projector, partner_projector, projector_class_count)];
+            *projector = projector
+                .checked_add(1)
+                .ok_or(OrbitProjectorError::CounterOverflow)?;
             add_count(
                 &mut result,
                 key,
@@ -341,17 +378,28 @@ fn orbit_gram(
     alphas: &[Vec<u16>],
     class_count: usize,
     dimension: &Atom,
-    limit: usize,
+    limit: Option<usize>,
 ) -> Result<Vec<Vec<Atom>>, OrbitProjectorError> {
+    resources::checkpoint()?;
+    let matrix_bytes = alphas
+        .len()
+        .checked_mul(alphas.len())
+        .and_then(|cells| cells.checked_mul(mem::size_of::<Atom>()))
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or(OrbitProjectorError::CounterOverflow)?;
+    resources::check_allocation(matrix_bytes)?;
     let positions = orbit_positions(alphas);
     let mut gram = Vec::with_capacity(alphas.len());
     for representative in alphas {
+        resources::checkpoint()?;
         let distribution = relative_matching_distribution(representative, class_count, limit)?;
         let mut row = vec![Atom::Zero; alphas.len()];
         for (key, multiplicity) in distribution {
+            resources::checkpoint()?;
             let target = positions[&key.alpha];
             row[target] += atom_from_count(multiplicity)?
                 * dimension.clone().pow(Atom::num(i64::from(key.cycles)));
+            resources::checkpoint()?;
         }
         gram.push(row);
     }
@@ -367,19 +415,20 @@ struct RelativeKey {
 fn relative_matching_distribution(
     representative: &[u16],
     class_count: usize,
-    limit: usize,
+    limit: Option<usize>,
 ) -> Result<BTreeMap<RelativeKey, u128>, OrbitProjectorError> {
-    let edge_types = upper_triangle_pairs(class_count);
+    resources::checkpoint()?;
+    let edge_types = upper_triangle_pairs(class_count)?;
     let counts = representative
         .iter()
         .copied()
-        .map(|count| u8::try_from(count).expect("rank twenty fits in u8"))
-        .collect::<Vec<_>>();
+        .map(|count| u8::try_from(count).map_err(|_| OrbitProjectorError::CounterOverflow))
+        .collect::<Result<Vec<_>, _>>()?;
     let mut cache = HashMap::new();
     relative_components(
         &counts,
         &edge_types,
-        triangle_len(class_count),
+        triangle_len(class_count)?,
         limit,
         &mut cache,
     )
@@ -389,9 +438,10 @@ fn relative_components(
     counts: &[u8],
     edge_types: &[(usize, usize)],
     alpha_len: usize,
-    limit: usize,
+    limit: Option<usize>,
     cache: &mut HashMap<Vec<u8>, BTreeMap<RelativeKey, u128>>,
 ) -> Result<BTreeMap<RelativeKey, u128>, OrbitProjectorError> {
+    resources::checkpoint()?;
     if let Some(cached) = cache.get(counts) {
         return Ok(cached.clone());
     }
@@ -436,11 +486,15 @@ fn relative_components(
 
     let mut result = BTreeMap::new();
     for (component, component_multiplicity) in component_options {
+        resources::checkpoint()?;
         for (mut rest, rest_multiplicity) in
             relative_components(&component.remaining, edge_types, alpha_len, limit, cache)?
         {
-            add_alpha(&mut rest.alpha, &component.alpha);
-            rest.cycles += 1;
+            add_alpha(&mut rest.alpha, &component.alpha)?;
+            rest.cycles = rest
+                .cycles
+                .checked_add(1)
+                .ok_or(OrbitProjectorError::CounterOverflow)?;
             let multiplicity = component_multiplicity
                 .checked_mul(rest_multiplicity)
                 .ok_or(OrbitProjectorError::CounterOverflow)?;
@@ -465,11 +519,13 @@ fn extend_component(
     last_exit: usize,
     alpha: Vec<u16>,
     path_multiplicity: u128,
-    limit: usize,
+    limit: Option<usize>,
     output: &mut BTreeMap<ComponentKey, u128>,
 ) -> Result<(), OrbitProjectorError> {
+    resources::checkpoint()?;
     let class_count = edge_color_count(edge_types);
     for next_type in 0..remaining.len() {
+        resources::checkpoint()?;
         let choices = remaining[next_type];
         if choices == 0 {
             continue;
@@ -478,14 +534,23 @@ fn extend_component(
         after_next[next_type] -= 1;
         let (left, right) = edge_types[next_type];
         for (entrance, exit) in [(left, right), (right, left)] {
+            resources::checkpoint()?;
             let multiplicity = path_multiplicity
                 .checked_mul(u128::from(choices))
                 .ok_or(OrbitProjectorError::CounterOverflow)?;
             let mut extended_alpha = alpha.clone();
-            extended_alpha[upper_triangle_index(last_exit, entrance, class_count)] += 1;
+            let extended =
+                &mut extended_alpha[upper_triangle_index(last_exit, entrance, class_count)];
+            *extended = extended
+                .checked_add(1)
+                .ok_or(OrbitProjectorError::CounterOverflow)?;
 
             let mut closed_alpha = extended_alpha.clone();
-            closed_alpha[upper_triangle_index(exit, anchor_entrance, class_count)] += 1;
+            let closed =
+                &mut closed_alpha[upper_triangle_index(exit, anchor_entrance, class_count)];
+            *closed = closed
+                .checked_add(1)
+                .ok_or(OrbitProjectorError::CounterOverflow)?;
             add_component_option(
                 output,
                 after_next.clone(),
@@ -513,7 +578,7 @@ fn add_component_option(
     remaining: Vec<u8>,
     alpha: Vec<u16>,
     multiplicity: u128,
-    limit: usize,
+    limit: Option<usize>,
 ) -> Result<(), OrbitProjectorError> {
     add_count(
         output,
@@ -528,35 +593,48 @@ fn solve_transposed(
     right_hand_side: &[Atom],
     rank: usize,
 ) -> Result<Vec<Atom>, OrbitProjectorError> {
+    resources::checkpoint()?;
     let variables = (0..gram.len())
         .map(|index| {
-            Atom::var(symbol!(&format!(
+            resources::checkpoint()?;
+            Ok(Atom::var(symbol!(&format!(
                 "FeynKit::OrbitProjectorRank{rank}_{index}"
-            )))
+            ))))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, OrbitProjectorError>>()?;
     let equations = (0..gram.len())
         .map(|column| {
-            variables.iter().enumerate().fold(
+            resources::checkpoint()?;
+            variables.iter().enumerate().try_fold(
                 -right_hand_side[column].clone(),
-                |equation, (row, variable)| equation + &gram[row][column] * variable,
+                |equation, (row, variable)| {
+                    resources::checkpoint()?;
+                    Ok(equation + &gram[row][column] * variable)
+                },
             )
         })
-        .collect::<Vec<_>>();
-    Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
-        .and_then(|(matrix, rhs)| {
-            matrix
-                .solve(&rhs)
-                .map_err(|error| symbolica::solve::SolveError::Other(error.to_string()))
+        .collect::<Result<Vec<_>, OrbitProjectorError>>()?;
+    resources::checkpoint()?;
+    let (matrix, rhs) = Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
+        .map_err(|source| OrbitProjectorError::Solve { rank, source })?;
+    resources::checkpoint()?;
+    let solution = matrix
+        .solve(&rhs)
+        .map_err(|error| OrbitProjectorError::Solve {
+            rank,
+            source: SolveError::Other(error.to_string()),
+        })?;
+    resources::checkpoint()?;
+    solution
+        .into_vec()
+        .into_iter()
+        .map(|value| {
+            resources::checkpoint()?;
+            let expression = value.to_expression();
+            resources::checkpoint()?;
+            Ok(expression)
         })
-        .map(|solution| {
-            solution
-                .into_vec()
-                .into_iter()
-                .map(|value| value.to_expression())
-                .collect::<Vec<_>>()
-        })
-        .map_err(|source| OrbitProjectorError::Solve { rank, source })
+        .collect()
 }
 
 fn dense_colors(colors: &[usize]) -> (Vec<usize>, usize) {
@@ -581,18 +659,32 @@ fn orbit_positions(alphas: &[Vec<u16>]) -> BTreeMap<Vec<u16>, usize> {
         .collect()
 }
 
-fn upper_triangle_pairs(size: usize) -> Vec<(usize, usize)> {
-    (0..size)
-        .flat_map(|left| (left..size).map(move |right| (left, right)))
-        .collect()
+fn upper_triangle_pairs(size: usize) -> Result<Vec<(usize, usize)>, OrbitProjectorError> {
+    let count = triangle_len(size)?;
+    let bytes = count
+        .checked_mul(mem::size_of::<(usize, usize)>())
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or(OrbitProjectorError::CounterOverflow)?;
+    resources::check_allocation(bytes)?;
+    let mut pairs = Vec::with_capacity(count);
+    for left in 0..size {
+        for right in left..size {
+            resources::checkpoint()?;
+            pairs.push((left, right));
+        }
+    }
+    Ok(pairs)
 }
 
 fn edge_color_count(edge_types: &[(usize, usize)]) -> usize {
     edge_types.last().map_or(0, |(_, right)| right + 1)
 }
 
-fn triangle_len(size: usize) -> usize {
-    size * (size + 1) / 2
+fn triangle_len(size: usize) -> Result<usize, OrbitProjectorError> {
+    size.checked_add(1)
+        .and_then(|next| size.checked_mul(next))
+        .map(|product| product / 2)
+        .ok_or(OrbitProjectorError::CounterOverflow)
 }
 
 fn upper_triangle_index(left: usize, right: usize, size: usize) -> usize {
@@ -608,22 +700,30 @@ fn split_joint(joint: usize, projector_class_count: usize) -> (usize, usize) {
     (joint / projector_class_count, joint % projector_class_count)
 }
 
-fn add_alpha(target: &mut [u16], contribution: &[u16]) {
+fn add_alpha(target: &mut [u16], contribution: &[u16]) -> Result<(), OrbitProjectorError> {
     for (target, contribution) in target.iter_mut().zip(contribution) {
-        *target += contribution;
+        resources::checkpoint()?;
+        *target = target
+            .checked_add(*contribution)
+            .ok_or(OrbitProjectorError::CounterOverflow)?;
     }
+    Ok(())
 }
 
 fn add_count<K: Ord>(
     output: &mut BTreeMap<K, u128>,
     key: K,
     multiplicity: u128,
-    limit: usize,
+    limit: Option<usize>,
 ) -> Result<(), OrbitProjectorError> {
+    resources::checkpoint()?;
     let is_new = !output.contains_key(&key);
-    if is_new && output.len() == limit {
+    if let Some(limit) = limit
+        && is_new
+        && output.len() >= limit
+    {
         return Err(OrbitProjectorError::OutputLimit {
-            terms: output.len() + 1,
+            terms: output.len().saturating_add(1),
             limit,
         });
     }
@@ -635,9 +735,10 @@ fn add_count<K: Ord>(
 }
 
 fn atom_from_count(count: u128) -> Result<Atom, OrbitProjectorError> {
-    let count =
-        i64::try_from(count).map_err(|_| OrbitProjectorError::MultiplicityOverflow(count))?;
-    Ok(Atom::num(count))
+    resources::checkpoint()?;
+    let coefficient = Atom::num(count);
+    resources::checkpoint()?;
+    Ok(coefficient)
 }
 
 #[cfg(test)]
@@ -664,7 +765,7 @@ mod tests {
                 internal_classes,
                 &projector,
                 projector_classes,
-                10_000,
+                Some(10_000),
             )
             .unwrap();
             assert_eq!(
@@ -687,7 +788,7 @@ mod tests {
                 multiplicities.len(),
                 &vec![0; colors.len()],
                 1,
-                10_000,
+                Some(10_000),
             )
             .unwrap();
             let alphas = intersections
@@ -697,7 +798,8 @@ mod tests {
                 .collect::<BTreeSet<_>>();
             for alpha in alphas {
                 let distribution =
-                    relative_matching_distribution(&alpha, multiplicities.len(), 10_000).unwrap();
+                    relative_matching_distribution(&alpha, multiplicities.len(), Some(10_000))
+                        .unwrap();
                 assert_eq!(
                     distribution.values().sum::<u128>(),
                     perfect_matching_count(colors.len()),
@@ -710,7 +812,7 @@ mod tests {
     #[test]
     fn orbit_gram_at_dimension_one_has_raw_orbit_sizes_in_every_row() {
         let colors = [0, 0, 1, 1, 1, 1];
-        let intersections = MatchingIntersections::new(&colors, 2, &[0; 6], 1, 100).unwrap();
+        let intersections = MatchingIntersections::new(&colors, 2, &[0; 6], 1, Some(100)).unwrap();
         let alphas = intersections
             .counts
             .keys()
@@ -729,7 +831,7 @@ mod tests {
                     .sum::<u128>()
             })
             .collect::<Vec<_>>();
-        let gram = orbit_gram(&alphas, 2, &Atom::one(), 100).unwrap();
+        let gram = orbit_gram(&alphas, 2, &Atom::one(), Some(100)).unwrap();
         for row in gram {
             assert_eq!(
                 row,
@@ -743,10 +845,27 @@ mod tests {
 
     #[test]
     fn dense_orbit_product_obeys_the_output_budget_before_solving() {
-        let error = OrbitProjector::new(&[0, 0, 1, 1], &[0, 1, 0, 1], Atom::one(), 3).unwrap_err();
+        let error =
+            OrbitProjector::new(&[0, 0, 1, 1], &[0, 1, 0, 1], Atom::one(), Some(3)).unwrap_err();
         assert!(matches!(
             error,
             OrbitProjectorError::OutputLimit { terms: 4, limit: 3 }
+        ));
+    }
+
+    #[test]
+    fn orbit_representation_overflows_are_reported() {
+        assert!(matches!(
+            MatchingIntersections::new(&[0; 256], 1, &[0; 256], 1, None),
+            Err(OrbitProjectorError::CounterOverflow)
+        ));
+        assert!(matches!(
+            relative_matching_distribution(&[256], 1, None),
+            Err(OrbitProjectorError::CounterOverflow)
+        ));
+        assert!(matches!(
+            add_alpha(&mut [u16::MAX], &[1]),
+            Err(OrbitProjectorError::CounterOverflow)
         ));
     }
 
@@ -781,7 +900,7 @@ mod tests {
         internal.extend([1; 18]);
         let mut projector = vec![1; 18];
         projector.extend([0; 2]);
-        let result = OrbitProjector::new(&internal, &projector, parse!("D"), 100).unwrap();
+        let result = OrbitProjector::new(&internal, &projector, parse!("D"), Some(100)).unwrap();
         let elapsed = started.elapsed();
 
         assert_eq!(result.terms().len(), 4);
@@ -822,7 +941,8 @@ mod tests {
 
     fn compare_with_brute_force(internal: &[usize], projector: &[usize]) {
         let dimension = parse!("D");
-        let reduced = OrbitProjector::new(internal, projector, dimension.clone(), 10_000).unwrap();
+        let reduced =
+            OrbitProjector::new(internal, projector, dimension.clone(), Some(10_000)).unwrap();
         let reduced = reduced
             .terms()
             .iter()
@@ -878,7 +998,7 @@ mod tests {
             .copied()
             .max()
             .map_or(0, |maximum| maximum + 1);
-        let mut alpha = vec![0; triangle_len(class_count)];
+        let mut alpha = vec![0; triangle_len(class_count).unwrap()];
         for left in 0..pairing.len() {
             let right = pairing[left];
             if left < right {

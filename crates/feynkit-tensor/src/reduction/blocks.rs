@@ -2,17 +2,33 @@
 //! contractions and vertex sums are coefficients, not projector monomials.
 
 use super::external::ExternalProjector;
-use super::*;
-use idenso::shorthands::UndoShorthands;
-use spenso::{
-    network::parsing::ParseState,
-    structure::{abstract_index::AbstractIndex, partial::PartialStructure},
+use super::{
+    Outside, TensorMonomial, TensorReducer, TensorReduction, TensorReductionError,
+    TensorReductionTerm, indexed_vector,
 };
+use idenso::shorthands::UndoShorthands;
+use idenso::tensor::composition;
+use idenso::tensor::{ContractSettings, SymbolicTensor};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::parsing::ParseState;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::{BaseRepName, LibraryRep, Minkowski};
+use spenso::structure::slot::IsAbstractSlot;
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
+use symbolica::utils::resources;
+use symbolica::utils::resources::ResourceBudget;
 
 impl TensorReducer {
-    pub(super) fn has_tensor_sum(expression: AtomView<'_>) -> bool {
+    pub(super) fn has_tensor_sum(expression: AtomView<'_>) -> Result<bool, TensorReductionError> {
         let mut found = false;
+        let mut resource_error = None;
         expression.visitor(&mut |value| {
+            if let Err(error) = resources::checkpoint() {
+                resource_error = Some(error);
+                return false;
+            }
             if matches!(value, AtomView::Add(_))
                 && value.contains_symbol(Minkowski::selfless_symbol())
             {
@@ -20,7 +36,10 @@ impl TensorReducer {
             }
             !found
         });
-        found
+        if let Some(error) = resource_error {
+            return Err(error.into());
+        }
+        Ok(found)
     }
 
     pub(super) fn reduce_blocks(
@@ -28,32 +47,18 @@ impl TensorReducer {
         source: &SymbolicTensor<PartialStructure>,
         external: Option<&ExternalProjector>,
     ) -> Result<TensorReduction, TensorReductionError> {
-        // Refuse oversized selected powers before the collector instantiates
-        // their independent dummy scopes. Scalar invariant powers stay opaque.
-        let mut oversized_power = false;
-        source.expression().visitor(&mut |value| {
-            if let AtomView::Pow(power) = value
-                && let AtomView::Add(sum) = power.get_base()
-                && let Ok(exponent) = usize::try_from(power.get_exp())
-            {
-                oversized_power |= sum.iter().any(|term| {
-                    self.parse_monomial(term).is_ok_and(|term| {
-                        term.integrated.len().saturating_mul(exponent)
-                            > OrthogonalWeingarten::MAX_RANK
-                    })
-                });
-            }
-            !oversized_power
-        });
-        if oversized_power {
-            return Err(TensorReductionError::TensorAlgebra(
-                "selected coefficient collection did not complete: tensor power exceeds the projector rank limit".into(),
-            ));
-        }
+        resources::checkpoint()?;
         // Only loop/spectator dots need open ports. Invariant dots, including
         // inverse Gram factors, must remain scalar coefficients.
         let mut admission_error = None;
         let indexed = source.expression().replace_map(|value, _, out| {
+            if admission_error.is_some() {
+                return;
+            }
+            if let Err(error) = resources::checkpoint() {
+                admission_error = Some(TensorReductionError::Resource(error));
+                return;
+            }
             let base = match value {
                 AtomView::Pow(power) => power.get_base(),
                 base => base,
@@ -79,6 +84,7 @@ impl TensorReducer {
             return Err(error);
         }
         let indexed = source.with_checked_expression(indexed)?;
+        resources::checkpoint()?;
         let rows = indexed
             .coefficient_list_with(|value| {
                 match self.indexed_vector(value) {
@@ -96,6 +102,7 @@ impl TensorReducer {
                 }
             })
             .map_err(|e| TensorReductionError::TensorAlgebra(e.to_string()))?;
+        resources::checkpoint()?;
         if let Some(error) = admission_error {
             return Err(error);
         }
@@ -104,6 +111,7 @@ impl TensorReducer {
         let mut terms = Vec::new();
         let mut max_rank = 0;
         for (outside, inside) in rows {
+            resources::checkpoint()?;
             let boundary = PartialStructure::from_logical_slots(
                 inside
                     .structure()
@@ -116,12 +124,6 @@ impl TensorReducer {
                 .map_err(|e| TensorReductionError::TensorAlgebra(e.to_string()))?;
             let rank = slots.len();
             max_rank = max_rank.max(rank);
-            if rank > OrthogonalWeingarten::MAX_RANK {
-                return Err(TensorReductionError::UnsupportedRank {
-                    rank,
-                    maximum: OrthogonalWeingarten::MAX_RANK,
-                });
-            }
             let indices = (0..rank).map(|_| state.fresh_index()).collect::<Vec<_>>();
             let fresh = slots
                 .iter()
@@ -143,9 +145,7 @@ impl TensorReducer {
                 .filter_map(|(position, slot)| {
                     slots
                         .iter()
-                        .position(|expected| {
-                            expected == &idenso::tensor::composition::port_atom(slot)
-                        })
+                        .position(|expected| expected == &composition::port_atom(slot))
                         .map(|axis| (position, indices[axis]))
                 })
                 .collect();
@@ -153,22 +153,25 @@ impl TensorReducer {
             let probe = SPENSO_TAG.rank_one_tensor_symbol("FeynKit::BlockProbe");
             // Probe vectors use the same native representation as the block
             // ports; the raw scalar dimension belongs only to projector weights.
-            let mut probe_index = 0;
+            let mut probe_index = 0_usize;
             let probes = representations
                 .iter()
                 .map(|representation| {
                     loop {
+                        resources::checkpoint()?;
                         let candidate = FunctionBuilder::new(probe)
                             .add_arg(probe_index)
                             .add_arg(representation)
                             .finish();
-                        probe_index += 1;
+                        probe_index = probe_index
+                            .checked_add(1)
+                            .ok_or(TensorReductionError::CounterOverflow)?;
                         if !self.external_vectors.contains(&candidate) {
-                            break candidate;
+                            break Ok::<_, TensorReductionError>(candidate);
                         }
                     }
                 })
-                .collect::<Vec<_>>();
+                .collect::<Result<Vec<_>, _>>()?;
             let monomial = TensorMonomial {
                 scalar: Atom::one(),
                 integrated: probes.clone(),
@@ -194,6 +197,7 @@ impl TensorReducer {
                 Vec::new()
             };
             for term in projected {
+                resources::checkpoint()?;
                 // Apply the existing projector to a general covariant block:
                 // every probe occurrence denotes one of its open tensor ports.
                 let projector = term.tensor.expression().replace_map(|value, _, out| {
@@ -253,12 +257,15 @@ impl TensorReducer {
                         tensor,
                         integrated_orbit: None,
                         projector_orbit: None,
+                        budget: ResourceBudget::capture_current(),
                     });
                 }
-                if terms.len() > self.output_term_limit {
+                if let Some(limit) = self.output_term_limit
+                    && terms.len() > limit
+                {
                     return Err(TensorReductionError::OutputLimit {
                         terms: terms.len(),
-                        limit: self.output_term_limit,
+                        limit,
                     });
                 }
             }
@@ -273,6 +280,7 @@ impl TensorReducer {
             zero: source.with_checked_expression(Atom::Zero)?,
             max_rank,
             fully_contracted,
+            budget: ResourceBudget::capture_current(),
         })
     }
 }
@@ -280,6 +288,7 @@ impl TensorReducer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::reduction::{dot, minkowski_slot};
     use symbolica::{parse, symbol};
 
     #[test]
@@ -307,9 +316,10 @@ mod tests {
             .unwrap();
         assert_eq!(result.terms().len(), 1);
         assert!(result.is_fully_contracted());
-        assert!(TensorReducer::has_tensor_sum(
-            result.expression().unwrap().into_expression().as_view()
-        ));
+        assert!(
+            TensorReducer::has_tensor_sum(result.expression().unwrap().into_expression().as_view())
+                .unwrap()
+        );
         // Independently contract this small rank-two identity to scalar dots.
         let actual = result
             .expression()

@@ -4,10 +4,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use linnet::half_edge::NodeIndex;
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
 use linnet::half_edge::involution::{EdgeIndex, Flow, Hedge, HedgePair, Orientation};
 use linnet::half_edge::swap::Swap;
-use linnet::half_edge::NodeIndex;
 use linnet::permutation::Permutation;
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyKeyError, PyReferenceError, PyTypeError, PyValueError};
@@ -16,8 +16,8 @@ use pyo3::types::{PyAny, PyDict, PyTuple, PyType};
 
 use crate::dot::{self, PyDotCodec, PyEdgeValue, PyGlobalData, PyNodeValue};
 use crate::drawing::{
-    copy_drawing, drawing_dict, DrawingGuard, PyEdgeDrawing, PyHalfEdgeDrawing, PyNodeDrawing,
-    EDGE_FIELDS, HEDGE_FIELDS, NODE_FIELDS,
+    DrawingGuard, EDGE_FIELDS, HEDGE_FIELDS, NODE_FIELDS, PyEdgeDrawing, PyHalfEdgeDrawing,
+    PyNodeDrawing, copy_drawing, drawing_dict,
 };
 use crate::native_graph::{PyHedgeGraph, PyNodeStore};
 use crate::topology::{PyCutPartition, PyCycle, PyDirectionBasis, PySubgraph, PyTraversalTree};
@@ -1903,21 +1903,30 @@ impl PyGraph {
         Self::find_bond(slf, py, subgraph, min_size, max_size)
     }
 
-    /// Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+    /// Enumerate circuits with optional diagnostics and cooperative RAM/time controls.
     ///
-    /// `max_results` bounds all non-empty combinations of a cycle basis, not only
-    /// the combinations that ultimately form circuits.
+    /// `max_results` is an opt-in diagnostic over all non-empty cycle-basis
+    /// combinations, not only final circuits. None disables the count ceiling.
     #[pyo3(
         name = "all_cycles",
-        signature = (*, max_results, subgraph=None)
+        signature = (*, max_results=None, subgraph=None, max_process_rss_bytes=None, max_elapsed_seconds=None)
     )]
     fn py_all_cycles(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        max_results: usize,
+        max_results: Option<usize>,
         subgraph: Option<&PySubgraph>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Vec<PyCycle>> {
-        Self::all_cycles(slf, py, max_results, subgraph)
+        Self::all_cycles(
+            slf,
+            py,
+            max_results,
+            subgraph,
+            max_process_rss_bytes,
+            max_elapsed_seconds,
+        )
     }
 
     /// Enumerate tadpole components after identifying a non-empty terminal node set.

@@ -5,6 +5,8 @@ use symbolica::{
     tensors::matrix::Matrix,
 };
 
+use symbolica::utils::resources::{self, ResourceBudget, ResourceLimits};
+
 use super::{IntegralFamily, IntegralFamilyError};
 
 /// An affine relation `D_pivot - sum(c_i D_i) = constant`, with `i < pivot`.
@@ -24,98 +26,113 @@ impl IntegralFamily {
     /// performed. Generic nonzero external invariants may appear in coefficients;
     /// specialize kinematics before constructing the family for degenerate cases.
     ///
-    /// `max_states` bounds processed exponent vectors, including intermediate
-    /// states. Exceeding the budget returns an error rather than a partial result.
+    /// `max_states` is an opt-in diagnostic bound on processed exponent vectors,
+    /// including intermediate states; `None` leaves their count unrestricted.
+    /// `resources` cooperatively bounds process RSS and elapsed time across this
+    /// request and any enclosing resource scope. Exhaustion returns an error,
+    /// never a partial algebraic identity.
     pub fn partial_fraction(
         &self,
         powers: &[i32],
-        max_states: usize,
+        max_states: Option<usize>,
+        resources: ResourceLimits,
     ) -> Result<Vec<(Atom, Vec<i32>)>, IntegralFamilyError> {
-        if powers.len() != self.denominators.len() {
-            return Err(IntegralFamilyError::InvalidPowers);
-        }
-        if self
-            .denominators
-            .iter()
-            .zip(powers)
-            .any(|(d, p)| d.is_zero() && *p > 0)
-        {
-            return Err(IntegralFamilyError::InvalidBasis(
-                "a positive-power denominator is identically zero".into(),
-            ));
-        }
-        let mut pending = BTreeMap::from([(powers.to_vec(), Atom::one())]);
-        let mut relations = BTreeMap::new();
-        let mut result = Vec::new();
-        let mut processed = 0;
-        while let Some((powers, coefficient)) = pending.pop_last() {
-            processed += 1;
-            if processed > max_states {
-                return Err(IntegralFamilyError::PartialFractionLimit(max_states));
+        ResourceBudget::new(resources).run(|| {
+            if powers.len() != self.denominators.len() {
+                return Err(IntegralFamilyError::InvalidPowers);
             }
-            let coefficient = coefficient.together();
-            if coefficient.is_zero() {
-                continue;
-            }
-            let support = powers
+            if self
+                .denominators
                 .iter()
-                .enumerate()
-                .filter_map(|(i, p)| (*p > 0).then_some(i))
-                .collect::<Vec<_>>();
-            if !relations.contains_key(&support) {
-                relations.insert(support.clone(), self.first_dependence(&support)?);
+                .zip(powers)
+                .any(|(d, p)| d.is_zero() && *p > 0)
+            {
+                return Err(IntegralFamilyError::InvalidBasis(
+                    "a positive-power denominator is identically zero".into(),
+                ));
             }
-            let Some(relation) = &relations[&support] else {
-                self.require_external_coefficient(&coefficient)?;
-                result.push((coefficient, powers));
-                continue;
-            };
-            let branches = if relation.constant.is_zero() {
-                if relation.coefficients.is_empty() {
-                    return Err(IntegralFamilyError::InvalidBasis(
-                        "a positive-power denominator is identically zero".into(),
-                    ));
+            resources::checkpoint()?;
+            let mut pending = BTreeMap::from([(powers.to_vec(), Atom::one())]);
+            let mut relations = BTreeMap::new();
+            let mut result = Vec::new();
+            let mut processed = 0usize;
+            while let Some((powers, coefficient)) = pending.pop_last() {
+                resources::checkpoint()?;
+                if let Some(limit) = max_states {
+                    processed = processed.saturating_add(1);
+                    if processed > limit {
+                        return Err(IntegralFamilyError::PartialFractionLimit(limit));
+                    }
                 }
-                // D_j = sum(c_i D_i). Dividing by D_j transfers one power
-                // from an earlier denominator to j. Total degree is fixed,
-                // while the exponent vector decreases lexicographically.
-                relation
-                    .coefficients
-                    .iter()
-                    .map(|(i, c)| (*i, c.clone()))
-                    .collect::<Vec<_>>()
-            } else {
-                // 1 = (D_j - sum(c_i D_i))/constant reduces total degree.
-                std::iter::once((relation.pivot, Atom::one() / &relation.constant))
-                    .chain(
-                        relation
-                            .coefficients
-                            .iter()
-                            .map(|(i, c)| (*i, -c / &relation.constant)),
-                    )
-                    .collect()
-            };
-            for (removed, factor) in branches {
-                if factor.is_zero() {
+                let coefficient = coefficient.together();
+                if coefficient.is_zero() {
                     continue;
                 }
-                let mut next = powers.clone();
-                next[removed] -= 1;
-                if relation.constant.is_zero() {
-                    next[relation.pivot] = next[relation.pivot]
-                        .checked_add(1)
-                        .ok_or(IntegralFamilyError::PowerOverflow)?;
+                let support = powers
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, p)| (*p > 0).then_some(i))
+                    .collect::<Vec<_>>();
+                if !relations.contains_key(&support) {
+                    relations.insert(support.clone(), self.first_dependence(&support)?);
+                    resources::checkpoint()?;
                 }
-                // Processing largest vectors first coalesces all paths to a
-                // state before visiting it, and avoids recursive stack growth.
-                debug_assert!(next < powers);
-                *pending.entry(next).or_insert_with(Atom::new) += &coefficient * factor;
-                if processed.saturating_add(pending.len()) > max_states {
-                    return Err(IntegralFamilyError::PartialFractionLimit(max_states));
+                let Some(relation) = &relations[&support] else {
+                    self.require_external_coefficient(&coefficient)?;
+                    result.push((coefficient, powers));
+                    continue;
+                };
+                let branches = if relation.constant.is_zero() {
+                    if relation.coefficients.is_empty() {
+                        return Err(IntegralFamilyError::InvalidBasis(
+                            "a positive-power denominator is identically zero".into(),
+                        ));
+                    }
+                    // D_j = sum(c_i D_i). Dividing by D_j transfers one power
+                    // from an earlier denominator to j. Total degree is fixed,
+                    // while the exponent vector decreases lexicographically.
+                    relation
+                        .coefficients
+                        .iter()
+                        .map(|(i, c)| (*i, c.clone()))
+                        .collect::<Vec<_>>()
+                } else {
+                    // 1 = (D_j - sum(c_i D_i))/constant reduces total degree.
+                    std::iter::once((relation.pivot, Atom::one() / &relation.constant))
+                        .chain(
+                            relation
+                                .coefficients
+                                .iter()
+                                .map(|(i, c)| (*i, -c / &relation.constant)),
+                        )
+                        .collect()
+                };
+                for (removed, factor) in branches {
+                    resources::checkpoint()?;
+                    if factor.is_zero() {
+                        continue;
+                    }
+                    let mut next = powers.clone();
+                    next[removed] -= 1;
+                    if relation.constant.is_zero() {
+                        next[relation.pivot] = next[relation.pivot]
+                            .checked_add(1)
+                            .ok_or(IntegralFamilyError::PowerOverflow)?;
+                    }
+                    // Processing largest vectors first coalesces all paths to a
+                    // state before visiting it, and avoids recursive stack growth.
+                    debug_assert!(next < powers);
+                    *pending.entry(next).or_insert_with(Atom::new) += &coefficient * factor;
+                    if let Some(limit) =
+                        max_states.filter(|limit| processed.saturating_add(pending.len()) > *limit)
+                    {
+                        return Err(IntegralFamilyError::PartialFractionLimit(limit));
+                    }
                 }
             }
-        }
-        Ok(result)
+            resources::checkpoint()?;
+            Ok(result)
+        })
     }
 
     fn first_dependence(
@@ -133,6 +150,7 @@ impl IntegralFamily {
             .map_err(|e| IntegralFamilyError::InvalidBasis(e.to_string()))?;
         let mut rows = Vec::new();
         for (position, row) in matrix.row_iter().enumerate() {
+            resources::checkpoint()?;
             rows.push(row.to_vec());
             let candidate = Matrix::from_nested_vec(rows.clone(), matrix.field().clone())
                 .map_err(IntegralFamilyError::InvalidBasis)?;
@@ -179,7 +197,9 @@ impl IntegralFamily {
 mod tests {
     use super::*;
     use feynkit_kinematics::Kinematics;
+    use std::time::Duration;
     use symbolica::parse;
+    use symbolica::utils::resources::ResourceLimitError;
 
     fn verify(
         denominators: Vec<Atom>,
@@ -189,7 +209,9 @@ mod tests {
         kin: &Kinematics,
     ) {
         let family = IntegralFamily::new(loops, external, denominators.clone(), kin).unwrap();
-        let terms = family.partial_fraction(&powers, 10_000).unwrap();
+        let terms = family
+            .partial_fraction(&powers, None, ResourceLimits::default())
+            .unwrap();
         let expression = |powers: &[i32]| {
             denominators
                 .iter()
@@ -274,17 +296,70 @@ mod tests {
         let family =
             IntegralFamily::new(vec![k.clone()], vec![], vec![x.clone(), &x - 1], &kin).unwrap();
         assert!(matches!(
-            family.partial_fraction(&[1], 10),
+            family.partial_fraction(&[1], None, ResourceLimits::default()),
             Err(IntegralFamilyError::InvalidPowers)
         ));
         assert!(matches!(
-            family.partial_fraction(&[2, 2], 1),
+            family.partial_fraction(&[2, 2], Some(1), ResourceLimits::default()),
             Err(IntegralFamilyError::PartialFractionLimit(1))
         ));
+        let memory = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..ResourceLimits::default()
+            },
+            || Ok(2),
+        );
+        assert!(matches!(
+            memory.run(|| family.partial_fraction(&[2, 2], None, ResourceLimits::default())),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(matches!(
+            family.partial_fraction(
+                &[2, 2],
+                None,
+                ResourceLimits {
+                    max_elapsed: Some(Duration::ZERO),
+                    ..ResourceLimits::default()
+                },
+            ),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Elapsed { .. } | ResourceLimitError::MonitorUnavailable { .. }
+            ))
+        ));
+        let missing_monitor = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..ResourceLimits::default()
+            },
+            || Err("test monitor unavailable".into()),
+        );
+        assert!(matches!(
+            missing_monitor.run(|| family.partial_fraction(
+                &[2, 2],
+                None,
+                ResourceLimits::default()
+            )),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::MonitorUnavailable { .. }
+            ))
+        ));
+        assert!(
+            !family
+                .partial_fraction(&[2, 2], None, ResourceLimits::default())
+                .unwrap()
+                .is_empty()
+        );
         let zero = IntegralFamily::new(vec![k], vec![], vec![Atom::Zero], &kin).unwrap();
-        assert!(zero.partial_fraction(&[1], 10).is_err());
+        assert!(
+            zero.partial_fraction(&[1], None, ResourceLimits::default())
+                .is_err()
+        );
         assert_eq!(
-            zero.partial_fraction(&[0], 10).unwrap(),
+            zero.partial_fraction(&[0], None, ResourceLimits::default())
+                .unwrap(),
             vec![(Atom::one(), vec![0])]
         );
     }
@@ -359,7 +434,9 @@ mod tests {
                 let family =
                     IntegralFamily::new(vec![k.clone()], vec![p.clone()], input.clone(), &kin)
                         .unwrap();
-                let terms = family.partial_fraction(&[1, 1, 1], 100).unwrap();
+                let terms = family
+                    .partial_fraction(&[1, 1, 1], None, ResourceLimits::default())
+                    .unwrap();
                 assert_eq!(terms.len(), 3, "expanded={expanded}");
                 for (coefficient, powers) in &terms {
                     assert!(!coefficient.contains(x.as_view()));

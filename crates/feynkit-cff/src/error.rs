@@ -1,9 +1,12 @@
 use crate::{EdgeId, VertexId};
+use symbolica::utils::resources::ResourceLimitError;
 use thiserror::Error;
 
 /// Errors reported while validating a topology or generating a CFF expression.
 #[derive(Clone, Debug, Error, PartialEq, Eq)]
 pub enum CffError {
+    #[error("{0}")]
+    Resource(#[from] ResourceLimitError),
     #[error("a CFF graph must contain at least one vertex")]
     EmptyGraph,
     #[error("CFF generation supports at most {maximum} vertices, received {actual}")]

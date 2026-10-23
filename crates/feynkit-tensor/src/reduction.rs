@@ -32,6 +32,7 @@
 //! output uses the explicitly budgeted labeled-pairing path.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
+use std::mem;
 
 use feynkit_graph::FeynmanDiagram;
 use idenso::tensor::{ContractSettings, SymbolicTensor};
@@ -46,6 +47,8 @@ use spenso::{
     },
 };
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol};
+use symbolica::utils::resources;
+use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
 use thiserror::Error;
 
 mod blocks;
@@ -55,13 +58,6 @@ use crate::{
     OrthogonalWeingarten, WeingartenError,
     orbit_projector::{OrbitProjector, OrbitProjectorError},
 };
-
-// Closed single-vector angular moments need no universal Weingarten table.
-// 31!! still fits the reducer's signed 64-bit multiplicity conversion.
-const MAX_ISOTROPIC_RANK: usize = 32;
-const DEFAULT_PAIRING_LIMIT: u128 = 20_000;
-const DEFAULT_PAIRING_PRODUCT_LIMIT: u128 = 120_000_000;
-const DEFAULT_OUTPUT_TERM_LIMIT: usize = 100_000;
 
 /// One invariant contraction class of repeated vectors.
 ///
@@ -127,11 +123,17 @@ impl ContractionOrbit {
     }
 
     /// Convert the orbit to a product of standard Spenso dot products.
-    pub fn invariant(&self) -> Atom {
+    ///
+    /// # Errors
+    /// Returns a resource error if a configured process-memory or elapsed-time
+    /// allowance is exceeded during materialization.
+    pub fn invariant(&self) -> Result<Atom, TensorReductionError> {
+        resources::checkpoint()?;
         let mut invariant = Atom::one();
         let mut alpha = 0;
         for left in 0..self.vectors.len() {
             for right in left..self.vectors.len() {
+                resources::checkpoint()?;
                 let exponent = self.alpha[alpha];
                 alpha += 1;
                 if exponent == 0 {
@@ -145,7 +147,8 @@ impl ContractionOrbit {
                 };
             }
         }
-        invariant
+        resources::checkpoint()?;
+        Ok(invariant)
     }
 }
 
@@ -179,6 +182,7 @@ pub struct TensorReductionTerm {
     tensor: SymbolicTensor<PartialStructure>,
     integrated_orbit: Option<ContractionOrbit>,
     projector_orbit: Option<ContractionOrbit>,
+    budget: ResourceBudget,
 }
 
 impl TensorReductionTerm {
@@ -204,9 +208,14 @@ impl TensorReductionTerm {
 
     /// Apply the scalar weight without discarding the retained tensor interface.
     pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        Ok(self
-            .tensor
-            .with_checked_expression(&self.coefficient * self.tensor.expression())?)
+        self.budget.run(|| {
+            resources::checkpoint()?;
+            let expression = self
+                .tensor
+                .with_checked_expression(&self.coefficient * self.tensor.expression())?;
+            resources::checkpoint()?;
+            Ok(expression)
+        })
     }
 }
 
@@ -239,6 +248,7 @@ pub struct TensorReduction {
     zero: SymbolicTensor<PartialStructure>,
     max_rank: usize,
     fully_contracted: bool,
+    budget: ResourceBudget,
 }
 
 impl TensorReduction {
@@ -273,16 +283,28 @@ impl TensorReduction {
     /// }
     /// ```
     pub fn expression(&self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.terms.iter().try_fold(self.zero.clone(), |sum, term| {
-            Ok(sum.try_add(&term.expression()?)?)
+        self.budget.run(|| {
+            resources::checkpoint()?;
+            let expression = self.terms.iter().try_fold(self.zero.clone(), |sum, term| {
+                resources::checkpoint()?;
+                Ok::<_, TensorReductionError>(sum.try_add(&term.expression()?)?)
+            })?;
+            resources::checkpoint()?;
+            Ok(expression)
         })
     }
 
     /// Consume the compact result and materialize its expression.
     pub fn into_expression(self) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        self.terms
-            .into_iter()
-            .try_fold(self.zero, |sum, term| Ok(sum.try_add(&term.expression()?)?))
+        self.budget.run(|| {
+            resources::checkpoint()?;
+            let expression = self.terms.into_iter().try_fold(self.zero, |sum, term| {
+                resources::checkpoint()?;
+                Ok::<_, TensorReductionError>(sum.try_add(&term.expression()?)?)
+            })?;
+            resources::checkpoint()?;
+            Ok(expression)
+        })
     }
 }
 
@@ -321,9 +343,10 @@ pub struct TensorReducer {
     integrated_heads: BTreeSet<String>,
     integrated_vectors: BTreeSet<Atom>,
     external_vectors: BTreeSet<Atom>,
-    pairing_limit: u128,
-    pairing_product_limit: u128,
-    output_term_limit: usize,
+    pairing_limit: Option<u128>,
+    pairing_product_limit: Option<u128>,
+    output_term_limit: Option<usize>,
+    resource_limits: ResourceLimits,
 }
 
 impl TensorReducer {
@@ -338,9 +361,9 @@ impl TensorReducer {
     /// dimension below half the tensor rank makes the universal metric basis
     /// singular. The all-equal isotropic fast path remains available there.
     ///
-    /// Fully contracted vacuum monomials with one repeated integrated vector
-    /// additionally support even ranks through 32. General and external-basis
-    /// projectors retain the rank-20 limit.
+    /// Count diagnostics and process-memory/elapsed-time limits are disabled
+    /// by default. Configure resources with [`Self::with_resources`]. Matching
+    /// counters and exponent representations remain checked for overflow.
     ///
     /// Add selectors with [`Self::with_integrated_head`] or
     /// [`Self::with_integrated_vector`].
@@ -350,9 +373,10 @@ impl TensorReducer {
             integrated_heads: BTreeSet::new(),
             integrated_vectors: BTreeSet::new(),
             external_vectors: BTreeSet::new(),
-            pairing_limit: DEFAULT_PAIRING_LIMIT,
-            pairing_product_limit: DEFAULT_PAIRING_PRODUCT_LIMIT,
-            output_term_limit: DEFAULT_OUTPUT_TERM_LIMIT,
+            pairing_limit: None,
+            pairing_product_limit: None,
+            output_term_limit: None,
+            resource_limits: ResourceLimits::default(),
         }
     }
 
@@ -401,24 +425,49 @@ impl TensorReducer {
         Ok(self)
     }
 
-    /// Bound labeled pairings generated by the generic/free-index path.
+    /// Opt into a labeled-pairing diagnostic for the generic/free-index path.
     ///
-    /// Symmetric contraction-orbit fast paths do not consume this budget.
+    /// Disabled by default. Symmetric contraction-orbit fast paths do not
+    /// consume this diagnostic allowance.
     pub fn with_pairing_limit(mut self, limit: u128) -> Self {
-        self.pairing_limit = limit;
+        self.pairing_limit = Some(limit);
         self
     }
 
-    /// Bound the labeled matching product in the residual-free-index path.
+    /// Opt into a matching-product diagnostic for residual-free-index output.
+    /// Disabled by default.
     pub fn with_pairing_product_limit(mut self, limit: u128) -> Self {
-        self.pairing_product_limit = limit;
+        self.pairing_product_limit = Some(limit);
         self
     }
 
-    /// Bound the number of distinct materialized invariant terms.
+    /// Opt into a diagnostic bound on materialized invariant terms.
+    /// Disabled by default.
     pub fn with_output_term_limit(mut self, limit: usize) -> Self {
-        self.output_term_limit = limit;
+        self.output_term_limit = Some(limit);
         self
+    }
+
+    /// Configure shared process-memory and elapsed-time limits for a request.
+    /// Nested resource scopes retain any stricter limits set by their caller.
+    ///
+    /// ```
+    /// use feynkit_tensor::TensorReducer;
+    /// use symbolica::parse;
+    /// use symbolica::utils::resources::ResourceLimits;
+    ///
+    /// let reducer = TensorReducer::new(parse!("D"))
+    ///     .with_resources(ResourceLimits::default());
+    /// assert_eq!(reducer.resource_limits(), ResourceLimits::default());
+    /// ```
+    pub fn with_resources(mut self, limits: ResourceLimits) -> Self {
+        self.resource_limits = limits;
+        self
+    }
+
+    /// Return the process-memory and elapsed-time configuration.
+    pub fn resource_limits(&self) -> ResourceLimits {
+        self.resource_limits
     }
 
     /// Dimension used by Spenso slots and projector coefficients.
@@ -437,8 +486,13 @@ impl TensorReducer {
         &self,
         expression: Atom,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorReductionError> {
-        SymbolicTensor::infer(expression.clone())
-            .map_err(|error| self.input_error(expression.as_view(), error))
+        ResourceBudget::new(self.resource_limits).run(|| {
+            resources::checkpoint()?;
+            let source = SymbolicTensor::infer(expression.clone())
+                .map_err(|error| self.input_error(expression.as_view(), error))?;
+            resources::checkpoint()?;
+            Ok(source)
+        })
     }
 
     fn input_error(
@@ -491,6 +545,18 @@ impl TensorReducer {
         &self,
         source: &SymbolicTensor<PartialStructure>,
     ) -> Result<TensorReduction, TensorReductionError> {
+        ResourceBudget::new(self.resource_limits).run(|| {
+            let reduction = self.reduce_scoped(source)?;
+            resources::checkpoint()?;
+            Ok(reduction)
+        })
+    }
+
+    fn reduce_scoped(
+        &self,
+        source: &SymbolicTensor<PartialStructure>,
+    ) -> Result<TensorReduction, TensorReductionError> {
+        resources::checkpoint()?;
         if self.integrated_heads.is_empty() && self.integrated_vectors.is_empty() {
             return Err(TensorReductionError::NoIntegratedVectorsSelected);
         }
@@ -509,44 +575,33 @@ impl TensorReducer {
             // Contract validates through the shared cached owner; diagnostic
             // refinement never accepts a source that native validation rejects.
             .map_err(|error| self.input_error(source.expression().as_view(), error))?;
+        resources::checkpoint()?;
         let normalized = normalized
             .to_dots()
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
-        if Self::has_tensor_sum(normalized.expression().as_view()) {
+        resources::checkpoint()?;
+        if Self::has_tensor_sum(normalized.expression().as_view())? {
             return self.reduce_blocks(&normalized, external.as_ref());
         }
         let rows = normalized
             .coefficient_list(TensorCollectFilter::Reps([LibraryRep::from(Minkowski {})]))
             .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
-        if rows.len() > self.output_term_limit {
+        resources::checkpoint()?;
+        if let Some(limit) = self.output_term_limit
+            && rows.len() > limit
+        {
             return Err(TensorReductionError::OutputLimit {
                 terms: rows.len(),
-                limit: self.output_term_limit,
+                limit,
             });
         }
 
         let mut terms = Vec::new();
         let mut max_rank = 0;
         for (selected, coefficient) in rows {
+            resources::checkpoint()?;
             let monomial = self.parse_monomial(selected.expression().as_view())?;
             max_rank = max_rank.max(monomial.integrated.len());
-            let extended_isotropic = external.is_none()
-                && monomial.integrated.len() <= MAX_ISOTROPIC_RANK
-                && monomial.integrated.len() % 2 == 0
-                && monomial
-                    .integrated
-                    .windows(2)
-                    .all(|pair| pair[0] == pair[1])
-                && monomial
-                    .outside
-                    .iter()
-                    .all(|outside| matches!(outside, Outside::Vector(_)));
-            if monomial.integrated.len() > OrthogonalWeingarten::MAX_RANK && !extended_isotropic {
-                return Err(TensorReductionError::UnsupportedRank {
-                    rank: monomial.integrated.len(),
-                    maximum: OrthogonalWeingarten::MAX_RANK,
-                });
-            }
             let projected = if let Some(external) = &external {
                 self.reduce_external_monomial(monomial, external)?
             } else if monomial.integrated.len() % 2 == 0 {
@@ -555,14 +610,17 @@ impl TensorReducer {
                 Vec::new()
             };
             for mut term in projected {
+                resources::checkpoint()?;
                 let tensor = coefficient.multiply(&term.tensor)?;
                 term.tensor = source.with_checked_expression(tensor.expression().clone())?;
                 terms.push(term);
             }
-            if terms.len() > self.output_term_limit {
+            if let Some(limit) = self.output_term_limit
+                && terms.len() > limit
+            {
                 return Err(TensorReductionError::OutputLimit {
                     terms: terms.len(),
-                    limit: self.output_term_limit,
+                    limit,
                 });
             }
         }
@@ -572,12 +630,13 @@ impl TensorReducer {
             .logical_slots()
             .iter()
             .all(|slot| slot.rep().rep != LibraryRep::from(Minkowski {}));
-
+        resources::checkpoint()?;
         Ok(TensorReduction {
             terms,
             zero,
             max_rank,
             fully_contracted,
+            budget: ResourceBudget::capture_current(),
         })
     }
 
@@ -589,11 +648,11 @@ impl TensorReducer {
         let mut scalar_factors = Vec::new();
         let mut indexed_vectors = Vec::new();
         let mut opaque_factors = Vec::new();
-        let mut integrated_rank = 0_usize;
         let mut integrated = Vec::new();
         let mut outside = Vec::new();
 
         for factor in factors {
+            resources::checkpoint()?;
             let (base, exponent) = match factor {
                 AtomView::Pow(power) => (power.get_base(), power.get_exp().to_owned()),
                 base => (base, Atom::one()),
@@ -626,13 +685,17 @@ impl TensorReducer {
                             .ok()
                             .and_then(|count| usize::try_from(count).ok())
                             .ok_or(TensorReductionError::InvalidVectorPower(exponent))?;
-                        integrated_rank = integrated_rank.saturating_add(count);
-                        if integrated_rank > MAX_ISOTROPIC_RANK {
-                            return Err(TensorReductionError::UnsupportedRank {
-                                rank: integrated_rank,
-                                maximum: MAX_ISOTROPIC_RANK,
-                            });
-                        }
+                        let bytes = count
+                            .checked_mul(mem::size_of::<Atom>() + mem::size_of::<Outside>())
+                            .and_then(|bytes| u64::try_from(bytes).ok())
+                            .ok_or(TensorReductionError::CounterOverflow)?;
+                        resources::check_allocation(bytes)?;
+                        integrated.try_reserve(count).map_err(|error| {
+                            TensorReductionError::TensorAlgebra(error.to_string())
+                        })?;
+                        outside.try_reserve(count).map_err(|error| {
+                            TensorReductionError::TensorAlgebra(error.to_string())
+                        })?;
                         integrated.extend(std::iter::repeat_n(internal.compact.clone(), count));
                         outside.extend(std::iter::repeat_n(
                             Outside::Vector(external.compact.clone()),
@@ -652,39 +715,17 @@ impl TensorReducer {
                     TensorReductionError::InvalidVectorPower(power.get_exp().to_owned())
                 })?;
                 let integrated = self.is_integrated(&vector);
-                if exponent > MAX_ISOTROPIC_RANK {
-                    return Err(TensorReductionError::UnsupportedRank {
-                        rank: exponent,
-                        maximum: MAX_ISOTROPIC_RANK,
+                if exponent > 2 {
+                    return Err(TensorReductionError::AmbiguousIndex {
+                        index: vector.index,
+                        integrated: if integrated { exponent } else { 0 },
+                        outside: if integrated { 0 } else { exponent },
                     });
-                }
-                if integrated {
-                    integrated_rank = integrated_rank.checked_add(exponent).ok_or(
-                        TensorReductionError::UnsupportedRank {
-                            rank: usize::MAX,
-                            maximum: MAX_ISOTROPIC_RANK,
-                        },
-                    )?;
-                    if integrated_rank > MAX_ISOTROPIC_RANK {
-                        return Err(TensorReductionError::UnsupportedRank {
-                            rank: integrated_rank,
-                            maximum: MAX_ISOTROPIC_RANK,
-                        });
-                    }
                 }
                 indexed_vectors.extend(std::iter::repeat_n(vector, exponent));
                 continue;
             }
             if let Some(vector) = self.indexed_vector(factor)? {
-                if self.is_integrated(&vector) {
-                    integrated_rank += 1;
-                    if integrated_rank > MAX_ISOTROPIC_RANK {
-                        return Err(TensorReductionError::UnsupportedRank {
-                            rank: integrated_rank,
-                            maximum: MAX_ISOTROPIC_RANK,
-                        });
-                    }
-                }
                 indexed_vectors.push(vector);
             } else {
                 let factor = factor.to_owned();
@@ -695,6 +736,7 @@ impl TensorReducer {
 
         let mut by_index: BTreeMap<Atom, IndexOccupants> = BTreeMap::new();
         for vector in indexed_vectors {
+            resources::checkpoint()?;
             let integrated = self.is_integrated(&vector);
             let occupants =
                 by_index
@@ -712,6 +754,7 @@ impl TensorReducer {
         }
 
         for (index, occupants) in by_index {
+            resources::checkpoint()?;
             let opaque_occurrences =
                 opaque_factors
                     .iter()
@@ -832,6 +875,7 @@ impl TensorReducer {
         &self,
         monomial: TensorMonomial,
     ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
+        resources::checkpoint()?;
         let rank = monomial.integrated.len();
         if rank == 0 {
             return Ok(vec![TensorReductionTerm {
@@ -839,6 +883,7 @@ impl TensorReducer {
                 tensor: SymbolicTensor::infer(monomial.scalar)?,
                 integrated_orbit: None,
                 projector_orbit: None,
+                budget: ResourceBudget::capture_current(),
             }]);
         }
         let pair_count = rank / 2;
@@ -870,62 +915,85 @@ impl TensorReducer {
         // Residual free indices are not repeated-vector color classes, so the
         // orbit projector cannot compact them.  Keep this explicitly bounded
         // labeled path only for tensor-valued output.
-        let pairing_count = perfect_matching_count(rank);
-        if pairing_count > self.pairing_limit {
-            return Err(TensorReductionError::PairingLimit {
-                rank,
-                pairings: pairing_count,
-                limit: self.pairing_limit,
-            });
+        if let Some(limit) = self.pairing_limit {
+            let pairing_count = perfect_matching_count(rank)?;
+            if pairing_count > limit {
+                return Err(TensorReductionError::PairingLimit {
+                    rank,
+                    pairings: pairing_count,
+                    limit,
+                });
+            }
         }
-        let pairing_products = pairing_count.saturating_mul(pairing_count);
-        if pairing_products > self.pairing_product_limit {
-            return Err(TensorReductionError::PairingProductLimit {
-                rank,
-                products: pairing_products,
-                limit: self.pairing_product_limit,
-            });
+        if let Some(limit) = self.pairing_product_limit {
+            let pairing_count = perfect_matching_count(rank)?;
+            let pairing_products = pairing_count
+                .checked_mul(pairing_count)
+                .ok_or(TensorReductionError::CounterOverflow)?;
+            if pairing_products > limit {
+                return Err(TensorReductionError::PairingProductLimit {
+                    rank,
+                    products: pairing_products,
+                    limit,
+                });
+            }
         }
 
-        let pairings = perfect_matchings(rank);
+        let pairings = perfect_matchings(rank)?;
         let internal_classes = classified_pairings(&monomial.integrated, &pairings)?;
         let outside_classes = classified_outside(&monomial.outside, &pairings)?;
-        let output_classes = internal_classes.orbits.len() * outside_classes.atoms.len();
-        if output_classes > self.output_term_limit {
+        let output_classes = internal_classes
+            .orbits
+            .len()
+            .checked_mul(outside_classes.atoms.len())
+            .ok_or(TensorReductionError::CounterOverflow)?;
+        if let Some(limit) = self.output_term_limit
+            && output_classes > limit
+        {
             return Err(TensorReductionError::OutputLimit {
                 terms: output_classes,
-                limit: self.output_term_limit,
+                limit,
             });
         }
 
         let table = OrthogonalWeingarten::new(pair_count, self.dimension.clone())?;
+        resources::checkpoint()?;
         let mut coefficient_by_key = BTreeMap::new();
         let mut coset_index = BTreeMap::new();
         for (index, (coset, coefficient)) in table.coefficients().enumerate() {
-            coset_index.insert(coset_key_from_parts(coset.parts()), index);
+            coset_index.insert(coset_key_from_parts(coset.parts())?, index);
             coefficient_by_key.insert(index, coefficient.clone());
         }
         let coefficient_count = coefficient_by_key.len();
-        let mut counts =
-            vec![
-                0_u128;
-                internal_classes.orbits.len() * outside_classes.atoms.len() * coefficient_count
-            ];
+        let count_len = output_classes
+            .checked_mul(coefficient_count)
+            .ok_or(TensorReductionError::CounterOverflow)?;
+        let bytes = count_len
+            .checked_mul(mem::size_of::<u128>())
+            .and_then(|bytes| u64::try_from(bytes).ok())
+            .ok_or(TensorReductionError::CounterOverflow)?;
+        resources::check_allocation(bytes)?;
+        let mut counts = vec![0_u128; count_len];
         for (left_index, left) in pairings.iter().enumerate() {
+            resources::checkpoint()?;
             let internal = internal_classes.class_of_pairing[left_index];
             for (right_index, right) in pairings.iter().enumerate() {
+                resources::checkpoint()?;
                 let outside = outside_classes.class_of_pairing[right_index];
-                let key = matching_coset_key(left, right);
+                let key = matching_coset_key(left, right)?;
                 let coefficient = coset_index[&key];
                 let offset = (internal * outside_classes.atoms.len() + outside) * coefficient_count
                     + coefficient;
-                counts[offset] += 1;
+                counts[offset] = counts[offset]
+                    .checked_add(1)
+                    .ok_or(TensorReductionError::CounterOverflow)?;
             }
         }
 
         let mut terms = Vec::new();
         for (integrated_index, integrated_orbit) in internal_classes.orbits.into_iter().enumerate()
         {
+            resources::checkpoint()?;
             for outside_index in 0..outside_classes.atoms.len() {
                 let mut coefficient = Atom::Zero;
                 for coefficient_index in 0..coefficient_count {
@@ -945,11 +1013,12 @@ impl TensorReducer {
                     coefficient,
                     tensor: SymbolicTensor::infer(
                         monomial.scalar.clone()
-                            * integrated_orbit.invariant()
+                            * integrated_orbit.invariant()?
                             * outside_classes.atoms[outside_index].clone(),
                     )?,
                     integrated_orbit: Some(integrated_orbit.clone()),
                     projector_orbit: outside_classes.orbits[outside_index].clone(),
+                    budget: ResourceBudget::capture_current(),
                 });
             }
         }
@@ -996,11 +1065,12 @@ impl TensorReducer {
                     coefficient: term.coefficient().clone(),
                     tensor: SymbolicTensor::infer(
                         monomial.scalar.clone()
-                            * integrated_orbit.invariant()
-                            * projector_orbit.invariant(),
+                            * integrated_orbit.invariant()?
+                            * projector_orbit.invariant()?,
                     )?,
                     integrated_orbit: Some(integrated_orbit),
                     projector_orbit: Some(projector_orbit),
+                    budget: ResourceBudget::capture_current(),
                 })
             })
             .collect()
@@ -1012,10 +1082,12 @@ impl TensorReducer {
         projector_vectors: Option<Vec<Atom>>,
     ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
         let pair_count = monomial.integrated.len() / 2;
-        let coefficient =
-            OrthogonalWeingarten::isotropic_pairing_coefficient(pair_count, self.dimension.clone());
         let integrated_orbit = repeated_orbit(monomial.integrated[0].clone(), pair_count)?;
-        let internal = integrated_orbit.invariant();
+        let coefficient = OrthogonalWeingarten::isotropic_pairing_coefficient(
+            pair_count,
+            self.dimension.clone(),
+        )?;
+        let internal = integrated_orbit.invariant()?;
 
         if let Some(projector_vectors) = projector_vectors {
             let orbits = contraction_orbits(&projector_vectors, self.output_term_limit)?;
@@ -1028,10 +1100,11 @@ impl TensorReducer {
                         tensor: SymbolicTensor::infer(
                             monomial.scalar.clone()
                                 * internal.clone()
-                                * projector_orbit.invariant(),
+                                * projector_orbit.invariant()?,
                         )?,
                         integrated_orbit: Some(integrated_orbit.clone()),
                         projector_orbit: Some(projector_orbit),
+                        budget: ResourceBudget::capture_current(),
                     })
                 })
                 .collect();
@@ -1052,6 +1125,7 @@ impl TensorReducer {
                     )?,
                     integrated_orbit: Some(integrated_orbit.clone()),
                     projector_orbit: None,
+                    budget: ResourceBudget::capture_current(),
                 })
             })
             .collect()
@@ -1063,10 +1137,12 @@ impl TensorReducer {
         projector_vectors: &[Atom],
     ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
         let pair_count = monomial.integrated.len() / 2;
-        let coefficient =
-            OrthogonalWeingarten::isotropic_pairing_coefficient(pair_count, self.dimension.clone());
         let projector_orbit = repeated_orbit(projector_vectors[0].clone(), pair_count)?;
-        let projector = projector_orbit.invariant();
+        let coefficient = OrthogonalWeingarten::isotropic_pairing_coefficient(
+            pair_count,
+            self.dimension.clone(),
+        )?;
+        let projector = projector_orbit.invariant()?;
         contraction_orbits(&monomial.integrated, self.output_term_limit)?
             .into_iter()
             .map(|integrated_orbit| {
@@ -1074,10 +1150,11 @@ impl TensorReducer {
                     coefficient: coefficient.clone()
                         * atom_from_count(integrated_orbit.labeled_pairings)?,
                     tensor: SymbolicTensor::infer(
-                        monomial.scalar.clone() * integrated_orbit.invariant() * projector.clone(),
+                        monomial.scalar.clone() * integrated_orbit.invariant()? * projector.clone(),
                     )?,
                     integrated_orbit: Some(integrated_orbit),
                     projector_orbit: Some(projector_orbit.clone()),
+                    budget: ResourceBudget::capture_current(),
                 })
             })
             .collect()
@@ -1210,40 +1287,56 @@ impl FeynmanDiagramTensorExt for FeynmanDiagram {
         &self,
         reducer: &TensorReducer,
     ) -> Result<TensorReduction, TensorReductionError> {
-        let projected_numerator = self.numerator().multiply(self.projector())?;
-        reducer.reduce(&projected_numerator)
+        ResourceBudget::new(reducer.resource_limits()).run(|| {
+            resources::checkpoint()?;
+            let projected_numerator = self.numerator().multiply(self.projector())?;
+            resources::checkpoint()?;
+            reducer.reduce(&projected_numerator)
+        })
     }
 
     fn reduce_tensor_graphs(
         &self,
         reducer: &TensorReducer,
     ) -> Result<Vec<FeynmanDiagram>, TensorReductionError> {
-        let reduction = self.reduce_tensor_numerator(reducer)?;
-        if !reduction.is_fully_contracted() {
-            return Err(TensorReductionError::ResidualFreeIndices);
-        }
-        reduction
-            .terms
-            .into_iter()
-            .map(|term| term.expression())
-            .collect::<Result<Vec<_>, _>>()?
-            .into_iter()
-            .filter(|numerator| !numerator.is_zero())
-            .enumerate()
-            .map(|(index, numerator)| {
-                self.clone()
-                    .with_name(format!("{}.tensor[{index}]", self.name()))
-                    .with_projector(SymbolicTensor::infer(Atom::one())?)
-                    .with_numerator(numerator)
-                    .map_err(TensorReductionError::Diagram)
-            })
-            .collect()
+        ResourceBudget::new(reducer.resource_limits()).run(|| {
+            resources::checkpoint()?;
+            let reduction = self.reduce_tensor_numerator(reducer)?;
+            if !reduction.is_fully_contracted() {
+                return Err(TensorReductionError::ResidualFreeIndices);
+            }
+            let graphs = reduction
+                .terms
+                .into_iter()
+                .map(|term| term.expression())
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .filter(|numerator| !numerator.is_zero())
+                .enumerate()
+                .map(|(index, numerator)| {
+                    resources::checkpoint()?;
+                    let diagram = self
+                        .clone()
+                        .with_name(format!("{}.tensor[{index}]", self.name()))
+                        .with_projector(SymbolicTensor::infer(Atom::one())?)
+                        .with_numerator(numerator)
+                        .map_err(TensorReductionError::Diagram)?;
+                    resources::checkpoint()?;
+                    Ok(diagram)
+                })
+                .collect::<Result<Vec<_>, TensorReductionError>>()?;
+            resources::checkpoint()?;
+            Ok(graphs)
+        })
     }
 }
 
 /// Failures while parsing or materializing a tensor reduction.
 #[derive(Debug, Error)]
 pub enum TensorReductionError {
+    /// A configured shared process-memory or elapsed-time allowance was exceeded.
+    #[error("{0}")]
+    Resource(#[from] ResourceLimitError),
     /// External basis entries must be compact Lorentz vectors.
     #[error("invalid compact external vector: {0}")]
     InvalidExternalVector(Atom),
@@ -1294,28 +1387,36 @@ pub enum TensorReductionError {
     /// Checked tensor admission, contraction, or complete coefficient collection failed.
     #[error("tensor reduction algebra failed: {0}")]
     TensorAlgebra(String),
-    /// A combinatorial multiplicity did not fit Symbolica's integer boundary.
-    #[error("pairing multiplicity {0} does not fit a signed 64-bit coefficient")]
+    /// A multiplicity did not fit an explicitly requested coefficient boundary.
+    #[error("pairing multiplicity {0} does not fit the requested coefficient boundary")]
     MultiplicityOverflow(u128),
-    /// The native matching representation is intentionally bounded to the
-    /// high-rank target validated by this API.
-    #[error("tensor rank {rank} exceeds the supported maximum {maximum}")]
+    /// A native matching or exponent representation cannot hold this rank.
+    #[error("tensor rank {rank} exceeds matching representation capacity {maximum}")]
     UnsupportedRank { rank: usize, maximum: usize },
     /// The orthogonal-Weingarten coefficient engine failed.
     #[error(transparent)]
-    Weingarten(#[from] WeingartenError),
+    Weingarten(WeingartenError),
     /// A scalar contribution could not be represented by a valid native graph.
     #[error(transparent)]
     Diagram(#[from] feynkit_graph::DiagramError),
     /// More than one Einstein contraction reused the same Minkowski index.
     #[error("Minkowski index {index} occurs {occurrences} times in one tensor term")]
     AmbiguousMinkowskiIndex { index: Atom, occurrences: usize },
-    /// A symmetry-reduced multiplicity exceeded the exact rank-20 counter.
-    #[error("pairing multiplicity overflowed the rank-20 exact counter")]
+    /// A matching multiplicity, allocation size, or exponent counter overflowed.
+    #[error("tensor matching arithmetic exceeds its native representation")]
     CounterOverflow,
     /// Internal and projector color lists must describe the same tensor rank.
     #[error("internal colors have rank {internal}, but projector colors have rank {projector}")]
     ProjectorRankMismatch { internal: usize, projector: usize },
+}
+
+impl From<WeingartenError> for TensorReductionError {
+    fn from(error: WeingartenError) -> Self {
+        match error {
+            WeingartenError::Resource(error) => Self::Resource(error),
+            error => Self::Weingarten(error),
+        }
+    }
 }
 
 impl From<idenso::tensor::inference::TensorInferenceError> for TensorReductionError {
@@ -1333,6 +1434,7 @@ impl From<idenso::tensor::composition::TensorCompositionError> for TensorReducti
 impl From<OrbitProjectorError> for TensorReductionError {
     fn from(error: OrbitProjectorError) -> Self {
         match error {
+            OrbitProjectorError::Resource(error) => Self::Resource(error),
             OrbitProjectorError::ColorLengthMismatch {
                 internal,
                 projector,
@@ -1341,11 +1443,7 @@ impl From<OrbitProjectorError> for TensorReductionError {
                 projector,
             },
             OrbitProjectorError::OddRank(rank) => Self::Weingarten(WeingartenError::OddRank(rank)),
-            OrbitProjectorError::UnsupportedRank { rank, maximum } => {
-                Self::UnsupportedRank { rank, maximum }
-            }
             OrbitProjectorError::OutputLimit { terms, limit } => Self::OutputLimit { terms, limit },
-            OrbitProjectorError::MultiplicityOverflow(count) => Self::MultiplicityOverflow(count),
             OrbitProjectorError::CounterOverflow => Self::CounterOverflow,
             OrbitProjectorError::Solve { rank, source } => {
                 Self::Weingarten(WeingartenError::Solve { rank, source })
@@ -1401,6 +1499,7 @@ fn count_minkowski_index(
     index: &Atom,
     multiplicity: usize,
 ) -> Result<usize, TensorReductionError> {
+    resources::checkpoint()?;
     if let AtomView::Fun(function) = expression
         && function.get_symbol().get_namespace() == "spenso"
         && function.get_symbol().get_stripped_name() == "mink"
@@ -1522,17 +1621,15 @@ fn repeated_orbit(
     vector: Atom,
     pair_count: usize,
 ) -> Result<ContractionOrbit, TensorReductionError> {
+    let rank = pair_count
+        .checked_mul(2)
+        .ok_or(TensorReductionError::CounterOverflow)?;
+    let exponent = u16::try_from(pair_count).map_err(|_| TensorReductionError::CounterOverflow)?;
     Ok(ContractionOrbit {
         vectors: vec![vector].into_boxed_slice(),
-        multiplicities: vec![2 * pair_count].into_boxed_slice(),
-        alpha: vec![
-            u16::try_from(pair_count).map_err(|_| TensorReductionError::OutputLimit {
-                terms: pair_count,
-                limit: usize::from(u16::MAX),
-            })?,
-        ]
-        .into_boxed_slice(),
-        labeled_pairings: perfect_matching_count(2 * pair_count),
+        multiplicities: vec![rank].into_boxed_slice(),
+        alpha: vec![exponent].into_boxed_slice(),
+        labeled_pairings: perfect_matching_count(rank)?,
     })
 }
 
@@ -1554,18 +1651,13 @@ fn classified_colors(colors: &[Atom]) -> (Vec<Atom>, Vec<usize>, Vec<usize>) {
 
 fn contraction_orbits(
     colors: &[Atom],
-    limit: usize,
+    limit: Option<usize>,
 ) -> Result<Vec<ContractionOrbit>, TensorReductionError> {
     let (vectors, multiplicities, _) = classified_colors(colors);
     let mut cache = HashMap::new();
     let multiplicities_u16 = multiplicities
         .iter()
-        .map(|count| {
-            u16::try_from(*count).map_err(|_| TensorReductionError::UnsupportedRank {
-                rank: colors.len(),
-                maximum: usize::from(u16::MAX),
-            })
-        })
+        .map(|count| u16::try_from(*count).map_err(|_| TensorReductionError::CounterOverflow))
         .collect::<Result<Vec<_>, _>>()?;
     let alpha = orbit_alpha(&multiplicities_u16, &mut cache, limit)?;
     Ok(alpha
@@ -1582,12 +1674,18 @@ fn contraction_orbits(
 fn orbit_alpha(
     counts: &[u16],
     cache: &mut HashMap<Vec<u16>, BTreeMap<Vec<u16>, u128>>,
-    limit: usize,
+    limit: Option<usize>,
 ) -> Result<BTreeMap<Vec<u16>, u128>, TensorReductionError> {
+    resources::checkpoint()?;
     if let Some(cached) = cache.get(counts) {
         return Ok(cached.clone());
     }
-    let alpha_len = counts.len() * (counts.len() + 1) / 2;
+    let alpha_len = counts
+        .len()
+        .checked_add(1)
+        .and_then(|next| counts.len().checked_mul(next))
+        .map(|size| size / 2)
+        .ok_or(TensorReductionError::CounterOverflow)?;
     let Some(left) = counts.iter().position(|count| *count != 0) else {
         return Ok(BTreeMap::from([(vec![0; alpha_len], 1)]));
     };
@@ -1596,6 +1694,7 @@ fn orbit_alpha(
     after_left[left] -= 1;
     let mut result = BTreeMap::<Vec<u16>, u128>::new();
     for right in left..counts.len() {
+        resources::checkpoint()?;
         let choices = after_left[right];
         if choices == 0 {
             continue;
@@ -1603,9 +1702,20 @@ fn orbit_alpha(
         let mut remaining = after_left.clone();
         remaining[right] -= 1;
         for (mut alpha, multiplicity) in orbit_alpha(&remaining, cache, limit)? {
-            alpha[upper_triangle_index(left, right, counts.len())] += 1;
-            *result.entry(alpha).or_default() += multiplicity * u128::from(choices);
-            if result.len() > limit {
+            let exponent = &mut alpha[upper_triangle_index(left, right, counts.len())];
+            *exponent = exponent
+                .checked_add(1)
+                .ok_or(TensorReductionError::CounterOverflow)?;
+            let addition = multiplicity
+                .checked_mul(u128::from(choices))
+                .ok_or(TensorReductionError::CounterOverflow)?;
+            let count = result.entry(alpha).or_default();
+            *count = count
+                .checked_add(addition)
+                .ok_or(TensorReductionError::CounterOverflow)?;
+            if let Some(limit) = limit
+                && result.len() > limit
+            {
                 return Err(TensorReductionError::OutputLimit {
                     terms: result.len(),
                     limit,
@@ -1621,15 +1731,25 @@ fn upper_triangle_index(left: usize, right: usize, size: usize) -> usize {
     left * size - left * left.saturating_sub(1) / 2 + right - left
 }
 
-fn perfect_matching_count(rank: usize) -> u128 {
-    (1..rank).step_by(2).map(|factor| factor as u128).product()
+fn perfect_matching_count(rank: usize) -> Result<u128, TensorReductionError> {
+    (1..rank).step_by(2).try_fold(1_u128, |count, factor| {
+        resources::checkpoint()?;
+        count
+            .checked_mul(factor as u128)
+            .ok_or(TensorReductionError::CounterOverflow)
+    })
 }
 
-fn perfect_matchings(rank: usize) -> Vec<Vec<usize>> {
-    fn generate(mask: u32, partners: &mut [usize], output: &mut Vec<Vec<usize>>) {
+fn perfect_matchings(rank: usize) -> Result<Vec<Vec<usize>>, TensorReductionError> {
+    fn generate(
+        mask: u32,
+        partners: &mut [usize],
+        output: &mut Vec<Vec<usize>>,
+    ) -> Result<(), TensorReductionError> {
+        resources::checkpoint()?;
         if mask == 0 {
             output.push(partners.to_vec());
-            return;
+            return Ok(());
         }
         let left = mask.trailing_zeros() as usize;
         let without_left = mask & !(1 << left);
@@ -1638,14 +1758,42 @@ fn perfect_matchings(rank: usize) -> Vec<Vec<usize>> {
             let right = candidates.trailing_zeros() as usize;
             partners[left] = right;
             partners[right] = left;
-            generate(without_left & !(1 << right), partners, output);
+            generate(without_left & !(1 << right), partners, output)?;
             candidates &= !(1 << right);
         }
+        Ok(())
     }
 
-    let mut output = Vec::with_capacity(perfect_matching_count(rank) as usize);
-    generate((1_u32 << rank) - 1, &mut vec![0; rank], &mut output);
+    // The labeled enumerator uses one bit per vertex. Orbit/isotropic paths
+    // do not use this representation and are not subject to this boundary.
+    if rank > u32::BITS as usize {
+        return Err(TensorReductionError::UnsupportedRank {
+            rank,
+            maximum: u32::BITS as usize,
+        });
+    }
+    let count = usize::try_from(perfect_matching_count(rank)?)
+        .map_err(|_| TensorReductionError::CounterOverflow)?;
+    let bytes_per_matching = rank
+        .checked_mul(mem::size_of::<usize>())
+        .and_then(|bytes| bytes.checked_add(mem::size_of::<Vec<usize>>()))
+        .ok_or(TensorReductionError::CounterOverflow)?;
+    let bytes = count
+        .checked_mul(bytes_per_matching)
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or(TensorReductionError::CounterOverflow)?;
+    resources::check_allocation(bytes)?;
+    let mut output = Vec::new();
     output
+        .try_reserve_exact(count)
+        .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
+    let mask = if rank == u32::BITS as usize {
+        u32::MAX
+    } else {
+        (1_u32 << rank) - 1
+    };
+    generate(mask, &mut vec![0; rank], &mut output)?;
+    Ok(output)
 }
 
 fn classified_pairings(
@@ -1737,7 +1885,7 @@ fn classified_outside(
             .orbits
             .iter()
             .map(ContractionOrbit::invariant)
-            .collect();
+            .collect::<Result<Vec<_>, _>>()?;
         return Ok(ClassifiedOutside {
             atoms,
             orbits: classified.orbits.into_iter().map(Some).collect(),
@@ -1765,26 +1913,34 @@ fn classified_outside(
 
 fn outside_pairing_atoms(
     outside: &[Outside],
-    pairing_limit: u128,
-    output_limit: usize,
+    pairing_limit: Option<u128>,
+    output_limit: Option<usize>,
 ) -> Result<BTreeMap<Atom, u128>, TensorReductionError> {
-    let pairings = perfect_matching_count(outside.len());
-    if pairings > pairing_limit {
+    let pairings = perfect_matching_count(outside.len())?;
+    if let Some(limit) = pairing_limit
+        && pairings > limit
+    {
         return Err(TensorReductionError::PairingLimit {
             rank: outside.len(),
             pairings,
-            limit: pairing_limit,
+            limit,
         });
     }
     let mut atoms = BTreeMap::<Atom, u128>::new();
-    for pairing in perfect_matchings(outside.len()) {
-        *atoms
+    for pairing in perfect_matchings(outside.len())? {
+        resources::checkpoint()?;
+        let count = atoms
             .entry(outside_pairing_atom(outside, &pairing))
-            .or_default() += 1;
-        if atoms.len() > output_limit {
+            .or_default();
+        *count = count
+            .checked_add(1)
+            .ok_or(TensorReductionError::CounterOverflow)?;
+        if let Some(limit) = output_limit
+            && atoms.len() > limit
+        {
             return Err(TensorReductionError::OutputLimit {
                 terms: atoms.len(),
-                limit: output_limit,
+                limit,
             });
         }
     }
@@ -1799,16 +1955,34 @@ fn outside_pairing_atom(outside: &[Outside], pairing: &[usize]) -> Atom {
         })
 }
 
-fn coset_key_from_parts(parts: &[usize]) -> u64 {
-    parts
-        .iter()
-        .fold(parts.len() as u64, |key, part| (key << 5) | *part as u64)
+fn coset_key_from_parts(parts: &[usize]) -> Result<u64, TensorReductionError> {
+    let initial = u64::try_from(parts.len()).map_err(|_| TensorReductionError::CounterOverflow)?;
+    parts.iter().try_fold(initial, |key, part| {
+        let part = u64::try_from(*part).map_err(|_| TensorReductionError::CounterOverflow)?;
+        if part >= 32 {
+            return Err(TensorReductionError::CounterOverflow);
+        }
+        key.checked_mul(32)
+            .and_then(|key| key.checked_add(part))
+            .ok_or(TensorReductionError::CounterOverflow)
+    })
 }
 
-fn matching_coset_key(left: &[usize], right: &[usize]) -> u64 {
+fn matching_coset_key(left: &[usize], right: &[usize]) -> Result<u64, TensorReductionError> {
+    resources::checkpoint()?;
     let mut seen = 0_u32;
-    let all = (1_u32 << left.len()) - 1;
-    let mut part_multiplicities = [0_u8; OrthogonalWeingarten::MAX_RANK / 2 + 1];
+    if left.len() > u32::BITS as usize {
+        return Err(TensorReductionError::UnsupportedRank {
+            rank: left.len(),
+            maximum: u32::BITS as usize,
+        });
+    }
+    let all = if left.len() == u32::BITS as usize {
+        u32::MAX
+    } else {
+        (1_u32 << left.len()) - 1
+    };
+    let mut part_multiplicities = [0_u8; u32::BITS as usize / 2 + 1];
     let mut part_count = 0_u64;
     while seen != all {
         let start = (!seen & all).trailing_zeros() as usize;
@@ -1824,22 +1998,28 @@ fn matching_coset_key(left: &[usize], right: &[usize]) -> u64 {
                 break;
             }
         }
-        part_multiplicities[size] += 1;
+        part_multiplicities[size] = part_multiplicities[size]
+            .checked_add(1)
+            .ok_or(TensorReductionError::CounterOverflow)?;
         part_count += 1;
     }
     let mut key = part_count;
     for size in (1..part_multiplicities.len()).rev() {
         for _ in 0..part_multiplicities[size] {
-            key = (key << 5) | size as u64;
+            key = key
+                .checked_mul(32)
+                .and_then(|key| key.checked_add(size as u64))
+                .ok_or(TensorReductionError::CounterOverflow)?;
         }
     }
-    key
+    Ok(key)
 }
 
 fn atom_from_count(count: u128) -> Result<Atom, TensorReductionError> {
-    let count =
-        i64::try_from(count).map_err(|_| TensorReductionError::MultiplicityOverflow(count))?;
-    Ok(Atom::num(count))
+    resources::checkpoint()?;
+    let count = Atom::num(count);
+    resources::checkpoint()?;
+    Ok(count)
 }
 
 #[cfg(test)]
@@ -1851,6 +2031,9 @@ mod tests {
     use idenso::shorthands::UndoShorthands;
     use spenso::structure::abstract_index::AbstractIndex;
     use spenso::vector_symbol;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
     use symbolica::symbol;
 
     fn vectors() -> (Symbol, Symbol, Symbol, Symbol) {
@@ -1890,6 +2073,252 @@ mod tests {
             .add_arg(minkowski_slot(dimension, left))
             .add_arg(minkowski_slot(dimension, right))
             .finish()
+    }
+
+    #[test]
+    fn count_diagnostics_are_disabled_by_default_and_explicit_when_requested() {
+        let (k, q, _, _) = vectors();
+        let dimension = Atom::var(symbol!("tensor_diagnostic_dimension"));
+        let mu = Atom::var(symbol!("tensor_diagnostic_mu"));
+        let nu = Atom::var(symbol!("tensor_diagnostic_nu"));
+        let source =
+            SymbolicTensor::infer(indexed(k, 1, &dimension, &mu) * indexed(q, 1, &dimension, &nu))
+                .unwrap();
+        let reducer = TensorReducer::new(dimension)
+            .with_integrated_head(k)
+            .with_integrated_head(q);
+        assert_eq!(reducer.pairing_limit, None);
+        assert_eq!(reducer.pairing_product_limit, None);
+        assert_eq!(reducer.output_term_limit, None);
+        assert_eq!(reducer.resource_limits(), ResourceLimits::default());
+        assert_eq!(reducer.reduce(&source).unwrap().max_rank(), 2);
+        assert!(matches!(
+            reducer.clone().with_pairing_limit(0).reduce(&source),
+            Err(TensorReductionError::PairingLimit { limit: 0, .. })
+        ));
+        assert!(matches!(
+            reducer
+                .clone()
+                .with_pairing_product_limit(0)
+                .reduce(&source),
+            Err(TensorReductionError::PairingProductLimit { limit: 0, .. })
+        ));
+        assert!(matches!(
+            reducer.with_output_term_limit(0).reduce(&source),
+            Err(TensorReductionError::OutputLimit { limit: 0, .. })
+        ));
+    }
+
+    #[test]
+    fn matching_and_multiplicity_representation_overflows_are_errors() {
+        assert!(matches!(
+            perfect_matchings(34),
+            Err(TensorReductionError::UnsupportedRank {
+                rank: 34,
+                maximum: 32
+            })
+        ));
+        assert!(perfect_matching_count(56).is_ok());
+        assert!(matches!(
+            perfect_matching_count(58),
+            Err(TensorReductionError::CounterOverflow)
+        ));
+        assert!(matches!(
+            coset_key_from_parts(&[1; 13]),
+            Err(TensorReductionError::CounterOverflow)
+        ));
+    }
+
+    #[test]
+    fn disabled_diagnostics_do_not_compute_pairing_product_counters() {
+        let (k, q, _, _) = vectors();
+        let dimension = Atom::var(symbol!("tensor_free_rank_dimension"));
+        let integrated = (0..36)
+            .map(|index| compact(if index % 2 == 0 { k } else { q }, 1, &dimension))
+            .collect();
+        let outside = (0..36)
+            .map(|index| {
+                let index = Atom::var(symbol!(&format!("tensor_free_rank_index_{index}")));
+                Outside::Index {
+                    slot: minkowski_slot(&dimension, &index),
+                    index,
+                }
+            })
+            .collect();
+        let result = TensorReducer::new(dimension).reduce_monomial(TensorMonomial {
+            scalar: Atom::one(),
+            integrated,
+            outside,
+        });
+        // 35!! squared overflows u128, but this path does not request a product
+        // diagnostic. Its real limitation is the labeled iterator's u32 mask.
+        assert!(matches!(
+            result,
+            Err(TensorReductionError::UnsupportedRank {
+                rank: 36,
+                maximum: 32
+            })
+        ));
+    }
+
+    #[test]
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    fn elapsed_resource_failure_precedes_tensor_work() {
+        let (k, _, _, _) = vectors();
+        let source = SymbolicTensor::infer(Atom::one()).unwrap();
+        let reducer = TensorReducer::new(Atom::num(4))
+            .with_integrated_head(k)
+            .with_resources(ResourceLimits {
+                max_elapsed: Some(Duration::ZERO),
+                ..ResourceLimits::default()
+            });
+        assert!(matches!(
+            reducer.reduce(&source),
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::Elapsed { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn outer_memory_budget_is_preserved_until_result_materialization() {
+        let (k, _, p, _) = vectors();
+        let dimension = Atom::num(4);
+        let source = SymbolicTensor::infer(
+            dot(&compact(k, 1, &dimension), &compact(p, 1, &dimension)).pow(2),
+        )
+        .unwrap();
+        let reducer = TensorReducer::new(dimension).with_integrated_head(k);
+        let measured = Arc::new(AtomicUsize::new(1));
+        let monitor = Arc::clone(&measured);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(4096),
+                ..ResourceLimits::default()
+            },
+            move || {
+                u64::try_from(monitor.load(Ordering::Relaxed)).map_err(|error| error.to_string())
+            },
+        );
+        let result = budget.run(|| reducer.reduce(&source)).unwrap();
+        measured.store(4097, Ordering::Relaxed);
+        assert!(matches!(
+            result.terms()[0].expression(),
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(matches!(
+            result.into_expression(),
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(matches!(
+            budget.run(|| reducer.reduce(&source)),
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+    }
+
+    #[test]
+    fn public_reduce_checks_after_block_work_and_preserves_domain_errors() {
+        let (k, q, p, _) = vectors();
+        let dimension = symbol!("tensor_late_block::D").to_atom();
+        let mu = symbol!("tensor_late_block::mu").to_atom();
+        let nu = symbol!("tensor_late_block::nu").to_atom();
+        let source = SymbolicTensor::infer(
+            (indexed(k, 1, &dimension, &mu) + indexed(q, 1, &dimension, &mu))
+                * (indexed(k, 1, &dimension, &nu) + indexed(q, 1, &dimension, &nu))
+                * indexed(p, 1, &dimension, &mu)
+                * indexed(p, 1, &dimension, &nu),
+        )
+        .unwrap();
+        assert!(TensorReducer::has_tensor_sum(source.expression().as_view()).unwrap());
+        let reducer = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .with_integrated_head(q);
+        // Warm the coefficient cache before calibrating the same steady-state work.
+        reducer.reduce_scoped(&source).unwrap();
+        let work_checks = Arc::new(AtomicUsize::new(0));
+        let monitor = Arc::clone(&work_checks);
+        let measure = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1_000_000),
+                ..ResourceLimits::default()
+            },
+            move || {
+                monitor.fetch_add(1, Ordering::Relaxed);
+                Ok(0)
+            },
+        );
+        // Measure the core work separately so refusal occurs only after its
+        // final contraction, at the public successful-result boundary.
+        measure.run(|| reducer.reduce_scoped(&source)).unwrap();
+        let checks = work_checks.load(Ordering::Relaxed);
+        let calls = AtomicUsize::new(0);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1_000_000),
+                ..ResourceLimits::default()
+            },
+            move || {
+                Ok(if calls.fetch_add(1, Ordering::Relaxed) >= checks {
+                    2_000_000
+                } else {
+                    0
+                })
+            },
+        );
+        assert!(matches!(
+            budget.run(|| reducer.reduce(&source)),
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(reducer.reduce(&source).unwrap().is_fully_contracted());
+
+        let calls = Arc::new(AtomicUsize::new(0));
+        let monitor = Arc::clone(&calls);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1_000_000),
+                ..ResourceLimits::default()
+            },
+            move || {
+                Ok(if monitor.fetch_add(1, Ordering::Relaxed) == 0 {
+                    0
+                } else {
+                    2_000_000
+                })
+            },
+        );
+        assert!(matches!(
+            budget.run(|| TensorReducer::new(dimension).reduce(&source)),
+            Err(TensorReductionError::NoIntegratedVectorsSelected)
+        ));
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn missing_requested_memory_monitor_is_a_typed_failure() {
+        let (k, _, _, _) = vectors();
+        let source = SymbolicTensor::infer(Atom::one()).unwrap();
+        let reducer = TensorReducer::new(Atom::num(4)).with_integrated_head(k);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(4096),
+                ..ResourceLimits::default()
+            },
+            || Err("test monitor unavailable".into()),
+        );
+        assert!(matches!(
+            budget.run(|| reducer.reduce(&source)),
+            Err(TensorReductionError::Resource(
+                ResourceLimitError::MonitorUnavailable { .. }
+            ))
+        ));
     }
 
     #[test]
@@ -2042,49 +2471,56 @@ mod tests {
     }
 
     #[test]
-    fn closed_single_vector_rank_32_preserves_general_rank_20_limit() {
+    fn closed_single_vector_moments_above_rank_32_are_exact() {
         let (k, q, p, _) = vectors();
-        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_isotropic_32"));
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_isotropic_extended"));
         let kc = compact(k, 1, &dimension);
         let qc = compact(q, 1, &dimension);
         let pc = compact(p, 1, &dimension);
         let reducer = TensorReducer::new(dimension.clone())
             .with_integrated_head(k)
             .with_integrated_head(q);
-        let input = dot(&kc, &pc).pow(32);
-        let actual = reducer
-            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
-            .unwrap();
-        let multiplicity = (1..32)
-            .step_by(2)
-            .fold(Atom::one(), |a, n| a * Atom::num(n));
-        let expected = multiplicity
-            * dot(&kc, &kc).pow(16)
-            * dot(&pc, &pc).pow(16)
-            * OrthogonalWeingarten::isotropic_pairing_coefficient(16, dimension);
-        assert!(actual.is_fully_contracted());
-        assert!(
-            (actual.expression().unwrap().into_expression() - expected)
-                .together()
-                .is_zero()
-        );
+        for rank in [32, 34, 36] {
+            let input = dot(&kc, &pc).pow(rank);
+            let actual = reducer
+                .reduce(&SymbolicTensor::infer(input).unwrap())
+                .unwrap();
+            let multiplicity = (1..rank)
+                .step_by(2)
+                .fold(Atom::one(), |value, factor| value * Atom::num(factor));
+            let expected = multiplicity
+                * dot(&kc, &kc).pow(rank / 2)
+                * dot(&pc, &pc).pow(rank / 2)
+                * OrthogonalWeingarten::isotropic_pairing_coefficient(
+                    rank as usize / 2,
+                    dimension.clone(),
+                )
+                .unwrap();
+            assert!(actual.is_fully_contracted());
+            assert!(
+                (actual.into_expression().unwrap().into_expression() - expected)
+                    .together()
+                    .is_zero(),
+                "closed isotropic rank {rank} differs from the exact moment"
+            );
+        }
+        // The same existing isotropic-projector path also handles mixed
+        // integrated vectors above the former generic rank-20 admission cap.
         let mixed = dot(&kc, &pc).pow(2) * dot(&qc, &pc).pow(20);
-        assert!(matches!(
-            reducer.reduce(&SymbolicTensor::infer((mixed.as_view()).to_owned()).unwrap()),
-            Err(TensorReductionError::UnsupportedRank {
-                rank: 22,
-                maximum: 20
-            })
-        ));
-        assert!(matches!(
-            reducer.reduce(
-                &SymbolicTensor::infer((dot(&kc, &pc).pow(34).as_view()).to_owned()).unwrap()
-            ),
-            Err(TensorReductionError::UnsupportedRank {
-                rank: 34,
-                maximum: 32
-            })
-        ));
+        let mixed = reducer
+            .reduce(&SymbolicTensor::infer(mixed).unwrap())
+            .unwrap();
+        assert!(mixed.is_fully_contracted());
+        assert_eq!(mixed.max_rank(), 22);
+        assert_eq!(mixed.terms().len(), 2);
+        assert_eq!(
+            mixed
+                .terms()
+                .iter()
+                .map(|term| { term.integrated_orbit().unwrap().labeled_pairings() })
+                .sum::<u128>(),
+            perfect_matching_count(22).unwrap()
+        );
     }
 
     #[test]
@@ -2153,7 +2589,7 @@ mod tests {
         projector: &[Atom],
         dimension: &Atom,
     ) -> Atom {
-        let pairings = perfect_matchings(integrated.len());
+        let pairings = perfect_matchings(integrated.len()).unwrap();
         let table = OrthogonalWeingarten::for_rank(integrated.len(), dimension.clone()).unwrap();
         let mut result = Atom::Zero;
         for left in &pairings {
@@ -2189,13 +2625,13 @@ mod tests {
 
     #[test]
     fn allocation_free_coset_keys_match_the_public_definition() {
-        let pairings = perfect_matchings(6);
+        let pairings = perfect_matchings(6).unwrap();
         for left in &pairings {
             for right in &pairings {
                 let coset = CosetType::between_matchings(left, right).unwrap();
                 assert_eq!(
-                    matching_coset_key(left, right),
-                    coset_key_from_parts(coset.parts())
+                    matching_coset_key(left, right).unwrap(),
+                    coset_key_from_parts(coset.parts()).unwrap()
                 );
             }
         }
@@ -2702,7 +3138,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_spectator_dots_enforce_power_rank_and_dimension_limits() {
+    fn compact_spectator_dots_enforce_power_and_dimension_validity() {
         let (k, _, p, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_compact_limits"));
         let kc = compact(k, 1, &dimension);
@@ -2715,11 +3151,17 @@ mod tests {
                 Err(TensorReductionError::InvalidVectorPower(_))
             ));
         }
-        let input = dot(&kc, &pc).pow(Atom::num(OrthogonalWeingarten::MAX_RANK + 1));
-        assert!(matches!(
-            reducer.reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap()),
-            Err(TensorReductionError::UnsupportedRank { .. })
-        ));
+        for rank in [21, 59] {
+            let input = dot(&kc, &pc).pow(rank);
+            assert!(
+                reducer
+                    .reduce(&SymbolicTensor::infer(input).unwrap())
+                    .unwrap()
+                    .into_expression()
+                    .unwrap()
+                    .is_zero()
+            );
+        }
         let wrong_dimension = dot(&kc, &compact(p, 1, &Atom::num(3)));
         assert!(matches!(
             reducer.parse_monomial(wrong_dimension.as_view()),
@@ -2860,9 +3302,9 @@ mod tests {
             .unwrap();
         let elapsed = started.elapsed();
 
-        // The default labeled budget is only 20,000, whereas rank 20 has
-        // 654,729,075 pairings.  Reaching this compact four-term result proves
-        // that both partial symmetries used the orbit projector.
+        // Rank 20 has 654,729,075 labeled pairings. Reaching this compact
+        // four-term result proves that both partial symmetries used the orbit
+        // projector without relying on a default work-count cutoff.
         assert_eq!(result.max_rank(), 20);
         assert_eq!(result.terms().len(), 4);
         assert!(result.is_fully_contracted());
@@ -2886,7 +3328,7 @@ mod tests {
             .iter()
             .fold(Atom::Zero, |sum, term| sum + term.coefficient().clone());
         let expected_sum = Atom::num(654_729_075_i64)
-            * OrthogonalWeingarten::isotropic_pairing_coefficient(10, dimension);
+            * OrthogonalWeingarten::isotropic_pairing_coefficient(10, dimension).unwrap();
         assert!((coefficient_sum - expected_sum).together().is_zero());
         eprintln!("public rank-20 [2,18] x [2,18] reduction: {elapsed:?}");
     }
@@ -3242,9 +3684,10 @@ mod tests {
         let result = reducer.parse_monomial(input.as_view());
         assert!(matches!(
             &result,
-            Err(TensorReductionError::UnsupportedRank {
-                rank: 1_000_000,
-                maximum: 32
+            Err(TensorReductionError::AmbiguousIndex {
+                integrated: 1_000_000,
+                outside: 0,
+                ..
             })
         ));
     }
@@ -3441,7 +3884,7 @@ mod tests {
             compact(q, 1, &dimension),
             compact(q, 1, &dimension),
         ];
-        let orbits = contraction_orbits(&colors, 100).unwrap();
+        let orbits = contraction_orbits(&colors, Some(100)).unwrap();
         assert_eq!(orbits.len(), 2);
         assert_eq!(
             orbits

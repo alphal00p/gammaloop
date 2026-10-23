@@ -186,11 +186,21 @@ rather than requiring callers to flatten that expression to a symbol.
 
 == Rank, symmetry, and limits
 
-Exact orthogonal-Weingarten coefficients support even ranks through 20. They depend on
-integer-partition classes rather than every labeled pairing: rank 20 needs 42 coefficient
-classes. Fully contracted numerators with repeated vectors use smaller contraction-orbit
-systems; unsymmetrized free-index output can still contain factorially many terms.
-The pairing, pairing-product, and output-term budgets make that limit explicit.
+Exact orthogonal-Weingarten coefficients use integer-partition classes rather
+than every labeled pairing: rank 20 needs 42 coefficient classes. Fully
+contracted numerators with repeated vectors use smaller contraction-orbit
+systems; unsymmetrized free-index output can still contain factorially many
+terms. Implemented generic and isotropic paths have no arbitrary rank cutoff;
+concrete index-representation bounds are reported separately.
+
+Pairing, pairing-product, and output-term counts are unrestricted by default.
+The corresponding `with_pairing_limit`, `with_pairing_product_limit`, and
+`with_output_term_limit` methods explicitly enable diagnostic ceilings. Use
+`reducer.with_resources(max_process_rss_bytes=..., max_elapsed_seconds=...)` for
+cooperative process-memory and elapsed-time controls. Both settings default to
+`None`; a request shares its budget with later expression materialization and
+any enclosing budget. Checks between native algebra operations do not interrupt
+an opaque operation; that requires an external supervisor.
 
 #callout("Keep mixed high-rank dimensions symbolic", [
   Fixed low integer dimensions can make the universal metric basis singular. Retain `D` or a

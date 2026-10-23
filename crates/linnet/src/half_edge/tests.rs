@@ -796,6 +796,8 @@ use crate::tree::{child_vec::ChildVecStore, Forest};
 use crate::{dot, half_edge::swap::Swap, parser::DotGraph};
 
 use super::*;
+use std::io::{Error as IoError, ErrorKind};
+use std::panic as panic_test_failure;
 
 #[test]
 fn double_triangle() {
@@ -874,6 +876,32 @@ fn all_cycles_rejects_unrepresentable_cycle_rank() {
             max_supported
         }) if rank == usize::BITS as usize && max_supported == usize::BITS as usize - 1
     ));
+}
+
+#[test]
+fn cycle_control_failure_preserves_its_source_and_graph() {
+    let mut builder = HedgeGraphBuilder::new();
+    let node = builder.add_node(());
+    builder.add_edge(node, node, (), false);
+    let graph: HedgeGraph<(), (), NoData, NodeStorageVec<()>> = builder.build();
+    let mut checkpoints = 0;
+    let error = graph
+        .all_cycles_of_with_control(&graph.full_filter(), 1, || {
+            checkpoints += 1;
+            if checkpoints >= 3 {
+                Err(IoError::new(ErrorKind::Interrupted, "test request stopped"))
+            } else {
+                Ok(())
+            }
+        })
+        .unwrap_err();
+    match error {
+        CycleEnumerationError::Control(source) => {
+            assert_eq!(source.kind(), ErrorKind::Interrupted);
+        }
+        other => panic_test_failure!("expected the original checkpoint error, received {other}"),
+    }
+    assert_eq!(graph.all_cycles(1).unwrap().len(), 1);
 }
 
 #[test]

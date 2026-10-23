@@ -27,6 +27,7 @@ pub use generation::{
     CffEnergyFactorComponent, CffEnergyFactorOwnership, CffGenerationContext,
     CffGlobalPrefactorSign, Generate3DExpressionOptions, GeneratedThreeDExpression,
     GenerationError, NumeratorSamplingScaleMode, RepresentationMode, generate_3d_expression,
+    generate_3d_expression_with_resources,
 };
 pub use graph_io::{
     EnergyEdgeIndexMap, GraphInfo, ParsedGraph, RepeatedGroup, ThreeDGraphSource, graph_info,

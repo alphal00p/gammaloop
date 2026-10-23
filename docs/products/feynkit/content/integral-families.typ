@@ -182,9 +182,12 @@ assert (reconstructed - 1/(kk*(kk-m2))).together() == E("0")
 The algorithm retains propagator labels and gives an exact rational-function
 identity. It does not shift loop momenta or discard scaleless terms. Apply
 exceptional kinematics before constructing the family: generic external
-invariants can occur in coefficient denominators. The optional `max_states`
-budget limits intermediate exponent vectors; exhaustion raises an error without
-returning a truncated decomposition.
+invariants can occur in coefficient denominators. `max_states=None` leaves work
+counts unrestricted. An explicit integer enables a diagnostic ceiling on
+intermediate exponent vectors; exhaustion raises an error without returning a
+truncated decomposition. Optional `max_process_rss_bytes` and
+`max_elapsed_seconds` apply cooperative process-memory and elapsed-time budgets
+to the whole operation, including coefficient algebra. Both default to `None`.
 
 == Verified momentum shifts and subtopologies
 
@@ -236,8 +239,14 @@ Supply a known transformation with `source.mapping_to(target, loop_images)`.
 This also supports purely eikonal families, which cannot supply a quadratic basis
 for automatic search. Unknown or complex coefficients do not pass the real-map
 check; known-real Symbolica assumptions can establish realness. A failed
-equivalence check returns `None`; incompatible inputs and exhausted
-`max_candidates` budgets raise an error.
+equivalence check returns `None`; incompatible inputs raise an error.
+`max_candidates=None` leaves work counts unrestricted; an explicit integer
+enables a diagnostic candidate ceiling. `find_mapping` and `find_mappings` also
+accept optional `max_process_rss_bytes` and `max_elapsed_seconds`, both `None` by
+default. A batch shares one resource budget across all candidate searches;
+resource exhaustion returns an error without a partial result. Checks run
+between native algebra operations, so interrupting an opaque operation requires
+an external supervisor.
 
 The Rust regression suite checks the published three-loop `topo4 -> topo1`
 example from #link("https://feyncalc.github.io/FeynCalcBookDev/FCLoopFindTopologyMappings.html")[FeynCalc's mapping documentation],

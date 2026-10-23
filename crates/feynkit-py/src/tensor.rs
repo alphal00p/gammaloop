@@ -4,6 +4,8 @@ use pyo3::{
     types::{PyAny, PyModule},
 };
 use spynso3::{expression::TensorExpression, structure::SpensoName};
+use symbolica::utils::resources;
+use symbolica::utils::resources::ResourceBudget;
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},
     atom::AtomView,
@@ -13,6 +15,7 @@ use symbolica::{
 use pyo3_stub_gen_derive::{gen_stub_pyclass, gen_stub_pymethods};
 
 use crate::error;
+use crate::resources as resource_options;
 
 /// Project Lorentz-tensor integrands onto Spenso invariants.
 ///
@@ -59,7 +62,7 @@ use crate::error;
 #[derive(Clone)]
 pub struct PyTensorReducer {
     // Box is required for alignment: CPython's wasm32 object allocator guarantees
-    // only 8 bytes, but the reducer's u128 pairing limits require 16. Rust allocates
+    // only 8 bytes, but the reducer's u128 pairing diagnostics require 16. Rust allocates
     // the boxed payload with the required alignment; do not inline it here.
     pub(crate) inner: Box<TensorReducer>,
 }
@@ -99,16 +102,25 @@ impl PyTensorReducer {
     ///     Whole vector heads or exact compact vectors to integrate.
     /// external : sequence of Expression or TensorExpression, optional
     ///     Independent compact vectors in the denominator's external basis.
+    /// max_process_rss_bytes : int or None, optional
+    ///     Process RSS allowance in bytes. None leaves memory unrestricted.
+    /// max_elapsed_seconds : float or None, optional
+    ///     Cooperative elapsed-time allowance, including expression materialization.
+    ///     None leaves time unrestricted. Count diagnostics are off by default.
     #[new]
-    #[pyo3(signature = (dimension, *, integrated=Vec::new(), external=Vec::new()))]
+    #[pyo3(signature = (dimension, *, integrated=Vec::new(), external=Vec::new(), max_process_rss_bytes=None, max_elapsed_seconds=None))]
     fn new(
         dimension: &PythonExpression,
         #[gen_stub(override_type(type_repr="typing.Sequence[symbolica.community.tensor.TensorName | symbolica.Expression | symbolica.community.tensor.TensorExpression]", imports=("typing", "symbolica", "symbolica.community.tensor")))]
         integrated: Vec<Bound<'_, PyAny>>,
         #[gen_stub(override_type(type_repr="typing.Sequence[symbolica.Expression | symbolica.community.tensor.TensorExpression]", imports=("typing", "symbolica", "symbolica.community.tensor")))]
         external: Vec<Bound<'_, PyAny>>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Self> {
-        let mut inner = TensorReducer::new(dimension.expr.clone());
+        let mut inner = TensorReducer::new(dimension.expr.clone()).with_resources(
+            resource_options::limits(max_process_rss_bytes, max_elapsed_seconds)?,
+        );
         for selector in integrated {
             if let Ok(name) = selector.extract::<SpensoName>() {
                 inner = inner.with_integrated_head(name.name);
@@ -165,11 +177,60 @@ impl PyTensorReducer {
     /// dimension : Expression
     ///     Lorentz-space dimension used by every ``spenso::mink`` slot. It
     ///     must match the dimension carried by the input expression.
+    /// max_process_rss_bytes : int or None, optional
+    ///     Process RSS allowance in bytes; disabled by default.
+    /// max_elapsed_seconds : float or None, optional
+    ///     Cooperative elapsed-time allowance; disabled by default.
     #[staticmethod]
-    fn feynkit(dimension: &PythonExpression) -> Self {
-        Self {
-            inner: Box::new(TensorReducer::feynkit(dimension.expr.clone())),
-        }
+    #[pyo3(signature = (dimension, *, max_process_rss_bytes=None, max_elapsed_seconds=None))]
+    fn feynkit(
+        dimension: &PythonExpression,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: Box::new(
+                TensorReducer::feynkit(dimension.expr.clone()).with_resources(
+                    resource_options::limits(max_process_rss_bytes, max_elapsed_seconds)?,
+                ),
+            ),
+        })
+    }
+
+    /// Return a reducer with process-memory and elapsed-time controls.
+    ///
+    /// These controls are disabled by default. Nested operations preserve any
+    /// stricter resource scope configured by their caller.
+    ///
+    /// Examples
+    /// --------
+    /// Using the setup in the ``TensorReducer`` class example:
+    ///
+    /// >>> reducer = reducer.with_resources(max_elapsed_seconds=30.0)
+    ///
+    /// Parameters
+    /// ----------
+    /// max_process_rss_bytes : int or None, optional
+    ///     Whole-process RSS allowance in bytes.
+    /// max_elapsed_seconds : float or None, optional
+    ///     Cooperative elapsed-time allowance for a reduction and materialization.
+    #[pyo3(signature = (*, max_process_rss_bytes=None, max_elapsed_seconds=None))]
+    fn with_resources(
+        &self,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
+    ) -> PyResult<Self> {
+        Ok(Self {
+            inner: Box::new(
+                self.inner
+                    .as_ref()
+                    .clone()
+                    .with_resources(resource_options::limits(
+                        max_process_rss_bytes,
+                        max_elapsed_seconds,
+                    )?),
+            ),
+        })
     }
 
     /// Return the configured Lorentz-space dimension.
@@ -186,9 +247,9 @@ impl PyTensorReducer {
         }
     }
 
-    /// Set the labeled-pairing budget for unsymmetrized or free-index output.
+    /// Opt into a labeled-pairing diagnostic for free-index output.
     ///
-    /// Symmetric contraction-orbit paths do not consume this budget.
+    /// Disabled by default. Symmetric contraction-orbit paths do not consume it.
     ///
     /// Examples
     /// --------
@@ -211,7 +272,8 @@ impl PyTensorReducer {
         }
     }
 
-    /// Set the relative-pairing budget for residual free-index output.
+    /// Opt into a relative-pairing diagnostic for residual free-index output.
+    /// Disabled by default.
     ///
     /// Examples
     /// --------
@@ -234,7 +296,8 @@ impl PyTensorReducer {
         }
     }
 
-    /// Set the maximum number of distinct invariant output terms.
+    /// Opt into a diagnostic maximum of distinct invariant output terms.
+    /// Disabled by default.
     ///
     /// Examples
     /// --------
@@ -300,19 +363,31 @@ impl PyTensorReducer {
         #[gen_stub(override_type(type_repr="symbolica.Expression | symbolica.community.tensor.TensorExpression", imports=("symbolica", "symbolica.community.tensor")))]
         expression: &Bound<'_, PyAny>,
     ) -> PyResult<Py<TensorExpression>> {
-        let expression = match expression.extract::<PyRef<'_, TensorExpression>>() {
-            Ok(value) => value.structured().clone(),
-            Err(_) => feynkit_graph::NumeratorInterface::admit(
-                expression
-                    .extract::<ConvertibleToExpression>()?
-                    .to_expression()
-                    .expr,
-                None,
-            )
-            .map_err(|error| crate::error::TensorReductionError::new_err(error.to_string()))?,
-        };
-        let reduction = self.inner.reduce(&expression).map_err(error::tensor)?;
-        TensorExpression::from_structured(py, reduction.into_expression().map_err(error::tensor)?)
+        ResourceBudget::new(self.inner.resource_limits()).run(|| {
+            resources::checkpoint()
+                .map_err(|resource_error| error::tensor(resource_error.into()))?;
+            let expression = match expression.extract::<PyRef<'_, TensorExpression>>() {
+                Ok(value) => value.structured().clone(),
+                Err(_) => feynkit_graph::NumeratorInterface::admit(
+                    expression
+                        .extract::<ConvertibleToExpression>()?
+                        .to_expression()
+                        .expr,
+                    None,
+                )
+                .map_err(|error| crate::error::TensorReductionError::new_err(error.to_string()))?,
+            };
+            resources::checkpoint()
+                .map_err(|resource_error| error::tensor(resource_error.into()))?;
+            let reduction = self.inner.reduce(&expression).map_err(error::tensor)?;
+            let result = TensorExpression::from_structured(
+                py,
+                reduction.into_expression().map_err(error::tensor)?,
+            )?;
+            resources::checkpoint()
+                .map_err(|resource_error| error::tensor(resource_error.into()))?;
+            Ok(result)
+        })
     }
 
     /// Return a concise description of the reducer configuration.
@@ -362,6 +437,31 @@ pub(crate) fn register(module: &Bound<'_, PyModule>) -> PyResult<()> {
 #[cfg(test)]
 mod tests {
     use super::PyTensorReducer;
+    use std::time::Duration;
+    use symbolica::api::python::PythonExpression;
+    use symbolica::atom::Atom;
+    use symbolica::utils::resources::ResourceLimits;
+
+    #[test]
+    fn python_resource_configuration_is_explicit_and_disabled_by_default() {
+        let dimension = PythonExpression { expr: Atom::num(4) };
+        let plain = PyTensorReducer::new(&dimension, Vec::new(), Vec::new(), None, None).unwrap();
+        assert_eq!(plain.inner.resource_limits(), ResourceLimits::default());
+        let configured = plain.with_resources(Some(4096), Some(0.0)).unwrap();
+        assert_eq!(
+            configured.inner.resource_limits(),
+            ResourceLimits {
+                max_process_rss_bytes: Some(4096),
+                max_elapsed: Some(Duration::ZERO),
+            }
+        );
+        assert_eq!(plain.inner.resource_limits(), ResourceLimits::default());
+        let canonical = PyTensorReducer::feynkit(&dimension, None, Some(30.0)).unwrap();
+        assert_eq!(
+            canonical.inner.resource_limits().max_elapsed,
+            Some(Duration::from_secs(30))
+        );
+    }
 
     #[test]
     fn python_wrapper_fits_wasm_allocator_alignment() {

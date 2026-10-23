@@ -64,7 +64,10 @@ single concrete return type; a runtime choice annotated `Literal["cff", "ltd"]`
 gives `CffRepresentation | LtdRepresentation`. Unknown methods raise
 `ValueError`. CFF-specific `max_orientations`, `fixed_orientations`,
 `contracted_edges` and `initial_state_edges` are keyword options on this same
-method; supplying them for LTD raises `ValueError`.
+method; supplying them for LTD raises `ValueError`. Both methods accept
+`max_process_rss_bytes=None` and `max_elapsed_seconds=None` for cooperative
+resource budgets shared across graph conversion, generation and result
+construction. Neither setting imposes a ceiling by default.
 
 ```python
 from symbolica.community import hepkit as hep
@@ -222,8 +225,9 @@ zoom. Browser selections do not change the symbolic result.
   gap chevrons show the pole direction relative to the shaded component.
 
 CFF accepts orientation constraints, contractions and selected subgraphs. Its
-`max_orientations` limit bounds candidate enumeration; constrained output need
-not represent the full unconstrained sum. LTD currently accepts complete
+`max_orientations=None` leaves candidate counts unrestricted. An explicit
+integer enables an orientation-count diagnostic; constrained output need not
+represent the full unconstrained sum. LTD currently accepts complete
 ordinary diagrams, with scalar numerator one, and supports repeated propagators.
 Partial subgraphs and auxiliary cut edges are rejected. Neither constructor
 accepts an arbitrary energy-dependent numerator.
