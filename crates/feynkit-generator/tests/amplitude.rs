@@ -14,8 +14,8 @@ use spenso::{
 use std::{collections::BTreeMap, sync::Arc};
 use symbolica::{
     atom::{Atom, AtomCore},
-    id::ConditionResult,
-    parse,
+    id::{ConditionResult, Pattern, Replacement},
+    parse, symbol,
 };
 
 fn canonical_tensor(source: SymbolicTensor<PartialStructure>) -> SymbolicTensor<PartialStructure> {
@@ -263,6 +263,103 @@ fn scalar_couplings_are_conjugated_without_assuming_they_are_real() {
         amplitude.squared().unwrap().expression().expression(),
         &parse!("amplitude_test::z*spenso::conj(amplitude_test::z)")
     );
+}
+
+#[test]
+fn real_parameter_wildcard_suffixes_preserve_complex_scalar_norms() {
+    for name in ["g_", "g__", "g___"] {
+        let mut definition: serde_json::Value =
+            serde_json::from_str(&Model::phi4().to_json().unwrap()).unwrap();
+        definition["parameters"].as_array_mut().unwrap().extend([
+            serde_json::json!({
+                "name": name, "nature": "external", "parameter_type": "real",
+                "value": [1.0, 0.0], "expression": null
+            }),
+            serde_json::json!({
+                "name": "h", "nature": "external", "parameter_type": "complex",
+                "value": [1.0, 2.0], "expression": null
+            }),
+        ]);
+        definition["couplings"][0]["expression"] = format!("{name}*h").into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let amplitude = Process::new(["phi", "phi"], ["phi", "phi"])
+            .generate_amplitude(
+                model,
+                &GenerationOptions::default().threads(1).max_vertices(1),
+                AmplitudeOptions::default(),
+            )
+            .unwrap();
+        assert_eq!(amplitude.diagrams().len(), 1);
+        let squared = amplitude
+            .squared()
+            .unwrap()
+            .sum_spins(&[0, 1, 2, 3], true, &BTreeMap::new(), &BTreeMap::new())
+            .unwrap()
+            .sum_colors(&[0, 1, 2, 3], true)
+            .unwrap();
+        let g = Atom::var(symbol!(&format!("UFO::{name}")));
+        let h = Atom::var(symbol!("UFO::h"));
+        let conjugate_h = symbol!("spenso::conj").call(&h);
+        let expected = g.clone().pow(2) * &h * &conjugate_h;
+        assert!(
+            (squared.expression().expression() - expected)
+                .expand()
+                .is_zero(),
+            "{name}: {}",
+            squared.expression().expression()
+        );
+        let norm = squared.expression().expression().replace_multiple([
+            Replacement::new(
+                Pattern::Literal(conjugate_h),
+                Pattern::Literal(Atom::one() - 2 * Atom::i()),
+            ),
+            Replacement::new(
+                Pattern::Literal(h),
+                Pattern::Literal(Atom::one() + 2 * Atom::i()),
+            ),
+            Replacement::new(Pattern::Literal(g), Pattern::Literal(Atom::one())),
+        ]);
+        assert_eq!(norm.expand(), Atom::num(5), "{name}");
+    }
+}
+
+#[test]
+fn explicit_reality_assumptions_are_literal_expressions() {
+    let real = parse!("amplitude_reality_test::r_");
+    let diagram = feynkit_graph::FeynmanDiagram::from_dot(
+        Arc::new(Model::phi3()),
+        r#"digraph {
+        a [num="amplitude_reality_test::r_*amplitude_reality_test::h"];
+        ext [style=invis];
+        ext -> a [particle="phi"];
+        a -> ext [particle="phi"];
+        a -> ext [particle="phi"];
+    }"#,
+    )
+    .unwrap();
+    let diagram = Arc::new(diagram);
+    for dimension in [
+        AmplitudeOptions::default().dimension,
+        symbol!("amplitude_reality_test::D_").into(),
+    ] {
+        let amplitude = Amplitude::new(
+            [diagram.clone()],
+            AmplitudeOptions {
+                dimension,
+                real: vec![real.clone()],
+            },
+        )
+        .unwrap();
+        assert_eq!(
+            amplitude
+                .conjugate()
+                .unwrap()
+                .expression()
+                .unwrap()
+                .expression(),
+            &parse!("amplitude_reality_test::r_*spenso::conj(amplitude_reality_test::h)")
+        );
+    }
 }
 
 #[test]
