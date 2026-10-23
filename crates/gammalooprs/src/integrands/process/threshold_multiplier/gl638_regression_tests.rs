@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 
 use momtrop::float::MomTropFloat;
 use symbolica::parse;
+use symbolica::prelude::SingleFloat;
 
 use super::{
     ThresholdMultiplierEvaluator, ThresholdMultiplierInput, ThresholdMultiplierInputValues,
@@ -15,13 +16,13 @@ use crate::{
     utils::{ArbPrec, F, FloatLike, load_generic_model},
 };
 
-fn compare_multipliers<T: FloatLike>(
+fn evaluate_multipliers<T: FloatLike>(
     layout: &ThresholdMultiplierLayout,
     evaluators: &mut [(ThresholdMultiplierEvaluator, ThresholdMultiplierEvaluator)],
     zero: F<T>,
+    mut compare: impl FnMut(&str, usize, &F<T>, &F<T>),
 ) {
     let mt = zero.from_usize(173);
-    let tolerance = zero.epsilon() * zero.from_usize(256);
     // All vectors are in the same CM routing as GL638. The last point deliberately lies
     // off the host shell and exercises the WH common-zero convention, not physical WF.
     for (label, soft_power) in [
@@ -124,11 +125,7 @@ fn compare_multipliers<T: FloatLike>(
             let compact = compact
                 .evaluate(&values, &mut EvaluationMetaData::new_empty())
                 .unwrap();
-            let scale = old.abs().max(compact.abs());
-            assert!(
-                (&old - &compact).abs() <= &tolerance * &scale,
-                "{label}, multiplier {index}: expanded={old}, compact={compact}"
-            );
+            compare(label, index, &old, &compact);
             if common_zero {
                 assert_eq!(compact, zero.from_usize(usize::from(index % 2 == 0)));
             }
@@ -196,6 +193,53 @@ fn gl638_compact_function_map_matches_expanded_multipliers() {
         }
     }
     assert_eq!(evaluators.len(), 6);
-    compare_multipliers(&layout, &mut evaluators, F(0.0));
-    compare_multipliers(&layout, &mut evaluators, F::<ArbPrec>::default());
+    // Kernel evaluation-order changes affect these ill-conditioned points: pairwise
+    // differences reached 690 binary64 eps and 1384 Arb eps; binary64 error against
+    // the 1000-bit reference reached 2.86e-11 (128638 eps). Fixed-eps pair budgets
+    // therefore do not establish route equivalence or binary64 accuracy.
+    let zero = F::<ArbPrec>::default();
+    // epsilon = 2^-(precision_bits - 1), so this budget is 2^-(precision_bits - 100).
+    let route_tolerance = zero.epsilon() * zero.from_usize(2).powi(99);
+    // 1e-8 leaves about 350x margin over the measured worst binary64 error.
+    // Retain every existing point, including the original WH common-zero selection.
+    let smoke_tolerance = zero.one() / zero.from_usize(100_000_000);
+    let mut references = Vec::new();
+    evaluate_multipliers(
+        &layout,
+        &mut evaluators,
+        zero,
+        |label, index, old, compact| {
+            let scale = old.abs().max(compact.abs());
+            assert!(
+                (old - compact).abs() <= &route_tolerance * &scale,
+                "{label}, multiplier {index}: expanded={old}, compact={compact}"
+            );
+            references.push(old.clone());
+        },
+    );
+    let mut references = references.iter();
+    evaluate_multipliers(
+        &layout,
+        &mut evaluators,
+        F(0.0),
+        |label, index, old, compact| {
+            let reference = references.next().unwrap();
+            for (route, value) in [("expanded", old), ("compact", compact)] {
+                assert!(
+                    value.is_finite(),
+                    "{label}, multiplier {index}, {route}: {value}"
+                );
+                let exact = value.to_arb_exact().unwrap();
+                if reference.is_zero() {
+                    assert_eq!(exact, *reference, "{label}, multiplier {index}, {route}");
+                } else {
+                    assert!(
+                        (&exact - reference).abs() <= &smoke_tolerance * reference.abs(),
+                        "{label}, multiplier {index}, {route}: binary64={value}, reference={reference}"
+                    );
+                }
+            }
+        },
+    );
+    assert!(references.next().is_none());
 }
