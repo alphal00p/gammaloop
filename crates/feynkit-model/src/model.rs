@@ -1631,8 +1631,8 @@ impl Model {
                 .iter()
                 .map(|coupling| {
                     Replacement::new(
-                        Atom::var(symbol!(&format!("UFO::{}", coupling.name))).to_pattern(),
-                        coupling.expression.clone(),
+                        Pattern::Literal(Atom::var(symbol!(&format!("UFO::{}", coupling.name)))),
+                        Pattern::Literal(coupling.expression.clone()),
                     )
                 })
                 .collect()
@@ -2735,6 +2735,30 @@ mod tests {
             named_coupling * 2 + Atom::var(symbol!("UFO::GC_UNKNOWN"))
         );
         assert_eq!(model.expand_couplings(&expanded), expanded);
+    }
+
+    #[test]
+    fn coupling_expansion_preserves_literal_wildcard_like_names_on_both_sides() {
+        for name in ["GC1", "GC_"] {
+            let mut definition: serde_json::Value =
+                serde_json::from_str(&model_json(name)).unwrap();
+            definition["couplings"][0]["name"] = name.into();
+            definition["couplings"][0]["expression"] = "g_".into();
+            definition["parameters"]
+                .as_array_mut()
+                .unwrap()
+                .push(serde_json::json!({
+                    "name": "g_", "nature": "external", "parameter_type": "real",
+                    "expression": null, "value": [2.0, 0.0]
+                }));
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let unrelated = Atom::var(symbol!("other_model::untouched_"));
+            let expression = Atom::var(symbol!(&format!("UFO::{name}"))) + &unrelated;
+            assert_eq!(
+                model.expand_couplings(&expression),
+                Atom::var(symbol!("UFO::g_")) + unrelated
+            );
+        }
     }
 
     #[test]
