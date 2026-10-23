@@ -7,6 +7,8 @@ impl FeynmanDiagram {
     /// used by finalization. Consumers can transport graph-local metadata
     /// without reconstructing ownership from momentum or particle labels.
     /// `final_state` lists comma-separated particles; `|` joins allowed alternatives.
+    /// Edge `power` is a positive integer and defaults to one. Contract absent
+    /// edges and represent negative powers as numerator factors.
     pub fn from_compact_dot(
         model: Arc<Model>,
         parsed: DotGraph,
@@ -130,6 +132,19 @@ impl FeynmanDiagram {
                 });
             }
             let mut edge = DiagramEdge::new(particle, !model.particle_is_self_conjugate(particle));
+            edge.propagator_power = attributes
+                .get("power")
+                .map(|value| {
+                    value
+                        .parse()
+                        .map_err(|_| DiagramError::InvalidDotAttribute {
+                            target: target.clone(),
+                            attribute: "power",
+                            value: value.clone(),
+                        })
+                })
+                .transpose()?
+                .unwrap_or(1);
             edge.numerator = NumeratorInterface::admit(
                 Self::parse_expression(
                     "edge numerator",
