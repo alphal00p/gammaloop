@@ -10,13 +10,14 @@ use linnet::half_edge::{
     swap::Swap,
 };
 use serde::{Deserialize, Serialize};
+use symbolica::utils::resources::{self, ResourceBudget, ResourceLimitError, ResourceLimits};
 use thiserror::Error;
 
 use crate::{
     MediumMode, OrientationData, OrientationExpression, OrientationID, ParsedGraph, ThermalWeight,
     ThreeDExpression,
     cff_recursion::enumerate_cff_surface_chains,
-    cut_structure::{ContourClosure, energy_residues},
+    cut_structure::{ContourClosure, CutStructureError, energy_residues},
     energy_bounds::normalize_energy_degree_bounds,
     expression::{ResidualDenominator, assign_numerator_map_labels},
     graph_io::{
@@ -300,6 +301,31 @@ mod generated_expression_persistence_tests {
     }
 
     #[test]
+    fn resource_cause_remains_visible_through_generation_errors() {
+        use std::error::Error;
+
+        let cause = ResourceLimitError::Memory {
+            rss_bytes: 2,
+            additional_bytes: 0,
+            limit_bytes: 1,
+        };
+        let errors: Vec<Box<dyn Error>> = vec![
+            Box::new(CutStructureError::Resource(cause.clone())),
+            Box::new(GenerationError::Resource(cause.clone())),
+            Box::new(GenerationError::from(CutStructureError::Resource(
+                cause.clone(),
+            ))),
+        ];
+        for error in errors {
+            assert_eq!(error.to_string(), cause.to_string());
+            assert_eq!(
+                error.source().and_then(|source| source.downcast_ref()),
+                Some(&cause),
+            );
+        }
+    }
+
+    #[test]
     fn persisted_component_prefactor_metadata_roundtrips() {
         let large = Rational::from(2).pow(100) + Rational::one();
         let energy_map = LinearEnergyExpr {
@@ -392,6 +418,17 @@ mod generated_expression_persistence_tests {
 
 #[derive(Debug, Error)]
 pub enum GenerationError {
+    #[error("{0}")]
+    Resource(#[from] ResourceLimitError),
+    #[error("CFF recursion attempted to resolve original edge {edge_id} twice")]
+    RepeatedOccurrenceResolution { edge_id: usize },
+    #[error(
+        "the CFF orientation count for {denominator_edges} denominator edges cannot be represented by a {counter_bits}-bit usize counter"
+    )]
+    CffOrientationCountOutOfRange {
+        denominator_edges: usize,
+        counter_bits: u32,
+    },
     #[error("LTD supports only vacuum generation; medium mode {medium_mode:?} is unsupported")]
     LtdRequiresVacuum { medium_mode: MediumMode },
     #[error("invalid LTD residue coordinate: {0}")]
@@ -427,7 +464,7 @@ pub enum GenerationError {
     #[error("{0}")]
     GraphIo(#[from] crate::graph_io::GraphIoError),
     #[error(transparent)]
-    CutStructure(#[from] crate::cut_structure::CutStructureError),
+    CutStructure(CutStructureError),
     #[error(
         "energy-degree bound was requested for edge {edge_id}, but this is not an internal edge of the selected graph"
     )]
@@ -461,9 +498,63 @@ pub enum GenerationError {
     },
 }
 
+impl From<CutStructureError> for GenerationError {
+    fn from(error: CutStructureError) -> Self {
+        match error {
+            CutStructureError::Resource(error) => Self::Resource(error),
+            error => Self::CutStructure(error),
+        }
+    }
+}
+
 pub type Result<T> = std::result::Result<T, GenerationError>;
 
+/// Generate a CFF or LTD expression without imposing RAM, time, or work limits.
+/// Any resource budget installed by the caller remains active.
 pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
+    graph: &G,
+    options: &Generate3DExpressionOptions,
+) -> Result<GeneratedThreeDExpression> {
+    generate_3d_expression_with_resources(graph, options, ResourceLimits::default())
+}
+
+/// Generate an expression under cooperative process-RSS and elapsed-time limits.
+///
+/// The budget covers graph conversion and final expression construction. Checks
+/// between algebraic operations also honor every enclosing resource budget;
+/// interrupting an opaque native operation requires an external supervisor.
+///
+/// ```no_run
+/// use std::time::Duration;
+/// use symbolica::utils::resources::ResourceLimits;
+/// use three_dimensional_reps::{
+///     GenerationError, ThreeDGraphSource, generate_3d_expression_with_resources,
+/// };
+///
+/// # fn generate<G: ThreeDGraphSource>(graph: &G) -> Result<(), GenerationError> {
+/// let limits = ResourceLimits {
+///     max_elapsed: Some(Duration::from_secs(60)),
+///     ..ResourceLimits::default()
+/// };
+/// let generated = generate_3d_expression_with_resources(graph, &Default::default(), limits)?;
+/// # let _ = generated;
+/// # Ok(())
+/// # }
+/// ```
+pub fn generate_3d_expression_with_resources<G: ThreeDGraphSource + ?Sized>(
+    graph: &G,
+    options: &Generate3DExpressionOptions,
+    limits: ResourceLimits,
+) -> Result<GeneratedThreeDExpression> {
+    ResourceBudget::new(limits).run(|| {
+        resources::checkpoint()?;
+        let generated = generate_3d_expression_scoped(graph, options)?;
+        resources::checkpoint()?;
+        Ok(generated)
+    })
+}
+
+fn generate_3d_expression_scoped<G: ThreeDGraphSource + ?Sized>(
     graph: &G,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
@@ -475,6 +566,7 @@ pub fn generate_3d_expression<G: ThreeDGraphSource + ?Sized>(
         });
     }
     let parsed = graph.to_three_d_parsed_graph()?;
+    resources::checkpoint()?;
     let validation = crate::validate_parsed_graph(&parsed);
     if !validation
         .internal_signature_dimension_violations
@@ -612,6 +704,7 @@ fn generate_3d_expression_from_parsed_generated(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
+    resources::checkpoint()?;
     let bounds = if options.representation == RepresentationMode::Cff {
         normalize_energy_degree_bounds(
             options.energy_degree_bounds.as_deref().unwrap_or(&[]),
@@ -704,12 +797,14 @@ fn build_expression_preserving_internal_edges(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<GeneratedThreeDExpression> {
+    resources::checkpoint()?;
     let preserved = options
         .preserve_internal_edges_as_four_d_denominators
         .iter()
         .copied()
         .collect::<BTreeSet<_>>();
     for edge_id in &preserved {
+        resources::checkpoint()?;
         let Some(edge) = parsed.internal_edges.get(*edge_id) else {
             return Err(GenerationError::UnknownCffPreservedInternalEdge { edge_id: *edge_id });
         };
@@ -1048,6 +1143,7 @@ fn generate_rational_component_product(
     parsed: &ParsedGraph,
     options: &Generate3DExpressionOptions,
 ) -> Result<Option<GeneratedThreeDExpression>> {
+    resources::checkpoint()?;
     let components = denominator_connected_components(parsed);
     if components.len() <= 1 {
         return Ok(None);
@@ -1068,6 +1164,7 @@ fn generate_rational_component_product(
         })
         .collect::<Vec<_>>();
     for (left, right) in (0..components.len()).tuple_combinations() {
+        resources::checkpoint()?;
         let variables = loop_supports[left]
             .intersection(&loop_supports[right])
             .copied()
@@ -1084,6 +1181,7 @@ fn generate_rational_component_product(
     let component_expressions = components
         .into_iter()
         .map(|component_edges| {
+            resources::checkpoint()?;
             let (component, embedding) = project_denominator_component(parsed, &component_edges);
             let component_options =
                 project_component_options(options, parsed.internal_edges.len(), &embedding)?;
@@ -1126,7 +1224,7 @@ fn generate_rational_component_product(
     }
     Ok(Some(GeneratedThreeDExpression {
         representation: options.representation,
-        expression: lift_component_expression_product(parsed, &expressions),
+        expression: lift_component_expression_product(parsed, &expressions)?,
         energy_factor_ownership,
         energy_factor_components,
         source_energy_degree_bounds: Vec::new(),
@@ -1368,7 +1466,8 @@ fn project_component_options(
 fn lift_component_expression_product(
     parsed: &ParsedGraph,
     components: &[(&ThreeDExpression<OrientationID>, &ParsedComponentEmbedding)],
-) -> ThreeDExpression<OrientationID> {
+) -> Result<ThreeDExpression<OrientationID>> {
+    resources::checkpoint()?;
     let mut expression = ThreeDExpression::<OrientationID>::new_empty();
     let mut partials = vec![OrientationExpression {
         data: OrientationData {
@@ -1395,6 +1494,7 @@ fn lift_component_expression_product(
     }];
 
     for (component_expression, embedding) in components {
+        resources::checkpoint()?;
         let edge_map = embedding
             .local_to_orig_edge
             .iter()
@@ -1408,6 +1508,7 @@ fn lift_component_expression_product(
         let mut next_partials = Vec::new();
         for partial in &partials {
             for component_orientation in &component_expression.orientations {
+                resources::checkpoint()?;
                 let mut merged = partial.clone();
                 for (local_id, orig_id) in embedding.local_to_orig_edge.iter().enumerate() {
                     merged.data.orientation[EdgeIndex(*orig_id)] =
@@ -1427,6 +1528,7 @@ fn lift_component_expression_product(
                 let mut variants = Vec::new();
                 for partial_variant in &partial.variants {
                     for component_variant in &component_orientation.variants {
+                        resources::checkpoint()?;
                         variants.push(product_variants(
                             partial_variant,
                             component_variant,
@@ -1452,7 +1554,8 @@ fn lift_component_expression_product(
         partial.data.label = Some(label);
     }
     expression.orientations = partials.into_iter().collect();
-    expression
+    resources::checkpoint()?;
+    Ok(expression)
 }
 
 fn product_variants(
@@ -1530,9 +1633,17 @@ fn generate_pure_cff_expression_from_parsed(
 ) -> Result<ThreeDExpression<OrientationID>> {
     #[cfg(feature = "generation-audit")]
     audit::record_cff();
+    resources::checkpoint()?;
     let signatures = parsed.signatures();
     let n_internal = signatures.len();
     let denominator_edge_ids = parsed.denominator_internal_edge_ids();
+    let orientation_count = u32::try_from(denominator_edge_ids.len())
+        .ok()
+        .and_then(|shift| 1usize.checked_shl(shift))
+        .ok_or(GenerationError::CffOrientationCountOutOfRange {
+            denominator_edges: denominator_edge_ids.len(),
+            counter_bits: usize::BITS,
+        })?;
     let basis = LowerSectorCffBuilder::component_basis_edges(&signatures, &denominator_edge_ids);
     // Contacts keep their parent coordinate namespace. Only the surviving
     // denominator rank belongs to this contour; map it back after recursion.
@@ -1544,7 +1655,8 @@ fn generate_pure_cff_expression_from_parsed(
     let mut surface_index =
         HashMap::<(LinearSurfaceKind, LinearEnergyExpr), HybridSurfaceID>::new();
 
-    for bitmask in 0..(1usize << denominator_edge_ids.len()) {
+    for bitmask in 0..orientation_count {
+        resources::checkpoint()?;
         let mut signs = vec![1; n_internal];
         for (bit, edge_index) in denominator_edge_ids.iter().copied().enumerate() {
             signs[edge_index] = if bitmask & (1usize << bit) == 0 {
@@ -1555,6 +1667,7 @@ fn generate_pure_cff_expression_from_parsed(
         }
         let surface_chains =
             enumerate_cff_surface_chains(parsed, &signs, medium_mode, preferred_tadpole_poles)?;
+        resources::checkpoint()?;
         if surface_chains.is_empty() {
             continue;
         }
@@ -1581,6 +1694,7 @@ fn generate_pure_cff_expression_from_parsed(
         let data = OrientationData::new(orientation);
         let mut groups = BTreeMap::<(ThermalWeight, Rational), Vec<Vec<HybridSurfaceID>>>::new();
         for chain in surface_chains {
+            resources::checkpoint()?;
             let denominators = chain
                 .surfaces
                 .into_iter()
@@ -2065,6 +2179,7 @@ impl KnownPolynomial {
     }
 
     fn div_rem(&self, divisor: &Self) -> Result<(Self, Self)> {
+        resources::checkpoint()?;
         let Some((divisor_monomial, divisor_coeff)) = divisor.leading_term() else {
             return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
         };
@@ -2072,6 +2187,7 @@ impl KnownPolynomial {
         let mut dividend = self.clone();
         let mut remainder = Self::zero();
         while let Some((lead_monomial, lead_coeff)) = dividend.leading_term() {
+            resources::checkpoint()?;
             if let Some(quotient_monomial) =
                 lead_monomial.quotient_after_dividing_by(&divisor_monomial)
             {
@@ -2164,6 +2280,7 @@ impl<'a> KnownPolynomialNormalForm<'a> {
     }
 
     fn branches(&self, numerator: KnownPolynomial) -> Result<Vec<KnownPolynomialBranch>> {
+        resources::checkpoint()?;
         let edges = self.parsed.denominator_internal_edge_ids();
         let mut branches = Vec::new();
         self.reduce(numerator, edges.clone(), edges, &mut branches)?;
@@ -2177,6 +2294,7 @@ impl<'a> KnownPolynomialNormalForm<'a> {
         candidates: Vec<usize>,
         branches: &mut Vec<KnownPolynomialBranch>,
     ) -> Result<()> {
+        resources::checkpoint()?;
         if numerator.is_zero() {
             return Ok(());
         }
@@ -2384,6 +2502,7 @@ impl<'a> BoundedCffBuilder<'a> {
     }
 
     fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
+        resources::checkpoint()?;
         let needs_generalized_expression = cff_bounds_need_generalized_expression(&self.bounds);
         if !needs_generalized_expression {
             let mut lower = LowerSectorCffBuilder::new(self.parsed, self.medium_mode);
@@ -2445,6 +2564,7 @@ impl<'a> BoundedCffBuilder<'a> {
     }
 
     fn build_quadratic_e_surface_only(&mut self) -> Result<()> {
+        resources::checkpoint()?;
         let quadratic_edges = self
             .bounds
             .iter()
@@ -2454,6 +2574,7 @@ impl<'a> BoundedCffBuilder<'a> {
 
         for size in 0..=quadratic_edges.len() {
             for pinched in quadratic_edges.iter().copied().combinations(size) {
+                resources::checkpoint()?;
                 self.lift_contracted_cff_terms(&pinched)?;
             }
         }
@@ -2464,6 +2585,7 @@ impl<'a> BoundedCffBuilder<'a> {
         mut self,
         lower_sector_base: bool,
     ) -> Result<ThreeDExpression<OrientationID>> {
+        resources::checkpoint()?;
         let Some(active_edge) = self.bounds.iter().position(|degree| *degree > 1) else {
             // The finite-pole remainder keeps the original denominator sector
             // and the parent's source frame.
@@ -2526,13 +2648,16 @@ impl<'a> BoundedCffBuilder<'a> {
         edge_id: usize,
         source: &ThreeDExpression<OrientationID>,
     ) -> Result<()> {
+        resources::checkpoint()?;
         let edge_map = (0..self.parsed.internal_edges.len())
             .map(|id| (id, id))
             .collect::<BTreeMap<_, _>>();
         let surface_map = self.assembly.copy_expression_surfaces(source, &edge_map);
 
         for orientation in &source.orientations {
+            resources::checkpoint()?;
             for variant in &orientation.variants {
+                resources::checkpoint()?;
                 let mut variant = variant.clone();
                 variant.remap_indices(&edge_map, |id| map_surface_id(id, &surface_map));
 
@@ -2586,6 +2711,7 @@ impl<'a> BoundedCffBuilder<'a> {
         sub_to_orig: &[usize],
         weight_polys: &BTreeMap<i32, Vec<Rational>>,
     ) -> Result<()> {
+        resources::checkpoint()?;
         // Lower-sector variants already carry their complete scalar
         // normalization in the original source frame. Quotient interpolation
         // is algebraic and introduces no additional contour conversion.
@@ -2598,6 +2724,7 @@ impl<'a> BoundedCffBuilder<'a> {
         let signatures = self.parsed.signatures();
 
         for orientation in &source.orientations {
+            resources::checkpoint()?;
             let full_loop_exprs = orientation
                 .loop_energy_map
                 .iter()
@@ -2618,6 +2745,7 @@ impl<'a> BoundedCffBuilder<'a> {
                 current_edge_exprs[edge_id].clone(),
             );
             for variant in &orientation.variants {
+                resources::checkpoint()?;
                 let mut variant = variant.clone();
                 variant.remap_indices(&edge_map, |id| map_surface_id(id, &surface_map));
 
@@ -2628,6 +2756,7 @@ impl<'a> BoundedCffBuilder<'a> {
                     .collect::<Vec<_>>();
 
                 for component in &components {
+                    resources::checkpoint()?;
                     let mut edge_exprs = base_edge_exprs.clone();
                     Self::assign_occurrence_sample(&mut edge_exprs, edge_id, component.sample);
                     let mut half_edges = base_half_edges.clone();
@@ -2674,6 +2803,7 @@ impl<'a> BoundedCffBuilder<'a> {
     }
 
     fn lift_contracted_cff_terms(&mut self, pinched_edges: &[usize]) -> Result<()> {
+        resources::checkpoint()?;
         let (subparsed, sub_to_orig) = self.project_parsed_edges(pinched_edges);
         let mut lower = LowerSectorCffBuilder::new(&subparsed, self.medium_mode);
         lower.source_prefactor = Some(self.source_prefactor.clone());
@@ -2706,6 +2836,7 @@ impl<'a> BoundedCffBuilder<'a> {
         let signatures = self.parsed.signatures();
 
         for orientation in &sub_expression.orientations {
+            resources::checkpoint()?;
             let full_loop_exprs = orientation
                 .loop_energy_map
                 .iter()
@@ -2740,10 +2871,15 @@ impl<'a> BoundedCffBuilder<'a> {
                 per_edge_components
                     .into_iter()
                     .multi_cartesian_product()
-                    .collect::<Vec<_>>()
+                    .map(|choice| {
+                        resources::checkpoint()?;
+                        Ok(choice)
+                    })
+                    .collect::<Result<Vec<_>>>()?
             };
 
             for variant in &orientation.variants {
+                resources::checkpoint()?;
                 let mut variant = variant.clone();
                 variant.remap_indices(&edge_map, |id| map_surface_id(id, &surface_map));
 
@@ -2754,6 +2890,7 @@ impl<'a> BoundedCffBuilder<'a> {
                     .collect::<Vec<_>>();
 
                 for components in &component_choices {
+                    resources::checkpoint()?;
                     let mut prefactor = variant.prefactor.clone();
                     let mut half_edges = remapped_half_edges.clone();
                     let mut numerator_surfaces = variant.numerator_surfaces.clone();
@@ -3034,7 +3171,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         inherited_contour_rows: &[Vec<i32>],
     ) -> Result<ThreeDExpression<OrientationID>> {
         let local_to_orig = (0..self.original.internal_edges.len()).collect::<Vec<_>>();
-        let recursion_budget = self.recursion_budget();
+        resources::checkpoint()?;
         self.sample_occurrences(
             self.original,
             &local_to_orig,
@@ -3046,17 +3183,29 @@ impl<'a> KnownFactorCffBuilder<'a> {
             Rational::one(),
             lower_sector_base,
             false,
-            0,
-            recursion_budget,
+            true,
         )?;
         // Every scalar base already carries the original source frame;
         // interpolation introduces no additional contour conversion.
         self.assembly.finalize_numerator_map_labels();
+        resources::checkpoint()?;
         Ok(self.assembly.expression)
     }
 
-    fn recursion_budget(&self) -> usize {
-        3 * self.original.internal_edges.len() + self.bounds.iter().copied().sum::<usize>()
+    // Recursion resolves a previously unresolved original edge in each branch.
+    // The sample-to-term transition only lowers the phase. Thus
+    // 2 * unresolved_edges + sample_phase strictly decreases without a work cap.
+    fn record_replacement(
+        replacements: &BTreeMap<usize, LinearEnergyExpr>,
+        edge_id: usize,
+        replacement: LinearEnergyExpr,
+    ) -> Result<BTreeMap<usize, LinearEnergyExpr>> {
+        resources::checkpoint()?;
+        let mut next = replacements.clone();
+        if next.insert(edge_id, replacement).is_some() {
+            return Err(GenerationError::RepeatedOccurrenceResolution { edge_id });
+        }
+        Ok(next)
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -3072,12 +3221,9 @@ impl<'a> KnownFactorCffBuilder<'a> {
         prefactor: Rational,
         lower_sector_base: bool,
         occurrence_normal_form_consumed: bool,
-        depth: usize,
-        recursion_budget: usize,
+        root_sample: bool,
     ) -> Result<()> {
-        if depth > recursion_budget {
-            return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
-        }
+        resources::checkpoint()?;
         let Some((active_local, degree)) =
             self.active_occurrence(parsed, local_to_orig, replacements)
         else {
@@ -3092,8 +3238,6 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 prefactor,
                 lower_sector_base,
                 occurrence_normal_form_consumed,
-                0,
-                recursion_budget,
             );
         };
 
@@ -3102,8 +3246,10 @@ impl<'a> KnownFactorCffBuilder<'a> {
         let use_uniform_scale = self.sampling_scale_mode.is_active_for_degree(degree);
 
         for (node_idx, sample) in nodes.iter().enumerate() {
+            resources::checkpoint()?;
             let basis_poly = lagrange_basis(&nodes, node_idx);
             for term in Self::occurrence_normal_form_terms(&basis_poly, use_uniform_scale) {
+                resources::checkpoint()?;
                 if term.coeff.is_zero() {
                     continue;
                 }
@@ -3158,11 +3304,11 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     );
                 }
 
-                let mut sub_replacements = replacements.clone();
-                sub_replacements.insert(
+                let sub_replacements = Self::record_replacement(
+                    replacements,
                     active_orig,
                     Self::occurrence_replacement_expr(active_orig, *sample, use_uniform_scale),
-                );
+                )?;
 
                 let mut next_known = known_factors.to_vec();
                 if term.parity != 0 {
@@ -3219,8 +3365,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         sample_prefactor,
                         lower_sector_base || !delete.is_empty(),
                         true,
-                        depth + 1,
-                        recursion_budget,
+                        false,
                     )?,
                     Err(GenerationError::SingularBasis)
                         if !sub_local_to_orig.iter().any(|orig_id| {
@@ -3244,7 +3389,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             }
             // Keep completed root samples compact while retaining every map,
             // including any zero map whose variants cancel at this boundary.
-            if self.normalize_public_output && depth == 0 {
+            if self.normalize_public_output && root_sample {
                 for orientation in &mut self.assembly.expression.orientations {
                     orientation.fuse_compatible_variants();
                 }
@@ -3266,12 +3411,8 @@ impl<'a> KnownFactorCffBuilder<'a> {
         prefactor: Rational,
         lower_sector_base: bool,
         occurrence_normal_form_consumed: bool,
-        depth: usize,
-        recursion_budget: usize,
     ) -> Result<()> {
-        if depth > recursion_budget {
-            return Err(GenerationError::CffHigherEnergyPowerNotImplemented);
-        }
+        resources::checkpoint()?;
         let known_factors = known_factors
             .iter()
             .cloned()
@@ -3330,14 +3471,16 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 .iter()
                 .map(|factor| factor.replace_var_with_ose(active, sample, orig_edge))
                 .collect::<Vec<_>>();
+            resources::checkpoint()?;
             sampled_factors.push(weight);
             if KnownLinearExpr::product_is_zero(&sampled_factors) {
                 continue;
             }
-            let mut next_replacements = replacements.clone();
-            next_replacements
-                .entry(orig_edge)
-                .or_insert_with(|| LinearEnergyExpr::ose(EdgeIndex(orig_edge), i64::from(sample)));
+            let next_replacements = Self::record_replacement(
+                replacements,
+                orig_edge,
+                LinearEnergyExpr::ose(EdgeIndex(orig_edge), i64::from(sample)),
+            )?;
             let mut next_half_edges = extra_half_edges.to_vec();
             next_half_edges.push(orig_edge);
             self.recursive_terms(
@@ -3351,8 +3494,6 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 prefactor.clone(),
                 lower_sector_base,
                 occurrence_normal_form_consumed,
-                depth + 1,
-                recursion_budget,
             )?;
         }
 
@@ -3394,7 +3535,9 @@ impl<'a> KnownFactorCffBuilder<'a> {
         let mut next_contour_rows = inherited_contour_rows.to_vec();
         next_contour_rows.push(active_signature.clone());
         for (sample, poly) in contact_weight_polys(total_bounds[active]) {
+            resources::checkpoint()?;
             for (power, coeff) in poly.into_iter().enumerate() {
+                resources::checkpoint()?;
                 if coeff.is_zero() {
                     continue;
                 }
@@ -3406,14 +3549,15 @@ impl<'a> KnownFactorCffBuilder<'a> {
                 if KnownLinearExpr::product_is_zero(&sampled_factors) {
                     continue;
                 }
-                let mut next_replacements = replacements.clone();
-                next_replacements.entry(orig_edge).or_insert_with(|| {
+                let next_replacements = Self::record_replacement(
+                    replacements,
+                    orig_edge,
                     if sample == 0 {
                         LinearEnergyExpr::zero()
                     } else {
                         LinearEnergyExpr::ose(EdgeIndex(orig_edge), i64::from(sample))
-                    }
-                });
+                    },
+                )?;
                 let mut next_half_edges = extra_half_edges.to_vec();
                 next_half_edges.extend(std::iter::repeat_n(orig_edge, power + 2));
                 let branch_prefactor = prefactor.clone() * coeff * rational_pow_i64(2, power + 2);
@@ -3435,8 +3579,6 @@ impl<'a> KnownFactorCffBuilder<'a> {
                         branch_prefactor,
                         true,
                         occurrence_normal_form_consumed,
-                        depth + 1,
-                        recursion_budget,
                     )?,
                     Err(
                         GenerationError::CffHigherEnergyPowerNotImplemented
@@ -3474,13 +3616,16 @@ impl<'a> KnownFactorCffBuilder<'a> {
         extra_uniform_scale_power: usize,
         prefactor: Rational,
     ) -> Result<()> {
+        resources::checkpoint()?;
         let numerator = KnownPolynomial::product_from_known_factors(parent, known_factors);
         // This path is reached only when a derivative-generated factor cannot
         // be remapped to the surviving graph. Keep its exact polynomial normal
         // form as the singular-projection fallback; ordinary lower contacts
         // stay factorized and obtain bounded CFF maps in `append_base_terms`.
+        resources::checkpoint()?;
         let branches = KnownPolynomialNormalForm::new(parsed, local_to_orig).branches(numerator)?;
         for branch in branches {
+            resources::checkpoint()?;
             self.append_known_polynomial_branch(
                 parsed,
                 local_to_orig,
@@ -3507,6 +3652,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         extra_uniform_scale_power: usize,
         prefactor: Rational,
     ) -> Result<()> {
+        resources::checkpoint()?;
         if branch.numerator.is_zero() || branch.denominator_edges.is_empty() {
             return Ok(());
         }
@@ -3579,6 +3725,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             .assembly
             .copy_expression_surfaces(&base_expression, &edge_map);
         for orientation in &base_expression.orientations {
+            resources::checkpoint()?;
             // A lower sector can lose a denominator direction which an earlier
             // generalized residue has already sampled. Reconstruct the full
             // loop-energy map from its surviving poles first, and use sampled
@@ -3617,6 +3764,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             }
 
             for variant in &orientation.variants {
+                resources::checkpoint()?;
                 let mut variant = variant.clone();
                 variant.remap_indices(&edge_map, |id| map_surface_id(id, &surface_map));
                 let base_coeff = &variant.prefactor * &branch_prefactor;
@@ -3631,6 +3779,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
                     .collect::<Vec<_>>();
 
                 for (monomial, monomial_coeff) in &branch.numerator.terms {
+                    resources::checkpoint()?;
                     let coeff = base_coeff.clone() * monomial_coeff.clone();
                     if coeff.is_zero() {
                         continue;
@@ -3717,6 +3866,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         lower_sector_base: bool,
         occurrence_normal_form_consumed: bool,
     ) -> Result<()> {
+        resources::checkpoint()?;
         if KnownLinearExpr::product_is_zero(known_factors) {
             return Ok(());
         }
@@ -3784,6 +3934,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
         let n_original = self.original.internal_edges.len();
 
         for orientation in base_expression.orientations {
+            resources::checkpoint()?;
             let local_edge_exprs = orientation
                 .edge_energy_map
                 .iter()
@@ -3805,6 +3956,7 @@ impl<'a> KnownFactorCffBuilder<'a> {
             }
 
             for mut variant in orientation.variants {
+                resources::checkpoint()?;
                 variant.remap_indices(&edge_map, |id| map_surface_id(id, &surface_map));
                 let coeff = &variant.prefactor * &prefactor;
                 if coeff.is_zero() {
@@ -4253,6 +4405,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
     }
 
     fn build(mut self) -> Result<ThreeDExpression<OrientationID>> {
+        resources::checkpoint()?;
         if self.parsed.internal_edges.is_empty() {
             // A fully contracted scalar contact is the zero-edge lower sector,
             // whose denominator is the multiplicative identity.
@@ -4363,6 +4516,7 @@ impl<'a> LowerSectorCffBuilder<'a> {
             .collect::<BTreeMap<_, _>>();
         let single_contour = terminal_contours.len() == 1;
         for (poles, coefficient) in terminal_contours {
+            resources::checkpoint()?;
             let mut expression =
                 generate_pure_cff_expression_from_parsed(self.parsed, self.medium_mode, &poles)?;
             for variant in expression
@@ -4379,7 +4533,9 @@ impl<'a> LowerSectorCffBuilder<'a> {
                 .assembly
                 .copy_expression_surfaces(&expression, &edge_map);
             for orientation in expression.orientations {
+                resources::checkpoint()?;
                 for mut variant in orientation.variants {
+                    resources::checkpoint()?;
                     variant.remap_indices(&edge_map, |id| map_surface_id(id, &surface_map));
                     self.assembly.push_variant_for_maps(
                         orientation.loop_energy_map.clone(),
@@ -4784,6 +4940,7 @@ fn solve_loop_energy_particular_from_target_edge_exprs(
     basis: &[usize],
     target_edge_exprs: &[LinearEnergyExpr],
 ) -> Result<Vec<LinearEnergyExpr>> {
+    resources::checkpoint()?;
     let n_loops = signatures
         .first()
         .map(|signature| signature.loop_signature.len())
@@ -4827,6 +4984,7 @@ fn solve_loop_energy_particular_from_target_edge_exprs(
         .collect::<Vec<_>>();
 
     for columns in (0..n_loops).combinations(basis.len()) {
+        resources::checkpoint()?;
         let square = matrix
             .iter()
             .map(|row| {
@@ -4860,6 +5018,7 @@ fn solve_loop_energy_from_target_edge_exprs(
     basis: &[usize],
     target_edge_exprs: &[LinearEnergyExpr],
 ) -> Result<Vec<LinearEnergyExpr>> {
+    resources::checkpoint()?;
     let n_loops = signatures
         .first()
         .map(|signature| signature.loop_signature.len())
@@ -5017,6 +5176,113 @@ fn cff_bounds_need_generalized_expression(bounds: &[usize]) -> bool {
 #[cfg(test)]
 mod representation_tests {
     use super::*;
+
+    #[test]
+    fn cff_orientation_counter_rejects_unrepresentable_shift() {
+        let mut parsed = crate::graph_io::test_graphs::box_graph();
+        let template = parsed.internal_edges[0].clone();
+        parsed.internal_edges = (0..usize::BITS as usize)
+            .map(|edge_id| {
+                let mut edge = template.clone();
+                edge.edge_id = edge_id;
+                edge
+            })
+            .collect();
+        assert!(matches!(
+            generate_pure_cff_expression_from_parsed(
+                &parsed,
+                MediumMode::Vacuum,
+                &BTreeMap::new(),
+            ),
+            Err(GenerationError::CffOrientationCountOutOfRange {
+                denominator_edges,
+                counter_bits,
+            }) if denominator_edges == usize::BITS as usize && counter_bits == usize::BITS
+        ));
+    }
+
+    #[test]
+    fn cff_orientation_loop_rechecks_active_resources() {
+        let checks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let monitor_checks = checks.clone();
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(10),
+                ..ResourceLimits::default()
+            },
+            move || {
+                Ok(
+                    if monitor_checks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
+                        0
+                    } else {
+                        11
+                    },
+                )
+            },
+        );
+        assert!(matches!(
+            budget.run(|| generate_pure_cff_expression_from_parsed(
+                &crate::graph_io::test_graphs::box_graph(),
+                MediumMode::Vacuum,
+                &BTreeMap::new(),
+            )),
+            Err(GenerationError::Resource(ResourceLimitError::Memory { .. }))
+        ));
+        assert!(checks.load(std::sync::atomic::Ordering::Relaxed) >= 2);
+    }
+
+    #[test]
+    fn generation_honors_outer_resources_without_count_limits() {
+        let parsed = crate::graph_io::test_graphs::box_graph();
+        let outer = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(10),
+                ..ResourceLimits::default()
+            },
+            || Ok(11),
+        );
+        for representation in [RepresentationMode::Cff, RepresentationMode::Ltd] {
+            let options = Generate3DExpressionOptions {
+                representation,
+                ..Default::default()
+            };
+            assert!(matches!(
+                outer.run(|| generate_3d_expression(&parsed, &options)),
+                Err(GenerationError::Resource(ResourceLimitError::Memory { .. }))
+            ));
+        }
+        let unavailable = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(10),
+                ..ResourceLimits::default()
+            },
+            || Err("injected unavailable RSS monitor".to_string()),
+        );
+        assert!(matches!(
+            unavailable.run(|| generate_3d_expression(&parsed, &Default::default())),
+            Err(GenerationError::Resource(
+                ResourceLimitError::MonitorUnavailable { .. }
+            ))
+        ));
+        assert!(generate_3d_expression(&parsed, &Default::default()).is_ok());
+    }
+
+    #[test]
+    fn occurrence_recursion_requires_a_fresh_original_edge() {
+        let empty = BTreeMap::new();
+        let first =
+            KnownFactorCffBuilder::record_replacement(&empty, 2, LinearEnergyExpr::zero()).unwrap();
+        assert!(empty.is_empty());
+        assert_eq!(first.len(), 1);
+        assert!(matches!(
+            KnownFactorCffBuilder::record_replacement(&first, 2, LinearEnergyExpr::zero()),
+            Err(GenerationError::RepeatedOccurrenceResolution { edge_id: 2 })
+        ));
+        let second =
+            KnownFactorCffBuilder::record_replacement(&first, 3, LinearEnergyExpr::zero()).unwrap();
+        assert_eq!(second.len(), 2);
+        assert_eq!(first.len(), 1);
+    }
 
     #[test]
     fn generation_rejects_invalid_graph_structure() {

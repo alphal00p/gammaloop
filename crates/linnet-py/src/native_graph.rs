@@ -11,10 +11,12 @@ use linnet::half_edge::subgraph::{
 };
 use linnet::half_edge::swap::Swap;
 use linnet::half_edge::tree::SimpleTraversalTree;
+use linnet::half_edge::CycleEnumerationError;
 use linnet::half_edge::{EdgeAccessors, HedgeGraph, HedgeGraphError, NodeIndex};
 use linnet::permutation::Permutation;
 use linnet::tree::{child_vec::ChildVecStore, Forest};
 use pyo3::prelude::*;
+use symbolica::utils::resources::ResourceLimitError;
 
 use crate::graph::{EdgeRecord, HalfEdgeRecord, NodeRecord};
 
@@ -462,12 +464,16 @@ impl PyHedgeGraph {
         &self,
         subgraph: &SuBitGraph,
         max_cycle_rank: usize,
-    ) -> Result<Vec<Cycle>, String> {
+        checkpoint: impl FnMut() -> Result<(), ResourceLimitError>,
+    ) -> Result<Vec<Cycle>, CycleEnumerationError<ResourceLimitError>> {
         match self {
-            Self::Vec(graph) => graph.all_cycles_of(subgraph, max_cycle_rank),
-            Self::Forest(graph) => graph.all_cycles_of(subgraph, max_cycle_rank),
+            Self::Vec(graph) => {
+                graph.all_cycles_of_with_control(subgraph, max_cycle_rank, checkpoint)
+            }
+            Self::Forest(graph) => {
+                graph.all_cycles_of_with_control(subgraph, max_cycle_rank, checkpoint)
+            }
         }
-        .map_err(|error| error.to_string())
     }
 
     pub(crate) fn tadpoles(&self, externals: &[NodeIndex]) -> Result<Vec<SuBitGraph>, String> {

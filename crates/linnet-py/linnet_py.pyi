@@ -554,12 +554,12 @@ class Graph:
         r"""
         Find one native inclusion-minimal cutset within an inclusive size range.
         """
-    def all_cycles(self, *, max_results: builtins.int, subgraph: typing.Optional[Subgraph] = None) -> builtins.list[Cycle]:
+    def all_cycles(self, *, max_results: typing.Optional[builtins.int] = None, subgraph: typing.Optional[Subgraph] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> builtins.list[Cycle]:
         r"""
-        Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+        Enumerate circuits with optional diagnostics and cooperative RAM/time controls.
 
-        `max_results` bounds all non-empty combinations of a cycle basis, not only
-        the combinations that ultimately form circuits.
+        `max_results` is an opt-in diagnostic over all non-empty cycle-basis
+        combinations, not only final circuits. None disables the count ceiling.
         """
     def tadpoles(self, externals: typing.Sequence[Node | builtins.int | builtins.str]) -> builtins.list[Subgraph]:
         r"""
@@ -706,7 +706,7 @@ class LayoutStream:
         Source and sink node indices; a missing endpoint denotes a dangling edge.
         """
     @staticmethod
-    def from_dot(dot: builtins.str, *, every: builtins.int = 4, steps: builtins.int = 200, epochs: builtins.int = 8, seed: builtins.int = 1, step: builtins.float = 0.02, cool: builtins.float = 0.85, spring_strength: builtins.float = 1.0, repulsion: builtins.float = 1.5, length_scale: builtins.float = 1.0, depth_scale: builtins.float = 1.0, flattening_end: builtins.float = 0.5, delta: builtins.float = 0.1, early_tolerance: builtins.float = 1e-06) -> LayoutStream:
+    def from_dot(dot: builtins.str, *, every: builtins.int = ..., steps: builtins.int = ..., epochs: builtins.int = ..., seed: builtins.int = ..., step: builtins.float = ..., cool: builtins.float = ..., spring_strength: builtins.float = ..., repulsion: builtins.float = ..., length_scale: builtins.float = ..., depth_scale: builtins.float = ..., flattening_end: builtins.float = ..., delta: builtins.float = ..., early_tolerance: builtins.float = ...) -> LayoutStream:
         r"""
         Start a force-layout preview from a single DOT graph.
 
