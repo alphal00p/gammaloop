@@ -13,7 +13,7 @@ use linnet::half_edge::{
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use symbolica::{
-    atom::{Atom, AtomCore},
+    atom::{Atom, AtomCore, Symbol},
     domains::rational::Rational,
     id::{Pattern, Replacement},
     parser::ParseSettings,
@@ -397,12 +397,14 @@ impl Particle {
             .map(|y| self.charge.clone() - y.clone() / Rational::from(2))
     }
 
-    /// Whether the model declares this particle's mass to be zero.
+    /// Whether an exact internal definition establishes a zero mass.
+    ///
+    /// Adjustable external defaults and parameter names do not establish
+    /// structural masslessness. Analytic definitions take precedence over
+    /// cached numerical values.
     pub fn is_massless(&self, model: &Model) -> bool {
         let mass = model.parameter_by_id(self.mass).unwrap();
-        mass.name == "ZERO"
-            || (mass.nature == ParameterNature::Internal
-                && mass.expression.as_ref().is_some_and(Atom::is_zero))
+        model.structural_zero_parameter_names().contains(&mass.name)
     }
 
     /// How the shared physics renderer draws this particle's line.
@@ -544,6 +546,66 @@ pub struct Parameter {
     pub expression: Option<Atom>,
 }
 
+/// Exact structural-zero propagation, without binding adjustable defaults.
+fn structural_zero_parameters(parameters: &[Parameter]) -> BTreeSet<String> {
+    let internal = parameters
+        .iter()
+        .filter(|parameter| parameter.nature == ParameterNature::Internal)
+        .filter_map(|parameter| {
+            let value = if let Some(expression) = &parameter.expression {
+                expression.clone()
+            } else {
+                let literal = parameter.value?;
+                let re = Rational::try_from(literal.re).ok()?;
+                let im = Rational::try_from(literal.im).ok()?;
+                Atom::num(re) + Atom::num(im) * Atom::i()
+            };
+            Some((symbol!(&format!("UFO::{}", parameter.name)), value))
+        })
+        .collect::<BTreeMap<Symbol, Atom>>();
+    // Most models have an acyclic definition graph. Resolve it once; unrelated
+    // cycles must not prevent a proof for another mass, so fall back to that
+    // parameter's dependency closure when necessary.
+    let resolved = crate::resolve_scalar_bindings(internal.clone()).ok();
+    parameters
+        .iter()
+        .filter(|parameter| parameter.nature == ParameterNature::Internal)
+        .filter(|parameter| {
+            let symbol = symbol!(&format!("UFO::{}", parameter.name));
+            let Some(expression) = internal.get(&symbol) else {
+                return false;
+            };
+            if let Some(resolved) = &resolved {
+                return resolved
+                    .get(&symbol)
+                    .is_some_and(|value| value.expand().is_zero());
+            }
+            let mut dependencies = BTreeMap::from([(symbol, expression.clone())]);
+            loop {
+                let next = internal
+                    .iter()
+                    .filter(|(candidate, _)| !dependencies.contains_key(candidate))
+                    .filter(|(candidate, _)| {
+                        dependencies
+                            .values()
+                            .any(|value| value.contains(Atom::var(**candidate).as_view()))
+                    })
+                    .map(|(candidate, value)| (*candidate, value.clone()))
+                    .collect::<Vec<_>>();
+                if next.is_empty() {
+                    break;
+                }
+                dependencies.extend(next);
+            }
+            crate::resolve_scalar_bindings(dependencies)
+                .ok()
+                .and_then(|resolved| resolved.get(&symbol).cloned())
+                .is_some_and(|value| value.expand().is_zero())
+        })
+        .map(|parameter| parameter.name.clone())
+        .collect()
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct VertexRule {
     pub name: String,
@@ -606,6 +668,7 @@ pub struct Model {
     restriction: Option<String>,
     orders: Vec<Order>,
     parameters: Vec<Parameter>,
+    structural_zero_parameters: BTreeSet<String>,
     particles: Vec<Particle>,
     propagators: Vec<Propagator>,
     lorentz_structures: Vec<LorentzStructure>,
@@ -702,46 +765,21 @@ impl Model {
                 })
             })
             .collect::<Result<Vec<_>, ModelError>>()?;
-        // Structural zeros come only from exact internal expressions. External
-        // parameters remain adjustable even when their current value is zero.
-        let mut zero_parameters = BTreeSet::from(["ZERO".to_owned()]);
-        loop {
-            let previous_len = zero_parameters.len();
-            let replacements = zero_parameters
-                .iter()
-                .map(|name| {
-                    Replacement::new(
-                        Atom::var(symbol!(&format!("UFO::{name}"))).to_pattern(),
-                        Atom::Zero,
-                    )
-                })
-                .collect::<Vec<_>>();
-            zero_parameters.extend(
-                parameters
-                    .iter()
-                    .filter(|parameter| {
-                        parameter.nature == ParameterNature::Internal
-                            && parameter.expression.as_ref().is_some_and(|expression| {
-                                expression.replace_multiple(&replacements).is_zero()
-                            })
-                    })
-                    .map(|parameter| parameter.name.clone()),
-            );
-            if zero_parameters.len() == previous_len {
-                break;
-            }
-        }
-        // A declared ZERO supplies the canonical mass/medium identity below.
+        // A symbol name and an adjustable numerical default are not proofs.
+        let zero_parameters = structural_zero_parameters(&parameters);
+        // A proven internal ZERO supplies the canonical mass/medium identity.
         // Keep other parameter expressions intact, including width aliases.
         // Without that identity, retain the exact zero proof on the parameter.
-        if !indexes.parameters.contains_key("ZERO") {
-            for parameter in &mut parameters {
-                if parameter.nature == ParameterNature::Internal
-                    && parameter.expression.is_some()
-                    && zero_parameters.contains(&parameter.name)
-                {
-                    parameter.expression = Some(Atom::Zero);
-                }
+        let canonical_zero = zero_parameters
+            .contains("ZERO")
+            .then(|| indexes.parameters["ZERO"]);
+        for parameter in &mut parameters {
+            if (canonical_zero.is_none() || parameter.name == "ZERO")
+                && parameter.nature == ParameterNature::Internal
+                && parameter.expression.is_some()
+                && zero_parameters.contains(&parameter.name)
+            {
+                parameter.expression = Some(Atom::Zero);
             }
         }
         let zero_mass_replacements = definition
@@ -753,8 +791,8 @@ impl Model {
             .into_iter()
             .map(|name| {
                 Replacement::new(
-                    Atom::var(symbol!(&format!("UFO::{name}"))).to_pattern(),
-                    Atom::Zero,
+                    Pattern::Literal(Atom::var(symbol!(&format!("UFO::{name}")))),
+                    Pattern::Literal(Atom::Zero),
                 )
             })
             .collect::<Vec<_>>();
@@ -768,22 +806,14 @@ impl Model {
                 spin: particle.spin,
                 color: particle.color,
                 mass: if zero_parameters.contains(&particle.mass) {
-                    indexes
-                        .parameters
-                        .get("ZERO")
-                        .copied()
-                        .unwrap_or(indexes.parameters[&particle.mass])
+                    canonical_zero.unwrap_or(indexes.parameters[&particle.mass])
                 } else {
                     indexes.parameters[&particle.mass]
                 },
                 width: indexes.parameters[&particle.width],
                 chemical_potential: particle.chemical_potential.as_ref().map(|name| {
                     if zero_parameters.contains(name) {
-                        indexes
-                            .parameters
-                            .get("ZERO")
-                            .copied()
-                            .unwrap_or(indexes.parameters[name])
+                        canonical_zero.unwrap_or(indexes.parameters[name])
                     } else {
                         indexes.parameters[name]
                     }
@@ -952,6 +982,7 @@ impl Model {
             restriction: definition.restriction,
             orders: definition.orders,
             parameters,
+            structural_zero_parameters: zero_parameters,
             particles,
             propagators,
             lorentz_structures,
@@ -1334,6 +1365,19 @@ impl Model {
 
     pub fn orders(&self) -> &[Order] {
         &self.orders
+    }
+
+    /// Parameters proved identically zero from the imported internal definitions.
+    ///
+    /// The proof resolves exact internal bindings and polynomial identities,
+    /// without binding adjustable external defaults. Cyclic definitions and
+    /// unsupported symbolic identities do not establish a zero. Parameter-card
+    /// updates preserve this set: an internal literal temporarily set to zero
+    /// is not thereby a structural restriction. To change a proved zero, rebuild
+    /// from the unrestricted source definition; import may have removed its
+    /// dependencies from masses and propagators.
+    pub fn structural_zero_parameter_names(&self) -> &BTreeSet<String> {
+        &self.structural_zero_parameters
     }
 
     pub fn parameters(&self) -> &[Parameter] {
@@ -1786,7 +1830,9 @@ impl Model {
     /// explicitly supplied by the card.
     ///
     /// Use [`Self::apply_parameter_card_with`] to recompute those values in the
-    /// same atomic operation.
+    /// same atomic operation. Exact internal zeros may already have been removed
+    /// from masses and propagators; overriding them with nonzero values requires
+    /// constructing a model from the original, unrestricted definition.
     pub fn apply_parameter_card(&mut self, card: &ParameterCard) -> Result<(), ModelError> {
         let updates =
             card.iter()
@@ -1801,6 +1847,13 @@ impl Model {
 
         if updates.is_empty() {
             return Ok(());
+        }
+        let structural_zeros = self.structural_zero_parameter_names();
+        for (index, value) in &updates {
+            let name = &self.parameters[index.index()].name;
+            if structural_zeros.contains(name) && (value.re != 0.0 || value.im != 0.0) {
+                return Err(ModelError::StructuralZeroOverride { name: name.clone() });
+            }
         }
         self.fingerprint.take();
         for parameter in &mut self.parameters {
@@ -2470,6 +2523,218 @@ mod tests {
             model.propagator("s_prop").unwrap().denominator,
             Atom::var(symbol!("UFO::P")).pow(2)
         );
+    }
+
+    #[test]
+    fn structural_zero_requires_an_internal_definition_not_a_parameter_name() {
+        for (nature, expression, value) in [
+            ("internal", Some("1"), 0.0),
+            ("internal", None, 1.0),
+            ("external", None, 0.0),
+            ("internal", Some("mass"), 0.0),
+        ] {
+            let mut definition: serde_json::Value =
+                serde_json::from_str(&model_json("GC1")).unwrap();
+            definition["parameters"][0]["nature"] = nature.into();
+            definition["parameters"][0]["expression"] = serde_json::json!(expression);
+            definition["parameters"][0]["value"] = serde_json::json!([value, 0.0]);
+            definition["parameters"][1]["value"] = serde_json::json!([0.0, 0.0]);
+            definition["particles"][0]["mass"] = "ZERO".into();
+            definition["particles"][0]["chemical_potential"] = "ZERO".into();
+            definition["propagators"][0]["denominator"] = "P^2-ZERO^2".into();
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let particle = model.particle("s").unwrap();
+            let zero_symbol = Atom::var(symbol!("UFO::ZERO"));
+            assert!(
+                !particle.is_massless(&model),
+                "{nature}, {expression:?}, {value}"
+            );
+            assert_eq!(particle.symbolic_mass(&model), zero_symbol);
+            assert_eq!(
+                particle.chemical_potential,
+                Some(model.parameter_id("ZERO").unwrap())
+            );
+            assert!(
+                model
+                    .propagator("s_prop")
+                    .unwrap()
+                    .denominator
+                    .contains(zero_symbol.as_view())
+            );
+            let restored = Model::from_json(&model.to_json().unwrap()).unwrap();
+            assert!(!restored.particle("s").unwrap().is_massless(&restored));
+        }
+    }
+
+    #[test]
+    fn an_undeclared_zero_symbol_does_not_erase_an_internal_mass_expression() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][0]["name"] = "null_width".into();
+        definition["parameters"][2]["expression"] = "2*ZERO".into();
+        definition["parameters"][2]["value"] = serde_json::json!([0.0, 0.0]);
+        definition["particles"][0]["mass"] = "double_mass".into();
+        definition["particles"][0]["width"] = "null_width".into();
+        definition["particles"][0]["chemical_potential"] = "double_mass".into();
+        definition["propagators"][0]["denominator"] = "P^2-double_mass^2".into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let particle = model.particle("s").unwrap();
+        assert!(!particle.is_massless(&model));
+        assert_eq!(particle.mass, model.parameter_id("double_mass").unwrap());
+        assert_eq!(particle.chemical_potential, Some(particle.mass));
+        let expression = model
+            .parameter("double_mass")
+            .unwrap()
+            .expression
+            .as_ref()
+            .unwrap();
+        assert!(expression.contains(Atom::var(symbol!("UFO::ZERO")).as_view()));
+        assert!(
+            model
+                .propagator("s_prop")
+                .unwrap()
+                .denominator
+                .contains(Atom::var(symbol!("UFO::double_mass")).as_view())
+        );
+    }
+
+    #[test]
+    fn custom_internal_zero_definitions_work_with_absent_or_invalid_canonical_zero() {
+        for has_canonical_name in [false, true] {
+            for literal in [false, true] {
+                let mut definition: serde_json::Value =
+                    serde_json::from_str(&model_json("GC1")).unwrap();
+                definition["parameters"][0]["name"] =
+                    if has_canonical_name { "ZERO" } else { "other" }.into();
+                definition["parameters"][0]["value"] = serde_json::json!([3.0, 0.0]);
+                definition["parameters"][1]["nature"] = "internal".into();
+                definition["parameters"][1]["expression"] = if literal {
+                    serde_json::Value::Null
+                } else {
+                    "0".into()
+                };
+                // An analytic zero wins over a stale nonzero cached value.
+                definition["parameters"][1]["value"] =
+                    serde_json::json!([if literal { 0.0 } else { 7.0 }, 0.0]);
+                definition["particles"][0]["mass"] = "double_mass".into();
+                definition["particles"][0]["width"] = "mass".into();
+                definition["particles"][0]["chemical_potential"] = "double_mass".into();
+                definition["propagators"][0]["denominator"] = "P^2-double_mass^2".into();
+                let model = Model::from_json(&definition.to_string()).unwrap();
+                let particle = model.particle("s").unwrap();
+                assert!(particle.is_massless(&model));
+                assert_eq!(particle.mass, model.parameter_id("double_mass").unwrap());
+                assert_eq!(particle.chemical_potential, Some(particle.mass));
+                assert_eq!(
+                    model.propagator("s_prop").unwrap().denominator,
+                    Atom::var(symbol!("UFO::P")).pow(2)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn a_canonical_zero_can_be_proved_through_internal_dependencies() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][0]["expression"] = "double_mass".into();
+        definition["parameters"][0]["value"] = serde_json::json!([5.0, 0.0]);
+        definition["parameters"][1]["nature"] = "internal".into();
+        definition["parameters"][1]["expression"] = "0".into();
+        definition["particles"][0]["mass"] = "double_mass".into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let particle = model.particle("s").unwrap();
+        assert_eq!(particle.mass, model.parameter_id("ZERO").unwrap());
+        assert!(particle.is_massless(&model));
+        assert!(
+            model
+                .parameter("ZERO")
+                .unwrap()
+                .expression
+                .as_ref()
+                .unwrap()
+                .is_zero()
+        );
+    }
+
+    #[test]
+    fn structural_zero_symbols_are_literal_even_with_wildcard_suffixes() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][0]["name"] = "null_".into();
+        definition["particles"][0]["mass"] = "double_mass".into();
+        definition["particles"][0]["width"] = "null_".into();
+        definition["propagators"][0]["denominator"] = "P^2-double_mass^2".into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        assert!(!model.particle("s").unwrap().is_massless(&model));
+        let denominator =
+            Atom::var(symbol!("UFO::P")).pow(2) - Atom::var(symbol!("UFO::double_mass")).pow(2);
+        assert_eq!(model.propagator("s_prop").unwrap().denominator, denominator);
+
+        definition["particles"][0]["mass"] = "null_".into();
+        definition["propagators"][0]["denominator"] = "P^2-null_^2".into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        assert!(model.particle("s").unwrap().is_massless(&model));
+        assert_eq!(
+            model.propagator("s_prop").unwrap().denominator,
+            Atom::var(symbol!("UFO::P")).pow(2)
+        );
+    }
+
+    #[test]
+    fn parameter_cards_cannot_invalidate_structural_zero_normalization() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][1]["nature"] = "internal".into();
+        definition["parameters"][1]["value"] = serde_json::json!([0.0, 0.0]);
+        definition["particles"][0]["mass"] = "double_mass".into();
+        definition["propagators"][0]["denominator"] = "P^2-double_mass^2".into();
+        let mut model = Model::from_json(&definition.to_string()).unwrap();
+        let original = model.to_json().unwrap();
+        assert!(model.particle("s").unwrap().is_massless(&model));
+        for name in ["ZERO", "mass", "double_mass"] {
+            let card = ParameterCard::from_json(&format!(r#"{{"{name}":[2,0]}}"#)).unwrap();
+            assert!(matches!(model.apply_parameter_card(&card),
+                Err(ModelError::StructuralZeroOverride { name: rejected }) if rejected == name));
+            assert_eq!(model.to_json().unwrap(), original);
+            let zero_card = ParameterCard::from_json(&format!(r#"{{"{name}":[0,0]}}"#)).unwrap();
+            let mut compatible = model.clone();
+            compatible.apply_parameter_card(&zero_card).unwrap();
+            assert!(compatible.particle("s").unwrap().is_massless(&compatible));
+        }
+    }
+
+    #[test]
+    fn parameter_cards_do_not_promote_adjustable_internal_literals_to_structural_zeros() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][1]["nature"] = "internal".into();
+        let mut model = Model::from_json(&definition.to_string()).unwrap();
+        model
+            .apply_parameter_card(&ParameterCard::from_json(r#"{"mass":[0,0]}"#).unwrap())
+            .unwrap();
+        assert!(!model.structural_zero_parameter_names().contains("mass"));
+        assert!(!model.particle("s").unwrap().is_massless(&model));
+        model
+            .apply_parameter_card(&ParameterCard::from_json(r#"{"mass":[2,0]}"#).unwrap())
+            .unwrap();
+        assert!(!model.particle("s").unwrap().is_massless(&model));
+    }
+
+    #[test]
+    fn structural_zero_proofs_resolve_dependencies_without_requiring_other_cycles() {
+        let mut definition: serde_json::Value = serde_json::from_str(&model_json("GC1")).unwrap();
+        definition["parameters"][2]["expression"] = "left-right".into();
+        definition["parameters"][2]["value"] = serde_json::json!([7.0, 0.0]);
+        definition["parameters"].as_array_mut().unwrap().extend([
+            serde_json::json!({"name":"left", "nature":"internal", "parameter_type":"real", "expression":"(mass+1)^2"}),
+            serde_json::json!({"name":"right", "nature":"internal", "parameter_type":"real", "expression":"mass^2+2*mass+1"}),
+            serde_json::json!({"name":"cycle", "nature":"internal", "parameter_type":"real", "expression":"cycle"})
+        ]);
+        definition["particles"][0]["mass"] = "double_mass".into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        assert!(
+            model
+                .structural_zero_parameter_names()
+                .contains("double_mass")
+        );
+        assert!(!model.structural_zero_parameter_names().contains("cycle"));
+        assert!(model.particle("s").unwrap().is_massless(&model));
     }
 
     #[test]

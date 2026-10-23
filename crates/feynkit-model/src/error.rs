@@ -142,6 +142,10 @@ pub enum ModelError {
     },
     #[error("parameter card references unknown parameter '{name}'")]
     UnknownCardParameter { name: String },
+    #[error(
+        "cannot override structural-zero parameter '{name}' with a nonzero or unresolved value; rebuild the model from its unrestricted definition"
+    )]
+    StructuralZeroOverride { name: String },
     #[error("cyclic internal parameter definitions prevent expansion of {parameters:?}")]
     CyclicParameterDefinitions { parameters: Vec<String> },
     #[error("external parameter '{name}' has no value for the default parameter card")]
