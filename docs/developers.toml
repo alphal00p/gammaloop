@@ -697,6 +697,14 @@ topics = ["tensor structure", "contraction", "tensor network", "parallelism", "p
 review_triggers = ["crates/symbolica-notation/**", "crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
 
 [[section.note.scope]]
+path = "crates/symbolica-notation/src/registry.rs"
+symbol = "symbolica_notation::Notation"
+anchor = "pub struct Notation {"
+# Reviewed 2026-10-23: The note records process-local immutable notation, bounded
+# text, idempotence, conflicts and poisoning. No renderer or symbol metadata is changed.
+digest = "871f3b9edd06cf1866a6eea6c42c59eb9ecf5c95"
+
+[[section.note.scope]]
 path = "crates/spenso/src/structure.rs"
 symbol = "spenso::structure::TensorStructure"
 anchor = "pub trait TensorStructure {"

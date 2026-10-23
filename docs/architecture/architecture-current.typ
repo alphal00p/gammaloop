@@ -193,6 +193,10 @@ It depends only on Symbolica and `thiserror`, below both Spenso and
 `linnet-render-py`; graph presentation no longer needs Spenso for these labels.
 This extraction preserves rendering and the `spenso.math-display` attachment
 format. Representation palettes, classes and rows remain owned by Spenso.
+`Notation::register` and `Notation::lookup` provide process-local, immutable
+shared notation with idempotent registration and typed conflict/poison errors.
+The registry is not consulted by renderers yet and never writes symbol tags or
+user data. Export will require an explicit opt-in portable attachment.
 
 No FeynKit crate depends on `gammalooprs`, `gammaloop-api`,
 `GlobalSettings`, or GammaLoop `State`. Generation receives explicit

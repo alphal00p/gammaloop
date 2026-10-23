@@ -297,3 +297,15 @@ The eager boundary also resolves completed lazy scaled tensors and tensor sums
 through `result_tensor`, preserving their coefficients and logical coordinates.
 Odd tensor powers preserve the remaining base after paired contractions. Completed execution waves
 release unused store payloads while retaining live aliases and tensor handles.
+
+== Process-local notation registry
+
+The shared notation crate also owns `Notation`: an optional structured index
+label, an optional structured head, and bounded plain/LaTeX/Typst display text.
+`Notation::register` is idempotent for equal values and rejects conflicts;
+`Notation::lookup` returns a shared immutable handle. An empty lazy map makes no
+Symbolica calls during initialization. Locks cover only lookup and insertion,
+never print callbacks, and poisoned locks fail explicitly. No renderer consults
+this registry yet, and no tags or user data are changed by registration.
+Notation is never implicitly serialized with symbols; a later opt-in portable
+attachment will provide an explicit export path.
