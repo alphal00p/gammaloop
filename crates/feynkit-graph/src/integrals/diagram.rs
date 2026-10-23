@@ -49,7 +49,7 @@ impl FeynmanDiagram {
     /// propagators and bridges. The stored loop routing supplies momentum names;
     /// dependent external coordinates are eliminated by that same routing.
     /// External carriers and dummy edges are excluded by the shared denominator
-    /// builder. Symbolic masses follow its conventions, including UFO ZERO.
+    /// builder. Symbolic masses use the model's exact structural-zero proofs.
     /// Widths, prescriptions and custom UFO denominator formulas are not inferred.
     /// Tree diagrams have no loop-integral family and return an error.
     /// Use [`IntegralFamily::from_diagram`] to append auxiliary scalar products

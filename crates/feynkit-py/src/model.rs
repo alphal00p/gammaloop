@@ -463,8 +463,8 @@ impl PyParticle {
         &self.model.parameter_by_id(self.inner().width).unwrap().name
     }
 
-    /// Exact symbolic mass, with the UFO ZERO parameter represented as zero.
-    /// Other parameters remain symbolic, even when their current value is zero.
+    /// Exact symbolic mass, using the model's retained structural-zero proofs.
+    /// Unproved parameters remain symbolic, even when their current value is zero.
     ///
     /// Examples
     /// --------

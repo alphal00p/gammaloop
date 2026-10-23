@@ -81,9 +81,7 @@ impl FeynmanDiagram {
                 let mass = self
                     .model
                     .particle_by_id(data.particle)?
-                    .symbolic_mass(&self.model)
-                    .replace(symbol!("UFO::ZERO"))
-                    .with(Atom::Zero);
+                    .symbolic_mass(&self.model);
                 let edge_momentum = symbols::momentum().call(edge.0);
                 let momentum = rescale(&edge_momentum);
                 let hard = (&momentum * scale).expand().replace(scale).with(Atom::Zero);

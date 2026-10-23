@@ -720,7 +720,7 @@ impl FeynmanDiagram {
     ///
     /// Each `denom(edge, Q(edge), mass², Q(edge)² - mass²)` uses the symbolic
     /// dimension `gammalooprs::dim` and the same momenta as the numerator. Masses
-    /// remain symbolic except the UFO `ZERO` parameter. External carriers,
+    /// remain symbolic unless the model proves an exact structural zero. External carriers,
     /// widths, and an imaginary prescription are excluded. Custom UFO
     /// propagator denominators are not instantiated here.
     pub fn denominator_expression(&self) -> Result<Atom, DiagramError> {
@@ -3936,6 +3936,62 @@ mod tests {
             directed_fermion_line().integral_family(&kin, &[]),
             Err(DiagramError::IntegralFamily(IntegralFamilyError::NoLoops))
         ));
+    }
+
+    #[test]
+    fn denominator_and_uv_preserve_nonzero_mass_named_zero() {
+        for (nature, expression) in [("internal", Some("3")), ("external", None)] {
+            let mut definition: serde_json::Value =
+                serde_json::from_str(&Model::phi3().to_json().unwrap()).unwrap();
+            let parameters = definition["parameters"].as_array_mut().unwrap();
+            let zero = parameters.iter_mut().find(|p| p["name"] == "ZERO").unwrap();
+            let mut vacuum_zero = zero.clone();
+            vacuum_zero["name"] = "VACZERO".into();
+            vacuum_zero["expression"] = "0".into();
+            zero["nature"] = nature.into();
+            zero["expression"] = serde_json::json!(expression);
+            zero["value"] = serde_json::json!([3.0, 0.0]);
+            parameters.push(vacuum_zero);
+            definition["particles"][0]["mass"] = "ZERO".into();
+            definition["particles"][0]["width"] = "VACZERO".into();
+            definition["propagators"][0]["denominator"] = "P(idx(1,1))^2-ZERO^2".into();
+            let model = Model::from_json(&definition.to_string()).unwrap();
+            let bubble = FeynmanDiagram::from_dot(
+                model,
+                r#"digraph bubble {
+                incoming [style=invis]; outgoing [style=invis];
+                incoming -> a [id=0, particle="phi"];
+                b -> outgoing [id=1, particle="phi"];
+                a -> b [id=2, particle="phi", lmb_id=0];
+                b -> a [id=3, particle="phi"];
+            }"#,
+            )
+            .unwrap();
+            let mass = Atom::var(symbolica::symbol!("UFO::ZERO"));
+            let denominator = bubble.denominator_expression().unwrap();
+            assert!(denominator.contains(mass.as_view()));
+            let propagators = bubble
+                .ordered_propagators(&feynkit_kinematics::Kinematics::new())
+                .unwrap();
+            assert_eq!(propagators.len(), 2);
+            assert!(
+                propagators
+                    .iter()
+                    .all(|(_, pole)| pole.contains(mass.as_view()))
+            );
+            // In six dimensions the bubble's UV expansion retains the quadratic
+            // physical-mass correction, so mass-name erasure changes the result.
+            let ultraviolet = bubble
+                .uv_expansion_of(
+                    &bubble.internal_subgraph(),
+                    &Atom::var(symbolica::symbol!("zero_mass_regression::uv_mass")),
+                    6,
+                    Some(&Atom::one()),
+                    &BTreeMap::new(),
+                )
+                .unwrap();
+            assert!(ultraviolet.contains(mass.as_view()));
+        }
     }
 
     #[test]
