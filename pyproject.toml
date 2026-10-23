@@ -100,6 +100,6 @@ enabled = true
 [tool.uv]
 package = false
 
-# The Python distribution is not yet on PyPI; use the community source branch.
+# The Python distribution is not yet on PyPI; use the upstream main source branch.
 [tool.uv.sources]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "community" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica.git", branch = "main" }

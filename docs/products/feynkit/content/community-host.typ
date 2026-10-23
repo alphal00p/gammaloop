@@ -35,9 +35,9 @@ resolved Cargo lockfile with the host release:
 // docs-example: syntax
 ```toml
 [patch.crates-io]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "7fa5270a3b4fa55d1ee505525e3bb29ff3c66227" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "7fa5270a3b4fa55d1ee505525e3bb29ff3c66227" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "7fa5270a3b4fa55d1ee505525e3bb29ff3c66227" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 ```
 

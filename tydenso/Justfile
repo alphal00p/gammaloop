@@ -68,8 +68,8 @@ check: build check-wasm-features
     tymbolica_checkout="${TYMBOLICA_CHECKOUT:-../../symbolica-typst-plugin}"
     tymbolica_revision="57b7455b37c30f4f87353c0073e49f5225e937ab"
     symbolica_source="$(sed -n '/^name = "symbolica"$/,/^\[\[package\]\]/s/^source = "\(.*\)"$/\1/p' ../Cargo.lock)"
-    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=community#[0-9a-f]{40}$ ]]; then
-      echo "the root lock must select one Symbolica revision from the official community branch" >&2
+    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=main#[0-9a-f]{40}$ ]]; then
+      echo "the root lock must select one Symbolica revision from the official main branch" >&2
       exit 1
     fi
     symbolica_revision="${symbolica_source##*#}"
@@ -99,7 +99,7 @@ check: build check-wasm-features
     if text.count(upstream) != 1:
         raise SystemExit("pinned Tymbolica source patch differs from the reviewed manifest")
     patches = "\n".join(
-        package + ' = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }'
+        package + ' = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }'
         for package in ("symbolica", "numerica", "graphica")
     )
     manifest.write_text(text.replace(upstream, patches, 1))
