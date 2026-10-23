@@ -1498,9 +1498,9 @@ export sources, while Linnet's graph adapter retains its subgraph styling.
 FeynKit's native notebook widgets also own their embedded CSS, JavaScript
 and HTML inputs. Test producers explicitly stage their embedded Python, Atom,
 JSON and graph fixtures without adding those inputs to production packages.
-The `gammaloop-render-data` runtime package copies fonts from the
-Cargo-locked Typst asset release and the checked-in MathML font, using the
-`typst-renderer` and `linnet-render-py` manifests. The documentation test closure
+The `gammaloop-render-data` runtime package copies the checked-in MathML font
+and its license using the `linnet-render-py` asset manifest. The documentation test
+closure
 also stages the shared browser font and its license from `linnet-render-py/fonts`.
 Renderers retain their compiled hash checks. Only rendering test groups, doctests
 and documentation receive this resource closure; it remains separate from compiled

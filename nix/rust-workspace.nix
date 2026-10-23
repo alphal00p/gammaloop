@@ -126,8 +126,6 @@
     (workspaceRoot + "/crates/linnet-render-py/fonts")
     (workspaceRoot + "/crates/linnet-render-py/src/view.py")
     (workspaceRoot + "/crates/linnet-render-py/src/view.js")
-    (workspaceRoot + "/crates/typst-renderer/fonts")
-    (workspaceRoot + "/crates/typst-renderer/data.json")
     (workspaceRoot + "/crates/vakint/form_src")
     (workspaceRoot + "/crates/vakint/templates")
   ];
@@ -494,7 +492,6 @@
       "crates/linnet-render-py/src/view.py"
       "crates/linnet-render-py/src/view.js"
     ];
-    "typst-renderer" = ["crates/typst-renderer/fonts" "crates/typst-renderer/data.json"];
     vakint = [
       "crates/vakint/form_src"
       "crates/vakint/templates"
@@ -687,45 +684,33 @@
   # Supply the host-owned assets expected by the native renderers. Keep this
   # runtime closure separate from compiled producers and notebook resource wheels.
   symbolicaRenderData = let
-    locked = lib.findFirst (package: package.name == "typst-assets")
-      (throw "Cargo.lock must contain typst-assets")
-      (builtins.fromTOML (builtins.readFile (workspaceRoot + "/Cargo.lock"))).package;
-    fonts = pkgs.fetchurl {
-      url = "https://static.crates.io/crates/typst-assets/typst-assets-${locked.version}.crate";
-      sha256 = locked.checksum;
-    };
     assets = lib.fileset.toSource {
       root = workspaceRoot;
       fileset = lib.fileset.unions
-        (workspacePackageExtraFilesetsForSourcePackages "production" ["typst-renderer" "linnet-render-py"]);
+        (workspacePackageExtraFilesetsForSourcePackages "production" ["linnet-render-py"]);
     };
   in pkgs.runCommand "gammaloop-render-data" {
     nativeBuildInputs = [pkgs.python313];
   } ''
-    tar -xzf ${fonts}
     python3 - <<'PY'
     import json, os, shutil
     from pathlib import Path
     destination = Path(os.environ["out"])
-    provider = Path("typst-assets-${locked.version}")
-    for consumer in ("typst-renderer", "linnet-render-py"):
+    for consumer in ("linnet-render-py",):
         root = Path("${assets}") / "crates" / consumer
         for asset in json.loads((root / "data.json").read_text())["assets"]:
             name, path = Path(asset["name"]), Path(asset["path"])
             assert not name.is_absolute() and ".." not in name.parts
             assert not path.is_absolute() and ".." not in path.parts
-            package = asset.get("package")
-            assert package in (None, "typst-assets")
-            source = (provider if package else root) / path
+            assert asset.get("package") is None
+            source = root / path
             output = destination / name
             output.parent.mkdir(parents=True, exist_ok=True)
             if output.exists():
                 assert output.read_bytes() == source.read_bytes(), name
             else:
                 shutil.copyfile(source, output)
-    shutil.copyfile(Path("${assets}") / "crates/typst-renderer/fonts/NOTICE", destination / "NOTICE")
-    for license in provider.glob("LICENSE*"):
-        shutil.copyfile(license, destination / license.name)
+    shutil.copyfile(Path("${assets}") / "crates/linnet-render-py/fonts/STIX-Two-OFL.txt", destination / "STIX-Two-OFL.txt")
     PY
   '';
 

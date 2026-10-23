@@ -9,7 +9,7 @@ workspace. Modified files identify this patch in their first line.
 Notebook math and graph labels now render directly as MathML. The Python
 runtime does not link this Rust compiler; explicit vector exports use the
 optional Python `typst` package. The patches below remain for document-building
-tools and the standalone compiler crate. Graph layout and line drawing run
+tools, specifically `alphal00p-docs-builder`. Graph layout and line drawing run
 directly in Rust and never call a Typst plugin. The compiler library does
 not expose upstream feature flags for several large document-only components,
 so this patch introduces opt-in features with empty defaults:
@@ -30,39 +30,23 @@ so this patch introduces opt-in features with empty defaults:
   Enable this together with library PDF support when using the SVG exporter.
 - `typst-library/full`: all library features above.
 
-`typst-renderer` uses this lean compiler by default. Its `full` feature enables
-all the above plus PDF/PNG export and Typst Kit's embedded/system fonts.
-The persistent documentation builder selects full library and SVG support.
+`alphal00p-docs-builder` selects full library and SVG support.
 Workspaces compiling these document tools must carry both Cargo patches. The
 isolated notebook host no longer needs either patch. Cargo features are additive,
 so document-tool builds and runtime dependency checks remain separate.
 
-The math runtime retains the rest of Typst's shared evaluator and layout code;
-this is not a separate implementation of Typst math. Do not remove shaping,
-Unicode segmentation, SVG parsing, or MathML support merely because graph
-geometry uses direct SVG.
-
 == Fonts
 
-`crates/typst-renderer/fonts` holds seven unmodified fonts from
-`typst-assets` 0.15.1: Libertinus Serif regular/bold/italic/bold-italic,
-New Computer Modern Math Book/bold, and DejaVu Sans Mono regular.
-These cover document math, text styles, and raw text. Typst equations request
-weight 450, so the Book face preserves the upstream default math appearance. Keeping complete math
-fonts preserves arbitrary user labels; no glyph subsetting is applied.
-The selected files total 4,227,456 bytes, replacing the 17-font bundle.
-Their upstream `NOTICE` is preserved alongside them and copied into the
-document asset bundle. Update that copy when changing the fonts. The browser
-runtime's independent STIX font is owned by `linnet-render-py`.
+The documentation builder uses Typst Kit's embedded and system fonts.
+The browser runtime's independent STIX font and its license are owned by
+`linnet-render-py` and included in `gammaloop-render-data`.
 
 == Updating and validation
 
 Compare these directories against the published 0.15.1 crate sources to isolate
 the feature patch. On upgrade, reapply the feature boundaries, update the root
-workspace lockfile, regenerate the Cargo/Nix graph, and run both lean and full
-`typst-renderer` tests. The full test exercises syntax highlighting, citations,
-PDF/PNG export, and PDF-to-SVG import; lean tests exercise math, text, SVG import,
-MathML, and diagnostics for omitted features. Runtime browser checks instead
+workspace lockfile, regenerate the Cargo/Nix graph, and run the documentation
+builder checks. Runtime browser checks instead
 exercise direct MathML, measurement receipts, and foreignObject SVG labels.
 Inspect resolved target dependencies to ensure these document compiler crates
 have not returned through runtime feature unification.

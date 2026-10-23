@@ -219,9 +219,6 @@
     "three-dimensional-reps": [
       "linnet"
     ],
-    "typst-renderer": [
-      "symbolica-data"
-    ],
     "vakint": [
       "feynkit-tensor",
       "idenso",
@@ -582,9 +579,6 @@
         "symbolica"
       ]
     },
-    "typst-renderer": {
-      "symbolica-data": []
-    },
     "vakint": {
       "feynkit-tensor": [],
       "idenso": [],
@@ -629,7 +623,6 @@
     "symbolica-data": "crates/symbolica-data",
     "symbolica-utils": "crates/symbolica-utils",
     "three-dimensional-reps": "crates/three-dimensional-reps",
-    "typst-renderer": "crates/typst-renderer",
     "vakint": "crates/vakint"
   },
   "packages": [
@@ -669,7 +662,6 @@
     "symbolica-data",
     "symbolica-utils",
     "three-dimensional-reps",
-    "typst-renderer",
     "vakint"
   ],
   "resolved_normal_dependencies": {
@@ -969,9 +961,6 @@
     "three-dimensional-reps": [
       "linnet",
       "symbolica-utils"
-    ],
-    "typst-renderer": [
-      "symbolica-data"
     ],
     "vakint": [
       "feynkit-graph",
@@ -1286,9 +1275,6 @@
       "linnet",
       "symbolica-utils"
     ],
-    "typst-renderer": [
-      "symbolica-data"
-    ],
     "vakint": [
       "feynkit-graph",
       "feynkit-kinematics",
@@ -1582,9 +1568,6 @@
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet"
-    ],
-    "typst-renderer": [
-      "symbolica-data"
     ],
     "vakint": [
       "feynkit-tensor",
@@ -1956,9 +1939,6 @@
         "serde",
         "symbolica"
       ]
-    },
-    "typst-renderer": {
-      "symbolica-data": []
     },
     "vakint": {
       "feynkit-tensor": [],
