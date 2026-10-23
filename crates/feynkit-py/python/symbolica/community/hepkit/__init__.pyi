@@ -1855,6 +1855,19 @@ class DiagramEdge:
         >>> propagator = edge.propagator
         """
     @property
+    def propagator_power(self) -> builtins.int:
+        r"""
+        Return the stored positive propagator power from the diagram's integral annotations.
+
+        Absent lines are contracted and irreducible numerator factors remain in the numerator.
+
+        Examples
+        --------
+        Using the setup in the ``DiagramEdge`` class example:
+
+        >>> powers = {line.id: line.propagator_power for line in diagram.internal_edges}
+        """
+    @property
     def external_index(self) -> builtins.int:
         r"""
         Return the external-leg index.
@@ -1986,7 +1999,7 @@ class DiagramEdge:
         >>> source_text = edge.numerator
         >>> factor = edge.numerator_expression()
         """
-    def denominator_expression(self, *, power: builtins.int = 1, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
+    def denominator_expression(self, *, power: typing.Optional[builtins.int] = None, dimension: typing.Optional[Expression | int | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | ComplexFloat | Float | builtins.int | builtins.float | builtins.str | decimal.Decimal | builtins.complex | tuple[Float | builtins.int | builtins.float | builtins.str | decimal.Decimal, Float | builtins.int | builtins.float | builtins.str | decimal.Decimal]] = None, in_lmb: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None) -> TensorExpression:
         r"""
         Return this edge's tagged q² - m² denominator as a scalar TensorExpression.
 
@@ -2004,8 +2017,8 @@ class DiagramEdge:
 
         Parameters
         ----------
-        power : int, optional
-            Signed propagator power; defaults to one.
+        power : int or None, optional
+            Signed power override; None preserves the stored propagator power.
         dimension : Expression or int or None, optional
             Lorentz dimension; defaults to the shared symbolic dimension.
         in_lmb : bool, optional
@@ -3452,7 +3465,7 @@ class FeynmanDiagram:
         ----------
         A complete diagram defaults to internal propagators; a Subgraph uses its region.
         edge_powers : mapping[int, int] or None, optional
-            Signed propagator powers by diagram edge ID; omitted edges have power one.
+            Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
         dimension : Expression or int or None, optional
             Lorentz dimension; defaults to the shared symbolic dimension.
         in_lmb : bool, optional
@@ -3575,7 +3588,7 @@ class FeynmanDiagram:
         numerator : Expression or TensorExpression or None, optional
             Prepared numerator in edge momenta; None uses the selected local numerator.
         edge_powers : mapping[int, int] or None, optional
-            Signed propagator powers by diagram edge ID; omitted edges have power one.
+            Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
             Zero omits the denominator; negative powers put it in the numerator.
             Entries outside the selected internal edges are ignored.
         """
@@ -3604,7 +3617,7 @@ class FeynmanDiagram:
         numerator : Expression or TensorExpression or None, optional
             Prepared numerator in edge momenta; None uses the selected local numerator.
         edge_powers : mapping[int, int] or None, optional
-            Signed propagator powers by diagram edge ID; omitted edges have power one.
+            Signed propagator powers by diagram edge ID; omitted edges retain their stored powers.
             Zero omits the denominator; negative powers put it in the numerator.
             Entries outside the selected internal edges are ignored.
         """
