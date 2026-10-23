@@ -1788,24 +1788,24 @@ submit! {
             def integrate_energy(self, *, method: typing.Literal["cff"], max_orientations: typing.Optional[int] = None, fixed_orientations: typing.Optional[typing.Mapping[int, bool]] = None, contracted_edges: typing.Optional[typing.Sequence[int]] = None, initial_state_edges: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None) -> pyo3_stub_gen.RustType["PyCffRepresentation"]:
                 r"""
                 Integrate propagators and an optional CFF numerator over loop energies.
-                
+
                 The measure is :math:`d\ell^0/(2\pi i)` per loop, with contours closed below.
                 Both representations include contour signs and on-shell factors, and share
                 ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
                 CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
-                
+
                 CFF supports subgraph selections and the constraints below. LTD requires a
                 complete ordinary diagram and uses its stored ordered loop-momentum basis.
                 Display either result directly to explore its terms and surfaces in a notebook.
-                
+
                 Examples
                 --------
                 Using the setup in the ``FeynmanDiagram`` class example:
-                
+
                 >>> cff = diagram.integrate_energy(method="cff")
                 >>> ltd = diagram.integrate_energy(method="ltd")
                 >>> expression = cff.to_expression()
-                
+
                 Parameters
                 ----------
                 method : {"cff", "ltd"}
@@ -1829,13 +1829,13 @@ submit! {
                     generalized backend and currently requires an unconstrained complete
                     diagram. Express energy dependence explicitly; loop-basis energies and
                     unevaluated energy-dependent functions are unsupported.
-                
+
                 Returns
                 -------
                 CffRepresentation or LtdRepresentation
                     The selected scalar energy representation, with structured term and
                     surface inspection, expression conversion and notebook display.
-                
+
                 Raises
                 ------
                 ValueError
@@ -1846,24 +1846,24 @@ submit! {
             def integrate_energy(self, *, method: typing.Literal["ltd"]) -> pyo3_stub_gen.RustType["PyLtdRepresentation"]:
                 r"""
                 Integrate propagators and an optional CFF numerator over loop energies.
-                
+
                 The measure is :math:`d\ell^0/(2\pi i)` per loop, with contours closed below.
                 Both representations include contour signs and on-shell factors, and share
                 ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
                 CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
-                
+
                 CFF supports subgraph selections and the constraints below. LTD requires a
                 complete ordinary diagram and uses its stored ordered loop-momentum basis.
                 Display either result directly to explore its terms and surfaces in a notebook.
-                
+
                 Examples
                 --------
                 Using the setup in the ``FeynmanDiagram`` class example:
-                
+
                 >>> cff = diagram.integrate_energy(method="cff")
                 >>> ltd = diagram.integrate_energy(method="ltd")
                 >>> expression = cff.to_expression()
-                
+
                 Parameters
                 ----------
                 method : {"cff", "ltd"}
@@ -1887,13 +1887,13 @@ submit! {
                     generalized backend and currently requires an unconstrained complete
                     diagram. Express energy dependence explicitly; loop-basis energies and
                     unevaluated energy-dependent functions are unsupported.
-                
+
                 Returns
                 -------
                 CffRepresentation or LtdRepresentation
                     The selected scalar energy representation, with structured term and
                     surface inspection, expression conversion and notebook display.
-                
+
                 Raises
                 ------
                 ValueError
