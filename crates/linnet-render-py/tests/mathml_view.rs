@@ -320,7 +320,7 @@ fn mathml_view_scene_and_collection_ownership() {
 }
 
 #[test]
-#[ignore = "requires root GO and the explicit browser client; finite local producer"]
+#[ignore = "manual browser producer; run with mathml_view_browser.py"]
 fn mathml_view_browser_producer() {
     run_python("serve_browser").unwrap();
 }

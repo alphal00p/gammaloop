@@ -1,7 +1,12 @@
 """Explicit browser client for the ignored native integration-test producer.
 
 This program never builds, imports Symbolica, creates fixtures or invents SVGs.
-Launch the producer separately after root GO, then pass its ready.json path.
+Launch the ignored producer separately, then pass its ready.json path.
+
+Playwright discovers its installed browsers by default. Override executables with
+MATHML_CHROMIUM_EXECUTABLE or MATHML_WEBKIT_EXECUTABLE. Optional extra library
+paths in MATHML_NIX_LD_LIBRARY_PATH are prepended to NIX_LD_LIBRARY_PATH.
+Artifacts must stay under the repository's ignored .local/graph-mathml-labels/browser.
 """
 
 import argparse
@@ -22,22 +27,11 @@ from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[3]
 ARTIFACTS = ROOT / ".local/graph-mathml-labels/browser"
-CHROMIUM = Path(
-    "/nix/store/rxf83sv2x0ja1hi6vdli6ijll5v15x9j-chromium-151.0.7922.173/bin/chromium"
-)
-WEBKIT = Path("/home/codex/.cache/ms-playwright/webkit-2359/pw_run.sh")
-WEBKIT_RUNTIME = Path(
-    "/shared/codex/dev/gammaloop/tensor-display/.local/tensor-viewer/webkit-runtime/lib"
-)
-INHERITED_LD = Path(
-    "/shared/codex/dev/symbolica-community/tensor-display/target/tensor-viewer-validation/"
-    "scoped-authoritative-release/inherited-NIX_LD_LIBRARY_PATH.txt"
-)
 
 
 def runtime_environment():
     environment = dict(os.environ)
-    paths = [str(WEBKIT_RUNTIME), *INHERITED_LD.read_text().strip().split(":")]
+    paths = environment.get("MATHML_NIX_LD_LIBRARY_PATH", "").split(":")
     paths += environment.get("NIX_LD_LIBRARY_PATH", "").split(":")
     environment["NIX_LD_LIBRARY_PATH"] = ":".join(dict.fromkeys(filter(None, paths)))
     environment["TMPDIR"] = "/tmp"
@@ -46,14 +40,13 @@ def runtime_environment():
 
 
 def launch(playwright, engine):
-    executable = CHROMIUM if engine == "chromium" else WEBKIT
-    assert executable.is_file(), executable
     options = {
-        "executable_path": str(executable),
         "headless": True,
         "timeout": 20000,
         "env": runtime_environment(),
     }
+    if executable := os.environ.get(f"MATHML_{engine.upper()}_EXECUTABLE"):
+        options["executable_path"] = executable
     if engine == "chromium":
         options["args"] = ["--no-sandbox", "--disable-dev-shm-usage"]
     return getattr(playwright, engine).launch(**options)

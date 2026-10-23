@@ -1,4 +1,4 @@
-"""Opt-in browser regressions; run only after root authorizes browser runtime.
+"""Opt-in browser regressions; run manually with an installed Playwright browser.
 
 Use --ready with the existing mathml_view_browser_producer. Its eight native
 views supply requests, bundled STIX CSS and immutable captures. Native jobs
