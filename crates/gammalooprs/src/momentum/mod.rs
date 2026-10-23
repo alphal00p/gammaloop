@@ -1862,11 +1862,17 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     }
 
     pub(crate) fn pol_one(&self) -> [F<T>; 4] {
-        self.external_state_momentum().transverse_basis()[0].clone()
+        self.external_state_momentum()
+            .transverse_basis()
+            .expect("invalid transverse external-state chart")[0]
+            .clone()
     }
 
     pub(crate) fn pol_two(&self) -> [F<T>; 4] {
-        self.external_state_momentum().transverse_basis()[1].clone()
+        self.external_state_momentum()
+            .transverse_basis()
+            .expect("invalid transverse external-state chart")[1]
+            .clone()
     }
 
     pub(crate) fn pol_three(&self) -> Polarization<F<T>> {
@@ -1920,6 +1926,7 @@ impl<T: FloatLike> FourMomentum<F<T>, F<T>> {
     pub(crate) fn xi(&self, lambda: Sign) -> [Complex<F<T>>; 2] {
         self.external_state_momentum()
             .helicity_spinor(lambda)
+            .expect("invalid helicity external-state chart")
             .map(|value| Complex::new(value.re, value.im))
     }
 }

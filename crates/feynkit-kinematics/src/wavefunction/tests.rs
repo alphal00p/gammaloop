@@ -165,7 +165,7 @@ fn scalar_adjoint_and_all_direct_barred_states() {
     // Preserve GammaLoop's zero-spatial-momentum spinor branch and imaginary root.
     let rest = FourMomentum::from_args(4., 0., 0., 0.);
     assert_eq!(
-        rest.helicity_spinor(Sign::Positive),
+        rest.helicity_spinor(Sign::Positive).unwrap(),
         [c(0., 0.), c(-1., 0.)]
     );
     assert!(
