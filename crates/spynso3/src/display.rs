@@ -46,6 +46,7 @@ use tabled::settings::{Alignment, Style};
 
 use crate::Spensor;
 use idenso::tensor::{SymbolicTensor, composition};
+use idenso::{CookMode, CookSettings};
 use spenso::structure::abstract_index::{AbstractIndex, DUMMY_INDEX_TAG};
 use spenso::structure::partial::PartialStructure;
 
@@ -647,6 +648,103 @@ struct IndexAliases {
 }
 
 impl IndexAliases {
+    // Classification is shared with full alias allocation. None labels are generated.
+    fn index_label(
+        representation: Symbol,
+        source: AtomView<'_>,
+        style: &str,
+    ) -> Option<(IndexPalette, Option<IndexDisplay>)> {
+        let metadata = RepresentationMetadata::from_symbol(representation)?;
+        let IndexPalette::Cyclic { .. } = metadata.index_palette else {
+            return None;
+        };
+        if Self::compound(source).is_some()
+            || (style == "alphabet"
+                && source
+                    .get_symbol()
+                    .is_some_and(|symbol| symbol.has_tag(DUMMY_INDEX_TAG)))
+        {
+            return Some((metadata.index_palette, None));
+        }
+        let label = usize::try_from(source)
+            .ok()
+            .and_then(|position| metadata.index_palette.resolve(position))
+            .or_else(|| match source {
+                AtomView::Var(variable) => IndexDisplay::from_symbol(variable.get_symbol())
+                    .or_else(|| {
+                        IndexDisplay::symbol(variable.get_symbol().get_stripped_name()).ok()
+                    }),
+                _ => None,
+            })?;
+        Some((metadata.index_palette, Some(label)))
+    }
+
+    fn reserved_for_descriptor(
+        descriptor: &SymbolicTensor<PartialStructure>,
+        style: &str,
+    ) -> HashMap<Symbol, HashSet<String>> {
+        let mut labels = HashMap::new();
+        if style == "raw" {
+            return labels;
+        }
+        let mut seen = HashSet::new();
+        Self::reserve_labels(
+            descriptor.expression().as_view(),
+            style,
+            &mut seen,
+            &mut labels,
+        );
+        for slot in descriptor.structure().logical_slots() {
+            Self::reserve_labels(
+                composition::port_atom(slot).as_view(),
+                style,
+                &mut seen,
+                &mut labels,
+            );
+        }
+        labels
+    }
+
+    fn reserve_labels(
+        atom: AtomView<'_>,
+        style: &str,
+        seen: &mut HashSet<(Symbol, Atom)>,
+        labels: &mut HashMap<Symbol, HashSet<String>>,
+    ) {
+        if let AtomView::Fun(function) = atom {
+            let representation = function.get_symbol();
+            if representation.is_scalar() {
+                return;
+            }
+            if representation.has_tag(&SPENSO_TAG.representation) && function.get_nargs() == 2 {
+                let index = function
+                    .iter()
+                    .nth(1)
+                    .expect("the representation has two arguments");
+                if !seen.insert((representation, index.to_owned())) {
+                    return;
+                }
+                let source = CookSettings::indices()
+                    .with_mode(CookMode::ReversibleEncoding)
+                    .uncook(index);
+                let (_, base) = Self::scope_parts(source.as_view());
+                for source in [source.as_view(), base] {
+                    if let Some((_, Some(label))) = Self::index_label(representation, source, style)
+                    {
+                        labels
+                            .entry(representation)
+                            .or_default()
+                            .insert(Self::label_key(&label));
+                    }
+                }
+                return;
+            }
+        }
+        for child in atom.children() {
+            Self::reserve_labels(child, style, seen, labels);
+        }
+    }
+
     fn for_descriptor(descriptor: &SymbolicTensor<PartialStructure>, style: &str) -> Self {
         let mut bundle = FunctionBuilder::new(spenso::structure::abstract_index::AIND_SYMBOLS.aind)
             .add_arg(descriptor.expression());
@@ -659,8 +757,7 @@ impl IndexAliases {
     fn for_atom(atom: &Atom, style: &str) -> Self {
         let mut slots = Vec::new();
         let mut source_indices = HashMap::new();
-        let cooking =
-            idenso::CookSettings::indices().with_mode(idenso::CookMode::ReversibleEncoding);
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let _ = atom.replace_map(|value, _, output| {
             let AtomView::Fun(function) = value else {
                 return;
@@ -712,44 +809,24 @@ impl IndexAliases {
         let mut occupied: HashMap<Symbol, HashSet<String>> = HashMap::new();
         let mut pending = BTreeMap::new();
         for (representation, index, source) in slots {
-            let Some(metadata) = RepresentationMetadata::from_symbol(representation) else {
+            let Some((palette, label)) = Self::index_label(representation, source.as_view(), style)
+            else {
                 continue;
             };
-            let IndexPalette::Cyclic { .. } = metadata.index_palette else {
-                continue;
-            };
-            if Self::compound(source.as_view()).is_some()
-                || (style == "alphabet"
-                    && source
-                        .as_view()
-                        .get_symbol()
-                        .is_some_and(|symbol| symbol.has_tag(DUMMY_INDEX_TAG)))
-            {
+            if let Some(label) = label {
+                occupied
+                    .entry(representation)
+                    .or_default()
+                    .insert(Self::label_key(&label));
+            } else {
                 pending.insert(
                     (
                         representation.get_name().to_owned(),
                         source.to_canonical_string(),
                         index.to_canonical_string(),
                     ),
-                    (representation, index, source, metadata.index_palette),
+                    (representation, index, source, palette),
                 );
-            } else {
-                let label = usize::try_from(source.as_view())
-                    .ok()
-                    .and_then(|position| metadata.index_palette.resolve(position))
-                    .or_else(|| match source.as_view() {
-                        AtomView::Var(variable) => IndexDisplay::from_symbol(variable.get_symbol())
-                            .or_else(|| {
-                                IndexDisplay::symbol(variable.get_symbol().get_stripped_name()).ok()
-                            }),
-                        _ => None,
-                    });
-                if let Some(label) = label {
-                    occupied
-                        .entry(representation)
-                        .or_default()
-                        .insert(Self::label_key(&label));
-                }
             }
         }
         let mut aliases = Self {

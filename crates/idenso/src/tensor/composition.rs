@@ -299,7 +299,9 @@ impl SymbolicTensor<PartialStructure> {
         if slots.is_empty() && state.bulk_arithmetic {
             return fragment.to_owned();
         }
-        reorder_presentation_ports(fragment, &slots, &mut state, true)
+        let additive =
+            PortRewriteState::additive_occurrence(self.expression.as_view(), fragment, false);
+        reorder_presentation_ports(fragment, &slots, &mut state, additive)
     }
 }
 
@@ -1225,6 +1227,19 @@ impl PortRewriteState {
             explicit_copies: false,
             indices: None,
         }
+    }
+
+    // A selected tensor outside sums follows the public logical interface.
+    // Under a sum, its argument order instead records that term's map to the
+    // shared interface and must survive slicing (including sums inside products).
+    fn additive_occurrence(value: AtomView<'_>, fragment: AtomView<'_>, additive: bool) -> bool {
+        if value == fragment {
+            return additive;
+        }
+        let additive = additive || matches!(value, AtomView::Add(_));
+        value
+            .children()
+            .any(|child| Self::additive_occurrence(child, fragment, additive))
     }
 
     /// Regroup exact arithmetic only when rebuilding cannot invoke user code.
@@ -3547,6 +3562,32 @@ mod tests {
             atom,
             PartialStructure::from_logical_slots(logical_ports.iter().copied()),
         )
+    }
+
+    #[test]
+    fn presentation_fragments_keep_permuted_ports_and_additive_maps() {
+        let representation = rep();
+        let a = representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(31)));
+        let b = representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(32)));
+        let head = SPENSO_TAG.tensor_symbol("fragment_logical_ports::P");
+        let leaf = partial_tensor(head, &[a, b], &[b, a]);
+        let coefficient = Atom::var(symbol!("fragment_logical_ports::y"));
+        let value = SymbolicTensor::new(&coefficient * leaf.expression(), leaf.structure().clone());
+        assert_eq!(
+            value.presentation_fragment(leaf.expression().as_view()),
+            leaf.presentation_atom()
+        );
+        let swapped = partial_tensor(head, &[b, a], &[b, a]);
+        let sum = leaf.expression() + swapped.expression();
+        let value = SymbolicTensor::new(coefficient * sum, leaf.structure().clone());
+        assert_eq!(
+            value.presentation_fragment(leaf.expression().as_view()),
+            *leaf.expression()
+        );
+        assert_eq!(
+            value.presentation_fragment(swapped.expression().as_view()),
+            *swapped.expression()
+        );
     }
 
     fn vector(name: &str, port: PartialSlot) -> SymbolicTensor<PartialStructure> {

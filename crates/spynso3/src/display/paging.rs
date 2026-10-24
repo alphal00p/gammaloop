@@ -262,6 +262,13 @@ impl TensorLeaves {
             bundle = bundle.add_arg(composition::port_atom(slot));
         }
         let discovered = IndexAliases::for_atom(&bundle.finish(), &self.settings.index_style);
+        for (representation, labels) in &discovered.reserved_labels {
+            self.aliases
+                .reserved_labels
+                .entry(*representation)
+                .or_default()
+                .extend(labels.iter().cloned());
+        }
         for (key, (mut position, mut display)) in discovered.entries {
             if let Some(existing) = self.aliases.entries.get(&key) {
                 if discovered
@@ -380,9 +387,16 @@ pub(crate) fn viewer(
             "The direct MathML pager does not accept Typst notation_source; use to_typst_project() or to_svg() for custom Typst exports",
         ));
     }
+    // Reserve explicit labels across the complete descriptor once, before any
+    // responsive layout can allocate a generated alias. Retain only that
+    // inventory; generated aliases and decoded sources remain leaf-local/bounded.
+    let aliases = IndexAliases {
+        reserved_labels: IndexAliases::reserved_for_descriptor(&value, &settings.index_style),
+        ..IndexAliases::default()
+    };
     let mut leaves = TensorLeaves {
         settings,
-        aliases: IndexAliases::default(),
+        aliases,
         cache: VecDeque::new(),
     };
     MathMLViewer::expression(

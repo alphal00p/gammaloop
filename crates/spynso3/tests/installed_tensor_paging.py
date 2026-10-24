@@ -599,6 +599,54 @@ class BrowserPagingTests(PagingAssertions):
         self.assertEqual(value.name.to_expression(), name)
         self.assertEqual(value.arguments, arguments)
 
+    def test_nested_permuted_leaf_matches_complete_export(self):
+        rep = Representation.mink(4)
+        leaf = TensorName("paging_nested_ports::P")(
+            Representation.euc(3)("i"), rep("mu")
+        ).permute_axes([1, 0])
+        value = S("paging_nested_ports::y") * leaf
+        original = self.tensorState(value)
+        for root in self.notationRoots(value):
+            labels = [
+                unicodedata.normalize("NFKC", node.text or "")
+                for node in self.visibleNodes(root)
+                if node.tag.rsplit("}", 1)[-1] in ("mi", "mtext")
+                and unicodedata.normalize("NFKC", node.text or "") in ("mu", "i")
+            ]
+            self.assertEqual(labels, ["mu", "i"])
+        static = ET.fromstring(
+            re.search(r"<math\b.*?</math>", value.to_html(), re.DOTALL).group()
+        )
+        self.assertLess(
+            self.visible(static).index("mu"), self.visible(static).index("i")
+        )
+        self.assertEqual(self.tensorState(value), original)
+
+    def test_generated_aliases_reserve_contracted_explicit_labels_viewer_wide(self):
+        Representation.mink(4)
+        names = [
+            TensorName(f"paging_internal_aliases::{name}")
+            for name in ("A", "B", "v", "w")
+        ]
+        a, b, v, w = [name.to_expression() for name in names]
+        mink = S("spenso::mink")
+        mu = S("mu")
+        dummy = S("paging_internal_aliases::d_0", tags=["spenso::dummy-index"])
+        value = TensorExpression(
+            a(mink(4, mu)) * b(mink(4, mu)) * v(mink(4, dummy)) * w(mink(4, dummy))
+        )
+        original = self.tensorState(value)
+        settings = DisplaySettings(index_style="alphabet")
+        static = ET.fromstring(
+            re.search(
+                r"<math\b.*?</math>", value.to_html(settings=settings), re.DOTALL
+            ).group()
+        )
+        self.assertEqual(self.visible(static).count("ν"), 2)
+        for root in self.notationRoots(value, settings):
+            self.assertEqual(self.visible(root).count("ν"), 2)
+        self.assertEqual(self.tensorState(value), original)
+
     def test_paged_leaves_retain_rich_settings(self):
         value = TensorName("paging_settings::A")(
             Representation.euc(3)("i"), Representation.mink(4)("mu")
