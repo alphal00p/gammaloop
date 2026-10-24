@@ -128,6 +128,7 @@ impl MasterCatalog {
         for (&count, data) in loops {
             catalog.load_constants(data, &mut identity)?;
             let mut fingerprints = BTreeMap::new();
+            let mut parent_graphs = BTreeMap::<Atom, BTreeSet<String>>::new();
             for family in &data.manifest.families {
                 let fingerprint = family["fingerprint"]
                     .as_str()
@@ -246,9 +247,21 @@ impl MasterCatalog {
                     metadata: value.clone(),
                     data: Some(Arc::clone(data)),
                 };
+                parent_graphs
+                    .entry(Self::family_symbol(fingerprint))
+                    .or_default()
+                    .insert(master.graph.clone());
                 if catalog.masters.insert(symbol, master).is_some() {
                     return Err(failure("duplicate family-qualified master identity"));
                 }
+            }
+            // A common denominator family can cover several maximal parents.
+            // Prefer those authenticated references to its representative graph;
+            // the family graph remains the fallback when no parents are listed.
+            for (family, graphs) in parent_graphs {
+                catalog
+                    .family_graphs
+                    .insert(family, graphs.into_iter().collect::<Vec<_>>().join("; "));
             }
         }
         if basis_expressions
@@ -524,7 +537,7 @@ impl MasterCatalog {
                         _ => None,
                     };
                     Some(format!(
-                        "{}: undeclared residual master; parent graph {}",
+                        "{}: undeclared residual master; candidate parent graph DOT references (no unique parent inferred): {}",
                         symbol.to_canonical_string(),
                         graph
                             .map(String::as_str)
@@ -1657,6 +1670,34 @@ mod tests {
                 .values()
                 .all(|master| master.graph.starts_with(&expected))
         );
+    }
+
+    #[test]
+    fn family_graph_remains_the_fallback_without_declared_parent_metadata() {
+        let vendored = super::super::data::RustRedData::vendored().unwrap();
+        let mut package = (*vendored.loops[&1]).clone();
+        package.manifest.masters.clear();
+        let package = Arc::new(package);
+        let family = &package.manifest.families[0];
+        let fingerprint = family["fingerprint"].as_str().unwrap();
+        let expected =
+            MasterCatalog::graph_location(&package, family["graph"].as_str().unwrap()).unwrap();
+        let catalog = MasterCatalog::load(
+            &BTreeMap::from([(1, Arc::clone(&package))]),
+            "local-mixed-release",
+        )
+        .unwrap();
+        assert!(catalog.masters.is_empty());
+        assert_eq!(
+            catalog.family_graphs[&MasterCatalog::family_symbol(fingerprint)],
+            expected
+        );
+        let unknown = catalog.symbol(fingerprint, &[2]);
+        let issues = catalog.unresolved(&unknown, false, &BTreeMap::new());
+        assert_eq!(issues.len(), 1);
+        assert!(issues[0].contains(&expected));
+        assert!(issues[0].contains("no unique parent inferred"));
+        assert!(expected.contains(&format!("/blob/{}/1L/", package.manifest.version)));
     }
 
     #[test]
