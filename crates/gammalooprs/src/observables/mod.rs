@@ -20,6 +20,7 @@ use std::path::Path;
 
 pub mod clustering;
 pub mod events;
+pub mod exact_moments;
 
 pub use clustering::{ClusteringResult, Jet, JetAlgorithm, JetClustering};
 pub use events::{
