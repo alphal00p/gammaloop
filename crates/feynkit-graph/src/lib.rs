@@ -196,7 +196,8 @@ pub struct DiagramEdge {
     pub particle: ParticleId,
     pub directed: bool,
     /// Positive power of this physical propagator. Contract absent edges and
-    /// place negative powers in the numerator instead.
+    /// place negative powers in the numerator instead. This integral annotation
+    /// is excluded from the diagram's topology ID and canonical topology key.
     pub propagator_power: i32,
     pub numerator: SymbolicTensor<PartialStructure>,
     source_slot: VertexSlot,

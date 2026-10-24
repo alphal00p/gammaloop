@@ -992,7 +992,7 @@ impl PyDiagramCut {
     /// Parameters
     /// ----------
     /// edge_powers : mapping[int, int] or None, optional
-    ///     Positive propagator powers by diagram edge ID; omitted edges have power one.
+    ///     Positive propagator powers by diagram edge ID; omitted edges retain their stored powers.
     /// prescription : int, optional
     ///     Sign of the imaginary prescription, either +1 or -1.
     /// normalization : Expression or None, optional
@@ -1000,10 +1000,12 @@ impl PyDiagramCut {
     #[pyo3(signature = (*, edge_powers=None, prescription=1, normalization=None))]
     fn propagators(
         &self,
+        py: Python<'_>,
         edge_powers: Option<BTreeMap<usize, usize>>,
         prescription: i8,
         normalization: Option<ConvertibleToExpression>,
     ) -> PyResult<Vec<PyCutPropagator>> {
+        let diagram = self.diagram.borrow(py);
         let powers = edge_powers.unwrap_or_default();
         let normalization = normalization.map_or_else(
             || -2 * Atom::var(symbolica::atom::Symbol::PI) * Atom::i(),
@@ -1017,7 +1019,12 @@ impl PyDiagramCut {
                 let inner = feynkit_cff::CutPropagator {
                     energy: feynkit_cff::symbols::energy_atom(edge),
                     on_shell_energy: feynkit_cff::symbols::on_shell_atom(edge),
-                    power: powers.get(&half.edge.0).copied().unwrap_or(1),
+                    power: powers.get(&half.edge.0).copied().unwrap_or_else(|| {
+                        usize::try_from(
+                            diagram.inner.underlying()[EdgeIndex(half.edge.0)].propagator_power,
+                        )
+                        .expect("validated diagram propagator powers are positive")
+                    }),
                     orientation: match half.endpoint {
                         DiagramEndpoint::Source => 1,
                         DiagramEndpoint::Target => -1,
@@ -1793,6 +1800,7 @@ submit! {
                 Both representations include contour signs and on-shell factors, and share
                 ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
                 CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+                Uncontracted internal propagators with stored powers other than one raise ValueError.
 
                 CFF supports subgraph selections and the constraints below. LTD requires a
                 complete ordinary diagram and uses its stored ordered loop-momentum basis.
@@ -1839,7 +1847,8 @@ submit! {
                 Raises
                 ------
                 ValueError
-                    The method is unknown, or CFF-only options are supplied for LTD.
+                    The method is unknown, CFF-only options are supplied for LTD, or an
+                    uncontracted internal propagator has a stored power other than one.
                 """
 
             @typing.overload
@@ -1851,6 +1860,7 @@ submit! {
                 Both representations include contour signs and on-shell factors, and share
                 ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
                 CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+                Uncontracted internal propagators with stored powers other than one raise ValueError.
 
                 CFF supports subgraph selections and the constraints below. LTD requires a
                 complete ordinary diagram and uses its stored ordered loop-momentum basis.
@@ -1897,7 +1907,8 @@ submit! {
                 Raises
                 ------
                 ValueError
-                    The method is unknown, or CFF-only options are supplied for LTD.
+                    The method is unknown, CFF-only options are supplied for LTD, or an
+                    uncontracted internal propagator has a stored power other than one.
                 """
 
 
@@ -4333,6 +4344,7 @@ impl PyFeynmanDiagram {
     /// Both representations include contour signs and on-shell factors, and share
     /// ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
     /// CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+    /// Uncontracted internal propagators with stored powers other than one raise ValueError.
     ///
     /// CFF supports subgraph selections and the constraints below. LTD requires a
     /// complete ordinary diagram and uses its stored ordered loop-momentum basis.
@@ -4379,7 +4391,8 @@ impl PyFeynmanDiagram {
     /// Raises
     /// ------
     /// ValueError
-    ///     The method is unknown, or CFF-only options are supplied for LTD.
+    ///     The method is unknown, CFF-only options are supplied for LTD, or an
+    ///     uncontracted internal propagator has a stored power other than one.
     #[gen_stub(skip)]
     #[pyo3(signature = (*, method, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None, numerator=None))]
     #[allow(clippy::too_many_arguments)] // Python options remain explicit keyword-only arguments.
@@ -4393,6 +4406,21 @@ impl PyFeynmanDiagram {
         initial_state_edges: Option<Vec<usize>>,
         numerator: Option<ConvertibleToExpression>,
     ) -> PyResult<Py<PyAny>> {
+        for (pair, edge, data) in self.inner.underlying().iter_edges_of(&self.selection()) {
+            if pair.is_paired()
+                && data.data.external.is_none()
+                && !data.data.is_dummy
+                && data.data.propagator_power != 1
+                && contracted_edges
+                    .as_ref()
+                    .is_none_or(|contracted| !contracted.contains(&edge.0))
+            {
+                return Err(PyValueError::new_err(format!(
+                    "energy integration does not support stored propagator power {} on edge {}",
+                    data.data.propagator_power, edge.0,
+                )));
+            }
+        }
         match method {
             "cff" => Py::new(
                 py,

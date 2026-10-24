@@ -24,6 +24,7 @@ fn propagator_annotations_keep_native_wrapper_and_denominator_semantics() {
         py.run(
             c"model = hep.Model.phi3()
 diagram = hep.FeynmanDiagram.from_dot(model, '''digraph bubble {
+  graph [num=\"(x+y)^2*(x-y)^3\"];
   ext [style=invis];
   ext -> a [particle=\"phi\"];
   a -> b [particle=\"phi\", lmb_id=0, power=2];
@@ -44,6 +45,28 @@ restored = hep.FeynmanDiagram.from_dot(model, diagram.to_dot())
 assert [edge.propagator_power for edge in restored.internal_edges] == [2, 3]
 assert restored.loop_momentum_basis.loop_edges == diagram.loop_momentum_basis.loop_edges
 assert restored.denominator_expression() == diagram.denominator_expression()
+assert '<svg' in diagram.render().to_svg()
+for options in ({'method': 'cff'}, {'method': 'cff', 'numerator': core.E('1')}, {'method': 'ltd'}):
+    try:
+        diagram.integrate_energy(**options)
+    except ValueError as error:
+        assert 'stored propagator power' in str(error)
+    else:
+        raise AssertionError('raised powers were integrated as unit powers')
+sewn = hep.FeynmanDiagram.from_dot(model, '''digraph cut_bubble {
+  graph [final_state=\"phi,phi\"];
+  ext [style=invis];
+  ext -> a [particle=\"phi\", is_cut=9];
+  b -> ext [particle=\"phi\", is_cut=9];
+  a -> b [particle=\"phi\", lmb_id=0, power=2];
+  b -> a [particle=\"phi\"];
+}''')
+cut = sewn.cuts[0]
+stored = {edge.id: edge.propagator_power for edge in cut.edges}
+assert 2 in stored.values()
+default_factors = [factor.to_expression() for factor in cut.propagators()]
+assert default_factors == [factor.to_expression() for factor in cut.propagators(edge_powers=stored)]
+assert default_factors != [factor.to_expression() for factor in cut.propagators(edge_powers={edge: 1 for edge in stored})]
 try:
     diagram.internal_edges[0].propagator_power = 5
 except AttributeError:
