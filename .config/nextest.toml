@@ -84,7 +84,7 @@ test-group = "five-loop-reduction"
 
 [profile.ci_gammaloop]
 inherits = "ci"
-default-filter = "not test(/(^|::)(slow|failing)::/)"
+default-filter = "not test(/(^|::)(slow|failing)::/) or test(/^rustred_evaluation::five_loop::slow::fixture::prepared::tests::/)"
 
 [profile.ci_gammaloop.junit]
 path = "junit.xml"
