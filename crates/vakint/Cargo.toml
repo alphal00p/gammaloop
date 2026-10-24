@@ -19,13 +19,13 @@ ahash = "0.8.12"
 arrayvec = "0.7.4"
 colored = { workspace = true }
 eyre = { workspace = true }
-feynkit-graph = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration" }
-feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration" }
-feynkit-model = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration" }
-feynkit-py = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration", optional = true }
-feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration" }
+feynkit-graph = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
+feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
+feynkit-model = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
+feynkit-py = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces", optional = true }
+feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 flate2 = "1.1.9"
-idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration", default-features = false }
+idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces", default-features = false }
 log = "0.4.29"
 once_cell.workspace = true
 regex = "1.12.2"
@@ -35,8 +35,8 @@ serde_json.workspace = true
 rustred.workspace = true
 rustred-app.workspace = true
 sha2 = "0.10.9"
-spenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration", default-features = false }
-spenso-macros = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration", default-features = false }
+spenso = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces", default-features = false }
+spenso-macros = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces", default-features = false }
 string-template-plus = "0.4.3"
 thiserror = { workspace = true }
 version-compare = "0.2.1"
@@ -57,8 +57,8 @@ default-features = false
 features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
-linnet = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration" }
-feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit-vakint-integration" }
+linnet = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
+feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 test-log = "0.2.19"
 
 [features]

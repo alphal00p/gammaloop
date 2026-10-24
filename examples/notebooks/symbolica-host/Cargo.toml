@@ -24,8 +24,8 @@ wasm = ["linnet-py/wasm", "feynkit-py/wasm", "spynso3/wasm"]
 
 [patch.crates-io]
 # Match the shared HEPKit host's optional notebook components.
-typst-library = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733" }
-typst-svg = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733" }
+typst-library = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
+typst-svg = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-canonical-numerator-interfaces" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
 numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
