@@ -60,16 +60,33 @@ use medians/ranges of three fresh processes and exact result/guard checks.
 
 == Explicit expensive runs
 
-To enable the full fixture button, configure the compiled
+To enable the saved-input reduction button, configure the compiled
 #raw("VAKINT_GALLERY_BENCHMARK") executable, #raw("VAKINT_GALLERY_ARTIFACTS")
-checkout, and #raw("VAKINT_GALLERY_WORK") development directory.
+checkout, #raw("VAKINT_GALLERY_WORK") development directory, and
+#raw("VAKINT_GALLERY_PREPARED_INPUT_ROOT"). This last directory contains
+#raw("quadratic/") and #raw("zero-momentum/") bundles, each with
+#raw("prepared-input.json"), #raw("vakint-input.symbolica") and its complete
+#raw("projector-conditions.symbolica"). The selected bundle must exist; the native
+CLI validates its exact payload, projection, scientific identity and producer
+provenance. Missing or invalid configured input reports an error and never falls
+back to fresh preparation. The two projections keep their distinct scientific
+definitions.
 #raw("VAKINT_GALLERY_CACHE") optionally supplies the completed compressed cache.
 These paths are deployment configuration, not browser-controlled commands.
 
 A separate worker runs the same Rust example with #raw("--projection"),
-#raw("--artifacts"), #raw("--work-dir") and optional #raw("--cache").
+#raw("--prepared-input"), #raw("--artifacts"), #raw("--work-dir") and optional
+#raw("--cache"). Each fresh process uses the same complete scalar input without
+repeating native graph generation, trace contraction, Taylor expansion or angular
+projection. The report separates current verification/loading from original
+producer preparation; historical preparation is excluded from current end-to-end
+time. Validate fresh scientific generation independently with
+#raw("--fresh-prepare --prepare-only") in a new directory before installing a
+bundle. Reusing scalar input does not cache its IBP result.
+
 The browser stays responsive and reads atomic status records. A process lock
-permits one gallery benchmark at a time, and a ten-hour timeout bounds each job.
+permits one gallery benchmark at a time. Physical reductions have no default
+time cutoff; the final cache-build budget does not apply to notebook reductions.
 Requests, logs and resulting receipts remain below the configured workspace.
 The app never prepares a cache. The graph tutorial's explicit tensor-contraction
 button is a separate, interactive algebra demonstration, not a controlled timing
@@ -78,7 +95,9 @@ sample of the complete quadratic fixture.
 == Validation
 
 Run #raw("marimo check 0*.py") and the repository Ruff formatter/checker in the
-coherent environment. Inspect all four apps in a browser, including native SVG,
+coherent environment. Run the cheap launcher/configuration tests with
+#raw("python -m unittest discover -s . -p test_shared_gallery.py"); they use fake
+commands and perform no graph preparation or reduction. Inspect all four apps in a browser, including native SVG,
 formula rendering, lookup forms, source-limit warnings, exact closure controls
 and background status. A notebook source passing static checks does not by itself
 establish native runtime interoperability. Preserve the actual browser and

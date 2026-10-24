@@ -168,14 +168,14 @@ def _(Gallery, mo):
                 mo,
                 "03 / measurements",
                 "Uncached versus compact-cache reduction",
-                "Preparation, loading, routing, IBP work, cache attachment and end-to-end time are reported separately.",
+                "Verified scalar-input loading, external data, native reduction and cache attachment are measured separately. Fresh scientific preparation is independent validation.",
             ),
             Gallery.evidence_card(mo, "quadratic", "Complete quadratic fixture"),
             Gallery.evidence_card(
                 mo, "zero-momentum", "Zero-momentum metric/color diagnostic"
             ),
             mo.md(
-                "Final comparisons use three fresh processes per configuration, medians and ranges, fixed workers/affinity, and exact result/guard checks. Warm in-process reuse is reported separately."
+                "Final comparisons use three fresh processes per configuration with the same verified scalar input, medians and ranges, fixed workers/affinity, and exact result/guard checks. Original graph and numerator preparation are reported separately. Warm in-process reuse is reported separately."
             ),
         ]
     )
@@ -187,7 +187,7 @@ def _(Gallery, mo):
     Gallery.section(
         mo,
         "04 / reproduce",
-        "An explicit expensive run",
+        "Reduce the verified saved input",
         "Opening this page never starts the physical benchmark or builds a cache.",
     )
     return
@@ -209,7 +209,7 @@ def _(Gallery, mo, os):
         disabled=not bool(os.environ.get("VAKINT_GALLERY_CACHE")),
     )
     run_benchmark = mo.ui.run_button(
-        label="Run the full scientific fixture",
+        label="Run reduction of the saved scalar input",
         kind="warn",
         disabled=not Gallery.benchmark_available(),
     )
@@ -220,13 +220,13 @@ def _(Gallery, mo, os):
             Gallery.note(
                 mo,
                 "May take substantial time",
-                "This invokes the same compiled Rust fixture as the recorded benchmark. It can run for minutes or hours. A single interactive run is not substituted for the controlled three-run benchmark.",
+                "This invokes the compiled Rust reduction with the complete verified scalar input, preserving all contributions and projector conditions. It does not repeat graph generation, gamma traces or Taylor preparation. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
             ),
             run_benchmark,
             mo.md(
-                "The server has no configured benchmark runner."
+                "The server has no fully configured runner and prepared scalar-input collection."
                 if not Gallery.benchmark_available()
-                else "The benchmark runner is configured; run logs are retained in its development workspace."
+                else "The runner uses the configured verified scalar-input collection. Run logs are retained in its development workspace; fresh scientific generation is validated separately."
             ),
         ]
     )
@@ -240,7 +240,7 @@ def _(Gallery, benchmark_choice, mo, run_benchmark, use_cache):
         benchmark_job = Gallery.start_benchmark(
             benchmark_choice.value, cached=use_cache.value
         )
-    except RuntimeError as _error:
+    except (OSError, ValueError, RuntimeError) as _error:
         mo.stop(True, mo.callout(str(_error), kind="warn"))
     return (benchmark_job,)
 

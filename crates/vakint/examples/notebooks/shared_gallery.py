@@ -299,6 +299,7 @@ class Gallery:
         )
         schema = receipt.get("schema") if isinstance(receipt, dict) else None
         if schema == "vakint.qcd-ladder.benchmark.v1":
+            prepared_input = receipt.get("input_mode") == "prepared"
             completed = receipt.get("reduction_completed") is True
             state = (
                 "Retained symbolic result" if completed else "Reduction not completed"
@@ -306,7 +307,11 @@ class Gallery:
             if not completed and receipt.get("retained_result_available"):
                 state = "Partial retained result"
             if "reduction_seconds" not in receipt:
-                state = "Preparation recorded"
+                state = (
+                    "Saved scalar input verified"
+                    if prepared_input
+                    else "Preparation recorded"
+                )
             fields = [(state, title)]
             closure = receipt.get("catalogue_closure", {})
             if closure.get("unknown_count"):
@@ -317,14 +322,20 @@ class Gallery:
                     )
                 )
             for key, label in (
-                ("reduction_seconds", "IBP reduction · seconds"),
-                ("preparation_seconds", "Native preparation · seconds"),
-                ("end_to_end_seconds", "End-to-end · seconds"),
+                ("reduction_seconds", "Native reduction · seconds"),
+                ("preparation_seconds", "Fresh native preparation · seconds"),
+                ("input_loading_seconds", "Verified input loading · seconds"),
+                (
+                    "end_to_end_seconds",
+                    "Saved input to result · seconds"
+                    if prepared_input
+                    else "Graph to result · seconds",
+                ),
             ):
-                if key in receipt:
+                if receipt.get(key) is not None:
                     fields.append((f"{receipt[key]:,.3f}", label))
             timing_rows = []
-            preparation = receipt.get("preparation", {})
+            preparation = receipt.get("preparation") or {}
             for key, label in (
                 ("graph_generation_seconds", "Graph and Feynman rules"),
                 ("scalar_contraction_seconds", "Native trace contraction"),
@@ -335,13 +346,22 @@ class Gallery:
                 if key in preparation:
                     timing_rows.append({"Stage": label, "Seconds": preparation[key]})
             for key, label in (
+                ("input_loading_seconds", "Verified saved scalar input"),
                 ("data_loading_seconds", "External data"),
                 ("cache_loading_seconds", "Persistent cache"),
-                ("reduction_seconds", "IBP reduction"),
+                ("reduction_seconds", "Native reduction"),
             ):
-                if key in receipt:
+                if receipt.get(key) is not None:
                     timing_rows.append({"Stage": label, "Seconds": receipt[key]})
             parts = [cls.metrics(mo, fields)]
+            if prepared_input:
+                parts.append(
+                    cls.note(
+                        mo,
+                        "Verified saved scalar input",
+                        "The complete prepared numerator and projector conditions were loaded and checked. Original graph, trace and Taylor preparation are historical provenance, excluded from this run's timings.",
+                    )
+                )
             if timing_rows:
                 parts.append(mo.ui.table(timing_rows, selection=None, pagination=False))
             if receipt.get("reduction_error"):
@@ -398,7 +418,26 @@ class Gallery:
             os.environ.get("VAKINT_GALLERY_BENCHMARK")
             and os.environ.get("VAKINT_GALLERY_WORK")
             and os.environ.get("VAKINT_GALLERY_ARTIFACTS")
+            and os.environ.get("VAKINT_GALLERY_PREPARED_INPUT_ROOT")
         )
+
+    @staticmethod
+    def prepared_input_directory(projection):
+        """Select server-owned scalar input; the Rust loader validates its contents."""
+        if projection not in ("quadratic", "zero-momentum"):
+            raise ValueError("Unknown physical projection")
+        configured = os.environ.get("VAKINT_GALLERY_PREPARED_INPUT_ROOT")
+        if not configured:
+            raise ValueError(
+                "This gallery server has no configured prepared scalar inputs"
+            )
+        directory = Path(configured).resolve() / projection
+        if not directory.is_dir():
+            raise ValueError(f"Prepared scalar-input directory is missing: {directory}")
+        manifest = directory / "prepared-input.json"
+        if not manifest.is_file():
+            raise ValueError(f"Prepared scalar-input manifest is missing: {manifest}")
+        return directory
 
     @staticmethod
     def start_benchmark(projection, *, cached=False):
@@ -408,7 +447,10 @@ class Gallery:
         if projection not in ("quadratic", "zero-momentum"):
             raise ValueError("Unknown physical projection")
         if not Gallery.benchmark_available():
-            raise ValueError("This gallery server has no configured benchmark runner")
+            raise ValueError(
+                "This gallery server needs a benchmark runner, workspace, external data and prepared scalar inputs"
+            )
+        prepared_input = Gallery.prepared_input_directory(projection)
         if cached and not os.environ.get("VAKINT_GALLERY_CACHE"):
             raise ValueError("This gallery server has no configured prepared cache")
         root = Path(os.environ["VAKINT_GALLERY_WORK"]).resolve()
@@ -431,6 +473,8 @@ class Gallery:
             os.environ["VAKINT_GALLERY_ARTIFACTS"],
             "--work-dir",
             str(work),
+            "--prepared-input",
+            str(prepared_input),
         ]
         if cached:
             command.extend(["--cache", os.environ["VAKINT_GALLERY_CACHE"]])

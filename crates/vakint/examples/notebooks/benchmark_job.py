@@ -50,7 +50,6 @@ def main():
                 check=False,
                 stdout=log,
                 stderr=subprocess.STDOUT,
-                timeout=36_000,
             )
         if result.returncode:
             status(
@@ -61,7 +60,7 @@ def main():
             )
         else:
             status("complete", receipt=receipt())
-    except (OSError, ValueError, subprocess.TimeoutExpired) as error:
+    except (OSError, ValueError) as error:
         status("failed", message=str(error))
     finally:
         os.close(lock_fd)
