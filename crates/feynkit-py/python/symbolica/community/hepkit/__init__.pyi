@@ -1710,7 +1710,7 @@ class DiagramCut:
         Parameters
         ----------
         edge_powers : mapping[int, int] or None, optional
-            Positive propagator powers by diagram edge ID; omitted edges have power one.
+            Positive propagator powers by diagram edge ID; omitted edges retain their stored powers.
         prescription : int, optional
             Sign of the imaginary prescription, either +1 or -1.
         normalization : Expression or None, optional
@@ -3050,6 +3050,7 @@ class FeynmanDiagram:
         Both representations include contour signs and on-shell factors, and share
         ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
         CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+        Uncontracted internal propagators with stored powers other than one raise ValueError.
 
         CFF supports subgraph selections and the constraints below. LTD requires a
         complete ordinary diagram and uses its stored ordered loop-momentum basis.
@@ -3096,7 +3097,8 @@ class FeynmanDiagram:
         Raises
         ------
         ValueError
-            The method is unknown, or CFF-only options are supplied for LTD.
+            The method is unknown, CFF-only options are supplied for LTD, or an
+            uncontracted internal propagator has a stored power other than one.
         """
     @overload
     def integrate_energy(self, *, method: typing.Literal["ltd"]) -> LtdRepresentation:
@@ -3107,6 +3109,7 @@ class FeynmanDiagram:
         Both representations include contour signs and on-shell factors, and share
         ``gammalooprs::OSE(e)`` for :math:`E_e=\sqrt{\boldsymbol{q}_e^2+m_e^2}`.
         CFF accepts a polynomial numerator; couplings, graph weights and the spatial measure are separate.
+        Uncontracted internal propagators with stored powers other than one raise ValueError.
 
         CFF supports subgraph selections and the constraints below. LTD requires a
         complete ordinary diagram and uses its stored ordered loop-momentum basis.
@@ -3153,7 +3156,8 @@ class FeynmanDiagram:
         Raises
         ------
         ValueError
-            The method is unknown, or CFF-only options are supplied for LTD.
+            The method is unknown, CFF-only options are supplied for LTD, or an
+            uncontracted internal propagator has a stored power other than one.
         """
     def subgraph(self, selection: Subgraph | None = None, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> Subgraph:
         r"""

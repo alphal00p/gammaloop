@@ -77,6 +77,11 @@ fn physical_power_is_used_by_denominators_but_not_family_forms() {
             },
         )
         .unwrap();
+    assert_eq!(dotted.id(), unit.id());
+    assert_eq!(
+        dotted.canonical_key().unwrap(),
+        unit.canonical_key().unwrap()
+    );
     let explicit = BTreeMap::from([(EdgeId(0), 2), (EdgeId(1), 3)]);
     assert_eq!(
         dotted.denominator_expression().unwrap(),
@@ -150,7 +155,13 @@ fn native_scene_displays_dots_and_factored_numerators() {
         .to_scene(None, &Default::default(), None, &SceneOptions::default())
         .unwrap();
     assert!(scene.pages.iter().any(|label| label.contains("^(2)")));
-    assert!(scene.title.as_deref().unwrap().starts_with("Numerator: "));
+    assert!(
+        scene
+            .title
+            .as_deref()
+            .unwrap()
+            .starts_with("#\"Numerator: ")
+    );
     assert!(
         scene
             .edges
