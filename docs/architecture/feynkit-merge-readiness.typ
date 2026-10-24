@@ -2362,3 +2362,15 @@ checks. The later `880ad11d` full run kept its actual compile-time source tree
 frozen and reduced the failure set to the five cases subsequently addressed by
 the focused source/interface and approved-reference runs at the start of this record. The earlier diagnostic failures remain recorded as failures of
 their own checkpoint.
+
+== Explicit portable display notation
+
+Display notation remains process-local under plain Symbolica expression and
+state serialization. Spenso-aware portable payload exports opt in to
+`spenso.notation` version 1 for referenced symbols. The attachment uses the
+existing bounded attachment set and structured display encoding. Import validates
+all fields, parses allowlisted MathML, and checks local conflicts before atom
+import. Registration by fully qualified name leaves native symbol attributes and
+tags to Atom import. Tydenso preserves referenced declarations in subsequent
+exports and supplies safe label content to its Typst renderer. The schema and
+bounds are recorded in the Spenso architecture note.

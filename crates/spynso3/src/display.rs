@@ -1368,7 +1368,7 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
                 );
             }
             if let Some(text) = &notation.text.typst {
-                heads.insert(name.clone(), text.as_str().to_owned());
+                heads.insert(name.clone(), text.to_typst_source());
             }
             if notation.custom_print {
                 callback_symbols.push(name);

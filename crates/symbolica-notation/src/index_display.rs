@@ -1,4 +1,4 @@
-use crate::MathMl;
+use crate::{DisplayText, MathMl};
 use std::borrow::Cow;
 use symbolica::atom::{Symbol, UserData};
 use thiserror::Error;
@@ -379,6 +379,19 @@ impl IndexDisplay {
                 source
             }
         }
+    }
+
+    /// Render the native structured label with LaTeX metacharacters escaped.
+    ///
+    /// ```
+    /// use symbolica_notation::IndexDisplay;
+    /// let label = IndexDisplay::text("A&B")?;
+    /// assert_eq!(label.to_latex_source(), "A\\&B");
+    /// # Ok::<(), symbolica_notation::IndexDisplayError>(())
+    /// ```
+    #[must_use]
+    pub fn to_latex_source(&self) -> String {
+        DisplayText::escape_latex(&self.to_native_string())
     }
 
     /// Render the plain label with explicit script delimiters. See [`Self::text`].

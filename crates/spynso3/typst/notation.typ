@@ -201,7 +201,51 @@
   math.upright("?")
 }
 
+#let _display-label(node) = {
+  let kind = node.first()
+  if kind in ("symbol", "text") { return node.at(1) }
+  if kind == "number" { return str(node.at(1)) }
+  if kind in ("sequence", "list") {
+    return node.at(1).map(_display-label).join(if kind == "sequence" { " " } else { "," })
+  }
+  if kind == "attach" and node.at(2) == none and node.at(3) == none {
+    return _display-label(node.at(1))
+  }
+  // Only the endpoint strings s/t affect slot suppression. Decorated labels
+  // and mathematical operations cannot equal either native endpoint string.
+  ""
+}
+
+#let _portable-settings(ctx, settings) = {
+  // Plugin import validates these records before exposing the render tree.
+  // Treat overrides as text; payloads must never supply executable Typst.
+  let result = settings
+  for record in ctx.attachments {
+    if record.at("schema", default: none) == "spenso.notation" and record.version == 1 {
+      let name = str(record.identity)
+      let declaration = cbor(record.data)
+      if "head" in declaration and name not in result.tensor-labels {
+        result.tensor-labels.insert(name, _display-node(declaration.head))
+      }
+      if "index-label" in declaration and name not in result.index-labels {
+        let label = declaration.at("index-label")
+        result.index-labels.insert(name, (
+          label: _display-label(label),
+          visual: _display-node(label),
+        ))
+      }
+      if "typst" in declaration and name not in result.print-heads {
+        result.print-heads.insert(name, math.upright(declaration.typst))
+      }
+    }
+  }
+  result
+}
+
 #let _payload-head(ctx, settings) = {
+  let settings = _portable-settings(ctx, settings)
+  let head = settings.print-heads.at(ctx.identity, default: none)
+  if head != none { return head }
   let display = if "spenso::index" in ctx.tags {
     _attachment(ctx, "spenso.math-display", ctx.identity, (1,))
   } else { none }
@@ -939,6 +983,7 @@
     )),
     tags: (
       "spenso::index": ctx => {
+        let settings = _portable-settings(ctx, settings)
         let registered = settings.index-labels.at(ctx.symbol.at("name", default: "?"), default: none)
         if ctx.kind != "function" or registered == none {
           (ctx.default)()

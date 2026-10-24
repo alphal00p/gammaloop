@@ -33,11 +33,16 @@ pub fn tensor_head_print(symbol: Symbol, backend: SpensoPrintBackend) -> Option<
         SpensoPrintBackend::Typst => &notation.text.typst,
     };
     text.as_ref()
-        .map(|text| text.as_str().to_owned())
+        .map(|text| match backend {
+            SpensoPrintBackend::Plain => text.as_str().to_owned(),
+            SpensoPrintBackend::Latex => text.to_latex_source(),
+            SpensoPrintBackend::Typst => text.to_typst_source(),
+        })
         .or_else(|| {
             notation.head.as_ref().map(|head| match backend {
                 SpensoPrintBackend::Typst => head.to_typst_source(),
-                SpensoPrintBackend::Plain | SpensoPrintBackend::Latex => head.to_native_string(),
+                SpensoPrintBackend::Plain => head.to_native_string(),
+                SpensoPrintBackend::Latex => head.to_latex_source(),
             })
         })
 }

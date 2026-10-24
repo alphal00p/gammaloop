@@ -38,6 +38,29 @@ def mathml(expression):
 
 
 class TensorPrintTests(unittest.TestCase):
+    def test_portable_export_is_explicit_in_fresh_processes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "plain.bin")
+            producer = textwrap.dedent("""
+                import sys
+                from symbolica.community.tensor import TensorName, to_typst_project
+                head = TensorName("portable_print::Head", print={"plain": "ProcessPortableLabel"}).to_expression()
+                head.save(sys.argv[1])
+                project = to_typst_project(head)
+                assert b"spenso.notation" in project["tree.cbor"]
+                assert b"ProcessPortableLabel" in project["tree.cbor"]
+                assert b"ProcessPortableLabel" not in open(sys.argv[1], "rb").read()
+            """)
+            consumer = textwrap.dedent("""
+                import sys
+                from symbolica import Expression
+                from symbolica.community.tensor import to_typst_project
+                project = to_typst_project(Expression.load(sys.argv[1]))
+                assert b"ProcessPortableLabel" not in project["tree.cbor"]
+            """)
+            subprocess.run([sys.executable, "-c", producer, filename], check=True)
+            subprocess.run([sys.executable, "-c", consumer, filename], check=True)
+
     def test_print_mapping_validation_and_registration(self):
         mapping = {
             "plain": "J",

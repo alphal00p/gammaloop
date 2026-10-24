@@ -703,7 +703,8 @@ anchor = "pub struct Notation {"
 # Reviewed 2026-10-23: The note records process-local immutable notation, bounded
 # text, idempotence, conflicts and poisoning. No renderer or symbol metadata is changed.
 # Reviewed 2026-10-24: notation now owns validated MathML and callback ownership; renderers and explicit Typst export settings use the local registry.
-digest = "a7987bfd0498cfebdde19ec8ff42728353beae72"
+# Reviewed 2026-10-24: explicit portable imports register validated names atomically before symbol interning.
+digest = "309685ed7ca70f43704fb12d8922f69751cadd47"
 
 [[section.note.scope]]
 path = "crates/spenso/src/structure.rs"

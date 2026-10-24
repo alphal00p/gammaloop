@@ -990,8 +990,15 @@ trusted, complete replacement for the bundled `notation.typ`; compilation
 executes that source, which must implement the expected notation interface.
 `formatted()`, `paged()` and expression `to_html()` reject it with `ValueError`.
 Direct MathML never parses Typst source; custom HTML printers supply MathML fragments.
-Display customization stays outside Atom payloads; portable representation and math-label
-declarations continue to travel with the expressions.
+Display notation stays process-local for ordinary Symbolica `Expression.save`
+and state exports. Spenso-aware exports such as `to_typst_project()` explicitly
+include referenced notation in validated `spenso.notation` version-1 attachments,
+alongside representation and display-identity index declarations. Heads and index
+labels use structured display trees; text overrides are bounded, and MathML
+passes the presentation allowlist. Import rejects conflicting local notation
+before importing atoms; identical re-import is safe. Callback implementations
+never travel. Tydenso renders transported Typst overrides as literal display
+text; executable custom source remains an explicit trusted document input.
 
 == Citation tracking
 

@@ -317,5 +317,22 @@ Typst source exports populate document settings keyed by full symbol name:
 `label` and `visual`, and `callback-symbols` lists callback-owned functions.
 `print-heads` and `print-calls` retain target-specific overrides. Endpoint labels
 `s` and `t` still suppress their ordinary slot one.
-Notation is never implicitly serialized with symbols; a later opt-in portable
-attachment will provide an explicit export path.
+Notation is never implicitly serialized by Symbolica `Expression.save` or
+`State::export`. Spenso-aware portable exports explicitly collect referenced
+registry entries in `spenso.notation`, version 1. Each fully qualified symbol
+identity keys a CBOR map with optional `index-label`, `head`, `plain`, `latex`,
+`typst`, and `mathml`. Callback code and callback ownership markers remain
+process-local; imports preserve identical existing local registrations. Structured labels reuse the bounded `spenso.math-display` tree
+encoding; display-identity index symbols retain that separate identity schema.
+Notation maps are limited to 64 KiB each and 128 declarations per set, within
+the common attachment limits of 256 records and 1 MiB total. Text overrides
+are limited to 4096 UTF-8 bytes; display trees share a 64-node budget and depth
+16; MathML is parsed through the 4096-byte, 256-node, depth-16 allowlist.
+Import validates all declarations and conflicts before atom import, then
+registers names atomically without guessing symbol tags or attributes. Equal
+imports are idempotent; conflicting local notation produces a named typed error.
+Tydenso regenerates attachments only for output references, and its Typst layer
+turns validated structured labels into content and treats transported Typst
+overrides as text, never executable source. Imported `DisplayText` values retain
+a literal mode so subsequent Rust and Python Typst or LaTeX source exports also
+escape them. Trusted local source overrides retain their existing behavior.

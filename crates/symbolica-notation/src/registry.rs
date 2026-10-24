@@ -18,7 +18,10 @@ use thiserror::Error;
 /// # Ok::<(), DisplayTextError>(())
 /// ```
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct DisplayText(String);
+pub struct DisplayText {
+    value: String,
+    literal: bool,
+}
 
 impl DisplayText {
     /// Validate at most 4096 UTF-8 bytes without control or XML noncharacters.
@@ -37,13 +40,68 @@ impl DisplayText {
         {
             return Err(DisplayTextError);
         }
-        Ok(Self(value))
+        Ok(Self {
+            value,
+            literal: false,
+        })
     }
 
     /// Borrow the validated text. See [`DisplayText`] for an example.
     #[must_use]
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.value
+    }
+
+    /// Validate literal display text received from a portable payload.
+    /// Unlike trusted local overrides, this can never become target source.
+    ///
+    /// # Errors
+    /// Returns [`DisplayTextError`] for the same bounds as [`Self::new`].
+    ///
+    /// ```
+    /// use symbolica_notation::DisplayText;
+    /// let text = DisplayText::literal("overline(J)")?;
+    /// assert_eq!(text.to_typst_source(), "upright(\"overline(J)\")");
+    /// assert_eq!(text.to_latex_source(), "\\text{overline(J)}");
+    /// # Ok::<(), symbolica_notation::DisplayTextError>(())
+    /// ```
+    pub fn literal(value: impl Into<String>) -> Result<Self, DisplayTextError> {
+        let mut text = Self::new(value)?;
+        text.literal = true;
+        Ok(text)
+    }
+
+    /// Render Typst source, quoting portable literals. See [`Self::literal`].
+    #[must_use]
+    pub fn to_typst_source(&self) -> String {
+        if self.literal {
+            format!("upright({:?})", self.value)
+        } else {
+            self.value.to_owned()
+        }
+    }
+
+    /// Render LaTeX source, escaping portable literals. See [`Self::literal`].
+    #[must_use]
+    pub fn to_latex_source(&self) -> String {
+        if self.literal {
+            format!("\\text{{{}}}", Self::escape_latex(&self.value))
+        } else {
+            self.value.to_owned()
+        }
+    }
+
+    pub(crate) fn escape_latex(value: &str) -> String {
+        value
+            .chars()
+            .map(|character| match character {
+                '\\' => "\\textbackslash{}".to_owned(),
+                '{' | '}' | '$' | '&' | '#' | '%' | '_' => format!("\\{character}"),
+                '^' => "\\textasciicircum{}".to_owned(),
+                '~' => "\\textasciitilde{}".to_owned(),
+                character => character.to_string(),
+            })
+            .collect()
     }
 }
 
@@ -71,9 +129,8 @@ pub struct TextOverrides {
 /// Index labels and structured heads are separate: `hedge(owner, local)` may
 /// use the index label `h` while its ordinary function head has other notation.
 /// The public structured trees retain [`IndexDisplay`]'s per-renderer bounds.
-/// A future portable attachment may
-/// explicitly export notation; symbol strings and state exports never do so
-/// implicitly. See [`Self::register`] for a runnable example.
+/// Explicit portable attachments can export notation; symbol strings and state
+/// exports never do so implicitly. See [`Self::register`] for a runnable example.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct Notation {
     /// Optional structured label for an index owner. See [`Self::register`].
@@ -93,7 +150,7 @@ pub struct Notation {
 // The initializer only allocates an empty map. It never calls Symbolica, so it
 // can also be forced inside a Symbolica initialize! callback without a probe or
 // a symbol-bundle lazy wrapper. No Symbolica operation runs under this lock.
-static NOTATION: LazyLock<RwLock<HashMap<Symbol, Arc<Notation>>>> =
+static NOTATION: LazyLock<RwLock<HashMap<String, Arc<Notation>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Registration conflict or poisoned process-local storage.
@@ -109,7 +166,7 @@ static NOTATION: LazyLock<RwLock<HashMap<Symbol, Arc<Notation>>>> =
 /// assert!(matches!(other.register(symbol), Err(RegistryError::Conflict { symbol: s }) if s == symbol));
 /// # Ok::<(), RegistryError>(())
 /// ```
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum RegistryError {
     /// A different notation already owns this symbol. See [`RegistryError`].
     #[error("symbol {symbol:?} already has different process-local notation")]
@@ -117,6 +174,10 @@ pub enum RegistryError {
         /// Symbol whose existing notation was preserved. See [`RegistryError`].
         symbol: Symbol,
     },
+    /// A portable declaration conflicts before its symbol is interned.
+    /// See [`Notation::register_names`].
+    #[error("symbol {name} already has different process-local notation")]
+    NameConflict { name: String },
     /// A prior panic poisoned storage; no further access is allowed.
     /// See [`Notation::lookup`] for the fallible access contract.
     #[error("process-local notation registry lock is poisoned")]
@@ -167,8 +228,9 @@ impl Notation {
     /// ```
     pub fn register(self, symbol: Symbol) -> Result<Arc<Self>, RegistryError> {
         let notation = Arc::new(self);
+        let name = symbol.get_name().to_owned();
         let mut entries = NOTATION.write().map_err(|_| RegistryError::Poisoned)?;
-        match entries.entry(symbol) {
+        match entries.entry(name) {
             Entry::Occupied(entry) if entry.get().as_ref() == notation.as_ref() => {
                 Ok(Arc::clone(entry.get()))
             }
@@ -192,8 +254,63 @@ impl Notation {
     /// # Ok::<(), RegistryError>(())
     /// ```
     pub fn lookup(symbol: Symbol) -> Result<Option<Arc<Self>>, RegistryError> {
+        Self::lookup_name(symbol.get_name())
+    }
+
+    /// Look up a fully qualified portable name before its symbol is interned.
+    /// See [`Self::register_names`] for an example of registration by name.
+    ///
+    /// # Errors
+    /// Returns [`RegistryError::Poisoned`] when storage is poisoned.
+    pub fn lookup_name(name: &str) -> Result<Option<Arc<Self>>, RegistryError> {
         let entries = NOTATION.read().map_err(|_| RegistryError::Poisoned)?;
-        Ok(entries.get(&symbol).map(Arc::clone))
+        Ok(entries.get(name).map(Arc::clone))
+    }
+
+    /// Register validated portable names atomically without interning symbols.
+    ///
+    /// This permits registration before Atom import without guessing the symbols'
+    /// algebraic attributes, tags, or user data. Callers must validate canonical
+    /// fully qualified names and notation at their transport boundary first.
+    /// No Symbolica operation runs under the registry lock.
+    ///
+    /// # Errors
+    /// Returns a named conflict without registering any declaration, or poisoning.
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    /// use symbolica_notation::{Notation, RegistryError};
+    /// Notation::register_names([("notation_doc::portable".to_owned(), Arc::new(Notation::default()))])?;
+    /// # Ok::<(), RegistryError>(())
+    /// ```
+    pub fn register_names(
+        declarations: impl IntoIterator<Item = (String, Arc<Self>)>,
+    ) -> Result<(), RegistryError> {
+        let mut candidate = HashMap::new();
+        for (name, notation) in declarations {
+            if candidate
+                .get(&name)
+                .is_some_and(|existing| existing != &notation)
+            {
+                return Err(RegistryError::NameConflict { name });
+            }
+            candidate.insert(name, notation);
+        }
+        let mut entries = NOTATION.write().map_err(|_| RegistryError::Poisoned)?;
+        for (name, notation) in &candidate {
+            if entries
+                .get(name)
+                .is_some_and(|existing| existing != notation)
+            {
+                return Err(RegistryError::NameConflict {
+                    name: name.to_owned(),
+                });
+            }
+        }
+        for (name, notation) in candidate {
+            entries.entry(name).or_insert(notation);
+        }
+        Ok(())
     }
 }
 
@@ -201,7 +318,41 @@ impl Notation {
 mod tests {
     use super::*;
     use std::thread;
+    use symbolica::atom::{NamespacedSymbol, SymbolBuilder};
     use symbolica::symbol;
+
+    #[test]
+    fn portable_names_do_not_intern_symbols_or_replace_equal_handles() {
+        let name = "notation_tests::portable_name";
+        assert!(Symbol::get_symbol(NamespacedSymbol::parse(name)).is_none());
+        let notation = Arc::new(Notation::default());
+        Notation::register_names([(name.to_owned(), Arc::clone(&notation))]).unwrap();
+        assert!(Symbol::get_symbol(NamespacedSymbol::parse(name)).is_none());
+        Notation::register_names([(name.to_owned(), Arc::new(Notation::default()))]).unwrap();
+        let symbol = SymbolBuilder::new(NamespacedSymbol::parse(name))
+            .build()
+            .unwrap();
+        assert!(Arc::ptr_eq(
+            &notation,
+            &Notation::lookup(symbol).unwrap().unwrap()
+        ));
+    }
+
+    #[test]
+    fn portable_name_conflicts_leave_the_whole_batch_untouched() {
+        let name = "notation_tests::portable_conflict";
+        Notation::register_names([(name.to_owned(), Arc::new(Notation::default()))]).unwrap();
+        let other = Arc::new(Notation {
+            head: Some(IndexDisplay::Number(3)),
+            ..Notation::default()
+        });
+        let untouched = "notation_tests::portable_untouched";
+        assert!(matches!(Notation::register_names([
+            (untouched.to_owned(), Arc::clone(&other)),
+            (name.to_owned(), other),
+        ]), Err(RegistryError::NameConflict { name: conflict }) if conflict == name));
+        assert!(Notation::lookup_name(untouched).unwrap().is_none());
+    }
 
     #[test]
     fn registration_preserves_symbol_data() {

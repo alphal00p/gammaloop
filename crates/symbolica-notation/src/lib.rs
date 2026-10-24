@@ -1,8 +1,8 @@
 //! Shared display notation for Symbolica symbols, below tensor and graph renderers.
 //!
 //! Structured labels retain the existing portable math-display encoding. The
-//! process-local notation owner is independent of symbol serialization; a later
-//! opt-in portable attachment will export notation explicitly. [`Notation::register`]
+//! process-local notation owner is independent of symbol serialization; Spenso
+//! portable payloads can export validated notation explicitly. [`Notation::register`]
 //! stores immutable shared notation in this process without changing symbol tags
 //! or user data; [`Notation::lookup`] retrieves it. Renderers resolve process-local presentation through this registry.
 //!

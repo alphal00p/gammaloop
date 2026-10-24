@@ -4,7 +4,14 @@
 //! runtimes validate the declarations, reconstruct the corresponding local
 //! symbols, and only then import native Atom data. Representation metadata uses
 //! `spenso.representation`; structured math displays use
-//! `spenso.math-display`.
+//! `spenso.math-display`. Explicit display notation uses `spenso.notation`.
+//! Plain Symbolica Atom/state exports never collect the notation registry.
+
+mod notation;
+pub use notation::{
+    NOTATION_ATTACHMENT_SCHEMA, NOTATION_ATTACHMENT_VERSION, NotationAttachmentError,
+    NotationDeclarations,
+};
 
 use std::{collections::BTreeMap, fmt, io::Cursor, str};
 use symbolica_notation::IndexDisplay;
@@ -62,10 +69,20 @@ pub fn register_math_display_attachments(
         .map_err(|error| error.to_string())
 }
 
+/// Validate and register explicit notation attachments before `Atom::import`.
+///
+/// For multi-schema imports, preflight each declaration set before registering
+/// any of them. See [`NotationDeclarations`] for the attachment-set API.
+pub fn register_notation_attachments(
+    attachments: &AttachmentSet,
+) -> std::result::Result<(), NotationAttachmentError> {
+    NotationDeclarations::from_attachment_set(attachments)?.register_before_atom_import()
+}
+
 /// Collect all portable Spenso declarations referenced by `atom`.
 ///
-/// The returned set contains both representation metadata and structured math
-/// displays. It can be merged with application-specific attachments before the
+/// The returned set contains representation metadata, structured math displays,
+/// and registered notation. It can be merged with application attachments before the
 /// Atom is exported through `symbolica-typst-plugin`.
 pub fn attachments_for_atom(atom: &Atom) -> Result<AttachmentSet> {
     let representations = RepresentationDeclarations::referenced_by_atom(atom)?;
@@ -73,6 +90,9 @@ pub fn attachments_for_atom(atom: &Atom) -> Result<AttachmentSet> {
     let mut attachments = AttachmentSet::new();
     representations.append_attachments_to(&mut attachments)?;
     math_displays.append_attachments_to(&mut attachments)?;
+    NotationDeclarations::referenced_by_atom(atom)
+        .and_then(|declarations| declarations.append_attachments_to(&mut attachments))
+        .map_err(|error| RepresentationAttachmentError::new(error.to_string()))?;
     Ok(attachments)
 }
 
