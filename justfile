@@ -126,6 +126,30 @@ check-symbolica-feature-isolation:
       done
     done
 
+    for manifest in tydenso/Cargo.toml examples/notebooks/symbolica-host/Cargo.toml; do
+      if ! cargo metadata --locked --offline --format-version 1 --manifest-path "$root/$manifest" > /dev/null; then
+        echo "${manifest%Cargo.toml}Cargo.lock is stale or cannot resolve offline; refresh it with cargo metadata --offline --manifest-path $manifest" >&2
+        exit 1
+      fi
+    done
+    python3 - "$root" <<'PYTHON'
+    import pathlib
+    import sys
+    import tomllib
+
+    root = pathlib.Path(sys.argv[1])
+    def packages(path):
+        with path.open("rb") as lock:
+            return {(p["name"], p["version"], p.get("source")) for p in tomllib.load(lock)["package"]}
+
+    # The standalone host itself is not a dependency vendored from the root lock.
+    host = packages(root / "examples/notebooks/symbolica-host/Cargo.lock")
+    host.remove(("alphal00p-notebook-host", "0.1.0", None))
+    missing = host - packages(root / "Cargo.lock")
+    if missing:
+        sys.exit("examples/notebooks/symbolica-host/Cargo.lock contains packages absent from Cargo.lock: " + repr(sorted(missing)))
+    PYTHON
+
 # Keep Pyodide's portable arithmetic isolated from native code generation and Hakari.
 check-spynso-wasm:
     #!/usr/bin/env bash

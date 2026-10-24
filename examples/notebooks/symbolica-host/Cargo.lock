@@ -1140,6 +1140,7 @@ dependencies = [
  "serde",
  "spenso",
  "symbolica",
+ "symbolica-notation",
  "thiserror 2.0.18",
  "three-dimensional-reps",
  "typed-index-collections",
@@ -1179,6 +1180,7 @@ dependencies = [
  "serde_json",
  "spenso",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror 2.0.18",
 ]
@@ -1633,6 +1635,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror 2.0.18",
  "tracing",
@@ -1964,9 +1967,9 @@ dependencies = [
  "resvg",
  "serde",
  "serde_json",
- "spenso",
  "symbolica",
  "symbolica-data",
+ "symbolica-notation",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -3360,6 +3363,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
@@ -3407,6 +3411,7 @@ dependencies = [
  "spenso-hep-lib",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "tabled",
  "thiserror 2.0.18",
@@ -3515,6 +3520,15 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+]
+
+[[package]]
+name = "symbolica-notation"
+version = "0.1.0"
+dependencies = [
+ "roxmltree 0.21.1",
+ "symbolica",
+ "thiserror 2.0.18",
 ]
 
 [[package]]

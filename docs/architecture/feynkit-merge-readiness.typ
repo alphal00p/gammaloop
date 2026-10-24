@@ -2323,7 +2323,7 @@ The subsequent `fd27769a` native package run passed 501 of 502 tests. Its only
 failure was presentation: encoded index symbols hid the original edge/vertex
 labels from Python's raw-index formatter. The existing display owners now
 resolve individual index payloads while keeping native identities as keys.
-Temporary presentation uses existing portable print-head tags and adds no
+Presentation now uses the `symbolica-notation` registry and adds no
 callbacks or live-tensor rewrites. Both new controls and all 171 Python/tensor
 wrapper tests pass, including the original plain, LaTeX and Typst provenance
 assertions. Those display fixes were included in the completed `880ad11d`
