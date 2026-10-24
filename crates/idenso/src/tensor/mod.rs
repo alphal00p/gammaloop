@@ -229,6 +229,11 @@ where
 /// assert_eq!(nominal_zero.finish_parts()?.rank(), 1);
 /// # Ok::<(), TensorInferenceError>(())
 /// ```
+///
+/// With the `bincode` feature, tensor archives are trusted GammaLoop state files.
+/// Decode trusts stored interface and index-history metadata without observing the
+/// payload again. Symbolica's Atom decoder is not safe for untrusted bytes; the
+/// archive magic and version distinguish supported state files, not a security boundary.
 #[derive(Debug, Clone)]
 pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {
     pub(crate) structure: S,

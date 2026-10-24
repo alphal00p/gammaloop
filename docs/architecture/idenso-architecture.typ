@@ -770,13 +770,17 @@ encode admitted tensor metadata together with the payload, operation flags and
 optional product-readiness fact. Restored readiness lets future products reuse
 that fact without classifying the decoded payload again. Decode uses the caller's
 state map, restores sorted index usage after symbol remapping, and checks archive
-version, unique index keys, mask alignment and
+magic and version, unique index keys, mask alignment and
 agreement between retained index roles and the logical interface. Indexed
 archives additionally reject unresolved public ports. This is a transfer of
 authoritative construction metadata, not raw-expression admission: cancelled
 pairs survive cloning and archive round trips even when the payload is `0` or
 `1`. Disposable planner, observation and reduction-completion caches are not
-serialized. The tensor archive carries its own format version; GammaLoop's
+serialized. These are trusted GammaLoop state files: decode trusts the stored
+metadata without observing the payload again, consistently with Symbolica's Atom
+decoder, which is not safe for untrusted bytes. A fixed eight-byte magic
+(`d9 49 44 45 4e 53 4f 00`) precedes version `1`. Legacy or unknown formats are
+rejected before their bytes can become an Atom allocation length. GammaLoop's
 already lowered standalone evaluator formats are unchanged.
 These wire implementations, rewrite settings, symbol
 registries, networks and cooked expressions do not together define an Idenso

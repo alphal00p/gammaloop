@@ -1,4 +1,9 @@
 //! Persist authoritative tensor metadata and operation flags, never planner caches.
+//!
+//! These archives are trusted GammaLoop state files. Decoding trusts stored
+//! metadata and delegates payload decoding to Symbolica, whose Atom decoder is
+//! not safe for untrusted bytes. The fixed magic and version reject unsupported
+//! formats before the Atom decoder can interpret their bytes as an allocation length.
 use super::SymbolicTensor;
 use super::composition::ExplicitIndexOccurrences;
 use super::inference::BorrowedTensorParts;
@@ -6,7 +11,7 @@ use crate::CookSettings;
 use crate::tensor::TensorProofs;
 use bincode::de::Decoder;
 use bincode::enc::Encoder;
-use bincode::error::{DecodeError, EncodeError};
+use bincode::error::{AllowedEnumVariants, DecodeError, EncodeError};
 use bincode::{Decode, Encode};
 use spenso::structure::abstract_index::AbstractIndex;
 use spenso::structure::partial::{
@@ -18,6 +23,7 @@ use std::sync::Arc;
 use symbolica::atom::Atom;
 use symbolica::state::HasStateMap;
 
+pub(super) const TENSOR_ARCHIVE_MAGIC: [u8; 8] = [0xd9, b'I', b'D', b'E', b'N', b'S', b'O', 0];
 pub(super) const TENSOR_ARCHIVE_VERSION: u8 = 1;
 
 impl Encode for ExplicitIndexOccurrences {
@@ -90,6 +96,7 @@ impl Encode for BorrowedTensorParts<'_> {
             .explicit_index_occurrences()
             .map_err(|error| EncodeError::OtherString(error.to_string()))?;
         let _ = self.product_is_normalized();
+        TENSOR_ARCHIVE_MAGIC.encode(encoder)?;
         TENSOR_ARCHIVE_VERSION.encode(encoder)?;
         self.expression.encode(encoder)?;
         // Canonical storage order alone cannot reconstruct the public axis order.
@@ -117,10 +124,18 @@ impl Encode for SymbolicTensor<PartialStructure> {
 
 impl<C: HasStateMap> Decode<C> for SymbolicTensor<PartialStructure> {
     fn decode<D: Decoder<Context = C>>(decoder: &mut D) -> Result<Self, DecodeError> {
-        if u8::decode(decoder)? != TENSOR_ARCHIVE_VERSION {
-            return Err(DecodeError::OtherString(
-                "unsupported symbolic tensor archive version".into(),
+        if <[u8; 8]>::decode(decoder)? != TENSOR_ARCHIVE_MAGIC {
+            return Err(DecodeError::Other(
+                "unrecognized symbolic tensor archive magic; legacy archives are unsupported",
             ));
+        }
+        let version = u8::decode(decoder)?;
+        if version != TENSOR_ARCHIVE_VERSION {
+            return Err(DecodeError::UnexpectedVariant {
+                type_name: "symbolic tensor archive version",
+                allowed: &AllowedEnumVariants::Allowed(&[1]),
+                found: u32::from(version),
+            });
         }
         let expression = Atom::decode(decoder)?;
         let slots = Vec::<PartialSlot>::decode(decoder)?;
@@ -183,13 +198,16 @@ mod tests {
     use super::super::inference::tests::{
         INFERENCE_CALLS, OCCURRENCE_FUNCTION_VISITS, SCOPE_VALIDATIONS,
     };
-    use super::{ExplicitIndexOccurrences, SymbolicTensor, TENSOR_ARCHIVE_VERSION};
+    use super::{
+        ExplicitIndexOccurrences, SymbolicTensor, TENSOR_ARCHIVE_MAGIC, TENSOR_ARCHIVE_VERSION,
+    };
     use crate::representations::ColorFundamental;
     use crate::tensor::composition::TensorCompositionError;
     use crate::test_support;
     use base64::Engine;
     use base64::engine::general_purpose::STANDARD;
     use bincode::config;
+    use bincode::error::DecodeError;
     use spenso::structure::abstract_index::AbstractIndex;
     use spenso::structure::partial::{
         OpenPortId, PartialIndex, PartialStructure, PartialStructureExt,
@@ -333,6 +351,7 @@ mod tests {
                 .collect::<Vec<_>>();
             let bytes = bincode::encode_to_vec(
                 (
+                    TENSOR_ARCHIVE_MAGIC,
                     version,
                     Atom::Zero,
                     slots,
@@ -434,6 +453,7 @@ mod tests {
         // cover a declared dual free port with the same collision identity.
         let bytes = bincode::encode_to_vec(
             (
+                TENSOR_ARCHIVE_MAGIC,
                 TENSOR_ARCHIVE_VERSION,
                 Atom::Zero,
                 vec![
@@ -501,6 +521,7 @@ mod tests {
         ] {
             let bytes = bincode::encode_to_vec(
                 (
+                    TENSOR_ARCHIVE_MAGIC,
                     TENSOR_ARCHIVE_VERSION,
                     Atom::Zero,
                     vec![representation.slot::<PartialIndex<AbstractIndex>, _>(index)],
@@ -795,5 +816,50 @@ mod tests {
             2
         );
         assert!(hidden.multiply(&expected).is_err());
+    }
+    #[test]
+    fn tensor_archive_rejects_legacy_and_crafted_lengths_before_atom_decode() {
+        let legacy_atom = bincode::encode_to_vec(Atom::one(), config::standard()).unwrap();
+        let mut old_tensor = vec![1u8];
+        old_tensor.extend(&legacy_atom);
+        let mut crafted = vec![1u8, 1u8];
+        crafted.extend(u64::MAX.to_le_bytes());
+        for bytes in [legacy_atom, old_tensor, crafted] {
+            let error = bincode::decode_from_slice_with_context::<
+                _,
+                SymbolicTensor<PartialStructure>,
+                _,
+            >(&bytes, config::standard(), StateMap::default())
+            .unwrap_err();
+            assert!(matches!(
+                error,
+                DecodeError::Other(
+                    "unrecognized symbolic tensor archive magic; legacy archives are unsupported"
+                )
+            ));
+        }
+    }
+
+    #[test]
+    fn tensor_archive_rejects_unknown_version_before_atom_decode() {
+        let bytes = bincode::encode_to_vec(
+            (TENSOR_ARCHIVE_MAGIC, TENSOR_ARCHIVE_VERSION + 1),
+            config::standard(),
+        )
+        .unwrap();
+        let error =
+            bincode::decode_from_slice_with_context::<_, SymbolicTensor<PartialStructure>, _>(
+                &bytes,
+                config::standard(),
+                StateMap::default(),
+            )
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            DecodeError::UnexpectedVariant {
+                type_name: "symbolic tensor archive version",
+                ..
+            }
+        ));
     }
 }
