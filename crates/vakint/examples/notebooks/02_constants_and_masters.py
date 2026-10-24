@@ -208,7 +208,7 @@ def _(Gallery, master, master_view, mo):
             master.graph.to_dot(), language="dot", disabled=True
         )
     else:
-        master_panel = mo.Html(Gallery.math_font_css() + master.to_html())
+        master_panel = mo.iframe(Gallery.math_font_css() + master.to_html())
     master_panel
     return
 
