@@ -1254,9 +1254,12 @@
   cranePythonExtraFeatureSets = {
     "gammaloop-api" = ["python_abi" "pyo3-extension-module"];
   };
-  # Python enables optional workspace packages absent from native closures.
+  # Keep optional Python packages and resolved local Git-patched dependencies.
   cranePythonSourcePackageNames =
-    workspaceDependencyClosureFor workspaceDependencyNamesFor "gammaloop-api";
+    workspaceDependencyClosureFor (
+      package:
+        sortedUnique (workspaceDependencyNamesFor package ++ workspaceResolvedDependencyNamesFor package)
+    ) "gammaloop-api";
   cranePythonSrc = workspacePackageSrcForSourcePackages {
     sourcePackages = cranePythonSourcePackageNames;
     packageSourcePackages = ["gammaloop-api"];
