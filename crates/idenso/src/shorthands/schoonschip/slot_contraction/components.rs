@@ -35,7 +35,20 @@ enum Argument<'a> {
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 enum TensorSource {
     Function(Symbol),
+    // A tensor whose written arguments no contraction may bind; see `bind`.
+    Spectator(Symbol),
     Factor(usize),
+}
+
+// How the reducer may treat a function head.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Head {
+    // Rebuilt with bound arguments.
+    Plain,
+    // Only symmetric, antisymmetric or cyclic: rebuilding would reorder bound
+    // arguments, so its tensors are kept verbatim as spectators.
+    Symmetric,
+    Opaque,
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -108,7 +121,7 @@ struct ComponentSum<'a, 'b> {
     intake: Intake,
     rank_one: bool,
     slots: &'b mut SlotMatcher,
-    heads: AHashMap<Symbol, bool>,
+    heads: AHashMap<Symbol, Head>,
     vectors: Vec<FunView<'a>>,
     vector_sources: AHashMap<AtomView<'a>, usize>,
     vector_positions: AHashMap<(Symbol, Vec<AtomView<'a>>), usize>,
@@ -417,7 +430,10 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                     .add_arg(second)
                     .finish()
             }
-            Variable::Tensor(TensorSource::Function(head), arguments) => {
+            Variable::Tensor(
+                TensorSource::Function(head) | TensorSource::Spectator(head),
+                arguments,
+            ) => {
                 let mut function = FunctionBuilder::new(*head);
                 for argument in arguments {
                     function = match *argument {
@@ -720,16 +736,20 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         }))
     }
 
-    fn plain(&mut self, head: Symbol) -> bool {
+    fn head(&mut self, head: Symbol) -> Head {
         *self.heads.entry(head).or_insert_with(|| {
-            head.get_wildcard_level() == 0
-                && !head.is_symmetric()
-                && !head.is_antisymmetric()
-                && !head.is_cyclesymmetric()
-                && !head.is_linear()
-                && !head.is_flat()
-                && head.get_normalization_function().is_none()
-                && head.get_evaluation_info().is_none()
+            if head.get_wildcard_level() != 0
+                || head.is_linear()
+                || head.is_flat()
+                || head.get_normalization_function().is_some()
+                || head.get_evaluation_info().is_some()
+            {
+                Head::Opaque
+            } else if head.is_symmetric() || head.is_antisymmetric() || head.is_cyclesymmetric() {
+                Head::Symmetric
+            } else {
+                Head::Plain
+            }
         })
     }
 
@@ -744,7 +764,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         let head = function.get_symbol();
         if head.is_scalar()
             || !head.has_tag(&self.contractor.tags.rank1)
-            || !self.plain(head)
+            || self.head(head) != Head::Plain
             || (self.intake != Intake::Contraction && function.get_nargs() != 1)
         {
             return None;
@@ -806,7 +826,7 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             || representation == LibraryRep::Dummy
             || !Self::atomic(dimension)
             || function.get_symbol() != representation.symbol()
-            || !self.plain(function.get_symbol())
+            || self.head(function.get_symbol()) != Head::Plain
         {
             return None;
         }
@@ -939,6 +959,10 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         self.variable(Variable::Dot(space, heads), exponent);
     }
 
+    /// A symmetric head, such as the colour structure constant of a gluon
+    /// vertex beside contracted Lorentz slots, enters as a spectator. Its ports
+    /// join the graph, so incidence stays checked, but a contraction binding
+    /// any of them declines the component, as for epsilon(a,...)*p(a).
     fn tensor(&mut self, function: FunView<'a>) -> Option<()> {
         let head = function.get_symbol();
         if !head.has_tag(&self.contractor.tags.tensor)
@@ -949,11 +973,15 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                     .last()
                     .is_some_and(|port| self.permits_slot(port)))
             || head.is_scalar()
-            || !self.plain(head)
             || !matches!(self.slots.classify(function.as_view()), SlotMatch::Other)
         {
             return None;
         }
+        let source = match self.head(head) {
+            Head::Plain => TensorSource::Function(head),
+            Head::Symmetric => TensorSource::Spectator(head),
+            Head::Opaque => return None,
+        };
         let value = function.as_view();
         let ports = if let Some(ports) = self.tensor_ports.get(&value) {
             ports.clone()
@@ -991,11 +1019,21 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
             self.tensor_ports.insert(value, ports.clone());
             ports
         };
+        let arguments = function
+            .iter()
+            .map(|arg| self.argument(arg))
+            .collect::<Vec<_>>();
+        if matches!(source, TensorSource::Spectator(_))
+            && function
+                .iter()
+                .zip(&arguments)
+                .any(|(written, &bound)| bound != Argument::Original(written))
+        {
+            // An earlier selected factor already bound one of its ports.
+            return None;
+        }
         let tensor = self.tensors.len();
-        self.tensors.push((
-            TensorSource::Function(head),
-            function.iter().map(|arg| self.argument(arg)).collect(),
-        ));
+        self.tensors.push((source, arguments));
         for (position, slot) in ports {
             if let Argument::Original(slot) = self.argument(slot) {
                 let (space, index) = self.resolve_endpoint(slot)?;
@@ -1109,6 +1147,16 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
         Some(())
     }
 
+    /// A spectator keeps its written arguments: a different binding declines.
+    fn bind(&mut self, tensor: usize, position: usize, argument: Argument<'a>) -> Option<()> {
+        let (source, arguments) = &mut self.tensors[tensor];
+        if matches!(source, TensorSource::Spectator(_)) && arguments[position] != argument {
+            return None;
+        }
+        arguments[position] = argument;
+        Some(())
+    }
+
     fn reduce_components(&mut self) -> Option<()> {
         for node in &mut self.nodes {
             // Degree-one indices survive as the exact original external slots.
@@ -1160,12 +1208,12 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                 &[Terminal::Tensor(tensor, position), Terminal::Vector(head)]
                 | &[Terminal::Vector(head), Terminal::Tensor(tensor, position)] => {
                     self.contracted = true;
-                    self.tensors[tensor].1[position] = Argument::Vector(space, head);
+                    self.bind(tensor, position, Argument::Vector(space, head))?;
                 }
                 &[Terminal::Tensor(tensor, position), Terminal::Free(slot)]
                 | &[Terminal::Free(slot), Terminal::Tensor(tensor, position)] => {
                     self.contracted |= edges != 0;
-                    self.tensors[tensor].1[position] = Argument::Original(slot);
+                    self.bind(tensor, position, Argument::Original(slot))?;
                 }
                 &[Terminal::Tensor(first, a), Terminal::Tensor(second, b)] => {
                     self.contracted |= edges != 0;
@@ -1184,8 +1232,8 @@ impl<'a, 'b> ComponentSum<'a, 'b> {
                         // endpoint while both ends still have a tensor partner.
                         self.nodes[node].slot
                     };
-                    self.tensors[first].1[a] = Argument::Original(slot);
-                    self.tensors[second].1[b] = Argument::Original(slot);
+                    self.bind(first, a, Argument::Original(slot))?;
+                    self.bind(second, b, Argument::Original(slot))?;
                 }
                 _ => return None,
             }
@@ -1448,6 +1496,207 @@ mod tests {
         );
     }
 
+    // A four-gluon-like vertex: its colour structure constants carry none of
+    // the Lorentz slots that its metrics contract.
+    fn gluon_vertex([a, b, c, d, e]: [&str; 5], [m, n, r, s]: [&str; 4]) -> String {
+        let f = |x: &str, y: &str| format!("spenso::f(coad(8,{x}),coad(8,{y}),coad(8,{e}))");
+        let g = |x: &str, y: &str| format!("g(mink(D,{x}),mink(D,{y}))");
+        format!(
+            "{}*{}*({}*{}-{}*{})+{}*{}*({}*{}-{}*{})+{}*{}*({}*{}-{}*{})",
+            f(a, b),
+            f(c, d),
+            g(m, r),
+            g(n, s),
+            g(m, s),
+            g(n, r),
+            f(a, c),
+            f(b, d),
+            g(m, n),
+            g(r, s),
+            g(m, s),
+            g(n, r),
+            f(a, d),
+            f(b, c),
+            g(m, n),
+            g(r, s),
+            g(m, r),
+            g(n, s),
+        )
+    }
+
+    fn planned_contraction(source: &Atom) -> Option<FactorizedContraction> {
+        let tensor = SymbolicTensor::infer(source.clone()).unwrap();
+        setup()
+            .observed(tensor.reduction_observations())
+            .contract_factorized(source.as_view(), None, true)
+    }
+
+    fn typed_contraction(source: &Atom) -> Atom {
+        SymbolicTensor::infer(source.clone())
+            .unwrap()
+            .contract(crate::tensor::ContractSettings {
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap()
+            .into_expression()
+    }
+
+    #[test]
+    fn symmetric_spectators_stay_verbatim_beside_planned_contractions() {
+        crate::test_support::test_initialize();
+        setup();
+        let vertex = gluon_vertex(["a1", "a2", "a3", "a4", "e1"], ["m1", "m2", "m3", "m4"]);
+        let momenta = "p(1,mink(D,m1))*p(2,mink(D,m4))+y*g(mink(D,m1),mink(D,m4))";
+        let source = input(&format!("({vertex})*({momenta})"));
+        let [c1, c2, c3] = [["a1", "a2", "a3", "a4"], ["a1", "a3", "a2", "a4"], [
+            "a1", "a4", "a2", "a3",
+        ]]
+        .map(|[a, b, c, d]| {
+            format!("spenso::f(coad(8,{a}),coad(8,{b}),coad(8,e1))*spenso::f(coad(8,{c}),coad(8,{d}),coad(8,e1))")
+        });
+        let dot = "g(p(1,mink(D)),p(2,mink(D)))";
+        let g23 = "g(mink(D,m2),mink(D,m3))";
+        // One term per spectator and Lorentz structure; no copy of either sum.
+        let expected = input(&format!(
+            "{c1}*p(1,mink(D,m3))*p(2,mink(D,m2))+(y-D*y-{dot})*{c1}*{g23}
+             +{c2}*p(1,mink(D,m2))*p(2,mink(D,m3))+(y-D*y-{dot})*{c2}*{g23}
+             +{c3}*p(1,mink(D,m2))*p(2,mink(D,m3))-{c3}*p(1,mink(D,m3))*p(2,mink(D,m2))"
+        ));
+        let planned = planned_contraction(&source).expect("a spectator does not decline");
+        assert_eq!(planned.status, ReductionStatus::Complete);
+        assert_eq!(planned.root, expected);
+        assert_eq!(typed_contraction(&source), expected);
+        // The rest of the product passes through unchanged.
+        for probe in [
+            input("(x+z)^3"),
+            input("t(mink(4,b),mink(4,c))"),
+            Atom::num(0.25f64),
+            input("z^n"),
+        ] {
+            let source = &probe * &source;
+            assert_eq!(typed_contraction(&source), &probe * &expected, "{probe}");
+        }
+
+        // Two vertex sums sharing Lorentz slots stay in the planner, with each
+        // structure constant as written in the source.
+        let partner = gluon_vertex(["b1", "b2", "b3", "b4", "e2"], ["m1", "m4", "m5", "m6"]);
+        let source = input(&format!("({vertex})*({partner})"));
+        let planned = planned_contraction(&source).expect("spectators do not decline");
+        assert_eq!(planned.status, ReductionStatus::Complete);
+        assert_eq!(typed_contraction(&source), planned.root);
+        let colour = crate::color::CS.f;
+        let mut written = std::collections::HashSet::new();
+        source.as_view().visitor(&mut |node| {
+            if matches!(node, AtomView::Fun(f) if f.get_symbol() == colour) {
+                written.insert(node.to_owned());
+            }
+            true
+        });
+        let AtomView::Add(terms) = planned.root.as_view() else {
+            panic!("{}", planned.root);
+        };
+        for term in terms.iter() {
+            let AtomView::Mul(factors) = term else {
+                panic!("{term}");
+            };
+            for factor in factors.iter() {
+                match factor {
+                    AtomView::Fun(f) if f.get_symbol() == colour => {
+                        assert!(written.contains(&factor.to_owned()), "{factor}");
+                    }
+                    AtomView::Add(_) => assert!(!factor.contains_symbol(colour), "{term}"),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn symmetric_spectator_contractions_match_the_literal_rewrite() {
+        crate::test_support::test_initialize();
+        setup();
+        let vertex = gluon_vertex(["a1", "a2", "a3", "a4", "e1"], ["m1", "m2", "m3", "m4"]);
+        let partner = gluon_vertex(["b1", "b2", "b3", "b4", "e2"], ["m1", "m4", "m5", "m6"]);
+        // A three-gluon-like vertex keeps its structure constant in every term.
+        let triple = |[a, b, c]: [&str; 3], [m, n, r]: [&str; 3]| {
+            let f = format!("spenso::f(coad(8,{a}),coad(8,{b}),coad(8,{c}))");
+            let g = |x: &str, y: &str| format!("g(mink(D,{x}),mink(D,{y}))");
+            let p = |k: u8, x: &str| format!("p({k},mink(D,{x}))");
+            format!(
+                "{f}*{}*({}-{})+{f}*{}*({}-{})+{f}*{}*({}-{})",
+                g(m, n),
+                p(1, r),
+                p(2, r),
+                g(n, r),
+                p(2, m),
+                p(3, m),
+                g(r, m),
+                p(3, n),
+                p(1, n),
+            )
+        };
+        let coloured = format!("g(coad(8,a1),coad(8,b1))*({vertex})*({partner})");
+        for source in [
+            format!("({vertex})*(p(1,mink(D,m1))*p(2,mink(D,m4))+y*g(mink(D,m1),mink(D,m4)))"),
+            format!("x*({vertex})*({partner})"),
+            format!(
+                "({})*({})",
+                triple(["a1", "a2", "e"], ["m1", "m2", "m3"]),
+                triple(["e", "a3", "a4"], ["m1", "m2", "m4"])
+            ),
+            coloured.clone(),
+        ] {
+            let source = input(&source);
+            if source != input(&coloured) {
+                assert_eq!(
+                    planned_contraction(&source)
+                        .expect("unbound spectators remain in the component planner")
+                        .status,
+                    ReductionStatus::Complete,
+                    "{source}"
+                );
+            }
+            // The literal rewrite copies a sum only into a bound antisymmetric
+            // tensor, so expand its input.
+            let literal =
+                SlotContraction::new().contract_ordered::<0>(source.expand().as_view(), true, None);
+            assert_eq!(
+                typed_contraction(&source).expand(),
+                literal.expand(),
+                "{source}"
+            );
+        }
+        // An antisymmetric head carrying a contracted slot keeps declining,
+        // whether a vector or a colour metric binds that slot.
+        for source in [
+            "(x*p(1,mink(4,a))+y*p(2,mink(4,a)))*(z*t(mink(4,a),mink(4,b),mink(4,c),mink(4,d))+spenso::epsilon(mink(4,a),mink(4,b),mink(4,c),mink(4,d)))".to_owned(),
+            coloured.clone(),
+        ] {
+            let source = input(&source);
+            assert!(planned_contraction(&source).is_none(), "{source}");
+        }
+        // The literal fallback relabels one vertex with the colour metric but
+        // keeps both vertex sums factorized, since their shared Lorentz slots
+        // sit on metrics. The planner then contracts that product around its
+        // spectators, as compared above.
+        let relabelled = vertex.replace("coad(8,a1)", "coad(8,b1)");
+        assert_eq!(
+            SlotContraction::new().contract_ordered::<0>(input(&coloured).as_view(), true, None),
+            input(&format!("({relabelled})*({partner})"))
+        );
+        // Colour trace notation in a sum connected by Lorentz slots declines
+        // the planner too. The sums, which share those slots on vectors and
+        // metrics, stay factorized.
+        let trace = "spenso::trace(coad(8),spenso::sym(spenso::f(coad(8,a1),spenso::in,spenso::out),spenso::f(coad(8,a2),spenso::in,spenso::out)))";
+        let source = input(&format!(
+            "(g(mink(D,m3),mink(D,m4))*{trace}+x*g(mink(D,m3),mink(D,m4))*spenso::f(coad(8,a1),coad(8,c),coad(8,d))*spenso::f(coad(8,a2),coad(8,c),coad(8,d)))*(p(1,mink(D,m1))*g(mink(D,m2),mink(D,m3))-p(2,mink(D,m2))*g(mink(D,m1),mink(D,m3)))*(p(3,mink(D,m1))*g(mink(D,m2),mink(D,m4))+p(3,mink(D,m2))*g(mink(D,m1),mink(D,m4)))"
+        ));
+        assert!(planned_contraction(&source).is_none(), "{source}");
+        assert_eq!(typed_contraction(&source), source);
+    }
+
     pub(super) fn setup() -> SlotContraction {
         crate::representations::initialize();
         for head in ["p", "q", "r", "s"] {
@@ -1461,7 +1710,7 @@ mod tests {
     }
     pub(super) fn input(value: &str) -> Atom {
         let mut qualified = value.to_owned();
-        for head in ["g(", "mink(", "cof("] {
+        for head in ["g(", "mink(", "cof(", "coad("] {
             let mut output = String::with_capacity(qualified.len());
             let mut start = 0;
             for (position, _) in qualified.match_indices(head) {

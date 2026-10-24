@@ -3,6 +3,7 @@
 mod components;
 pub(crate) use components::{FactorizedContraction, ReductionStatus};
 
+use crate::representations::COLOR_REPRESENTATIONS;
 use spenso::{
     network::{
         library::symbolic::ETS,
@@ -482,7 +483,12 @@ impl SlotContraction {
         // exposing the slot in every term, as in
         // (p(a)+q(a))*(r(a)+epsilon(a,b,c,d)), whose antisymmetric tensor the
         // component planner declines. Each source term then substitutes into
-        // its own copy of that sum.
+        // its own copy of that sum. This deliberately bounded rule leaves
+        // other declined products factorized, as before #151: colour-blocked
+        // sums, bound symmetric tensors, unbound user or bispinor tensors,
+        // compact-vector epsilon with an unbound slot, and inexact vector
+        // coefficients. They may retain explicit contractions even after the
+        // enabled identity algebras run.
         for (source, factor) in factors.clone().enumerate() {
             if !matches!(factor, AtomView::Add(_)) {
                 continue;
@@ -490,7 +496,11 @@ impl SlotContraction {
             for (partner, tensor) in factors.clone().enumerate() {
                 let admitted = match tensor {
                     AtomView::Fun(function) => function.get_symbol() != self.metric,
-                    AtomView::Add(_) => self.expand && partner != source,
+                    AtomView::Add(_) => {
+                        self.expand
+                            && partner != source
+                            && self.binds_antisymmetric(factor, tensor, rank_one, slots)
+                    }
                     _ => false,
                 };
                 if admitted
@@ -557,6 +567,65 @@ impl SlotContraction {
                 None
             }
             _ => None,
+        }
+    }
+
+    /// Whether a metric or vector of `source` binds a non-colour slot of an
+    /// antisymmetric tensor in a term of `partner` (rule ii). This covers the
+    /// bound-epsilon fallback of #151, not every reason the planner declines.
+    /// Colour slots, such as those of f, do not authorize partner-sum copies.
+    fn binds_antisymmetric(
+        &self,
+        source: AtomView<'_>,
+        partner: AtomView<'_>,
+        rank_one: bool,
+        slots: &mut SlotMatcher,
+    ) -> bool {
+        let mut ports = Vec::new();
+        Self::visit_linear(partner, &mut |function| {
+            if function.get_symbol().is_antisymmetric() {
+                for argument in function.iter() {
+                    if let Some(port) = Endpoint::parse(argument, slots)
+                        && self.permits(port.representation)
+                        && !COLOR_REPRESENTATIONS
+                            .iter()
+                            .any(|colour| colour.base() == port.representation.base())
+                    {
+                        ports.push(port);
+                    }
+                }
+            }
+        });
+        let mut bound = false;
+        if !ports.is_empty() {
+            Self::visit_linear(source, &mut |function| {
+                if self.metrics && function.get_symbol() == self.metric {
+                    for argument in function.iter() {
+                        bound |= Endpoint::parse(argument, slots).is_some_and(|endpoint| {
+                            ports.iter().any(|port| port.matches(&endpoint))
+                        });
+                    }
+                } else if rank_one
+                    && let Some((_, endpoint)) = self.rank_one_endpoint(function, slots)
+                {
+                    bound |= ports.iter().any(|port| port.matches(&endpoint));
+                }
+            });
+        }
+        bound
+    }
+
+    /// Visit the functions of the sums and products through which
+    /// `replace_linear` passes a slot. Powers and function arguments keep
+    /// their own scopes.
+    fn visit_linear<'a>(expression: AtomView<'a>, visit: &mut impl FnMut(FunView<'a>)) {
+        match expression {
+            AtomView::Add(sum) => sum.iter().for_each(|term| Self::visit_linear(term, visit)),
+            AtomView::Mul(product) => product
+                .iter()
+                .for_each(|factor| Self::visit_linear(factor, visit)),
+            AtomView::Fun(function) => visit(function),
+            _ => {}
         }
     }
 
@@ -1186,6 +1255,62 @@ mod tests {
         let result = dots(source.clone());
         assert!(!result.has_repeated_explicit_indices(), "{result}");
         assert_eq!(result.expand(), dots(source.expand()).expand());
+    }
+
+    #[test]
+    fn partner_sums_are_copied_only_into_bound_antisymmetric_tensors() {
+        crate::test_support::test_initialize();
+        initialize_vectors();
+        symbolica::symbol!("spenso::slot_contraction_antisymmetric"; Antisymmetric);
+        for (input, expected, rank_one) in [
+            // The slot sits on a vector in one partner term and on epsilon in
+            // the other, as in the e+ e- -> Z a numerators of NinjaRS.
+            (
+                "(x*slot_contraction_p(mink(4,a))+y*slot_contraction_q(mink(4,a)))*(z*slot_contraction_q(mink(4,a))*epsilon(slot_contraction_p(mink(4)),mink(4,c),mink(4,d),mink(4,e))+epsilon(mink(4,a),mink(4,c),mink(4,d),mink(4,e)))",
+                "x*(z*slot_contraction_q(slot_contraction_p(mink(4)))*epsilon(slot_contraction_p(mink(4)),mink(4,c),mink(4,d),mink(4,e))+epsilon(slot_contraction_p(mink(4)),mink(4,c),mink(4,d),mink(4,e)))+y*(z*slot_contraction_q(slot_contraction_q(mink(4)))*epsilon(slot_contraction_p(mink(4)),mink(4,c),mink(4,d),mink(4,e))+epsilon(slot_contraction_q(mink(4)),mink(4,c),mink(4,d),mink(4,e)))",
+                true,
+            ),
+            // Any antisymmetric tensor outside the colour algebra counts.
+            (
+                "(g(mink(4,a),mink(4,x))+g(mink(4,a),mink(4,y)))*(T(mink(4,a))+slot_contraction_antisymmetric(mink(4,a),mink(4,b)))",
+                "T(mink(4,x))+T(mink(4,y))+slot_contraction_antisymmetric(mink(4,x),mink(4,b))+slot_contraction_antisymmetric(mink(4,y),mink(4,b))",
+                false,
+            ),
+        ] {
+            let expression = parse(input);
+            let result = SlotContraction::new().run(expression.as_view(), false, rank_one);
+            assert_eq!(result, parse(expected), "{input}");
+        }
+        // Both sums stay factorized otherwise: the planner contracts plain
+        // tensors itself, these gluon-vertex-like sums share Lorentz slots on
+        // metrics and vectors only, the epsilon slots are not bound, and a
+        // colour metric binding a structure constant is left to the colour
+        // algebra.
+        for (input, rank_one) in [
+            (
+                "(x*slot_contraction_p(mink(4,a))+y*slot_contraction_q(mink(4,a)))*(z*U(mink(4,a))+V(mink(4,a)))",
+                true,
+            ),
+            (
+                "(f(coad(8,a),coad(8,b),coad(8,e))*g(mink(4,m),mink(4,n))+f(coad(8,a),coad(8,b),coad(8,e))*slot_contraction_p(mink(4,m))*slot_contraction_q(mink(4,n)))*(f(coad(8,e),coad(8,b),coad(8,c))*g(mink(4,m),mink(4,r))-f(coad(8,e),coad(8,b),coad(8,c))*slot_contraction_p(mink(4,m))*slot_contraction_q(mink(4,r)))",
+                true,
+            ),
+            (
+                "(x*slot_contraction_p(mink(4,a))+y*slot_contraction_q(mink(4,a)))*(z*U(mink(4,a))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e))+V(mink(4,a))*epsilon(mink(4,b),mink(4,c),mink(4,d),mink(4,e)))",
+                true,
+            ),
+            (
+                "(g(coad(8,a),coad(8,x))+g(coad(8,a),coad(8,y)))*(T(coad(8,a))+f(coad(8,a),coad(8,b),coad(8,c)))",
+                false,
+            ),
+        ] {
+            let expression = parse(input);
+            assert_eq!(
+                SlotContraction::new().run(expression.as_view(), false, rank_one),
+                expression,
+                "{input}"
+            );
+        }
     }
 
     #[test]

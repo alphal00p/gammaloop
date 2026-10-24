@@ -26,7 +26,7 @@ use symbolica_utils::PatternReplacement;
 
 use crate::{
     W_, color_f, color_t,
-    representations::{ColorAdjoint, ColorFundamental, ColorSextet},
+    representations::{COLOR_REPRESENTATIONS, ColorAdjoint, ColorFundamental, ColorSextet},
     shorthands::chain::Chain,
     tensor::{SymbolicTensor, inference::TensorInferenceError},
 };
@@ -202,11 +202,7 @@ impl SymbolicTensor<PartialStructure> {
                 // colour connections are prerequisites of this identity;
                 // the shared contractor preserves the other representations.
                 let contraction = crate::tensor::ContractSettings {
-                    representations: Some(&[
-                        ColorFundamental {}.into(),
-                        ColorAdjoint {}.into(),
-                        ColorSextet {}.into(),
-                    ]),
+                    representations: Some(&*COLOR_REPRESENTATIONS),
                     collect_chains: false,
                     collect_traces: false,
                     ..Default::default()
@@ -4205,12 +4201,7 @@ fn color_node_search(expr: AtomView<'_>, skip_invariants: bool) -> bool {
                 return false;
             }
             selected = [CS.f, CS.d, CS.t, CS.gram, CS.cas, CS.idx].contains(&symbol)
-                || TensorCollectFilter::Reps([
-                    ColorAdjoint {}.into(),
-                    ColorFundamental {}.into(),
-                    ColorSextet {}.into(),
-                ])
-                .matches(node);
+                || TensorCollectFilter::Reps(*COLOR_REPRESENTATIONS).matches(node);
         }
         !selected
     });

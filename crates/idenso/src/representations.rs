@@ -2,13 +2,23 @@ use spenso::{
     network::{library::symbolic::ETS, tags::SPENSO_TAG},
     structure::{
         abstract_index::AIND_SYMBOLS,
-        representation::{Euclidean, Lorentz, Minkowski, RepName},
+        representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName},
     },
 };
 use spenso_macros::SimpleRepresentation;
 use symbolica::atom::Atom;
 
 use super::{color::CS, dirac::AGS, rep_symbols::RS};
+
+/// Representations whose identities are owned by the colour algebra.
+pub(crate) static COLOR_REPRESENTATIONS: std::sync::LazyLock<[LibraryRep; 3]> =
+    std::sync::LazyLock::new(|| {
+        [
+            ColorFundamental {}.into(),
+            ColorAdjoint {}.into(),
+            ColorSextet {}.into(),
+        ]
+    });
 
 #[rustfmt::skip]
 #[derive(SimpleRepresentation)]
