@@ -1,4 +1,5 @@
 use linnet_render_py::{PyDiagramView, PyRenderSettings};
+use pyo3::exceptions::PyImportError;
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 pub(crate) mod execution;
@@ -1727,6 +1728,8 @@ impl SpensoNet {
     }
 
     /// Render static mathematical tensor notation to SVG.
+    /// Requires the optional `typst` Python package. For the network diagram
+    /// without that compiler, use `network.render().to_svg()` instead.
     ///
     /// Parameters
     /// ----------
@@ -1773,7 +1776,12 @@ impl SpensoNet {
         notation_source: Option<String>,
     ) -> PyResult<String> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref())
+        display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref()).map_err(|cause| {
+            if !cause.is_instance_of::<PyImportError>(py) { return cause; }
+            let error = PyImportError::new_err("Tensor notation SVG requires the optional Python package 'typst'; install it with `python -m pip install typst`. For the network diagram SVG, use network.render().to_svg().");
+            error.set_cause(py, Some(cause));
+            error
+        })
     }
 
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
