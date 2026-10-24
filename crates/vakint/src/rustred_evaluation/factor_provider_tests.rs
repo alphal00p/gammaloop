@@ -162,6 +162,7 @@ fn three_loop_provider_refuses_missing_mass_map_and_recovers_after_limit_error()
                     max_rule_applications: 0,
                     ..Default::default()
                 }
+                .with_diagnostics()
             )
             .is_err()
     );
@@ -283,6 +284,7 @@ fn four_loop_provider_matches_h_positive_corner_and_dotted_reductions() {
                     max_rule_applications: 0,
                     ..Default::default()
                 }
+                .with_diagnostics()
             )
             .is_err()
     );

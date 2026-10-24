@@ -175,7 +175,7 @@ mod tests {
         #[cfg(target_pointer_width = "64")]
         assert_eq!(
             options.resolve(4, Default::default()).unwrap().ram_bytes,
-            16_000_000_000
+            u64::MAX
         );
         // Enumeration/admission shape only: no reduction or new rules.
     }
