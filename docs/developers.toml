@@ -1330,6 +1330,21 @@ products = ["spenso", "idenso", "gammaloop"]
 topics = ["schoonschip", "tensor-network", "parsing", "rewrites", "python"]
 review_triggers = ["crates/idenso/src/**", "crates/spenso/src/network/**", "crates/spynso3/src/**"]
 
+[[section.note]]
+id = "generation-integration-plan"
+title = "Combined generation integration plan"
+summary = "Draft plan, not yet accepted, for rebuilding the combined Feynman-generation line on current FeynKit, diagnosing the sample-dependent vacuum group ratio, completing names, route() and the Classes gate, and closing the full-mode time and memory regressions with gammabench evidence."
+source = "docs/architecture/generation-integration-plan.typ"
+kind = "Design proposal"
+status = "Draft proposal"
+lifecycle = "proposal"
+owner = "unassigned"
+reviewed_at = "2026-10-24"
+review_ref = "f02faa90d55c"
+products = ["feynkit", "gammaloop", "linnet"]
+topics = ["generation", "performance", "testing", "integration"]
+review_triggers = ["crates/feynkit-generator/src/**", "crates/linnet/src/**", "crates/gammalooprs/src/feyngen/**"]
+
 [[section]]
 id = "investigations"
 title = "Engineering investigations"
