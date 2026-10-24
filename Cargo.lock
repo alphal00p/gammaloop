@@ -1948,6 +1948,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gammaloop-statistics"
+version = "0.1.0"
+dependencies = [
+ "numerica",
+ "schemars",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "gammaloop-tracing-filter"
 version = "0.1.0"
 dependencies = [
@@ -2043,6 +2054,7 @@ dependencies = [
  "dyn-clone",
  "enum_dispatch",
  "eyre",
+ "gammaloop-statistics",
  "gammaloop-tracing-filter",
  "gammaloop-workspace-hack",
  "idenso",
