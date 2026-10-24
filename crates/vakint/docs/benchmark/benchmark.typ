@@ -378,6 +378,56 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
     representation reload belongs to reduction. Missing events are “—”, never zero.
     Full records remain in JSON.
   ]
+  let reuse = five.at("warm_reuse", default: none)
+  if reuse != none and reuse.functional_records.len() > 0 {
+    pagebreak()
+    text(20pt, weight: "bold", fill: navy)[Genuinely connected five-loop control]
+    v(0.4em)
+    [*Supplement: same-engine warm reuse.* This scalar ladder-pinch control is
+    separate from the physical quadratic/q0 workloads and from held-out
+    persistent-cache comparisons. Each fresh process makes one first public API
+    call and then repeats it on the same engine, settings and input.]
+    v(0.4em)
+    if reuse.status == "measured-paired-reuse" {
+      let proof = reuse.functional_records.filter(record => record.performance_eligible).first()
+      [Three fresh process pairs; full values, ordered guards and family identities
+      agree. Median seconds and observed ranges below cover whole public API calls.]
+      v(0.3em)
+      table(columns: (1fr, 1fr), inset: 12pt, stroke: 0.4pt + luma(215),
+        table.header(
+          table.cell(fill: navy, text(fill: white)[First public call]),
+          table.cell(fill: navy, text(fill: white)[Repeated call · same engine]),
+        ),
+        table.cell(fill: pale, align(center, summary-time(reuse.first_call))),
+        table.cell(fill: if reuse.warm_over_first != none and reuse.warm_over_first > 0 { ratio-fill(reuse.warm_over_first) } else { pale },
+          align(center, summary-time(reuse.warm_call))),
+      )
+      if reuse.warm_over_first != none {
+        parbreak()
+        [Warm median ÷ first-call median: *×#multiplier(reuse.warm_over_first)*.]
+      }
+      v(0.4em)
+      text(8pt)[Source #raw(proof.performance_evidence.stamps.VAKINT_CACHE_BUILD_GIT_REVISION.slice(0, 12));
+      executable #raw(proof.performance_evidence.binary_sha256.slice(0, 12));
+      data #raw(proof.input.data_manifests.at("manifest.json").sha256.slice(0, 12)).
+      CPU #proof.performance_evidence.cpu_affinity; one fixed worker.]
+    } else {
+      [#reuse.functional_records.len() completed functional pair(s).
+      Three qualified fresh pairs in one accepted window are required for timing aggregates.]
+    }
+    v(0.4em)
+    block(fill: pale, inset: 10pt, radius: 4pt)[
+      *Scope.* Default prepared 1L–4L caches are attached; no persistent 5L cache
+      is attached before or after either call. On-demand owner preparation is
+      included inside the API timer. Loading, input preparation, serialization,
+      cache snapshots and parity checks are excluded. Reuse may involve several
+      kinds of in-memory state; this is not a selected persistent-cache speedup.
+      Pure IBP, owner-only and terminal-only durations remain unmeasured.
+      These values never enter the cold-process or physical-workload medians.
+      Family identity parity establishes neither catalogue closure nor numerical
+      master availability.
+    ]
+  }
   for (kind, label) in (("held_out", "Protected held-out inputs"), ("tuning", "Training-selection inputs (separate)")) {
     let suite = five.at(kind)
     if suite != none {

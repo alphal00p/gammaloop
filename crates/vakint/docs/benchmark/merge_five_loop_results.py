@@ -1,4 +1,4 @@
-"""Append existing, completed 5L cache/suite evidence to a NEW workspace report.
+"""Append completed 5L cache, suite and paired-control evidence to a NEW report.
 
 This is a report adapter, not an authenticator or a reduction runner. The native
 drivers own proof validation. Functional records never establish performance.
@@ -1453,6 +1453,302 @@ def primary_records(provenance):
     return output
 
 
+WARM_REUSE_CASE = "connected-five-loop-warm-reuse-control"
+
+
+def warm_reuse_records(provenance):
+    """One fresh process contains the first call and its same-engine repeat."""
+    result = {
+        "status": "pending",
+        "functional_records": [],
+        "first_call": None,
+        "warm_call": None,
+        "warm_over_first": None,
+        "catalogue_closure": None,
+        "pure_ibp_seconds": None,
+        "owner_preparation_seconds": None,
+        "terminal_substitution_seconds": None,
+    }
+    samples, contexts, invocations = {}, set(), set()
+    for bundle in provenance.records.values():
+        if bundle["case_id"] != WARM_REUSE_CASE:
+            continue
+        report, launcher = bundle["record"], bundle["launcher"]
+        directory = Path(bundle["references"]["record"]["path"]).parent
+        launch_base = Path(bundle["references"]["launcher"]["path"]).parent
+
+        def payload(reference, name=None, base=directory):
+            if name is not None:
+                require(reference["file"] == name, "unexpected timed-pair payload")
+                reference = {**reference, "path": name}
+            path = hashed_file(reference, base)
+            require(
+                type(reference["bytes"]) is int
+                and reference["bytes"] == path.stat().st_size,
+                "timed-pair payload length differs",
+            )
+            return path
+
+        require(
+            report.get("schema") == "vakint.five-loop-connected-timed-pair.v1"
+            and all(
+                report.get(key) is True
+                for key in (
+                    "completed",
+                    "exact_value_parity",
+                    "ordered_full_guard_parity",
+                    "family_identity_parity",
+                )
+            )
+            and report.get("additional_demo_checks_run") is False,
+            "timed pair is incomplete or lacks exact parity",
+        )
+        input_path, inputs = hashed_record(launcher.get("input_manifest"), launch_base)
+        require(input_path == directory / "input.json", "timed pair pins another input")
+        require(
+            inputs["schema"] == report["schema"]
+            and inputs["powers_native_order"] == [1, 2, 1, 1, 1, 1, 1, 1, 1]
+            and inputs["mass_squared"] == inputs["numerator"] == "1",
+            "connected-control input convention differs",
+        )
+        dot = payload(inputs["dot"], "input.dot")
+        payload(inputs["input"], "input.symbolica")
+        require(
+            payload(inputs["dot_source"]).read_bytes() == dot.read_bytes(),
+            "DOT source differs",
+        )
+        fixture_path, fixture = hashed_record(
+            launcher.get("scientific_fixture"), launch_base
+        )
+        _, old = hashed_record(
+            {
+                "path": fixture["source_report"],
+                "sha256": fixture["source_report_sha256"],
+            },
+            fixture_path.parent,
+        )
+        require(
+            fixture["dot_sha256"] == digest(dot)
+            and fixture["dot_bytes"] == dot.stat().st_size
+            and old[fixture["dot_field"]].encode() == dot.read_bytes()
+            and fixture["historical_pinched_loop_blocks"]
+            == old["pinched_loop_blocks"]
+            == [5]
+            and fixture["powers_native_order"]
+            == old["pinched_powers"]
+            == inputs["powers_native_order"]
+            and old["exact_equality"] is True,
+            "input is not the accepted genuinely connected five-loop control",
+        )
+        manifests = inputs["data_manifests"]
+        require(
+            set(manifests)
+            == {"manifest.json", *(f"{n}L/manifest.json" for n in range(1, 6))},
+            "timed pair lacks the complete loaded data identity",
+        )
+        for reference in manifests.values():
+            payload(reference)
+        payload(inputs["application"])
+        require(
+            manifests["manifest.json"]["sha256"] == old["data_manifest_sha256"],
+            "connected-control data differs from its accepted fixture",
+        )
+        snapshot_path, snapshot = hashed_record(
+            launcher.get("source_snapshot"), launch_base
+        )
+        stamps = bundle["artifact"]["stamps"]
+        bindings = {
+            "build_rustc": "VAKINT_CACHE_BUILD_RUSTC",
+            "build_profile": "VAKINT_CACHE_BUILD_PROFILE",
+            **{
+                "build_" + field: stamp
+                for field, stamp in (
+                    ("git_revision", "VAKINT_CACHE_BUILD_GIT_REVISION"),
+                    ("rustred_revision", "VAKINT_CACHE_BUILD_RUSTRED_REVISION"),
+                    ("symbolica_revision", "VAKINT_CACHE_BUILD_SYMBOLICA_REVISION"),
+                    (
+                        "main_source_snapshot_sha256",
+                        "VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256",
+                    ),
+                    (
+                        "native_source_snapshot_sha256",
+                        "VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256",
+                    ),
+                )
+            },
+        }
+        require(
+            all(
+                inputs.get(field) is not None and inputs[field] == stamps.get(stamp)
+                for field, stamp in bindings.items()
+            )
+            and snapshot["head"] == inputs["build_git_revision"]
+            and digest(snapshot_path) == inputs["build_main_source_snapshot_sha256"],
+            "timed pair belongs to another compiled source/cohort",
+        )
+        for field, name in (
+            (
+                "compiled_example_sha256",
+                "crates/vakint/examples/five_loop_saved_application.rs",
+            ),
+            (
+                "compiled_dot_adapter_sha256",
+                "crates/vakint/examples/saved_application/dot.rs",
+            ),
+            ("model_sha256", "crates/vakint/tests/fixtures/phi_3_4.json"),
+            ("compiled_cargo_lock_sha256", "Cargo.lock"),
+        ):
+            require(
+                inputs[field] == snapshot["source_sha256"][name],
+                "compiled pair ingredient differs",
+            )
+        binary = inputs["executable"]["sha256"]
+        payload(inputs["executable"])
+        require(
+            binary == launcher["binary_sha256"]
+            and binary
+            in {entry["sha256"] for entry in artifact_binaries(bundle["artifact"])},
+            "timed-pair executable differs",
+        )
+        phases, outputs = {}, {}
+        snapshots = [inputs["cache_statistics_before_cold"]]
+        for phase in ("cold", "warm"):
+            path = payload(report[phase + "_record"], phase + ".json")
+            record = read(path)
+            require(
+                record["phase"] == phase and record["completed"] is True,
+                "incomplete timed call",
+            )
+            number(record["whole_public_application_seconds"])
+            value = payload(record["value"], phase + ".symbolica")
+            guards = payload(
+                record["ordered_nonzero_conditions"], phase + "-guards.json"
+            )
+            families = payload(record["families"], phase + "-families.json")
+            ordered, family_rows = read(guards), read(families)
+            require(
+                value.stat().st_size > 0
+                and isinstance(ordered, list)
+                and all(isinstance(item, str) for item in ordered)
+                and type(record["nonzero_condition_count"]) is int
+                and len(ordered) == record["nonzero_condition_count"]
+                and isinstance(family_rows, list)
+                and all(
+                    isinstance(row, list) and len(row) == 2 and isinstance(row[0], str)
+                    for row in family_rows
+                )
+                and type(record["family_count"]) is int
+                and len(family_rows) == record["family_count"],
+                "invalid complete guard/family payload",
+            )
+            outputs[phase] = [digest(path) for path in (value, guards, families)]
+            snapshots.append(record["cache_statistics_after"])
+            phases[phase] = record
+        require(
+            outputs["cold"] == outputs["warm"],
+            "timed-pair full output/ordered guard/family parity failed",
+        )
+        for snapshot in snapshots:
+            attached = snapshot["persistent"]
+            require(
+                set(attached) == {str(n) for n in range(1, 6)}
+                and all(attached[str(n)]["attached"] is (n < 5) for n in range(1, 6)),
+                "connected-control lower-loop/5L cache attachments differ",
+            )
+        record = {
+            "evidence": bundle["references"],
+            "input_manifest": evidence(input_path),
+            "scientific_fixture": evidence(fixture_path),
+            "raw_report": report,
+            "input": inputs,
+            "calls": phases,
+            "performance_eligible": False,
+        }
+        result["functional_records"].append(record)
+        provenance.used.add(bundle["references"]["record"]["path"])
+        if bundle["window"] is None:
+            continue
+        sample = launcher["sample"]
+        require(
+            type(sample) is int and sample in range(3) and sample not in samples,
+            "three distinct pair indices required",
+        )
+        qualification = provenance.qualify(
+            bundle, binary, WARM_REUSE_CASE, "cold-warm-pair", sample
+        )
+        window = read(qualification["window"]["path"])
+        row = next(
+            row
+            for row in window["samples"]
+            if row["report_sha256"] == bundle["references"]["record"]["sha256"]
+        )
+        for key in ("child_pid", "supervisor_pid", "child_start_ticks"):
+            require(
+                type(launcher.get(key)) is int and launcher[key] > 0,
+                "missing actual pair process identity",
+            )
+        for key in ("started_unix_seconds", "finished_unix_seconds"):
+            number(launcher.get(key))
+        require(
+            launcher.get("interval_scope")
+            == "supervisor pre-spawn setup through supervisor-observed worker completion"
+            and all(
+                row.get(key) == launcher.get(key)
+                for key in (
+                    "child_pid",
+                    "supervisor_pid",
+                    "child_start_ticks",
+                    "started_unix_seconds",
+                    "finished_unix_seconds",
+                    "interval_scope",
+                )
+            ),
+            "pair launcher/window process observations differ",
+        )
+        invocation = (launcher["child_pid"], launcher["child_start_ticks"])
+        require(invocation not in invocations, "warm pair reuses a process invocation")
+        invocations.add(invocation)
+        contexts.add(
+            json.dumps(
+                {
+                    "artifact": bundle["references"]["artifact"]["sha256"],
+                    "window": qualification["window"]["sha256"],
+                    "fixture": digest(fixture_path),
+                    "snapshot": digest(snapshot_path),
+                    "input": inputs["input"]["sha256"],
+                    "dot": inputs["dot"]["sha256"],
+                    "data": {k: v["sha256"] for k, v in manifests.items()},
+                    "application": inputs["application"]["sha256"],
+                    "settings": inputs["settings_debug"],
+                    "output": outputs["cold"],
+                },
+                sort_keys=True,
+            )
+        )
+        record["performance_eligible"] = True
+        record["performance_evidence"] = qualification
+        samples[sample] = phases
+    if result["functional_records"]:
+        result["status"] = "functional-only"
+    if samples:
+        require(
+            set(samples) == {0, 1, 2} and len(contexts) == 1,
+            "three identical-context fresh pairs in one window required",
+        )
+        result["first_call"] = summarize(
+            samples[n]["cold"]["whole_public_application_seconds"] for n in range(3)
+        )
+        result["warm_call"] = summarize(
+            samples[n]["warm"]["whole_public_application_seconds"] for n in range(3)
+        )
+        first = result["first_call"]["median_seconds"]
+        result["warm_over_first"] = (
+            result["warm_call"]["median_seconds"] / first if first else None
+        )
+        result["status"] = "measured-paired-reuse"
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)
@@ -1497,6 +1793,7 @@ def main():
         if args.tuning
         else None,
         "primary": primary_records(provenance),
+        "warm_reuse": warm_reuse_records(provenance),
         "evidence_index": evidence(args.evidence),
         "scope": "Functional evidence is retained separately from eligible matched performance samples.",
     }

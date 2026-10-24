@@ -1621,6 +1621,493 @@ class ReportContractTests(unittest.TestCase):
             merge.main()
         self.assertFalse((self.root / "duplicate.json").exists())
 
+    def warm_pairs(self, count=3):
+        """Synthetic files only; the two calls are nested in one process record."""
+
+        def external(path):
+            return {**merge.evidence(path), "bytes": path.stat().st_size}
+
+        def sidecar(path):
+            return {
+                "file": path.name,
+                "bytes": path.stat().st_size,
+                "sha256": merge.digest(path),
+            }
+
+        self.warm_external = external
+        self.warm_sidecar = sidecar
+        dot = "SYNTHETIC CONNECTED FIVE-LOOP GRAPH"
+        powers = [1, 2, 1, 1, 1, 1, 1, 1, 1]
+        manifests = {
+            name: external(self.write("data/" + name, {"test_fixture": name}))
+            for name in ("manifest.json", *(f"{i}L/manifest.json" for i in range(1, 6)))
+        }
+        application = external(
+            self.write("application.json", {"test_fixture": "native application"})
+        )
+        old = self.write(
+            "science.json",
+            {
+                "test_fixture": True,
+                "pinched_dot": dot,
+                "pinched_powers": powers,
+                "pinched_loop_blocks": [5],
+                "exact_equality": True,
+                "data_manifest_sha256": manifests["manifest.json"]["sha256"],
+            },
+        )
+        fixture = self.write(
+            "fixture.json",
+            {
+                "test_fixture": True,
+                "source_report": str(old),
+                "source_report_sha256": merge.digest(old),
+                "dot_field": "pinched_dot",
+                "dot_sha256": merge.hashlib.sha256(dot.encode()).hexdigest(),
+                "dot_bytes": len(dot),
+                "powers_native_order": powers,
+                "historical_pinched_loop_blocks": [5],
+            },
+        )
+        sources = {
+            "crates/vakint/examples/five_loop_saved_application.rs": "a" * 64,
+            "crates/vakint/examples/saved_application/dot.rs": "b" * 64,
+            "crates/vakint/tests/fixtures/phi_3_4.json": "c" * 64,
+            "Cargo.lock": "d" * 64,
+        }
+        snapshot = self.write(
+            "source.json",
+            {
+                "head": self.stamps["VAKINT_CACHE_BUILD_GIT_REVISION"],
+                "source_sha256": sources,
+            },
+        )
+        self.stamps["VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256"] = merge.digest(
+            snapshot
+        )
+        self.stamps["VAKINT_CACHE_BUILD_RUSTC"] = "rustc TEST"
+        artifact = merge.read(self.artifact)
+        artifact["stamps"] = self.stamps
+        self.artifact.write_text(json.dumps(artifact))
+        cache = {"persistent": {str(i): {"attached": i < 5} for i in range(1, 6)}}
+        for n in range(count):
+            directory = self.root / f"pair-{n}"
+            directory.mkdir()
+            dot_path = directory / "input.dot"
+            dot_path.write_text(dot)
+            input_path = directory / "input.symbolica"
+            input_path.write_text("SYNTHETIC SAME INPUT")
+            inputs = {
+                "schema": "vakint.five-loop-connected-timed-pair.v1",
+                "test_fixture": True,
+                "powers_native_order": powers,
+                "mass_squared": "1",
+                "numerator": "1",
+                "dot": sidecar(dot_path),
+                "dot_source": external(dot_path),
+                "input": sidecar(input_path),
+                "data_manifests": manifests,
+                "application": application,
+                "build_rustc": self.stamps["VAKINT_CACHE_BUILD_RUSTC"],
+                "build_profile": "release",
+                "build_git_revision": self.stamps["VAKINT_CACHE_BUILD_GIT_REVISION"],
+                "build_rustred_revision": self.stamps[
+                    "VAKINT_CACHE_BUILD_RUSTRED_REVISION"
+                ],
+                "build_symbolica_revision": self.stamps[
+                    "VAKINT_CACHE_BUILD_SYMBOLICA_REVISION"
+                ],
+                "build_main_source_snapshot_sha256": merge.digest(snapshot),
+                "build_native_source_snapshot_sha256": self.stamps[
+                    "VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256"
+                ],
+                "compiled_example_sha256": sources[
+                    "crates/vakint/examples/five_loop_saved_application.rs"
+                ],
+                "compiled_dot_adapter_sha256": sources[
+                    "crates/vakint/examples/saved_application/dot.rs"
+                ],
+                "model_sha256": sources["crates/vakint/tests/fixtures/phi_3_4.json"],
+                "compiled_cargo_lock_sha256": sources["Cargo.lock"],
+                "executable": external(self.binary),
+                "cache_statistics_before_cold": cache,
+                "settings_debug": "TEST SAME SETTINGS",
+            }
+            input_manifest = self.write(f"pair-{n}/input.json", inputs)
+            phases = {}
+            for phase, duration in (("cold", 10 + n), ("warm", 2 + n)):
+                value = directory / (phase + ".symbolica")
+                value.write_text("SYNTHETIC SAME RESULT")
+                guards = self.write(f"pair-{n}/{phase}-guards.json", ["G1", "G2"])
+                families = self.write(
+                    f"pair-{n}/{phase}-families.json", [["F1", {"TEST": "family"}]]
+                )
+                path = self.write(
+                    f"pair-{n}/{phase}.json",
+                    {
+                        "phase": phase,
+                        "completed": True,
+                        "whole_public_application_seconds": duration,
+                        "value": sidecar(value),
+                        "ordered_nonzero_conditions": sidecar(guards),
+                        "families": sidecar(families),
+                        "nonzero_condition_count": 2,
+                        "family_count": 1,
+                        "cache_statistics_after": cache,
+                    },
+                )
+                phases[phase + "_record"] = sidecar(path)
+            pair = self.write(
+                f"pair-{n}/pair.json",
+                {
+                    "schema": "vakint.five-loop-connected-timed-pair.v1",
+                    "test_fixture": True,
+                    "completed": True,
+                    "exact_value_parity": True,
+                    "ordered_full_guard_parity": True,
+                    "family_identity_parity": True,
+                    "additional_demo_checks_run": False,
+                    **phases,
+                },
+            )
+            observed = {
+                "child_pid": 1000 + n,
+                "supervisor_pid": 900,
+                "child_start_ticks": 100 + n,
+                "started_unix_seconds": 100 + 100 * n,
+                "finished_unix_seconds": 150 + 100 * n,
+                "interval_scope": "supervisor pre-spawn setup through supervisor-observed worker completion",
+            }
+            launcher = self.write(
+                f"pair-{n}/launcher.json",
+                {
+                    "test_fixture": True,
+                    "final_performance_eligible": True,
+                    "fresh_process": True,
+                    "binary_sha256": merge.digest(self.binary),
+                    "case_id": merge.WARM_REUSE_CASE,
+                    "variant": "cold-warm-pair",
+                    "sample": n,
+                    "cpu_affinity": "TEST_CPU",
+                    "thread_environment": self.threads,
+                    **observed,
+                    "input_manifest": merge.evidence(input_manifest),
+                    "scientific_fixture": merge.evidence(fixture),
+                    "source_snapshot": merge.evidence(snapshot),
+                },
+            )
+            self.records.append(
+                {
+                    "record": merge.evidence(pair),
+                    "launcher": merge.evidence(launcher),
+                    "artifact": merge.evidence(self.artifact),
+                    "case_id": merge.WARM_REUSE_CASE,
+                }
+            )
+            self.window_rows.append(
+                {
+                    "report_sha256": merge.digest(pair),
+                    "launcher_sha256": merge.digest(launcher),
+                    "artifact_sha256": merge.digest(self.artifact),
+                    "case_id": merge.WARM_REUSE_CASE,
+                    "variant": "cold-warm-pair",
+                    "sample": n,
+                    "exit_code": 0,
+                    "fresh_process": True,
+                    **observed,
+                }
+            )
+
+    def warm_evaluate(self, **kwargs):
+        return merge.warm_reuse_records(merge.ReportEvidence(self.index(**kwargs)))
+
+    def warm_refresh(self, n=0):
+        directory = self.root / f"pair-{n}"
+        pair = merge.read(directory / "pair.json")
+        for phase in ("cold", "warm"):
+            pair[phase + "_record"] = self.warm_sidecar(directory / (phase + ".json"))
+        (directory / "pair.json").write_text(json.dumps(pair))
+        launcher = merge.read(directory / "launcher.json")
+        launcher["input_manifest"] = merge.evidence(directory / "input.json")
+        (directory / "launcher.json").write_text(json.dumps(launcher))
+        self.records[n]["record"] = merge.evidence(directory / "pair.json")
+        self.records[n]["launcher"] = merge.evidence(directory / "launcher.json")
+        self.window_rows[n]["report_sha256"] = merge.digest(directory / "pair.json")
+        self.window_rows[n]["launcher_sha256"] = merge.digest(
+            directory / "launcher.json"
+        )
+
+    def test_warm_reuse_three_fresh_pairs_have_separate_nested_medians(self):
+        self.warm_pairs()
+        result = self.warm_evaluate()
+        self.assertEqual(result["status"], "measured-paired-reuse")
+        self.assertEqual(result["first_call"]["samples_seconds"], [10, 11, 12])
+        self.assertEqual(result["warm_call"]["samples_seconds"], [2, 3, 4])
+        self.assertEqual(result["warm_over_first"], 3 / 11)
+        self.assertIsNone(result["catalogue_closure"])
+        self.assertIsNone(result["pure_ibp_seconds"])
+        self.assertIsNone(result["owner_preparation_seconds"])
+        self.assertEqual(len(result["functional_records"]), 3)
+        self.assertTrue(
+            all(x["performance_eligible"] for x in result["functional_records"])
+        )
+
+    def test_warm_reuse_without_accepted_window_stays_functional(self):
+        self.warm_pairs()
+        result = self.warm_evaluate(qualified=False)
+        self.assertEqual(result["status"], "functional-only")
+        self.assertIsNone(result["first_call"])
+        self.assertIsNone(result["warm_call"])
+        with self.assertRaises(ValueError):
+            self.warm_evaluate(window_edit=lambda w: w.update(accepted=False))
+
+    def test_warm_reuse_requires_three_independent_process_pairs(self):
+        self.warm_pairs(2)
+        with self.assertRaises(ValueError):
+            self.warm_evaluate()
+        self.records.clear()
+        self.window_rows.clear()
+        for n in range(2):
+            import shutil
+
+            shutil.rmtree(self.root / f"pair-{n}")
+        self.warm_pairs()
+        launcher = self.root / "pair-1/launcher.json"
+        value = merge.read(launcher)
+        value.update(child_pid=1000, child_start_ticks=100)
+        launcher.write_text(json.dumps(value))
+        self.warm_refresh(1)
+        self.window_rows[1].update(child_pid=1000, child_start_ticks=100)
+        with self.assertRaisesRegex(ValueError, "reuses a process"):
+            self.warm_evaluate()
+
+    def test_warm_reuse_checks_actual_launcher_window_process_facts(self):
+        self.warm_pairs()
+        for field in (
+            "child_pid",
+            "supervisor_pid",
+            "child_start_ticks",
+            "started_unix_seconds",
+            "finished_unix_seconds",
+            "interval_scope",
+        ):
+            with self.subTest(field=field):
+                old = self.window_rows[0][field]
+                self.window_rows[0][field] = (
+                    old + 1 if isinstance(old, (int, float)) else "WRONG"
+                )
+                with self.assertRaises(ValueError):
+                    self.warm_evaluate()
+                self.window_rows[0][field] = old
+
+    def test_warm_reuse_checks_every_cache_attachment_snapshot(self):
+        self.warm_pairs()
+        directory = self.root / "pair-0"
+        for file, field in (
+            ("input.json", "cache_statistics_before_cold"),
+            ("cold.json", "cache_statistics_after"),
+            ("warm.json", "cache_statistics_after"),
+        ):
+            path = directory / file
+            original = path.read_bytes()
+            for loop in ("1", "5"):
+                with self.subTest(file=file, loop=loop):
+                    value = json.loads(original)
+                    value[field]["persistent"][loop]["attached"] = loop == "5"
+                    path.write_text(json.dumps(value))
+                    self.warm_refresh()
+                    with self.assertRaisesRegex(ValueError, "attachments differ"):
+                        self.warm_evaluate()
+            path.write_bytes(original)
+            self.warm_refresh()
+
+    def test_warm_reuse_rehashes_input_and_complete_phase_files(self):
+        self.warm_pairs()
+        directory = self.root / "pair-0"
+        for name in (
+            "input.json",
+            "input.dot",
+            "input.symbolica",
+            "cold.json",
+            "warm.json",
+            "cold.symbolica",
+            "warm.symbolica",
+            "cold-guards.json",
+            "warm-guards.json",
+            "cold-families.json",
+            "warm-families.json",
+        ):
+            path = directory / name
+            original = path.read_bytes()
+            with self.subTest(file=name):
+                path.write_bytes(b"CORRUPTED")
+                with self.assertRaises((ValueError, KeyError)):
+                    self.warm_evaluate()
+                path.write_bytes(original)
+
+    def test_warm_reuse_does_not_trust_rehashed_ordered_parity_flags(self):
+        self.warm_pairs()
+        directory = self.root / "pair-0"
+        for field, file, value in (
+            ("ordered_nonzero_conditions", "warm-guards.json", ["G2", "G1"]),
+            ("families", "warm-families.json", [["DIFFERENT", {}]]),
+        ):
+            path = directory / file
+            old = path.read_bytes()
+            phase = directory / "warm.json"
+            old_phase = phase.read_bytes()
+            with self.subTest(field=field):
+                path.write_text(json.dumps(value))
+                record = json.loads(old_phase)
+                record[field] = self.warm_sidecar(path)
+                phase.write_text(json.dumps(record))
+                self.warm_refresh()
+                with self.assertRaisesRegex(ValueError, "parity failed"):
+                    self.warm_evaluate()
+            path.write_bytes(old)
+            phase.write_bytes(old_phase)
+            self.warm_refresh()
+
+    def test_warm_reuse_rejects_incomplete_calls_or_extra_demo_work(self):
+        self.warm_pairs()
+        directory = self.root / "pair-0"
+        for file, field, value in (
+            ("pair.json", "completed", False),
+            ("pair.json", "additional_demo_checks_run", True),
+            ("cold.json", "completed", False),
+            ("warm.json", "whole_public_application_seconds", -1),
+        ):
+            path = directory / file
+            old = path.read_bytes()
+            with self.subTest(file=file, field=field):
+                document = json.loads(old)
+                document[field] = value
+                path.write_text(json.dumps(document))
+                self.warm_refresh()
+                with self.assertRaises(ValueError):
+                    self.warm_evaluate()
+            path.write_bytes(old)
+            self.warm_refresh()
+
+    def test_warm_reuse_rejects_changed_science_source_data_and_settings(self):
+        self.warm_pairs()
+        path = self.root / "pair-0/input.json"
+        old = path.read_bytes()
+        for field, value in (
+            ("powers_native_order", [1] * 9),
+            ("mass_squared", "2"),
+            ("compiled_example_sha256", "e" * 64),
+            ("build_git_revision", "a" * 40),
+            ("settings_debug", "DIFFERENT SETTINGS"),
+        ):
+            with self.subTest(field=field):
+                document = json.loads(old)
+                document[field] = value
+                path.write_text(json.dumps(document))
+                self.warm_refresh()
+                with self.assertRaises(ValueError):
+                    self.warm_evaluate()
+        path.write_bytes(old)
+        self.warm_refresh()
+        data = self.root / "data/manifest.json"
+        data.write_text("CHANGED")
+        with self.assertRaises(ValueError):
+            self.warm_evaluate()
+
+    def test_warm_reuse_append_preserves_every_old_cold_result(self):
+        self.warm_pairs()
+        base_value = {
+            "test_fixture": True,
+            "summary": [{"cold_seconds": 123}],
+            "reduction_runs": {"old": {"value": 42}},
+        }
+        base = self.write("base.json", base_value)
+        output = self.root / "new-warm.json"
+        args = [
+            "adapter",
+            "--base",
+            str(base),
+            "--evidence",
+            str(self.index()),
+            "--output",
+            str(output),
+            "--select-current",
+        ]
+        with patch("sys.argv", args):
+            merge.main()
+        merged = merge.read(output)
+        for key, value in base_value.items():
+            self.assertEqual(merged[key], value)
+        current = merged["five_loop_runs"][merged["selected_five_loop_run"]]
+        self.assertEqual(current["warm_reuse"]["status"], "measured-paired-reuse")
+        self.assertTrue(
+            all(x["status"] == "pending" for x in current["primary"].values())
+        )
+        self.assertIsNone(current["held_out"])
+        self.assertIsNone(current["tuning"])
+        self.assertIsNone(current["cache"])
+
+    def test_warm_reuse_requires_same_outputs_across_independent_pairs(self):
+        self.warm_pairs()
+        directory = self.root / "pair-1"
+        for phase in ("cold", "warm"):
+            value = directory / (phase + ".symbolica")
+            value.write_text("COHERENTLY DIFFERENT SECOND PAIR")
+            path = directory / (phase + ".json")
+            record = merge.read(path)
+            record["value"] = self.warm_sidecar(value)
+            path.write_text(json.dumps(record))
+        self.warm_refresh(1)
+        with self.assertRaisesRegex(ValueError, "identical-context"):
+            self.warm_evaluate()
+
+    def test_warm_reuse_checks_connected_science_and_payload_lengths(self):
+        self.warm_pairs()
+        science = self.root / "science.json"
+        original = science.read_bytes()
+        value = json.loads(original)
+        value["pinched_loop_blocks"] = [1, 4]
+        science.write_text(json.dumps(value))
+        fixture = self.root / "fixture.json"
+        authority = merge.read(fixture)
+        authority["source_report_sha256"] = merge.digest(science)
+        fixture.write_text(json.dumps(authority))
+        for n in range(3):
+            launch = self.root / f"pair-{n}/launcher.json"
+            record = merge.read(launch)
+            record["scientific_fixture"] = merge.evidence(fixture)
+            launch.write_text(json.dumps(record))
+            self.warm_refresh(n)
+        with self.assertRaisesRegex(ValueError, "genuinely connected"):
+            self.warm_evaluate()
+        science.write_bytes(original)
+        authority["source_report_sha256"] = merge.digest(science)
+        fixture.write_text(json.dumps(authority))
+        for n in range(3):
+            launch = self.root / f"pair-{n}/launcher.json"
+            record = merge.read(launch)
+            record["scientific_fixture"] = merge.evidence(fixture)
+            launch.write_text(json.dumps(record))
+            self.warm_refresh(n)
+        phase = self.root / "pair-0/cold.json"
+        record = merge.read(phase)
+        record["value"]["bytes"] += 1
+        phase.write_text(json.dumps(record))
+        self.warm_refresh()
+        with self.assertRaisesRegex(ValueError, "length differs"):
+            self.warm_evaluate()
+
+    def test_warm_reuse_uses_existing_release_artifact_gate(self):
+        self.warm_pairs()
+        artifact = merge.read(self.artifact)
+        artifact["actual_codegen"]["fat_lto"] = False
+        self.artifact.write_text(json.dumps(artifact))
+        for record, row in zip(self.records, self.window_rows):
+            record["artifact"] = merge.evidence(self.artifact)
+            row["artifact_sha256"] = merge.digest(self.artifact)
+        with self.assertRaisesRegex(ValueError, "release executable"):
+            self.warm_evaluate()
+
 
 if __name__ == "__main__":
     unittest.main()

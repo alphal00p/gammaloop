@@ -224,6 +224,35 @@ acceptance are separate decisions. The adapter issues none of them. It retains
 and preparation time, and stores the later selection separately. Selecting an
 existing cache creates no new preparation or performance measurement.
 
+== Connected control and warm reuse
+
+The separate #raw("warm_reuse") supplement uses the existing evidence index
+with case ID #raw("connected-five-loop-warm-reuse-control"). Each record is one
+#raw("pair.json") from #raw("five_loop_saved_application --timed-pair-only"),
+not two independently launched samples. The launcher pins hashed
+#raw("input_manifest"), #raw("scientific_fixture") and #raw("source_snapshot")
+references. The scientific fixture binds the accepted connected ladder-pinch
+DOT, its original native-order powers and historical science receipt; it does
+not transfer old timings or catalogue classification to the new run.
+
+Final display requires exactly three fresh invocations with indices 0–2 and
+variant #raw("cold-warm-pair") in one accepted serialized window. Actual
+#raw("child_pid"), #raw("supervisor_pid"), #raw("child_start_ticks"),
+start/end timestamps and observation scope must agree between launcher and
+window. The first and warm durations remain nested within that process; no
+inner timestamp is reconstructed. Rehash input, data/application, source and
+all complete value/ordered-guard/family payloads. The original phase records
+and all exact parity checks remain intact.
+
+Report the first call and same-engine repeat separately. Their whole public API
+timers include deferred owner preparation; loading/input preparation,
+serialization, cache snapshots and parity checks are outside. The observed
+attachment policy is prepared 1L–4L caches present and persistent 5L absent at
+all three snapshots. This is neither a physical-rung cache speedup nor a
+held-out cold median. Pure IBP, owner-only, terminal-only and catalogue closure
+remain null. Unqualified completed pairs stay functional-only. Existing
+primary/suite aggregates and their acceptance requirements are unchanged.
+
 == Timing and rendering
 
 Medians and full observed ranges are recomputed from actual per-case samples.
