@@ -471,7 +471,70 @@ mod tests {
         },
         tensors::parametric::ParamTensor,
     };
-    use symbolica::{function, symbol};
+    use symbolica::{atom::FunctionBuilder, function, symbol};
+
+    #[test]
+    fn indexed_symbol_renaming_preserves_scoped_dual_ports_and_zero() {
+        use std::collections::HashMap;
+        crate::test_support::test_initialize();
+        let source_rep = LibraryRep::new_dual("idenso::indexed_rename_rep")
+            .unwrap()
+            .new_rep(3);
+        let target_rep = LibraryRep::new_dual("idenso::indexed_rename_target_rep")
+            .unwrap()
+            .new_rep(3);
+        let source_head = spenso::tensor_symbol!("indexed_rename_head");
+        let target_head = spenso::tensor_symbol!("indexed_rename_target_head");
+        let (scope, target_scope) = symbol!("indexed_rename_scope", "indexed_rename_target_scope");
+        let source = IndexedTensor::infer_indexed(
+            FunctionBuilder::new(source_head)
+                .add_arg(
+                    source_rep
+                        .dual()
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(1).scoped(scope))
+                        .to_atom(),
+                )
+                .add_arg(
+                    source_rep
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(2).scoped(scope))
+                        .to_atom(),
+                )
+                .finish(),
+        )
+        .unwrap();
+        let expected = IndexedTensor::infer_indexed(
+            FunctionBuilder::new(target_head)
+                .add_arg(
+                    target_rep
+                        .dual()
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(1).scoped(target_scope))
+                        .to_atom(),
+                )
+                .add_arg(
+                    target_rep
+                        .slot::<AbstractIndex, _>(AbstractIndex::Normal(2).scoped(target_scope))
+                        .to_atom(),
+                )
+                .finish(),
+        )
+        .unwrap();
+        let renaming = HashMap::from([
+            (source_head, target_head),
+            (source_rep.rep.symbol(), target_rep.rep.symbol()),
+            (scope, target_scope),
+        ]);
+        let renamed = source.rename_symbols(&renaming).unwrap();
+        assert_eq!(renamed.expression(), expected.expression());
+        assert_eq!(renamed.structure(), expected.structure());
+        assert_eq!(
+            IndexedTensor::infer_indexed(renamed.expression().clone()).unwrap(),
+            expected
+        );
+        let zero = source.try_sub(&source).unwrap();
+        let mapped_zero = zero.rename_symbols(&renaming).unwrap();
+        assert!(mapped_zero.expression().is_zero());
+        assert_eq!(mapped_zero.structure(), expected.structure());
+    }
 
     #[test]
     fn indexed_admission_keeps_layout_and_rejects_all_unresolved_ports() {
