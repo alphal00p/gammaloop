@@ -73,7 +73,11 @@ crate::symbolica_init_lazy_static! {
                     && dind1.get_nargs() == 1
                 {
                     let arg = dind1.iter().next().unwrap();
-                    if let AtomView::Fun(arg) = arg
+                    if arg.is_scalar().is_true() {
+                        // Scalar normalization belongs to Symbolica. Tensor and
+                        // unknown arguments retain the broadcast operation.
+                        **out = arg.conj();
+                    } else if let AtomView::Fun(arg) = arg
                         && arg.get_nargs() == 1
                         && arg.get_symbol() == symbol!("spenso::conj")
                     {
@@ -463,6 +467,44 @@ impl<S: TensorStructure + Clone, C: ToParam + HasStructure<Structure = S>>
 #[test]
 fn conj_construction() {
     // let a=  symbol!("spenso::conj", tag = SPENSO_TAG.tag);
+}
+
+#[test]
+fn broadcast_conjugation_uses_symbolica_for_proven_scalars() {
+    let x = Atom::var(symbol!("spenso::scalar_conjugation::x"; Scalar));
+    let real = Atom::var(symbol!("spenso::scalar_conjugation::r"; Real, Scalar));
+    let scalar_function = symbol!("spenso::scalar_conjugation::f"; Scalar);
+    for value in [
+        Atom::num((1, 3)) + Atom::i() * Atom::num((2, 7)),
+        x.clone(),
+        real.clone(),
+        x.pow(2) * &real,
+        function!(scalar_function, &x),
+        function!(Symbol::SIN, &x) + &real,
+        x.conj(),
+    ] {
+        assert!(value.is_scalar().is_true());
+        let actual = INBUILTS.conj(&value);
+        assert_eq!(actual, value.conj());
+        assert_eq!(INBUILTS.conj(actual), value);
+    }
+}
+
+#[test]
+fn broadcast_conjugation_preserves_unknown_and_closed_tensor_arguments() {
+    let unknown = Atom::var(symbol!("spenso::scalar_conjugation::unknown"));
+    let tensor = SPENSO_TAG.tensor_symbol("spenso::scalar_conjugation::tensor");
+    let vector = function!(tensor, crate::mink!(4, 1));
+    for value in [unknown, vector.clone(), vector.pow(2)] {
+        assert!(!value.is_scalar().is_true());
+        let actual = INBUILTS.conj(&value);
+        let AtomView::Fun(conjugate) = actual.as_view() else {
+            panic!("tensor or unknown arguments must retain broadcast conjugation")
+        };
+        assert_eq!(conjugate.get_symbol(), INBUILTS.conj);
+        assert_eq!(conjugate.iter().next().unwrap(), value.as_view());
+        assert_eq!(INBUILTS.conj(actual), value);
+    }
 }
 
 #[test]
