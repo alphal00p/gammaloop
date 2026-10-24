@@ -21,7 +21,8 @@ def main():
     parser.add_argument(
         "--font",
         type=Path,
-        default=Path(__file__).parents[2] / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
+        default=Path(__file__).parents[2]
+        / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
     )
     args = parser.parse_args()
     result = subprocess.run(
@@ -52,7 +53,6 @@ print(json.dumps([expression.to_html(), spenso.load_math_font(),
     assert len(html.encode()) < 10_000
     assert setup.count("data:font/woff2;base64,") == 1
     assert "SIL OPEN FONT LICENSE" in setup
-    assert "data-spenso-wrap" in long_sum
     assert "<script" not in long_sum
 
     with sync_playwright() as driver:
@@ -103,31 +103,6 @@ print(json.dumps([expression.to_html(), spenso.load_math_font(),
             assert len(requests) == (0 if offline else 1), requests
             print(f"offline={offline}: {len(requests)} requests; {measurements}")
 
-            original_math = page.locator("#sum math").inner_html()
-            rows = []
-            for width in (1200, 280, 1200):
-                layout = page.evaluate(
-                    """width => {
-                        const section = document.querySelector('#sum');
-                        section.style.width = width + 'px';
-                        const box = section.querySelector('[data-spenso-math]');
-                        const terms = [...section.querySelectorAll('[data-spenso-term]')];
-                        return {
-                            rows: new Set(terms.map(x => Math.round(x.getBoundingClientRect().y))).size,
-                            width: box.clientWidth,
-                            scroll: box.scrollWidth,
-                            fractions: section.querySelectorAll('mfrac').length,
-                            signs: terms.slice(1).map(x => x.firstElementChild.textContent),
-                        };
-                    }""",
-                    width,
-                )
-                assert layout["scroll"] <= layout["width"] + 1, layout
-                assert layout["fractions"] == 12, layout
-                assert layout["signs"] == ["+"] * 11, layout
-                rows.append(layout["rows"])
-            assert rows[0] == rows[2] == 1 and rows[1] > 1, rows
-            assert page.locator("#sum math").inner_html() == original_math
             # A scrollbar alone is insufficient: centered overflowing math can
             # put its leading factors outside the reachable scroll area.
             for selector in ("#wide", "#product", "#fraction"):
@@ -149,9 +124,7 @@ print(json.dumps([expression.to_html(), spenso.load_math_font(),
                 assert bounds["scroll"] > bounds["width"], (selector, bounds)
                 assert bounds["left"] >= bounds["start"] - 1, (selector, bounds)
                 assert bounds["right"] <= bounds["end"] + 1, (selector, bounds)
-            print(
-                f"offline={offline}: sum rows at 1200/280/1200px = {rows}; wide term scrolls"
-            )
+            print(f"offline={offline}: wide term, product and fraction scroll")
             context.close()
         browser.close()
 

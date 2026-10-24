@@ -3,7 +3,7 @@ use crate::display;
 use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
 use idenso::tensor::{SymbolicTensor, composition};
 use pyo3::exceptions::PyValueError;
-use pyo3::{Py, PyAny, PyErr, PyResult, Python};
+use pyo3::{Py, PyAny, PyResult, Python};
 use spenso::network::tags;
 use spenso::network::tags::SPENSO_TAG;
 use spenso::network::tags::mathml;
@@ -84,27 +84,8 @@ impl DisplaySettings {
     }
 }
 
-/// Complete export uses the same tensor notation and source-label owner as
-/// paging. Its explicit export cap reports an error rather than dropping terms.
-pub(crate) fn atom_to_html(
-    py: Python<'_>,
-    atom: &Atom,
-    settings: &DisplaySettings,
-) -> PyResult<String> {
-    let aliases = IndexAliases::for_atom(atom, &settings.index_style);
-    html(py, atom, settings, &aliases)
-}
-
-pub(crate) fn structured_to_html(
-    py: Python<'_>,
-    value: &SymbolicTensor<PartialStructure>,
-    settings: &DisplaySettings,
-) -> PyResult<String> {
-    let aliases = IndexAliases::for_descriptor(value, &settings.index_style);
-    html(py, &value.presentation_atom(), settings, &aliases)
-}
-
-fn html(
+// Complete export and scoped paging share the tensor notation owner.
+pub(super) fn html(
     py: Python<'_>,
     atom: &Atom,
     settings: &DisplaySettings,
@@ -142,9 +123,6 @@ fn html(
             })
         },
     );
-    if let Some(error) = PyErr::take(py) {
-        return Err(error);
-    }
     // A callback's missing fragment must not silently fall back to an encoded
     // index. Preserve its typed failure until this Python export boundary.
     let body = label_error
@@ -180,16 +158,13 @@ struct TensorLeaves {
 impl TensorLeaves {
     fn render(
         &mut self,
-        py: Python<'_>,
         value: &SymbolicTensor<PartialStructure>,
         view: AtomView<'_>,
         state: &PrintState,
-    ) -> PyResult<Option<String>> {
-        let Some(symbol) = view.get_symbol() else {
-            return Ok(None);
-        };
+    ) -> Option<String> {
+        let symbol = view.get_symbol()?;
         if !fits(view, &mut { MAX_LEAF_NODES }, 0, MAX_LEAF_BYTES, usize::MAX) {
-            return Ok(None);
+            return None;
         }
         // Arithmetic and ordinary calls belong to Symbolica. Only semantic
         // tensor leaves enter the scoped semantic printer.
@@ -218,7 +193,7 @@ impl TensorLeaves {
                     | "spenso::Nc"
             );
         if !semantic {
-            return Ok(None);
+            return None;
         }
         let root = value.expression().as_view().get_data();
         // Custom printers receive the complete state. Reusing a fragment must
@@ -246,7 +221,7 @@ impl TensorLeaves {
                 .expect("the cache position was found without intervening mutation");
             let result = entry.1.clone();
             self.cache.push_back(entry);
-            return Ok(result);
+            return result;
         }
         // The inherited Python expression may own a byte-for-byte Atom clone.
         // Equality is bounded by fits above and does not scan a large root.
@@ -359,9 +334,6 @@ impl TensorLeaves {
                     Some(source.format_string(&options, PrintState::new()))
                 })
         });
-        if let Some(error) = PyErr::take(py) {
-            return Err(error);
-        }
         // Oversized calls defer to structural rendering so their arguments can
         // still be paged and inspected, rather than becoming an atomic loop.
         let result = result.filter(|html| html.len() <= MAX_LEAF_BYTES);
@@ -370,7 +342,7 @@ impl TensorLeaves {
         if self.cache.len() > 128 {
             self.cache.pop_front();
         }
-        Ok(result)
+        result
     }
 }
 
@@ -404,8 +376,8 @@ pub(crate) fn viewer(
         PrintOptions::new()
             .multiplication_operator('·')
             .num_exp_as_superscript(true),
-        Some(Box::new(move |py, atom, _options, state| {
-            leaves.render(py, &value, atom, state)
+        Some(Box::new(move |_py, atom, _options, state| {
+            Ok(leaves.render(&value, atom, state))
         })),
     )
     .page_size(size)

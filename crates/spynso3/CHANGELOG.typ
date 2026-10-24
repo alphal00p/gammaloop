@@ -7,10 +7,6 @@ and this project adheres to #link("https://semver.org/spec/v2.0.0.html")[Semanti
 
 == Unreleased
 
-- MathML sums wrap automatically between top-level terms as the output width
-  changes. Fractions, bracketed groups, and tensor indices stay together;
-  individual terms wider than the output area remain horizontally scrollable.
-  Wrapping uses CSS and adds no JavaScript or renderer download.
 - MathML output loads the full STIX Two Math font from a pinned CDN URL when
   it is not installed locally. Expressions share the font download and contain
   no embedded font bytes.

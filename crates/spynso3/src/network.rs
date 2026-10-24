@@ -1670,6 +1670,7 @@ impl SpensoNet {
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PyResult<PythonFormattedOutput> {
+        display::reject_html_notation(notation_source.as_deref())?;
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
         let value = Arc::new(self.structure.clone());
         let expression = Py::new(

@@ -10,7 +10,7 @@ use spenso::structure::representation::{LibraryRep, Representation};
 use spenso::structure::slot::{Slot, SlotMatch, SlotMatcher};
 
 use crate::display;
-use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode, paging};
+use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
 use crate::metadata::{SpensoRepresentationName, SpensoTensorStructure};
 use idenso::tensor::composition;
 use pyo3::{PyResult, Python};
@@ -150,7 +150,7 @@ impl IndexAliases {
                 "<math xmlns=\"http://www.w3.org/1998/Math/MathML\">{body}</math>"
             ));
         }
-        paging::atom_to_html(py, &index, settings)
+        display::atom_to_html(py, &index, settings, None)
     }
 }
 

@@ -1046,13 +1046,12 @@ impl Spensor {
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
-        py: Python<'_>,
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, DisplaySettings>>,
         notation_source: Option<String>,
     ) -> PyResult<PythonFormattedOutput> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::format_concrete_tensor_output_rich(py, self, &settings, notation_source.as_deref())
+        display::format_concrete_tensor_output_rich(self, &settings, notation_source.as_deref())
     }
 
     /// Render the tensor as an HTML fragment.

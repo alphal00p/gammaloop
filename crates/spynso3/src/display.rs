@@ -66,7 +66,6 @@ pub const NOTEBOOK_STYLE: &str = concat!(
 mod explorer;
 mod labels;
 pub(crate) mod library;
-mod mathml;
 pub(crate) mod metadata;
 pub(crate) mod network;
 pub(crate) mod paging;
@@ -1679,7 +1678,8 @@ pub fn atom_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     reject_html_notation(notation_source)?;
-    paging::atom_to_html(py, atom, settings)
+    let aliases = IndexAliases::for_atom(atom, &settings.index_style);
+    paging::html(py, atom, settings, &aliases)
 }
 
 pub(crate) fn reject_html_notation(notation_source: Option<&str>) -> PyResult<()> {
@@ -1692,7 +1692,6 @@ pub(crate) fn reject_html_notation(notation_source: Option<&str>) -> PyResult<()
 }
 
 fn notebook_html_fragment(fragment: &str) -> String {
-    let fragment = mathml::wrap_sums(fragment);
     // Share fonts and responsive MathML layout for symbolic and concrete tensors.
     format!("<style>{NOTEBOOK_STYLE}</style><div data-spenso-math>{fragment}</div>")
 }
@@ -1787,7 +1786,8 @@ pub fn structured_to_html(
     notation_source: Option<&str>,
 ) -> PyResult<String> {
     reject_html_notation(notation_source)?;
-    paging::structured_to_html(py, value, settings)
+    let aliases = IndexAliases::for_descriptor(value, &settings.index_style);
+    paging::html(py, &value.presentation_atom(), settings, &aliases)
 }
 
 pub(crate) fn structured_to_svg(
@@ -2629,7 +2629,7 @@ fn concrete_tensor_to_table_html(
             );
             if settings.show_dimensions {
                 let representation = slot.rep().to_symbolic([]);
-                let dimension = paging::atom_to_html(py, &representation, settings)?;
+                let dimension = atom_to_html(py, &representation, settings, None)?;
                 let _ = write!(
                     html,
                     r#"<span data-spenso-port-dimension>{dimension}</span>"#
@@ -2783,22 +2783,32 @@ pub(crate) fn concrete_tensor_to_latex(tensor: &Spensor, show_dimensions: bool) 
 }
 
 pub(crate) fn format_concrete_tensor_output_rich(
-    py: Python<'_>,
     tensor: &Spensor,
     settings: &DisplaySettings,
     notation_source: Option<&str>,
 ) -> PyResult<PythonFormattedOutput> {
     reject_html_notation(notation_source)?;
-    let html = concrete_tensor_to_html(py, tensor, settings, None)?;
-    Ok(PythonFormattedOutput::new(
-        format_concrete_with_settings(tensor, TensorDisplayMode::Plain, settings),
-        Some(html),
-        Some(format_concrete_with_settings(
-            tensor,
-            TensorDisplayMode::Latex,
-            settings,
-        )),
-    ))
+    // Each backend must observe the same snapshot even if the Python Tensor
+    // is mutated after formatted() returns. This independent value is owned
+    // by the lazy output, rather than borrowing the mutable Python object.
+    let tensor = tensor.clone();
+    let settings = settings.clone();
+    Ok(PythonFormattedOutput::lazy(move |py, backend| {
+        match backend {
+            FormattedOutputBackend::Html => concrete_tensor_to_html(py, &tensor, &settings, None),
+            FormattedOutputBackend::Text => Ok(format_concrete_with_settings(
+                &tensor,
+                TensorDisplayMode::Plain,
+                &settings,
+            )),
+            FormattedOutputBackend::Latex => Ok(format_concrete_with_settings(
+                &tensor,
+                TensorDisplayMode::Latex,
+                &settings,
+            )),
+        }
+        .map(Some)
+    }))
 }
 
 /// Produce compact plain-text tensor notation.
@@ -3898,6 +3908,39 @@ mod tests {
             format_concrete_with_settings(&tensor, TensorDisplayMode::Latex, &settings),
             "$$2$$"
         );
+    }
+
+    #[test]
+    fn concrete_formatted_text_survives_html_export_failure() {
+        let tensor = Spensor::scalar_with_descriptor(
+            ConcreteOrParam::Concrete(RealOrComplex::Real(2.)),
+            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots([])),
+            None,
+            Vec::new(),
+        );
+        let settings = DisplaySettings {
+            tensor_layout: "invalid".into(),
+            ..DisplaySettings::default()
+        };
+        let output = format_concrete_tensor_output_rich(&tensor, &settings, None).unwrap();
+        Python::initialize();
+        Python::attach(|py| {
+            assert_eq!(output.format_plain(py).unwrap(), "2");
+            let error = output.render(py, FormattedOutputBackend::Html).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(
+                error.to_string().contains("spenso.tensor_layout"),
+                "{error}"
+            );
+            assert_eq!(output.format_plain(py).unwrap(), "2");
+            assert_eq!(
+                output
+                    .render(py, FormattedOutputBackend::Latex)
+                    .unwrap()
+                    .as_deref(),
+                Some("$$2$$")
+            );
+        });
     }
 
     #[test]

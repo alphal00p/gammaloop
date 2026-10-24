@@ -11,7 +11,7 @@ use linnet_render_py::{PyDiagramView, PyRenderSettings};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{PyAnyMethods, PyDictMethods, PyListMethods};
 use pyo3::types::{PyDict, PyList};
-use pyo3::{Bound, PyErr, PyResult, Python};
+use pyo3::{Bound, PyResult, Python};
 use serde_json::{Value, json};
 use spenso::network::graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp};
 use spenso::network::parsing::ShadowedStructure;
@@ -321,12 +321,6 @@ impl SpensoNet {
                         .join(", "),
                 );
             }
-            // Preserve any pending Python exception at the snapshot boundary.
-            // Registered Python printer failures are instead logged by Symbolica
-            // and decline the override without leaving a pending exception.
-            if let Some(error) = PyErr::take(py) {
-                return Err(error);
-            }
             let record = PyDict::new(py);
             record.set_item("id", id.0)?;
             record.set_item("kind", label.kind)?;
@@ -388,9 +382,6 @@ impl SpensoNet {
                     Some(label.source)
                 }
             };
-            if let Some(error) = PyErr::take(py) {
-                return Err(error);
-            }
             record.set_item(
                 "label-mathml",
                 port_source.as_ref().map(|source| &source.mathml),
@@ -443,9 +434,6 @@ impl SpensoNet {
             }
             if let Some(h) = sink {
                 detail.property("Sink half-edge", h.0);
-            }
-            if let Some(error) = PyErr::take(py) {
-                return Err(error);
             }
             record.set_item("inspection", detail.inspection(py)?)?;
             edges.append(record)?;

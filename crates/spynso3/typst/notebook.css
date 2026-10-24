@@ -16,22 +16,8 @@ math[data-spenso-math] {
 }
 
 /* Center short equations without putting wide fractions or products outside
-   the scrollable area on the left. Wrapped sums size their individual terms. */
-[data-spenso-math] math[display="block"]:not([data-spenso-wrap]) {
+   the scrollable area on the left. */
+[data-spenso-math] math[display="block"] {
   width: max-content;
   min-width: 100%;
-}
-
-/* MathML Core cannot break a math row. Wrap whole additive terms with CSS;
-   each term still uses native math layout for fractions, fences and scripts. */
-[data-spenso-math] math[data-spenso-wrap] {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: safe center;
-  row-gap: 0.6em;
-}
-
-[data-spenso-wrap] > [data-spenso-term] {
-  flex: 0 0 auto;
 }

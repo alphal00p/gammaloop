@@ -329,6 +329,19 @@ class SymbolicDisplayTests(unittest.TestCase):
                 [slot.to_expression() for slot in value.structure.axes], slots
             )
 
+    def test_formatted_rejects_typst_notation_consistently(self):
+        head = sp.TensorName("full_display_tests::FormattedNotation")(
+            sp.Representation.euc(2)
+        )
+        tensor = sp.Tensor.dense(head, [1.0, 2.0])
+        network = sp.TensorNetwork(tensor)
+        for value in (head, tensor, network):
+            with self.subTest(kind=type(value).__name__):
+                with self.assertRaisesRegex(
+                    ValueError, "does not accept Typst notation_source"
+                ):
+                    value.formatted(notation_source="")
+
     def test_ready_formatted_output_remains_compatible(self):
         output = FormattedOutput("plain", "<em>rich</em>", "$$x$$")
         self.assertEqual(str(output), "plain")
