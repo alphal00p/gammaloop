@@ -1,6 +1,7 @@
 """Gallery launch and display contracts; no native host or subprocesses run."""
 
 import fcntl
+import hashlib
 import json
 import os
 import subprocess
@@ -288,6 +289,58 @@ class GalleryReceiptTests(unittest.TestCase):
             self.assertIsNotNone(row["Seconds"])
             self.assertNotIn("Native trace contraction", row["Stage"])
         self.assertIsNone(receipt["preparation_seconds"])
+
+
+class GalleryFooterTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory(prefix="gallery-footer-contract-")
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name)
+        environment = patch.dict(
+            os.environ, {"VAKINT_GALLERY_EVIDENCE": str(self.root)}
+        )
+        environment.start()
+        self.addCleanup(environment.stop)
+        self.mo = SimpleNamespace(Html=lambda value: value)
+
+    def evidence(self, runtime=None):
+        receipts = {}
+        if runtime is not None:
+            payload = json.dumps(runtime).encode()
+            (self.root / "runtime.json").write_bytes(payload)
+            receipts["runtime"] = {
+                "path": "runtime.json",
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        (self.root / "manifest.json").write_text(
+            json.dumps({"schema": 1, "receipts": receipts})
+        )
+
+    def test_footer_displays_authenticated_runtime_fields(self):
+        self.evidence(
+            {"display": [["Compiled Vakint", "native-test"], ["UI", "ui-test"]]}
+        )
+        footer = Gallery.footer(self.mo)
+        self.assertIn("Compiled Vakint: native-test", footer)
+        self.assertIn("UI: ui-test", footer)
+        self.assertIn("External data and provenance</a>", footer)
+
+    def test_footer_without_runtime_keeps_existing_links(self):
+        self.evidence()
+        footer = Gallery.footer(self.mo)
+        self.assertIn("Native Symbolica expressions", footer)
+        self.assertIn("External data and provenance</a></footer>", footer)
+        self.assertNotIn("Compiled Vakint:", footer)
+
+    def test_footer_escapes_runtime_labels_and_values(self):
+        self.evidence(
+            {"display": [["UI<script>", '</footer><script>alert("x")</script>']]}
+        )
+        footer = Gallery.footer(self.mo)
+        self.assertNotIn("<script>", footer)
+        self.assertIn("UI&lt;script&gt;:", footer)
+        self.assertIn("&lt;/footer&gt;", footer)
+        self.assertIn("alert(&quot;x&quot;)", footer)
 
 
 if __name__ == "__main__":
