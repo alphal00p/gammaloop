@@ -3,7 +3,7 @@ use crate::{
     cff::{CutCFFIndex, esurface::EnergySurfaceExt, orientations::GraphOrientation},
     graph::{
         ExternalConnection, FeynmanGraph, FinalizedCut, Graph, GraphGroup, GroupId, LmbIndex,
-        LoopMomentumBasis, parse::complete_group_parsing,
+        LoopMomentumBasis, edge::EdgeMass, parse::complete_group_parsing,
     },
     integrands::{
         HasIntegrand,
@@ -572,6 +572,28 @@ struct CutEventGenerationContext<'a> {
 }
 
 impl CrossSectionGraphTerm {
+    fn incoming_mass_product_squared<'a, T: FloatLike>(
+        masses: impl IntoIterator<Item = (&'a str, &'a EdgeMass)>,
+        model: &Model,
+        param_builder: &ParamBuilder,
+        one: F<T>,
+    ) -> Result<F<T>> {
+        let zero = one.zero();
+        let product = masses.into_iter().try_fold(
+            Complex::new_re(one),
+            |product, (edge_name, mass)| -> Result<Complex<F<T>>> {
+                let mass = match mass {
+                    EdgeMass::Zero => Complex::new_re(zero.clone()),
+                    mass => mass.value(model, param_builder).ok_or_else(|| {
+                        eyre!("Incoming edge '{edge_name}' has no resolved mass value")
+                    })?,
+                };
+                Ok(product * &mass * &mass)
+            },
+        )?;
+        Ok(product.re)
+    }
+
     pub fn from_cross_section_graph(
         graph: &CrossSectionGraph,
         settings: &GlobalSettings,
@@ -1864,20 +1886,21 @@ impl GraphTerm for CrossSectionGraphTerm {
                 2 => {
                     let mom_1 = &(momentum_sample.external_moms()[ExternalIndex::from(0)]);
                     let mom_2 = &(momentum_sample.external_moms()[ExternalIndex::from(1)]);
-                    let mass_factor = self
-                        .graph
-                        .initial_state_cut
-                        .iter_edges(&self.graph)
-                        .map(|(_, e)| {
-                            e.data
-                                .mass
-                                .value(context.model, &self.param_builder)
-                                .unwrap()
-                        })
-                        .fold(Complex::new_re(momentum_sample.one()), |acc, mass| {
-                            acc * &mass * &mass
-                        })
-                        .re;
+                    let mass_factor = Self::incoming_mass_product_squared(
+                        self.graph
+                            .initial_state_cut
+                            .iter_edges(&self.graph)
+                            .map(|(_, edge)| (edge.data.name.as_str(), &edge.data.mass)),
+                        context.model,
+                        &self.param_builder,
+                        momentum_sample.one(),
+                    )
+                    .with_context(|| {
+                        format!(
+                            "Could not evaluate incoming flux masses for graph '{}'",
+                            self.graph.name
+                        )
+                    })?;
 
                     let f = F::from_f64(4.0) * (mom_1.dot(mom_2).square() - mass_factor).sqrt();
 
@@ -1987,5 +2010,80 @@ impl HasIntegrand for CrossSectionIntegrand {
         );
 
         self.data.graph_terms[0].graph.get_loop_number() * 3
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::initialisation::test_initialise;
+    use crate::utils::load_generic_model;
+    use symbolica::domains::rational::Rational;
+    use symbolica::symbol;
+
+    #[test]
+    fn incoming_mass_products_preserve_zero_real_and_complex_values() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        let builder = ParamBuilder::default();
+        let one = F::<f64>::from(&Rational::from(1));
+        let zero = EdgeMass::Zero;
+        let four = EdgeMass::Value(Complex::new_re(one.from_usize(4)));
+        let complex_left = EdgeMass::Value(Complex::new(one.from_usize(2), one));
+        let complex_right = EdgeMass::Value(Complex::new(one.from_usize(3), -one.from_usize(2)));
+        for (masses, expected) in [
+            ([&zero, &zero], 0),
+            ([&zero, &four], 0),
+            ([&four, &four], 256),
+            ([&complex_left, &complex_right], 63),
+        ] {
+            let result = CrossSectionGraphTerm::incoming_mass_product_squared(
+                [("left", masses[0]), ("right", masses[1])],
+                &model,
+                &builder,
+                one,
+            )
+            .unwrap();
+            assert_eq!(result, one.from_usize(expected));
+        }
+    }
+
+    #[test]
+    fn incoming_mass_products_resolve_model_variables() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        let builder = ParamBuilder::default();
+        let one = F::<f64>::from(&Rational::from(1));
+        let four = EdgeMass::Value(Complex::new_re(one.from_usize(4)));
+        for (symbol, expected) in [(symbol!("UFO::MT"), 478864), (symbol!("UFO::Me"), 0)] {
+            let mass = EdgeMass::ModelVar(symbol);
+            let result = CrossSectionGraphTerm::incoming_mass_product_squared(
+                [("model", &mass), ("fixed", &four)],
+                &model,
+                &builder,
+                one,
+            )
+            .unwrap();
+            assert_eq!(result, one.from_usize(expected));
+        }
+    }
+
+    #[test]
+    fn incoming_mass_products_reject_unresolved_variables_after_zero() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        let builder = ParamBuilder::default();
+        let one = F::<f64>::from(&Rational::from(1));
+        let zero = EdgeMass::Zero;
+        let unknown = EdgeMass::ModelVar(symbol!("flux_mass_test::unknown_mass"));
+        for masses in [
+            [("massless", &zero), ("unresolved", &unknown)],
+            [("unresolved", &unknown), ("massless", &zero)],
+        ] {
+            let error =
+                CrossSectionGraphTerm::incoming_mass_product_squared(masses, &model, &builder, one)
+                    .unwrap_err();
+            assert!(error.to_string().contains("Incoming edge 'unresolved'"));
+        }
     }
 }
