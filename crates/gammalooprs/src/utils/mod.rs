@@ -306,6 +306,24 @@ pub mod tracing;
 #[cfg(test)]
 mod tests {
     #[test]
+    fn complex_phases_compare_across_zero() {
+        use super::{ApproxEq, Complex, F};
+
+        let tolerance = F(1e-10);
+        let real = Complex::new(F(2.0), F(0.0));
+        let below = Complex::new(F(2.0), F(-1e-20));
+        assert!(below.approx_eq(&real, &tolerance));
+        assert!(real.approx_eq(&below, &tolerance));
+        assert!(below.approx_eq_res(&real, &tolerance).is_ok());
+
+        // The norms agree to 1.25e-13, so only the phase check (5e-7 apart) rejects this.
+        let off_phase = Complex::new(F(2.0), F(-1e-6));
+        assert!(!off_phase.approx_eq(&real, &tolerance));
+        assert!(!real.approx_eq(&off_phase, &tolerance));
+        assert!(off_phase.approx_eq_res(&real, &tolerance).is_err());
+    }
+
+    #[test]
     fn native_hypot_preserves_finite_range() {
         use super::{ArbPrec, F};
 
@@ -4097,6 +4115,23 @@ impl<T: FloatLike> ApproxEq<F<T>, F<T>> for F<T> {
     }
 }
 
+/// Both phases in [0, 2π), with `lhs` shifted by 2π when that brings it closer to
+/// `rhs`: a phase just below 2π is close to zero.
+fn phases_on_circle<T: FloatLike>(lhs: &Complex<F<T>>, rhs: &Complex<F<T>>) -> (F<T>, F<T>) {
+    let pi = lhs.re.PI();
+    let two_pi = lhs.re.TAU();
+    let rhs = rhs.arg().rem_euclid(&two_pi);
+    let lhs = lhs.arg().rem_euclid(&two_pi);
+    let lhs = if &lhs - &rhs > pi {
+        &lhs - &two_pi
+    } else if &rhs - &lhs > pi {
+        &lhs + &two_pi
+    } else {
+        lhs
+    };
+    (lhs, rhs)
+}
+
 impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
     fn approx_eq(&self, other: &Complex<F<T>>, tolerance: &F<T>) -> bool {
         if !self.norm().re.approx_eq(&other.norm().re, tolerance) {
@@ -4104,9 +4139,7 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
         } else if self.norm().is_zero() || other.norm().is_zero() {
             return true;
         }
-        let two_pi = self.re.PI() + self.re.PI();
-        let arg_self = self.arg().rem_euclid(&two_pi);
-        let arg_other = other.arg().rem_euclid(&two_pi);
+        let (arg_self, arg_other) = phases_on_circle(self, other);
         if !arg_self.approx_eq(&arg_other, tolerance) {
             return false;
         }
@@ -4124,11 +4157,7 @@ impl<T: FloatLike> ApproxEq<Complex<F<T>>, F<T>> for Complex<F<T>> {
             return Ok(());
         }
 
-        let two_pi = self.re.PI() + self.re.PI();
-        let arg_self = self.arg().rem_euclid(&two_pi);
-        let arg_other = other.arg().rem_euclid(&two_pi);
-        // let arg_diff = (&self.arg() - &other.arg()).rem_euclid(&two_pi);
-        // let arg_zero = self.re.zero();
+        let (arg_self, arg_other) = phases_on_circle(self, other);
         if !arg_self.approx_eq(&arg_other, tolerance) {
             return Err(eyre!(
                 "Phases are not approximately equal: \n{:+e} - \n{:+e}= \n{:+e}!=0 with tolerance {:+e}",
