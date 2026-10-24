@@ -89,11 +89,11 @@ fn bundled_five_loop_application_loads_from_its_portable_directory() {
     let bytes = std::fs::read(directory.join("application.json")).unwrap();
     assert_eq!(
         format!("{:x}", Sha256::digest(&bytes)),
-        "01425e1cecc71893d2e3a592a162600100326f285914926df61e43dd0c870e4b"
+        "976d574c4ad8b4021ac7a1914c624095a77f5975b98e243c7a20a9396a86ff03"
     );
     let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert_eq!(document["metadata"]["remaining_terminals"], 905);
-    assert_eq!(document["metadata"]["source_generation"], 54);
+    assert_eq!(document["metadata"]["remaining_terminals"], 640);
+    assert_eq!(document["metadata"]["source_generation"], 119);
     let mut settings = VakintSettings::default();
     assert!(settings.rustred_artifact_path.is_none());
     let engine = super::cache_tests::external_engine()
