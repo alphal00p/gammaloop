@@ -17,7 +17,7 @@ from typing import overload
 from symbolica import ComplexFloat, Float
 from symbolica.community.graph import DiagramRender, RenderSettings
 from symbolica.community.tensor import DisplaySettings, Slot, TensorExpression, TensorName
-from symbolica.core import Expression
+from symbolica.core import Expression, Replacement
 
 @typing.final
 class Amplitude:
@@ -6493,7 +6493,7 @@ class LoopMomentumBasis:
         >>> for edge in diagram.edges:
         ...     print(edge.particle_name, momentum_by_edge[edge.id])
         """
-    def momentum_replacements(self) -> builtins.list[typing.Any]:
+    def momentum_replacements(self) -> builtins.list[Replacement]:
         r"""
         Return Symbolica Replacement objects using the same routing as numerical momenta.
         Tensor index arguments are retained on every routed vector.

@@ -2526,7 +2526,7 @@ pub(crate) fn format_concrete_tensor_output_rich(
 #[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None))]
-fn format_tensor(
+pub fn format_tensor(
     expression: &PythonExpression,
     show_dimensions: Option<bool>,
     settings: Option<PyRef<'_, DisplaySettings>>,
@@ -2632,7 +2632,7 @@ fn to_typst(
 #[spenso_macros::track_usage(crate::record_usage, on_success)]
 #[pyfunction]
 #[pyo3(signature = (expression, show_dimensions = None, *, settings = None, notation_source = None))]
-fn to_html(
+pub fn to_html(
     py: Python<'_>,
     expression: &PythonExpression,
     show_dimensions: Option<bool>,
