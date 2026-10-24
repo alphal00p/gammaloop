@@ -1,6 +1,8 @@
 #![cfg(feature = "feynkit-ingress")]
 //! Finite exact closure comparisons; no assertion of arbitrary-index coverage.
 
+#[path = "support/external_data.rs"]
+mod external_data_fixture;
 mod five_loop_closure;
 
 use std::{cell::Cell, collections::BTreeSet, path::PathBuf, time::Instant};
@@ -45,10 +47,26 @@ fn engine() -> Result<ClosureEngine> {
     let report = engine.load_official_external_data(
         5,
         &OfficialExternalDataOptions {
+            version: external_data_fixture::required_version(),
             local_artifacts_path: std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").map(PathBuf::from),
             ..Default::default()
         },
     )?;
+    // Five-loop vacuum master identities contain one family and fifteen indices.
+    // Check the active campaign inventory, independently of which checkout was selected.
+    let five_loop_masters = engine
+        .master_symbols()?
+        .into_iter()
+        .filter(|master| {
+            matches!(master.as_atom().as_view(), AtomView::Fun(function)
+                if function.get_symbol() == vakint_symbol!("RustRedMaster")
+                    && function.get_nargs() == 16)
+        })
+        .count();
+    assert_eq!(
+        five_loop_masters, 640,
+        "closure tests require the authenticated 640-master campaign"
+    );
     let settings = VakintSettings {
         epsilon_symbol: "eps".into(),
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
