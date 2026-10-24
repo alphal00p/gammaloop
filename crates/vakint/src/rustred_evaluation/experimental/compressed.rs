@@ -19,9 +19,8 @@ pub(crate) fn decode(input: &[u8], max_bytes: usize) -> Result<Vec<u8>, String> 
         return Err("compressed native asset exceeds byte limit".into());
     }
     let bound = u64::try_from(max_bytes)
-        .ok()
-        .and_then(|value| value.checked_add(1))
-        .ok_or("native decompression limit overflow")?;
+        .map_err(|_| "native decompression limit overflow")?
+        .saturating_add(1);
     let mut decoder = GzDecoder::new(input);
     let mut bytes = Vec::new();
     decoder
@@ -63,22 +62,32 @@ mod tests {
     #[test]
     fn damaged_truncated_or_trailing_members_fail_closed() {
         let encoded = encode(&vec![7; 1024]).unwrap();
-        for end in 0..encoded.len() {
-            assert!(decode(&encoded[..end], 2048).is_err(), "truncated at {end}");
+        for max_bytes in [2048, usize::MAX] {
+            assert_eq!(decode(&encoded, max_bytes).unwrap(), vec![7; 1024]);
+            for end in 0..encoded.len() {
+                assert!(
+                    decode(&encoded[..end], max_bytes).is_err(),
+                    "truncated at {end}"
+                );
+            }
+            let mut corrupt = encoded.clone();
+            let checksum = corrupt.len() - 8;
+            corrupt[checksum] ^= 1;
+            assert!(decode(&corrupt, max_bytes).is_err());
+            let mut trailing = encoded.clone();
+            trailing.push(0);
+            assert!(
+                decode(&trailing, max_bytes)
+                    .unwrap_err()
+                    .contains("trailing")
+            );
+            let mut concatenated = encoded.clone();
+            concatenated.extend_from_slice(&encoded);
+            assert!(
+                decode(&concatenated, max_bytes)
+                    .unwrap_err()
+                    .contains("trailing")
+            );
         }
-        let mut corrupt = encoded.clone();
-        let checksum = corrupt.len() - 8;
-        corrupt[checksum] ^= 1;
-        assert!(decode(&corrupt, 2048).is_err());
-        let mut trailing = encoded.clone();
-        trailing.push(0);
-        assert!(decode(&trailing, 2048).unwrap_err().contains("trailing"));
-        let mut concatenated = encoded.clone();
-        concatenated.extend_from_slice(&encoded);
-        assert!(
-            decode(&concatenated, 2048)
-                .unwrap_err()
-                .contains("trailing")
-        );
     }
 }
