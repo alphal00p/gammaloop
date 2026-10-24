@@ -1939,6 +1939,12 @@ impl InterfaceInference {
         }
 
         match value {
+            AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor_word) => {
+                syntax_error = Some(TensorInferenceError::invalid(format!(
+                    "tensor word symbol `{}` must be called with operands",
+                    variable.get_symbol()
+                )));
+            }
             AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor) => {
                 syntax_error = Some(TensorInferenceError::invalid(format!(
                     "tensor symbol `{}` must be called with at least one structural port",
@@ -1952,6 +1958,57 @@ impl InterfaceInference {
                     return false;
                 }
                 let symbol = function.get_symbol();
+                if symbol.has_tag(&SPENSO_TAG.tensor_word) {
+                    if symbol.is_scalar()
+                        || symbol.has_tag(&SPENSO_TAG.tensor)
+                        || symbol.has_tag(&SPENSO_TAG.rank1)
+                        || symbol.has_tag(&SPENSO_TAG.representation)
+                        || symbol.has_tag(&SPENSO_TAG.broadcast)
+                    {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "a tensor word head must carry only the tensor-word structural role",
+                        ));
+                        return false;
+                    }
+                    if function.get_nargs() == 0 {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "tensor words require at least one operand; use the typed word constructor for the identity",
+                        ));
+                        return false;
+                    }
+                    for argument in function.iter() {
+                        if !SymbolicTensor::<PartialStructure>::is_word_operand(symbol, argument) {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "word operands must be individual generators or same-head words with scalar coefficients; keep commuting tensor coefficients outside the word",
+                            ));
+                            return false;
+                        }
+                        if self.slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
+                            || self.slots.parse_representation::<LibraryRep>(argument).is_ok()
+                        {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "tensor word operands must be tensors or coefficients, not bare structural ports",
+                            ));
+                            return false;
+                        }
+                        if Self::has_structured_syntax(argument) {
+                            match self.infer_view(argument) {
+                                Ok(interface) if interface.open_positions().is_empty() => {}
+                                Ok(_) => {
+                                    syntax_error = Some(TensorInferenceError::invalid(
+                                        "tensor words with unresolved operands require the typed word constructor",
+                                    ));
+                                    return false;
+                                }
+                                Err(error) => {
+                                    syntax_error = Some(error);
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                }
                 // Explicit scalar functions own their metadata, which may itself
                 // contain tensor syntax without exposing any tensor ports.
                 if SPENSO_TAG.is_scalar_metadata(symbol)
@@ -2530,7 +2587,7 @@ impl InterfaceInference {
                 return Self::merge_explicit_interface_sequence(&interfaces);
             }
 
-            if symbol == SPENSO_TAG.bracket {
+            if symbol == SPENSO_TAG.bracket || symbol.has_tag(&SPENSO_TAG.tensor_word) {
                 let mut interfaces = Vec::new();
                 for argument in arguments {
                     if !Self::has_structured_syntax(argument) {
@@ -2538,7 +2595,7 @@ impl InterfaceInference {
                     }
                     interfaces.push(self.infer_view(argument)?);
                 }
-                if interfaces.is_empty() {
+                if interfaces.is_empty() && !symbol.has_tag(&SPENSO_TAG.tensor_word) {
                     return Err(TensorInferenceError::invalid(
                         "ordered tensor products require at least one tensor operand",
                     ));
