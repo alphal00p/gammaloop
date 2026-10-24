@@ -77,6 +77,10 @@ pub(super) fn project(
             &input.dimension,
             &opaque_slots,
         );
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let native = cooking.try_cook(native.as_view()).map_err(error)?;
         let native = reducer.admit(native).map_err(error)?;
         let reduced = reducer.reduce(&native).map_err(error)?;
         log::debug!(target: "vakint::saved_application",
@@ -89,9 +93,11 @@ pub(super) fn project(
                 .coefficient()
                 .try_to_rational_polynomial(&Q, &Z, None)
                 .map_err(error)?;
-            nonzero_conditions.insert(coefficient.denominator.to_expression());
+            let denominator = coefficient.denominator.to_expression();
+            nonzero_conditions.insert(cooking.uncook(denominator.as_view()));
         }
         let reduced = reduced.into_expression().map_err(error)?.into_expression();
+        let reduced = cooking.uncook(reduced.as_view());
         let bridged = VakintTerm::bridge_opaque_projectors(reduced.as_view(), &mut next_dummy);
         let bridged = VakintTerm::spenso_to_vakint_numerator(
             bridged.as_view(),
@@ -132,7 +138,7 @@ pub(super) fn project(
 mod tests {
     use super::*;
     use crate::utils::vakint_macros::vk_parse;
-    use symbolica::atom::Atom;
+    use symbolica::{atom::Atom, coefficient::CoefficientView};
 
     #[test]
     fn native_projection_keeps_other_factors_as_spectators() {
@@ -168,6 +174,42 @@ mod tests {
                         .is_zero()
                 }));
             }
+        }
+    }
+
+    #[test]
+    fn compound_dimension_projection_restores_numerator_and_guards() {
+        Vakint::initialize_vakint_symbols();
+        let dimension = vk_parse!("4-2*eps").unwrap();
+        let result = project(&VacuumTensorProjectionInput {
+            numerator: vk_parse!("dot(k(1),k(2))^2").unwrap(),
+            dot_head: S.dot,
+            component_loop_momenta: vec![vec![S.k.call(1)], vec![S.k.call(2)]],
+            dimension: dimension.clone(),
+        })
+        .unwrap();
+        let expected = vk_parse!("dot(k(1),k(1))*dot(k(2),k(2))/(4-2*eps)").unwrap();
+        assert!((&result.numerator - expected).expand().together().is_zero());
+        assert!(
+            result.nonzero_conditions.iter().any(|condition| {
+                let scale = (condition / &dimension).expand().together();
+                matches!(scale.as_view(), AtomView::Num(number)
+                        if matches!(number.get_coeff_view(),
+                            CoefficientView::Natural(..) | CoefficientView::Large(..))
+                            && number.get_coeff_view().is_real()
+                            && !scale.is_zero())
+            }),
+            "dimension={dimension}, guards={:?}",
+            result.nonzero_conditions
+        );
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        for expression in std::iter::once(&result.numerator).chain(&result.nonzero_conditions) {
+            assert_eq!(cooking.uncook(expression.as_view()), *expression);
+            assert!(!VakintTerm::contains_feynkit_bridge_syntax(
+                expression.as_view()
+            ));
         }
     }
 }
