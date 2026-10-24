@@ -26,22 +26,42 @@ const MAX_LEAF_NODES: usize = 256;
 const MAX_LEAF_BYTES: usize = 4096;
 const MAX_ALIASES: usize = 4096;
 
-fn fits(atom: AtomView<'_>, budget: &mut usize, depth: usize) -> bool {
+fn fits(
+    atom: AtomView<'_>,
+    budget: &mut usize,
+    depth: usize,
+    max_bytes: usize,
+    max_terms: usize,
+) -> bool {
     if *budget == 0
         || depth > 32
-        || atom.get_byte_size() > MAX_LEAF_BYTES
+        || matches!(atom, AtomView::Add(sum) if sum.get_nargs() > max_terms)
+        || atom.get_byte_size() > max_bytes
         || atom
             .get_symbol()
-            .is_some_and(|symbol| symbol.get_name().len() > MAX_LEAF_BYTES)
+            .is_some_and(|symbol| symbol.get_name().len() > max_bytes)
     {
         return false;
     }
     *budget -= 1;
-    atom.children().all(|child| fits(child, budget, depth + 1))
+    atom.children()
+        .all(|child| fits(child, budget, depth + 1, max_bytes, max_terms))
 }
 
 pub(crate) fn is_large(value: &SymbolicTensor<PartialStructure>) -> bool {
-    !fits(value.expression().as_view(), &mut 1000, 0)
+    // Text keeps the base limits, independently of notebook layout budgets.
+    !fits(value.expression().as_view(), &mut 2000, 0, 64 * 1024, 100)
+}
+
+/// Notebook previews retain their smaller rendering threshold.
+pub(crate) fn needs_paging(value: &SymbolicTensor<PartialStructure>) -> bool {
+    !fits(
+        value.expression().as_view(),
+        &mut 1000,
+        0,
+        MAX_LEAF_BYTES,
+        usize::MAX,
+    )
 }
 
 type LeafCacheKey = (Atom, [u16; 10]);
@@ -168,7 +188,7 @@ impl TensorLeaves {
         let Some(symbol) = view.get_symbol() else {
             return Ok(None);
         };
-        if !fits(view, &mut { MAX_LEAF_NODES }, 0) {
+        if !fits(view, &mut { MAX_LEAF_NODES }, 0, MAX_LEAF_BYTES, usize::MAX) {
             return Ok(None);
         }
         // Arithmetic and ordinary calls belong to Symbolica. Only semantic
@@ -320,7 +340,13 @@ impl TensorLeaves {
                 .and_then(|(_, display)| display.to_mathml())
                 .or_else(|| {
                     let source = aliases.source_indices.get(&key)?;
-                    if !fits(source.as_view(), &mut { MAX_LEAF_NODES }, 0) {
+                    if !fits(
+                        source.as_view(),
+                        &mut { MAX_LEAF_NODES },
+                        0,
+                        MAX_LEAF_BYTES,
+                        usize::MAX,
+                    ) {
                         return None;
                     }
                     Some(source.format_string(&options, PrintState::new()))
@@ -394,9 +420,52 @@ mod tests {
     #[test]
     fn semantic_leaf_work_is_bounded_before_notation_callbacks() {
         let small = parse!("f(x,y)");
-        assert!(fits(small.as_view(), &mut { MAX_LEAF_NODES }, 0));
-        assert!(!fits(small.as_view(), &mut 1, 0));
-        assert!(!fits(small.as_view(), &mut { MAX_LEAF_NODES }, 33));
+        assert!(fits(
+            small.as_view(),
+            &mut { MAX_LEAF_NODES },
+            0,
+            MAX_LEAF_BYTES,
+            usize::MAX
+        ));
+        assert!(!fits(
+            small.as_view(),
+            &mut 1,
+            0,
+            MAX_LEAF_BYTES,
+            usize::MAX
+        ));
+        assert!(!fits(
+            small.as_view(),
+            &mut { MAX_LEAF_NODES },
+            33,
+            MAX_LEAF_BYTES,
+            usize::MAX
+        ));
+    }
+
+    #[test]
+    fn text_limits_are_independent_of_notebook_leaf_limits() {
+        let head = symbol!("paging_text_tests::f");
+        let wide = FunctionBuilder::new(head)
+            .add_args((0..1024).map(Atom::num))
+            .finish();
+        assert!(fits(wide.as_view(), &mut 2000, 0, 64 * 1024, 100));
+        assert!(!fits(
+            wide.as_view(),
+            &mut 1000,
+            0,
+            MAX_LEAF_BYTES,
+            usize::MAX
+        ));
+        let sum = Atom::add_many(
+            (0..101).map(|i| FunctionBuilder::new(head).add_arg(Atom::num(i)).finish()),
+        );
+        assert!(!fits(sum.as_view(), &mut 2000, 0, 64 * 1024, 100));
+        assert!(fits(sum.as_view(), &mut 2000, 0, 64 * 1024, usize::MAX));
+        let too_wide = FunctionBuilder::new(head)
+            .add_args((0..2000).map(Atom::num))
+            .finish();
+        assert!(!fits(too_wide.as_view(), &mut 2000, 0, 64 * 1024, 100));
     }
 
     #[test]

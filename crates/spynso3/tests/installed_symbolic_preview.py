@@ -8,7 +8,7 @@ from symbolica.community import tensor as sp
 
 
 class SymbolicDisplayTests(unittest.TestCase):
-    def assertBoundedNotebookPreview(self, value):
+    def assertBoundedNotebookPreview(self, value, *, full_text=False):
         html = value._repr_html_()
         self.assertIn("<math", html)
         self.assertIn("Expression preview", html)
@@ -18,17 +18,23 @@ class SymbolicDisplayTests(unittest.TestCase):
         output = value.formatted()
         self.assertEqual(output._repr_html_(), html)
         self.assertEqual(output._repr_html_(), html)
-        self.assertIsNone(output._repr_latex_())
-        self.assertIsNone(output._repr_latex_())
-        self.assertEqual(
-            value._repr_latex_(),
-            r"$$\text{Large tensor expression: use the paged viewer}$$",
-        )
-        plain = output.format_plain()
-        self.assertEqual(
-            plain,
-            "Tensor expression (large; use the paged notebook viewer or explicit export)",
-        )
+        if full_text:
+            self.assertEqual(output._repr_latex_(), value.to_latex())
+            self.assertEqual(value._repr_latex_(), value.to_latex())
+            plain = value.format_tensor()
+            self.assertEqual(output.format_plain(), plain)
+        else:
+            self.assertIsNone(output._repr_latex_())
+            self.assertIsNone(output._repr_latex_())
+            self.assertEqual(
+                value._repr_latex_(),
+                r"$$\text{Large tensor expression: use the paged viewer}$$",
+            )
+            plain = output.format_plain()
+            self.assertEqual(
+                plain,
+                "Tensor expression (large; use the paged notebook viewer or explicit export)",
+            )
         for rendered in (str(value), repr(value), str(output), repr(output)):
             self.assertEqual(rendered, plain)
         for rendered in (value, output):
@@ -219,9 +225,35 @@ class SymbolicDisplayTests(unittest.TestCase):
         self.assertEqual(value.rank, 0)
 
     def test_sum_header_boundary_keeps_both_complete_exported_terms(self):
-        arguments = ",".join(str(i) for i in range(573))
-        raw = E(
-            f"full_display_tests::f({arguments})+full_display_tests::g({arguments},0)"
+        # Symbol ids and kernel encodings affect the exact byte boundary.
+        # Vary an integer's encoded length one byte at a time so the sum header,
+        # rather than either term, is what crosses the notebook byte limit.
+        candidates = []
+        found = False
+        for argument_count in range(500, 800):
+            arguments = ",".join(str(i) for i in range(argument_count))
+            base = E(
+                f"full_display_tests::f({arguments})+full_display_tests::g({arguments},0)"
+            )
+            if not 4064 <= base.get_byte_size() <= 4096:
+                continue
+            for padding in range(32):
+                pad = 1 << (80 + 8 * padding)
+                raw = E(
+                    f"full_display_tests::f({arguments})+full_display_tests::g({arguments},0,{pad})"
+                )
+                sizes = (
+                    raw.get_byte_size(),
+                    sum(term.get_byte_size() for term in raw.terms()),
+                )
+                candidates.append(sizes)
+                if sizes[0] > 4096 and sizes[1] <= 4096:
+                    found = True
+                    break
+            if found:
+                break
+        self.assertTrue(
+            found, f"no sum-header byte-boundary fixture found: {candidates}"
         )
         self.assertGreater(raw.get_byte_size(), 4096)
         self.assertLessEqual(sum(term.get_byte_size() for term in raw.terms()), 4096)
@@ -231,9 +263,9 @@ class SymbolicDisplayTests(unittest.TestCase):
         self.assertEqual(output._repr_latex_(), value.to_latex())
         html = value.to_html()
         self.assertEqual(output._repr_html_(), html)
-        for i in range(573):
+        for i in range(argument_count):
             self.assertEqual(html.count(f"<mn>{i}</mn>"), 3 if i == 0 else 2)
-        self.assertBoundedNotebookPreview(value)
+        self.assertBoundedNotebookPreview(value, full_text=True)
         self.assertEqual(value.to_expression(), raw)
 
     def test_large_product_and_power_exports_render_every_factor(self):
@@ -254,7 +286,9 @@ class SymbolicDisplayTests(unittest.TestCase):
                     self.assertIn(f"x{i}", plain)
                     self.assertIn(f"x{i}", latex)
                     self.assertIn(f">x{i}<", html)
-                self.assertBoundedNotebookPreview(value)
+                self.assertBoundedNotebookPreview(value, full_text=True)
+                if raw == product:
+                    self.assertEqual(len(str(value)), 5033)
                 self.assertEqual(value.to_expression(), raw)
 
     def test_large_display_keeps_logical_ports_metadata_and_status(self):

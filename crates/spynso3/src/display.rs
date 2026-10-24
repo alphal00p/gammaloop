@@ -1268,28 +1268,24 @@ pub(crate) fn format_structured_output_rich(
     let notebook_settings = settings.clone();
     let notebook_notation = notation_source.clone();
     let custom_notation = notation_source.is_some();
-    let formatted = if !custom_notation && paging::is_large(&value) {
-        PythonFormattedOutput::lazy(move |py, backend| match backend {
-            FormattedOutputBackend::Html => paging::static_html(
-                py,
-                expression.clone_ref(py),
-                Arc::clone(&value),
-                settings.clone(),
-                notation_source.clone(),
-            )
+    let large_text = paging::is_large(&value);
+    let paged_html = paging::needs_paging(&value);
+    let formatted = PythonFormattedOutput::lazy(move |py, backend| match backend {
+        FormattedOutputBackend::Html if !custom_notation && paged_html => paging::static_html(
+            py,
+            expression.clone_ref(py),
+            Arc::clone(&value),
+            settings.clone(),
+            notation_source.clone(),
+        )
+        .map(Some),
+        FormattedOutputBackend::Text if !custom_notation && large_text => Ok(Some(
+            "Tensor expression (large; use the paged notebook viewer or explicit export)".into(),
+        )),
+        FormattedOutputBackend::Latex if !custom_notation && large_text => Ok(None),
+        _ => format_structured_backend(py, &value, &settings, notation_source.as_deref(), backend)
             .map(Some),
-            FormattedOutputBackend::Text => Ok(Some(
-                "Tensor expression (large; use the paged notebook viewer or explicit export)"
-                    .into(),
-            )),
-            FormattedOutputBackend::Latex => Ok(None),
-        })
-    } else {
-        PythonFormattedOutput::lazy(move |py, backend| {
-            format_structured_backend(py, &value, &settings, notation_source.as_deref(), backend)
-                .map(Some)
-        })
-    };
+    });
     // Custom Typst notation is available through source projects and SVG.
     // Preserve the explicit HTML error instead of creating a notebook viewer.
     if custom_notation {

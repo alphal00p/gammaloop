@@ -4506,7 +4506,7 @@ impl TensorExpression {
     }
 
     fn _repr_html_(self_: PyRef<'_, Self>, py: Python<'_>) -> PyResult<Option<String>> {
-        if display::paging::is_large(&self_.value) {
+        if display::paging::needs_paging(&self_.value) {
             let value = Arc::clone(&self_.value);
             return display::paging::static_html(
                 py,
