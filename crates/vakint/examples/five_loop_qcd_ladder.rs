@@ -186,9 +186,16 @@ fn main() -> fixture::Result<()> {
         5,
         &OfficialExternalDataOptions {
             local_artifacts_path: artifacts,
+            load_prepared_caches: false,
             ..Default::default()
         },
     )?;
+    let caches_before = (1..=5)
+        .map(|loops| Ok((loops, engine.cache_statistics(loops)?.attached)))
+        .collect::<fixture::Result<BTreeMap<_, _>>>()?;
+    if caches_before.values().any(|attached| *attached) {
+        return Err("baseline must never import a persistent cache".into());
+    }
     report["data_manifest_sha256"] = json!(format!(
         "{:x}",
         Sha256::digest(std::fs::read(loaded.path.join("manifest.json"))?)
@@ -202,10 +209,26 @@ fn main() -> fixture::Result<()> {
         engine.load_cache(5, cache, &Default::default())?;
         report["cache_loading_seconds"] = json!(started.elapsed().as_secs_f64());
         engine.clear_cache(5)?;
-    } else {
-        engine.detach_cache(5)?;
     }
-    report["persistent_cache_attached"] = json!(engine.cache_statistics(5)?.attached);
+    let caches_during_evaluation = (1..=5)
+        .map(|loops| Ok((loops, engine.cache_statistics(loops)?.attached)))
+        .collect::<fixture::Result<BTreeMap<_, _>>>()?;
+    if caches_during_evaluation
+        .iter()
+        .any(|(&loops, &attached)| attached != (cache.is_some() && loops == 5))
+    {
+        return Err(
+            "measurement requires no persistent backing or only the manual five-loop file".into(),
+        );
+    }
+    report["persistent_cache_attached"] = json!(caches_during_evaluation[&5]);
+    report["persistent_cache_attachments_before"] = json!(caches_before);
+    report["persistent_cache_attachments_during_evaluation"] = json!(caches_during_evaluation);
+    report["persistent_cache_policy"] = json!(if cache.is_some() {
+        "manual-five-loop-only"
+    } else {
+        "none"
+    });
     let owners_before = engine.rustred_application_owner_preparation_statistics()?;
     LOGGER.0.lock().map_err(|error| error.to_string())?.clear();
     let started = Instant::now();

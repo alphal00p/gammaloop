@@ -18,7 +18,7 @@ use eyre::{Context, Result, bail, ensure};
 use owner_proof::OwnerProof;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use symbolica::atom::AtomCore;
+use symbolica::atom::{AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
     RustRedMasterMode, Vakint, VakintSettings,
@@ -410,6 +410,27 @@ fn complete_samples(receipts: &[&Value], variants: &[&str], repetitions: usize) 
         })
 }
 
+fn validate_catalogue_closure(receipt: &Value, directory: &Path) -> Result<()> {
+    if receipt["success"] != true {
+        return Ok(());
+    }
+    let closure = &receipt["catalogue_closure"];
+    let unknown: BTreeSet<String> = serde_json::from_value(closure["unknown_masters"].clone())?;
+    let recorded: BTreeSet<String> =
+        serde_json::from_slice(&fs::read(directory.join("unknown-masters.json"))?)?;
+    ensure!(
+        recorded == unknown
+            && closure["unknown_count"].as_u64() == Some(unknown.len() as u64)
+            && closure["master_count"]
+                .as_u64()
+                .is_some_and(|count| count >= unknown.len() as u64)
+            && closure["closed"].as_bool() == Some(unknown.is_empty())
+            && closure["unknown_sha256"] == digest(&directory.join("unknown-masters.json"))?,
+        "saved catalogue classification differs from its full unknown-master inventory"
+    );
+    Ok(())
+}
+
 fn persistent_cache_attachments(engine: &Vakint) -> Result<BTreeMap<usize, bool>> {
     (1..=5)
         .map(|loops| Ok((loops, engine.cache_statistics(loops)?.attached)))
@@ -517,6 +538,14 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         "persistent_cache_policy":if options.variant=="cached" {"manual-five-loop-only"} else {"none"},
         "evaluation_seconds":evaluation_seconds,"saved_application_including_owner_seconds":saved_seconds,
         "owner_preparation_seconds":owner_seconds,"ibp_excluding_owner_seconds":(saved_seconds-owner_seconds).max(0.0),
+        // Retain the existing field name, but never label this derived interval
+        // pure IBP: the native call also transports and combines exact terms.
+        "native_timing_scope":{
+            "saved_application_including_owner_seconds":"Native entry transport, lazy owner preparation, DAG reduction, exact sum, and terminal substitution",
+            "ibp_excluding_owner_seconds":"Saved application interval minus actual deferred-owner preparation; entry transport, exact combination and terminal substitution remain included",
+            "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
+            "separate_native_phase_durations_available":false
+        },
         "owner_preparation_policy":"deferred on demand; actual stat delta, no common prewarm",
         "end_to_end_scope":"supervisor worker spawn through exit, including loading, evaluation and output serialization",
         "owner_preparation_during_load_seconds":owners_before.preparation_time.as_secs_f64(),
@@ -546,6 +575,35 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
     .into();
     match outcome {
         Ok(result) => {
+            // Inspect the final combined expression against the instance's
+            // declared identities. Retain success does not imply catalogue
+            // closure, an independent master basis, or numerical availability.
+            let known = engine
+                .master_symbols()?
+                .into_iter()
+                .map(|symbol| symbol.as_atom().clone())
+                .collect::<BTreeSet<_>>();
+            let mut masters = BTreeSet::new();
+            result.value.visitor(&mut |part| {
+                if matches!(part, AtomView::Fun(function) if function.get_symbol() == vakint::vakint_symbol!("RustRedMaster")) {
+                    masters.insert(part.to_owned());
+                    return false;
+                }
+                true
+            });
+            let unknown = masters
+                .difference(&known)
+                .map(AtomCore::to_canonical_string)
+                .collect::<BTreeSet<_>>();
+            let unknown_path = options.work_dir.join("unknown-masters.json");
+            write_json(&unknown_path, &json!(unknown))?;
+            receipt["catalogue_closure"] = json!({
+                "closed":unknown.is_empty(),"master_count":masters.len(),
+                "unknown_count":unknown.len(),"unknown_masters":unknown,
+                "unknown_file":"unknown-masters.json","unknown_sha256":digest(&unknown_path)?,
+                "scope":"Final combined retained master identities versus loaded catalogue declarations",
+                "independent_basis_claim":false,"numerical_evaluation_claim":false
+            });
             write_bytes(
                 &options.work_dir.join("value.symbolica"),
                 result.value.to_canonical_string().as_bytes(),
@@ -557,11 +615,14 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
                 .collect::<BTreeSet<_>>();
             write_json(&options.work_dir.join("guards.json"), &json!(guards))?;
             receipt["success"] = true.into();
+            receipt["retained_result_available"] = true.into();
             receipt["value_sha256"] = digest(&options.work_dir.join("value.symbolica"))?.into();
             receipt["guards_sha256"] = digest(&options.work_dir.join("guards.json"))?.into();
         }
         Err(error) => {
             receipt["success"] = false.into();
+            receipt["retained_result_available"] = false.into();
+            receipt["catalogue_closure"] = Value::Null;
             receipt["error"] = error.to_string().into();
         }
     }
@@ -776,6 +837,7 @@ fn main() -> Result<()> {
                 }
                 let receipt: Value = serde_json::from_slice(&fs::read(&receipt_path)?)?;
                 owner_proof::validate_completed_outputs(&receipt, &directory, root)?;
+                validate_catalogue_closure(&receipt, &directory)?;
                 validate_receipt(&receipt, &identity, &root.id, variant, sample)?;
                 measurements.push(receipt);
             }
@@ -796,6 +858,25 @@ fn main() -> Result<()> {
             });
         let mut row =
             json!({"id":root.id,"successful":successful,"exact_output_and_guard_parity":exact});
+        // Missing or failed samples cannot establish closure. A completed
+        // retained expression may still contain correctly reported unknowns.
+        row["catalogue_closure"] = if successful {
+            let unknown = selected
+                .iter()
+                .map(|receipt| {
+                    serde_json::from_value::<BTreeSet<String>>(
+                        receipt["catalogue_closure"]["unknown_masters"].clone(),
+                    )
+                })
+                .collect::<Result<Vec<_>, _>>()?
+                .into_iter()
+                .flatten()
+                .collect::<BTreeSet<_>>();
+            json!({"closed":unknown.is_empty(),"unknown_count":unknown.len(),
+                "unknown_masters":unknown,"numerical_evaluation_claim":false})
+        } else {
+            Value::Null
+        };
         row["native_keys_authenticated"] = (successful
             && selected
                 .iter()
@@ -901,6 +982,24 @@ fn main() -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_unknowns_remain_successful_but_cannot_claim_catalogue_closure() -> Result<()> {
+        let directory = tempfile::tempdir()?;
+        let unknown = json!(["vakint::RustRedMaster(vakint::rustred_family_unknown,2)"]);
+        write_json(&directory.path().join("unknown-masters.json"), &unknown)?;
+        let mut receipt = json!({"success":true,"catalogue_closure":{
+            "closed":false,"master_count":1,"unknown_count":1,"unknown_masters":unknown,
+            "unknown_sha256":digest(&directory.path().join("unknown-masters.json"))?}});
+        validate_catalogue_closure(&receipt, directory.path())?;
+        assert_eq!(receipt["success"], true);
+        receipt["catalogue_closure"]["closed"] = true.into();
+        assert!(validate_catalogue_closure(&receipt, directory.path()).is_err());
+        receipt["catalogue_closure"]["closed"] = false.into();
+        write_json(&directory.path().join("unknown-masters.json"), &json!([]))?;
+        assert!(validate_catalogue_closure(&receipt, directory.path()).is_err());
+        Ok(())
+    }
 
     #[test]
     fn complete_cases_require_every_sample_and_variant() {
