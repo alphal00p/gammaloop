@@ -721,11 +721,6 @@ const IDENSO: &[RustExampleSpec] = &[
         "rust",
         "fn accepts_cookable<T: idenso::Cookable>(_expression: &T) {}"
     ),
-    example!(
-        "SelectiveExpand",
-        "rust",
-        "fn accepts_expansion<T: idenso::selective_expand::SelectiveExpand>(_expression: &T) {}"
-    ),
     example!("bis", "rust", "let representation = idenso::bis!(4);"),
     example!("cof", "rust", "let representation = idenso::cof!(Nc);"),
     example!("coad", "rust", "let representation = idenso::coad!(Na);"),

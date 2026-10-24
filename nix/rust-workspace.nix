@@ -37,10 +37,15 @@
   workspacePrebuildPackage = "gammaloop-ci-prebuild";
   workspacePrebuildPackageDir = "crates/${workspacePrebuildPackage}";
 
-  # The native DOT parser is a path dependency outside the workspace members.
-  localCargoPatchSources = lib.fileset.unions [
-    (workspaceRoot + "/vendor/dot-parser")
-  ];
+  # The native DOT parser's local path is outside the workspace members.
+  # Older cache baselines use the registry; current local paths remain required.
+  localCargoPatchSources = let
+    dotParser = (workspaceManifestFor ".").workspace.dependencies.dot-parser or {};
+  in
+    lib.fileset.unions (
+      lib.optional (builtins.isAttrs dotParser && dotParser ? path)
+      (workspaceRoot + "/${dotParser.path}")
+    );
   cargoSources = lib.fileset.unions [
     (craneLib.fileset.commonCargoSources workspaceRoot)
     localCargoPatchSources
@@ -519,6 +524,8 @@
       "assets/embedded/drawing/templates/layout-core.typ"
       "assets/embedded/drawing/templates/physics-edge-style.typ"
       "crates/clinnet/tests/resources"
+      "crates/kurvst/typst/tests/pattern-split.typ"
+      "crates/kurvst/typst/tests/layer-offset.typ"
       "crates/linnest/typst/examples/map-style.typ"
       "tests/resources/graphs/epemttbar.dot"
     ];
@@ -1169,13 +1176,23 @@
           if builtins.isAttrs rawDependency
           then rawDependency
           else {version = rawDependency;};
+        package = dependencyAttrs.package or dependency;
+        workspacePatch = (workspaceManifestFor ".").patch.${dependencyAttrs.git or ""}.${package} or {};
+        # Preserve the resolved workspace owner when promoting patched Git dev-dependencies.
+        resolvedDependencyAttrs =
+          if dependencyAttrs ? git
+          && builtins.hasAttr package inheritedDependencies
+          && (workspacePatch.path or null) == workspaceMemberPackageDirs.${package}
+          then (builtins.removeAttrs dependencyAttrs ["git" "branch" "rev" "tag"])
+            // {path = workspacePrebuildDependencyPathFor package;}
+          else dependencyAttrs;
         features = sortedUnique (
           (dependencyAttrs.features or [])
           ++ lib.filter (feature: !lib.hasInfix "/" feature) (context.features.${dependency} or [])
           ++ (crossFeatures.${dependency} or [])
         );
       in
-        dependencyAttrs
+        resolvedDependencyAttrs
         // lib.optionalAttrs (features != []) {inherit features;});
   testBinaryFeatureAnchorCargoTomlFor = context:
     (pkgs.formats.toml {}).generate "${testBinaryFeatureAnchorPackageFor context}-Cargo.toml" ({
@@ -2522,8 +2539,8 @@
       '';
     });
 
-  nextestPackageGroups = map (target: target // lib.optionalAttrs (target.name == "docs") {
-    runtimeTools = [docsTypst nextestPython pkgs.git pkgs.jujutsu];
+  nextestPackageGroups = map (target: target // lib.optionalAttrs (builtins.elem target.name ["docs" "clinnet"]) {
+    runtimeTools = [docsTypst] ++ lib.optionals (target.name == "docs") [nextestPython pkgs.git pkgs.jujutsu];
   }) ci.groups;
 
   sortedUnique = list: lib.sort (left: right: left < right) (lib.unique list);

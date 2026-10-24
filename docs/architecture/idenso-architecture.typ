@@ -20,7 +20,7 @@ follows:
   and `SymbolicNet`;
 - `shorthands` owns chain, trace, dot-product, metric, and Schoonschip-style normalization;
 - `dirac`, `color`, and `epsilon` own domain-specific identities and settings;
-- `selective_expand`, `IndexTooling`, and `cook` provide expression preparation, index hygiene,
+- `IndexTooling` and `cook` provide expression preparation, index hygiene,
   compact symbol encodings, and canonicalization;
 - the optional `python` module registers a Symbolica community-module facade.
 
@@ -79,8 +79,6 @@ normal form:
 
 - `IndexTooling` parses enough structure to canonicalize tensor indices, list dangling slots,
   wrap all indices or only dummies, form adjoints, and alias tensor subexpressions;
-- `SelectiveExpand` distributes only factors carrying selected representation families, keeping
-  unrelated sectors factorized;
 - `MetricSimplifier` and `Chain` normalize metrics, dot products, open chains, and closed traces;
 - `GammaSimplifier` collects bispinor chains and applies dimension-gated Clifford, trace,
   projector, gamma5, and optional four-dimensional epsilon rules;
