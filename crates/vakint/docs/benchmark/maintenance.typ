@@ -12,6 +12,52 @@ The five-loop adapter #raw("merge_five_loop_results.py") extends those records;
 it neither runs reductions nor authenticates owner proofs. Its file-contract
 tests use synthetic temporary files, never measured or reference physics data.
 
+== Prepare the physical input once
+
+The complete quadratic numerator preparation is a separate measured stage. Build
+#raw("five_loop_qcd_ladder") with the normal release profile, then save its complete
+scalar input once:
+
+```sh
+five_loop_qcd_ladder --work-dir /path/to/workspace/quadratic-input \
+  --fresh-prepare --prepare-only
+five_loop_qcd_ladder --work-dir /path/to/workspace/uncached-run \
+  --prepared-input /path/to/workspace/quadratic-input --artifacts /path/to/external-data
+five_loop_qcd_ladder --work-dir /path/to/workspace/cached-run \
+  --prepared-input /path/to/workspace/quadratic-input --artifacts /path/to/external-data \
+  --cache /path/to/selected-cache.rrcache.gz
+```
+
+Each reduction remains a fresh process. All 21 quadratic contributions, mass
+factors and projector conditions come from the same verified input; this is input
+reuse, separate from the optional persistent reduction cache. The manifest
+#raw("prepared-input.json") authenticates exact scalar/condition bytes, projection,
+scientific definitions and producer source identities. The collector automatically
+reuses a valid bundle in its work directory when no explicit input is selected.
+An invalid bundle, including payloads with a missing manifest, errors before any
+native regeneration. #raw("--fresh-prepare") requires a new work
+directory and explicitly validates native generation again; it never overwrites a
+completed bundle. #raw("--prepare-only") can also validate an existing bundle.
+
+Prepared-input reports set #raw("input_mode: prepared") and
+#raw("fresh_native_preparation: false"); current #raw("preparation") and
+#raw("preparation_seconds") are null. The measured #raw("input_loading_seconds")
+covers verification and parsing. The original producer's preparation timings and
+source hashes remain under #raw("prepared_input.manifest") as historical evidence,
+excluded from the current end-to-end duration. The manifest path and SHA-256 bind
+that provenance. Current consumer fixture hashes are recorded separately. Never
+combine fresh and prepared-input samples into one comparison, or describe a reused
+input's end-to-end time as fresh graph-to-result time. The reduction timer itself
+keeps its existing boundary after external-data/cache setup and before result
+classification/serialization.
+
+The ignored slow acceptance test follows the same reuse policy in
+#raw("VAKINT_QCD_LADDER_EVIDENCE"). Optionally select an external bundle with
+#raw("VAKINT_QCD_LADDER_PREPARED_INPUT"). Force independent regeneration using
+#raw("VAKINT_QCD_LADDER_FRESH_PREPARE=1") with a new evidence directory and no explicit
+prepared-input environment variable. Census, complete exact reduction, warm parity,
+and full nonzero conditions remain checked in both modes.
+
 == Append evidence without changing history
 
 ```sh

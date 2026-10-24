@@ -1,7 +1,8 @@
-//! Rebuild the massless QCD numerator from native model rules on every run.
+//! Prepare the massless QCD numerator from native model rules, or reuse its verified scalar input.
 //! The transverse quadratic coefficient is not a complete beta function.
 
 mod physical;
+mod prepared;
 mod projector;
 mod vacuum;
 
@@ -43,9 +44,13 @@ use symbolica::{
     symbol,
 };
 
+pub use prepared::PreparedInputManifest;
+
+pub const PREPARED_INPUT_MANIFEST: &str = "prepared-input.json";
+
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-#[derive(Clone, Copy, Debug, serde::Serialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Projection {
     QuadraticTransverse,
@@ -61,7 +66,7 @@ impl Projection {
     }
 }
 
-#[derive(Default, serde::Serialize)]
+#[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct PreparationTimings {
     pub graph_generation_seconds: f64,
     pub scalar_contraction_seconds: f64,
@@ -79,6 +84,8 @@ pub struct LadderFixture {
     pub nonzero_conditions: Vec<Atom>,
     pub projection: Projection,
     pub timings: PreparationTimings,
+    /// Historical preparation provenance, present only when this input was loaded.
+    pub prepared_input: Option<PreparedInputManifest>,
 }
 
 type Shape = Graph<u8, i64>;
@@ -447,7 +454,7 @@ pub fn prepare(evidence: &Path, projection: Projection) -> Result<LadderFixture>
     )?;
     std::fs::write(
         evidence.join("conventions.txt"),
-        "Native GammaLoop/FeynKit model-rule generation; bare DOT does not dress its numerator.\nMassless down-quark, Feynman gauge, fixed SU(3), tr_Dirac(1)=4, all Lorentz tags d.\nHomogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; NOT the q=0 masslike trace and NOT a complete beta function.\nAuxiliary angular q average is normalized at fixed q^2: no sixth physical loop.\nL=5, twelve incidence edges after two insertion collapses; nine distinct denominator forms with five fermion dots after native duplicate coalescing; initial A=14; Taylor terms have A=14..16 and unlowered A-r_mom=10.\nCommon UV mass is inserted only into final denominators; original slash numerators remain massless.\nAll preparation is rerun inside the slow test; these generated outputs are evidence, not a test shortcut.\n",
+        "Native GammaLoop/FeynKit model-rule generation; bare DOT does not dress its numerator.\nMassless down-quark, Feynman gauge, fixed SU(3), tr_Dirac(1)=4, all Lorentz tags d.\nHomogeneous quadratic Taylor coefficient of numerator AND denominators.\nTransverse contraction delta_ab*(g_munu-q_mu*q_nu/q^2)/[8*(d-1)*q^2]; NOT the q=0 masslike trace and NOT a complete beta function.\nAuxiliary angular q average is normalized at fixed q^2: no sixth physical loop.\nL=5, twelve incidence edges after two insertion collapses; nine distinct denominator forms with five fermion dots after native duplicate coalescing; initial A=14; Taylor terms have A=14..16 and unlowered A-r_mom=10.\nCommon UV mass is inserted only into final denominators; original slash numerators remain massless.\nFresh preparation validates the native physical construction; verified saved scalar inputs allow separate IBP-only tests.\n",
     )?;
     if matches!(projection, Projection::ZeroMomentumMetric) {
         std::fs::write(
@@ -473,5 +480,6 @@ pub fn prepare(evidence: &Path, projection: Projection) -> Result<LadderFixture>
         nonzero_conditions: projected.conditions.into_iter().collect(),
         projection,
         timings,
+        prepared_input: None,
     })
 }

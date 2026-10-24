@@ -1,4 +1,4 @@
-//! Rebuild and reduce the complete physical five-loop source in a fresh process.
+//! Prepare the complete physical five-loop source, or reuse its verified scalar input.
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
 mod fixture;
 use ::vakint;
@@ -17,6 +17,8 @@ use vakint::{
     EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
     RustRedMasterMode, Vakint, VakintSettings,
 };
+
+const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--cache PATH] [--warm]";
 
 struct StageLogger(Mutex<BTreeMap<String, Vec<f64>>>);
 static LOGGER: StageLogger = StageLogger(Mutex::new(BTreeMap::new()));
@@ -73,7 +75,9 @@ fn main() -> fixture::Result<()> {
     let mut work = None;
     let mut artifacts = None;
     let mut cache = None;
+    let mut prepared_input = None;
     let mut prepare_only = false;
+    let mut fresh_prepare = false;
     let mut dress_only = false;
     let mut warm = false;
     let mut coefficient_representation = CandidateCacheRepresentation::Sparse;
@@ -81,24 +85,66 @@ fn main() -> fixture::Result<()> {
     let mut arguments = std::env::args_os().skip(1);
     while let Some(argument) = arguments.next() {
         match argument.to_str() {
-            Some("--work-dir") => work = Some(PathBuf::from(arguments.next().ok_or("missing work directory")?)),
-            Some("--artifacts") => artifacts = Some(PathBuf::from(arguments.next().ok_or("missing artifact path")?)),
-            Some("--cache") => cache = Some(PathBuf::from(arguments.next().ok_or("missing cache path")?)),
+            Some("--help" | "-h") => {
+                println!("{USAGE}");
+                return Ok(());
+            }
+            Some("--work-dir") => {
+                work = Some(PathBuf::from(
+                    arguments.next().ok_or("missing work directory")?,
+                ))
+            }
+            Some("--artifacts") => {
+                artifacts = Some(PathBuf::from(
+                    arguments.next().ok_or("missing artifact path")?,
+                ))
+            }
+            Some("--cache") => {
+                cache = Some(PathBuf::from(arguments.next().ok_or("missing cache path")?))
+            }
+            Some("--prepared-input") => {
+                prepared_input = Some(PathBuf::from(
+                    arguments.next().ok_or("missing prepared-input directory")?,
+                ))
+            }
             Some("--prepare-only") => prepare_only = true,
+            Some("--fresh-prepare") => fresh_prepare = true,
             Some("--dress-only") => dress_only = true,
             Some("--warm") => warm = true,
-            Some("--coefficient-representation") => coefficient_representation = match arguments.next().and_then(|value| value.into_string().ok()).as_deref() {
-                Some("sparse") => CandidateCacheRepresentation::Sparse,
-                Some("factorized") => CandidateCacheRepresentation::Factorized,
-                _ => return Err("coefficient representation must be sparse or factorized".into()),
-            },
-            Some("--projection") => projection = match arguments.next().and_then(|value| value.into_string().ok()).as_deref() {
-                Some("quadratic") => fixture::Projection::QuadraticTransverse,
-                Some("zero-momentum") => fixture::Projection::ZeroMomentumMetric,
-                _ => return Err("projection must be quadratic or zero-momentum".into()),
-            },
-            _ => return Err("usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepare-only|--dress-only] [--cache PATH] [--warm]".into()),
+            Some("--coefficient-representation") => {
+                coefficient_representation = match arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .as_deref()
+                {
+                    Some("sparse") => CandidateCacheRepresentation::Sparse,
+                    Some("factorized") => CandidateCacheRepresentation::Factorized,
+                    _ => {
+                        return Err(
+                            "coefficient representation must be sparse or factorized".into()
+                        );
+                    }
+                }
+            }
+            Some("--projection") => {
+                projection = match arguments
+                    .next()
+                    .and_then(|value| value.into_string().ok())
+                    .as_deref()
+                {
+                    Some("quadratic") => fixture::Projection::QuadraticTransverse,
+                    Some("zero-momentum") => fixture::Projection::ZeroMomentumMetric,
+                    _ => return Err("projection must be quadratic or zero-momentum".into()),
+                }
+            }
+            _ => return Err(USAGE.into()),
         }
+    }
+    if fresh_prepare && prepared_input.is_some() {
+        return Err("--fresh-prepare cannot be combined with --prepared-input".into());
+    }
+    if dress_only && prepared_input.is_some() {
+        return Err("--dress-only cannot be combined with --prepared-input".into());
     }
     let representation_name = match coefficient_representation {
         CandidateCacheRepresentation::Sparse => "sparse",
@@ -119,8 +165,27 @@ fn main() -> fixture::Result<()> {
         return Ok(());
     }
     let total_started = Instant::now();
-    let prepared = fixture::prepare(&work, projection)?;
-    let input = prepared.input.to_canonical_string();
+    if prepared_input.is_none() && fixture::LadderFixture::has_prepared_input(&work)? {
+        if fresh_prepare {
+            return Err("--fresh-prepare requires a new --work-dir; preserve the completed prepared-input bundle".into());
+        }
+        prepared_input = Some(work.clone());
+    }
+    let fresh_native_preparation = prepared_input.is_none();
+    let input_started = Instant::now();
+    let prepared = match &prepared_input {
+        Some(directory) => fixture::LadderFixture::load_prepared(directory, projection)?,
+        None => fixture::prepare(&work, projection)?,
+    };
+    let input_loading_seconds =
+        (!fresh_native_preparation).then(|| input_started.elapsed().as_secs_f64());
+    let manifest_directory = prepared_input.as_ref().unwrap_or(&work);
+    let manifest = match &prepared.prepared_input {
+        Some(manifest) => manifest.clone(),
+        None => prepared.save_prepared(&work)?,
+    };
+    let manifest_path =
+        std::fs::canonicalize(manifest_directory.join(fixture::PREPARED_INPUT_MANIFEST))?;
     let sources: [(&str, &[u8]); 7] = [
         (
             "mod.rs",
@@ -153,14 +218,24 @@ fn main() -> fixture::Result<()> {
         "coefficient_representation":representation_name,
         "source_commit":git(&["rev-parse", "HEAD"]), "source_dirty":git(&["status", "--porcelain"]).map(|value| !value.is_empty()),
         "executable_sha256":format!("{:x}", Sha256::digest(std::fs::read(std::env::current_exe()?)?)),
-        "fresh_native_preparation":true, "fixture_sources_sha256":source_hashes, "preparation":prepared.timings,
-        "preparation_seconds":prepared.preparation_seconds, "scalar_terms":prepared.scalar_terms,
+        "fresh_native_preparation":fresh_native_preparation,
+        "input_mode":if fresh_native_preparation {"fresh"} else {"prepared"},
+        "fixture_sources_sha256":manifest.producer.fixture_sources_sha256,
+        "consumer_fixture_sources_sha256":source_hashes,
+        "prepared_input":{"manifest_path":manifest_path,
+            "manifest_sha256":format!("{:x}",Sha256::digest(std::fs::read(&manifest_path)?)),
+            "manifest":manifest},
+        "input_loading_seconds":input_loading_seconds,
+        "preparation":if fresh_native_preparation {serde_json::to_value(&prepared.timings)?} else {serde_json::Value::Null},
+        "preparation_seconds":fresh_native_preparation.then_some(prepared.preparation_seconds),
+        "end_to_end_scope":if fresh_native_preparation {"fresh native preparation through cold result serialization"} else {"verified prepared-input loading through cold result serialization; original preparation excluded"},
+        "scalar_terms":prepared.scalar_terms,
         "preparation_policy":{"fixture_work_count_overrides":false,
             "optional_numerator_denominator_cancellation":false,
             "optional_scalar_expansion":false,"scalar_term_count":"stored representation",
             "native_denominator_basis_lowering":"required by saved-index application"},
-        "contributions":prepared.contributions, "input_sha256":format!("{:x}", Sha256::digest(input.as_bytes())),
-        "input_bytes":input.len(), "prepared_nonzero_conditions":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
+        "contributions":prepared.contributions, "input_sha256":manifest.input.sha256,
+        "input_bytes":manifest.input.bytes, "prepared_nonzero_conditions":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
         "persistent_cache":cache, "reduction_completed":false});
     std::fs::write(
         work.join("benchmark.json"),

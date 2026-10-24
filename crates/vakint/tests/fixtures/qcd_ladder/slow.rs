@@ -1,4 +1,4 @@
-//! Full native preparation and exact saved-application acceptance. Never cached.
+//! Exact saved-application acceptance with fresh or verified saved scalar preparation.
 use super::*;
 use crate as vakint;
 use symbolica::atom::AtomView;
@@ -6,7 +6,7 @@ use symbolica::atom::AtomView;
 mod fixture;
 
 #[test_log::test]
-#[ignore = "full slow pipeline: requires VAKINT_SAVED_APPLICATION and native licensed tensor algebra"]
+#[ignore = "full reduction: requires VAKINT_SAVED_APPLICATION; set VAKINT_QCD_LADDER_PREPARED_INPUT to reuse verified scalar preparation"]
 fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture::Result<()> {
     use crate::{EvaluationMethod, EvaluationOrder, RustRedEvaluationOptions};
     let artifact = std::env::var_os("VAKINT_SAVED_APPLICATION").ok_or("set VAKINT_SAVED_APPLICATION to the explicitly selected saved publication; no default/download is permitted")?;
@@ -14,10 +14,44 @@ fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture
         std::env::var_os("VAKINT_QCD_LADDER_EVIDENCE")
             .ok_or("set VAKINT_QCD_LADDER_EVIDENCE to a development workspace directory")?,
     );
-    let prepared_input = fixture::prepare(&evidence, fixture::Projection::QuadraticTransverse)?;
+    std::fs::create_dir_all(&evidence)?;
+    let input_started = std::time::Instant::now();
+    let force_fresh = match std::env::var_os("VAKINT_QCD_LADDER_FRESH_PREPARE") {
+        None => false,
+        Some(value) if value == "1" => true,
+        Some(_) => return Err("VAKINT_QCD_LADDER_FRESH_PREPARE must be 1 or unset".into()),
+    };
+    let mut prepared_directory =
+        std::env::var_os("VAKINT_QCD_LADDER_PREPARED_INPUT").map(PathBuf::from);
+    if force_fresh && prepared_directory.is_some() {
+        return Err("VAKINT_QCD_LADDER_FRESH_PREPARE cannot be combined with VAKINT_QCD_LADDER_PREPARED_INPUT".into());
+    }
+    if prepared_directory.is_none() && fixture::LadderFixture::has_prepared_input(&evidence)? {
+        if force_fresh {
+            return Err("fresh preparation requires a new VAKINT_QCD_LADDER_EVIDENCE directory; preserve the completed bundle".into());
+        }
+        prepared_directory = Some(evidence.clone());
+    }
+    let prepared_input = match &prepared_directory {
+        Some(directory) => fixture::LadderFixture::load_prepared(
+            directory,
+            fixture::Projection::QuadraticTransverse,
+        )?,
+        None => {
+            let prepared = fixture::prepare(&evidence, fixture::Projection::QuadraticTransverse)?;
+            prepared.save_prepared(&evidence)?;
+            prepared
+        }
+    };
+    assert_eq!(prepared_input.contributions, 21);
     eprintln!(
-        "qcd_ladder phase=preparation_complete seconds={:.6} scalar_terms={} contributions={}",
-        prepared_input.preparation_seconds,
+        "qcd_ladder phase=input_ready input_mode={} seconds={:.6} scalar_terms={} contributions={}",
+        if prepared_directory.is_some() {
+            "prepared"
+        } else {
+            "fresh"
+        },
+        input_started.elapsed().as_secs_f64(),
         prepared_input.scalar_terms,
         prepared_input.contributions
     );

@@ -58,14 +58,38 @@ cancellation; integer-index lowering is required by the saved application.
 No mass branch is discarded solely because its overall UV degree is finite;
 subdivergent poles must be assessed together with the complete forest formula.
 
-The full preparation runs inside the ignored #raw("slow::") test and is excluded
-from the ordinary test selection. The preparation command shares the same helper:
+The ignored #raw("slow::") acceptance test and the collector share the same native
+preparation helper. Prepare the complete scalar input once, without applying IBPs:
 
-#raw("cargo run --release -p vakint --features feynkit-ingress --example five_loop_qcd_ladder -- --work-dir ../workspace/5l-push/quadratic --artifacts ../vakint-external-data", block: true)
+```sh
+cargo run --locked --release -p vakint \
+  --features "feynkit-ingress experimental-rustred \
+weighted-lowering-diagnostics symbolica_community_module" \
+  --example five_loop_qcd_ladder -- \
+  --work-dir /path/to/workspace/quadratic-input --fresh-prepare --prepare-only
+```
 
-#raw("--dress-only") performs native graph/rule preparation and validates the
-vacuum incidence without gamma algebra. #raw("--prepare-only") additionally
-recomputes the complete scalar input without applying IBPs. The default
+This saves #raw("prepared-input.json"), the exact #raw("vakint-input.symbolica") and
+all projector conditions. Subsequent invocations reuse a valid bundle in their
+#raw("--work-dir") automatically. An explicit #raw("--prepared-input PATH") selects
+that directory for a separate fresh-process reduction, without graph generation,
+Dirac/color contraction, Taylor expansion or angular projection:
+
+```sh
+five_loop_qcd_ladder --work-dir /path/to/workspace/uncached-run \
+  --prepared-input /path/to/workspace/quadratic-input \
+  --artifacts /path/to/vakint-external-data
+```
+
+The loader checks the input and condition hashes, projection, complete contribution
+inventory, scientific source definitions and producer provenance. A corrupt or
+incompatible existing bundle, including payloads with a missing manifest, is an
+error before native preparation, never a reason to regenerate silently.
+#raw("--fresh-prepare") explicitly repeats native validation in a new work directory;
+it cannot overwrite a completed bundle or combine with #raw("--prepared-input").
+#raw("--prepare-only") creates or validates the selected bundle and exits before
+IBPs. #raw("--dress-only") performs native graph/rule preparation and validates the
+vacuum incidence without gamma algebra; it cannot consume a prepared bundle. The default
 #raw("--projection quadratic") preserves the full transverse coefficient above.
 The additional #raw("--projection zero-momentum") diagnostic retains both current
 vertices and contracts with unaveraged #raw("g_munu*delta_ab") at zero external
@@ -82,7 +106,13 @@ data identity, exact conditions, and cache counters are written alongside the
 expressions in #raw("benchmark.json"). #raw("--cache PATH") explicitly attaches a
 prepared five-loop cache; #raw("--warm") performs a second evaluation and requires
 exact result, guard, and family parity. Repeated uncached/cached measurements use
-separate fresh processes. Preparation is rerun for each complete measurement.
+separate fresh processes consuming the same verified scalar-input bundle.
+Native preparation is measured separately. For reused input, #raw("input_mode") is
+#raw("prepared"), current #raw("preparation") and #raw("preparation_seconds") are null,
+and #raw("input_loading_seconds") measures verification and parsing. The manifest
+retains the original producer's preparation timings and source hashes as historical
+provenance; they are excluded from the current end-to-end duration. A fresh
+#raw("--fresh-prepare") run reports its actual native preparation separately.
 Uncached runs explicitly detach any backing attached by the data loader;
 cached runs clear resident results while retaining the selected backing.
 The receipt measures deferred owner preparation from actual cumulative counters
@@ -101,7 +131,12 @@ remain provenance; neither an execution ceiling nor its failure establishes IBP
 coverage or surviving terminals. The scalar-work override interface is removed.
 
 The slow test requires the explicit #raw("VAKINT_SAVED_APPLICATION") and
-#raw("VAKINT_QCD_LADDER_EVIDENCE") paths. Its preparation census distinguishes a
+#raw("VAKINT_QCD_LADDER_EVIDENCE") paths. It automatically reuses the verified bundle
+in the evidence directory after the first successful preparation; optionally set
+#raw("VAKINT_QCD_LADDER_PREPARED_INPUT") to a separate saved-input directory. Set
+#raw("VAKINT_QCD_LADDER_FRESH_PREPARE=1") and choose a new evidence directory for
+explicit fresh native validation. The complete census and exact cold/warm result,
+family and guard checks run for either input mode. Its preparation census distinguishes a
 verified geometric witness from the recorded starting predicates. Out-of-domain
 inputs receive an advisory warning and may still reduce safely. A successful
 primary benchmark must report any unknown residuals explicitly; it never changes
@@ -127,9 +162,11 @@ mass-dimension balance #raw("D_key-j=10"). For the additional diagnostic, explic
 #raw("D_key-j=9"); other or mixed projection values are rejected. These checks
 do not certify individual-term UV degree or campaign coverage.
 
-Only the compact source fixture and reproducible code belong in version control.
+The compact source fixture and reproducible code remain the scientific definition.
 Large dressed/projected numerators and diagnostic DOT output remain generated
-workspace evidence, never a precomputed substitute for the slow test.
+workspace evidence. A verified prepared scalar-input bundle is a reusable input to
+the IBP acceptance test; it does not replace the separate fresh-preparation check
+or contain a precomputed reduction result.
 
 The separately ignored prepared-input diagnostic records the native execution
 policy and still checks all original visible input poles, mass homogeneity, and

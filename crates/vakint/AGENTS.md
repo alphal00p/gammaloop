@@ -54,3 +54,11 @@ workspace JSON. Functional evidence never supplies performance medians: final
 comparisons require matched fresh samples and an explicitly accepted serialized
 window. Preserve original cohorts, full result/guard checks, and unmeasured null
 phases. The adapter's synthetic file-contract tests do not run reductions.
+
+The five-loop physical collector saves its complete scalar input as
+`prepared-input.json` plus authenticated input/condition payloads. Repeated runs
+reuse a valid bundle in their work directory; use `--prepared-input PATH` to share
+it across fresh uncached/cached processes. Keep native preparation timing separate
+from repeated reduction timing. `--fresh-prepare --prepare-only` in a new work
+directory validates generation independently. See the maintenance contract for
+slow-test environment controls and provenance requirements.
