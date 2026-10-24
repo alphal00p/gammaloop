@@ -1,11 +1,13 @@
 //! Source notation for retained numerator payloads and their logical ports.
 
+use std::{cell::RefCell, collections::HashMap, rc::Rc};
+
 use idenso::{CookMode, CookSettings, tensor::SymbolicTensor};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use spenso::structure::{
     Canonicalized, OrderedStructure, TensorStructure,
     abstract_index::AbstractIndex,
-    partial::{OpenPortId, PartialIndex, PartialStructure, PartialStructureExt},
+    partial::{OpenPortId, PartialIndex, PartialSlot, PartialStructure, PartialStructureExt},
     representation::LibraryRep,
     slot::{AbsInd, IsAbstractSlot, SlotMatcher},
 };
@@ -56,7 +58,7 @@ impl NumeratorInterface {
         };
         let expression = cook(&expression)?;
         let Some(interface) = interface else {
-            return Ok(SymbolicTensor::infer(expression)?);
+            return Ok(Self::canonical_ports(SymbolicTensor::infer(expression)?));
         };
         let mut matcher = SlotMatcher::default();
         let ports = interface
@@ -85,6 +87,70 @@ impl NumeratorInterface {
             expression,
             PartialStructure::from_logical_slots(ports),
         )?)
+    }
+
+    /// Order explicit logical ports by their source notation. Inference follows
+    /// the in-memory term order of a product, which depends on the order in
+    /// which Symbolica registered its symbols and so differs between processes;
+    /// admitted and serialized interfaces must not. Open ports are identified by
+    /// position, so a tensor with any keeps its order.
+    pub(crate) fn canonical_ports(
+        tensor: SymbolicTensor<PartialStructure>,
+    ) -> SymbolicTensor<PartialStructure> {
+        let Some(mut ports) = Self::keyed_ports(&tensor) else {
+            return tensor;
+        };
+        if Self::in_canonical_order(&ports) {
+            return tensor;
+        }
+        ports.sort_by(|(left, _), (right, _)| left.cmp(right));
+        // Reordering retains every port, so the established interface stays valid.
+        // `SymbolicTensor::permuted` would first rewrite and re-check the whole
+        // expression to name open ports, which explicit ports do not need.
+        SymbolicTensor::from_normalized_parts(
+            tensor.into_expression(),
+            PartialStructure::from_logical_slots(ports.into_iter().map(|(_, slot)| slot)),
+        )
+    }
+
+    /// Logical ports with their source notation, or `None` if any port is open.
+    fn keyed_ports(
+        tensor: &SymbolicTensor<PartialStructure>,
+    ) -> Option<Vec<(Rc<str>, PartialSlot)>> {
+        tensor
+            .structure()
+            .logical_slots()
+            .into_iter()
+            .map(|slot| Self::port_key(slot).map(|key| (key, slot)))
+            .collect()
+    }
+
+    fn in_canonical_order(ports: &[(Rc<str>, PartialSlot)]) -> bool {
+        ports.is_sorted_by(|(left, _), (right, _)| left <= right)
+    }
+
+    /// The source notation of an explicit port, or `None` for an open port.
+    fn port_key(slot: PartialSlot) -> Option<Rc<str>> {
+        thread_local! {
+            // A key depends only on its slot, and the same few external and
+            // half-edge ports recur in every fragment and export of a process.
+            static KEYS: RefCell<HashMap<PartialSlot, Rc<str>>> = RefCell::default();
+        }
+        let PartialIndex::Explicit(index) = slot.aind else {
+            return None;
+        };
+        Some(KEYS.with_borrow_mut(|keys| {
+            keys.entry(slot)
+                .or_insert_with(|| {
+                    let port = slot.rep().slot::<AbstractIndex, _>(index).to_atom();
+                    CookSettings::indices()
+                        .with_mode(CookMode::ReversibleEncoding)
+                        .uncook(port.as_view())
+                        .to_canonical_string()
+                        .into()
+                })
+                .clone()
+        }))
     }
 
     /// Export source notation, retaining metadata whenever syntax loses ports.
@@ -130,13 +196,17 @@ impl NumeratorInterface {
     /// Only individual encoded index payloads are decoded. The native rename
     /// owner maps their occurrences and logical ports simultaneously, including
     /// ports carried only by a zero; remaining momentum/scalar heads are mapped
-    /// in the native expression after index transport.
+    /// in the native expression after index transport. A canonical port order,
+    /// declared or inferred, stays canonical for the new labels; any other
+    /// order, which only a declaration produces, moves positionally.
     pub(crate) fn translate(
         tensor: &SymbolicTensor<PartialStructure>,
         translate: impl Fn(&Atom) -> Result<Atom, DiagramError>,
     ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
         let tensor = tensor.with_cooked_indices(&cooking)?;
+        let canonical =
+            Self::keyed_ports(&tensor).is_some_and(|ports| Self::in_canonical_order(&ports));
         let mut symbols = std::collections::HashSet::new();
         let mut collect = |value: &Atom| {
             value.visitor(&mut |node| {
@@ -185,7 +255,12 @@ impl NumeratorInterface {
             renaming.insert(symbol, target);
         }
         let tensor = tensor.rename_symbols(&renaming)?;
-        Ok(tensor.with_checked_expression(translate(tensor.expression())?)?)
+        let tensor = tensor.with_checked_expression(translate(tensor.expression())?)?;
+        Ok(if canonical {
+            Self::canonical_ports(tensor)
+        } else {
+            tensor
+        })
     }
 }
 
@@ -216,6 +291,27 @@ mod tests {
     use super::*;
     use spenso::structure::representation::{Euclidean, Minkowski, RepName};
     use symbolica::{function, id::Replacement};
+
+    #[test]
+    fn inferred_ports_are_independent_of_symbol_registration_order() {
+        let vector = |head, owner: usize| {
+            let index = function!(crate::symbols::hedge_index(), owner, 1);
+            function!(head, Minkowski {}.new_rep(4).to_symbolic([index]))
+        };
+        let ports = |first, second| {
+            NumeratorInterface::admit(vector(first, 1) * vector(second, 2), None)
+                .unwrap()
+                .structure()
+                .logical_slots()
+        };
+        // Symbolica orders product factors by the registration of their heads:
+        // `a` precedes `b`, whereas `d` precedes `c`.
+        let a = spenso::tensor_symbol!("feynkit_graph::port_order_a");
+        let b = spenso::tensor_symbol!("feynkit_graph::port_order_b");
+        let d = spenso::tensor_symbol!("feynkit_graph::port_order_d");
+        let c = spenso::tensor_symbol!("feynkit_graph::port_order_c");
+        assert_eq!(ports(a, b), ports(c, d));
+    }
 
     #[test]
     fn source_codec_preserves_anonymous_axes_and_ranked_zero() {
@@ -273,6 +369,45 @@ mod tests {
                 .replace(indices[0].to_pattern())
                 .with(indices[1].clone())))
             .is_err()
+        );
+    }
+
+    #[test]
+    fn transport_keeps_canonical_orders_canonical_and_moves_other_orders_positionally() {
+        let index = |owner: usize| function!(crate::symbols::hedge_index(), owner, 1);
+        let port = |owner| Minkowski {}.new_rep(4).to_symbolic([index(owner)]);
+        let matrix = spenso::tensor_symbol!("feynkit_graph::transported_matrix");
+        let source = function!(matrix, port(1), port(2));
+        let relabel = |map: [(usize, usize); 2]| {
+            move |atom: &Atom| {
+                Ok::<_, DiagramError>(atom.replace_multiple(
+                    map.map(|(from, to)| Replacement::new(index(from).to_pattern(), index(to))),
+                ))
+            }
+        };
+        let declare = |owners: [usize; 2]| Some(NumeratorInterface(owners.map(port).to_vec()));
+
+        // A canonical order, inferred or declared, stays canonical for the
+        // swapped labels.
+        let swap = relabel([(1, 2), (2, 1)]);
+        let expected = NumeratorInterface::admit(swap(&source).unwrap(), None).unwrap();
+        for interface in [None, declare([1, 2])] {
+            let canonical = NumeratorInterface::admit(source.clone(), interface).unwrap();
+            assert!(
+                NumeratorInterface::translate(&canonical, swap)
+                    .unwrap()
+                    .same_value(&expected)
+            );
+        }
+
+        // Any other order, which only a declaration produces, moves positionally.
+        let shift = relabel([(1, 3), (2, 4)]);
+        let declared = NumeratorInterface::admit(source.clone(), declare([2, 1])).unwrap();
+        let expected = NumeratorInterface::admit(shift(&source).unwrap(), declare([4, 3])).unwrap();
+        assert!(
+            NumeratorInterface::translate(&declared, shift)
+                .unwrap()
+                .same_value(&expected)
         );
     }
 }

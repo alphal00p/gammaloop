@@ -399,6 +399,15 @@ The shared `NumeratorInterface` codec owns source admission and export. Live
 diagram-to-runtime conversion copies the existing carriers; it does not pass
 them through that codec again. Diagram DOT/JSON retains expression strings and
 adds ordered interface metadata only when the expression cannot recover it.
+Without metadata, admission orders explicit ports by their source notation
+rather than by Symbolica's term order, which follows symbol registration. The
+aggregate fragment product uses the same order. Label transport keeps a
+canonical order, declared or inferred, canonical for the new labels; any other
+order, which only a declaration produces, moves positionally. Metadata and port
+order therefore do not depend on the process or thread schedule. Validation
+matches the aggregate's explicit ports with the fragment product by label, so an
+artifact that declares the same ports in another order still imports and keeps
+that order.
 `num_interface` describes node, edge and aggregate numerator ports;
 `numerator_prefactor_interface` and `projector_interface` describe the two
 graph-wide factors. `GlobalPrefactor`'s own JSON uses `num_interface` and
