@@ -736,31 +736,33 @@ impl ExplicitIndexOccurrences {
     }
 
     /// Combine admitted construction metadata without inspecting result syntax.
-    fn product(
+    pub(super) fn product(
         sources: &[&SymbolicTensor<PartialStructure>],
     ) -> Result<Self, TensorCompositionError> {
         let mut result = Self::default();
         for source in sources {
             let positional = !source.structure.open_positions().is_empty();
+            let raw_observation;
             let observed = if positional {
-                if source.proofs.occurrences.get().is_none() {
-                    // Raw positional layouts can differ from physical builtin
-                    // argument order. Their rewrite owns correspondence; this
-                    // admission checks scopes and written identities only.
-                    let observed = InterfaceInference::scoped_occurrences(
+                if source.expression.is_zero() && source.proofs.occurrences.get().is_none() {
+                    let boundary = Self::from_interface(&source.structure);
+                    boundary.validate()?;
+                    let _ = source.proofs.occurrences.set(Arc::new(boundary));
+                }
+                if let Some(observed) = source.proofs.occurrences.get() {
+                    observed.as_ref()
+                } else {
+                    // A raw positional layout may differ from physical argument
+                    // order. Observe scopes locally; this is not authoritative
+                    // metadata and must never populate the admitted proof cell.
+                    raw_observation = InterfaceInference::scoped_occurrences(
                         source.expression.as_view(),
                         &mut SlotMatcher::default(),
                     )
                     .map_err(TensorCompositionError::from)?;
-                    observed.validate()?;
-                    let _ = source.proofs.occurrences.set(Arc::new(observed));
+                    raw_observation.validate()?;
+                    &raw_observation
                 }
-                source
-                    .proofs
-                    .occurrences
-                    .get()
-                    .expect("observed positional source")
-                    .as_ref()
             } else {
                 source
                     .explicit_index_occurrences()
@@ -2801,14 +2803,15 @@ impl SymbolicTensor<PartialStructure> {
         }
         let explicit = self.structure.open_positions().is_empty()
             && right.structure.open_positions().is_empty();
+        let materialized;
         let (materialized_left, materialized_right) = if explicit {
-            // Every selected assignment is already present in admitted syntax.
-            (self.clone(), right.clone())
+            (self, right)
         } else {
-            (
+            materialized = (
                 self.reindex_interface_ports(&left_indices)?,
                 right.reindex_interface_ports(&right_indices)?,
-            )
+            );
+            (&materialized.0, &materialized.1)
         };
         let atom = if self.is_zero() || right.is_zero() {
             Atom::Zero
@@ -2833,7 +2836,7 @@ impl SymbolicTensor<PartialStructure> {
             validate_explicit_index_occurrences(&atom)?;
         }
         SymbolicTensor::from_normalized_parts(atom, interface)
-            .validate_rewrite("contract_ports", &[&materialized_left, &materialized_right])
+            .validate_rewrite("contract_ports", &[materialized_left, materialized_right])
     }
 
     fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
@@ -3271,9 +3274,13 @@ impl SymbolicTensor<PartialStructure> {
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         for source in [self, right] {
-            source
-                .explicit_index_occurrences()
-                .map_err(TensorCompositionError::from)?;
+            if source.structure.open_positions().is_empty() {
+                source
+                    .explicit_index_occurrences()
+                    .map_err(TensorCompositionError::from)?;
+            } else {
+                ExplicitIndexOccurrences::product(&[source])?;
+            }
         }
         let plan = self.product_plan(right)?;
         let compact_dot = matches!(&plan, ProductPlan::Contract(_))
@@ -3495,6 +3502,7 @@ mod tests {
     use crate::dirac::AGS;
     use crate::representations::{Bispinor, ColorAdjoint, ColorFundamental};
     use crate::test_support;
+    use spenso::algebra::ScalarMul;
     use spenso::network::graph::{NetworkNode, NetworkOp};
     use spenso::network::parsing::{NetworkParse, ParseSettings};
     use spenso::structure::dimension::Dimension;
@@ -3506,7 +3514,7 @@ mod tests {
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::{Arc, Mutex};
     use symbolica::atom::Symbol;
-    use symbolica::symbol;
+    use symbolica::{function, symbol};
 
     fn rep() -> Representation<LibraryRep> {
         ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4))
@@ -6668,5 +6676,88 @@ mod tests {
         // The relabelling operation determines the target interface. Normalizer
         // output does not replace admitted tensor metadata, even when scalar.
         value.reindex_interface_ports(&replacements).unwrap();
+    }
+
+    #[test]
+    fn positional_ranked_zero_seeds_declared_index_history() {
+        let i = AbstractIndex::Normal(99801);
+        let j = AbstractIndex::Normal(99803);
+        let ports = [
+            rep().slot(PartialIndex::Explicit(i)),
+            rep().slot(PartialIndex::open(1)),
+        ];
+        let vector = vector("positional_zero_vector", ports[0]);
+        for admitted in [false, true] {
+            let zero = SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots(ports));
+            if admitted {
+                zero.ensure_validated().unwrap();
+            }
+            let contracted = zero
+                .contract_ports(&vector, &[PortPair { left: 0, right: 0 }])
+                .unwrap();
+            assert!(contracted.is_zero());
+            assert_eq!(contracted.rank(), 1);
+            let reindexed = zero
+                .reindex_interface_ports(&HashMap::from([(0, j)]))
+                .unwrap();
+            assert!(reindexed.is_zero());
+            assert_eq!(reindexed.rank(), 2);
+            assert_eq!(
+                reindexed
+                    .explicit_index_occurrences()
+                    .unwrap()
+                    .count(rep().slot(j)),
+                1
+            );
+        }
+    }
+
+    #[test]
+    fn multiply_accepts_raw_positional_logical_order() {
+        let mink = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        let physical = [
+            rep().slot(PartialIndex::open(0)),
+            mink.slot(PartialIndex::open(1)),
+        ];
+        let logical = [
+            mink.slot(PartialIndex::open(0)),
+            rep().slot(PartialIndex::open(1)),
+        ];
+        let source = partial_tensor(
+            tensor_symbol!("raw_positional_product"),
+            &physical,
+            &logical,
+        );
+        let vector = tensor("raw_positional_vector", &[mink]);
+        let direct = source
+            .contract_ports(&vector, &[PortPair { left: 0, right: 0 }])
+            .unwrap();
+        let automatic = source.multiply(&vector).unwrap();
+        assert_eq!(automatic.structure, direct.structure);
+        assert_eq!(automatic.rank(), 1);
+        assert!((&source * &vector).is_ok());
+        assert_eq!(
+            source.try_scalar_mul(&Atom::num(3)).unwrap().structure,
+            source.structure
+        );
+    }
+
+    #[test]
+    fn scalar_multiplication_keeps_closed_dummy_scope_independent() {
+        let index = AbstractIndex::Normal(99811);
+        let port = rep().slot(PartialIndex::Explicit(index));
+        let source = partial_tensor(tensor_symbol!("scalar_scope_vector"), &[port], &[port]);
+        let scalar = function!(tensor_symbol!("scalar_scope_p"), port_atom(port))
+            * function!(tensor_symbol!("scalar_scope_q"), port_atom(port));
+        let result = source
+            .scalar_mul(&scalar)
+            .expect("a closed scalar must multiply a tensor");
+        assert_eq!(result.structure, source.structure);
+        SymbolicTensor::validate_interface(&result.expression, &result.structure).unwrap();
+        let indexed = source.clone().try_into_indexed().unwrap();
+        let scaled = indexed
+            .scalar_mul(&scalar)
+            .expect("indexed scalar multiplication must succeed");
+        assert_eq!(scaled.structure(), indexed.structure());
     }
 }

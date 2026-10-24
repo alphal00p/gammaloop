@@ -276,6 +276,14 @@ impl IndexedTensor {
             .try_into_indexed()
     }
 
+    /// Multiply by an independently scoped scalar, reporting invalid inputs.
+    /// See [`SymbolicTensor::<PartialStructure>::try_scalar_mul`] for the contract.
+    pub fn try_scalar_mul(&self, rhs: &Atom) -> Result<Self> {
+        self.partial_engine()
+            .try_scalar_mul(rhs)?
+            .try_into_indexed()
+    }
+
     /// Consume both operands through the shared composition engine and strict
     /// indexed result validation. Clone an operand explicitly when retaining it.
     pub fn multiply(self, right: Self) -> std::result::Result<Self, TensorCompositionError> {

@@ -1720,6 +1720,46 @@ impl SymbolicTensor<PartialStructure> {
         Ok(value)
     }
 
+    /// Multiply by an independently scoped scalar expression.
+    /// Dummy indices of the scalar are renamed when they collide with this tensor.
+    /// Unlike [`ScalarMul::scalar_mul`](spenso::algebra::ScalarMul::scalar_mul),
+    /// this fallible entry point reports invalid scalar input with a typed error.
+    ///
+    /// # Errors
+    ///
+    /// Rejects invalid source metadata, a non-scalar factor, or invalid scalar syntax.
+    /// See the [arithmetic example](SymbolicTensor).
+    pub fn try_scalar_mul(&self, rhs: &Atom) -> InferenceResult<Self> {
+        let scalar = Self::infer(rhs.clone())?;
+        if !scalar.is_scalar() {
+            return Err(TensorInferenceError::invalid(
+                "scalar multiplication requires a scalar factor",
+            ));
+        }
+        let source = ExplicitIndexOccurrences::product(&[self])?;
+        let dummies = Self::reserved_dummies([self, &scalar]);
+        let renaming = scalar
+            .explicit_index_occurrences()?
+            .entries()
+            .filter(|(slot, count)| *count == 2 && source.count(*slot) != 0)
+            .map(|(slot, _)| (slot.aind(), dummies.fresh_index()))
+            .collect::<HashMap<_, _>>();
+        if renaming.is_empty() {
+            return Ok(self.multiply(&scalar)?);
+        }
+        let expression = scalar.expression.replace_map(|node, _, output| {
+            if node.get_symbol().is_some_and(|head| head.is_scalar()) {
+                **output = node.to_owned();
+            } else if let Ok(slot) = Slot::<LibraryRep, AbstractIndex>::try_from(node)
+                && let Some(target) = renaming.get(&slot.aind())
+            {
+                **output = slot.rep().slot::<AbstractIndex, _>(*target).to_atom();
+            }
+        });
+        let scalar = scalar.with_renamed_indices(expression, &renaming)?;
+        Ok(self.multiply(&scalar)?)
+    }
+
     /// Add tensors with compatible logical interfaces, retaining the left order.
     /// See the [example](SymbolicTensor).
     ///

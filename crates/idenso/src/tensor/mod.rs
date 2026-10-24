@@ -1120,24 +1120,26 @@ impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<OrderedStructure<LibraryRe
 impl ScalarMul<Atom> for SymbolicTensor<PartialStructure> {
     type Output = Self;
 
+    /// # Panics
+    ///
+    /// Panics on invalid inputs; use [`Self::try_scalar_mul`] for typed errors.
     fn scalar_mul(&self, rhs: &Atom) -> Option<Self> {
-        let scalar = Self::infer(rhs.clone()).ok()?;
-        if !scalar.is_scalar() {
-            return None;
-        }
-        self.multiply(&scalar).ok()
+        Some(self.try_scalar_mul(rhs).unwrap_or_else(|error| {
+            panic!("symbolic tensor scalar multiplication failed: {error}")
+        }))
     }
 }
 
 impl ScalarMul<Atom> for SymbolicTensor<IndexedStructure> {
     type Output = Self;
 
+    /// # Panics
+    ///
+    /// Panics on invalid inputs; use [`Self::try_scalar_mul`] for typed errors.
     fn scalar_mul(&self, rhs: &Atom) -> Option<Self> {
-        let scalar = Self::infer_indexed(rhs.clone()).ok()?;
-        if !scalar.is_scalar() {
-            return None;
-        }
-        self.clone().multiply(scalar).ok()
+        Some(self.try_scalar_mul(rhs).unwrap_or_else(|error| {
+            panic!("indexed symbolic tensor scalar multiplication failed: {error}")
+        }))
     }
 }
 
