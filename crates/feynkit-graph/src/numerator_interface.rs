@@ -13,9 +13,9 @@ use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use crate::{DiagramError, FeynmanDiagram};
 
-/// Optional source-artifact ports that cannot be recovered from the expression,
-/// notably a computed zero's rank. Entries retain logical axis order; compact
-/// representations denote distinct unresolved ports.
+/// Ordered source-artifact ports for non-scalar numerators, including computed zeros.
+/// Declared logical axes survive different symbol-registration orders when source text
+/// is loaded elsewhere. Compact representations denote distinct unresolved ports.
 #[derive(Clone, Debug)]
 pub struct NumeratorInterface(
     /// Source port declarations in logical order. `admit` validates them before
@@ -87,7 +87,7 @@ impl NumeratorInterface {
         )?)
     }
 
-    /// Export source notation, retaining metadata whenever syntax loses ports.
+    /// Export source notation with its complete nonempty logical interface.
     pub fn export<A>(
         tensor: &SymbolicTensor<Canonicalized<OrderedStructure<LibraryRep, A>>>,
     ) -> (Atom, Option<Self>)
@@ -106,9 +106,7 @@ impl NumeratorInterface {
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(true, true);
         let expression = cooking.uncook(tensor.expression().as_view());
-        if Self::admit(expression.clone(), None)
-            .is_ok_and(|restored| restored.structure().logical_slots() == logical)
-        {
+        if logical.is_empty() {
             return (expression, None);
         }
         let ports = logical
@@ -214,8 +212,102 @@ impl<'de> Deserialize<'de> for NumeratorInterface {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json as json;
+    use spenso::network::tags::SPENSO_TAG;
     use spenso::structure::representation::{Euclidean, Minkowski, RepName};
-    use symbolica::{function, id::Replacement};
+    use std::env;
+    use std::process::Command;
+    use symbolica::function;
+    use symbolica::id::Replacement;
+
+    #[test]
+    fn source_codec_omits_scalar_interfaces() {
+        for input in [Atom::zero(), Atom::one(), Atom::num((2, 3))] {
+            let source = NumeratorInterface::admit(input.clone(), None).unwrap();
+            let (expression, metadata) = NumeratorInterface::export(&source);
+            assert_eq!(expression, input);
+            assert!(metadata.is_none());
+            assert!(
+                NumeratorInterface::admit(expression, metadata)
+                    .unwrap()
+                    .same_value(&source)
+            );
+        }
+    }
+
+    #[test]
+    fn source_codec_keeps_ports_across_registration_order() {
+        const PAYLOAD: &str = "FEYNKIT_INTERFACE_REGISTRATION_ORDER_TEST_PAYLOAD";
+        let payload = env::var(PAYLOAD).ok();
+        let names = [
+            "feynkit_graph::portable_rank_one_a",
+            "feynkit_graph::portable_rank_one_b",
+        ];
+        let (a, b) = if payload.is_some() {
+            let b = SPENSO_TAG.rank_one_tensor_symbol(names[1]);
+            let a = SPENSO_TAG.rank_one_tensor_symbol(names[0]);
+            (a, b)
+        } else {
+            let a = SPENSO_TAG.rank_one_tensor_symbol(names[0]);
+            let b = SPENSO_TAG.rank_one_tensor_symbol(names[1]);
+            (a, b)
+        };
+
+        if let Some(payload) = payload {
+            let (expression, interface): (String, String) = json::from_str(&payload).unwrap();
+            let expression =
+                FeynmanDiagram::parse_expression("test numerator", expression).unwrap();
+            let inferred = NumeratorInterface::admit(expression.clone(), None).unwrap();
+            let metadata = NumeratorInterface::parse(&interface).unwrap();
+            let restored = NumeratorInterface::admit(expression, Some(metadata)).unwrap();
+            assert_eq!(restored.expression(), inferred.expression());
+            assert_ne!(
+                restored.structure().logical_slots(),
+                inferred.structure().logical_slots(),
+                "opposite registration must expose the inference-order difference"
+            );
+            let (_, metadata) = NumeratorInterface::export(&restored);
+            assert_eq!(
+                metadata.unwrap().to_json(),
+                interface,
+                "the reader must preserve the writer's logical axis order"
+            );
+            return;
+        }
+
+        let ports = [1, 2].map(|index| Minkowski {}.new_rep(4).to_symbolic([Atom::num(index)]));
+        let input = function!(a, &ports[0]) * function!(b, &ports[1]);
+        let source = NumeratorInterface::admit(input.clone(), None).unwrap();
+        let (expression, metadata) = NumeratorInterface::export(&source);
+        assert_eq!(expression, input);
+        assert_eq!(
+            NumeratorInterface::admit(expression.clone(), None)
+                .unwrap()
+                .structure()
+                .logical_slots(),
+            source.structure().logical_slots()
+        );
+        let metadata = metadata.expect("portable source text requires the writer's ordered ports");
+        let payload =
+            json::to_string(&(expression.to_canonical_string(), metadata.to_json())).unwrap();
+        let reader = Command::new(env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "numerator_interface::tests::source_codec_keeps_ports_across_registration_order",
+                "--test-threads=1",
+                "--nocapture",
+            ])
+            .env(PAYLOAD, payload)
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&reader.stdout);
+        assert!(
+            reader.status.success() && stdout.contains("1 passed; 0 failed;"),
+            "fresh reader failed:\n{}\n{}",
+            stdout,
+            String::from_utf8_lossy(&reader.stderr)
+        );
+    }
 
     #[test]
     fn source_codec_preserves_anonymous_axes_and_ranked_zero() {
