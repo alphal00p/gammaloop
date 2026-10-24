@@ -10,6 +10,21 @@ from marimo._output.formatting import try_format
 from symbolica.community import graph as rendering
 from symbolica.community import hepkit as fk
 
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 model = fk.Model(Path(__file__).parent / "fixtures/scalars_2p_3p.json")
 diagram = next(
     candidate
@@ -33,9 +48,15 @@ diagram = next(
 region = diagram.filter(edge=lambda edge: not edge.is_external)
 
 for value in (model.process(["scalar_0"], ["scalar_0"]), diagram, region):
-    drawing = value.render(
+    view = value.render(
         config=rendering.RenderSettings(drawing=rendering.DrawOptions(node_radius=5))
     )
+    assert isinstance(view, rendering.DiagramView)
+    assert callable(value._mime_) and callable(value._repr_mimebundle_)
+    widget_bundle, _ = DisplayFormatter().format(view)
+    assert "application/vnd.jupyter.widget-view+json" in widget_bundle
+    assert "image/svg+xml" not in widget_bundle
+    drawing = external_metrics_snapshot(view)
     bundle, _ = DisplayFormatter().format(drawing)
     assert bundle["text/html"] == drawing.to_html()
     assert bundle["image/svg+xml"] == drawing.to_svg()
@@ -53,11 +74,13 @@ expected = (
     | {("edge", edge_id) for edge_id in edges}
     | {("halfedge", half.index) for half in diagram.to_graph().half_edges()}
 )
-canonical = ET.fromstring(diagram.to_graph()._repr_html_())
+canonical = ET.fromstring(
+    external_metrics_snapshot(diagram.to_graph().render()).to_svg()
+)
 shared_script = canonical.find(namespace + "script").text
 
 for value in (diagram, region):
-    svg = value.render().to_svg()
+    svg = external_metrics_snapshot(value.render()).to_svg()
     root = ET.fromstring(svg)
     assert root.get("data-linnet-interactive") == "true"
     assert "feynkit-diagram-svg" in root.get("class", "")
@@ -91,8 +114,8 @@ for value in (diagram, region):
     output = try_format(value)
     assert output.exception is None, output.traceback
     assert output.mimetype == "text/html"
-    assert "<iframe" in output.data
-    assert "data-linnet-interactive" in output.data
+    assert "marimo-ui-element" in output.data
+    assert callable(value._mime_) and callable(value._repr_mimebundle_)
     assert diagram.to_json() == snapshot
     if value is region:
         assert any(
@@ -131,7 +154,9 @@ for style in (
         cross_section,
         cross_section.filter(edge=lambda edge: edge.is_external),
     ):
-        root = ET.fromstring(value.render(style=style).to_svg())
+        root = ET.fromstring(
+            external_metrics_snapshot(value.render(style=style)).to_svg()
+        )
         targets = root.findall(".//*[@data-linnet-kind]")
         assert {
             (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))

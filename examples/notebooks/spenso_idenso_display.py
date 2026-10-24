@@ -3,9 +3,11 @@
 # dependencies = [
 #     "symbolica==3.0.1",
 #     "marimo==0.24.0",
-#     "typst==0.15.0",
+#     "anywidget>=0.9,<1",
 # ]
 # ///
+
+# ruff: noqa: PLR1711  # Empty cell returns are Marimo syntax.
 
 import marimo
 
@@ -38,8 +40,8 @@ def _(mo):
 
 @app.cell
 def _():
-    from symbolica.community import graph as lp
     import symbolica as sy
+    from symbolica.community import graph as lp
     from symbolica.community import tensor as spenso
     from symbolica.community.tensor import (
         AUTO,
@@ -49,7 +51,6 @@ def _():
         Tensor,
         TensorExpression,
         TensorName,
-        as_tensor,
         chain,
         dot,
         trace,
@@ -554,10 +555,10 @@ def _(Representation, Tensor, TensorName, display_settings, lp):
     v = Tensor.dense(TensorName.vector("v")(euc), [3.0, 4.0])
 
     contraction = u * v
-    contraction_math = contraction.to_html(settings=display_settings)
+    contraction_math = contraction.expression().to_html(settings=display_settings)
     contraction_dot = contraction.to_dot()
     graph = lp.Graph.from_dot(contraction_dot, lp.DotCodec.topology())
-    contraction_graph = graph.to_svg()
+    contraction_graph = graph.render()
     contraction.execute()
     contraction_result = contraction.result_scalar()
     return (
@@ -588,7 +589,7 @@ def _(
             mo.ui.tabs(
                 {
                     "Tensor view": mo.Html(contraction_math),
-                    "Network graph": mo.Html(contraction_graph),
+                    "Network graph": contraction_graph,
                     "DOT source": source_block(contraction_dot, "dot"),
                 }
             ),

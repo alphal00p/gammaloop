@@ -1,6 +1,8 @@
 //! Native SVG drawing of prepared graphs, the host-side counterpart of
 //! `draw.typ`: native layout, Kurvst geometry, the shared annotation search
-//! and SVG output. Typst only typesets the label pages a [`Scene`] lists.
+//! and SVG output. The host measures the MathML label pages a [`Scene`] lists.
+//!
+//! See [`Scene::typeset_mathml`] for the shared label/measurement contract.
 mod config;
 mod curves;
 pub use config::Config;
@@ -10,17 +12,16 @@ mod marks;
 mod output;
 
 use kurbo::{BezPath, Point};
-use linnet::half_edge::{
-    involution::EdgeIndex,
-    layout::impred::{EdgeLabel, ImpredConfig},
-    subgraph::{ModifySubSet, SuBitGraph},
-};
-use serde_json::Value;
+use linnet::half_edge::involution::EdgeIndex;
+use linnet::half_edge::layout::impred::{EdgeLabel, ImpredConfig};
+use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
+use roxmltree::Document;
+use serde_json::{Map, Value};
 use std::sync::Arc;
 
 use crate::{ImpredRun, TypstDotEdge, TypstDotEndpoint, TypstDotNode, TypstGraph, TypstGraphSpec};
 use labels::{Anchor, Bounds, Placement, Stroke as CollisionStroke};
-pub use labels::{LabelPage, Typeset};
+pub use labels::{LabelError, LabelMetrics, LabelPage, LabelSource, Typeset};
 pub use output::Details;
 
 /// Drawing unit in points: Linnest's default 1.5em at 9pt text.
@@ -29,6 +30,7 @@ const UNIT: f64 = 13.5;
 const NODE_RADIUS: f64 = 0.16;
 
 /// A prepared graph with its paint and label sources, drawn by [`Scene::render`].
+/// See [`Self::typeset_mathml`] for a complete measured-label example.
 pub struct Scene {
     /// Layout graph: sizes and pins as statements, in graph-spec form.
     pub graph: TypstGraphSpec,
@@ -37,14 +39,14 @@ pub struct Scene {
     pub edges: Vec<EdgeDrawing>,
     /// Typst source preceding the label pages: imports, text style, definitions.
     pub preamble: String,
-    /// Typst content of the title row above the drawing.
-    pub title: Option<String>,
-    /// Typst content of each label page.
-    pub pages: Vec<String>,
+    /// Label source of the title row above the drawing.
+    pub title: Option<LabelSource>,
+    /// Label source of each page, in measurement order after the title.
+    pub pages: Vec<LabelSource>,
     /// Layout options; `layout-algo` selects `dot` or `impred` (the default).
-    pub layout: serde_json::Map<String, Value>,
+    pub layout: Map<String, Value>,
     /// Further passes, applied in order to the previous pass's geometry.
-    pub layout_passes: Vec<serde_json::Map<String, Value>>,
+    pub layout_passes: Vec<Map<String, Value>>,
     /// Edges defining the layered hierarchy, in spec order. Other edges are
     /// routed around it without changing the ranks. `None` uses all edges.
     pub layout_edges: Option<Vec<usize>>,
@@ -140,26 +142,99 @@ const FEEDBACK_WARM: f64 = 0.8;
 const FEEDBACK_STEPS: usize = 100;
 
 impl Scene {
-    /// The Typst document typesetting every label page, in order.
-    pub fn label_document(&self) -> String {
+    /// The optional vector-export document, with measured title first.
+    ///
+    /// See [`Self::typeset_mathml`] for constructing a scene, and [`Self::typeset`]
+    /// for importing the pages produced by an external Typst compiler.
+    ///
+    /// # Errors
+    /// Returns [`LabelError::MissingTypstSource`] if any label has only MathML.
+    pub fn label_document(&self) -> Result<String, LabelError> {
         let pages: Vec<String> = self
             .title
             .iter()
-            .map(|title| format!("#box[{title}]"))
-            .chain(self.pages.iter().map(|page| LabelPage::measured(page)))
-            .collect();
-        format!(
+            .chain(&self.pages)
+            .enumerate()
+            .map(|(page, source)| {
+                source
+                    .typst
+                    .as_deref()
+                    .map(LabelPage::measured)
+                    .ok_or(LabelError::MissingTypstSource { page })
+            })
+            .collect::<Result<_, _>>()?;
+        Ok(format!(
             "#set page(width: auto, height: auto, margin: 0pt, fill: none)\n{}\n{}",
             self.preamble,
             pages.join("\n#pagebreak()\n")
-        )
+        ))
+    }
+
+    /// Import host-measured MathML boxes, title first, in points.
+    ///
+    /// # Errors
+    /// Returns [`LabelError`] when the number of measurements is wrong, a
+    /// rectangle is invalid, or a label is malformed MathML or contains foreign
+    /// elements. MathML does not need a Typst source.
+    ///
+    /// ```
+    /// use linnest::svg::{LabelMetrics, LabelSource, Scene};
+    /// use serde_json;
+    /// use std::error::Error;
+    /// let scene = Scene {
+    ///     graph: serde_json::from_str(r#"{"nodes":[],"edges":[]}"#)?,
+    ///     nodes: Vec::new(), edges: Vec::new(), preamble: String::new(),
+    ///     title: Some(LabelSource::text("Measured title")), pages: Vec::new(),
+    ///     layout: Default::default(), layout_passes: Vec::new(),
+    ///     layout_edges: None, label_feedback: false,
+    /// };
+    /// // Supply the actual browser's measurements, in title/label order.
+    /// let metrics = LabelMetrics { width: 65.0, height: 9.0, baseline: 7.0 };
+    /// let labels = scene.typeset_mathml(&[metrics])?;
+    /// assert_eq!(labels.title.as_ref().map(|title| title.metrics), Some(metrics));
+    /// assert!(scene.label_document()?.contains("Measured title"));
+    /// # Ok::<(), Box<dyn Error>>(())
+    /// ```
+    pub fn typeset_mathml(&self, metrics: &[LabelMetrics]) -> Result<Typeset, LabelError> {
+        let expected = self.pages.len() + usize::from(self.title.is_some());
+        if metrics.len() != expected {
+            return Err(LabelError::MeasurementCount {
+                expected,
+                actual: metrics.len(),
+            });
+        }
+        let mut pages = self
+            .title
+            .iter()
+            .chain(&self.pages)
+            .zip(metrics)
+            .map(|(source, metrics)| source.typeset_mathml(*metrics));
+        let title = if self.title.is_some() {
+            Some(pages.next().ok_or(LabelError::MissingTitle)??)
+        } else {
+            None
+        };
+        Ok(Typeset {
+            title,
+            pages: pages.collect::<Result<_, _>>()?,
+            defs: String::new(),
+        })
     }
 
     /// Read the SVG pages compiled from [`Scene::label_document`].
-    pub fn typeset(&self, svgs: &[String]) -> Result<Typeset, String> {
+    ///
+    /// See [`Typeset::read`] for an example of the measured SVG page protocol.
+    ///
+    /// # Errors
+    /// Returns [`LabelError`] for malformed or unmeasured SVG pages, a missing
+    /// title, or a page count that differs from this scene's labels.
+    pub fn typeset(&self, svgs: &[String]) -> Result<Typeset, LabelError> {
         let typeset = Typeset::read(svgs, self.title.is_some())?;
         if typeset.pages.len() != self.pages.len() {
-            return Err("typeset pages do not match the scene's label pages".to_owned());
+            return Err(LabelError::PageCount {
+                expected: self.pages.len(),
+                actual: typeset.pages.len(),
+            });
         }
         Ok(typeset)
     }
@@ -255,7 +330,7 @@ struct Laid {
 impl Laid {
     fn layered(
         graph: &mut TypstGraph,
-        options: &serde_json::Map<String, Value>,
+        options: &Map<String, Value>,
         edges: Option<&Vec<usize>>,
     ) -> Result<Self, String> {
         graph.layout_config = serde_json::from_value(Value::Object(options.clone()))
@@ -467,13 +542,7 @@ impl Drawing {
             };
             let label = drawing
                 .label
-                .map(|page| {
-                    typeset.pages[page]
-                        .metrics
-                        .map(|metrics| (page, metrics))
-                        .ok_or("label page has no measurements")
-                })
-                .transpose()?;
+                .map(|page| (page, typeset.pages[page].metrics));
             let paired = edge.source.is_some() && edge.sink.is_some();
             if drawing.momentum && !(paired && label.is_some()) {
                 // External arrows are fixed decorations, as are internal ones
@@ -628,10 +697,10 @@ impl Drawing {
                 layers.push(Element::Label {
                     page,
                     bounds: Bounds {
-                        left: at[0] - label.width / UNIT / 2.0,
-                        right: at[0] + label.width / UNIT / 2.0,
-                        bottom: at[1] - label.height / UNIT / 2.0,
-                        top: at[1] + label.height / UNIT / 2.0,
+                        left: at[0] - label.metrics.width / UNIT / 2.0,
+                        right: at[0] + label.metrics.width / UNIT / 2.0,
+                        bottom: at[1] - label.metrics.height / UNIT / 2.0,
+                        top: at[1] + label.metrics.height / UNIT / 2.0,
                     },
                     href: None,
                 });
@@ -640,7 +709,8 @@ impl Drawing {
             // overlapping anchors steal clicks from the keyboard-focusable one.
             let (width, height) = drawing.size(typeset);
             let label_size = drawing.label.map_or(0.0, |page| {
-                typeset.pages[page].width.max(typeset.pages[page].height)
+                let metrics = typeset.pages[page].metrics;
+                metrics.width.max(metrics.height)
             });
             targets.push(Target {
                 at,
@@ -908,8 +978,8 @@ impl NodeDrawing {
             return (self.radius, self.radius);
         };
         let (w, h) = (
-            (label.width / UNIT / 2.0 + padding).max(self.radius),
-            (label.height / UNIT / 2.0 + padding).max(self.radius),
+            (label.metrics.width / UNIT / 2.0 + padding).max(self.radius),
+            (label.metrics.height / UNIT / 2.0 + padding).max(self.radius),
         );
         if self.rectangular {
             (w, h)
@@ -928,7 +998,7 @@ impl Scene {
         let mut body = String::new();
         let (mut width, mut height) = (0.0_f64, 0.0_f64);
         for figure in figures {
-            let document = roxmltree::Document::parse(figure).map_err(|e| e.to_string())?;
+            let document = Document::parse(figure).map_err(|e| e.to_string())?;
             let size = document
                 .root_element()
                 .attribute("viewBox")
@@ -1090,9 +1160,9 @@ mod tests {
                 ),
             ],
             preamble: String::new(),
-            title: Some("#\"bubble\"".to_owned()),
-            pages: vec!["[x]".to_owned()],
-            layout: serde_json::Map::new(),
+            title: Some(LabelSource::text("bubble")),
+            pages: vec![LabelSource::text("x")],
+            layout: Map::new(),
             layout_passes: Vec::new(),
             layout_edges: None,
             label_feedback: false,
@@ -1107,7 +1177,12 @@ mod tests {
 
     fn typeset(scene: &Scene) -> Typeset {
         let label = page(r#"<g/><a href="linnest-metrics:10,8,8,12"><rect/></a>"#);
-        scene.typeset(&[page("<g/>"), label]).unwrap()
+        scene
+            .typeset(&[
+                page(r#"<g/><a href="linnest-metrics:10,8,8,12"><rect/></a>"#),
+                label,
+            ])
+            .unwrap()
     }
 
     #[test]
@@ -1175,17 +1250,225 @@ mod tests {
     fn reads_title_and_measured_label_pages() {
         let scene = bubble(false);
         let typeset = typeset(&scene);
-        assert!(typeset
-            .title
-            .as_ref()
-            .is_some_and(|title| title.metrics.is_none()));
-        assert_eq!(typeset.pages[0].metrics, Some([10.0, 8.0, 8.0, 12.0]));
+        assert_eq!(
+            typeset.title.as_ref().unwrap().metrics,
+            LabelMetrics {
+                width: 10.0,
+                height: 12.0,
+                baseline: 8.0
+            }
+        );
+        assert_eq!(
+            typeset.pages[0].metrics,
+            LabelMetrics {
+                width: 10.0,
+                height: 12.0,
+                baseline: 8.0
+            }
+        );
         assert_eq!(typeset.pages[0].body, "<g/>");
         assert_eq!(typeset.defs.matches("<symbol").count(), 1);
         assert!(scene.typeset(&[page("<g/>")]).is_err());
-        let document = scene.label_document();
+        let document = scene.label_document().unwrap();
         assert!(document.starts_with("#set page(width: auto, height: auto, margin: 0pt"));
-        assert!(document.contains("#box[#\"bubble\"]\n#pagebreak()\n#context"));
+        assert!(document.contains("let body = \"bubble\";"));
+        assert_eq!(document.matches("#context").count(), 2);
+    }
+
+    #[test]
+    fn mathml_sources_and_measurements_roundtrip_without_vector_sources() {
+        let mut scene = bubble(false);
+        scene.title = Some(LabelSource::text("a<&\"b"));
+        scene.pages[0] = LabelSource {
+            mathml: "<mfrac><mi>α</mi><msub><mi>p</mi><mn>2</mn></msub></mfrac>".into(),
+            typst: None,
+        };
+        let measurements = [
+            LabelMetrics {
+                width: 31.25,
+                height: 9.5,
+                baseline: 7.75,
+            },
+            LabelMetrics {
+                width: 11.5,
+                height: 18.25,
+                baseline: 12.0,
+            },
+        ];
+        let encoded = serde_json::to_string(&measurements).unwrap();
+        let restored: Vec<LabelMetrics> = serde_json::from_str(&encoded).unwrap();
+        assert_eq!(restored, measurements);
+        let typeset = scene.typeset_mathml(&restored).unwrap();
+        assert_eq!(typeset.title.as_ref().unwrap().metrics, measurements[0]);
+        assert_eq!(typeset.pages[0].metrics, measurements[1]);
+        assert!(typeset.defs.is_empty());
+        assert!(matches!(
+            scene.label_document(),
+            Err(LabelError::MissingTypstSource { page: 1 })
+        ));
+
+        let svg = scene.render(&typeset).unwrap();
+        let document = Document::parse(&svg).unwrap();
+        let objects: Vec<_> = document
+            .descendants()
+            .filter(|node| node.has_tag_name(("http://www.w3.org/2000/svg", "foreignObject")))
+            .collect();
+        // The title and the four edge labels all embed the measured source.
+        assert_eq!(objects.len(), 5);
+        for (index, object) in objects.iter().enumerate() {
+            let metrics = measurements[usize::from(index != 0)];
+            assert_eq!(object.attribute("x"), Some("0"));
+            assert_eq!(object.attribute("y"), Some("0"));
+            assert_eq!(
+                object.attribute("width").unwrap().parse::<f64>().unwrap(),
+                metrics.width
+            );
+            assert_eq!(
+                object.attribute("height").unwrap().parse::<f64>().unwrap(),
+                metrics.height
+            );
+            let div = object.first_element_child().unwrap();
+            assert!(div.has_tag_name(("http://www.w3.org/1999/xhtml", "div")));
+            assert_eq!(
+                div.attribute("style"),
+                Some("font-size:9px;line-height:1;width:max-content")
+            );
+            let math = div.first_element_child().unwrap();
+            assert!(math.has_tag_name(("http://www.w3.org/1998/Math/MathML", "math")));
+            assert_eq!(
+                math.first_element_child().unwrap().tag_name().name(),
+                if index == 0 { "mtext" } else { "mfrac" }
+            );
+            if index == 0 {
+                assert_eq!(math.first_element_child().unwrap().text(), Some("a<&\"b"));
+            }
+        }
+        assert!(svg.contains("#linnet-node-0?"));
+        assert!(svg.contains("#linnet-halfedge-1?"));
+        assert!(svg.contains("&quot;particle&quot;:&quot;x&quot;"));
+    }
+
+    #[test]
+    fn mathml_requires_exact_measurements_and_valid_fragments() {
+        let mut scene = bubble(false);
+        let metrics = LabelMetrics {
+            width: 10.0,
+            height: 12.0,
+            baseline: 8.0,
+        };
+        for count in [0, 1, 3] {
+            assert!(scene.typeset_mathml(&vec![metrics; count]).is_err());
+        }
+        for invalid in [
+            LabelMetrics {
+                width: f64::NAN,
+                ..metrics
+            },
+            LabelMetrics {
+                width: f64::INFINITY,
+                ..metrics
+            },
+            LabelMetrics {
+                width: -1.0,
+                ..metrics
+            },
+            LabelMetrics {
+                height: f64::NEG_INFINITY,
+                ..metrics
+            },
+            LabelMetrics {
+                height: -1.0,
+                ..metrics
+            },
+            LabelMetrics {
+                baseline: f64::NAN,
+                ..metrics
+            },
+            LabelMetrics {
+                baseline: -1.0,
+                ..metrics
+            },
+            LabelMetrics {
+                baseline: 13.0,
+                ..metrics
+            },
+        ] {
+            // Both the title and content boundary validate their measurements.
+            assert!(scene.typeset_mathml(&[invalid, metrics]).is_err());
+            assert!(scene.typeset_mathml(&[metrics, invalid]).is_err());
+        }
+        for source in [
+            "<mfrac><mi>x</mi></mrow>",
+            "<math><mi>x</mi></math>",
+            "<div xmlns=\"http://www.w3.org/1999/xhtml\">x</div>",
+        ] {
+            scene.pages[0].mathml = source.into();
+            assert!(scene.typeset_mathml(&[metrics, metrics]).is_err());
+        }
+        scene.pages[0] = LabelSource::text("");
+        scene.title = None;
+        let zero = LabelMetrics {
+            width: 0.0,
+            height: 0.0,
+            baseline: 0.0,
+        };
+        assert_eq!(
+            scene.typeset_mathml(&[zero]).unwrap().pages[0].metrics,
+            zero
+        );
+        assert!(scene.typeset_mathml(&[zero, zero]).is_err());
+        scene.pages.clear();
+        let empty = scene.typeset_mathml(&[]).unwrap();
+        assert!(empty.title.is_none() && empty.pages.is_empty());
+        assert!(serde_json::from_str::<LabelMetrics>(r#"{"width":10,"height":12}"#).is_err());
+    }
+
+    #[test]
+    fn native_mathml_and_vector_metrics_produce_the_same_geometry() {
+        for momentum in [false, true] {
+            let mut scene = bubble(momentum);
+            scene.nodes[0].label = Some(0);
+            let vector = typeset(&scene);
+            let mathml = scene
+                .typeset_mathml(&[
+                    vector.title.as_ref().unwrap().metrics,
+                    vector.pages[0].metrics,
+                ])
+                .unwrap();
+            // Equal measured rectangles must feed the same node sizing,
+            // collision search, arrow placement, targets, and page bounds.
+            let mut geometry = mathml.clone();
+            geometry.title.as_mut().unwrap().body = vector.title.as_ref().unwrap().body.clone();
+            geometry.pages[0].body = vector.pages[0].body.clone();
+            geometry.defs.clone_from(&vector.defs);
+            assert_eq!(
+                scene.render(&geometry).unwrap(),
+                scene.render(&vector).unwrap()
+            );
+            assert_eq!(scene.nodes[0].size(&mathml), scene.nodes[0].size(&vector));
+        }
+    }
+
+    #[test]
+    fn vector_import_rejects_missing_and_invalid_measurements() {
+        let scene = bubble(false);
+        for metrics in [
+            "NaN,8,8,12",
+            "10,-8,8,12",
+            "10,8,8,4",
+            "10,8,8,inf",
+            "10,8,8",
+            "10,8,8,12,0",
+        ] {
+            let invalid = page(&format!(
+                r#"<a href="linnest-metrics:{metrics}"><rect/></a>"#
+            ));
+            assert!(
+                scene.typeset(&[invalid.clone(), invalid]).is_err(),
+                "{metrics}"
+            );
+        }
+        assert!(scene.typeset(&[page("<g/>"), page("<g/>")]).is_err());
     }
 
     #[test]
@@ -1429,8 +1712,7 @@ mod tests {
                 let mut scene = bubble(momentum);
                 scene.label_feedback = true;
                 let mut typeset = typeset(&scene);
-                typeset.pages[0].width = width;
-                typeset.pages[0].metrics = Some([width, 8.0, 8.0, 12.0]);
+                typeset.pages[0].metrics.width = width;
                 let (expected, scores) = eager(&scene, &typeset);
                 continued_after_rejection |= (1..scores.len().saturating_sub(1))
                     .any(|i| scores[i] >= *scores[..i].iter().min().unwrap());

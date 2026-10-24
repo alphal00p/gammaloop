@@ -1,7 +1,10 @@
 """Exercise the shared graph camera and inspector in Chromium and WebKit."""
 
 import importlib.util
+import re
 import unittest
+
+from rendering_metrics import external_metrics_snapshot
 
 from symbolica.community import graph as lp
 
@@ -14,15 +17,19 @@ class SvgBrowserTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright
 
         sizes = [(120, 80), (360, 80), (120, 600), (900, 80)]
+        # Camera sizing uses fixed canvases around one captured native drawing.
+        # The dimensions below are fixtures; label measurement has its own harness.
+        graph = lp.build(lp.node("label", label=lp.TextLabel("Same label")))
+        drawing = external_metrics_snapshot(graph.render()).to_svg()
         drawings = []
         for width, height in sizes:
-            source = (
-                f"#set page(width: {width}pt, height: {height}pt, margin: 0pt)\n"
-                '#link("#linnet-node-0")[#text(size: 12pt)[Same label]]'
+            opening, rest = drawing.split(">", 1)
+            opening = re.sub(
+                r'viewBox="[^"]*"', f'viewBox="0 0 {width} {height}"', opening
             )
-            drawings.append(
-                lp.DiagramRender.from_sources({"main.typ": source.encode()}).to_html()
-            )
+            opening = re.sub(r'width="[^"]*"', f'width="{width}pt"', opening)
+            opening = re.sub(r'height="[^"]*"', f'height="{height}pt"', opening)
+            drawings.append(f'<figure class="linnet-graph">{opening}>{rest}</figure>')
         document = "<style>figure { margin: 0; }</style>" + "".join(
             f'<div id="graph-{index}" style="width:520px">{drawing}</div>'
             for index, drawing in enumerate(drawings)
@@ -103,7 +110,9 @@ class SvgBrowserTests(unittest.TestCase):
                     browser = engine.launch()
                     try:
                         page = browser.new_page()
-                        page.set_content(graph.render().to_html())
+                        page.set_content(
+                            external_metrics_snapshot(graph.render()).to_html()
+                        )
                         paper = page.locator(
                             'svg[data-linnet-interactive] [fill="#ffffff"]'
                         ).first
@@ -142,10 +151,14 @@ class SvgBrowserTests(unittest.TestCase):
 
         left, right = lp.node("left"), lp.node("right")
         graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
-        drawing = graph.to_svg().replace(
-            'data-linnet-interactive="true"',
-            'data-linnet-interactive="true" data-linnet-viewport-height="360"',
-            1,
+        drawing = (
+            external_metrics_snapshot(graph.render())
+            .to_svg()
+            .replace(
+                'data-linnet-interactive="true"',
+                'data-linnet-interactive="true" data-linnet-viewport-height="360"',
+                1,
+            )
         )
         with sync_playwright() as playwright:
             for engine in (playwright.chromium, playwright.webkit):
@@ -182,7 +195,8 @@ class SvgBrowserTests(unittest.TestCase):
                     try:
                         page = browser.new_page(viewport={"width": 1000, "height": 800})
                         page.set_content(
-                            '<!doctype html><meta charset="utf-8">' + graph.to_svg()
+                            '<!doctype html><meta charset="utf-8">'
+                            + external_metrics_snapshot(graph.render()).to_svg()
                         )
                         panel = page.locator(".linnet-inspector")
                         self.assertFalse(panel.is_visible())
@@ -214,7 +228,7 @@ class SvgBrowserTests(unittest.TestCase):
 
         left, right = lp.node("left"), lp.node("right")
         graph = lp.build(left, right, lp.edge(lp.source(left), "p", lp.sink(right)))
-        drawing = graph.to_svg()
+        drawing = external_metrics_snapshot(graph.render()).to_svg()
         document = (
             '<!doctype html><meta charset="utf-8">'
             f'<div id="first">{drawing}</div><div id="second">{drawing}</div>'

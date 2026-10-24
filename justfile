@@ -109,8 +109,8 @@ check-symbolica-feature-isolation:
       fi
     done
     symbolica_source="$(sed -n '/^name = "symbolica"$/,/^\[\[package\]\]/s/^source = "\(.*\)"$/\1/p' "$root/Cargo.lock")"
-    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=community#[0-9a-f]{40}$ ]]; then
-      echo "the root lock must select one Symbolica revision from the official community branch" >&2
+    if ! [[ "$symbolica_source" =~ ^git\+https://github\.com/symbolica-dev/symbolica\?branch=main#[0-9a-f]{40}$ ]]; then
+      echo "the root lock must select one Symbolica revision from the official main branch" >&2
       exit 1
     fi
     for lock in "$root/Cargo.lock" "$root/tydenso/Cargo.lock" "$root/examples/notebooks/symbolica-host/Cargo.lock"; do
@@ -125,6 +125,30 @@ check-symbolica-feature-isolation:
         fi
       done
     done
+
+    for manifest in tydenso/Cargo.toml examples/notebooks/symbolica-host/Cargo.toml; do
+      if ! cargo metadata --locked --offline --format-version 1 --manifest-path "$root/$manifest" > /dev/null; then
+        echo "${manifest%Cargo.toml}Cargo.lock is stale or cannot resolve offline; refresh it with cargo metadata --offline --manifest-path $manifest" >&2
+        exit 1
+      fi
+    done
+    python3 - "$root" <<'PYTHON'
+    import pathlib
+    import sys
+    import tomllib
+
+    root = pathlib.Path(sys.argv[1])
+    def packages(path):
+        with path.open("rb") as lock:
+            return {(p["name"], p["version"], p.get("source")) for p in tomllib.load(lock)["package"]}
+
+    # The standalone host itself is not a dependency vendored from the root lock.
+    host = packages(root / "examples/notebooks/symbolica-host/Cargo.lock")
+    host.remove(("alphal00p-notebook-host", "0.1.0", None))
+    missing = host - packages(root / "Cargo.lock")
+    if missing:
+        sys.exit("examples/notebooks/symbolica-host/Cargo.lock contains packages absent from Cargo.lock: " + repr(sorted(missing)))
+    PYTHON
 
 # Keep Pyodide's portable arithmetic isolated from native code generation and Hakari.
 check-spynso-wasm:

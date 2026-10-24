@@ -187,6 +187,22 @@ spenso, idenso ------> feynkit-tensor
 focused crates -> feynkit / feynkit-py
 ```
 
+`symbolica-notation` owns the small structured `IndexDisplay` tree and its
+bounded MathML/Typst/plain rendering and existing portable user-data encoding.
+It depends on Symbolica, `thiserror` and the XML parser `roxmltree`, below both Spenso and
+`linnet-render-py`; graph presentation no longer needs Spenso for these labels.
+This extraction preserves rendering and the `spenso.math-display` attachment
+format. Representation palettes, classes and rows remain owned by Spenso.
+`Notation::register` and `Notation::lookup` provide process-local, immutable
+shared notation with idempotent registration and typed conflict/poison errors.
+Renderers resolve callbacks, process-local notation, and escaped symbol names
+in that order. Display-only symbol tags and tensor-head user data are not read.
+Python MathML mappings use a bounded presentation allowlist and reconstruct
+escaped markup. Typst exports carry notation in explicit document settings;
+canonical symbol strings and saved states contain no display-only tags.
+Identity-derived index attachments retain their portable encoding. Portable
+presentation export will require a later explicit opt-in attachment.
+
 No FeynKit crate depends on `gammalooprs`, `gammaloop-api`,
 `GlobalSettings`, or GammaLoop `State`. Generation receives explicit
 `GenerationOptions`, and progress/cancellation are callback- and
@@ -229,7 +245,8 @@ Converting a generation result into a coherent amplitude requires its completed
 status; cancellation cannot silently publish a complete amplitude.
 
 Python diagram, edge, and vertex numerators use Spenso's `TensorExpression`
-directly, with the existing constructor inferring their tensor interfaces. Diagram
+directly, wrapping their retained tensors without re-inferring their interfaces
+or discarding scoped index history. Diagram
 denominators use the same scalar tensor interface and Spenso Minkowski products,
 with symbolic masses owned by the canonical particle model. They contain one
 quadratic factor per internal edge, excluding widths and the imaginary prescription.
@@ -368,9 +385,19 @@ it directly. `get_single_atom` is an explicit decoded expression view for
 exports, diagnostics and external algebra consumers, rather than the handoff
 between typed generation stages.
 
-UFO rule lowering uses temporary source expressions until a complete localized
-vertex or propagator factor is ready. The generator admits that factor once
-into its existing numerator cache. `PreparedNumerator` retains separate typed
+The generator's model-bound numerator cache retains admitted templates for rules
+whose explicit index identities can be localized injectively. Instantiation
+transports their logical ports and scoped index history, including identities
+absent from a normalized zero, and restores the raw rule's occurrence-based
+logical axis order. Rules with unresolved ports, callback-sensitive notation or
+ambiguous scoped aliases remain source expressions until localized at their
+actual graph owner, where they undergo checked admission. The same cache retains
+the resulting localized vertex and propagator factors.
+Template admission and symbolic callbacks run outside cache write guards.
+Concurrent cold callers may compute the same immutable template, but publication
+retains one shared value; all callers reuse that winner. Poisoned caches fail
+instead of continuing with potentially invalid retained tensors.
+`PreparedNumerator` retains separate typed
 values for exact comparison, routed sampling input and sampled results.
 Sampling evaluates the Lorentz sector to finite scalar components; its color
 sector can remain symbolic with open ports, so the combined sample remains a

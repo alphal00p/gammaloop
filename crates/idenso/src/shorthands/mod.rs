@@ -1,14 +1,12 @@
-use spenso::structure::{abstract_index::AbstractIndex, partial::PartialStructure};
-use spenso::{
-    network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing},
-    structure::slot::{AbsInd, DummyAind, ParseableAind},
-};
+use spenso::network::parsing::{ParseSettings, SchoonschipExpansionMode, ShorthandParsing};
+use spenso::structure::abstract_index::AbstractIndex;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::slot::{AbsInd, DummyAind, ParseableAind};
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
-use crate::{
-    NetworkToolingError,
-    tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor, inference::TensorInferenceError},
-};
+use crate::NetworkToolingError;
+use crate::tensor::inference::TensorInferenceError;
+use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
 
 pub(crate) mod bracket;
 pub mod chain;
@@ -37,17 +35,22 @@ impl SymbolicTensor<PartialStructure> {
     /// This does not expand a numerator or evaluate finite tensor components.
     pub fn undo_dots(&self) -> Result<Self, TensorInferenceError> {
         let expression = self.expression().undo_dots::<AbstractIndex>()?;
-        self.with_identity_result(expression, None)
+        // Opening notation allocates index identities. Establish those new
+        // identities at this materialization boundary rather than carrying a
+        // source mask which cannot name them.
+        self.with_materialized_expression(expression)
     }
 
     /// Expose chain factors with fresh compatible dummy indices and unchanged endpoints.
     pub fn undo_chain(&self) -> Result<Self, TensorInferenceError> {
-        self.with_identity_result(self.expression().undo_chain::<AbstractIndex>()?, None)
+        let expression = self.expression().undo_chain::<AbstractIndex>()?;
+        self.with_materialized_expression(expression)
     }
 
     /// Replace trace notation with a closed chain, without evaluating it.
     pub fn undo_trace(&self) -> Result<Self, TensorInferenceError> {
-        self.with_identity_result(self.expression().undo_trace::<AbstractIndex>()?, None)
+        let expression = self.expression().undo_trace::<AbstractIndex>()?;
+        self.with_materialized_expression(expression)
     }
 }
 
@@ -289,17 +292,15 @@ impl<'a> UndoShorthands for AtomView<'a> {
 
 #[cfg(test)]
 mod tests {
-    use spenso::{
-        chain, chain_factor, dot, mink, network::tags::SPENSO_TAG,
-        structure::abstract_index::AbstractIndex, vector,
-    };
-    use symbolica::{
-        atom::{Atom, AtomCore, FunctionBuilder},
-        symbol,
-    };
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::abstract_index::AbstractIndex;
+    use spenso::{chain, chain_factor, dot, mink, vector};
+    use symbolica::atom::{Atom, AtomCore, FunctionBuilder};
+    use symbolica::symbol;
     use symbolica_utils::AtomPrintExt;
 
-    use crate::shorthands::{bracket::BracketNormalizer, schoonschip::Schoonschip};
+    use crate::shorthands::bracket::BracketNormalizer;
+    use crate::shorthands::schoonschip::Schoonschip;
     use crate::test_support::test_initialize;
 
     use super::*;
@@ -511,19 +512,22 @@ mod tests {
 
 #[cfg(test)]
 mod typed_dot_tests {
+    use crate::tensor::composition::TensorCompositionError;
+    use crate::test_support;
+    use spenso::structure::representation::LibraryRep;
+    use spenso::structure::slot::{IsAbstractSlot, SlotMatcher};
+    use spenso::tensor_symbol;
+    use symbolica::atom::FunctionBuilder;
+
     use super::*;
     use crate::tensor::SymbolicTensor;
-    use spenso::{
-        chain, chain_factor, dot, g, mink,
-        network::tags::SPENSO_TAG,
-        structure::partial::{PartialStructure, PartialStructureExt},
-        tensor, trace, vector,
-    };
-    use std::sync::{
-        Arc,
-        atomic::{AtomicUsize, Ordering},
-    };
-    use symbolica::{atom::AtomCore, function, symbol};
+    use spenso::network::tags::SPENSO_TAG;
+    use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+    use spenso::{chain, chain_factor, dot, g, mink, tensor, trace, vector};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use symbolica::atom::AtomCore;
+    use symbolica::{function, symbol};
 
     #[test]
     fn typed_dot_formatting_does_not_contract_explicit_factors() {
@@ -812,5 +816,37 @@ mod typed_dot_tests {
         let indexed = vector!(notation_explicit_p, mink!(4, 97081)).pow(2);
         let source = SymbolicTensor::infer(indexed.clone()).unwrap();
         assert_eq!(source.to_dots().unwrap().expression(), &indexed);
+    }
+
+    #[test]
+    fn opening_dot_notation_records_its_allocated_dummy_pair() {
+        test_support::test_initialize();
+        let source = SymbolicTensor::infer(dot!(
+            vector!(allocated_dot_p, mink!(4)),
+            vector!(allocated_dot_q, mink!(4))
+        ))
+        .unwrap();
+        let opened = source.undo_dots().unwrap();
+        assert!(opened.is_scalar());
+        let mut slots = SlotMatcher::default();
+        let mut allocated = None;
+        opened.expression().visitor(&mut |node| {
+            if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(node) {
+                allocated.get_or_insert(slot);
+                return false;
+            }
+            true
+        });
+        let slot = allocated.expect("opening a dot allocates its contraction index");
+        let extra = SymbolicTensor::infer(
+            FunctionBuilder::new(tensor_symbol!("allocated_dot_third_use"))
+                .add_arg(slot.to_atom())
+                .finish(),
+        )
+        .unwrap();
+        assert!(matches!(opened.multiply(&extra),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { index, occurrences: 3 })
+                if index == slot.aind()
+        ));
     }
 }

@@ -703,7 +703,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#170ba932d0cf73508da34cc78fbe82361158147e"
 dependencies = [
  "ahash",
  "dyn-clone",
@@ -763,6 +763,7 @@ dependencies = [
  "spenso",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "thiserror",
  "tracing",
@@ -1066,7 +1067,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#170ba932d0cf73508da34cc78fbe82361158147e"
 dependencies = [
  "ahash",
  "astro-float",
@@ -1398,6 +1399,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6f6ff9a378485b298a5286656da665ba74413d36db0979633275d2e708145d4"
 
 [[package]]
+name = "roxmltree"
+version = "0.21.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f1964b10c76125c36f8afe190065a4bf9a87bf324842c05701330bba9f1cacbb"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "rug"
 version = "1.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1606,6 +1616,7 @@ dependencies = [
  "serde_json",
  "spenso-macros",
  "symbolica",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "symbolica-utils",
  "tabled",
@@ -1631,7 +1642,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/symbolica-dev/symbolica?branch=community#c78cffc20f318df1fce50539a587cbe8ffc717c0"
+source = "git+https://github.com/symbolica-dev/symbolica?branch=main#170ba932d0cf73508da34cc78fbe82361158147e"
 dependencies = [
  "ahash",
  "append-only-vec",
@@ -1660,6 +1671,15 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.0",
+]
+
+[[package]]
+name = "symbolica-notation"
+version = "0.1.0"
+dependencies = [
+ "roxmltree",
+ "symbolica",
+ "thiserror",
 ]
 
 [[package]]
@@ -1878,6 +1898,7 @@ dependencies = [
  "idenso",
  "spenso",
  "symbolica",
+ "symbolica-notation",
  "symbolica-typst-plugin",
  "wasm-minimal-protocol",
 ]

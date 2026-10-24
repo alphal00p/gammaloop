@@ -192,7 +192,15 @@ anchor = "pub fn generate("
 # Reviewed 2026-10-17: Only toy-model fixtures change: singlet summands have matching scalar color factors, the dedicated colored test retains matching color tensors, and incompatible sums remain rejected before caching.
 # Reviewed 2026-10-17: The toy fermion propagator now uses standard UFO PSlash with valid spinor and contracted Lorentz ports; its original graph/sign/cut assertions remain intact.
 # Reviewed 2026-10-19: the architecture note records caller-thread execution for explicit threads(1), unchanged multi-worker behavior, exact epsilon import normalization and the new regression coverage; the readiness note keeps timing qualification separate.
-digest = "c410fad778b921428a9713a8e1579f30f06ea31d"
+# Reviewed 2026-10-23: the current architecture records model-bound admitted
+# numerator templates, injective localization with retained index history and
+# occurrence-order restoration. Dynamic rules still enter at their actual owner;
+# generation, filtering, cancellation and explicit threads(1) ownership remain.
+# Reviewed 2026-10-23: Template admission runs outside write guards; concurrent publication retains one shared template. Cache poisoning remains a failure. See the updated generation ownership note.
+# No-impact attestation 2026-10-23: boxed error sources preserve numerator-template admission and error propagation.
+# Reviewed 2026-10-23: native label writers omit local zero; template binding
+# preserves that spelling. Numerator ownership and caching are unchanged.
+digest = "672732ee50bec4d09f0453e34cb7220c3ddd3535"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -250,7 +258,13 @@ anchor = "pub struct FeynmanDiagram {"
 # Reviewed 2026-10-20: the architecture records native vertex metadata requiring
 # model-fingerprint validation. Single and collection import regressions preserve
 # ordinary compact labels and num expressions without discarding native bindings.
-digest = "f1cff6ba0ac5a406d174c6bc71bd0cd4ffe0dc54"
+# Reviewed 2026-10-23: fragment products use retained tensor algebra, preserving
+# logical ports and construction history through normalization. The architecture
+# distinguishes typed Python wrapping from source admission; native metadata
+# validation, prefactor replacement and topology/routing ownership are retained.
+# Reviewed 2026-10-23: Cooking, index and slot causes remain typed in DiagramError; scene configuration has a distinct diagnostic. Retained tensor and serialization ownership remain unchanged.
+# No-impact attestation 2026-10-23: boxed tensor error sources preserve graph ownership and error semantics.
+digest = "2cbc7e6e672b92c090ee9052f5bf062fbf3f8bfa"
 
 [[section.note.scope]]
 path = "crates/feynkit-tensor/src/lib.rs"
@@ -402,7 +416,9 @@ end_anchor = "\n#[debug_instrument]\npub(crate) fn to_vakint_integrand<"
 # Reviewed 2026-10-18: The UV note records validated physical fixed-selector
 # admissibility after original unfiltered scope validation. Formal D/epsilon,
 # tensor factorization, genuine summed contractions and selector bounds remain guarded.
-digest = "aa86a2bcf483dc539fbddb34f6983a095d192fde"
+# Reviewed 2026-10-23: Vakint restoration canonicalizes uvterm local zero before
+# typed admission; backend dummy/public-port separation and UV algorithms remain.
+digest = "52239c3b024703396d4e60480fd22ecf04761d32"
 
 [[section.note.scope]]
 path = "crates/vakint/src/lib.rs"
@@ -657,7 +673,13 @@ anchor = "pub trait IndexTooling {"
 # Evaluator scalar aliases are a separate downstream owner.
 # Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
 # Reviewed 2026-10-17: IndexTooling dimension transforms now receive fallible callbacks from the retained tensor owner; the syntax and Idenso notes describe native index/dimension transport and checked API boundaries.
-digest = "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+# Reviewed 2026-10-23: raw canonicalization and adjunction retain checked source
+# parsing, dual wrappers and factorized chain cleanup. The syntax note now
+# distinguishes authoritative typed index/dimension transport from arbitrary
+# callback replacements; typed history is not recovered from normalized text.
+# No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
+# local-zero spelling; its logical-axis and component assertions are unchanged.
+digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
 
 [[section.note]]
 id = "spenso-architecture"
@@ -672,7 +694,17 @@ reviewed_at = "2026-10-06"
 review_ref = "15f0aba87c360abf0123a41a6e347a1583b2f13a"
 products = ["spenso"]
 topics = ["tensor structure", "contraction", "tensor network", "parallelism", "parsing", "serialization"]
-review_triggers = ["crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
+review_triggers = ["crates/symbolica-notation/**", "crates/spenso/Cargo.toml", "crates/spenso/src/structure.rs", "crates/spenso/src/structure/**", "crates/spenso/src/tensors/**", "crates/spenso/src/contraction.rs", "crates/spenso/src/contraction/**", "crates/spenso/src/network/**", "crates/spenso/src/shadowing/**", "crates/spenso/src/symbolic_parallelism.rs", "crates/spenso/src/symbolica_init.rs"]
+
+[[section.note.scope]]
+path = "crates/symbolica-notation/src/registry.rs"
+symbol = "symbolica_notation::Notation"
+anchor = "pub struct Notation {"
+# Reviewed 2026-10-23: The note records process-local immutable notation, bounded
+# text, idempotence, conflicts and poisoning. No renderer or symbol metadata is changed.
+# Reviewed 2026-10-24: notation now owns validated MathML and callback ownership; renderers and explicit Typst export settings use the local registry.
+# Reviewed 2026-10-24: explicit portable imports register validated names atomically before symbol interning.
+digest = "309685ed7ca70f43704fb12d8922f69751cadd47"
 
 [[section.note.scope]]
 path = "crates/spenso/src/structure.rs"
@@ -803,7 +835,13 @@ anchor = "pub trait IndexTooling {"
 # Evaluator scalar aliases are a separate downstream owner.
 # Reviewed 2026-10-16: Index canonicalization preserves dual wrappers; raw queries reject unbound chain endpoints and ignore scalar metadata. Idenso architecture and shared syntax now describe these contracts.
 # Reviewed 2026-10-17: IndexTooling dimension transforms now receive fallible callbacks from the retained tensor owner; the syntax and Idenso notes describe native index/dimension transport and checked API boundaries.
-digest = "e8a84816478a3d8dbc437d10df37f7b05bf1f9f8"
+# Reviewed 2026-10-23: native adjunction materializes anonymous axes before
+# dualizing their logical interface and uses checked declared-result admission;
+# raw canonicalization retains source validation and factorized reconstruction.
+# These boundaries agree with the Idenso note's authoritative typed-metadata model.
+# No-impact attestation 2026-10-23: the native-adjoint test fixture uses canonical
+# local-zero spelling; its logical-axis and component assertions are unchanged.
+digest = "b6b8af1e73031ce2c7dc97185cc31f4a90c63d64"
 
 [[section.note.scope]]
 path = "crates/idenso/src/cook.rs"
@@ -820,7 +858,18 @@ anchor = "pub struct CookSettings {"
 # Reviewed 2026-10-18: Strict indexed admission follows reversible public-index
 # Open/scope payloads without rebuilding expressions; opaque labels and closed
 # compact contractions retain the boundaries documented in the Idenso note.
-digest = "e38e0e3114eac5c8448ab37e7261d071f8dbbbee"
+# Reviewed 2026-10-23: the Idenso note records native named/Open/scoped index
+# preservation in both index-cooking modes, malformed-form rejection and shared
+# opaque-label interning. Portable dimensions and generic function cooking keep
+# their separate owners; reversible Open inspection remains metadata-only.
+# Reviewed 2026-10-23: Native index validation retains AbstractIndexError as its source; reversible cooking and accepted source forms are unchanged.
+# Reviewed 2026-10-23: Third-party tagged calls that AbstractIndex cannot parse
+# retain opaque-label interning; malformed Spenso-owned Open/scope calls still
+# fail. The architecture note records this split; native forms remain preserved.
+# Reviewed 2026-10-23: one-argument native labels are retained and explicit-zero
+# aliases use AbstractIndex serialization. Opaque malformed labels and Open/scope
+# validation remain; Idenso architecture and Spenso syntax document the policy.
+digest = "b7327c174d55a96e27a015c5f74ddc0b4061b1b5"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/mod.rs"
@@ -838,7 +887,12 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # Reviewed 2026-10-16: Symbolic TensorFromExpression retains the canonical source layout; reviewed against the Idenso symbolic-target and Spenso realization descriptions.
 # Reviewed 2026-10-17: The Idenso note records retained reduction state, declared-interface persistence, consuming component handoff and its logical layout.
 # Reviewed 2026-10-18: The Idenso note documents indexed admission and checked methods, proof-preserving native interoperability, component lowering and explicit-slot archives; both interfaces share one algebra engine.
-digest = "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+# Reviewed 2026-10-23: the Idenso note records authoritative scoped usage and
+# operation flags. Certified algebra retains construction metadata while dropping
+# payload-specific caches; same_reduction_state also compares retained occurrence
+# identity. Raw mutation and arbitrary replacement still require admission.
+# Reviewed 2026-10-23: Certified construction stays crate-private; metadata sharing and borrowed composition preserve authoritative interfaces. Public API examples document the existing algebra contracts.
+digest = "61c5470a85e144f021e7382909eb5ee93a9618b9"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/indexed.rs"
@@ -858,7 +912,13 @@ end_anchor = "    /// Scope explicit indices"
 # Reviewed 2026-10-17: unchanged payload and complete logical layout reuse the
 # existing finisher. Mapper execution, unchecked-input validation, ranked-zero
 # dimension changes and independent callback-result checks remain enforced.
-digest = "2fab115ac04bd931c076c9125b65d98748ca81bd"
+# Reviewed 2026-10-23: dimension mapping transports and validates oriented usage,
+# including cancelled indices, before publishing mapped metadata. The Idenso
+# note now requires unchanged usage as well as payload and layout before reusing
+# cached facts; mapped results are not re-admitted from normalized Atom syntax.
+# Reviewed 2026-10-23: Cooking and slot failures retain typed causes through mapped metadata operations. The syntax observer and authoritative admission boundaries remain unchanged.
+# No-impact attestation 2026-10-23: direct error-constructor mapping preserves representation-dimension inference.
+digest = "ef4c76753e299b2aefa9ab93c042e5930a9466da"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
@@ -1587,7 +1647,10 @@ anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
 # Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
 # Reviewed 2026-10-19: exact preparation collects existing numerical content and scalar factors before its single index canonicalization. The added chiral-cycle control is red before this reorder and green afterward, preserves dummy/order variants and rejects a distinct matrix; no graph expansion or reference change.
-digest = "fc33f3fc768c2d69937c7c65535713b2f90df5de"
+# No-impact attestation 2026-10-23: boxed comparison errors preserve grouping, numerator comparison and source chains.
+# Reviewed 2026-10-23: GroupingIndex emits named labels through AbstractIndex's
+# canonical serializer; grouping identities and comparison rules are unchanged.
+digest = "729f281b9b3dc7014aa4878b6acee1e0e2bc3be5"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"
@@ -1753,7 +1816,15 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-19: the UFO adapter retains requested-source metadata under the
 # loader public import scope; its renamed embedded Python helper stays owned by
 # feynkit-ufo in both explicit source lists. Producer and runtime boundaries stay fixed.
-digest = "9ed8dd0ee840c3876b4c7a341bbd6a433d55ad0d"
+# Reviewed 2026-10-23: the cache note follows the shared font/data manifest and
+# measurement widget to linnet-render-py, retaining Spynso's Typst source assets.
+# Package-specific embedded Python fixtures and documentation font/license inputs
+# remain in their compile-test/runtime owners; compiler partitioning is unchanged.
+# Reviewed 2026-10-23: Compile-time source ownership includes the shared native-forwarding and symbolic-preview fixtures; production and runtime cache boundaries remain separate.
+# Reviewed 2026-10-23: Global build sources include the shared graph Python/JavaScript assets; compile-time Spynso sources include the embedded paging fixture. Build algorithms and test selection are unchanged.
+# Reviewed 2026-10-23: removed the orphaned compiler crate and its assets;
+# remaining browser font ownership and producer/runtime boundaries match the cache note.
+digest = "c24349a73066d80b2007f9aad5d44ac28a9e44cb"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"

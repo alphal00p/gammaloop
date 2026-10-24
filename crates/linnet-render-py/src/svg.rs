@@ -7,6 +7,15 @@ use resvg::{tiny_skia, usvg};
 impl PyDiagramRender {
     /// Convert the captured SVG geometry directly; labels are already glyph paths.
     pub(crate) fn export_pages(&self, format: &str) -> PyResult<Vec<Vec<u8>>> {
+        if self
+            .pages()
+            .iter()
+            .any(|svg| svg.contains("class=\"linnet-math-label\""))
+        {
+            return Err(PyRuntimeError::new_err(
+                "PDF and PNG exports require outlined labels; call view.outlined() with the optional Python typst package, then export the returned snapshot",
+            ));
+        }
         let options = usvg::Options {
             // Native SVG uses points; retain the same physical page dimensions.
             dpi: 72.0,

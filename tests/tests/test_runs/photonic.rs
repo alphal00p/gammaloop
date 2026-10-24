@@ -437,15 +437,6 @@ fn photons_phys_1l_inspect() -> Result<()> {
         None,
         true,
     )?;
-    let (_, inspect) = Inspect {
-        process: None,
-        integrand_name: Some("default".to_string()),
-        point: vec![0.1, 0.2, 0.3],
-        momentum_space: false,
-        ..Default::default()
-    }
-    .run(&mut cli)?;
-
     // Propagator and loop-measure phases rotate the sign-migrated 2025
     // reference by i. Eliminating p5 instead of p0 reverses the threshold
     // key order and slightly shifts the finite-precision SOCP center.
@@ -453,8 +444,6 @@ fn photons_phys_1l_inspect() -> Result<()> {
     // the current one gives (-5.127347252278015e-10, 2.827365556430783e-10).
     // Compact collection and guarded evaluator compilation change binary64
     // operation order. Main and the native route agree exactly after Arb evaluation.
-    let target = Complex::new(-5.127347252277986e-10, 2.827365556430804e-10);
-    assert_eq!(inspect, target);
     let (_, precise) = Inspect {
         process: None,
         integrand_name: Some("default".to_string()),
@@ -467,6 +456,25 @@ fn photons_phys_1l_inspect() -> Result<()> {
     assert_eq!(
         precise,
         Complex::new(-5.127347252278009e-10, 2.8273655564307803e-10)
+    );
+
+    let (_, inspect) = Inspect {
+        process: None,
+        integrand_name: Some("default".to_string()),
+        point: vec![0.1, 0.2, 0.3],
+        momentum_space: false,
+        ..Default::default()
+    }
+    .run(&mut cli)?;
+    // Compare against Arb rather than a hard-coded binary64 value: kernel and
+    // compiled evaluation order change binary64 rounding. The measured relative
+    // difference is 5.30726278179626e-15, within the 1e-12 tolerance.
+    let distance = complex_distance(inspect, precise);
+    let precise_modulus = precise.re.hypot(precise.im);
+    assert!(
+        distance <= 1e-12 * precise_modulus,
+        "binary64 {inspect:?} differs from precise {precise:?}: relative difference {}",
+        distance / precise_modulus
     );
 
     Ok(())

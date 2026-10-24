@@ -4,7 +4,7 @@
     {
       "constant": "STIX_TWO_MATH",
       "name": "render/fonts/STIXTwoMath-Regular.woff2",
-      "path": "typst/STIXTwoMath-Regular.woff2",
+      "path": "fonts/STIXTwoMath-Regular.woff2",
       "description": "Offline browser MathML font: STIX Two Math"
     }
   ]

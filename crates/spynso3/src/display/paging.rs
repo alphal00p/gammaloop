@@ -1,537 +1,385 @@
-//! Bounded presentation trees. Ellipses are render-tree nodes, never algebraic atoms.
-use super::*;
-use ciborium::Value;
-use std::{collections::BTreeMap, ffi::CString};
-use symbolica::atom::representation::ListIterator;
+//! Tensor notation leaves in Symbolica's responsive MathML renderer.
+use crate::display;
+use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
+use idenso::tensor::{SymbolicTensor, composition};
+use pyo3::exceptions::PyValueError;
+use pyo3::{Py, PyAny, PyErr, PyResult, Python};
+use spenso::network::tags;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::network::tags::mathml;
+use spenso::network::tags::mathml::ExportError;
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::structure::representation::RepresentationMetadata;
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::sync::Arc;
+use symbolica::api::python::MathMLViewer;
+use symbolica::api::python::PythonExpression;
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
+use symbolica::domains::SelfRing;
+use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
+use symbolica_notation::Notation;
 
-const MAX_NODES: usize = 2_000;
-const MAX_DEPTH: usize = 32;
-const MAX_BYTES: usize = 64 * 1024;
 pub(crate) const DEFAULT_PAGE_SIZE: usize = 25;
+const MAX_LEAF_NODES: usize = 256;
+const MAX_LEAF_BYTES: usize = 4096;
+const MAX_ALIASES: usize = 4096;
 
-fn map(fields: impl IntoIterator<Item = (&'static str, Value)>) -> Value {
-    Value::Map(
-        fields
-            .into_iter()
-            .map(|(k, v)| (Value::Text(k.into()), v))
-            .collect(),
-    )
-}
-fn text(s: &str) -> Value {
-    Value::Text(s.into())
-}
-fn children(atom: AtomView<'_>) -> Option<ListIterator<'_>> {
-    match atom {
-        AtomView::Add(a) => Some(a.iter()),
-        AtomView::Mul(a) => Some(a.iter()),
-        AtomView::Pow(a) => Some(a.iter()),
-        AtomView::Fun(a) => Some(a.iter()),
-        _ => None,
-    }
-}
-fn fits(atom: AtomView<'_>, nodes: &mut usize, depth: usize) -> bool {
-    if depth > MAX_DEPTH
-        || *nodes == 0
-        || atom.get_byte_size() > MAX_BYTES
+fn fits(atom: AtomView<'_>, budget: &mut usize, depth: usize) -> bool {
+    if *budget == 0
+        || depth > 32
+        || atom.get_byte_size() > MAX_LEAF_BYTES
         || atom
             .get_symbol()
-            .is_some_and(|s| s.get_name().len() > MAX_BYTES)
+            .is_some_and(|symbol| symbol.get_name().len() > MAX_LEAF_BYTES)
     {
         return false;
     }
-    *nodes -= 1;
-    children(atom).is_none_or(|mut c| c.all(|a| fits(a, nodes, depth + 1)))
-}
-
-fn large_sum(a: AtomView<'_>, limit: usize, budget: &mut usize) -> bool {
-    large_sum_at(a, limit, budget, 0)
-}
-fn large_sum_at(a: AtomView<'_>, limit: usize, budget: &mut usize, depth: usize) -> bool {
-    if *budget == 0 || depth > MAX_DEPTH {
-        return true;
-    }
     *budget -= 1;
-    if matches!(a, AtomView::Add(s) if s.get_nargs()>limit) {
-        return true;
-    }
-    children(a).is_some_and(|mut c| c.any(|n| large_sum_at(n, limit, budget, depth + 1)))
+    atom.children().all(|child| fits(child, budget, depth + 1))
 }
 
 pub(crate) fn is_large(value: &SymbolicTensor<PartialStructure>) -> bool {
-    let a = value.expression().as_view();
-    let mut nodes = MAX_NODES;
-    !fits(a, &mut nodes, 0) || large_sum(a, 100, &mut { MAX_NODES })
+    !fits(value.expression().as_view(), &mut 1000, 0)
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Span {
-    start: usize,
-    len: usize,
-}
-#[derive(Clone, Copy)]
-struct Cursor {
-    focus: Span,
-    sum: Span,
-    next: Span,
-    index: usize,
-}
+type LeafCacheKey = (Atom, [u16; 10]);
 
-#[pyclass]
-struct PageSource {
-    value: Arc<SymbolicTensor<PartialStructure>>,
-    settings: DisplaySettings,
-    notation: Option<String>,
-    spans: BTreeMap<usize, Span>,
-    cursors: Vec<Cursor>,
-    aliases: IndexAliases,
-}
-
-struct Builder<'a> {
-    root: &'a [u8],
-    value: &'a SymbolicTensor<PartialStructure>,
-    settings: &'a DisplaySettings,
-    aliases: &'a mut IndexAliases,
-    spans: &'a mut BTreeMap<usize, Span>,
-    cursor: Option<Cursor>,
-    focus: Span,
-    next: Option<Cursor>,
-    active: Option<Span>,
-    selected_page: Option<Value>,
-    selection: Option<String>,
-    start: usize,
-    end: usize,
-    total: usize,
-    unit: &'static str,
-    limit: usize,
-    summaries: bool,
-    nodes: usize,
-    bytes: usize,
-    attachments: Vec<Value>,
-    sources: Vec<String>,
-    page_aliases: IndexAliases,
-    holes: Vec<(usize, String)>,
-}
-
-impl Builder<'_> {
-    fn span(&self, a: AtomView<'_>) -> Span {
-        Span {
-            start: a.get_data().as_ptr() as usize - self.root.as_ptr() as usize,
-            len: a.get_byte_size(),
+impl DisplaySettings {
+    /// Tensor presentation options shared by static exports and scoped paging.
+    pub(crate) fn mathml_options(&self) -> PrintOptions {
+        let mut options = display::display_options_with_settings(TensorDisplayMode::Typst, self);
+        options.mode = PrintMode::MathML;
+        for (key, value) in [
+            ("spenso.tensor_layout", &self.tensor_layout),
+            ("spenso.index_gap", &self.index_gap),
+            ("spenso.factor_gap", &self.factor_gap),
+        ] {
+            options
+                .custom_print_mode
+                .insert(key.into(), PrintUserData::String(value.clone()));
         }
+        options
     }
-    fn hole(&mut self, a: AtomView<'_>, label: &str) -> Value {
-        let span = self.span(a);
-        self.spans.insert(span.start, span);
-        let index = self.holes.iter().position(|(id, _)| *id == span.start);
-        let index = index.or_else(|| {
-            if self.holes.len() >= 32 || span == self.focus {
-                return None;
-            }
-            let index = self.holes.len();
-            let label = match a {
-                AtomView::Add(sum) => {
-                    format!("Open sum [{}] · {} terms", index + 1, sum.get_nargs())
+}
+
+/// Complete export uses the same tensor notation and source-label owner as
+/// paging. Its explicit export cap reports an error rather than dropping terms.
+pub(crate) fn atom_to_html(
+    py: Python<'_>,
+    atom: &Atom,
+    settings: &DisplaySettings,
+) -> PyResult<String> {
+    let aliases = IndexAliases::for_atom(atom, &settings.index_style);
+    html(py, atom, settings, &aliases)
+}
+
+pub(crate) fn structured_to_html(
+    py: Python<'_>,
+    value: &SymbolicTensor<PartialStructure>,
+    settings: &DisplaySettings,
+) -> PyResult<String> {
+    let aliases = IndexAliases::for_descriptor(value, &settings.index_style);
+    html(py, &value.presentation_atom(), settings, &aliases)
+}
+
+fn html(
+    py: Python<'_>,
+    atom: &Atom,
+    settings: &DisplaySettings,
+    aliases: &IndexAliases,
+) -> PyResult<String> {
+    let options = settings.mathml_options();
+    let label_error = RefCell::new(None);
+    let body = mathml::expression(
+        atom.as_view(),
+        &options,
+        &PrintState::new(),
+        &|representation, index| {
+            let key = (representation, index.to_owned());
+            if let Some((_, display)) = aliases.entries.get(&key) {
+                let rendered = display.to_mathml();
+                if rendered.is_none() {
+                    label_error
+                        .borrow_mut()
+                        .get_or_insert(ExportError::IncompleteOutput);
                 }
-                AtomView::Mul(product) => format!(
-                    "Open product [{}] · {} factors",
-                    index + 1,
-                    product.get_nargs()
-                ),
-                _ => format!("{} [{}]", label, index + 1),
-            };
-            self.holes.push((span.start, label));
-            Some(index)
-        });
-        let label = index.map_or_else(|| "⋯".to_owned(), |i| format!("⋯[{}]", i + 1));
-        let marker = map([("kind", text("omission")), ("label", text(&label))]);
-        if matches!(a, AtomView::Add(_)) {
-            map([("kind", text("sum")), ("terms", Value::Array(vec![marker]))])
-        } else {
-            marker
-        }
-    }
-    fn leaf(&mut self, a: AtomView<'_>, remaining: usize) -> PyResult<Value> {
-        self.nodes = remaining;
-        self.bytes -= a.get_byte_size();
-        let atom = self.value.presentation_fragment(a);
-        // Alias ownership lasts for the viewer, rather than restarting on every page.
-        let discovered = IndexAliases::for_atom(&atom, &self.settings.index_style);
-        self.page_aliases
-            .source_indices
-            .extend(discovered.source_indices.clone());
-        self.aliases
-            .source_indices
-            .extend(discovered.source_indices);
-        for (key, (position, display)) in discovered.entries {
-            if let Some(existing) = self.aliases.entries.get(&key) {
-                self.page_aliases.entries.insert(key, existing.clone());
-                continue;
+                return rendered;
             }
-            let mut position = position;
-            let mut display = display;
-            if self.settings.index_style == "alphabet"
-                && let (Some(mut p), Some(metadata)) =
-                    (position, RepresentationMetadata::from_symbol(key.0))
-            {
-                while self
-                    .aliases
-                    .entries
-                    .iter()
-                    .any(|((rep, _), (_, d))| *rep == key.0 && *d == display)
-                {
-                    p = p.saturating_add(1);
-                    let Some(next) = metadata.index_palette.resolve(p) else {
-                        break;
-                    };
-                    display = next;
+            aliases.source_indices.get(&key).and_then(|source| {
+                let rendered =
+                    mathml::expression(source.as_view(), &options, &PrintState::new(), &|_, _| {
+                        None
+                    });
+                match rendered {
+                    Ok(rendered) => Some(rendered),
+                    Err(error) => {
+                        label_error.borrow_mut().get_or_insert(error);
+                        None
+                    }
                 }
-                position = Some(p);
-            }
-            self.page_aliases
-                .entries
-                .insert(key.clone(), (position, display.clone()));
-            self.aliases.entries.insert(key, (position, display));
-        }
-        self.sources
-            .push(typst_custom_print_source(self.settings, &atom)?);
-        let attachments = portable_attachments(&atom).map_err(PyRuntimeError::new_err)?;
-        let Value::Map(mut envelope) =
-            symbolica_typst_plugin::payload::atom_render_tree_value(&atom, &attachments)
-                .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
-        else {
-            unreachable!()
-        };
-        let mut result = None;
-        for (k, v) in envelope.drain(..) {
-            if k == text("root") {
-                result = Some(v);
-            } else if k == text("attachments")
-                && let Value::Array(a) = v
-            {
-                self.attachments.extend(a);
-            }
-        }
-        Ok(result.expect("render tree root"))
+            })
+        },
+    );
+    if let Some(error) = PyErr::take(py) {
+        return Err(error);
     }
-    fn sequence(
-        &mut self,
-        span: Span,
-        mut iter: ListIterator<'_>,
-        depth: usize,
-        kind: &'static str,
-        field: &'static str,
-        unit: &'static str,
-    ) -> PyResult<Value> {
-        if self.active.is_some() || self.cursor.is_some_and(|c| c.sum != span) {
-            return Ok(self.hole(
-                AtomView::from(&self.root[span.start..span.start + span.len]),
-                "Open subexpression",
+    // A callback's missing fragment must not silently fall back to an encoded
+    // index. Preserve its typed failure until this Python export boundary.
+    let body = label_error
+        .into_inner()
+        .map_or(body, Err)
+        .map_err(|error| {
+            let exception = PyValueError::new_err(format!(
+                "complete MathML export failed: {error}; use paged() for bounded inspection"
             ));
-        }
-        self.active = Some(span);
-        self.unit = unit;
-        self.total = iter.len();
-        // Keep a compact expression outline separate from the selected inner
-        // sum. Wrapping a sum inside its original fences makes those fences
-        // stretch across the whole page and hides the surrounding factors.
-        let marker = if span != self.focus {
-            let original = AtomView::from(&self.root[span.start..span.start + span.len]);
-            let marker = self.hole(original, "Open selected sum");
-            self.selection = Some(
-                self.holes
-                    .iter()
-                    .position(|(id, _)| *id == span.start)
-                    .map_or_else(|| "Selected sum".to_owned(), |i| format!("Sum [{}]", i + 1)),
-            );
-            Some(marker)
-        } else {
-            None
-        };
-        let mut offset = 0;
-        // Resume from a previously validated byte boundary, without rescanning terms.
-        let mut rest = None;
-        if let Some(cursor) = self.cursor {
-            offset = cursor.index;
-            rest = Some(&self.root[cursor.next.start..span.start + span.len]);
-        }
-        self.start = offset;
-        self.end = offset;
-        let mut terms = Vec::new();
-        if offset > 0 {
-            terms.push(map([("kind", text("omission"))]));
-        }
-        for _ in 0..self.limit {
-            if self.end >= self.total {
-                break;
+            if let ExportError::InvalidSettings {
+                source: Some(source),
+                ..
+            } = error
+            {
+                exception.set_cause(py, Some(PyValueError::new_err(source.to_string())));
             }
-            let term = if let Some(data) = rest {
-                // The next term's length is retained in the cursor; following
-                // terms are read using the original list iterator's bounded skip.
-                let original = AtomView::from(&self.root[span.start..span.start + span.len]);
-                let original_iter = children(original).expect("sequence");
-                // Construct a list cursor from a validated suffix (no data copying).
-                // SAFETY: cursors are created only from this immutable
-                // sum's iterator; every update advances by that atom's length.
-                let mut suffix = unsafe { original_iter.resume_at(data, self.total - self.end) };
-                let t = suffix.next().unwrap();
-                rest = Some(&data[t.get_byte_size()..]);
-                t
-            } else {
-                iter.next().unwrap()
-            };
-            if self.nodes < 16 || self.bytes < term.get_byte_size().min(256) {
-                let next = self.span(term);
-                self.next = Some(Cursor {
-                    focus: self.focus,
-                    sum: span,
-                    next,
-                    index: self.end,
-                });
-                break;
-            }
-            terms.push(self.build(term, depth + 1)?);
-            self.end += 1;
-        }
-        if self.end < self.total {
-            if self.next.is_none() {
-                let next = if let Some(data) = rest {
-                    Span {
-                        start: data.as_ptr() as usize - self.root.as_ptr() as usize,
-                        len: 0,
-                    }
-                } else {
-                    self.span(iter.next().unwrap())
-                };
-                self.next = Some(Cursor {
-                    focus: self.focus,
-                    sum: span,
-                    next,
-                    index: self.end,
-                });
-            }
-            terms.push(map([("kind", text("omission"))]));
-        }
-        let page = map([("kind", text(kind)), (field, Value::Array(terms))]);
-        if let Some(marker) = marker {
-            self.selected_page = Some(page);
-            Ok(marker)
-        } else {
-            Ok(page)
-        }
-    }
-    fn build(&mut self, a: AtomView<'_>, depth: usize) -> PyResult<Value> {
-        if depth > MAX_DEPTH || self.nodes == 0 {
-            return Ok(self.hole(a, "Open subexpression"));
-        }
-        let span = self.span(a);
-        if self.summaries && span != self.focus && children(a).is_some() {
-            return Ok(self.hole(a, "Open oversized term"));
-        }
-        let mut remaining = self.nodes;
-        let too_many = large_sum(a, self.limit.min(100), &mut { MAX_NODES });
-        let target = self.cursor.is_some_and(|c| c.sum == span);
-        if !(self.summaries && children(a).is_some())
-            && !too_many
-            && !target
-            && a.get_byte_size() <= self.bytes
-            && fits(a, &mut remaining, depth)
-        {
-            return self.leaf(a, remaining);
-        }
-        self.nodes -= 1;
-        match a {
-            AtomView::Add(sum) => self.sequence(span, sum.iter(), depth, "sum", "terms", "Terms"),
-
-            AtomView::Mul(m) => {
-                // Avoid a single product with arbitrarily many factor placeholders.
-                if m.get_nargs() > 32 {
-                    if span == self.focus {
-                        return self.sequence(
-                            span,
-                            m.iter(),
-                            depth,
-                            "product",
-                            "factors",
-                            "Factors",
-                        );
-                    }
-                    return Ok(self.hole(a, "Open product factors"));
-                }
-                let mut factors = Vec::new();
-                for c in m.iter() {
-                    factors.push(self.build(c, depth + 1)?);
-                }
-                Ok(map([
-                    ("kind", text("product")),
-                    ("factors", Value::Array(factors)),
-                ]))
-            }
-            AtomView::Pow(p) => {
-                let (b, e) = p.get_base_exp();
-                Ok(map([
-                    ("kind", text("power")),
-                    ("base", self.build(b, depth + 1)?),
-                    ("exponent", self.build(e, depth + 1)?),
-                ]))
-            }
-            AtomView::Fun(f) if span == self.focus => {
-                self.sequence(span, f.iter(), depth, "inspection", "items", "Arguments")
-            }
-            _ => Ok(self.hole(a, "Open arguments")),
-        }
-    }
+            exception
+        })?;
+    Ok(display::notebook_html_fragment(&format!(
+        "<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow>{body}</mrow></math>"
+    )))
 }
 
-#[pymethods]
-impl PageSource {
-    #[pyo3(signature = (focus, cursor, limit, summaries=false))]
-    fn page(
+struct TensorLeaves {
+    settings: DisplaySettings,
+    aliases: IndexAliases,
+    // Responsive alternatives share direct fragments, with bounded retention.
+    // A cached fragment and the returned viewer response need independent owned
+    // strings. Tensor metadata itself remains shared through the viewer's Arc.
+    cache: VecDeque<(LeafCacheKey, Option<String>)>,
+}
+
+impl TensorLeaves {
+    fn render(
         &mut self,
         py: Python<'_>,
-        focus: usize,
-        cursor: Option<usize>,
-        limit: usize,
-        summaries: bool,
-    ) -> PyResult<Py<PyDict>> {
-        if !(1..=500).contains(&limit) {
-            return Err(PyValueError::new_err("page size must be 1..500"));
-        }
-        let focus = *self
-            .spans
-            .get(&focus)
-            .ok_or_else(|| PyValueError::new_err("unknown subexpression"))?;
-        let cursor = cursor
-            .map(|id| {
-                self.cursors
-                    .get(id)
-                    .copied()
-                    .ok_or_else(|| PyValueError::new_err("unknown cursor"))
-            })
-            .transpose()?;
-        if cursor.is_some_and(|c| c.focus != focus) {
-            return Err(PyValueError::new_err(
-                "cursor belongs to another subexpression",
-            ));
-        }
-        let root = self.value.expression().as_view().get_data();
-        let atom = AtomView::from(&root[focus.start..focus.start + focus.len]);
-        let mut builder = Builder {
-            root,
-            value: &self.value,
-            settings: &self.settings,
-            aliases: &mut self.aliases,
-            spans: &mut self.spans,
-            cursor,
-            focus,
-            next: None,
-            active: None,
-            selected_page: None,
-            selection: None,
-            start: 0,
-            end: 0,
-            total: 0,
-            unit: "Terms",
-            limit,
-            summaries,
-            nodes: MAX_NODES,
-            bytes: MAX_BYTES,
-            attachments: Vec::new(),
-            sources: Vec::new(),
-            page_aliases: IndexAliases::default(),
-            holes: Vec::new(),
+        value: &SymbolicTensor<PartialStructure>,
+        view: AtomView<'_>,
+        state: &PrintState,
+    ) -> PyResult<Option<String>> {
+        let Some(symbol) = view.get_symbol() else {
+            return Ok(None);
         };
-        let node = builder.build(atom, 0)?;
-        let result = PyDict::new(py);
-        result.set_item("start", builder.start)?;
-        result.set_item("end", builder.end)?;
-        result.set_item("total", builder.total)?;
-        result.set_item("unit", builder.unit)?;
-        result.set_item("selection", &builder.selection)?;
-        result.set_item("holes", &builder.holes)?;
-        let next = builder.next.map(|c| {
-            let id = self.cursors.len();
-            self.cursors.push(c);
-            id
-        });
-        result.set_item("next", next)?;
-        let tree = map([
-            ("kind", text("atom-render-tree")),
-            ("root", node),
-            ("page", builder.selected_page.unwrap_or(Value::Null)),
-            ("attachments", Value::Array(builder.attachments)),
-        ]);
-        let mut bytes = Vec::new();
-        ciborium::into_writer(&tree, &mut bytes)
-            .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
-        result.set_item("tree", PyBytes::new(py, &bytes))?;
-        let mut source = typst_settings_source(&self.settings, &Atom::zero());
-        source.push_str(&format!(
-            "\n#let settings = (..settings, index-aliases: {})\n",
-            builder
-                .page_aliases
-                .typst_source(&self.settings.index_style)
-        ));
-        // Merge callbacks from the bounded fragments, rather than losing earlier overrides.
-        for s in builder.sources {
-            source.push_str("\n#let saved-heads = settings.at(\"print-heads\", default: (:))\n#let saved-calls = settings.at(\"print-calls\", default: ())\n");
-            source.push_str(&s);
-            source.push_str("#let settings = (..settings, print-heads: (: ..saved-heads, ..settings.print-heads), print-calls: saved-calls + settings.print-calls)\n");
+        if !fits(view, &mut { MAX_LEAF_NODES }, 0) {
+            return Ok(None);
         }
-        result.set_item("settings", source)?;
-        result.set_item("notation", self.notation.as_deref().unwrap_or(NOTATION_TYP))?;
-        result.set_item("render", RENDER_TYP)?;
-        Ok(result.unbind())
+        // Arithmetic and ordinary calls belong to Symbolica. Only semantic
+        // tensor leaves enter the scoped semantic printer.
+        let semantic = symbol.has_tag(&SPENSO_TAG.tensor)
+            || symbol.has_tag("tensor")
+            || symbol.has_tag(&SPENSO_TAG.index)
+            || symbol.has_tag(&SPENSO_TAG.representation)
+            || tags::tensor_has_custom_print(symbol)
+            || Notation::lookup(symbol)
+                .expect("notation registry must not be poisoned")
+                .is_some()
+            || matches!(
+                symbol.get_name(),
+                "spenso::bracket"
+                    | "spenso::cas"
+                    | "spenso::idx"
+                    | "spenso::gram"
+                    | "spenso::gamma"
+                    | "spenso::gamma0"
+                    | "spenso::gamma5"
+                    | "spenso::projp"
+                    | "spenso::projm"
+                    | "spenso::dot"
+                    | "spenso::chain"
+                    | "spenso::trace"
+                    | "spenso::Nc"
+            );
+        if !semantic {
+            return Ok(None);
+        }
+        let root = value.expression().as_view().get_data();
+        // Custom printers receive the complete state. Reusing a fragment must
+        // preserve every observable flag and level, including exponent context.
+        let context = [
+            u16::from(state.in_sum),
+            u16::from(state.in_product),
+            u16::from(state.suppress_one),
+            u16::from(state.in_exp),
+            u16::from(state.in_exp_base),
+            u16::from(state.top_level_add_child),
+            u16::from(state.superscript),
+            state.level,
+            state.bracket_level,
+            state.indentation_level,
+        ];
+        if let Some(index) = self
+            .cache
+            .iter()
+            .position(|((atom, flags), _)| atom.as_view() == view && *flags == context)
+        {
+            let entry = self
+                .cache
+                .remove(index)
+                .expect("the cache position was found without intervening mutation");
+            let result = entry.1.clone();
+            self.cache.push_back(entry);
+            return Ok(result);
+        }
+        // The inherited Python expression may own a byte-for-byte Atom clone.
+        // Equality is bounded by fits above and does not scan a large root.
+        let atom = if view.get_data() == root {
+            value.presentation_atom()
+        } else {
+            value.presentation_fragment(view)
+        };
+        let mut aliases = IndexAliases::for_atom(&atom, &self.settings.index_style);
+        // Reserve the public free ports without walking the original expression.
+        let mut bundle = FunctionBuilder::new(AIND_SYMBOLS.aind).add_arg(&atom);
+        for slot in value.structure().logical_slots() {
+            bundle = bundle.add_arg(composition::port_atom(slot));
+        }
+        let discovered = IndexAliases::for_atom(&bundle.finish(), &self.settings.index_style);
+        for (key, (mut position, mut display)) in discovered.entries {
+            if let Some(existing) = self.aliases.entries.get(&key) {
+                if discovered
+                    .reserved_labels
+                    .get(&key.0)
+                    .is_some_and(|labels| labels.contains(&IndexAliases::label_key(&existing.1)))
+                {
+                    // An explicit internal label may first appear on a later
+                    // page. Keep it distinct by retaining this index's source
+                    // spelling here, without renaming already displayed parts.
+                    aliases.entries.remove(&key);
+                    continue;
+                }
+                if let Some(alias) = aliases.entries.get_mut(&key) {
+                    *alias = existing.clone();
+                }
+                continue;
+            }
+            let mut retain = self.aliases.entries.len() < MAX_ALIASES;
+            if self.settings.index_style == "alphabet" {
+                let metadata = RepresentationMetadata::from_symbol(key.0);
+                while retain {
+                    let label = IndexAliases::label_key(&display);
+                    if !self
+                        .aliases
+                        .reserved_labels
+                        .get(&key.0)
+                        .is_some_and(|used| used.contains(&label))
+                        && !discovered
+                            .reserved_labels
+                            .get(&key.0)
+                            .is_some_and(|used| used.contains(&label))
+                    {
+                        break;
+                    }
+                    let Some(next_position) = position.and_then(|p| p.checked_add(1)) else {
+                        retain = false;
+                        break;
+                    };
+                    let Some(next) = metadata
+                        .as_ref()
+                        .and_then(|metadata| metadata.index_palette.resolve(next_position))
+                    else {
+                        retain = false;
+                        break;
+                    };
+                    position = Some(next_position);
+                    display = next;
+                }
+            }
+            if retain {
+                self.aliases
+                    .reserved_labels
+                    .entry(key.0)
+                    .or_default()
+                    .insert(IndexAliases::label_key(&display));
+                let alias = (position, display);
+                if let Some(local) = aliases.entries.get_mut(&key) {
+                    *local = alias.clone();
+                }
+                self.aliases.entries.insert(key, alias);
+            } else {
+                // Keep established names stable. New keys retain their source
+                // spelling once the bounded viewer alias inventory is full.
+                aliases.entries.remove(&key);
+            }
+        }
+        let options = self.settings.mathml_options();
+        // Aliases remain borrowed viewer state, rather than serialized options
+        // or symbols inserted into the expression being paged.
+        let result = mathml::render(atom.as_view(), &options, state, &|representation, index| {
+            let key = (representation, index.to_owned());
+            aliases
+                .entries
+                .get(&key)
+                .and_then(|(_, display)| display.to_mathml())
+                .or_else(|| {
+                    let source = aliases.source_indices.get(&key)?;
+                    if !fits(source.as_view(), &mut { MAX_LEAF_NODES }, 0) {
+                        return None;
+                    }
+                    Some(source.format_string(&options, PrintState::new()))
+                })
+        });
+        if let Some(error) = PyErr::take(py) {
+            return Err(error);
+        }
+        // Oversized calls defer to structural rendering so their arguments can
+        // still be paged and inspected, rather than becoming an atomic loop.
+        let result = result.filter(|html| html.len() <= MAX_LEAF_BYTES);
+        self.cache
+            .push_back(((view.to_owned(), context), result.clone()));
+        if self.cache.len() > 128 {
+            self.cache.pop_front();
+        }
+        Ok(result)
     }
 }
 
-fn module(py: Python<'_>) -> PyResult<Bound<'_, PyModule>> {
-    // Cache the module in sys.modules; all viewers share code, not expression state.
-    let modules = py.import("sys")?.getattr("modules")?;
-    let name = "_spenso_paging";
-    if let Ok(m) = modules.get_item(name) {
-        return Ok(m.cast_into::<PyModule>()?);
-    }
-    let code = CString::new(include_str!("../../typst/paging.py")).unwrap();
-    let m = PyModule::from_code(py, &code, c"spenso_paging.py", c"_spenso_paging")?;
-    m.add_function(wrap_pyfunction!(compile_typst, &m)?)?;
-    m.setattr("WIDGET_ESM", include_str!("../../typst/paging.js"))?;
-    m.setattr("NOTEBOOK_STYLE", NOTEBOOK_STYLE)?;
-    modules.set_item(name, &m)?;
-    Ok(m)
-}
 pub(crate) fn viewer(
     py: Python<'_>,
+    expression: Py<PythonExpression>,
     value: Arc<SymbolicTensor<PartialStructure>>,
     settings: DisplaySettings,
     notation: Option<String>,
     size: usize,
 ) -> PyResult<Py<PyAny>> {
-    if ![25, 100, 250, 500].contains(&size) {
+    if notation.is_some() {
         return Err(PyValueError::new_err(
-            "page_size must be 25, 100, 250, or 500",
+            "The direct MathML pager does not accept Typst notation_source; use to_typst_project() or to_svg() for custom Typst exports",
         ));
     }
-    let len = value.expression().as_view().get_byte_size();
-    let source = PageSource {
-        value,
+    let mut leaves = TensorLeaves {
         settings,
-        notation,
-        spans: BTreeMap::from([(0, Span { start: 0, len })]),
-        cursors: Vec::new(),
         aliases: IndexAliases::default(),
+        cache: VecDeque::new(),
     };
-    Ok(module(py)?
-        .getattr("Pager")?
-        .call1((Py::new(py, source)?, size))?
-        .unbind())
+    MathMLViewer::expression(
+        expression,
+        PrintOptions::new()
+            .multiplication_operator('·')
+            .num_exp_as_superscript(true),
+        Some(Box::new(move |py, atom, _options, state| {
+            leaves.render(py, &value, atom, state)
+        })),
+    )
+    .page_size(size)
+    .into_python(py)
 }
+
 pub(crate) fn static_html(
     py: Python<'_>,
+    expression: Py<PythonExpression>,
     value: Arc<SymbolicTensor<PartialStructure>>,
     settings: DisplaySettings,
     notation: Option<String>,
 ) -> PyResult<String> {
-    viewer(py, value, settings, notation, DEFAULT_PAGE_SIZE)?
+    viewer(py, expression, value, settings, notation, DEFAULT_PAGE_SIZE)?
         .call_method0(py, "_repr_html_")?
         .extract(py)
 }
@@ -539,30 +387,42 @@ pub(crate) fn static_html(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use spenso::structure::representation::{LibraryRep, Minkowski, RepName};
+    use symbolica::atom::{NamespacedSymbol, SymbolBuilder};
+    use symbolica::{parse, symbol};
+
     #[test]
-    fn budgets_reject_deep_wide_and_large_atoms() {
-        let small = symbolica::parse!("x+y");
-        assert!(fits(small.as_view(), &mut { MAX_NODES }, 0));
+    fn semantic_leaf_work_is_bounded_before_notation_callbacks() {
+        let small = parse!("f(x,y)");
+        assert!(fits(small.as_view(), &mut { MAX_LEAF_NODES }, 0));
         assert!(!fits(small.as_view(), &mut 1, 0));
-        assert!(!fits(small.as_view(), &mut { MAX_NODES }, MAX_DEPTH + 1));
-        let huge = Atom::add_many(
-            (0..3000)
-                .map(|n| symbolica::parse!("x").pow(n))
-                .collect::<Vec<_>>(),
-        );
-        assert!(!fits(huge.as_view(), &mut { MAX_NODES }, 0));
+        assert!(!fits(small.as_view(), &mut { MAX_LEAF_NODES }, 33));
     }
+
     #[test]
-    fn continuation_resumes_the_exact_immutable_sum_suffix() {
-        let atom = symbolica::parse!("a+b+c+d+e");
-        let AtomView::Add(sum) = atom.as_view() else {
-            panic!("sum")
-        };
-        let all = sum.iter().collect::<Vec<_>>();
-        let root = atom.as_view().get_data();
-        let start = all[2].get_data().as_ptr() as usize - root.as_ptr() as usize;
-        // SAFETY: the offset comes from the original immutable iterator.
-        let resumed = unsafe { sum.iter().resume_at(&root[start..], all.len() - 2) };
-        assert_eq!(resumed.collect::<Vec<_>>(), all[2..]);
+    fn complete_export_preserves_decoded_label_errors() {
+        let representation = LibraryRep::from(Minkowski {});
+        let index = Atom::var(symbol!("paging_mathml_tests::i"));
+        let tensor = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("paging_mathml_tests::T"))
+            .add_arg(representation.to_symbolic([Atom::num(4), index.clone()]))
+            .finish();
+        let source = Atom::var(
+            SymbolBuilder::new(NamespacedSymbol::parse(&format!(
+                "paging_mathml_tests::{}",
+                "x".repeat(5000)
+            )))
+            .build()
+            .unwrap(),
+        );
+        let mut aliases = IndexAliases::default();
+        aliases
+            .source_indices
+            .insert((representation.symbol(), index), source);
+        Python::initialize();
+        Python::attach(|py| {
+            let error = html(py, &tensor, &DisplaySettings::default(), &aliases).unwrap_err();
+            assert!(error.is_instance_of::<PyValueError>(py));
+            assert!(error.to_string().contains("source exceeds"), "{error}");
+        });
     }
 }

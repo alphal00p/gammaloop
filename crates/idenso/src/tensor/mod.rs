@@ -1,52 +1,45 @@
-use std::{ops::AddAssign, sync::OnceLock};
-
-use linnet::half_edge::subgraph::subset::SubSet;
-use spenso::{
-    algebra::ScalarMul,
-    bracket,
-    contraction::{Contract, ContractionError, Trace},
-    iterators::IteratableTensor,
-    network::{
-        ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
-        library::{
-            DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError,
-            function_lib::Wrap,
-            symbolic::{ETS, ExplicitKey, TensorLibrary},
-        },
-        parsing::{
-            ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom,
-            TensorFromExpression, TensorLibraryFor,
-        },
-        store::NetworkStore,
-        tags::SPENSO_TAG,
-    },
-    shadowing::{Concretize, symbolica_utils::SpensoPrintSettings},
-    structure::{
-        ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasName, HasStructure,
-        MergeInfo, NamedStructure, OrderedStructure, PendingIndexPermutation, Reindexed,
-        ScalarStructure, ScalarTensor, SlotIndex, StructureContract, TensorIdentity, TensorShell,
-        TensorStructure, ToSymbolic,
-        abstract_index::AIND_SYMBOLS,
-        concrete_index::{ExpandedIndex, FlatIndex},
-        representation::{LibraryRep, LibrarySlot},
-        slot::{AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, SlotMatcher},
-    },
-    tensors::parametric::MixedTensor,
-};
-use symbolica_utils::{AtomPrintExt, IntoArgs, IntoSymbol};
-
-use delegate::delegate;
-use spenso::structure::StructureError;
-use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::dimension::Dimension;
-use spenso::structure::representation::Representation;
-
-use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol},
-    function,
-};
-
+use self::composition::ExplicitIndexOccurrences;
 use crate::NetworkToolingError;
+use delegate::delegate;
+use linnet::half_edge::subgraph::subset::SubSet;
+use spenso::algebra::ScalarMul;
+use spenso::bracket;
+use spenso::contraction::{Contract, ContractionError, Trace};
+use spenso::iterators::IteratableTensor;
+use spenso::network::library::function_lib::Wrap;
+use spenso::network::library::symbolic::{ETS, ExplicitKey, TensorLibrary};
+use spenso::network::library::{DummyKey, DummyLibrary, FunctionLibrary, FunctionLibraryError};
+use spenso::network::parsing::{
+    ParseSettings, ShadowedStructure, StrictTensorFilter, StructureFromAtom, TensorFromExpression,
+    TensorLibraryFor,
+};
+use spenso::network::store::NetworkStore;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::network::{
+    ExecutionResult, Network, Ref, Sequential, SmallestDegree, TensorNetworkError,
+};
+use spenso::shadowing::Concretize;
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
+use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
+use spenso::structure::concrete_index::{ExpandedIndex, FlatIndex};
+use spenso::structure::dimension::Dimension;
+use spenso::structure::partial::PartialStructure;
+use spenso::structure::representation::{LibraryRep, LibrarySlot, Representation};
+use spenso::structure::slot::{
+    AbsInd, DualSlotTo, DummyAind, IsAbstractSlot, ParseableAind, SlotMatcher,
+};
+use spenso::structure::{
+    ApplyPendingIndexPermutation, CanonicalLayout, Canonicalized, HasName, HasStructure,
+    IndexedStructure, MergeInfo, NamedStructure, OrderedStructure, PendingIndexPermutation,
+    Reindexed, ScalarStructure, ScalarTensor, SlotIndex, StructureContract, StructureError,
+    TensorIdentity, TensorShell, TensorStructure, ToSymbolic,
+};
+use spenso::tensors::parametric::MixedTensor;
+use std::ops::AddAssign;
+use std::sync::{Arc, OnceLock};
+use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
+use symbolica::function;
+use symbolica_utils::{AtomPrintExt, IntoArgs, IntoSymbol};
 
 mod canonicalize;
 mod collection;
@@ -74,7 +67,7 @@ impl<S> FunctionLibrary<SymbolicTensor<S>, Atom> for Wrap {
         tensor: SymbolicTensor<S>,
     ) -> eyre::Result<SymbolicTensor<S>, FunctionLibraryError<Self::Key>> {
         Ok(SymbolicTensor {
-            proofs: Default::default(),
+            proofs: tensor.proofs.algebra_result(),
             structure: tensor.structure,
             is_composite: true,
             is_metric: false,
@@ -174,9 +167,51 @@ where
 /// A [`spenso::structure::partial::PartialStructure`] also retains logical port
 /// order and occurrence-local unresolved indices for positional composition.
 /// The structure is independent of the expression, so a zero can retain its rank.
-/// Checked construction and rewriting validate interfaces when callbacks can
-/// change them; structure mappings retain the symbolic payload.
+/// Tensor metadata is authoritative after admission. Algebra derives the
+/// result's ports and scoped index uses from its operands; simplification of
+/// the symbolic payload does not erase that construction history. Raw inputs
+/// and arbitrary replacements must use a checked admission boundary. A callback
+/// used by ordinary algebra must preserve the admitted tensor meaning.
 /// The payload defaults to `Atom`; borrowed views use the same tensor carrier.
+///
+/// # Example
+///
+/// Admission separates a tensor's public ports from its scalar coefficients.
+/// In particular, cancellation retains the rank and later contractions remain typed.
+///
+/// ```
+/// use idenso::tensor::SymbolicTensor;
+/// use idenso::tensor::inference::TensorInferenceError;
+/// use spenso::structure::abstract_index::AbstractIndex;
+/// use spenso::structure::representation::{Euclidean, RepName};
+/// use spenso::structure::slot::IsAbstractSlot;
+/// use spenso::tensor_symbol;
+/// use symbolica::atom::Atom;
+/// use symbolica::function;
+///
+/// let port = Euclidean {}
+///     .new_rep(3)
+///     .to_lib()
+///     .slot::<AbstractIndex, _>(AbstractIndex::Normal(7));
+/// let vector = SymbolicTensor::infer(function!(tensor_symbol!("docs::vector"), port.to_atom()))?;
+/// let zero = vector.try_sub(&vector)?;
+/// assert!(zero.is_zero());
+/// assert_eq!(zero.rank(), 1);
+/// assert!(zero.multiply(&vector)?.is_scalar());
+/// assert_eq!(vector.try_add(&vector)?.rank(), 1);
+/// let two = SymbolicTensor::infer(Atom::num(2))?;
+/// assert!(vector.pow(&two)?.is_scalar());
+/// assert_eq!(vector.multiply(&two)?.rank(), 1);
+///
+/// // Raw parts must be admitted before they are used as authoritative metadata.
+/// let admitted = SymbolicTensor::from_declared_parts(
+///     vector.expression().clone(), vector.structure().clone(),
+/// )?;
+/// assert!(admitted.same_value(&vector));
+/// let nominal_zero = SymbolicTensor::checked_parts(Atom::Zero, vector.structure().clone())?;
+/// assert_eq!(nominal_zero.finish_parts()?.rank(), 1);
+/// # Ok::<(), TensorInferenceError>(())
+/// ```
 #[derive(Debug, Clone)]
 pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = Atom> {
     pub(crate) structure: S,
@@ -186,12 +221,17 @@ pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractIndex>, E = A
     pub(crate) proofs: TensorProofs,
 }
 
-/// Facts about this immutable payload and interface. Mutation drops every fact;
-/// copying a tensor may copy established facts, but attaching new parts cannot.
+/// Authoritative tensor metadata and payload-specific derived facts. Raw
+/// mutation drops both; certified algebra retains metadata and drops caches
+/// whose contents describe the previous payload.
 #[derive(Clone, Default)]
 pub(crate) struct TensorProofs {
     pub(super) validated: OnceLock<bool>,
     pub(super) intrinsic: OnceLock<bool>,
+    /// Tensor product finishing is inert and there are no unresolved factor
+    /// occurrences which ordinary multiplication could reorder or coalesce.
+    pub(super) normalized_product: OnceLock<bool>,
+    pub(in crate::tensor) occurrences: OnceLock<Arc<ExplicitIndexOccurrences>>,
     pub(super) algebra: OnceLock<bool>,
     pub(super) rewrite: OnceLock<bool>,
     pub(super) contracted: bool,
@@ -209,6 +249,7 @@ impl std::fmt::Debug for TensorProofs {
             .debug_struct("TensorProofs")
             .field("validated", &self.validated)
             .field("intrinsic", &self.intrinsic)
+            .field("normalized_product", &self.normalized_product)
             .field("algebra", &self.algebra)
             .field("rewrite", &self.rewrite)
             .field("contracted", &self.contracted)
@@ -216,6 +257,20 @@ impl std::fmt::Debug for TensorProofs {
             .field("observed", &self.observations.get().is_some())
             .field("planned", &self.shallow_graph.get().is_some())
             .finish()
+    }
+}
+
+impl TensorProofs {
+    /// Retain construction metadata without reusing reduction state or a graph
+    /// built for another payload. Scalar algebra does not change these ports or
+    /// index identities, even when Symbolica cancels their visible factors.
+    pub(super) fn algebra_result(&self) -> Self {
+        Self {
+            validated: self.validated.clone(),
+            normalized_product: self.normalized_product.clone(),
+            occurrences: self.occurrences.clone(),
+            ..Self::default()
+        }
     }
 }
 
@@ -266,29 +321,24 @@ impl<S, E> SymbolicTensor<S, E> {
     pub fn same_reduction_state(&self, other: &Self) -> bool {
         self.proofs.validated.get() == other.proofs.validated.get()
             && self.proofs.intrinsic.get() == other.proofs.intrinsic.get()
+            && self.proofs.normalized_product.get() == other.proofs.normalized_product.get()
+            && self.proofs.occurrences.get().map(Arc::as_ptr)
+                == other.proofs.occurrences.get().map(Arc::as_ptr)
             && self.proofs.algebra.get() == other.proofs.algebra.get()
             && self.proofs.rewrite.get() == other.proofs.rewrite.get()
             && self.proofs.contracted == other.proofs.contracted
             && self.proofs.frontier == other.proofs.frontier
             && self.proofs.reduction == other.proofs.reduction
-            && self
-                .proofs
-                .leaf_interfaces
-                .get()
-                .map(std::sync::Arc::as_ptr)
-                == other
-                    .proofs
-                    .leaf_interfaces
-                    .get()
-                    .map(std::sync::Arc::as_ptr)
-            && self.proofs.observations.get().map(std::sync::Arc::as_ptr)
-                == other.proofs.observations.get().map(std::sync::Arc::as_ptr)
+            && self.proofs.leaf_interfaces.get().map(Arc::as_ptr)
+                == other.proofs.leaf_interfaces.get().map(Arc::as_ptr)
+            && self.proofs.observations.get().map(Arc::as_ptr)
+                == other.proofs.observations.get().map(Arc::as_ptr)
             && match (
                 self.proofs.shallow_graph.get(),
                 other.proofs.shallow_graph.get(),
             ) {
                 (None, None) => true,
-                (Some(Ok(left)), Some(Ok(right))) => std::sync::Arc::ptr_eq(left, right),
+                (Some(Ok(left)), Some(Ok(right))) => Arc::ptr_eq(left, right),
                 (Some(Err(left)), Some(Err(right))) => left == right,
                 _ => false,
             }
@@ -301,12 +351,14 @@ impl<S, E> SymbolicTensor<S, E> {
 
 impl<S, E: AtomCore + From<E::Output>> SymbolicTensor<S, E> {
     /// Protect an implicit scalar contraction when scalar arithmetic repeats it.
-    pub(super) fn scalar_power_expression(expression: E) -> E {
-        let mut indexed_product = false;
-        if matches!(
+    /// Admitted callers provide their index metadata. Only legacy raw network
+    /// storage without that metadata needs to discover its written scope.
+    pub(super) fn scalar_power_expression(expression: E, indexed: Option<bool>) -> E {
+        let indexed_product = matches!(
             expression.as_atom_view(),
             AtomView::Mul(_) | AtomView::Pow(_)
-        ) {
+        ) && indexed.unwrap_or_else(|| {
+            let mut indexed_product = false;
             expression.visitor(&mut |value| {
                 if let AtomView::Fun(fun) = value {
                     let symbol = fun.get_symbol();
@@ -318,7 +370,8 @@ impl<S, E: AtomCore + From<E::Output>> SymbolicTensor<S, E> {
                 }
                 !indexed_product
             });
-        }
+            indexed_product
+        });
         // Keep implicit index sums atomic when scalar arithmetic takes powers.
         if indexed_product {
             expression
@@ -582,7 +635,9 @@ impl<S: TensorStructure, E: AtomCore + From<E::Output>> HasStructure for Symboli
     }
 
     fn scalar_power_base(self) -> Option<Self::Scalar> {
-        self.scalar().map(Self::scalar_power_expression)
+        let indexed = self.proofs.occurrences.get().map(|usage| !usage.is_empty());
+        self.scalar()
+            .map(|expression| Self::scalar_power_expression(expression, indexed))
     }
 
     fn scalar_ref(&self) -> Option<&Self::Scalar> {
@@ -998,7 +1053,7 @@ impl<S> std::ops::Neg for SymbolicTensor<S> {
 
     fn neg(self) -> Self::Output {
         Self {
-            proofs: Default::default(),
+            proofs: self.proofs.algebra_result(),
             expression: -self.expression,
             is_composite: true,
             is_metric: self.is_metric,
@@ -1031,8 +1086,8 @@ impl<Aind: AbsInd> AddAssign<&SymbolicTensor<OrderedStructure<LibraryRep, Aind>>
     }
 }
 
-impl<S: Clone> ScalarMul<Atom> for SymbolicTensor<S> {
-    type Output = SymbolicTensor<S>;
+impl<Aind: AbsInd> ScalarMul<Atom> for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+    type Output = Self;
 
     fn scalar_mul(&self, rhs: &Atom) -> Option<Self::Output> {
         Some(Self {
@@ -1042,6 +1097,30 @@ impl<S: Clone> ScalarMul<Atom> for SymbolicTensor<S> {
             is_metric: false,
             structure: self.structure.clone(),
         })
+    }
+}
+
+impl ScalarMul<Atom> for SymbolicTensor<PartialStructure> {
+    type Output = Self;
+
+    fn scalar_mul(&self, rhs: &Atom) -> Option<Self> {
+        let scalar = Self::infer(rhs.clone()).ok()?;
+        if !scalar.is_scalar() {
+            return None;
+        }
+        self.multiply(&scalar).ok()
+    }
+}
+
+impl ScalarMul<Atom> for SymbolicTensor<IndexedStructure> {
+    type Output = Self;
+
+    fn scalar_mul(&self, rhs: &Atom) -> Option<Self> {
+        let scalar = Self::infer_indexed(rhs.clone()).ok()?;
+        if !scalar.is_scalar() {
+            return None;
+        }
+        self.clone().multiply(scalar).ok()
     }
 }
 

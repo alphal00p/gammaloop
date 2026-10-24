@@ -1,20 +1,16 @@
 //! Canonical GammaLoop energy symbols, also used by standalone FeynKit.
 
+use spenso::network::tags::mathml;
 use std::sync::LazyLock;
 
-use spenso::{
-    network::tags::TENSOR_PRINT_CALLBACK_TAG,
-    shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings},
-    structure::abstract_index::AIND_SYMBOLS,
-    symbolica_init::SymbolicaInitLazy,
-    utils::to_subscript,
-};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
-    function,
-    printer::{PrintOptions, PrintState},
-    symbol,
-};
+use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
+use spenso::structure::abstract_index::AIND_SYMBOLS;
+use spenso::symbolica_init::SymbolicaInitLazy;
+use spenso::utils;
+use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::printer::{PrintOptions, PrintState};
+use symbolica::{function, symbol};
+use symbolica_notation::Notation;
 
 use crate::EdgeId;
 
@@ -26,6 +22,29 @@ fn print_energy(
     state: &PrintState,
     on_shell: bool,
 ) -> Option<String> {
+    if options.mode.is_mathml() {
+        let AtomView::Fun(function) = atom else {
+            return None;
+        };
+        if function.get_nargs() != 1 {
+            return None;
+        }
+        let index = function.iter().next()?;
+        if index.get_byte_size() > 1024 {
+            return None;
+        }
+        let id = mathml::expression(index, options, &PrintState::new(), &|_, _| None).ok()?;
+        let value = if on_shell {
+            format!("<msubsup><mi>E</mi><mrow>{id}</mrow><mtext>os</mtext></msubsup>")
+        } else {
+            format!("<msub><mi>E</mi><mrow>{id}</mrow></msub>")
+        };
+        return mathml::fragment(if on_shell && state.in_exp_base {
+            format!("<mrow><mo>(</mo>{value}<mo>)</mo></mrow>")
+        } else {
+            value
+        });
+    }
     let backend = if options.mode.is_latex() {
         SpensoPrintBackend::Latex
     } else {
@@ -61,27 +80,39 @@ fn print_energy(
         SpensoPrintBackend::Plain => {
             let head = if on_shell { "Eᵒˢ" } else { "E" };
             let index = usize::try_from(index).ok()?;
-            format!("{head}{}", to_subscript(index as isize))
+            format!("{head}{}", utils::to_subscript(index as isize))
         }
     })
 }
 
 static ON_SHELL: LazyLock<Symbol> = LazyLock::new(|| {
-    symbol!(
+    let symbol = symbol!(
         "gammalooprs::OSE"; Scalar;
-        tag = TENSOR_PRINT_CALLBACK_TAG,
         print = |a, opt, state| print_energy(a, opt, state, true),
         der = |_, arg, out| {
             if arg == 1 { **out = Atom::num(1); }
         }
-    )
+    );
+    Notation {
+        custom_print: true,
+        ..Notation::default()
+    }
+    .register(symbol)
+    .expect("the canonical energy symbol has one notation");
+    symbol
 });
 static ENERGY: LazyLock<Symbol> = LazyLock::new(|| {
-    symbol!(
+    let symbol = symbol!(
         "gammalooprs::E",
-        tag = TENSOR_PRINT_CALLBACK_TAG,
         print = |a, opt, state| print_energy(a, opt, state, false)
-    )
+    );
+    Notation {
+        custom_print: true,
+        ..Notation::default()
+    }
+    .register(symbol)
+    .expect("the canonical energy symbol has one notation");
+    symbol
 });
 
 pub fn on_shell() -> Symbol {
@@ -120,7 +151,7 @@ mod tests {
         let canonical = energy.to_canonical_string();
         assert_eq!(energy, symbolica::parse!("gammalooprs::OSE(3)"));
         assert!(canonical.ends_with("::OSE(3)"));
-        assert!(on_shell().has_tag(TENSOR_PRINT_CALLBACK_TAG));
+        assert!(Notation::has_custom_print(on_shell()).unwrap());
         assert_eq!(
             energy.printer(PrintOptions::typst()).to_string(),
             "E^(\"os\")_(3)"

@@ -4,7 +4,6 @@
 #     "symbolica==3.0.1",
 #     "anywidget==0.9.18",
 #     "marimo==0.24.0",
-#     "typst==0.15.0",
 # ]
 # ///
 
@@ -39,7 +38,7 @@ def _(mo):
     updates their coordinates. **Pause** stops the solver between batches.
 
     This is a geometry preview: blue circles are nodes; small amber points are
-    the solver's edge positions. Typst typography and final label placement are
+    the solver's edge positions. Browser typography and final label placement are
     left to the finished drawing.
     """)
     return

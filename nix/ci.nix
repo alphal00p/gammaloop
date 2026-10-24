@@ -76,7 +76,6 @@
         "linnet-py"
         "linnet-render-py"
         "linnest"
-        "typst-renderer"
       ];
     }
     {
@@ -88,6 +87,7 @@
         "spenso-hep-lib"
         "spenso-macros"
         "spynso3"
+        "symbolica-notation"
         "symbolica-utils"
         "symbolica-data"
       ];

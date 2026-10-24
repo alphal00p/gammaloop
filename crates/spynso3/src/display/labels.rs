@@ -3,8 +3,8 @@ use std::{
     sync::{LazyLock, RwLock},
 };
 
-use spenso::network::tags::TENSOR_PRINT_HEAD_PREFIX;
 use symbolica::atom::{Atom, AtomCore, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
+use symbolica_notation::{DisplayText, Notation, TextOverrides};
 
 use super::DisplaySettings;
 
@@ -56,10 +56,6 @@ impl DisplaySettings {
             let latex = latex.to_owned();
             let typst = typst.clone();
             SymbolBuilder::new(name)
-                .with_tags([
-                    format!("{TENSOR_PRINT_HEAD_PREFIX}latex:{latex}"),
-                    format!("{TENSOR_PRINT_HEAD_PREFIX}typst:{typst}"),
-                ])
                 .with_print_function(move |_, options, _| {
                     if options.mode.is_latex() {
                         Some(latex.clone())
@@ -72,6 +68,20 @@ impl DisplaySettings {
                 .build()
                 .expect("presentation names encode their complete declaration")
         });
+        Notation {
+            text: TextOverrides {
+                plain: None,
+                latex: Some(
+                    DisplayText::new(latex).expect("model labels are bounded display text"),
+                ),
+                typst: Some(
+                    DisplayText::new(&typst).expect("model labels are bounded display text"),
+                ),
+            },
+            ..Notation::default()
+        }
+        .register(presentation)
+        .expect("presentation symbol names encode their notation");
         LABELS.write().unwrap().insert(
             symbol,
             LatexLabel {

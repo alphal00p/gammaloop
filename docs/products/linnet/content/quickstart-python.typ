@@ -12,8 +12,20 @@ python -m pip install "maturin>=1.13,<2"
 maturin develop --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml
 ```
 
-Rendering uses the embedded Rust Typst compiler. No separate Python Linnet or Typst
-package or external Typst executable is required.
+Graph rendering uses native Rust geometry and direct MathML labels. Notebook
+display requires `anywidget`; the live browser measures labels before the
+drawing is finalized. No Typst compiler is used for this path.
+
+The GammaLoop package and this checkout's isolated notebook host declare
+`notebook-display` (`anywidget>=0.9,<1`), `graph-export`
+(`playwright>=1.55,<2`) and `typst-export` (`typst>=0.15`) extras. Do not assume
+those extras exist in the currently released external Community wheel.
+For an existing host environment, install the dependencies you need directly:
+
+// docs-example: syntax
+```sh
+python -m pip install "anywidget>=0.9,<1"
+```
 
 == Parse and inspect a graph
 
@@ -62,6 +74,27 @@ Run `python linnet_quickstart.py`. Success means the assertions pass and the gra
 DOT. `Graph` also exposes typed nodes, half-edges, subgraphs, cycles, oriented cuts, and
 traversal trees; use the #link("reference/python/")[Python reference] for the exact current
 surface.
+
+In a notebook, keep and display the configured view:
+
+```python
+from IPython.display import display
+
+view = graph.render()
+display(view)
+```
+
+After the browser finishes measuring, `snapshot = view.measured()` returns an
+immutable drawing. `snapshot.to_svg()`, `snapshot.to_html()` and
+`snapshot.save("graph.svg")` preserve its measured boxes and embedded font.
+Exporting a pending view raises an error.
+
+Scripts may explicitly request `view.measured(browser="chromium")`. Install
+`playwright>=1.55,<2` and run `python -m playwright install chromium` first.
+The default SVG contains browser MathML in XHTML `foreignObject` elements;
+use `view.outlined()` with optional Python typst-py (distribution `typst>=0.15`)
+for vector labels before PDF, PNG or Typst SVG import. Neither an automatic
+headless browser nor estimated label bounds are used.
 
 Continue with #link("guides/python-rendering/")[Rendering graphs from Python] to explore a
 complete graph with custom drawing selectors. The #link("playground/")[live Python playground]

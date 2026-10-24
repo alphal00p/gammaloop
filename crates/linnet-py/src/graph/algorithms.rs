@@ -1,5 +1,6 @@
 //! Graphica algorithms over a lossless, colored incidence graph.
 use super::*;
+use pyo3::PyErr;
 use std::sync::{Arc, Mutex};
 use symbolica::{
     api::python::{ConvertibleToExpression, PythonExpression},

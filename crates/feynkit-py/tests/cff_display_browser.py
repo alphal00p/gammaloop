@@ -146,7 +146,7 @@ def main(directory, executable=None, engine="chromium"):
             display.locator("[data-explorer] > summary").click()
             display.locator("[data-graph] .linnet-viewport").wait_for(state="visible")
         ids = page.locator("[id]").evaluate_all("nodes => nodes.map(n=>n.id)")
-        assert len(ids) == len(set(ids)), "SVG glyph IDs collide across displays"
+        assert len(ids) == len(set(ids)), "SVG IDs collide across displays"
         # The sum is also navigation: endpoints, adjacent terms, and one ID editor.
         choose_orientation(page, 10)
         assert root.locator("[data-sum-id]").evaluate_all(

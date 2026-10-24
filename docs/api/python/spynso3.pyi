@@ -29,7 +29,7 @@ import numpy.typing
 import symbolica.core
 import typing
 from symbolica import ComplexFloat, Float
-from symbolica.community.graph import DiagramRender, RenderSettings
+from symbolica.community.graph import DiagramView, RenderSettings
 from symbolica.core import Condition, Evaluator, Expression, FormattedOutput, FunctionDefinition, HeldExpression, PatternRestriction, Replacement, Transformer
 
 AUTO: _AutoIndex
@@ -393,8 +393,9 @@ class DisplaySettings:
 
     Formatting does not change indices, tensor algebra, or component order.
     The defaults use representation-specific index alphabets and an interactive
-    component explorer. Typst/plain source supports ports layout; alternative
-    layouts and custom spacing require a rich HTML or SVG renderer.
+    component explorer. The direct MathML pager supports rich layouts and gaps;
+    static Typst/plain source supports ports layout. HTML uses direct MathML;
+    customizable Typst projects and SVG exports retain the Typst notation backend.
 
     Examples
     --------
@@ -548,12 +549,12 @@ class DisplaySettings:
     @property
     def index_gap(self) -> builtins.str:
         r"""
-        Spacing between rendered indices, as a finite Typst length using
+        Spacing between rendered indices, as a finite length using
 
         Returns
         -------
         str
-            Spacing between rendered indices, as a finite Typst length using
+            Spacing between rendered indices, as a finite length using
             pt, mm, cm, in, em, or %.
 
         Examples
@@ -596,7 +597,7 @@ class DisplaySettings:
         symbol_scripts : bool, default True
             Render index and component information using symbol scripts where supported.
         index_gap : str, default "0.08em"
-            Spacing between rendered indices, as a finite Typst length using
+            Spacing between rendered indices, as a finite length using
             pt, mm, cm, in, em, or %.
         factor_gap : str, default "0.12em"
             Spacing between rendered factors, using the same length units as index_gap.
@@ -2833,6 +2834,25 @@ class Tensor:
         >>> tensor = Tensor.dense(A, [1.0, 2.0, 3.0, 4.0])
         >>> output = tensor.to_typst()
         """
+    def to_typst_project(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> dict:
+        r"""
+        Return the source files of a complete Typst project without compiling it.
+        Custom notation is source code for `notation.typ` in the returned mapping.
+
+        # Errors
+
+        Returns a Python exception if the tensor cannot be serialized. Registered
+        Python printer exceptions are logged and decline the override, allowing
+        native fallback. Exporting does not import or invoke a compiler.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import Representation, Tensor, TensorName
+        >>> tensor = Tensor.dense(TensorName("A")(Representation.euc(2)), [1., 2.])
+        >>> project = tensor.to_typst_project()
+        >>> sorted(project)
+        ['main.typ', 'notation.typ', 'render.typ', 'tree.cbor']
+        """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:
         r"""
         Create a rich display value for a notebook.
@@ -2845,8 +2865,8 @@ class Tensor:
         settings : DisplaySettings, optional
             Tensor notation and display choices. Defaults to DisplaySettings().
         notation_source : str, optional
-            Custom Typst notation source used by the rich renderer. This is
-            Typst code, not a filename; omit it for the supplied tensor notation.
+            Unsupported for HTML and formatted output; raises ValueError.
+            Use to_typst_project() or to_svg() for custom Typst notation.
 
         Returns
         -------
@@ -2857,6 +2877,11 @@ class Tensor:
         -----
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
+
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
 
         Examples
         --------
@@ -2879,8 +2904,8 @@ class Tensor:
         settings : DisplaySettings, optional
             Tensor notation and display choices. Defaults to DisplaySettings().
         notation_source : str, optional
-            Custom Typst notation source used by the rich renderer. This is
-            Typst code, not a filename; omit it for the supplied tensor notation.
+            Unsupported for HTML and formatted output; raises ValueError.
+            Use to_typst_project() or to_svg() for custom Typst notation.
 
         Returns
         -------
@@ -2889,9 +2914,8 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        Mathematical rendering uses direct MathML without a Typst compiler.
+        Pass the returned fragment to the notebook's HTML display facility.
 
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
@@ -2900,6 +2924,11 @@ class Tensor:
         Matrix toggle. Dark mode follows the surrounding page. The color scale
         measures stored component payload bytes, not total process memory. Use
         DisplaySettings(tensor_view="matrix") for static mathematical HTML.
+
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
 
         Examples
         --------
@@ -2932,12 +2961,17 @@ class Tensor:
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        SVG export uses the optional Python package typst (typst-py).
+        Pass the returned markup to the notebook's SVG display facility.
 
         Components follow logical axis order. Large static displays show a
         bounded preview rather than every component.
+
+        # Errors
+
+        Returns ImportError if optional typst-py is unavailable, or RuntimeError if
+        compilation fails. Registered Python printer exceptions are logged and decline
+        the override, allowing native fallback.
 
         Examples
         --------
@@ -3007,10 +3041,11 @@ class Tensor:
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -3043,10 +3078,11 @@ class Tensor:
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -3079,10 +3115,11 @@ class Tensor:
             Keys must identify existing external axes. Each axis may be renamed
             once; renaming must preserve the external interface.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -3161,10 +3198,11 @@ class Tensor:
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -3814,10 +3852,10 @@ class TensorExpression(Expression):
     return ordinary expressions; the tensor-aware overrides retain the interface.
     Use ``to_expression()`` to explicitly drop the tensor interface.
 
-    Pass ``intern="indices"`` to reversibly encode compound index labels, or
-    ``intern="flattened"`` to create readable names. Both modes operate only on
-    index payloads. An explicit ``structure`` retains the declared axis order
-    and can describe the interface of a symbolic zero.
+    Pass ``intern="indices"`` to reversibly encode unknown function-valued index
+    labels, or ``intern="flattened"`` to create readable names. Both modes operate
+    only on index payloads and preserve native index forms. An explicit ``structure``
+    retains the declared axis order and can describe the interface of a symbolic zero.
 
     Examples
     --------
@@ -4007,10 +4045,11 @@ class TensorExpression(Expression):
             not reorder arguments or component axes. For zero, it supplies the rank
             and axes that cannot be inferred from the scalar expression alone.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -5544,10 +5583,11 @@ class TensorExpression(Expression):
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -5578,10 +5618,11 @@ class TensorExpression(Expression):
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -5612,10 +5653,11 @@ class TensorExpression(Expression):
             Keys must identify existing external axes. Each axis may be renamed
             once; renaming must preserve the external interface.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -5671,10 +5713,11 @@ class TensorExpression(Expression):
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -6135,6 +6178,42 @@ class TensorExpression(Expression):
         >>> A = TensorName("M")(space, space)
         >>> output = A.to_typst()
         """
+    def to_typst_project(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> dict:
+        r"""
+        Export a customizable Typst project without running a compiler.
+
+        Parameters
+        ----------
+        show_dimensions : bool, optional
+            Override settings.show_dimensions for this call.
+        settings : DisplaySettings, optional
+            Tensor notation, layout, and spacing choices.
+        notation_source : str, optional
+            Replacement notation.typ source; defaults to the bundled notation.
+
+        Returns
+        -------
+        dict[str, bytes]
+            main.typ, render.typ, notation.typ, and the portable tree.cbor payload.
+            Write each file's bytes beneath one project directory. Compile main.typ
+            with that directory as the compiler root, for example using
+            typst.compile(project_dir / "main.typ", root=project_dir).
+
+        Notes
+        -----
+        All rich layouts are supported. The optional Python package typst is
+        needed only to compile the returned project.
+
+        # Errors
+
+        Returns a Python exception if payload export fails. Registered Python printer
+        exceptions are logged and decline the override, allowing native fallback.
+
+        Examples
+        --------
+        >>> from symbolica.community.tensor import TensorExpression
+        >>> project = TensorExpression(1).to_typst_project()
+        """
     def formatted(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> FormattedOutput:  # type: ignore[override]  # ty: ignore[invalid-method-override]
         r"""
         Create a lazy rich display value for a notebook.
@@ -6147,8 +6226,8 @@ class TensorExpression(Expression):
         settings : DisplaySettings, optional
             Tensor notation and display choices. Defaults to DisplaySettings().
         notation_source : str, optional
-            Custom Typst notation source used by the rich renderer. This is
-            Typst code, not a filename; omit it for the supplied tensor notation.
+            Unsupported for HTML and notebook output; raises ValueError.
+            Use to_typst_project() or to_svg() for custom Typst notation.
 
         Returns
         -------
@@ -6161,6 +6240,11 @@ class TensorExpression(Expression):
         Paging retains factorization and ordered ports; explicit exports remain complete.
         Settings are captured here; custom printers run on the first request
         for each backend. Create a new formatted value after changing printers.
+
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
 
         Examples
         --------
@@ -6180,18 +6264,25 @@ class TensorExpression(Expression):
         Parameters
         ----------
         page_size : int, default 25
-            Maximum entries shown on a page: 25, 100, 250, or 500. Rendering may
+            Maximum entries shown on a page, between 1 and 500. Rendering may
             show fewer entries when an individual expression is large.
         settings : DisplaySettings, optional
             Tensor notation, index labels, and other presentation preferences.
         notation_source : str, optional
-            Custom Typst notation source, with the same meaning as in to_html().
+            Unsupported by the direct MathML pager. Use to_typst_project() or to_svg()
+            for custom Typst notation; paging raises ValueError when supplied.
 
         Returns
         -------
         object
             Notebook viewer retaining the expression and rendering pages on demand.
             Display it in marimo or Jupyter to navigate its widget.
+
+        # Errors
+
+        Returns ValueError for Typst notation or an invalid page size; viewer failures
+        propagate. Registered Python printer exceptions are logged and decline the
+        override, allowing native fallback.
 
         Examples
         --------
@@ -6233,8 +6324,8 @@ class TensorExpression(Expression):
         settings : DisplaySettings, optional
             Tensor notation and display choices. Defaults to DisplaySettings().
         notation_source : str, optional
-            Custom Typst notation source used by the rich renderer. This is
-            Typst code, not a filename; omit it for the supplied tensor notation.
+            Unsupported for HTML and notebook output; raises ValueError.
+            Use to_typst_project() or to_svg() for custom Typst notation.
 
         Returns
         -------
@@ -6243,9 +6334,14 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        Mathematical rendering uses direct MathML and requires no Typst compiler.
+        The complete expression is exported; oversized output raises an error.
+        Pass the returned string to the notebook's HTML display facility.
+
+        # Errors
+
+        Returns ValueError for Typst notation or incomplete MathML. Registered Python
+        printer exceptions are logged and decline the override, allowing native fallback.
 
         Examples
         --------
@@ -6276,9 +6372,14 @@ class TensorExpression(Expression):
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        SVG export uses the optional Python package typst (typst-py).
+        Pass the returned markup to the notebook's SVG display facility.
+
+        # Errors
+
+        Returns ImportError if optional typst-py is unavailable, or RuntimeError if
+        compilation fails. Registered Python printer exceptions are logged and decline
+        the override, allowing native fallback.
 
         Examples
         --------
@@ -7703,9 +7804,14 @@ class TensorName:
             Normalize a newly constructed call. A callable receives an Expression
             and returns its normalized Expression; tensor interfaces must remain valid.
         print : dict of str to str or callable, optional
-            A mapping with keys "plain", "latex", or "typst" changes just the
-            displayed tensor name. Values are source without math delimiters,
-            for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+            A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
+            displayed tensor name. Plain, LaTeX and Typst values are bounded display
+            text without math delimiters, for example {"typst": "overline(J)"}.
+            MathML accepts a bounded presentation subset with validated attributes;
+            executable markup, namespaces and unknown entities raise ValueError.
+            Notation is process-local and is not saved with expressions. Equal
+            re-registration succeeds; conflicting notation raises ValueError.
+            Spenso adds arguments and indices.
             A callable uses Symbolica's print callback convention and replaces
             the complete display; returning None selects the standard display.
         derivative, series, eval : callable, optional
@@ -7722,7 +7828,7 @@ class TensorName:
         Examples
         --------
         >>> from symbolica.community.tensor import TensorName, Representation
-        >>> J = TensorName("Jbar", print={"typst": "macron(J)"})
+        >>> J = TensorName("Jbar", print={"typst": "overline(J)"})
         >>> vector = J(Representation.euc(3))
         >>> vector.rank
         1
@@ -7759,9 +7865,14 @@ class TensorName:
             Normalize a newly constructed call. A callable receives an Expression
             and returns its normalized Expression; tensor interfaces must remain valid.
         print : dict of str to str or callable, optional
-            A mapping with keys "plain", "latex", or "typst" changes just the
-            displayed tensor name. Values are source without math delimiters,
-            for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+            A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
+            displayed tensor name. Plain, LaTeX and Typst values are bounded display
+            text without math delimiters, for example {"typst": "overline(J)"}.
+            MathML accepts a bounded presentation subset with validated attributes;
+            executable markup, namespaces and unknown entities raise ValueError.
+            Notation is process-local and is not saved with expressions. Equal
+            re-registration succeeds; conflicting notation raises ValueError.
+            Spenso adds arguments and indices.
             A callable uses Symbolica's print callback convention and replaces
             the complete display; returning None selects the standard display.
         derivative, series, eval : callable, optional
@@ -7778,7 +7889,7 @@ class TensorName:
         Examples
         --------
         >>> from symbolica.community.tensor import TensorName, Representation
-        >>> J = TensorName.vector("Jbar_vector", print={"typst": "macron(J)"})
+        >>> J = TensorName.vector("Jbar_vector", print={"typst": "overline(J)"})
         >>> vector = J(Representation.euc(3))
         >>> vector.rank
         1
@@ -8684,7 +8795,7 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+        Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
 
         Examples
         --------
@@ -8697,7 +8808,7 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.to_linnest()
         """
-    def render(self, *, config: typing.Optional[RenderSettings] = None) -> DiagramRender:
+    def render(self, *, config: typing.Optional[RenderSettings] = None) -> DiagramView:
         r"""
         Render a displayable snapshot of the current network graph.
 
@@ -8715,7 +8826,7 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+        Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
 
         Examples
         --------
@@ -8840,7 +8951,7 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.formatted()
         """
-    def to_html(self, *, config: typing.Optional[RenderSettings] = None) -> builtins.str:
+    def to_html(self, *, config: typing.Optional[RenderSettings] = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Display the current network graph and execution status.
 
@@ -8858,7 +8969,7 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+        Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
 
         Examples
         --------
@@ -8893,9 +9004,10 @@ class TensorNetwork:
 
         Notes
         -----
-        Mathematical rendering uses the embedded Typst compiler. The returned
-        string is not automatically displayed; pass it to the notebook's HTML
-        or SVG display facility.
+        SVG export uses the optional Python package typst (typst-py).
+        Pass the returned markup to the notebook's SVG display facility.
+        Raises ImportError if the optional typst-py package is unavailable, or RuntimeError
+        if compilation fails.
 
         This formats the symbolic source expression, independent of execution
         progress. Use render() or to_html() for the network graph.
@@ -8911,7 +9023,8 @@ class TensorNetwork:
         >>> network = TensorNetwork(tensor)
         >>> output = network.to_svg()
         """
-    def _repr_html_(self) -> builtins.str: ...
+    def _mime_(self) -> typing.Any: ...
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any: ...
     def expression(self) -> TensorExpression:
         r"""
         Return the symbolic source computation of this network.
@@ -8949,10 +9062,11 @@ class TensorNetwork:
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -8987,10 +9101,11 @@ class TensorNetwork:
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -9025,10 +9140,11 @@ class TensorNetwork:
             Keys must identify existing external axes. Each axis may be renamed
             once; renaming must preserve the external interface.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -9114,10 +9230,11 @@ class TensorNetwork:
             corresponding axis unchanged. A Slot must have the matching
             representation. Repeated compatible labels cause contraction.
         intern : {"indices", "flattened"} or None, optional
-            Encode compound index labels before checking the tensor structure.
+            Encode unknown function-valued index labels before checking the tensor structure.
             "indices" retains reversible payloads; "flattened" creates readable names.
             Both preserve index tags and leave scalar arguments and tensor heads intact.
-            None leaves labels unchanged and requires ordinary atomic index labels.
+            Native index forms, including named, scoped, and open indices, remain unchanged.
+            None accepts native index forms without encoding unknown function labels.
 
         Returns
         -------
@@ -10865,8 +10982,8 @@ def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.
     settings : DisplaySettings, optional
         Tensor notation and display choices. Defaults to DisplaySettings().
     notation_source : str, optional
-        Custom Typst notation source used by the rich renderer. This is
-        Typst code, not a filename; omit it for the supplied tensor notation.
+        Unsupported for HTML and notebook output; raises ValueError.
+        Use to_typst_project() or to_svg() for custom Typst notation.
 
     Returns
     -------
@@ -10877,6 +10994,11 @@ def formatted(expression: Expression, show_dimensions: typing.Optional[builtins.
     -----
     Settings are captured here; custom printers run on the first request
     for each backend. Create a new formatted value after changing printers.
+
+    # Errors
+
+    Returns ValueError for Typst notation or incomplete MathML. Registered Python
+    printer exceptions are logged and decline the override, allowing native fallback.
 
     Examples
     --------
@@ -10951,8 +11073,8 @@ def to_html(expression: Expression, show_dimensions: typing.Optional[builtins.bo
     settings : DisplaySettings, optional
         Tensor notation and display choices. Defaults to DisplaySettings().
     notation_source : str, optional
-        Custom Typst notation source used by the rich renderer. This is
-        Typst code, not a filename; omit it for the supplied tensor notation.
+        Unsupported for HTML and notebook output; raises ValueError.
+        Use to_typst_project() or to_svg() for custom Typst notation.
 
     Returns
     -------
@@ -10961,9 +11083,14 @@ def to_html(expression: Expression, show_dimensions: typing.Optional[builtins.bo
 
     Notes
     -----
-    Mathematical rendering uses the embedded Typst compiler. The returned
-    string is not automatically displayed; pass it to the notebook's HTML
-    or SVG display facility.
+    Mathematical rendering uses direct MathML and requires no Typst compiler.
+    The complete expression is exported; oversized output raises an error.
+    Pass the returned string to the notebook's HTML display facility.
+
+    # Errors
+
+    Returns ValueError for Typst notation or incomplete MathML. Registered Python
+    printer exceptions are logged and decline the override, allowing native fallback.
 
     Examples
     --------
@@ -10998,9 +11125,14 @@ def to_svg(expression: Expression, show_dimensions: typing.Optional[builtins.boo
 
     Notes
     -----
-    Mathematical rendering uses the embedded Typst compiler. The returned
-    string is not automatically displayed; pass it to the notebook's HTML
-    or SVG display facility.
+    SVG export uses the optional Python package typst (typst-py).
+    Pass the returned markup to the notebook's SVG display facility.
+
+    # Errors
+
+    Returns ImportError if optional typst-py is unavailable, or RuntimeError if
+    compilation fails. Registered Python printer exceptions are logged and decline
+    the override, allowing native fallback.
 
     Examples
     --------
@@ -11043,6 +11175,46 @@ def to_typst(expression: Expression, show_dimensions: typing.Optional[builtins.b
     >>> expression = S("x") + 1
     >>> from symbolica.community.tensor import to_typst
     >>> output = to_typst(expression)
+    """
+
+def to_typst_project(expression: Expression, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> dict:
+    r"""
+    Export a customizable Typst project without running a compiler.
+
+    Parameters
+    ----------
+    expression : Expression
+        Symbolica tensor syntax or scalar algebra to display.
+    show_dimensions : bool, optional
+        Override settings.show_dimensions for this call.
+    settings : DisplaySettings, optional
+        Tensor notation, layout, and spacing choices.
+    notation_source : str, optional
+        Replacement notation.typ source. Omit it for the bundled notation.
+
+    Returns
+    -------
+    dict[str, bytes]
+        main.typ, render.typ, notation.typ, and the portable tree.cbor payload.
+        Write each file's bytes beneath one project directory. Compile main.typ
+        with that directory as the compiler root, for example using
+        typst.compile(project_dir / "main.typ", root=project_dir).
+
+    Notes
+    -----
+    Unlike to_typst(), the project supports all rich layouts and custom notation.
+    The optional Python package typst is needed only to compile the result.
+
+    # Errors
+
+    Returns a Python exception if payload export fails. Registered Python printer
+    exceptions are logged and decline the override, allowing native fallback.
+
+    Examples
+    --------
+    >>> from symbolica import S
+    >>> from symbolica.community.tensor import to_typst_project
+    >>> project = to_typst_project(S("x") + 1)
     """
 
 @typing.overload

@@ -1,19 +1,18 @@
-use crate::{
-    shorthands::schoonschip::{ReductionStatus, Schoonschip},
-    tensor::SymbolicTensor,
-};
-use spenso::{
-    network::{library::symbolic::ETS, tags::SPENSO_TAG},
-    structure::{
-        TensorStructure,
-        partial::{PartialStructure, PartialStructureExt},
-    },
-};
+use crate::shorthands::chain::CHAINIFY_CALLS;
+use crate::shorthands::schoonschip::{ReductionStatus, Schoonschip};
+use crate::tensor::collection::SHALLOW_BUILDS;
+use crate::tensor::simplification::observation::INITIAL_SCANS;
+use crate::tensor::{ContractSettings, SELECTED_OPENS, SymbolicTensor};
+use crate::{Cookable, color_f, color_t, test_support};
+use spenso::network::library::symbolic::ETS;
+use spenso::network::tags::SPENSO_TAG;
+use spenso::structure::TensorStructure;
+use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+use spenso::{g, index_symbol, trace_sym};
 use std::sync::{Arc, Mutex};
-use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
-    parser::ParseSettings,
-};
+use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
+use symbolica::parser::ParseSettings;
+use symbolica::{function, parse_lit, symbol};
 
 fn setup() {
     crate::test_support::test_initialize();
@@ -38,7 +37,6 @@ fn contract(source: &Atom) -> SymbolicTensor<PartialStructure> {
 
 #[test]
 fn disabled_metric_elimination_preserves_supplied_vectors() {
-    use crate::tensor::ContractSettings;
     setup();
     let settings = ContractSettings {
         metrics: false,
@@ -68,7 +66,6 @@ fn disabled_metric_elimination_preserves_supplied_vectors() {
 
 #[test]
 fn contraction_forwards_observations_after_normalization_and_ordered_rewriting() {
-    use crate::tensor::{ContractSettings, SELECTED_OPENS};
     setup();
     let settings = ContractSettings {
         collect_chains: false,
@@ -109,15 +106,12 @@ fn contraction_forwards_observations_after_normalization_and_ordered_rewriting()
 
 #[test]
 fn chain_admission_skips_finished_open_tensor_coefficients() {
-    use crate::Cookable;
-    use crate::shorthands::chain::CHAINIFY_CALLS;
-    use crate::tensor::simplification::observation::INITIAL_SCANS;
     setup();
-    let reps = crate::test_support::test_initialize();
-    let label = spenso::index_symbol!("fused_raw_routing::chain_channel_edge");
-    let [a, b] = [1, 2].map(|i| reps.mink4.to_symbolic([symbolica::function!(label, i)]));
+    let reps = test_support::test_initialize();
+    let label = index_symbol!("fused_raw_routing::chain_channel_edge");
+    let [a, b] = [1, 2].map(|i| reps.mink4.to_symbolic([function!(label, i, 0)]));
     let coefficient = Atom::add_many((0..128).map(|i| {
-        let x = Atom::var(symbolica::symbol!(&format!(
+        let x = Atom::var(symbol!(&format!(
             "fused_raw_routing::channel_coefficient_{i}"
         )));
         x * input("spenso::g(p(17,spenso::mink(4)),q(23,spenso::mink(4)))").pow(i % 4 + 1)
@@ -128,7 +122,7 @@ fn chain_admission_skips_finished_open_tensor_coefficients() {
             .finish()
     };
     let source = SymbolicTensor::infer(
-        (&coefficient * spenso::g!(&a, &b)
+        (&coefficient * g!(&a, &b)
             + coefficient.pow(2)
                 * vector("fused_raw_routing::p", &a)
                 * vector("fused_raw_routing::q", &b))
@@ -148,7 +142,6 @@ fn chain_admission_skips_finished_open_tensor_coefficients() {
 
 #[test]
 fn chain_admission_updates_channels_after_vector_substitution() {
-    use crate::shorthands::chain::CHAINIFY_CALLS;
     setup();
     let source = input(
         "(t(spenso::mink(4,a),spenso::mink(4,i))+u(spenso::mink(4,a),spenso::mink(4,i)))*p(spenso::mink(4,i))*q(spenso::mink(4,b))",
@@ -165,7 +158,6 @@ fn chain_admission_updates_channels_after_vector_substitution() {
 
 #[test]
 fn chain_admission_retains_generic_channels_inside_scalar_scopes() {
-    use crate::{shorthands::chain::CHAINIFY_CALLS, tensor::ContractSettings};
     setup();
     let source = SymbolicTensor::infer(input("(x+y)^7*(t(spenso::mink(4,i),spenso::mink(4,j))*u(spenso::mink(4,j),spenso::mink(4,i))+z)^2")).unwrap();
     CHAINIFY_CALLS.with(|count| count.set(0));
@@ -189,7 +181,6 @@ fn chain_admission_retains_generic_channels_inside_scalar_scopes() {
 
 #[test]
 fn contraction_collects_matrix_words_with_supplied_endpoints() {
-    use crate::tensor::ContractSettings;
     setup();
     for (source, expected, reversed, rank) in [
         (
@@ -282,22 +273,13 @@ fn supplied_chain_endpoints_are_validated_and_do_not_expose_ports() {
 
 #[test]
 fn contraction_reuses_source_free_color_invariants_without_opening_scopes() {
-    use crate::tensor::{ContractSettings, SELECTED_OPENS, collection::SHALLOW_BUILDS};
-    let reps = crate::test_support::test_initialize();
+    let reps = test_support::test_initialize();
     let [a, b, c, d, e, f] = [97601, 97602, 97603, 97604, 97605, 97606]
         .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));
     let rep = reps.cof_nc.to_symbolic([] as [Atom; 0]);
-    let symmetric = |x: &Atom| {
-        spenso::trace_sym!(
-            &rep,
-            crate::color_t!(x),
-            crate::color_t!(&c),
-            crate::color_t!(&d)
-        )
-    };
-    let invariant =
-        crate::color_f!(&a, &b, &e) * symmetric(&e) * crate::color_f!(&a, &b, &f) * symmetric(&f);
-    let weight = symbolica::parse_lit!((source_free_weight_x + source_free_weight_y) ^ 12);
+    let symmetric = |x: &Atom| trace_sym!(&rep, color_t!(x), color_t!(&c), color_t!(&d));
+    let invariant = color_f!(&a, &b, &e) * symmetric(&e) * color_f!(&a, &b, &f) * symmetric(&f);
+    let weight = parse_lit!((source_free_weight_x + source_free_weight_y) ^ 12);
     let source = SymbolicTensor::infer(weight * (Atom::one() + invariant).pow(2)).unwrap();
     let settings = ContractSettings {
         collect_chains: false,
@@ -334,7 +316,6 @@ fn contraction_reuses_source_free_color_invariants_without_opening_scopes() {
 
 #[test]
 fn contraction_source_proof_keeps_new_metric_connections_eligible() {
-    use crate::tensor::ContractSettings;
     let reps = crate::test_support::test_initialize();
     let [a, b, c, d, e, z] = [97611, 97612, 97613, 97614, 97615, 97616]
         .map(|index| reps.coad_da.to_symbolic([Atom::num(index)]));

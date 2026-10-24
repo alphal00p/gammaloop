@@ -8,7 +8,7 @@ mod mutations;
 mod native_graph;
 mod render;
 pub use graph::PyGraph;
-pub use linnet_render_py::{drawing, typst, PyDiagramRender, PyRenderSettings};
+pub use linnet_render_py::{drawing, typst, PyDiagramRender, PyDiagramView, PyRenderSettings};
 pub use topology::PySubgraph;
 pub use typst::{PyAuto as Auto, PyRenderSettings as RenderSettings};
 mod streaming;

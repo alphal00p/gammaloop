@@ -340,15 +340,15 @@ fn captured_expanded_temporal_word_is_independent_of_internal_dummy_order() {
     use symbolica::{function, id::Replacement, symbol};
 
     test_initialize();
-    // Literal uncooked D11 chain from the rejected analytic numerator. Rebuild
-    // native index metadata before using the existing chain expander.
+    // Literal uncooked D11 chain from the rejected analytic numerator. Intern
+    // its historical labels reversibly without changing the captured text.
     let raw = Atom::parse(
         include_str!("../../../tests/fixtures/d11_contracted_temporal_chain.sym"),
         "idenso",
         Default::default(),
     )
     .unwrap();
-    let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+    let cooking = CookSettings::reversible().with_input_tags([SPENSO_TAG.index.clone()]);
     let chain = cooking.try_cook(raw.as_view()).unwrap();
     assert_eq!(cooking.uncook(chain.as_view()), raw);
     let captured = chain

@@ -1,12 +1,42 @@
-"""Complete notebook display and lazy backends against the installed extension."""
+"""Bounded notebook previews, complete exports, and lazy backend caching."""
 
 import unittest
+from unittest.mock import Mock
 
 from symbolica import E, FormattedOutput, PrintMode
 from symbolica.community import tensor as sp
 
 
 class SymbolicDisplayTests(unittest.TestCase):
+    def assertBoundedNotebookPreview(self, value):
+        html = value._repr_html_()
+        self.assertIn("<math", html)
+        self.assertIn("Expression preview", html)
+        self.assertIn("data-symbolica-marker", html)
+        self.assertLessEqual(len(html.encode()), 256 * 1024)
+
+        output = value.formatted()
+        self.assertEqual(output._repr_html_(), html)
+        self.assertEqual(output._repr_html_(), html)
+        self.assertIsNone(output._repr_latex_())
+        self.assertIsNone(output._repr_latex_())
+        self.assertEqual(
+            value._repr_latex_(),
+            r"$$\text{Large tensor expression: use the paged viewer}$$",
+        )
+        plain = output.format_plain()
+        self.assertEqual(
+            plain,
+            "Tensor expression (large; use the paged notebook viewer or explicit export)",
+        )
+        for rendered in (str(value), repr(value), str(output), repr(output)):
+            self.assertEqual(rendered, plain)
+        for rendered in (value, output):
+            pretty = Mock()
+            rendered._repr_pretty_(pretty, False)
+            pretty.text.assert_called_once_with(plain)
+        return html
+
     def test_formatted_only_computes_each_requested_backend_once(self):
         modes = []
 
@@ -16,6 +46,7 @@ class SymbolicDisplayTests(unittest.TestCase):
                 PrintMode.Symbolica: "Jbar",
                 PrintMode.Latex: r"\bar{J}",
                 PrintMode.Typst: "macron(J)",
+                PrintMode.MathML: "<mover><mi>J</mi><mo>¯</mo></mover>",
             }.get(mode)
 
         value = sp.TensorName("full_display_tests::Current", print=printer)(
@@ -45,8 +76,8 @@ class SymbolicDisplayTests(unittest.TestCase):
 
         modes.clear()
         html = formatted._repr_html_()
-        self.assertIn("<mover", html)
-        self.assertEqual(set(modes), {PrintMode.Typst})
+        self.assertIn("<mover><mi>J</mi><mo>¯</mo></mover>", html)
+        self.assertEqual(set(modes), {PrintMode.MathML})
         count = len(modes)
         self.assertEqual(formatted._repr_html_(), html)
         self.assertEqual(len(modes), count)
@@ -59,26 +90,98 @@ class SymbolicDisplayTests(unittest.TestCase):
         self.assertIn("3", output._repr_latex_())
         self.assertIn("<msup", output._repr_html_())
 
-    def test_failed_render_is_cached_without_preventing_latex(self):
+    def test_declined_print_callback_caches_fallback_without_preventing_latex(self):
+        for raises in (False, True):
+            with self.subTest(raises=raises):
+                modes = []
+
+                def printer(expression, *, mode, modes=modes, raises=raises, **options):
+                    modes.append(mode)
+                    if mode == PrintMode.MathML:
+                        if raises:
+                            # Registered printers log Python errors and decline.
+                            raise ValueError("intentional-print-decline")
+                        return None
+                    return r"\bar{J}" if mode == PrintMode.Latex else "J"
+
+                name = "Raised" if raises else "Declined"
+                value = sp.TensorName(f"full_display_tests::{name}", print=printer)(
+                    7, sp.Representation.euc(2)("a")
+                )
+                original = value.to_expression()
+                modes.clear()
+                output = value.formatted()
+                self.assertEqual(modes, [])
+                html = output._repr_html_()
+                self.assertIn("<math", html)
+                self.assertIn(name, html)
+                self.assertIn("<mn>7</mn>", html)
+                self.assertEqual(set(modes), {PrintMode.MathML})
+                count = len(modes)
+                self.assertEqual(output._repr_html_(), html)
+                self.assertEqual(len(modes), count)
+
+                modes.clear()
+                latex = output._repr_latex_()
+                self.assertIn(r"\bar{J}", latex)
+                self.assertEqual(set(modes), {PrintMode.Latex})
+                count = len(modes)
+                self.assertEqual(output._repr_latex_(), latex)
+                self.assertEqual(len(modes), count)
+                self.assertEqual(value.to_expression(), original)
+
+    def test_export_limit_errors_propagate_and_retry_independently_of_latex(self):
         modes = []
+        oversized = True
 
         def printer(expression, *, mode, **options):
             modes.append(mode)
-            if mode == PrintMode.Typst:
-                return '#panic("intentional-render-failure")'
-            return "J"
+            if mode == PrintMode.MathML:
+                if oversized:
+                    # Exceed the complete export's 16 MiB output budget.
+                    return "<mtext>" + "x" * (16 * 1024 * 1024) + "</mtext>"
+                return "<mover><mi>J</mi><mo>¯</mo></mover>"
+            return r"\bar{J}" if mode == PrintMode.Latex else "J"
 
-        value = sp.TensorName("full_display_tests::BrokenRender", print=printer)(
+        value = sp.TensorName("full_display_tests::ExportLimit", print=printer)(
             sp.Representation.euc(2)
         )
+        original = value.to_expression()
+        modes.clear()
         output = value.formatted()
-        self.assertIsNone(output._repr_html_())
-        count = len(modes)
-        self.assertIsNone(output._repr_html_())
-        self.assertEqual(len(modes), count)
-        self.assertIn("J", output._repr_latex_())
+        self.assertEqual(modes, [])
+        error = "complete MathML export failed: .*rendering limits"
+        with self.assertRaisesRegex(ValueError, error):
+            value.to_html()
+        self.assertEqual(set(modes), {PrintMode.MathML})
+        modes.clear()
+        for _ in range(2):
+            count = len(modes)
+            with self.assertRaisesRegex(ValueError, error):
+                output._repr_html_()
+            self.assertEqual(set(modes), {PrintMode.MathML})
+            self.assertGreater(len(modes), count)
 
-    def test_large_scalar_display_prints_every_term(self):
+        modes.clear()
+        latex = output._repr_latex_()
+        self.assertIn(r"\bar{J}", latex)
+        self.assertEqual(set(modes), {PrintMode.Latex})
+        count = len(modes)
+        self.assertEqual(output._repr_latex_(), latex)
+        self.assertEqual(len(modes), count)
+
+        oversized = False
+        modes.clear()
+        html = output._repr_html_()
+        self.assertIn("<mover><mi>J</mi><mo>¯</mo></mover>", html)
+        self.assertEqual(set(modes), {PrintMode.MathML})
+        count = len(modes)
+        self.assertEqual(output._repr_html_(), html)
+        self.assertEqual(output._repr_latex_(), latex)
+        self.assertEqual(len(modes), count)
+        self.assertEqual(value.to_expression(), original)
+
+    def test_large_scalar_exports_print_every_term_and_notebooks_are_bounded(self):
         calls = []
 
         def printer(expression, *, mode, **options):
@@ -90,23 +193,32 @@ class SymbolicDisplayTests(unittest.TestCase):
         original = value.to_expression()
         self.assertGreater(original.get_byte_size(), 4096)
         calls.clear()
-        html = value._repr_html_()
+        html = value.to_html()
         for i in range(term_count):
             self.assertIn(f"<mn>{i}</mn>", html)
         self.assertGreaterEqual(len(calls), term_count)
+        self.assertEqual(set(calls), {PrintMode.MathML})
         calls.clear()
-        latex = value._repr_latex_()
+        latex = value.to_latex()
         self.assertIn(str(term_count - 1), latex)
         self.assertGreaterEqual(len(calls), term_count)
-        self.assertEqual(latex, value.to_latex())
-        output = value.formatted()
+        self.assertEqual(set(calls), {PrintMode.Latex})
+        output = sp.formatted(original)
         self.assertEqual(output._repr_html_(), html)
         self.assertEqual(output._repr_latex_(), latex)
         self.assertEqual(output.format_plain(), value.format_tensor())
+        calls.clear()
+        preview = self.assertBoundedNotebookPreview(value)
+        self.assertGreater(len(calls), 0)
+        self.assertLess(len(calls), term_count)
+        self.assertEqual(set(calls), {PrintMode.MathML})
+        self.assertLess(
+            sum(f"<mn>{i}</mn>" in preview for i in range(term_count)), term_count
+        )
         self.assertEqual(value.to_expression(), original)
         self.assertEqual(value.rank, 0)
 
-    def test_sum_header_boundary_keeps_both_complete_terms(self):
+    def test_sum_header_boundary_keeps_both_complete_exported_terms(self):
         arguments = ",".join(str(i) for i in range(573))
         raw = E(
             f"full_display_tests::f({arguments})+full_display_tests::g({arguments},0)"
@@ -114,54 +226,55 @@ class SymbolicDisplayTests(unittest.TestCase):
         self.assertGreater(raw.get_byte_size(), 4096)
         self.assertLessEqual(sum(term.get_byte_size() for term in raw.terms()), 4096)
         value = sp.TensorExpression(raw)
-        output = value.formatted()
+        output = sp.formatted(raw)
         self.assertEqual(output.format_plain(), value.format_tensor())
         self.assertEqual(output._repr_latex_(), value.to_latex())
-        self.assertEqual(output._repr_html_(), value.to_html())
+        html = value.to_html()
+        self.assertEqual(output._repr_html_(), html)
+        for i in range(573):
+            self.assertEqual(html.count(f"<mn>{i}</mn>"), 3 if i == 0 else 2)
+        self.assertBoundedNotebookPreview(value)
         self.assertEqual(value.to_expression(), raw)
 
-    def test_large_product_and_power_render_every_factor(self):
-        class Pretty:
-            def __init__(self):
-                self.parts = []
-
-            def text(self, text):
-                self.parts.append(text)
-
+    def test_large_product_and_power_exports_render_every_factor(self):
         factor_count = 1024
         product = E("*".join(f"full_display_tests::x{i}" for i in range(factor_count)))
         self.assertGreater(product.get_byte_size(), 4096)
         for raw in (product, (product + 1) ** 7):
             with self.subTest(power=raw != product):
                 value = sp.TensorExpression(raw)
-                html = value._repr_html_()
-                latex = value._repr_latex_()
-                plain = str(value.formatted())
-                free_html = sp.formatted(raw)._repr_html_()
-                pretty = Pretty()
-                value._repr_pretty_(pretty, False)
-                self.assertEqual(html, free_html)
-                self.assertEqual(plain, value.format_tensor())
-                self.assertEqual(latex, value.to_latex())
-                self.assertEqual("".join(pretty.parts), plain)
+                html = value.to_html()
+                latex = value.to_latex()
+                plain = value.format_tensor()
+                output = sp.formatted(raw)
+                self.assertEqual(html, output._repr_html_())
+                self.assertEqual(plain, output.format_plain())
+                self.assertEqual(latex, output._repr_latex_())
                 for i in range(factor_count):
                     self.assertIn(f"x{i}", plain)
                     self.assertIn(f"x{i}", latex)
                     self.assertIn(f">x{i}<", html)
+                self.assertBoundedNotebookPreview(value)
                 self.assertEqual(value.to_expression(), raw)
 
     def test_large_display_keeps_logical_ports_metadata_and_status(self):
         m, e = sp.Representation.mink(4), sp.Representation.euc(3)
         tensor = sp.TensorName("full_display_tests::T")(m("a"), e("b"), m("c"))
-        coefficient = E("+".join(f"full_display_tests::c{i}" for i in range(1024)))
+        term_count = 2048
+        coefficient = E(
+            "+".join(f"full_display_tests::c{i}" for i in range(term_count))
+        )
         value = (coefficient * tensor).with_name("full_display_tests::Named")
         original = value.to_expression()
         self.assertGreater(original.get_byte_size(), 4096)
         slots = [slot.to_expression() for slot in value.structure.axes]
         name, status = value.name.to_expression(), value.reduction_status
-        self.assertEqual(value._repr_html_(), value.to_html())
-        self.assertEqual(value._repr_latex_(), value.to_latex())
-        self.assertEqual(value.formatted().format_plain(), value.format_tensor())
+        html, latex, plain = value.to_html(), value.to_latex(), value.format_tensor()
+        for i in range(term_count):
+            self.assertIn(f">c{i}<", html)
+            self.assertIn(f"c{i}", latex)
+            self.assertIn(f"c{i}", plain)
+        self.assertBoundedNotebookPreview(value)
         self.assertEqual(value.to_expression(), original)
         self.assertEqual([slot.to_expression() for slot in value.structure.axes], slots)
         self.assertEqual(value.name.to_expression(), name)

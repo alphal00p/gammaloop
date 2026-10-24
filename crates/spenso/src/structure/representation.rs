@@ -17,6 +17,7 @@ use std::{
     hash::{Hash, Hasher},
     sync::{LazyLock, RwLock},
 };
+use symbolica_notation::{IndexDisplay, IndexDisplayError};
 
 use bincode::{Decode, Encode};
 
@@ -38,6 +39,9 @@ use symbolica::{
     printer::PrintUserData,
     symbol,
 };
+
+#[cfg(feature = "shadowing")]
+use crate::network::tags::mathml;
 
 use thiserror::Error;
 
@@ -802,503 +806,6 @@ fn representation_typst_body(label: &IndexDisplay) -> String {
     )
 }
 
-/// A safe, printer-neutral description of one mathematical index label.
-///
-/// The tree is deliberately small: plugins may deserialize it from Symbolica
-/// symbol metadata and turn it into Typst source without evaluating arbitrary
-/// source supplied by an Atom payload.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum IndexDisplay {
-    Symbol(String),
-    /// Upright text embedded in a mathematical label.
-    Text(String),
-    Number(i64),
-    Sequence(Vec<IndexDisplay>),
-    /// A nested argument/row list. Unlike `Sequence`, entries retain their
-    /// comma/row boundary when used by a safe mathematical display node.
-    List(Vec<IndexDisplay>),
-    /// A validated mathematical display node.
-    ///
-    /// `head` is never emitted directly. Rendering dispatches through a fixed
-    /// allowlist, so imported symbol metadata cannot inject Typst source.
-    Math {
-        head: String,
-        arguments: Vec<IndexDisplay>,
-    },
-    Attach {
-        base: Box<IndexDisplay>,
-        top: Option<Box<IndexDisplay>>,
-        bottom: Option<Box<IndexDisplay>>,
-    },
-}
-
-impl IndexDisplay {
-    pub fn symbol(name: impl Into<String>) -> Result<Self, RepLibraryError> {
-        let name = name.into();
-        if name.is_empty() {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "an index label cannot be empty".to_owned(),
-            ));
-        }
-        if name.chars().count() > 128 || name.chars().any(char::is_control) {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "an index label must contain at most 128 non-control characters".to_owned(),
-            ));
-        }
-        Ok(Self::Symbol(name))
-    }
-
-    pub fn with_bottom(self, bottom: IndexDisplay) -> Self {
-        match self {
-            Self::Attach {
-                base,
-                top,
-                bottom: None,
-            } => Self::Attach {
-                base,
-                top,
-                bottom: Some(Box::new(bottom)),
-            },
-            display => Self::Attach {
-                base: Box::new(display),
-                top: None,
-                bottom: Some(Box::new(bottom)),
-            },
-        }
-    }
-
-    pub fn with_top(self, top: IndexDisplay) -> Self {
-        match self {
-            Self::Attach {
-                base,
-                top: None,
-                bottom,
-            } => Self::Attach {
-                base,
-                top: Some(Box::new(top)),
-                bottom,
-            },
-            display => Self::Attach {
-                base: Box::new(display),
-                top: Some(Box::new(top)),
-                bottom: None,
-            },
-        }
-    }
-
-    pub fn text(value: impl Into<String>) -> Result<Self, RepLibraryError> {
-        let value = value.into();
-        if value.chars().count() > 1024 || value.chars().any(char::is_control) {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "display text must contain at most 1024 non-control characters".to_owned(),
-            ));
-        }
-        Ok(Self::Text(value))
-    }
-
-    pub fn math(
-        head: impl Into<String>,
-        arguments: Vec<IndexDisplay>,
-    ) -> Result<Self, RepLibraryError> {
-        let head = head.into();
-        if !matches!(
-            head.as_str(),
-            "arg"
-                | "add"
-                | "sub"
-                | "plus"
-                | "neg"
-                | "times"
-                | "dot"
-                | "factorial"
-                | "mul"
-                | "()"
-                | "group"
-                | "lr"
-                | "pow"
-                | "frac"
-                | "root"
-                | "call"
-                | "op-call"
-                | "op"
-                | "accent"
-                | "underline"
-                | "overline"
-                | "underbrace"
-                | "overbrace"
-                | "underbracket"
-                | "overbracket"
-                | "underparen"
-                | "overparen"
-                | "undershell"
-                | "overshell"
-                | "cancel"
-                | "vec"
-                | "mat"
-                | "cases"
-                | "class"
-                | "mid"
-                | "scripts"
-                | "limits"
-                | "stretch"
-        ) {
-            return Err(RepLibraryError::InvalidIndexDisplay(format!(
-                "unsupported mathematical display node {head:?}"
-            )));
-        }
-        if arguments.len() > 64 {
-            return Err(RepLibraryError::InvalidIndexDisplay(
-                "a mathematical display node cannot contain more than 64 arguments".to_owned(),
-            ));
-        }
-        Ok(Self::Math { head, arguments })
-    }
-
-    fn escaped_typst_string(value: &str) -> String {
-        value
-            .replace('\\', "\\\\")
-            .replace('"', "\\\"")
-            .replace('\n', "\\n")
-            .replace('\r', "\\r")
-    }
-
-    fn literal_text(&self) -> Option<&str> {
-        match self {
-            Self::Symbol(value) | Self::Text(value) => Some(value),
-            _ => None,
-        }
-    }
-
-    fn typst_math_source(head: &str, arguments: &[Self]) -> String {
-        let sources = arguments
-            .iter()
-            .map(Self::to_typst_source)
-            .collect::<Vec<_>>();
-        let joined = |separator: &str| sources.join(separator);
-        let unary = |prefix: &str, suffix: &str| {
-            sources
-                .first()
-                .map(|body| format!("{prefix}{body}{suffix}"))
-                .unwrap_or_else(|| r#"upright("?")"#.to_owned())
-        };
-        let call = |name: &str| format!("{name}({})", joined(","));
-
-        match head {
-            "arg" => joined(","),
-            "add" => joined(" + "),
-            "sub" => joined(" - "),
-            "plus" => unary("+", ""),
-            "neg" => unary("-", ""),
-            "times" => joined(" times "),
-            "dot" => joined(" dot "),
-            "factorial" => unary("", "!"),
-            "mul" => joined(" "),
-            "()" | "group" | "lr" => unary("lr((", "))"),
-            "pow" if sources.len() == 2 => {
-                format!("attach({},t:{})", sources[0], sources[1])
-            }
-            "frac" if sources.len() == 2 => format!("frac({},{})", sources[0], sources[1]),
-            "root" if sources.len() == 1 => format!("root({})", sources[0]),
-            "root" if sources.len() == 2 => {
-                format!("root({},{})", sources[0], sources[1])
-            }
-            "call" | "op-call" if !sources.is_empty() => {
-                let body = sources[1..].join(",");
-                format!("{}({body})", sources[0])
-            }
-            "op" if arguments.len() == 1 => {
-                let text = arguments[0].literal_text().unwrap_or("?");
-                format!(r#"op("{}")"#, Self::escaped_typst_string(text))
-            }
-            "accent" if arguments.len() == 2 => {
-                let accent = arguments[1].literal_text().unwrap_or("?");
-                format!(
-                    r#"accent({},"{}")"#,
-                    sources[0],
-                    Self::escaped_typst_string(accent)
-                )
-            }
-            "underline" | "overline" | "cancel" | "mid" | "scripts" | "limits" | "stretch"
-                if sources.len() == 1 =>
-            {
-                call(head)
-            }
-            "underbrace" | "overbrace" | "underbracket" | "overbracket" | "underparen"
-            | "overparen" | "undershell" | "overshell"
-                if (1..=2).contains(&sources.len()) =>
-            {
-                call(head)
-            }
-            "vec" => call("vec"),
-            "mat" => {
-                let rows = arguments
-                    .iter()
-                    .map(|row| match row {
-                        Self::List(entries) => entries
-                            .iter()
-                            .map(Self::to_typst_source)
-                            .collect::<Vec<_>>()
-                            .join(","),
-                        value => value.to_typst_source(),
-                    })
-                    .collect::<Vec<_>>()
-                    .join(";");
-                format!("mat({rows})")
-            }
-            "cases" => call("cases"),
-            "class" if arguments.len() == 2 => {
-                let class = arguments[0].literal_text().unwrap_or("normal");
-                format!(
-                    r#"class("{}",{})"#,
-                    Self::escaped_typst_string(class),
-                    sources[1]
-                )
-            }
-            // The constructor rejects unknown nodes. This fixed fallback also
-            // keeps forged/imported user data from becoming executable source.
-            _ => r#"upright("?")"#.to_owned(),
-        }
-    }
-
-    fn is_typst_math_name(name: &str) -> bool {
-        matches!(
-            name,
-            "alpha"
-                | "beta"
-                | "gamma"
-                | "delta"
-                | "epsilon"
-                | "zeta"
-                | "eta"
-                | "theta"
-                | "iota"
-                | "kappa"
-                | "lambda"
-                | "mu"
-                | "nu"
-                | "xi"
-                | "omicron"
-                | "pi"
-                | "rho"
-                | "sigma"
-                | "tau"
-                | "upsilon"
-                | "phi"
-                | "chi"
-                | "psi"
-                | "omega"
-        )
-    }
-
-    pub fn to_typst_source(&self) -> String {
-        match self {
-            Self::Symbol(name)
-                if name.chars().count() == 1
-                    && name
-                        .chars()
-                        .next()
-                        .is_some_and(|character| character.is_alphanumeric()) =>
-            {
-                name.clone()
-            }
-            Self::Symbol(name) if Self::is_typst_math_name(name) => name.clone(),
-            Self::Symbol(name) => {
-                format!(r#"italic("{}")"#, Self::escaped_typst_string(name))
-            }
-            Self::Text(value) => {
-                format!(r#"upright("{}")"#, Self::escaped_typst_string(value))
-            }
-            Self::Number(number) => number.to_string(),
-            Self::Sequence(items) => items
-                .iter()
-                .map(Self::to_typst_source)
-                .collect::<Vec<_>>()
-                .join(" "),
-            Self::List(items) => items
-                .iter()
-                .map(Self::to_typst_source)
-                .collect::<Vec<_>>()
-                .join(","),
-            Self::Math { head, arguments } => Self::typst_math_source(head, arguments),
-            Self::Attach { base, top, bottom } => {
-                let mut source = format!("attach({}", base.to_typst_source());
-                if let Some(top) = top {
-                    source.push_str(",t:");
-                    source.push_str(&top.to_typst_source());
-                }
-                if let Some(bottom) = bottom {
-                    source.push_str(",b:");
-                    source.push_str(&bottom.to_typst_source());
-                }
-                source.push(')');
-                source
-            }
-        }
-    }
-
-    pub fn to_native_string(&self) -> String {
-        match self {
-            Self::Symbol(name) => name.clone(),
-            Self::Text(value) => value.clone(),
-            Self::Number(number) => number.to_string(),
-            Self::Sequence(items) => items
-                .iter()
-                .map(Self::to_native_string)
-                .collect::<Vec<_>>()
-                .join(" "),
-            Self::List(items) => items
-                .iter()
-                .map(Self::to_native_string)
-                .collect::<Vec<_>>()
-                .join(","),
-            Self::Math { .. } => self.to_typst_source(),
-            Self::Attach { base, top, bottom } => {
-                let mut output = base.to_native_string();
-                if let Some(top) = top {
-                    output.push_str("^(");
-                    output.push_str(&top.to_native_string());
-                    output.push(')');
-                }
-                if let Some(bottom) = bottom {
-                    output.push_str("_(");
-                    output.push_str(&bottom.to_native_string());
-                    output.push(')');
-                }
-                output
-            }
-        }
-    }
-
-    #[cfg(feature = "shadowing")]
-    fn node_user_data(&self) -> UserData {
-        match self {
-            Self::Symbol(name) => UserData::List(vec![
-                UserData::String("symbol".to_owned()),
-                UserData::String(name.clone()),
-            ]),
-            Self::Text(value) => UserData::List(vec![
-                UserData::String("text".to_owned()),
-                UserData::String(value.clone()),
-            ]),
-            Self::Number(number) => UserData::List(vec![
-                UserData::String("number".to_owned()),
-                UserData::Integer(*number),
-            ]),
-            Self::Sequence(items) => UserData::List(vec![
-                UserData::String("sequence".to_owned()),
-                UserData::List(items.iter().map(Self::node_user_data).collect()),
-            ]),
-            Self::List(items) => UserData::List(vec![
-                UserData::String("list".to_owned()),
-                UserData::List(items.iter().map(Self::node_user_data).collect()),
-            ]),
-            Self::Math { head, arguments } => UserData::List(vec![
-                UserData::String("math".to_owned()),
-                UserData::String(head.clone()),
-                UserData::List(arguments.iter().map(Self::node_user_data).collect()),
-            ]),
-            Self::Attach { base, top, bottom } => UserData::List(vec![
-                UserData::String("attach".to_owned()),
-                base.node_user_data(),
-                top.as_deref()
-                    .map(Self::node_user_data)
-                    .unwrap_or(UserData::None),
-                bottom
-                    .as_deref()
-                    .map(Self::node_user_data)
-                    .unwrap_or(UserData::None),
-            ]),
-        }
-    }
-
-    #[cfg(feature = "shadowing")]
-    fn from_node_user_data(data: &UserData, depth: usize) -> Option<Self> {
-        if depth > 16 {
-            return None;
-        }
-        let UserData::List(fields) = data else {
-            return None;
-        };
-        match fields.as_slice() {
-            [UserData::String(kind), UserData::String(name)] if kind == "symbol" => {
-                Self::symbol(name.clone()).ok()
-            }
-            [UserData::String(kind), UserData::String(value)] if kind == "text" => {
-                Self::text(value.clone()).ok()
-            }
-            [UserData::String(kind), UserData::Integer(number)] if kind == "number" => {
-                Some(Self::Number(*number))
-            }
-            [UserData::String(kind), UserData::List(items)] if kind == "sequence" => {
-                if items.len() > 64 {
-                    return None;
-                }
-                Some(Self::Sequence(
-                    items
-                        .iter()
-                        .map(|item| Self::from_node_user_data(item, depth + 1))
-                        .collect::<Option<Vec<_>>>()?,
-                ))
-            }
-            [UserData::String(kind), UserData::List(items)] if kind == "list" => {
-                if items.len() > 64 {
-                    return None;
-                }
-                Some(Self::List(
-                    items
-                        .iter()
-                        .map(|item| Self::from_node_user_data(item, depth + 1))
-                        .collect::<Option<Vec<_>>>()?,
-                ))
-            }
-            [
-                UserData::String(kind),
-                UserData::String(head),
-                UserData::List(arguments),
-            ] if kind == "math" => {
-                let arguments = arguments
-                    .iter()
-                    .map(|argument| Self::from_node_user_data(argument, depth + 1))
-                    .collect::<Option<Vec<_>>>()?;
-                Self::math(head.clone(), arguments).ok()
-            }
-            [UserData::String(kind), base, top, bottom] if kind == "attach" => Some(Self::Attach {
-                base: Box::new(Self::from_node_user_data(base, depth + 1)?),
-                top: match top {
-                    UserData::None => None,
-                    value => Some(Box::new(Self::from_node_user_data(value, depth + 1)?)),
-                },
-                bottom: match bottom {
-                    UserData::None => None,
-                    value => Some(Box::new(Self::from_node_user_data(value, depth + 1)?)),
-                },
-            }),
-            _ => None,
-        }
-    }
-
-    #[cfg(feature = "shadowing")]
-    pub fn symbol_user_data(&self) -> UserData {
-        UserData::List(vec![
-            UserData::String("spenso::index-display-v1".to_owned()),
-            self.node_user_data(),
-        ])
-    }
-
-    #[cfg(feature = "shadowing")]
-    pub fn from_symbol(symbol: Symbol) -> Option<Self> {
-        match symbol.get_data() {
-            UserData::List(fields) => match fields.as_slice() {
-                [UserData::String(kind), display] if kind == "spenso::index-display-v1" => {
-                    Self::from_node_user_data(display, 0)
-                }
-                _ => None,
-            },
-            _ => None,
-        }
-    }
-}
-
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub enum IndexPalette {
     #[default]
@@ -1587,7 +1094,10 @@ impl LibraryRep {
         SymbolBuilder::new(namespaced)
             .with_tags(tags)
             .with_user_data(metadata.to_user_data())
-            .with_print_function(move |a, opt, _state| {
+            .with_print_function(move |a, opt, state| {
+                if opt.mode.is_mathml() {
+                    return mathml::representation(a, opt, state);
+                }
                 if matches!(
                     opt.custom_print_mode.get("typst"),
                     Some(PrintUserData::Integer(1))
@@ -1836,12 +1346,12 @@ pub struct ExtendibleReps {
 
 #[derive(Debug, Error)]
 pub enum RepLibraryError {
+    #[error(transparent)]
+    IndexDisplay(#[from] IndexDisplayError),
     #[error("{0} Already exists and is of different type")]
     AlreadyExistsDifferentType(String),
     #[error("{0} Already exists and has different metric function")]
     AlreadyExistsDifferentMetric(String),
-    #[error("invalid index display: {0}")]
-    InvalidIndexDisplay(String),
     #[error("invalid index palette: {0}")]
     InvalidIndexPalette(String),
     #[error("{0} already exists with different representation metadata")]
@@ -2564,11 +2074,12 @@ mod test {
 #[cfg(feature = "shadowing")]
 mod shadowing_tests {
     use symbolica::atom::{Atom, AtomView, NamespacedSymbol, Symbol, SymbolBuilder};
+    use symbolica_notation::IndexDisplay;
 
     use crate::network::tags::SPENSO_TAG;
 
     use super::{
-        IndexDisplay, IndexPalette, IndexRow, LibraryRep, Minkowski, RepLibraryError, RepName,
+        IndexPalette, IndexRow, LibraryRep, Minkowski, RepLibraryError, RepName,
         RepresentationClass, RepresentationError, RepresentationMetadata,
         representation_typst_body,
     };
@@ -2823,47 +2334,6 @@ mod shadowing_tests {
 
         assert!(body.contains(r#"italic("M\"; raw-source")"#));
         assert!(!body.contains(r#""M"; raw-source"#));
-    }
-
-    #[test]
-    fn mathematical_display_nodes_render_and_round_trip_as_safe_user_data() {
-        let display = IndexDisplay::math(
-            "add",
-            vec![
-                IndexDisplay::math(
-                    "accent",
-                    vec![
-                        IndexDisplay::symbol("p").unwrap(),
-                        IndexDisplay::symbol("⃗").unwrap(),
-                    ],
-                )
-                .unwrap(),
-                IndexDisplay::math(
-                    "frac",
-                    vec![IndexDisplay::symbol("q").unwrap(), IndexDisplay::Number(2)],
-                )
-                .unwrap(),
-                IndexDisplay::text("soft").unwrap(),
-            ],
-        )
-        .unwrap();
-
-        assert_eq!(
-            display.to_typst_source(),
-            r#"accent(p,"⃗") + frac(q,2) + upright("soft")"#
-        );
-        let symbol = SymbolBuilder::new(NamespacedSymbol::parse(
-            "spenso_rep_metadata_tests::MathDisplayRoundTrip",
-        ))
-        .with_user_data(display.symbol_user_data())
-        .build()
-        .unwrap();
-        assert_eq!(IndexDisplay::from_symbol(symbol), Some(display));
-    }
-
-    #[test]
-    fn unknown_math_display_heads_cannot_be_constructed() {
-        assert!(IndexDisplay::math("raw-code", vec![]).is_err());
     }
 
     #[test]

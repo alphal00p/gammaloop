@@ -15,6 +15,7 @@ __all__ = [
     "Dash",
     "DebugLevel",
     "DiagramRender",
+    "DiagramView",
     "DrawOptions",
     "DrawingSelectors",
     "Fraction",
@@ -280,6 +281,167 @@ class DiagramRender:
     def _repr_html_(self) -> builtins.str: ...
     def _repr_svg_(self) -> typing.Optional[builtins.str]: ...
     def _mime_(self) -> tuple[builtins.str, builtins.str]: ...
+    def __repr__(self) -> builtins.str: ...
+
+@typing.final
+class DiagramView:
+    r"""
+    A resolved drawing awaiting its notebook browser's label measurements.
+
+    Clones retain the same scenes, receipt identity, and completion cells. A
+    widget and its caller therefore observe the same completed snapshot. Each
+    freshly constructed view has a new identity; receipts belong to that view,
+    and a completed view rejects different measurements. SVG/HTML exports are
+    immutable snapshots and never trigger implicit remeasurement.
+
+    ```no_run
+    use linnest::svg::Scene;
+    use linnet_render_py::PyDiagramView;
+    use pyo3::{PyResult, Python};
+    # fn example(scene: Scene) -> PyResult<()> {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let view = PyDiagramView::from_scene(py, scene, None)?;
+        let retained = view.clone(); // Shares completion with the notebook owner.
+        let request = view.measurement_request(py)?;
+        // Send request to the browser; measured() accepts its complete receipt.
+        // Scripts can explicitly request Chromium instead (requires Playwright).
+        let snapshot = view.measured(py, None, Some("chromium"))?;
+        assert_eq!(retained.to_svg_pages(py)?, snapshot.to_svg_pages()?);
+        let collection = PyDiagramView::from_views(vec![view], None)?;
+        assert_eq!(collection.diagrams().len(), 1);
+        let svg = snapshot.to_svg()?;
+        // Optional vector compilation is separate from the measured snapshot.
+        let outlined = collection.outlined(py)?;
+        assert_eq!(snapshot.to_svg()?, svg);
+        # Ok(())
+    })
+    # }
+    ```
+    """
+    @property
+    def diagrams(self) -> builtins.list[DiagramView]:
+        r"""
+        Configured child views for a collection, retaining their original scenes.
+        See [`Self`] for an example. Returned clones share child completion state.
+        """
+    def measurement_request(self) -> dict:
+        r"""
+        The exact ordered MathML probes, fixed font, and receipt identity.
+
+        See [`Self`] for the measurement lifecycle. A receipt must echo this
+        request's `id` and contain one finite, nonnegative rectangle per label in
+        request order. All dimensions and the baseline are SVG user units (points).
+
+        # Errors
+        Returns a Python error if bundled font loading, hashing, or request
+        serialization fails. No browser or notebook dependency is imported here.
+        """
+    def measured(self, measurements: typing.Optional[dict] = None, *, browser: typing.Optional[builtins.str] = None) -> DiagramRender:
+        r"""
+        Obtain a completed immutable snapshot, or explicitly measure using Chromium.
+
+        See [`Self`] for an example. Calling without arguments reuses completion;
+        pending labels need either an external receipt or explicit browser mode.
+        The same receipt is idempotent, including through a retained clone.
+
+        # Errors
+        Returns `ValueError` for conflicting arguments, an unsupported browser,
+        stale/malformed receipts, changed measurements, or invalid label sources.
+        Returns `RuntimeError` while measurement is pending or native rendering
+        fails. Optional browser setup and execution errors propagate as Python
+        errors. Failed capture does not publish this view's completed snapshot;
+        child views already completed remain independently usable.
+        """
+    def outlined(self) -> DiagramRender:
+        r"""
+        Outline labels with the optional Python Typst compiler; no browser is used.
+
+        See [`Self`] for an example. The vector snapshot has its own completion
+        cell, shared by clones, and never changes an existing measured export.
+
+        # Errors
+        Returns `ValueError` if labels lack Typst sources or captured MathML has
+        no retained scene, `ImportError` if the optional `typst` package is absent,
+        or a Python error on compilation/rendering failure. Compiler exceptions
+        retain their Python cause via [`typst_export::compile_sources`].
+        """
+    def to_svg(self) -> builtins.str:
+        r"""
+        Return the completed single-page SVG; see [`Self`] for an example.
+
+        # Errors
+        Propagates [`Self::measured`] errors and rejects multipage snapshots.
+        """
+    def to_svg_pages(self) -> builtins.list[builtins.str]:
+        r"""
+        Return independent strings for all completed pages; see [`Self`].
+
+        # Errors
+        Propagates [`Self::measured`] errors if completion is unavailable.
+        """
+    def to_html(self) -> builtins.str:
+        r"""
+        Return completed HTML with its font resource; see [`Self`].
+
+        # Errors
+        Propagates [`Self::measured`] errors if completion is unavailable.
+        """
+    def save(self, output: builtins.str | os.PathLike | pathlib.Path) -> pathlib.Path:
+        r"""
+        Save the completed snapshot, selecting the format by suffix.
+
+        ```no_run
+        use linnet_render_py::PyDiagramView;
+        use pyo3::{PyResult, Python};
+        # fn save(py: Python<'_>, completed: PyDiagramView) -> PyResult<()> {
+        completed.save(py, "diagram.svg".into())?;
+        # Ok(())
+        # }
+        ```
+
+        # Errors
+        Propagates [`Self::measured`] errors, filesystem/export errors, and
+        invalid format/page-count errors. PDF/PNG need an outlined snapshot.
+        """
+    def widget(self) -> typing.Any:
+        r"""
+        Optional notebook dependencies are imported only when displaying a view.
+        The widget retains a clone of the backend owner until it is closed.
+
+        ```no_run
+        use linnet_render_py::PyDiagramView;
+        use pyo3::{PyResult, Python};
+        # fn notebook(py: Python<'_>, view: PyDiagramView) -> PyResult<()> {
+        let widget = view.widget(py)?;
+        # Ok(())
+        # }
+        ```
+
+        # Errors
+        Propagates font/request errors and Python import or widget setup errors.
+        """
+    def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
+        r"""
+        Jupyter MIME bundle hook; see [`Self::widget`] for notebook construction.
+
+        # Errors
+        Propagates widget setup and Python MIME protocol errors.
+        """
+    def _display_(self) -> typing.Any:
+        r"""
+        Marimo adapter for the retained widget; see [`Self::widget`].
+
+        # Errors
+        Propagates widget errors and missing/failed Marimo imports or adapters.
+        """
+    def _mime_(self) -> typing.Any:
+        r"""
+        Marimo MIME hook for [`Self::_display_`]; see [`Self::widget`].
+
+        # Errors
+        Propagates display adapter and Python MIME protocol errors.
+        """
     def __repr__(self) -> builtins.str: ...
 
 @typing.final

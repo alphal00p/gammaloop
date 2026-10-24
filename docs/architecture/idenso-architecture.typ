@@ -49,6 +49,15 @@ must not treat printed names alone as a complete serialized registry.
 
 == Core symbolic representation
 
+Tensor metadata is authoritative after initial admission. Raw Atom input is checked against
+the tensor grammar, declared or inferred interface, placeholder scopes and index multiplicities
+at that boundary. Ordinary typed algebra derives its result from admitted operands and carries
+their structure and scoped index usage; it does not reconstruct or revalidate the resulting
+Atom to recover facts already established by the operation. Symbolica normalization may erase
+visible factors without erasing their construction history. Callbacks used by ordinary algebra
+must preserve the admitted tensor meaning; arbitrary interface-changing transformations belong
+at a checked raw-expression boundary.
+
 `SymbolicTensor<S, E = Atom>` owns the tensor interface and symbolic payload:
 
 - the structure `S`, defaulting to `OrderedStructure<LibraryRep, AbstractIndex>`;
@@ -56,8 +65,24 @@ must not treat printed names alone as a complete serialized registry.
 - `is_metric` and `is_composite`, retaining operation classification independently of the
   current Atom's outer syntax; these flags participate in equality and serialization,
   and are not interface certificates;
-- private interface, observation and completion proofs, invalidated when the operation cannot
-  justify carrying them to its result.
+- authoritative scoped explicit-index usage, with entries retaining their original `Slot`
+  orientation while usage keys match representation base, dimension and index. An aligned
+  dummy mask records multiplicity: one use has an unset bit, two uses have a set bit, and a
+  third use is rejected. Two uses commonly form a contracted pair, but can also be two free
+  ports with the same orientation; the logical free interface determines their actual role;
+- compact per-variance maxima alongside that total-use mask. These retain both orientations
+  when a dimension mapping separates a hidden use from a public port. Alternatives combine
+  maxima; products add uses. Their sum can exceed the alternative's maximum total;
+- private admission, observation and completion facts. Construction metadata travels with
+  certified operations; payload-specific graphs, observations and completion facts are retained
+  only when the operation justifies carrying them to its result.
+
+The usage metadata is conservative within its multiplicative scope. A product that normalizes
+to `1` or `0` can still retain a contracted pair, so a later factor using the same index cannot
+silently become a third occurrence. Raw admission of the printed `1` has no such history and is
+a different construction. Addition exports its shared external interface while each summand
+binds its internal pairs; a closed scalar power likewise owns its internal scope. Logical
+structure separately retains orientation, axis order and the declared shape of zero.
 
 The explicit ordered specialization implements `TensorStructure` and network contraction.
 Structural methods delegate to the ordered slots, while permutations rewrite slot atoms and
@@ -84,7 +109,8 @@ alone would discard the outer layout needed by ranked zeros and component axes.
 Model recipes and genuinely scalar coefficients remain
 Atoms. Borrowing `expression()` for
 a scalar algorithm leaves the source interface available; rebuilding an unrelated
-tensor from the returned Atom would lose that interface and its reduction facts.
+tensor from the returned Atom would lose that interface, conservative index history
+and reduction facts.
 Mathematical equality alone cannot decide whether an old shared carrier may be
 reused: `same_reduction_state` also compares its validation and completion state.
 
@@ -122,8 +148,10 @@ the extra planner-entry payload copy without changing public method signatures
 or identity rules. Completion-policy metadata is retained separately.
 Indexed `multiply(self, right: Self)` consumes both operands and moves them into
 the existing partial multiplication owner. This avoids copying an already owned
-graph-fold accumulator and preserves the same product planning and strict result
-validation. Callers clone only inputs whose owning graph, shared definition or
+graph-fold accumulator and preserves the same product planning. Compatibility and
+multiplicity checks use the operands' retained metadata before Atom normalization;
+the product receives the derived structure, sorted usage and dummy mask without
+result-payload admission. Callers clone only inputs whose owning graph, shared definition or
 Cartesian product needs them again. The partial-interface multiplication method
 retains its borrowed API. New products receive new result facts; input reduction
 proofs are not certificates for their product. Collection, dimension/index
@@ -139,10 +167,20 @@ unresolved ports even when the complete input is scalar; independent diagnostic
 oracles may use it without changing GammaLoop's runtime storage contract.
 
 External declared interfaces enter through `from_declared_parts`, which checks
-the payload against the logical slots once. Bincode stores the payload, logical
-slots and operation flags, remapping symbols on decode. It never stores proof or
-planner caches. This preserves ranked zero and unresolved axis order while
-rejecting a nonzero payload with an unrelated declared interface.
+the payload against the logical slots once, rejecting a nonzero payload with an
+unrelated declared interface. Bincode instead transports an admitted tensor:
+it stores the payload, logical slots, operation flags, sorted explicit-index
+usage, dummy mask and optional product-readiness fact. Decode remaps symbols and
+checks metadata consistency, then restores construction history, including pairs
+absent from the normalized payload. Future products reuse established readiness
+instead of classifying the payload again. Planner graphs, observations and
+reduction-completion caches are not serialized. Ranked zero and unresolved
+logical axis order survive both boundaries.
+
+Opening dot or chain notation and canonicalizing dummy names establishes new index identities.
+Those materialization owners record the new uses and retain conservative source history; they
+do not re-infer the free interface or reject a valid typed product because its normalized Atom
+has coalesced into a power. Ordinary scalar algebra carries the established history directly.
 
 The shared `feynkit_graph::NumeratorInterface` codec owns source admission and
 export. Diagram DTOs and DOT use ordinary expression strings with optional
@@ -206,15 +244,16 @@ not be certified as fully contracted. Callback-sensitive inputs continue through
 the existing checked contractor, including the rank-loss rejection for a
 normalizer that turns `T(b)` in `g(a,b)*T(a)` into a scalar.
 
-Checked reconstruction preserves established interfaces where the operation justifies it.
-Public fields and low-level constructors are not validity certificates: inference can retain
-raw repeated ports until `checked_parts` merges their explicit contractions. This intermediate
-boundary also lets bindings discard stored-data identity when a declaration becomes a
-contraction, even if its input and final result have the same rank.
-Callback-sensitive rewrites validate their output because normalization can remove tensor
-ports. Result validation observes the existing ports without temporary index materialization
-or callback replay; constructor inference retains its materialization semantics within the
-same inference owner. Index substitution distinguishes graph storage identities from logical unresolved
+Source-attached algebra preserves established interfaces and construction metadata when its
+operation owns the invariant. Attaching unrelated raw parts does not establish that invariant:
+inference can retain raw repeated ports until `checked_parts` merges their explicit
+contractions. This intermediate boundary also lets bindings discard stored-data identity when
+a declaration becomes a contraction, even if its input and final result have the same rank.
+Arbitrary expression replacement and callback-sensitive rewrites which cannot certify their
+interface check the actual output, because normalization can remove tensor ports. That boundary
+observes existing ports without temporary index materialization or callback replay;
+constructor inference retains its materialization semantics within the same inference owner.
+Index substitution distinguishes graph storage identities from logical unresolved
 ports, checks every sum branch, and retains necessary multiplicity checks. Unchanged branches
 are borrowed; changed exact sums and products use bulk construction when callback ordering
 permits it.
@@ -299,32 +338,32 @@ excludes only recognized physical Minkowski selector leaves (coordinates zero
 through three), using borrowed component and representation bounds; it leaves
 scalar D and epsilon dependence untouched. Its per-leaf predicate distinguishes
 valid selectors from unchecked uses of the same delta head. The query first
-validates the original unfiltered index multiplicities; excluding a leaf cannot
+requires the original unfiltered admitted index metadata; excluding a leaf cannot
 hide a malformed source. Filtered discovery uses a separate fresh cache. General pair
 observation still counts these connections when no exclusion is requested, and
 unknown/out-of-range selectors and genuine summed Lorentz contractions remain
 visible. The borrowed bounds query neither invokes normalization callbacks nor
 materializes indices; the compact-vector recognizer keeps its existing grammar.
 
-`map_representation_dimensions` maps representation dimensions in both the
-payload and the logical interface, including ports carried only by a ranked
-zero. Its callback receives the representation kind and the decoded dimension;
-portable dimension payloads are decoded and encoded individually. It does not
-substitute unrelated scalar coefficients. `with_lorentz_dimension` delegates to
-this owner for its physical-four-dimensional Lorentz replacement. Newly
-coincident explicit indices contract; excess occurrences fail. Callback
-validation compares the encoded interfaces before and after the change,
-separately from the retained logical layout. A no-op normalizer must accept
-mixed representations stored in a different order, while a normalizer that
-removes a nonzero tensor's ports must fail. This operation does not provide
-component tables for a new formal dimension.
+`map_representation_dimensions` maps representation dimensions in the payload,
+logical interface and retained scoped index usage, including ports carried only
+by a ranked zero and indices absent after cancellation. Its callback receives
+the representation kind and the decoded dimension; portable dimension payloads
+are decoded and encoded individually. It does not substitute unrelated scalar
+coefficients. `with_lorentz_dimension` delegates to this owner for its
+physical-four-dimensional Lorentz replacement. Newly coincident compatible
+explicit ports contract; invalid dimensions, incompatible internal pairs and
+excess occurrences fail. The operation derives its result metadata from the
+mapped source metadata without admitting the rebuilt Atom again. Normalizers
+triggered while rebuilding must preserve that mapped tensor meaning. This
+operation does not provide component tables for a new formal dimension.
 
-`rename_symbols` applies an injective simultaneous map to the native payload and
-its logical interface, including encoded dimensions and zero-only labels.
-Swaps are allowed; collisions with existing targets that are not themselves
-renamed are rejected. Callback-sensitive results are checked without replaying
-the callback. Existing trusted internal renaming retains its private fast path;
-the public entry point does not expose an unchecked proof transfer.
+`rename_symbols` applies an injective simultaneous map to the native payload,
+logical interface and retained scoped index usage, including encoded dimensions
+and labels absent from the simplified payload. Swaps are allowed; collisions
+with existing targets that are not themselves renamed are rejected. Mapped
+metadata establishes the result's interface and index roles; normalizers
+triggered while rebuilding must preserve that mapped tensor meaning.
 
 The native `dirac_adjoint(preserve_indices)` shares preparation and cleanup with
 the raw expression operation while retaining the tensor carrier. It dualizes
@@ -374,22 +413,34 @@ The indexed `into_network` entry point consumes the same retained carrier and
 uses this handoff with an already explicit public interface. Its logical layout,
 ranked-zero handling and index-decoding checks are unchanged.
 
-The Atom-like API has deliberate checked boundaries and some ergonomic gaps.
+The Atom-like API distinguishes raw replacement from source-attached operations.
 Symbolica seals `AtomCore`, preventing a downstream implementation on this
-carrier. `replace` accepts a checked `TensorRule`; arbitrary substitutions need
-explicit expression mapping and validation. Addition, multiplication and powers
-use fallible tensor operations rather than inherited Atom arithmetic.
-`with_algebra_result` and other retained-interface finishers require an owned
-algebraic invariant; they are not general substitutes for checked admission.
+carrier. `with_checked_expression` checks an arbitrary replacement against the
+retained interface; `with_transformed_expression` infers an arbitrary transformed
+interface. Both are admission boundaries, including for scalar outputs.
+`with_rewritten_expression` retains its checked path for callback-sensitive
+identity results. Component realization also checks its retained interface at
+the network boundary.
+`replace` accepts a `TensorRule` whose actual matched interfaces and index bounds
+are checked locally. Addition, multiplication and powers use fallible tensor
+operations: they check operand metadata and derive result metadata before payload
+normalization. `with_algebra_result` and certified identity finishers instead
+require the producer's source-attached algebraic invariant. They carry the admitted
+structure and conservative index history when that invariant applies; they do not
+certify unrelated replacement Atoms. Producer-certified simultaneous index
+relabeling maps retained usage as well as public ports, so injectivity also covers
+identities absent from the simplified payload.
 There is no typed Taylor-series or general derivative API yet, so GammaLoop
 restores scalar-engine results against the retained interface. `expand_dots`
 returns the tensor carrier, preserving untouched open ports while checking
 transformations that could change them.
 
 An identity dimension mapping retains completed reductions and cached
-observations through `finish_parts`, after running the mapper and checking the
-whole payload and logical layout. Unchecked carriers still undergo validation;
-an unchanged zero expression alone does not establish an unchanged interface.
+observations through `finish_parts`, after running the mapper and establishing
+that the native payload, logical layout and oriented index-usage metadata are
+unchanged. Admitted carriers reuse their facts; raw carriers still undergo
+admission. An unchanged zero expression or free interface alone cannot establish
+that hidden index history is unchanged.
 The color-construction macros have a separate syntax trap: a bare `object.field`
 is representation-pattern shorthand. Literal chain placeholder symbols must use
 `Atom::var`, rather than that field shorthand.
@@ -649,6 +700,48 @@ with trace equal to its dimension, independent of the dummy labels.
 The shared concrete syntax and which crate owns each rewrite are specified in the
 #link("spenso-symbolica-syntax-and-rewrites.typ")[Spenso/Idenso Symbolica syntax note].
 
+== Notebook presentation
+
+Spenso's existing `network::tags::mathml` printer emits bounded semantic leaves
+directly as MathML, reusing the tensor, slot, representation and chain
+recognizers. Gamma and slash notation, ordered chains and traces, bra/ket ports,
+color invariants and display settings use native MathML. Idenso retains ownership
+of color-invariant semantics. Presentation preserves the source Atom bytes and
+the typed logical interface; it does not rewrite tensor algebra.
+
+Spynso's viewer adapter retains typed metadata, display-local index aliases and
+a bounded cache of leaf fragments. Alias resolution is scoped to the viewer and
+supplied to the printer for each bounded leaf; it requires no complete-source
+walk. Symbolica's official `MathMLViewer::expression` owns arithmetic, cursor
+caching, responsive layouts, paging and navigation. The pager has no CBOR render
+tree, Typst compilation or notation worker.
+
+Explicit expression `to_html()` emits complete direct MathML; it does not page,
+truncate or compile Typst. `formatted()`, `paged()` and `to_html()` reject
+`notation_source` with `ValueError`. `TensorName` head mappings accept `mathml`
+fragments, and callable printers handle `PrintMode.MathML` for both rich display
+and complete HTML exports. Typst source is never parsed into MathML.
+
+Bare `to_typst()` remains source-only.
+`to_typst_project(..., notation_source=...)` returns a `dict[str, bytes]`
+containing `main.typ`, `render.typ`, `notation.typ` and `tree.cbor`, without
+invoking a compiler.
+Expression `to_svg()` compiles that project through optional Python typst-py
+(distribution `typst`); the native extension contains no Rust Typst compiler.
+Custom Typst notation belongs to these project and vector exports.
+
+Tensor-network `render()` returns a shared Linnet `DiagramView`. Its live
+AnyWidget measures direct MathML labels in the notebook browser before the
+existing native `Scene::render` draws the geometry. `view.measured()` retrieves
+the completed immutable `DiagramRender`; SVG and HTML retain the measured boxes
+and embedded font. Scripts explicitly request `measured(browser="chromium")`
+with optional Playwright and Chromium, or return a receipt from the same view's
+`measurement_request()` to `measured(measurements=...)`. Pending measurement
+raises an error on export; there are no estimated bounds or automatic headless
+browser. Default graph SVG uses XHTML `foreignObject` MathML and targets browsers.
+For PDF, PNG or Typst SVG import, `view.outlined()` uses optional typst-py to
+produce vector labels.
+
 == Features and serialization
 
 Idenso defaults to `native`, forwarding GMP/MPFR support; `wasm` selects the Wasm backend with
@@ -659,11 +752,18 @@ initialization; its `python_stubgen` feature adds metadata for the unified Spens
 
 Binary encoding is always derived for Idenso's zero-sized representation marker types.
 The optional `bincode` implementations for partial and indexed symbolic tensors
-reconstruct and validate their payloads, logical slots and operation flags using
-the caller's state map. Indexed archives encode explicit slots and reject
-unresolved or mismatched interfaces on load; planner and proof caches are not
-serialized. GammaLoop's full-state format changes to version 21 for this slot
-layout, while its already lowered standalone evaluator formats are unchanged.
+encode admitted tensor metadata together with the payload, operation flags and
+optional product-readiness fact. Restored readiness lets future products reuse
+that fact without classifying the decoded payload again. Decode uses the caller's
+state map, restores sorted index usage after symbol remapping, and checks archive
+version, unique index keys, mask alignment and
+agreement between retained index roles and the logical interface. Indexed
+archives additionally reject unresolved public ports. This is a transfer of
+authoritative construction metadata, not raw-expression admission: cancelled
+pairs survive cloning and archive round trips even when the payload is `0` or
+`1`. Disposable planner, observation and reduction-completion caches are not
+serialized. The tensor archive carries its own format version; GammaLoop's
+already lowered standalone evaluator formats are unchanged.
 These wire implementations, rewrite settings, symbol
 registries, networks and cooked expressions do not together define an Idenso
 checkpoint format. Reversible cooking stores the
@@ -678,6 +778,16 @@ payload before normalization. Function calls, callback-bearing expressions and
 unsupported symbol metadata are rejected. Index/function cooking keeps its
 existing registry-dependent behavior; construction and cooking remain separate
 from reduction.
+
+Index-only cooking preserves validated native named, Open and scoped index forms
+in both flattened and reversible modes. Tagged named heads accept `head(owner)`
+for local zero and `head(owner, local)` for natural owner/local values. Native
+serialization and index cooking canonicalize local zero to `head(owner)`;
+`head(owner, 0)` parses to the same index. It interns opaque function-valued labels
+with expression-local reuse, retaining their shared identity across representation
+kinds. Tagged third-party heads that do not parse as native indices are interned
+as opaque labels. Malformed Spenso-owned Open and scope forms remain errors.
+The separate all-function cooking mode retains its own source/tag policy.
 
 == Ownership and error boundaries
 
@@ -695,9 +805,21 @@ queries report `IndexToolingError`. A raw-expression escape hatch does not
 retain a separately declared logical layout automatically. Callers restoring
 that layout must supply the original structure.
 
-Admission records validation for the exact payload and logical interface.
-Gamma identities preserve this certificate instead of inferring and validating
-their generated results again. Generated homogeneous trace sums read the
+Composition, inference and cooking preserve underlying admission, slot and
+index errors as typed sources. Python bindings translate those errors at the
+presentation boundary. The Bincode custom-error interface accepts a diagnostic
+string, so formatting is confined to that serialization boundary.
+
+Admission establishes the logical interface and scoped index metadata once.
+Typed algebra uses those facts as the tensor's meaning, even when the resulting
+Atom no longer displays the same index occurrences. Raw admission still rejects
+malformed signatures, incompatible sum interfaces, invalid placeholder scopes,
+excess index multiplicities and mismatched declared ports; cancellation in a
+generated payload is not permission to weaken those checks. A new arbitrary Atom
+replacement must establish its own admitted facts.
+
+Gamma identities preserve the source-attached invariant instead of inferring and
+validating their generated results again. Generated homogeneous trace sums read the
 interface of one representative term through Spenso's existing syntactic
 structure reader. This relies on the trace recipe's algebraic invariant;
 arbitrary user rewrites cannot claim it. Callback-sensitive results retain
@@ -705,8 +827,10 @@ their checked boundary, and unresolved positional ports retain their identity
 checks.
 
 Unchanged regions carry the same certificates through planner operations.
-Validation does not imply contraction completion or absence of user normalizers: those
-are separate facts, and mutable payload or interface access invalidates them.
+Admission does not imply contraction completion or absence of user normalizers: those
+are separate facts. Raw mutable payload or interface access invalidates construction
+metadata and derived facts; certified algebra carries construction metadata while
+discarding caches that describe an earlier payload.
 Graph scratch interfaces containing encoded open-port identities are converted
 to public logical ports before acquiring a validation certificate.
 
@@ -731,9 +855,11 @@ representation-bearing factors when completeness matters.
 
 - Tensor structure is inferred from tagged representation arguments, including dimension and
   dual orientation; function spelling alone is insufficient.
-- For a nonzero tensor, `SymbolicTensor.structure` and the slot atoms inside `expression`
-  describe the same external indices. Ranked zero retains its declared interface without
-  payload slots. Permutation operations preserve the logical correspondence in either case.
+- Initial admission establishes agreement between the payload and its declared or inferred
+  interface. Thereafter structure, sorted scoped index usage and the dummy mask are authoritative;
+  ordinary typed operations derive them from operands without re-admitting the result Atom.
+  Cancellation can remove visible index occurrences while their collision history remains.
+  Ranked zero retains its declared interface. Permutations preserve logical axis correspondence.
 - Dummy indices introduced by parsing or shorthand expansion are fresh only within that parse
   state. Cross-expression hygiene remains explicit through wrapping or canonicalization.
 - Dimension-specific identities fire only when the required representation dimension can be

@@ -1109,6 +1109,63 @@ preferences; they protect behavior that has been easy to regress.
 - If the extension module environment is an issue when compiling the Python API,
   try `build-api-abi`.
 
+=== Symbolica Integration
+<symbolica-integration>
+
+Symbolica symbol definitions are process-global, shared by every crate and Python
+session in a process, and part of the serialized data model.
+
+==== Symbols
+
+- Treat a symbol's tags, attributes and user data as part of its identity.
+  Canonical strings spell out its tags (`ns::{tag,…}::name`), and state exports
+  (including `Expression.save`) carry tags and user data. Parsing or importing a
+  symbol whose registered definition differs fails with "redefined with new
+  attributes". Changing any of them is a serialization change: regenerate the
+  affected fixtures deliberately and say so in the change description.
+- Reserve tags for semantics that must survive serialization and that patterns
+  or predicates match, such as `spenso::index`, `spenso::tensor`,
+  `spenso::rank1` and `spenso::dummy-index`. Never add tags or user data only to
+  change presentation.
+- Define each symbol once, through its owning constructor or `initialize!`
+  registration, and reuse that constructor everywhere, including tests.
+  Redeclaring a name with different tags or attributes makes behavior depend on
+  which code path registered it first in the process.
+- Normalization callbacks (`norm = …`) must preserve a tensor's free indices.
+  They may reorder arguments according to the symbol's symmetry, change signs and
+  coefficients, rename internal dummy indices, or return zero; they must never
+  add, remove, rename or re-represent a free index. Idenso relies on this contract
+  to carry admitted metadata without re-reading payloads.
+
+==== Notation and display
+
+- Keep notation in code. Renderers resolve a symbol's display from its print
+  callback, then its notation registered in `symbolica-notation`, then its escaped
+  name. Register notation in the symbol's owning constructor; print callbacks and
+  registered notation are never serialized with the symbol.
+- Notation is process-local. It travels only through explicit, validated
+  `spenso.notation` portable attachments; plain symbol strings and state exports
+  never carry it.
+- Treat imported data as untrusted. Never copy text from symbols, attachments or
+  payloads into HTML, MathML, SVG, JavaScript, Typst or LaTeX source without
+  escaping it or validating it against an allowlist; imported text overrides
+  render literally.
+- Python display objects follow Symbolica's display contract: `_repr_mimebundle_`
+  always returns `text/plain` plus static `text/html` or `image/svg+xml`, which
+  survive saved notebooks and nbconvert, and adds the live widget only when
+  `anywidget` imports. A missing optional package is never a display error.
+  `to_html()` and `to_svg()` return complete output with default arguments;
+  browser measurement and optional compilers are explicit opt-ins.
+
+==== Kernel pin
+
+- Symbolica, Numerica and Graphica resolve to one Symbolica commit in the root,
+  Tydenso and notebook-host lockfiles, and the notebook-host lock stays a subset
+  of the root lock; `just check-symbolica-feature-isolation` enforces both. Keep
+  the uv source on the same branch. Update them in one change, then rerun that
+  check, the Clippy gate and the GammaLoop tests: a kernel update affects every
+  crate.
+
 === Symbolica Community Extensions
 <community-extensions>
 

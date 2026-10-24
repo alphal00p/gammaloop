@@ -4,12 +4,17 @@ import json
 import re
 import unittest
 import xml.etree.ElementTree as ET
+import sys
+from pathlib import Path
+from types import ModuleType
+from unittest.mock import patch
 
 from symbolica.core import Expression
 
 E = Expression.parse
 from symbolica.community.graph import (
     DiagramRender,
+    DiagramView,
     LayoutSettings,
     RenderSettings,
     Stroke,
@@ -26,9 +31,59 @@ from symbolica.community.tensor import (
 )
 
 
+def fixture_linnest(owner, **kwargs):
+    # Source-only control: fake compiler returns vector paths with known metrics.
+    # Real typography is checked by the explicit optional typst-py harness.
+    compiler = ModuleType("typst")
+    calls = []
+
+    def compile_labels(main, *, root, format):
+        assert format == "svg"
+        main, root = Path(main), Path(root)
+        assert main.is_absolute() and root.is_absolute()
+        assert main == root / "main.typ"
+        assert {
+            path.relative_to(root).as_posix()
+            for path in root.rglob("*")
+            if path.is_file()
+        } == {"main.typ"}
+        source = main.read_bytes().decode()
+        assert "linnest-metrics:" in source
+        calls.append(source)
+        vector_page = (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 12">'
+            '<path d="M1 1H23V11H1Z" fill="black"/>'
+            '<a href="linnest-metrics:24,9,9,12"><rect width="1" height="1"/></a>'
+            "</svg>"
+        ).encode()
+        return [vector_page] * (source.count("#pagebreak()") + 1)
+
+    compiler.compile = compile_labels
+    with patch.dict(sys.modules, {"typst": compiler}):
+        result = owner.to_linnest(**kwargs)
+    assert calls, "explicit outlined export did not use the fixture compiler"
+    return result
+
+
+def external_metrics_snapshot(view):
+    # EXTERNAL METRICS FIXTURE in points, not browser measurements.
+    request = view.measurement_request()
+    return view.measured(
+        measurements={
+            "id": request["id"],
+            "metrics": [
+                {"id": label["id"], "width": 24.0, "height": 12.0, "baseline": 9.0}
+                for label in request["labels"]
+            ],
+        }
+    )
+
+
 def graph_labels(network):
     labels = {}
-    for node in ET.fromstring(network.render().to_svg()).iter():
+    for node in ET.fromstring(
+        external_metrics_snapshot(network.render()).to_svg()
+    ).iter():
         if node.attrib.get("data-linnet-kind") not in {"node", "edge"}:
             continue
         detail = json.loads(node.attrib["data-linnet-detail"])
@@ -47,7 +102,7 @@ class NetworkDisplayTests(unittest.TestCase):
         q = TensorName.vector("network_layout_tests::q")(rep)
         network = (A("i", "j", "k") * p("i") * q("j") / (p * p)).to_network()
         before = network.to_dot()
-        root = ET.fromstring(network.render().to_svg())
+        root = ET.fromstring(external_metrics_snapshot(network.render()).to_svg())
         centers, edges = {}, {}
         for element in root.iter():
             kind = element.attrib.get("data-linnet-kind")
@@ -95,7 +150,7 @@ class NetworkDisplayTests(unittest.TestCase):
         def summary(value):
             before = value.to_dot()
             status = value.status
-            html = value.to_html()
+            html = external_metrics_snapshot(value.render()).to_html()
             self.assertEqual(value.to_dot(), before)
             text = re.search(r'class="spenso-network-status".*?</div>', html).group()
             self.assertIn(f'data-complete="{str(status.complete).lower()}"', text)
@@ -124,8 +179,9 @@ class NetworkDisplayTests(unittest.TestCase):
     def test_edge_slots_use_representation_alphabets(self):
         gamma = TensorExpression.dirac_gamma(4)(1, 2, 1).to_network()
         labels = graph_labels(gamma)
-        self.assertCountEqual(labels, ["a", "b", "mu", "gamma"])
-        ET.fromstring(gamma.render().to_svg())
+        # label-typst is a complete content expression, including math delimiters.
+        self.assertCountEqual(labels, ["$a$", "$b$", "$mu$", "$gamma$"])
+        ET.fromstring(external_metrics_snapshot(gamma.render()).to_svg())
 
         # Compound graph indices must be named together, not independently as mu.
         rep = Representation.mink(4)
@@ -135,17 +191,17 @@ class NetworkDisplayTests(unittest.TestCase):
             p(E("gammalooprs::hedge(2,1)")) * q(E("gammalooprs::hedge(3,1)"))
         ).to_network()
         labels = graph_labels(network)
-        self.assertIn("mu", labels)
-        self.assertIn("nu", labels)
-        ET.fromstring(network.render().to_svg())
+        self.assertIn("$mu$", labels)
+        self.assertIn("$nu$", labels)
+        ET.fromstring(external_metrics_snapshot(network.render()).to_svg())
 
     def test_registered_names_and_typed_inspection(self):
         spinor = Representation.bis(4)
         jbar = TensorName("network_details::Jbar", print={"typst": "macron(J)"})(spinor)
         gamma = TensorExpression.dirac_gamma(4)
         network = (jbar(1) * gamma(1, 2, 1)).to_network()
-        self.assertIn("macron(J)", graph_labels(network))
-        root = ET.fromstring(network.render().to_svg())
+        self.assertIn("$macron(J)$", graph_labels(network))
+        root = ET.fromstring(external_metrics_snapshot(network.render()).to_svg())
         details = [
             json.loads(node.attrib["data-linnet-detail"])
             for node in root.iter()
@@ -224,7 +280,7 @@ class NetworkDisplayTests(unittest.TestCase):
         network = tensor("i", "j") * tensor("j", "k")
         expression = network.expression().to_expression()
         before = network.to_dot()
-        html = network.to_html()
+        html = external_metrics_snapshot(network.render()).to_html()
         self.assertRegex(before, r'tree = "[0-9A-Za-z]+"')
         # Numeric-leading tree IDs must not become extra DOT nodes.
         node_ids = set(
@@ -237,7 +293,9 @@ class NetworkDisplayTests(unittest.TestCase):
         self.assertEqual(network.to_dot(), before)
         network.execute()
         self.assertNotEqual(network.to_dot(), before)
-        self.assertIn("<svg", network._repr_html_())
+        self.assertIn("<svg", external_metrics_snapshot(network.render()).to_html())
+        self.assertTrue(callable(network._mime_))
+        self.assertTrue(callable(network._repr_mimebundle_))
         self.assertEqual(network.expression().to_expression(), expression)
         self.assertEqual(list(network.result_tensor()), [7.0, 10.0, 15.0, 22.0])
 
@@ -253,7 +311,7 @@ class NetworkDisplayTests(unittest.TestCase):
             TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network(),
         ):
             with self.subTest(network=repr(network)):
-                svg = network.render().to_svg()
+                svg = external_metrics_snapshot(network.render()).to_svg()
                 self.assertIn("data-linnet-interactive", svg)
                 self.assertIn("spenso-network-svg", svg)
                 self.assertIn("light-dark", svg)
@@ -278,7 +336,9 @@ class NetworkDisplayTests(unittest.TestCase):
                 edge_stroke=Stroke(paint=Color("#123456"), thickness=2)
             ),
         )
-        drawing = network.render(config=config)
+        view = network.render(config=config)
+        self.assertIsInstance(view, DiagramView)
+        drawing = external_metrics_snapshot(view)
         self.assertIsInstance(drawing, DiagramRender)
         svg, html = drawing.to_svg(), drawing.to_html()
         self.assertIn("#123456", svg)
@@ -286,29 +346,33 @@ class NetworkDisplayTests(unittest.TestCase):
         self.assertEqual(drawing._repr_svg_(), svg)
         self.assertEqual(drawing._repr_html_(), html)
         self.assertEqual(drawing._mime_(), ("text/html", html))
-        self.assertIn("#image(bytes(", drawing.to_linnest())
+        with self.assertRaisesRegex(ValueError, "outlined labels"):
+            drawing.to_linnest()
         network.execute()
         self.assertEqual(drawing.to_html(), html)
         self.assertEqual(drawing.to_svg(), svg)
+        self.assertEqual(view.measured().to_svg(), svg)
         self.assertEqual(config.layouts.pass_count, 1)
         config.title = "changed"
         self.assertEqual(drawing.to_svg(), svg)
         with self.assertRaises(ValueError):
             DrawOptions(node_radius=-1)
         with self.assertRaises(TypeError):
-            network.render(config={"title": "obsolete"})
+            external_metrics_snapshot(network.render(config={"title": "obsolete"}))
 
     def test_linnet_configuration_and_portable_source(self):
         network = TensorExpression.dirac_gamma(4)("a", "b", "mu").to_network()
         config = RenderSettings(title="Network preview")
-        source = network.to_linnest(config=config)
+        source = fixture_linnest(network, config=config)
         self.assertIn("#image(bytes(", source)
         self.assertNotIn("@preview", source)
         self.assertNotIn("digraph", source)
         self.assertNotIn("network-dot", source)
-        # Portable source contains the complete SVG, including typeset glyphs.
+        # The source embeds the complete SVG with the fixture compiler's vector labels.
         self.assertIn("<svg", source)
-        self.assertIn("<svg", network.render(config=config).to_svg())
+        self.assertIn(
+            "<svg", external_metrics_snapshot(network.render(config=config)).to_svg()
+        )
         self.assertIn("<math", network.expression().to_html())
 
 

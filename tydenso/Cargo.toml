@@ -8,6 +8,7 @@ license = "MIT"
 version = "0.1.0"
 
 [workspace.dependencies]
+symbolica-notation = { path = "../crates/symbolica-notation" }
 idenso = { path = "../crates/idenso", default-features = false, features = ["wasm"] }
 spenso = { path = "../crates/spenso", default-features = false, features = ["portable-payload", "shadowing", "wasm"] }
 symbolica = { version = "3.0.1", default-features = false, features = ["wasm"] }
@@ -16,9 +17,9 @@ symbolica-typst-plugin = { version = "0.1.0", default-features = false, features
 
 # Consuming workspaces select the same algebra engine and Typst payload.
 [patch.crates-io]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "main" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
 
 [profile.release]

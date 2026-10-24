@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Lint, export, and smoke-test the editable documentation Marimo notebooks."""
 
+# ruff: noqa: EXE001  # Publication invokes this source through Python.
+
 from __future__ import annotations
 
 import argparse
@@ -51,10 +53,12 @@ class Notebook:
 
     @property
     def ready_selector(self) -> str:
+        if self.ready_value in {"generic", "physics"}:
+            return 'iframe[title="Graph diagram"]'
         if self.docs_product != "linnet":
             return f'[data-notebook-ready="{Path(self.filename).stem}"]'
         if self.ready_value == "quickstart":
-            return '[data-notebook="python_quickstart"] svg[width$="pt"]'
+            return '[data-notebook="python_quickstart"] iframe[title="Graph diagram"]'
         return f'[data-linnet-render-ready="{self.ready_value}"] svg'
 
 
@@ -316,8 +320,8 @@ def export(
             )
             generator.add_code(
                 "notebook_browser_ready\n" + match.group(1) + "\n\n"
-                "import marimo as mo\n"
-                "mo.Html(graph.to_svg())",
+                "view = graph.render()\n"
+                "view",
                 display_code=True,
             )
             generators.append(
@@ -457,6 +461,9 @@ def http_smoke(
                     f'data-linnet-render-ready=\\"{notebook.ready_value}\\"'
                 ),
             }
+            if notebook.ready_value in {"generic", "physics"}:
+                required.pop("render readiness marker")
+                required["prepared diagram view"] = ".render("
             missing = [
                 label for label, marker in required.items() if marker not in body
             ]
@@ -525,6 +532,10 @@ def browser_smoke(
                     state="visible",
                     timeout=timeout,
                 )
+                if notebook.ready_value in {"generic", "physics", "quickstart"}:
+                    page.frame_locator(notebook.ready_selector).locator(
+                        "svg[data-linnet-renderer=native]"
+                    ).wait_for(state="visible", timeout=timeout)
                 if docs:
                     page.wait_for_function(
                         """() => !document.querySelector(
@@ -574,7 +585,7 @@ def browser_smoke(
                             arg=[notebook.ready_selector, previous],
                             timeout=timeout,
                         )
-                    preview = page.frame_locator(f"{notebook.ready_selector} iframe")
+                    preview = page.frame_locator(notebook.ready_selector)
                     svg = preview.locator("svg[data-linnet-interactive]")
                     svg.wait_for(state="visible", timeout=timeout)
                     if not svg.evaluate("svg => Boolean(svg.linnetSelection)"):
@@ -588,12 +599,12 @@ def browser_smoke(
                         if toggle.is_checked() != split:
                             previous = page.locator(
                                 notebook.ready_selector
-                            ).inner_html()
+                            ).get_attribute("srcdoc")
                             toggle.set_checked(split)
                             page.wait_for_function(
                                 """([selector, previous]) => {
                                     const preview = document.querySelector(selector);
-                                    return preview && preview.innerHTML !== previous;
+                                    return preview && preview.getAttribute('srcdoc') !== previous;
                                 }""",
                                 arg=[notebook.ready_selector, previous],
                                 timeout=timeout,
@@ -618,7 +629,7 @@ def browser_smoke(
                         )
                         page.wait_for_function(
                             """([selector, theme]) => {
-                                const frame = document.querySelector(`${selector} iframe`);
+                                const frame = document.querySelector(selector);
                                 const doc = frame?.contentDocument;
                                 return doc?.querySelector('svg')?.dataset.theme === theme
                                     && frame.contentWindow.getComputedStyle(doc.documentElement).colorScheme

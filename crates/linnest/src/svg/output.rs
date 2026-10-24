@@ -83,7 +83,7 @@ impl<K: Into<String>, V: Into<Value>> FromIterator<(K, V)> for Details {
     }
 }
 
-fn xml_escape(text: &str) -> String {
+pub(super) fn xml_escape(text: &str) -> String {
     text.replace('&', "&amp;")
         .replace('"', "&quot;")
         .replace('<', "&lt;")
@@ -244,8 +244,8 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
     let canvas_width = (bounds.width() + 2.0 * PAD) * UNIT;
     let canvas_height = (bounds.height() + 2.0 * PAD) * UNIT;
     let title = typeset.title.as_ref();
-    let column = title.map_or(canvas_width, |title| canvas_width.max(title.width));
-    let title_height = title.map_or(0.0, |title| title.height + GUTTER);
+    let column = title.map_or(canvas_width, |title| canvas_width.max(title.metrics.width));
+    let title_height = title.map_or(0.0, |title| title.metrics.height + GUTTER);
     let (width, height) = (
         column + 2.0 * MARGIN,
         title_height + canvas_height + 2.0 * MARGIN,
@@ -265,7 +265,7 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
         let _ = write!(
             svg,
             r#"<g transform="translate({} {})">{}</g>"#,
-            number(MARGIN + (column - title.width) / 2.0),
+            number(MARGIN + (column - title.metrics.width) / 2.0),
             number(MARGIN),
             title.body
         );
@@ -390,8 +390,8 @@ pub(super) fn svg(typeset: &Typeset, layers: &[Element], targets: &[Target]) -> 
                     let _ = write!(
                         svg,
                         r#"<a href="{href}" transform="translate({lx} {ly})"><rect width="{w}" height="{h}" fill="transparent" stroke="none"/></a>"#,
-                        w = number(page.width),
-                        h = number(page.height)
+                        w = number(page.metrics.width),
+                        h = number(page.metrics.height)
                     );
                 }
             }

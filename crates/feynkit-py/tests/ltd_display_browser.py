@@ -11,6 +11,40 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
+def assert_math_labels(root):
+    root.evaluate("""async root => {
+      await document.fonts.ready;
+      await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const svg=root.querySelector('.lp-graph');
+      const sources=root.querySelector('[data-drawing]').content.querySelector('[data-ltd-labels]');
+      for(const label of svg.querySelectorAll('.lp-math-label')) {
+        const pages=label.querySelectorAll(':scope > foreignObject');
+        if(pages.length!==1||label.querySelector('use'))throw Error('missing direct local MathML label');
+        const page=pages[0],content=page.firstElementChild,math=content?.querySelector('math');
+        const source=[...sources.querySelectorAll('[data-label-key]')].find(source=>source.dataset.labelKey===label.dataset.labelKey);
+        const expected=source?.querySelector('math');
+        if(!svg.contains(page)||!math||math.namespaceURI!=='http://www.w3.org/1998/Math/MathML'
+          ||!expected||!math.isEqualNode(expected))throw Error(`wrong MathML fragment for ${label.dataset.labelKey}`);
+        if(math.querySelector('merror'))throw Error('invalid MathML label');
+        const bounds=content.getBoundingClientRect(),matrix=page.getScreenCTM();
+        const width=page.width.baseVal.value,height=page.height.baseVal.value;
+        if(!matrix||![width,height,bounds.width,bounds.height].every(value=>Number.isFinite(value)&&value>0))
+          throw Error('empty MathML label');
+        if(Math.abs(width*Math.hypot(matrix.a,matrix.b)-bounds.width)>.5
+          ||Math.abs(height*Math.hypot(matrix.c,matrix.d)-bounds.height)>.5)
+          throw Error('MathML label bounds do not match the visible measurement');
+        if(Math.abs(page.x.baseVal.value+width/2)>1e-6||Math.abs(page.y.baseVal.value+height/2)>1e-6)
+          throw Error('MathML label is not centered on its native anchor');
+        if(label.hasAttribute('data-edge-label')) {
+          const hit=label.querySelector(':scope > rect');
+          if(!hit||hit.getAttribute('fill')!=='transparent'
+            ||['x','y','width','height'].some((name,i)=>+hit.getAttribute(name)!==[-8,-7,16,14][i]))
+            throw Error('MathML replacement changed the fixed edge-label hit target');
+        }
+      }
+    }""")
+
+
 def main(directory, executable=None, engine="chromium"):
     sources = sorted(directory.glob("ltd-*.html"))
     assert sources, "Run installed_ltd_display.py first"
@@ -58,13 +92,8 @@ def main(directory, executable=None, engine="chromium"):
                 if(!label.getAttribute('transform').startsWith(original.getAttribute('transform')))
                   throw Error('label moved from its native placement onto an edge hit target');
               }
-              for(const label of svg.querySelectorAll('.lp-math-label')) {
-                const use=label.querySelector('use');
-                const glyph=document.getElementById(use.getAttribute('href').slice(1));
-                if(!svg.contains(glyph)||!glyph.querySelector('use'))throw Error('missing local Typst label');
-                if(!use.getBBox().width||!use.getBBox().height)throw Error('empty Typst label');
-              }
             }""")
+            assert_math_labels(root)
             # Reconstruct every displayed product, including common factors on
             # ancestors. Raised poles exercise signed sums and repeated energies.
             root.evaluate("""root => {
@@ -89,6 +118,7 @@ def main(directory, executable=None, engine="chromium"):
                 if(new Set(actual).size!==expected.length||actual.length!==expected.length)throw Error(`lost residue ${r.id} terms`);
               }
             }""")
+            assert_math_labels(root)
             assert not errors, (source.name, errors)
 
         results = {}
@@ -258,8 +288,10 @@ def main(directory, executable=None, engine="chromium"):
         sigma = gap.locator("..").get_attribute("data-pole-sign")
         key = f"pole-{cut}-{'minus' if sigma == '-1' else 'plus'}"
         assert root.locator(f'.lp-math-label[data-label-key="{key}"]').count() == 1
+        assert_math_labels(root)
         gap.click()
         assert root.locator("[data-sum-input]").input_value() != old_id
+        assert_math_labels(root)
         assert camera.get_attribute("viewBox") == panned
         assert camera_handle.evaluate("e=>e.isConnected")
         camera.press("0")
@@ -274,6 +306,7 @@ def main(directory, executable=None, engine="chromium"):
         root.locator(".lp-graph").wait_for(state="visible")
         assert camera_handle.evaluate("e=>e.isConnected")
         assert camera.get_attribute("viewBox") == original
+        assert_math_labels(root)
         assert root.locator("[data-cut-edge]").evaluate_all(
             "nodes=>nodes.map(e=>+e.dataset.cutEdge).sort((a,b)=>a-b)"
         ) == root.evaluate("""root => {
@@ -298,9 +331,10 @@ def main(directory, executable=None, engine="chromium"):
         for root in roots.all():
             root.locator("[data-residue-graph] > summary").click()
             root.locator(".lp-graph").wait_for(state="visible")
+            assert_math_labels(root)
         assert page.locator(".lp-graph [id]").evaluate_all(
             "nodes=>new Set(nodes.map(n=>n.id)).size===nodes.length"
-        ), "Typeset glyph IDs leaked between display instances"
+        ), "Graph IDs leaked between display instances"
         assert not errors, errors
         print(json.dumps(results))
         browser.close()

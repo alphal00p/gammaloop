@@ -1,9 +1,9 @@
 # /// script
 # requires-python = ">=3.11"
 # dependencies = [
+#     "anywidget>=0.9,<1",
 #     "marimo==0.24.0",
 #     "symbolica==3.0.1",
-#     "typst==0.15.0",
 #     "ufo-model-loader==1.0.1",
 # ]
 # ///

@@ -1,17 +1,15 @@
 //! Native drawing of a diagram: the physics scene `to_linnest` describes in
-//! Typst, laid out and painted by `linnest::svg`. Typst typesets only labels.
+//! Typst, laid out and painted by `linnest::svg`, with native MathML labels.
 use std::collections::{BTreeMap, BTreeSet};
 
 use feynkit_model::{LineKind, Model, Particle, ParticleId};
-use linnest::{
-    TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec,
-    svg::{Config, Dash, Details, EdgeDrawing, NodeDrawing, Pattern, Scene, Stroke},
+use linnest::svg::{
+    Config, Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Pattern, Scene, Stroke,
 };
-use linnet::half_edge::{
-    EdgeAccessors,
-    involution::{EdgeIndex, Orientation},
-    subgraph::{SuBitGraph, SubSetLike},
-};
+use linnest::{TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec};
+use linnet::half_edge::EdgeAccessors;
+use linnet::half_edge::involution::{EdgeIndex, Orientation};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
 use serde_json::{Map, Value};
 
 use crate::{DiagramError, FeynmanDiagram, LoopMomentumBasis};
@@ -25,6 +23,8 @@ const OUTSIDE: &str = "#77777773";
 const EXTERNAL_SPACING: f64 = 10.0;
 
 /// Physics drawing options the native renderer honours.
+/// See [`Self::process_scene`] for a process schematic and
+/// [`FeynmanDiagram::to_scene`] for retained diagram rendering.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SceneOptions {
     /// Momentum arrows beside every edge.
@@ -64,6 +64,24 @@ impl FeynmanDiagram {
     /// Typst: particle lines and flow arrows, momentum arrows, highlighting and
     /// inspection details. Cross sections open their initial states before
     /// layout while retaining the original inspection identities.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use feynkit_graph::{DiagramError, FeynmanDiagram, SceneOptions};
+    /// use std::collections::BTreeSet;
+    /// # fn scene(diagram: &FeynmanDiagram) -> Result<(), DiagramError> {
+    /// let scene = diagram.to_scene(None, &BTreeSet::new(), None, &SceneOptions::default())?;
+    /// assert_eq!(scene.graph.edges.len(), diagram.edges().count());
+    /// # Ok(())
+    /// # }
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a diagram error when a supplied momentum basis is inconsistent.
+    ///
+    /// # Panics
+    /// Panics if `highlight` contains half-edges outside this diagram's arena.
     pub fn to_scene(
         &self,
         highlight: Option<&SuBitGraph>,
@@ -153,7 +171,7 @@ impl FeynmanDiagram {
             .partition(|(_, ends, _)| ends.source.is_none());
         let place = !incoming.is_empty() && !outgoing.is_empty();
 
-        let mut pages: Vec<String> = Vec::new();
+        let mut pages: Vec<LabelSource> = Vec::new();
         let mut hedge = 0;
         let mut edges = Vec::new();
         for (id, ends, edge) in self.edges() {
@@ -231,11 +249,15 @@ impl FeynmanDiagram {
                 (options.show_particle || show_momentum || options.show_edge_index).then(|| {
                     let mut components = Vec::new();
                     if options.show_particle {
-                        components.push(particle.typst_label());
+                        // Typst metadata is executable source, not a MathML label.
+                        let mut label = LabelSource::text(&particle.name);
+                        label.typst = Some(particle.typst_label());
+                        components.push(label);
                     }
                     if show_momentum {
                         let (loops, external) = momentum.integer_coefficients();
                         let mut terms = Vec::new();
+                        let mut mathml = String::new();
                         for (head, coefficients) in [("k", loops), ("p", external)] {
                             for (index, coefficient) in coefficients.into_iter().enumerate() {
                                 if coefficient == 0 {
@@ -253,19 +275,60 @@ impl FeynmanDiagram {
                                 } else {
                                     coefficient.abs().to_string()
                                 };
+                                if !sign.is_empty() {
+                                    mathml.push_str(if coefficient < 0 {
+                                        "<mo>−</mo>"
+                                    } else {
+                                        "<mo>+</mo>"
+                                    });
+                                }
+                                if !factor.is_empty() {
+                                    mathml.push_str(&format!("<mn>{factor}</mn>"));
+                                }
+                                mathml.push_str(&format!(
+                                    "<msub><mi>{head}</mi><mn>{index}</mn></msub>"
+                                ));
                                 terms.push(format!("{sign}{factor} {head}_{index}"));
                             }
                         }
-                        components.push(if terms.is_empty() {
-                            "0".into()
+                        let typst = if terms.is_empty() {
+                            mathml.push_str("<mn>0</mn>");
+                            "0".to_owned()
                         } else {
                             terms.join(" ")
+                        };
+                        components.push(LabelSource {
+                            mathml: format!("<mrow>{mathml}</mrow>"),
+                            typst: Some(typst),
                         });
                     }
                     if options.show_edge_index {
-                        components.push(format!("upright(e)_{}", id.0));
+                        components.push(LabelSource {
+                            mathml: format!(
+                                "<msub><mi mathvariant=\"normal\">e</mi><mn>{}</mn></msub>",
+                                id.0
+                            ),
+                            typst: Some(format!("upright(e)_{}", id.0)),
+                        });
                     }
-                    let content = format!("[$ {} $]", components.join(" quad "));
+                    let content = LabelSource {
+                        mathml: format!(
+                            "<mrow>{}</mrow>",
+                            components
+                                .iter()
+                                .map(|label| label.mathml.as_str())
+                                .collect::<Vec<_>>()
+                                .join("<mspace width=\"1em\"/>")
+                        ),
+                        typst: Some(format!(
+                            "[$ {} $]",
+                            components
+                                .iter()
+                                .map(|label| label.typst.as_deref().expect("paired graph label"))
+                                .collect::<Vec<_>>()
+                                .join(" quad ")
+                        )),
+                    };
                     pages
                         .iter()
                         .position(|page| *page == content)
@@ -389,7 +452,12 @@ impl FeynmanDiagram {
         if options.show_node_index {
             for (index, node) in node_drawings.iter_mut().enumerate() {
                 node.label = Some(pages.len());
-                pages.push(format!("[$ upright(v)_{index} $]"));
+                pages.push(LabelSource {
+                    mathml: format!(
+                        "<msub><mi mathvariant=\"normal\">v</mi><mn>{index}</mn></msub>"
+                    ),
+                    typst: Some(format!("[$ upright(v)_{index} $]")),
+                });
             }
         }
         let (edge_specs, edge_drawings) = edges.into_iter().unzip();
@@ -483,13 +551,32 @@ impl SceneOptions {
     }
 
     /// A process is a star graph with a finite interaction region.
+    /// Incoming and outgoing slices preserve their external-state order.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use feynkit_graph::SceneOptions;
+    /// use feynkit_model::Model;
+    /// let model = Model::phi4();
+    /// let phi = model.particle_id("phi")?;
+    /// let scene = SceneOptions::default().process_scene(
+    ///     &model, &[phi, phi], &[phi, phi], &Default::default(),
+    /// )?;
+    /// assert_eq!(scene.edges.len(), 4);
+    /// # Ok::<(), feynkit_graph::DiagramError>(())
+    /// ```
+    ///
+    /// # Errors
+    /// Returns a model error for unknown particle IDs, or
+    /// [`DiagramError::SceneConfiguration`] for invalid drawing settings.
     pub fn process_scene(
         &self,
         model: &Model,
         incoming: &[ParticleId],
         outgoing: &[ParticleId],
         config: &Config,
-    ) -> Result<Scene, String> {
+    ) -> Result<Scene, DiagramError> {
         let node = TypstNodeSpec {
             name: Some("process".into()),
             index: Some(0),
@@ -538,9 +625,7 @@ impl SceneOptions {
         for (is_incoming, particles) in [(true, incoming), (false, outgoing)] {
             for (rank, id) in particles.iter().enumerate() {
                 let index = scene.edges.len();
-                let particle = model
-                    .particle_by_id(*id)
-                    .expect("validated process particle");
+                let particle = model.particle_by_id(*id)?;
                 let orientation = if particle.antiparticle == *id {
                     "undirected"
                 } else if particle.is_antiparticle() {
@@ -577,9 +662,9 @@ impl SceneOptions {
                 let mut drawing = self.particle_drawing(particle, model, orientation);
                 if self.show_particle {
                     drawing.label = Some(scene.pages.len());
-                    scene
-                        .pages
-                        .push(format!("[$ {} $]", particle.typst_label()));
+                    let mut label = LabelSource::text(&particle.name);
+                    label.typst = Some(format!("[$ {} $]", particle.typst_label()));
+                    scene.pages.push(label);
                 }
                 drawing.details = [
                     ("particle", Value::from(particle.name.clone())),
@@ -595,7 +680,9 @@ impl SceneOptions {
                 scene.edges.push(drawing);
             }
         }
-        config.apply(&mut scene)?;
+        config
+            .apply(&mut scene)
+            .map_err(DiagramError::SceneConfiguration)?;
         // A process has a finite interaction region, not a point vertex. Place
         // straight legs around its final styled radius, leaving visible line
         // outside even when the caller enlarges the blob. Mixed states occupy
@@ -632,16 +719,17 @@ impl SceneOptions {
 
 #[cfg(test)]
 mod tests {
+    use crate::DiagramError;
+    use feynkit_model::{Model, ParticleId};
     use std::collections::BTreeSet;
 
     use linnest::svg::Dash;
-    use linnet::half_edge::{
-        involution::Hedge,
-        subgraph::{ModifySubSet, SuBitGraph},
-    };
+    use linnet::half_edge::involution::Hedge;
+    use linnet::half_edge::subgraph::{ModifySubSet, SuBitGraph};
 
     use super::{HIGHLIGHT, INK, OUTSIDE};
-    use crate::{SceneOptions, display::tests::one_loop};
+    use crate::SceneOptions;
+    use crate::display::tests::one_loop;
 
     #[test]
     fn describes_amplitudes_as_the_typst_layout_prepares_them() {
@@ -668,13 +756,15 @@ mod tests {
             (None, None, false)
         );
         // Every edge shares one particle label; the name stays outside the SVG.
-        assert_eq!(scene.pages, ["[$ \"phi\" $]"]);
+        assert_eq!(scene.pages.len(), 1);
+        assert_eq!(scene.pages[0].mathml, "<mrow><mtext>phi</mtext></mrow>");
+        assert_eq!(scene.pages[0].typst.as_deref(), Some("[$ \"phi\" $]"));
         assert!(scene.edges.iter().all(|edge| edge.label == Some(0)));
         assert!(scene.title.is_none());
         // Half-edges are numbered in builder order, as Typst's `build` does.
         assert_eq!(scalar.details.get("source-hedge"), Some(&1.into()));
         assert_eq!(scalar.details.get("sink-hedge"), Some(&2.into()));
-        let document = scene.label_document();
+        let document = scene.label_document().unwrap();
         assert!(!document.contains("#import"));
         assert!(document.contains("[$ \"phi\" $]"));
     }
@@ -698,7 +788,12 @@ mod tests {
         assert_eq!(scene.pages.len(), 3);
         assert_eq!(scene.edges[0].label, scene.edges[3].label);
         let internal = &scene.pages[scene.edges[1].label.unwrap()];
-        assert!(internal.contains("k_0"));
+        assert!(internal.typst.as_deref().unwrap().contains("k_0"));
+        assert!(
+            internal
+                .mathml
+                .contains("<msub><mi>k</mi><mn>0</mn></msub>")
+        );
         // A selected half highlights its edge and vertex; the rest fades.
         assert_eq!(scene.edges[1].stroke.paint, HIGHLIGHT);
         assert_eq!(scene.edges[1].stroke.dash, Dash::Dashed(0.9, 4.05));
@@ -706,5 +801,89 @@ mod tests {
         assert_eq!(scene.edges[2].stroke.dash, Dash::Dotted);
         assert_eq!(scene.nodes[0].stroke.paint, HIGHLIGHT);
         assert_eq!(scene.nodes[1].stroke.paint, OUTSIDE);
+    }
+
+    #[test]
+    fn mathml_keeps_routing_signs_and_native_inspection_indices() {
+        let diagram = one_loop();
+        let scene = diagram
+            .to_scene(
+                None,
+                &BTreeSet::new(),
+                None,
+                &SceneOptions {
+                    show_particle: false,
+                    show_momentum: Some(true),
+                    show_edge_index: true,
+                    show_node_index: true,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        for ((id, _, _), edge) in diagram.edges().zip(&scene.edges) {
+            let label = &scene.pages[edge.label.unwrap()];
+            let momentum = diagram.loop_momentum_basis().edge_signatures[&id].format_momentum();
+            assert_eq!(
+                label.mathml.matches("<mo>−</mo>").count(),
+                momentum.matches('-').count()
+            );
+            assert_eq!(
+                label.mathml.matches("<mo>+</mo>").count(),
+                momentum.matches('+').count()
+            );
+            assert!(label.mathml.contains(&format!(
+                "<msub><mi mathvariant=\"normal\">e</mi><mn>{}</mn></msub>",
+                id.0
+            )));
+            assert!(!label.mathml.contains("<math"));
+        }
+        let external = &scene.pages[scene.edges[0].label.unwrap()];
+        assert!(
+            external
+                .mathml
+                .contains("<msub><mi>p</mi><mn>0</mn></msub>")
+        );
+        for (index, node) in scene.nodes.iter().enumerate() {
+            assert_eq!(
+                scene.pages[node.label.unwrap()].mathml,
+                format!("<msub><mi mathvariant=\"normal\">v</mi><mn>{index}</mn></msub>")
+            );
+        }
+    }
+
+    #[test]
+    fn process_mathml_escapes_names_and_keeps_custom_typst_vector_only() {
+        let diagram = one_loop();
+        let mut definition: serde_json::Value = serde_json::from_str(
+            &diagram
+                .model()
+                .to_json()
+                .unwrap()
+                .replace("\"phi\"", "\"p<&\""),
+        )
+        .unwrap();
+        definition["particles"][0]["typstname"] = "overline(phi)_\"custom\"".into();
+        let model = Model::from_json(&definition.to_string()).unwrap();
+        let particle = model.particle_id("p<&").unwrap();
+        let scene = SceneOptions::default()
+            .process_scene(&model, &[particle], &[particle], &Default::default())
+            .unwrap();
+        assert!(matches!(
+            SceneOptions::default().process_scene(
+                &model,
+                &[ParticleId::from_index(usize::MAX)],
+                &[],
+                &Default::default(),
+            ),
+            Err(DiagramError::Model(_))
+        ));
+        assert_eq!(scene.pages.len(), 2);
+        for label in &scene.pages {
+            assert_eq!(label.mathml, "<mtext>p&lt;&amp;</mtext>");
+            assert_eq!(
+                label.typst.as_deref(),
+                Some("[$ overline(phi)_\"custom\" $]")
+            );
+        }
     }
 }

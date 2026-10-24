@@ -1,4 +1,4 @@
-use linnet_render_py::{PyDiagramRender, PyRenderSettings};
+use linnet_render_py::{PyDiagramView, PyRenderSettings};
 use std::{collections::HashMap, ops::Deref, sync::Arc};
 
 pub(crate) mod execution;
@@ -18,7 +18,11 @@ use spenso::{
     network::{
         ContractScalars, ExecutionResult, MinIntermediateCost, Network, Sequential,
         SingleSmallestDegree, Steps,
-        library::symbolic::{ExplicitKey, TensorLibrary},
+        library::{
+            FunctionLibrary,
+            function_lib::Wrap,
+            symbolic::{ExplicitKey, TensorLibrary},
+        },
         parsing::{ParseSettings, ShadowedStructure},
         store::{NetworkStore, TensorScalarStoreMapping},
         tags::SPENSO_TAG,
@@ -40,14 +44,13 @@ use symbolica::{
         ConvertibleToReplaceWith, PythonCondition, PythonExpression, PythonFormattedOutput,
         PythonPatternRestriction,
     },
-    atom::FunctionBuilder,
     id::{Condition, PatternRestriction},
     prelude::*,
 };
 
 use symbolica::api::python::ConvertibleToExpression;
 #[cfg(test)]
-use symbolica::domains::float::Complex as SymComplex;
+use symbolica::{atom::FunctionBuilder, domains::float::Complex as SymComplex};
 
 use crate::{display, expression::TensorExpression, library::SpensorFunctionLibrary};
 use idenso::tensor::{
@@ -664,22 +667,18 @@ impl SpensoNet {
             .map_err(composition_error)?;
         self = self.relabel_ports(&left_indices)?;
         right = right.relabel_ports(&right_indices)?;
-        let structure = SymbolicTensor::new(
-            if subtract {
-                self.structure.expression() - right.structure.expression()
-            } else {
-                self.structure.expression() + right.structure.expression()
-            },
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            if subtract {
-                self.materialized.expression() - right.materialized.expression()
-            } else {
-                self.materialized.expression() + right.materialized.expression()
-            },
-            self.materialized.structure().clone(),
-        );
+        let structure = if subtract {
+            self.structure.try_sub(&right.structure)
+        } else {
+            self.structure.try_add(&right.structure)
+        }
+        .map_err(TensorExpression::inference_error)?;
+        let materialized = if subtract {
+            self.materialized.try_sub(&right.materialized)
+        } else {
+            self.materialized.try_add(&right.materialized)
+        }
+        .map_err(TensorExpression::inference_error)?;
         let network = if subtract {
             self.network - right.network
         } else {
@@ -702,30 +701,27 @@ impl SpensoNet {
                 "a non-scalar tensor cannot be used as a denominator",
             ));
         }
-        let structure = SymbolicTensor::new(
-            Atom::num(1) / self.structure.expression(),
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            Atom::num(1) / self.materialized.expression(),
-            self.materialized.structure().clone(),
-        );
+        let exponent =
+            SymbolicTensor::checked_parts(Atom::num(-1), PartialStructure::from_logical_slots([]))
+                .map_err(TensorExpression::inference_error)?;
+        let structure = self
+            .structure
+            .pow(&exponent)
+            .map_err(TensorExpression::inference_error)?;
+        let materialized = self
+            .materialized
+            .pow(&exponent)
+            .map_err(TensorExpression::inference_error)?;
         Self::finish(self.network.pow(-1), structure, materialized)
     }
 
     pub(crate) fn broadcast_function(self, function: Symbol) -> PyResult<Self> {
-        let structure = SymbolicTensor::new(
-            FunctionBuilder::new(function)
-                .add_arg(self.structure.expression().clone())
-                .finish(),
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            FunctionBuilder::new(function)
-                .add_arg(self.materialized.expression().clone())
-                .finish(),
-            self.materialized.structure().clone(),
-        );
+        let structure = Wrap
+            .apply(&function, self.structure)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        let materialized = Wrap
+            .apply(&function, self.materialized)
+            .map_err(|error| PyValueError::new_err(error.to_string()))?;
         Self::finish(self.network.fun(function), structure, materialized)
     }
 
@@ -1477,7 +1473,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
     ///
     /// Examples
     /// --------
@@ -1491,8 +1487,8 @@ impl SpensoNet {
     /// >>> output = network.to_linnest()
     #[pyo3(signature = (*, config=None))]
     fn to_linnest(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
-        Ok(typst_renderer::Document::svg_source(
-            &self.render_graph(py, config)?.to_svg()?,
+        Ok(linnet_render_py::typst_export::svg_source(
+            &self.render_graph(py, config)?.outlined(py)?.to_svg()?,
         ))
     }
 
@@ -1512,7 +1508,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
     ///
     /// Examples
     /// --------
@@ -1525,15 +1521,11 @@ impl SpensoNet {
     /// >>> network = TensorNetwork(tensor)
     /// >>> output = network.render()
     #[pyo3(signature = (*, config=None))]
-    fn render(
-        &self,
-        py: Python<'_>,
-        config: Option<&PyRenderSettings>,
-    ) -> PyResult<PyDiagramRender> {
+    fn render(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<PyDiagramView> {
         let drawing = self
             .render_graph(py, config)?
             .map_svg(|svg| display::network::svg_theme(&svg))?;
-        let html = display::network::html(&drawing.to_svg_pages()?.join("\n"), &self.status());
+        let html = display::network::html("<!--linnet-svg-0-->", &self.status());
         Ok(drawing.with_html(html))
     }
 
@@ -1671,16 +1663,26 @@ impl SpensoNet {
     #[pyo3(signature = (show_dimensions = None, *, settings = None, notation_source = None))]
     fn formatted(
         &self,
+        py: Python<'_>,
         show_dimensions: Option<bool>,
         settings: Option<PyRef<'_, display::DisplaySettings>>,
         notation_source: Option<String>,
-    ) -> PythonFormattedOutput {
+    ) -> PyResult<PythonFormattedOutput> {
         let settings = display::resolved_settings(show_dimensions, settings.as_deref());
-        display::format_structured_output_rich(
-            Arc::new(self.structure.clone()),
+        let value = Arc::new(self.structure.clone());
+        let expression = Py::new(
+            py,
+            PythonExpression {
+                expr: value.expression().clone(),
+            },
+        )?;
+        Ok(display::format_structured_output_rich(
+            py,
+            expression,
+            value,
             settings,
             notation_source,
-        )
+        ))
     }
 
     /// Display the current network graph and execution status.
@@ -1699,7 +1701,7 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust; labels use the embedded Typst compiler.
+    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
     ///
     /// Examples
     /// --------
@@ -1711,9 +1713,16 @@ impl SpensoNet {
     /// >>> from symbolica.community.tensor import TensorNetwork
     /// >>> network = TensorNetwork(tensor)
     /// >>> output = network.to_html()
-    #[pyo3(signature = (*, config=None))]
-    fn to_html(&self, py: Python<'_>, config: Option<&PyRenderSettings>) -> PyResult<String> {
-        self.render(py, config)?.to_html()
+    #[pyo3(signature = (*, config=None, browser=None))]
+    fn to_html(
+        &self,
+        py: Python<'_>,
+        config: Option<&PyRenderSettings>,
+        browser: Option<&str>,
+    ) -> PyResult<String> {
+        self.render(py, config)?
+            .measured(py, None, browser)?
+            .to_html()
     }
 
     /// Render static mathematical tensor notation to SVG.
@@ -1736,9 +1745,10 @@ impl SpensoNet {
     ///
     /// Notes
     /// -----
-    /// Mathematical rendering uses the embedded Typst compiler. The returned
-    /// string is not automatically displayed; pass it to the notebook's HTML
-    /// or SVG display facility.
+    /// SVG export uses the optional Python package typst (typst-py).
+    /// Pass the returned markup to the notebook's SVG display facility.
+    /// Raises ImportError if the optional typst-py package is unavailable, or RuntimeError
+    /// if compilation fails.
     ///
     /// This formats the symbolic source expression, independent of execution
     /// progress. Use render() or to_html() for the network graph.
@@ -1765,8 +1775,19 @@ impl SpensoNet {
         display::structured_to_svg(py, &self.structure, &settings, notation_source.as_deref())
     }
 
-    fn _repr_html_(&self, py: Python<'_>) -> PyResult<String> {
-        self.to_html(py, None)
+    fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?._mime_(py)
+    }
+
+    #[pyo3(signature = (include=None, exclude=None))]
+    fn _repr_mimebundle_(
+        &self,
+        py: Python<'_>,
+        include: Option<Vec<String>>,
+        exclude: Option<Vec<String>>,
+    ) -> PyResult<Py<PyAny>> {
+        self.render(py, None)?
+            ._repr_mimebundle_(py, include, exclude)
     }
 
     /// Return the symbolic source computation of this network.
@@ -1793,10 +1814,9 @@ impl SpensoNet {
     /// >>> network.expression().rank
     /// 2
     fn expression(&self, py: Python<'_>) -> PyResult<Py<TensorExpression>> {
-        TensorExpression::from_known_parts(
+        TensorExpression::from_shared(
             py,
-            self.structure.expression().clone(),
-            self.structure.structure().clone(),
+            Arc::new(self.structure.clone()),
             self.descriptor.as_ref().map(|(name, _)| *name),
             self.descriptor
                 .as_ref()
@@ -1844,10 +1864,11 @@ impl SpensoNet {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1888,10 +1909,11 @@ impl SpensoNet {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -1939,10 +1961,11 @@ impl SpensoNet {
     ///     Keys must identify existing external axes. Each axis may be renamed
     ///     once; renaming must preserve the external interface.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -2068,10 +2091,11 @@ impl SpensoNet {
     ///     corresponding axis unchanged. A Slot must have the matching
     ///     representation. Repeated compatible labels cause contraction.
     /// intern : {"indices", "flattened"} or None, optional
-    ///     Encode compound index labels before checking the tensor structure.
+    ///     Encode unknown function-valued index labels before checking the tensor structure.
     ///     "indices" retains reversible payloads; "flattened" creates readable names.
     ///     Both preserve index tags and leave scalar arguments and tensor heads intact.
-    ///     None leaves labels unchanged and requires ordinary atomic index labels.
+    ///     Native index forms, including named, scoped, and open indices, remain unchanged.
+    ///     None accepts native index forms without encoding unknown function labels.
     ///
     /// Returns
     /// -------
@@ -2121,14 +2145,8 @@ impl SpensoNet {
     /// >>> network = TensorNetwork(tensor)
     /// >>> negated = -network
     pub fn __neg__(&self) -> PyResult<Self> {
-        let structure = SymbolicTensor::new(
-            Atom::num(-1) * self.structure.expression(),
-            self.structure.structure().clone(),
-        );
-        let materialized = SymbolicTensor::new(
-            Atom::num(-1) * self.materialized.expression(),
-            self.materialized.structure().clone(),
-        );
+        let structure = -self.structure.clone();
+        let materialized = -self.materialized.clone();
         Self::finish(-self.network.clone(), structure, materialized)
     }
 
@@ -2660,7 +2678,10 @@ mod tests {
                     .map(composition::port_atom),
             )
             .finish();
-        (SymbolicTensor::new(atom, interface), name)
+        // Storage receives an admitted descriptor, as it does through Tensor.dense.
+        let descriptor = SymbolicTensor::from_declared_parts(atom, interface)
+            .expect("test tensor descriptor must match its declared interface");
+        (descriptor, name)
     }
 
     #[test]
@@ -3170,6 +3191,7 @@ mod tests {
     #[test]
     fn open_tensor_product_contracts_only_the_planned_pair() {
         initialize();
+        Python::initialize();
         let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
         let (left, left_name) = tensor_descriptor(
@@ -3246,6 +3268,7 @@ mod tests {
     #[test]
     fn tensor_product_aligns_each_unique_open_representation_pair() {
         initialize();
+        Python::initialize();
         let euclidean = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let minkowski = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(2));
         let (left, left_name) = tensor_descriptor(
@@ -3338,6 +3361,7 @@ mod tests {
     #[test]
     fn open_outer_product_does_not_alias_explicit_dummy_symbol() {
         initialize();
+        Python::initialize();
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let explicit = AbstractIndex::Symbol(symbol!("d_0").into());
         let (left, left_name) = tensor_descriptor(

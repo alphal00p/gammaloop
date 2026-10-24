@@ -8,6 +8,8 @@ from collections import Counter
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
+from rendering_metrics import external_metrics_snapshot
+
 from symbolica.community import graph as lp
 
 SVG = "{http://www.w3.org/2000/svg}"
@@ -45,7 +47,7 @@ class SvgInteractionTests(unittest.TestCase):
         )
 
     def test_logical_ids_and_escaped_details_are_safe_and_keyboard_addressable(self):
-        root = ET.fromstring(self.graph.to_svg())
+        root = ET.fromstring(external_metrics_snapshot(self.graph.render()).to_svg())
         targets = root.findall(".//*[@data-linnet-kind]")
         identities = {
             (target.attrib["data-linnet-kind"], int(target.attrib["data-linnet-id"]))
@@ -112,7 +114,7 @@ class SvgInteractionTests(unittest.TestCase):
                     vertex,
                     lp.edge(endpoints[0], shape, *endpoints[1:]),
                 )
-                root = ET.fromstring(graph.to_svg())
+                root = ET.fromstring(external_metrics_snapshot(graph.render()).to_svg())
                 targets = root.findall(".//*[@data-linnet-kind='halfedge']")
                 self.assertEqual(
                     {int(target.get("data-linnet-id")) for target in targets},
@@ -138,7 +140,7 @@ class SvgInteractionTests(unittest.TestCase):
                         self.assertNotEqual(detail["pair"], half.index)
 
     def test_native_drawing_contains_custom_paints_and_inspection_targets(self):
-        root = ET.fromstring(self.graph.to_svg())
+        root = ET.fromstring(external_metrics_snapshot(self.graph.render()).to_svg())
         self.assertTrue(
             any(
                 element.get("stroke", "").lower() == "#356a9a"
@@ -148,7 +150,7 @@ class SvgInteractionTests(unittest.TestCase):
         self.assertTrue(root.findall(".//*[@data-linnet-kind]"))
 
     def assert_native_drawing_unchanged(self, native, decorated):
-        # Called by the Rust integration test at the embedded compiler boundary.
+        # Called by the Rust unit test with the same captured measured snapshot.
         native_root = ET.fromstring(native)
         decorated_root = ET.fromstring(decorated)
         self.assertTrue(decorated_root.findall(".//*[@data-linnet-kind]"))
@@ -168,19 +170,31 @@ class SvgInteractionTests(unittest.TestCase):
         self.assertEqual(ET.tostring(native_root), ET.tostring(decorated_root))
 
     def test_svg_file_and_rich_representations_share_the_prepared_drawing(self):
-        prepared = self.graph.render()
+        view = self.graph.render()
+        prepared = external_metrics_snapshot(view)
         expected = prepared.to_svg()
         with TemporaryDirectory() as directory:
             output = Path(directory) / "graph.svg"
             self.assertEqual(prepared.save(output), output)
             self.assertEqual(output.read_text(), expected)
-        self.assertEqual(self.graph._repr_html_(), self.graph._repr_svg_())
-        self.assertIn('data-linnet-interactive="true"', self.graph._repr_html_())
+        self.assertEqual(prepared._repr_svg_(), expected)
+        self.assertEqual(prepared._repr_html_(), prepared.to_html())
+        self.assertIn('data-linnet-interactive="true"', prepared.to_html())
+        self.assertEqual(view.measured().to_svg(), expected)
         selected = self.graph.subgraph(edges=["propagator"])
-        self.assertIn('data-linnet-interactive="true"', selected._repr_html_())
+        selected_snapshot = external_metrics_snapshot(selected.render())
+        self.assertIn('data-linnet-interactive="true"', selected_snapshot.to_html())
+        for owner in (self.graph, selected):
+            self.assertFalse(hasattr(owner, "_repr_html_"))
+            self.assertFalse(hasattr(owner, "_repr_svg_"))
+            bundle = owner._repr_mimebundle_(include=["text/plain"])
+            self.assertIn("DiagramView", bundle["text/plain"])
 
-    @unittest.skipUnless(importlib.util.find_spec("marimo"), "Marimo is not installed")
-    def test_marimo_prefers_scripted_html_and_wraps_it_for_execution(self):
+    @unittest.skipUnless(
+        importlib.util.find_spec("marimo") and importlib.util.find_spec("anywidget"),
+        "Marimo and AnyWidget are not installed",
+    )
+    def test_marimo_displays_the_measurement_widget(self):
         from marimo._output.formatting import try_format
 
         for value in (self.graph, self.graph.subgraph(edges=["propagator"])):
@@ -188,8 +202,7 @@ class SvgInteractionTests(unittest.TestCase):
                 output = try_format(value)
                 self.assertIsNone(output.exception)
                 self.assertEqual(output.mimetype, "text/html")
-                self.assertIn("<iframe", output.data)
-                self.assertIn("data-linnet-interactive", output.data)
+                self.assertIn("marimo-ui-element", output.data)
 
 
 if __name__ == "__main__":

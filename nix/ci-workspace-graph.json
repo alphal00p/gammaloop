@@ -62,6 +62,7 @@
       "feynkit-graph",
       "linnet",
       "spenso",
+      "symbolica-notation",
       "three-dimensional-reps"
     ],
     "feynkit-generator": [
@@ -80,6 +81,7 @@
       "linnest",
       "linnet",
       "spenso",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
@@ -105,8 +107,7 @@
       "linnet-render-py",
       "spenso",
       "spenso-macros",
-      "spynso3",
-      "typst-renderer"
+      "spynso3"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -164,6 +165,7 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -172,6 +174,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "kurvst": [],
@@ -191,12 +194,14 @@
     "linnet-render-py": [
       "linnest",
       "linnet",
-      "typst-renderer"
+      "symbolica-data",
+      "symbolica-notation"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
@@ -213,16 +218,13 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
-      "symbolica-data",
-      "typst-renderer"
+      "symbolica-notation"
     ],
     "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet"
-    ],
-    "typst-renderer": [
-      "symbolica-data"
     ],
     "vakint": [
       "feynkit-tensor",
@@ -331,6 +333,7 @@
       "spenso": [
         "shadowing"
       ],
+      "symbolica-notation": [],
       "three-dimensional-reps": []
     },
     "feynkit-generator": {
@@ -359,6 +362,7 @@
       "spenso": [
         "shadowing"
       ],
+      "symbolica-notation": [],
       "symbolica-utils": []
     },
     "feynkit-kinematics": {
@@ -394,8 +398,7 @@
         "shadowing"
       ],
       "spenso-macros": [],
-      "spynso3": [],
-      "typst-renderer": []
+      "spynso3": []
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
@@ -492,6 +495,7 @@
       "spenso-hep-lib": [
         "native"
       ],
+      "symbolica-notation": [],
       "symbolica-utils": [
         "native"
       ],
@@ -509,6 +513,7 @@
         "shadowing"
       ],
       "spenso-macros": [],
+      "symbolica-notation": [],
       "symbolica-utils": []
     },
     "kurvst": {},
@@ -540,7 +545,8 @@
         "svg"
       ],
       "linnet": [],
-      "typst-renderer": []
+      "symbolica-data": [],
+      "symbolica-notation": []
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
@@ -550,6 +556,7 @@
         "serde"
       ],
       "spenso-macros": [],
+      "symbolica-notation": [],
       "symbolica-utils": []
     },
     "spenso-hep-lib": {
@@ -574,10 +581,10 @@
       ],
       "spenso-hep-lib": [],
       "spenso-macros": [],
-      "symbolica-data": [],
-      "typst-renderer": []
+      "symbolica-notation": []
     },
     "symbolica-data": {},
+    "symbolica-notation": {},
     "symbolica-utils": {},
     "three-dimensional-reps": {
       "linnet": [
@@ -585,9 +592,6 @@
         "serde",
         "symbolica"
       ]
-    },
-    "typst-renderer": {
-      "symbolica-data": []
     },
     "vakint": {
       "feynkit-tensor": [],
@@ -631,9 +635,9 @@
     "spenso-macros": "crates/spenso-macros",
     "spynso3": "crates/spynso3",
     "symbolica-data": "crates/symbolica-data",
+    "symbolica-notation": "crates/symbolica-notation",
     "symbolica-utils": "crates/symbolica-utils",
     "three-dimensional-reps": "crates/three-dimensional-reps",
-    "typst-renderer": "crates/typst-renderer",
     "vakint": "crates/vakint"
   },
   "packages": [
@@ -671,9 +675,9 @@
     "spenso-macros",
     "spynso3",
     "symbolica-data",
+    "symbolica-notation",
     "symbolica-utils",
     "three-dimensional-reps",
-    "typst-renderer",
     "vakint"
   ],
   "resolved_normal_dependencies": {
@@ -710,6 +714,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -732,6 +737,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps"
     ],
@@ -744,6 +750,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-cff": [
@@ -755,6 +762,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps"
     ],
@@ -769,6 +777,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-graph": [
@@ -781,6 +790,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
@@ -788,6 +798,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-model": [
@@ -813,9 +824,9 @@
       "spenso-macros",
       "spynso3",
       "symbolica-data",
+      "symbolica-notation",
       "symbolica-utils",
-      "three-dimensional-reps",
-      "typst-renderer"
+      "three-dimensional-reps"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -826,6 +837,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-ufo": [
@@ -850,6 +862,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -872,6 +885,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -882,6 +896,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "gammaloop-tracing-filter-macros": [],
@@ -902,6 +917,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -911,6 +927,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "kurvst": [],
@@ -928,19 +945,20 @@
       "linnet",
       "linnet-render-py",
       "symbolica-data",
-      "typst-renderer"
+      "symbolica-notation"
     ],
     "linnet-render-py": [
       "kurvst",
       "linnest",
       "linnet",
       "symbolica-data",
-      "typst-renderer"
+      "symbolica-notation"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
@@ -949,6 +967,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "spenso-macros": [],
@@ -963,17 +982,15 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-data",
-      "symbolica-utils",
-      "typst-renderer"
+      "symbolica-notation",
+      "symbolica-utils"
     ],
     "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet",
       "symbolica-utils"
-    ],
-    "typst-renderer": [
-      "symbolica-data"
     ],
     "vakint": [
       "feynkit-graph",
@@ -985,6 +1002,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ]
   },
@@ -1022,6 +1040,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -1046,6 +1065,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps"
     ],
@@ -1058,6 +1078,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-cff": [
@@ -1069,6 +1090,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps"
     ],
@@ -1083,6 +1105,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-graph": [
@@ -1095,6 +1118,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
@@ -1102,6 +1126,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-model": [
@@ -1127,9 +1152,9 @@
       "spenso-macros",
       "spynso3",
       "symbolica-data",
+      "symbolica-notation",
       "symbolica-utils",
-      "three-dimensional-reps",
-      "typst-renderer"
+      "three-dimensional-reps"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -1140,6 +1165,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-ufo": [
@@ -1164,6 +1190,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -1186,6 +1213,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -1196,6 +1224,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "gammaloop-tracing-filter-macros": [],
@@ -1216,6 +1245,7 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -1225,6 +1255,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "kurvst": [],
@@ -1242,19 +1273,20 @@
       "linnet",
       "linnet-render-py",
       "symbolica-data",
-      "typst-renderer"
+      "symbolica-notation"
     ],
     "linnet-render-py": [
       "kurvst",
       "linnest",
       "linnet",
       "symbolica-data",
-      "typst-renderer"
+      "symbolica-notation"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
@@ -1263,6 +1295,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "spenso-macros": [],
@@ -1277,17 +1310,15 @@
       "spenso-hep-lib",
       "spenso-macros",
       "symbolica-data",
-      "symbolica-utils",
-      "typst-renderer"
+      "symbolica-notation",
+      "symbolica-utils"
     ],
     "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet",
       "symbolica-utils"
-    ],
-    "typst-renderer": [
-      "symbolica-data"
     ],
     "vakint": [
       "feynkit-graph",
@@ -1299,6 +1330,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ]
   },
@@ -1326,6 +1358,7 @@
     "spenso",
     "spenso-hep-lib",
     "spynso3",
+    "symbolica-notation",
     "symbolica-utils",
     "three-dimensional-reps",
     "vakint"
@@ -1354,6 +1387,7 @@
     "spenso",
     "spenso-hep-lib",
     "spynso3",
+    "symbolica-notation",
     "symbolica-utils",
     "three-dimensional-reps",
     "vakint"
@@ -1424,6 +1458,7 @@
       "feynkit-model",
       "linnet",
       "spenso",
+      "symbolica-notation",
       "three-dimensional-reps"
     ],
     "feynkit-generator": [
@@ -1442,6 +1477,7 @@
       "linnest",
       "linnet",
       "spenso",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "feynkit-kinematics": [
@@ -1467,8 +1503,7 @@
       "linnet-render-py",
       "spenso",
       "spenso-macros",
-      "spynso3",
-      "typst-renderer"
+      "spynso3"
     ],
     "feynkit-tensor": [
       "feynkit-graph",
@@ -1527,6 +1562,7 @@
       "linnet",
       "spenso",
       "spenso-hep-lib",
+      "symbolica-notation",
       "symbolica-utils",
       "three-dimensional-reps",
       "vakint"
@@ -1535,6 +1571,7 @@
       "linnet",
       "spenso",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "kurvst": [],
@@ -1555,12 +1592,14 @@
     "linnet-render-py": [
       "linnest",
       "linnet",
-      "typst-renderer"
+      "symbolica-data",
+      "symbolica-notation"
     ],
     "spenso": [
       "gammaloop-workspace-hack",
       "linnet",
       "spenso-macros",
+      "symbolica-notation",
       "symbolica-utils"
     ],
     "spenso-hep-lib": [
@@ -1577,16 +1616,13 @@
       "spenso",
       "spenso-hep-lib",
       "spenso-macros",
-      "symbolica-data",
-      "typst-renderer"
+      "symbolica-notation"
     ],
     "symbolica-data": [],
+    "symbolica-notation": [],
     "symbolica-utils": [],
     "three-dimensional-reps": [
       "linnet"
-    ],
-    "typst-renderer": [
-      "symbolica-data"
     ],
     "vakint": [
       "feynkit-tensor",
@@ -1698,6 +1734,7 @@
       "spenso": [
         "shadowing"
       ],
+      "symbolica-notation": [],
       "three-dimensional-reps": []
     },
     "feynkit-generator": {
@@ -1726,6 +1763,7 @@
       "spenso": [
         "shadowing"
       ],
+      "symbolica-notation": [],
       "symbolica-utils": []
     },
     "feynkit-kinematics": {
@@ -1761,8 +1799,7 @@
         "shadowing"
       ],
       "spenso-macros": [],
-      "spynso3": [],
-      "typst-renderer": []
+      "spynso3": []
     },
     "feynkit-tensor": {
       "feynkit-graph": [],
@@ -1860,6 +1897,7 @@
       "spenso-hep-lib": [
         "native"
       ],
+      "symbolica-notation": [],
       "symbolica-utils": [
         "native"
       ],
@@ -1877,6 +1915,7 @@
         "shadowing"
       ],
       "spenso-macros": [],
+      "symbolica-notation": [],
       "symbolica-utils": []
     },
     "kurvst": {},
@@ -1913,7 +1952,8 @@
         "svg"
       ],
       "linnet": [],
-      "typst-renderer": []
+      "symbolica-data": [],
+      "symbolica-notation": []
     },
     "spenso": {
       "gammaloop-workspace-hack": [],
@@ -1923,6 +1963,7 @@
         "serde"
       ],
       "spenso-macros": [],
+      "symbolica-notation": [],
       "symbolica-utils": []
     },
     "spenso-hep-lib": {
@@ -1949,10 +1990,10 @@
       ],
       "spenso-hep-lib": [],
       "spenso-macros": [],
-      "symbolica-data": [],
-      "typst-renderer": []
+      "symbolica-notation": []
     },
     "symbolica-data": {},
+    "symbolica-notation": {},
     "symbolica-utils": {},
     "three-dimensional-reps": {
       "linnet": [
@@ -1960,9 +2001,6 @@
         "serde",
         "symbolica"
       ]
-    },
-    "typst-renderer": {
-      "symbolica-data": []
     },
     "vakint": {
       "feynkit-tensor": [],

@@ -1,8 +1,8 @@
 /* Shared by rich displays whose content, rather than a single graph, sizes the
    notebook frame. Ancestor themes also work in accessible Marimo iframes. */
 (() => {
-  for (const root of document.querySelectorAll("[data-feynkit-notebook]")) {
-    if (root.dataset.notebookReady) continue;
+  const start = (root) => {
+    if (root.dataset.notebookReady) return;
     root.dataset.notebookReady = "true";
     root.dataset.linnetFrameOwner = "true";
     const ancestors = [];
@@ -76,7 +76,7 @@
     syncTheme();
     try {
       const frame = window.frameElement;
-      if (frame && document.body) {
+      if (frame && document.body && !document.body.hasAttribute('data-linnet-frame-owner')) {
         document.documentElement.style.overflow = "hidden";
         // Measure content instead of scrollHeight, which includes the old
         // viewport height and prevents a collapsed notebook frame from shrinking.
@@ -108,5 +108,8 @@
     } catch (_) {
       /* Cross-origin embeddings control their own frame sizing. */
     }
-  }
+  };
+  const startAll = () => document.querySelectorAll("[data-feynkit-notebook]").forEach(start);
+  document.addEventListener("linnet:rendered", startAll);
+  startAll();
 })();
