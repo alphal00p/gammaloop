@@ -449,7 +449,11 @@ impl SlotContraction {
                     // its notation owner establishes trace eligibility.
                     return None;
                 }
-                if head == self.tags.chain || head == self.tags.trace || head == self.tags.bracket {
+                if head == self.tags.chain
+                    || head == self.tags.trace
+                    || head == self.tags.bracket
+                    || head.has_tag(&self.tags.tensor_word)
+                {
                     // These notation owners carry ports inside their words.
                     // Keep their existing admission and checked rewrite rules.
                     return None;
