@@ -1426,6 +1426,11 @@ sum-of-squares convention, which is not a general correlated-bin variance.
 
 ==== Exact represented-sample snapshot mode
 
+The `gammaloop-statistics` crate owns the shared Numerica-only moment codec and
+reporting arithmetic. The `observables::exact_moments` module re-exports that
+owner, preserving histogram API types without duplicating its implementation.
+Independent clients need no GammaLoop, Symbolica or Python dependency.
+
 The separately negotiated exact mode stores additive rational moments of each
 complete, finite binary64 sample: its value, absolute value and square, with
 optional third and fourth powers. The count includes cut and untouched-bin
