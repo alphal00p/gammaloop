@@ -35,9 +35,6 @@ impl PyCffRepresentation {
             _ => None,
         };
         let mut math_cache = BTreeMap::<Atom, String>::new();
-        let format_text = py
-            .import("symbolica.community.tensor")?
-            .getattr("format_tensor")?;
         let mut math = |expr: Atom| -> PyResult<String> {
             if expr == Atom::num(1) {
                 return Ok("1".into());
@@ -72,7 +69,7 @@ impl PyCffRepresentation {
                 contributions.push(json!({"coefficient": term.coefficient.to_canonical_string(),
                     "energies": term.energies, "numerator": numerator.to_canonical_string(),
                     "numerator_html": math(numerator)?,
-                    "energy_map": term.energy_map.iter().map(|(e,a)| Ok((*e,format_text.call1((PythonExpression { expr: a.clone() },))?.extract::<String>()?))).collect::<PyResult<BTreeMap<_,_>>>()?,
+                    "energy_map": term.energy_map.iter().map(|(e,a)| Ok((*e, spynso3::display::format_tensor(&PythonExpression { expr: a.clone() }, None, None)?))).collect::<PyResult<BTreeMap<_,_>>>()?,
                     "origin": term.origin,
                 }));
             }

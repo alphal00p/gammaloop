@@ -30,7 +30,7 @@ use pyo3::{
 use spenso::structure::partial::PartialStructure;
 use spynso3::{expression::TensorExpression, structure::SpensoName};
 use symbolica::{
-    api::python::{ConvertibleToExpression, PythonExpression},
+    api::python::{ConvertibleToExpression, PythonExpression, PythonReplacement},
     atom::Atom,
     parser::ParseSettings,
     wrap_input,
@@ -1433,8 +1433,7 @@ impl PyLoopMomentumBasis {
     ///
     /// >>> rules = diagram.loop_momentum_basis.momentum_replacements()
     /// >>> routed = diagram.numerator_expression().to_expression().replace_multiple(rules)
-    fn momentum_replacements(&self, py: Python<'_>) -> PyResult<Vec<Py<PyAny>>> {
-        let constructor = py.import("symbolica.core")?.getattr("Replacement")?;
+    fn momentum_replacements(&self, py: Python<'_>) -> PyResult<Vec<PythonReplacement>> {
         self.inner
             .momentum_replacements()
             .into_iter()
@@ -1444,12 +1443,13 @@ impl PyLoopMomentumBasis {
                     unreachable!("momentum substitutions are symbolic patterns")
                 };
                 let rhs = rhs.to_atom().map_err(error::DiagramError::new_err)?;
-                Ok(constructor
-                    .call1((
-                        PythonExpression { expr: pattern },
-                        PythonExpression { expr: rhs },
-                    ))?
-                    .unbind())
+                let pattern = PythonExpression { expr: pattern }
+                    .into_pyobject(py)?
+                    .extract()?;
+                let rhs = PythonExpression { expr: rhs }
+                    .into_pyobject(py)?
+                    .extract()?;
+                PythonReplacement::new(pattern, rhs, None, None, 0, None, false, true, false, 100)
             })
             .collect()
     }
