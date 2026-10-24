@@ -11,13 +11,16 @@ use spenso::{
         Canonicalized, TensorStructure,
         abstract_index::{AIND_SYMBOLS, AbstractIndex},
         dimension::Dimension,
-        representation::RepName,
-        slot::AbsInd,
+        representation::{LibraryRep, RepName, Representation},
+        slot::{AbsInd, IsAbstractSlot, SlotMatch, SlotMatcher},
     },
     tensor_symbol,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomOrView, AtomView, EvaluationInfo, FunctionBuilder, Symbol},
+    atom::{
+        Atom, AtomCore, AtomOrView, AtomView, EvaluationInfo, FunctionBuilder, Symbol,
+        representation::FunView,
+    },
     coefficient::CoefficientView,
     domains::rational::Rational,
     printer::{PrintOptions, PrintState},
@@ -35,9 +38,11 @@ use super::representations::{ColorAdjoint, ColorFundamental};
 mod casimir;
 mod conjugate;
 mod macros;
+mod scoped;
 pub(crate) mod simplify;
 
 pub use conjugate::color_conj_impl;
+pub use scoped::{ColorFamilyConvention, ColorFamilyDeclaration, ScopedColorFamily};
 
 #[derive(Debug)]
 pub enum ColorError {
@@ -68,6 +73,124 @@ pub struct ColorSymbols {
 }
 
 impl ColorSymbols {
+    /// Validate native invariant grammar and return its complete representation payloads.
+    /// Casimir/index invariants return one compact representation, Gram invariants
+    /// return two, and `d_R` returns its representation followed by its homogeneous
+    /// adjoint port space. Symbolic scalar degrees remain formal. This validates
+    /// syntax, not a common group action or a fixed representation dimension.
+    /// Unresolved formal representation labels have no typed payload and return
+    /// an error here; native algebra can still manipulate those formal labels.
+    pub fn invariant_representations(
+        &self,
+        function: FunView<'_>,
+    ) -> Result<Option<Vec<Representation<LibraryRep>>>, String> {
+        self.invariant_metadata(function)?
+            .map(|representations| {
+                representations
+                    .into_iter()
+                    .map(|representation| {
+                        representation.ok_or_else(|| {
+                            "formal color invariant label has no declared typed representation"
+                                .into()
+                        })
+                    })
+                    .collect()
+            })
+            .transpose()
+    }
+
+    // Formal scalar labels are an existing native invariant convention. A
+    // missing typed payload preserves that convention without guessing a space.
+    pub(crate) fn invariant_metadata(
+        &self,
+        function: FunView<'_>,
+    ) -> Result<Option<Vec<Option<Representation<LibraryRep>>>>, String> {
+        if ![self.cas, self.idx, self.gram, self.d].contains(&function.get_symbol()) {
+            return Ok(None);
+        }
+        self.invariant_argument_representations(
+            function.get_symbol(),
+            &function.iter().collect::<Vec<_>>(),
+        )
+    }
+
+    pub(crate) fn invariant_argument_representations(
+        &self,
+        symbol: Symbol,
+        arguments: &[AtomView<'_>],
+    ) -> Result<Option<Vec<Option<Representation<LibraryRep>>>>, String> {
+        fn representation(
+            slots: &mut SlotMatcher,
+            argument: AtomView<'_>,
+        ) -> Result<Option<Representation<LibraryRep>>, String> {
+            if let Ok(representation) = slots.parse_representation::<LibraryRep>(argument) {
+                return Ok(Some(representation));
+            }
+            if !matches!(slots.classify(argument), SlotMatch::Other) {
+                return Err("color invariant representation must be compact".into());
+            }
+            let interface =
+                crate::tensor::inference::InterfaceInference::replacement_interface(argument)
+                    .map_err(|error| format!("invalid color invariant representation: {error}"))?;
+            if interface.canonical().is_scalar() {
+                Ok(None)
+            } else {
+                Err("color invariant metadata must be a compact representation or formal scalar label".into())
+            }
+        }
+        let mut slots = SlotMatcher::default();
+        if symbol == self.d {
+            if arguments.len() < 4 {
+                return Err("symmetric color invariant requires a representation and at least three adjoint slots".into());
+            }
+            let representation = representation(&mut slots, arguments[0])?;
+            let adjoint = slots
+                .parse::<LibraryRep, AbstractIndex>(arguments[1])
+                .map_err(|_| "symmetric color invariant requires explicit adjoint slots")?
+                .rep();
+            if !adjoint.rep.is_self_dual()
+                || arguments[2..].iter().any(|argument| {
+                    !matches!(slots.parse::<LibraryRep, AbstractIndex>(*argument),
+                        Ok(slot) if slot.rep() == adjoint)
+                })
+            {
+                return Err(
+                    "symmetric color invariant requires homogeneous self-dual adjoint slots".into(),
+                );
+            }
+            return Ok(Some(vec![representation, Some(adjoint)]));
+        }
+        let kind = if symbol == self.cas {
+            ColorInvariantPrintKind::Casimir
+        } else if symbol == self.idx {
+            ColorInvariantPrintKind::Index
+        } else if symbol == self.gram {
+            ColorInvariantPrintKind::Gram
+        } else {
+            return Ok(None);
+        };
+        if arguments.len() != kind.arity() {
+            return Err(format!(
+                "color invariant `{symbol}` requires {} arguments",
+                kind.arity()
+            ));
+        }
+        if !matches!(slots.classify(arguments[0]), SlotMatch::Other) {
+            return Err("color invariant degree must be scalar".into());
+        }
+        let degree =
+            crate::tensor::inference::InterfaceInference::replacement_interface(arguments[0])
+                .map_err(|error| format!("invalid color invariant degree: {error}"))?;
+        if !degree.canonical().is_scalar() {
+            return Err("color invariant degree must be scalar".into());
+        }
+        arguments[1..]
+            .iter()
+            .map(|argument| representation(&mut slots, *argument))
+            .collect::<Result<Vec<_>, String>>()
+            .map(Some)
+    }
+
     pub fn chain_t<'a>(&self, adjoint_index: impl Into<AtomOrView<'a>>) -> Atom {
         FunctionBuilder::new(self.t)
             .add_arg(adjoint_index)
@@ -237,12 +360,16 @@ enum ColorInvariantPrintKind {
 }
 
 impl ColorInvariantPrintKind {
+    fn arity(self) -> usize {
+        if matches!(self, Self::Gram) { 3 } else { 2 }
+    }
+
     fn print(self, atom: AtomView<'_>, opt: &PrintOptions) -> Option<String> {
         let resolved = SpensoPrintSettings::resolve(opt)?;
         let settings = resolved.presentation;
         let AtomView::Fun(f) = atom else { return None };
         let args = f.iter().collect::<Vec<_>>();
-        let arity = if matches!(self, Self::Gram) { 3 } else { 2 };
+        let arity = self.arity();
         if args.len() != arity {
             return None;
         }

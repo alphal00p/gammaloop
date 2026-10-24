@@ -1029,22 +1029,13 @@ impl SymbolicTensor<PartialStructure> {
         Ok(value)
     }
 
-    /// Rename symbols in the payload and its interface. The renaming must be
-    /// injective and avoid symbols already present, so the established
-    /// interface and validation carry over unchanged.
+    /// Rename symbols in the payload and its interface. The caller must check
+    /// injectivity and validate the resulting interface after normalization.
     pub(crate) fn with_renamed_symbols(
         &self,
         renaming: &HashMap<Symbol, Symbol>,
     ) -> InferenceResult<Self> {
-        let rename = |atom: AtomView<'_>| {
-            atom.replace_map(|node, _context, out| {
-                if let AtomView::Var(variable) = node
-                    && let Some(target) = renaming.get(&variable.get_symbol())
-                {
-                    **out = Atom::var(*target);
-                }
-            })
-        };
+        let rename = |atom: AtomView<'_>| atom.rename_symbols(renaming);
         let slots = self
             .structure
             .logical_slots()
@@ -1106,9 +1097,10 @@ impl SymbolicTensor<PartialStructure> {
                 Self::from_normalized_parts(Atom::Zero, physical).with_renamed_symbols(renaming)?;
             Self::validate_interface(&value.expression, &physical.structure)?;
         } else {
-            // Injectivity proves the mapped interface; validate scopes and index
-            // multiplicities in the actual rebuilt expression once.
-            Self::validate_atom(&value.expression)?;
+            // A renamed function can have different metadata or normalization.
+            // Check the rebuilt payload against the mapped interface without
+            // replaying the function's normalizer.
+            Self::validate_interface(&value.expression, &value.structure)?;
         }
         if value.expression == self.expression {
             value.is_metric = self.is_metric;
@@ -1561,6 +1553,20 @@ impl InterfaceInference {
         arguments: &[AtomView<'_>],
         logical_arguments: bool,
     ) -> InferenceResult<Option<Canonicalized<ExplicitKey<AbstractIndex>>>> {
+        if symbol == CS.d {
+            let representations = CS
+                .invariant_argument_representations(symbol, arguments)
+                .map_err(TensorInferenceError::invalid)?
+                .expect("the d head is an invariant");
+            return Ok(Some(ExplicitKey::from_iter(
+                std::iter::repeat_n(
+                    representations[1].expect("the d adjoint port is typed"),
+                    arguments.len() - 1,
+                ),
+                symbol,
+                Some(vec![arguments[0].to_owned()]),
+            )));
+        }
         let builtin = symbol == *EPSILON_SYMBOL
             || symbol == ETS.metric
             || symbol == ETS.flat
@@ -1572,6 +1578,21 @@ impl InterfaceInference {
             || symbol == CS.f
             || symbol == CS.t;
         if !builtin {
+            if let Some(family) = crate::color::ScopedColorFamily::from_symbol(symbol)
+                .map_err(TensorInferenceError::invalid)?
+            {
+                crate::color::ScopedColorFamily::validate_arguments(symbol, arguments)
+                    .map_err(TensorInferenceError::invalid)?;
+                let symbols = family.scoped_to_native();
+                let adopted = arguments
+                    .iter()
+                    .map(|argument| argument.rename_symbols(&symbols))
+                    .collect::<Vec<_>>();
+                let adopted = adopted.iter().map(Atom::as_view).collect::<Vec<_>>();
+                // Signature validation, including resolved compact channels,
+                // remains owned by the native generator/structure factories.
+                self.builtin_tensor_structure(symbols[&symbol], &adopted, logical_arguments)?;
+            }
             return Ok(None);
         }
 
@@ -1952,12 +1973,20 @@ impl InterfaceInference {
                     return false;
                 }
                 let symbol = function.get_symbol();
+                if let Err(error) = CS.invariant_metadata(function) {
+                    syntax_error = Some(TensorInferenceError::invalid(error));
+                    return false;
+                }
                 // Explicit scalar functions own their metadata, which may itself
                 // contain tensor syntax without exposing any tensor ports.
                 if SPENSO_TAG.is_scalar_metadata(symbol)
                     || symbol == SPENSO_TAG.scalar
                     || symbol == SPENSO_TAG.pure_scalar
                 {
+                    return false;
+                }
+                if let Err(error) = crate::color::ScopedColorFamily::validate_function(function) {
+                    syntax_error = Some(TensorInferenceError::invalid(error));
                     return false;
                 }
                 let arguments = function.iter().collect::<Vec<_>>();
@@ -2309,10 +2338,14 @@ impl InterfaceInference {
         {
             return None;
         }
+        let metadata_arguments = usize::from(symbol == CS.d);
+        if metadata_arguments != 0 {
+            CS.invariant_metadata(function).ok()??;
+        }
         let mut logical = Vec::new();
         let mut explicit_ports = 0;
         let mut function_metadata = false;
-        for argument in function.iter() {
+        for argument in function.iter().skip(metadata_arguments) {
             if let Ok(slot) = self.slots.parse::<LibraryRep, AbstractIndex>(argument) {
                 explicit_ports += 1;
                 let index = Self::partial_index(slot.aind(), policy);
@@ -2365,6 +2398,12 @@ impl InterfaceInference {
         arguments: &[AtomView<'_>],
         structure: &Canonicalized<ExplicitKey<AbstractIndex>>,
     ) -> PartialStructure {
+        let metadata_arguments = structure
+            .canonical()
+            .additional_args
+            .as_ref()
+            .map_or(0, Vec::len);
+        let arguments = &arguments[metadata_arguments..];
         let canonical_ports = arguments
             .iter()
             .enumerate()
@@ -4831,6 +4870,150 @@ pub(crate) mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn checked_symbol_renaming_includes_tensor_and_representation_heads() {
+        crate::test_support::test_initialize();
+        let (dimension, target_dimension, scope, target_scope, coefficient, target_coefficient) = symbolica::symbol!(
+            "rename_heads_dimension",
+            "rename_heads_target_dimension",
+            "rename_heads_scope",
+            "rename_heads_target_scope",
+            "rename_heads_coefficient",
+            "rename_heads_target_coefficient"
+        );
+        let rep = LibraryRep::new_dual("idenso::rename_heads_rep")
+            .unwrap()
+            .new_rep(dimension);
+        let target_rep = LibraryRep::new_dual("idenso::rename_heads_target_rep")
+            .unwrap()
+            .new_rep(target_dimension);
+        let head = spenso::tensor_symbol!("rename_heads_source");
+        let target_head = spenso::tensor_symbol!("rename_heads_target");
+        let renaming = HashMap::from([
+            (head, target_head),
+            (rep.rep.symbol(), target_rep.rep.symbol()),
+            (dimension, target_dimension),
+            (scope, target_scope),
+            (coefficient, target_coefficient),
+        ]);
+        let source = SymbolicTensor::infer(
+            Atom::var(coefficient)
+                * FunctionBuilder::new(head)
+                    .add_arg(
+                        rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(17).scoped(scope))
+                            .to_atom(),
+                    )
+                    .add_arg(rep.dual().to_symbolic([]))
+                    .finish(),
+        )
+        .unwrap();
+        let expected = SymbolicTensor::infer(
+            Atom::var(target_coefficient)
+                * FunctionBuilder::new(target_head)
+                    .add_arg(
+                        target_rep
+                            .slot::<AbstractIndex, _>(
+                                AbstractIndex::Normal(17).scoped(target_scope),
+                            )
+                            .to_atom(),
+                    )
+                    .add_arg(target_rep.dual().to_symbolic([]))
+                    .finish(),
+        )
+        .unwrap();
+        let renamed = source.rename_symbols(&renaming).unwrap();
+        assert_eq!(renamed.expression, expected.expression);
+        assert_eq!(renamed.structure, expected.structure);
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let renamed_zero = zero.rename_symbols(&renaming).unwrap();
+        assert!(renamed_zero.expression.is_zero());
+        assert_eq!(renamed_zero.structure, expected.structure);
+    }
+
+    #[test]
+    fn checked_symbol_renaming_does_not_normalize_an_intermediate_head() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let (source_index, target_index) =
+            symbolica::symbol!("rename_head_source_index", "rename_head_target_index");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let source_head = spenso::tensor_symbol!(
+            "rename_intermediate_source",
+            norm = move |node, out| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().next()
+                    && slot.iter().nth(1) == Some(Atom::var(target_index).as_view())
+                {
+                    **out = Atom::one();
+                }
+            }
+        );
+        let target_head = spenso::tensor_symbol!("rename_intermediate_target");
+        let rep = ExtendibleReps::MINKOWSKI.new_rep(4);
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(source_head)
+                .add_arg(rep.to_symbolic([Atom::var(source_index)]))
+                .finish(),
+        )
+        .unwrap();
+        let expected = SymbolicTensor::infer(
+            FunctionBuilder::new(target_head)
+                .add_arg(rep.to_symbolic([Atom::var(target_index)]))
+                .finish(),
+        )
+        .unwrap();
+        calls.store(0, Ordering::Relaxed);
+        let renamed = source
+            .rename_symbols(&HashMap::from([
+                (source_head, target_head),
+                (source_index, target_index),
+            ]))
+            .unwrap();
+        assert_eq!(renamed.expression, expected.expression);
+        assert_eq!(renamed.structure, expected.structure);
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn checked_symbol_renaming_rejects_target_normalizer_port_loss() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let source_head = spenso::tensor_symbol!("rename_target_loss_source");
+        let target_head = spenso::tensor_symbol!(
+            "rename_target_loss_target",
+            norm = move |_node, out| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                **out = Atom::one();
+            }
+        );
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(source_head)
+                .add_arg(
+                    ExtendibleReps::MINKOWSKI
+                        .new_rep(4)
+                        .to_symbolic([Atom::num(71)]),
+                )
+                .finish(),
+        )
+        .unwrap();
+        assert!(
+            source
+                .rename_symbols(&HashMap::from([(source_head, target_head)]))
+                .is_err()
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
 
     #[test]

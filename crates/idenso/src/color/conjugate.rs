@@ -1,4 +1,4 @@
-use std::sync::LazyLock;
+use std::{collections::HashMap, sync::LazyLock};
 
 use spenso::{
     network::{
@@ -10,11 +10,11 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         representation::{LibraryRep, RepName},
-        slot::{IsAbstractSlot, Slot},
+        slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, FunctionBuilder},
+    atom::{Atom, AtomCore, AtomView, FunctionBuilder, Symbol},
     id::Replacement,
 };
 
@@ -24,44 +24,33 @@ use crate::{
 };
 
 use super::{
-    CS,
+    CS, ScopedColorFamily,
     simplify::{color_generator_adjoint_view, fundamental_chain_dimension_view},
 };
 
-static COLOR_CONJ_GENERATOR_TRANSPOSITIONS: LazyLock<[Replacement; 1]> = LazyLock::new(|| {
+static COLOR_CONJ_GENERATOR_TRANSPOSITIONS: LazyLock<[Replacement; 1]> =
+    LazyLock::new(|| [generator_transposition(&HashMap::new())]);
+
+fn generator_transposition(symbols: &HashMap<Symbol, Symbol>) -> Replacement {
     let cof = ColorFundamental {};
     let coaf = ColorFundamental {}.dual();
 
-    [Replacement::new(
+    Replacement::new(
         color_t!(
             RS.i__,
             cof.to_symbolic([RS.d_, RS.a_]),
             coaf.to_symbolic([RS.d_, RS.b_]),
         )
+        .rename_symbols(symbols)
         .to_pattern(),
         color_t!(
             RS.i__,
             coaf.to_symbolic([RS.d_, RS.b_]),
             cof.to_symbolic([RS.d_, RS.a_]),
-        ),
-    )]
-});
-
-static COLOR_CONJ_REPRESENTATION_SWAPS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
-    let cof = ColorFundamental {};
-    let coaf = ColorFundamental {}.dual();
-
-    [
-        Replacement::new(
-            coaf.to_symbolic([RS.d_, RS.a_]).to_pattern(),
-            cof.to_symbolic([RS.d_, RS.a_]),
-        ),
-        Replacement::new(
-            cof.to_symbolic([RS.d_, RS.a_]).to_pattern(),
-            coaf.to_symbolic([RS.d_, RS.a_]),
-        ),
-    ]
-});
+        )
+        .rename_symbols(symbols),
+    )
+}
 
 struct ColorConjugator;
 
@@ -145,6 +134,29 @@ impl ColorConjugator {
 }
 
 pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
+    let mut slots = SlotMatcher::default();
+    // Typed admission diagnoses malformed declarations. Valid heads contain all
+    // family metadata; no process-local action registry supplies semantics.
+    let mut families = Vec::new();
+    expression.visitor(&mut |node| {
+        if let AtomView::Fun(function) = node {
+            if function.get_symbol().is_scalar() {
+                return false;
+            }
+            // A malformed raw head supplies no family policy and cannot disable
+            // valid families elsewhere. Typed admission reports the metadata error.
+            if let Ok(Some(family)) = ScopedColorFamily::from_symbol(function.get_symbol())
+                && !families.contains(&family)
+            {
+                families.push(family);
+            }
+        }
+        true
+    });
+    let scoped_transpositions = families
+        .iter()
+        .map(|family| generator_transposition(&family.native_to_scoped()))
+        .collect::<Vec<_>>();
     expression
         .replace_map(|arg, _context, out| {
             let AtomView::Fun(conjugate) = arg else {
@@ -173,13 +185,40 @@ pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
                     **out = AtomView::Fun(word).to_owned();
                 }
             } else if [T.chain, T.trace].contains(&word.get_symbol())
-                && let Some(result) = ColorConjugator::run(AtomView::Fun(word))
+                && let Some(result) = ColorConjugator::run(AtomView::Fun(word)).or_else(|| {
+                    families.iter().find_map(|family| {
+                        let source =
+                            crate::tensor::SymbolicTensor::infer(AtomView::Fun(word).to_owned())
+                                .ok()?;
+                        let adopted = source.rename_symbols(&family.scoped_to_native()).ok()?;
+                        ColorConjugator::run(adopted.expression().as_view())
+                            .map(|result| result.rename_symbols(&family.native_to_scoped()))
+                    })
+                })
             {
                 **out = result;
             }
         })
         .replace_multiple(&*COLOR_CONJ_GENERATOR_TRANSPOSITIONS)
-        .replace_multiple(&*COLOR_CONJ_REPRESENTATION_SWAPS)
+        .replace_multiple(&scoped_transpositions)
+        .replace_map(|arg, _, out| {
+            // Conjugation dualizes every tensor space, including user-defined
+            // representations. Keep scalar metadata and compact representations
+            // opaque, and preserve exact dimension and index payloads.
+            if matches!(arg, AtomView::Fun(fun) if fun.get_symbol().is_scalar()) {
+                **out = arg.to_owned();
+                return;
+            }
+            match slots.classify(arg) {
+                SlotMatch::Explicit(slot) => {
+                    if let Ok(rep) = slots.representation(slot) {
+                        **out = rep.dual().to_symbolic([slot.dimension(), slot.index()]);
+                    }
+                }
+                SlotMatch::Opaque => **out = arg.to_owned(),
+                SlotMatch::Other => {}
+            }
+        })
 }
 
 #[cfg(test)]
