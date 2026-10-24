@@ -1177,6 +1177,14 @@ where
         profile::bump(Counter::ParseStructureAttempt, 1);
         let structure = {
             let _span = profile::span(Timer::ParseStructure);
+            if let Some(structure) = S::selected_slot_structure_from_parser(state)?
+                && let Ok(key) = library.key_for_selected_slot_structure(&structure)
+            {
+                profile::bump(Counter::ParseStructureOk, 1);
+                let tensor_structure = structure.canonical().clone();
+                return Ok(construction
+                    .library_tensor(&tensor_structure, structure.map_canonical(|_| key)));
+            }
             S::structure_from_parser(state)
         };
 

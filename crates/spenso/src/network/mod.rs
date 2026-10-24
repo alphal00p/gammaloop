@@ -75,6 +75,8 @@ use symbolica::id::AliasedAtom;
 #[cfg(feature = "shadowing")]
 pub mod tags;
 #[cfg(feature = "shadowing")]
+pub mod tensor_symmetry;
+#[cfg(feature = "shadowing")]
 use tags::{SPENSO_TAG, scalar_store_alias, scalar_store_alias_index};
 // use eyre::Result;
 

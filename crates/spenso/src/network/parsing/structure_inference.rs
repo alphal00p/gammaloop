@@ -89,6 +89,16 @@ pub trait StructureFromAtom: Sized {
         Self::structure_from_atom(state.current_view(), &mut state.matcher.borrow_mut())
     }
 
+    /// Observe an ordinary selected-slot leaf for explicit component-library
+    /// resolution. This is not permission to create a component shadow: the
+    /// parser may use it only when the library's selected-slot policy resolves
+    /// the complete signature. Direct inference retains its own restrictions.
+    fn selected_slot_structure_from_parser<Aind>(
+        _state: &ParseState<Aind, AtomView<'_>>,
+    ) -> Result<Option<Canonicalized<Self>>, StructureError> {
+        Ok(None)
+    }
+
     /// Infer structure with operation-local recognition state.
     fn parse(value: AtomView<'_>) -> Result<Canonicalized<Self>, StructureError> {
         Self::structure_from_atom(value, &mut SlotMatcher::default())
@@ -303,7 +313,10 @@ impl TensorialSyntax {
         // Registered projectors preserve argument interfaces like brackets.
         // Ordinary function metadata remains opaque; unary broadcasts are
         // handled below with their arity requirement.
-        if symbol == tags.bracket || matcher.is_projector(symbol) {
+        if symbol == tags.bracket
+            || symbol.has_tag(&tags.tensor_word)
+            || matcher.is_projector(symbol)
+        {
             return fun
                 .iter()
                 .any(|arg| Self::is_tensorial(arg, filter, matcher));
@@ -604,6 +617,8 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
         fun: FunView<'_>,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
+        crate::network::tensor_symmetry::TensorSlotSymmetry::validate_function(fun)
+            .map_err(StructureError::ParsingError)?;
         if fun.get_symbol() == matcher.tags().dot {
             if matcher.compact_inner_product_parts::<Aind>(fun).is_none() {
                 return Err(StructureError::ParsingError(
@@ -624,7 +639,9 @@ impl<Aind: AbsInd + ParseableAind> OrderedStructure<LibraryRep, Aind> {
             }
             return Self::syntactic_structure_from_atom(fun.iter().next().unwrap(), matcher);
         }
-        if fun.get_symbol() == matcher.tags().bracket {
+        if fun.get_symbol() == matcher.tags().bracket
+            || fun.get_symbol().has_tag(&matcher.tags().tensor_word)
+        {
             if fun.get_nargs() == 0 {
                 return Err(StructureError::ParsingError(
                     "empty bracket expression".to_owned(),
@@ -850,6 +867,37 @@ impl<Aind: AbsInd + DummyAind + ParseableAind> StructureFromAtom for ShadowedStr
             Self::structure_from_atom(state.current_view(), &mut matcher)
         }
     }
+
+    fn selected_slot_structure_from_parser<Index>(
+        state: &ParseState<Index, AtomView<'_>>,
+    ) -> Result<Option<Canonicalized<Self>>, StructureError> {
+        let AtomView::Fun(function) = state.current_view() else {
+            return Ok(None);
+        };
+        let symbol = function.get_symbol();
+        let mut matcher = state.matcher.borrow_mut();
+        if symbol.has_tag(&matcher.tags().tensor_word)
+            || symbol == matcher.tags().chain
+            || symbol == matcher.tags().trace
+            || symbol == matcher.tags().dot
+            || matcher
+                .compact_inner_product_parts::<Aind>(function)
+                .is_some()
+        {
+            return Ok(None);
+        }
+        drop(matcher);
+        if crate::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(symbol)
+            .map_err(StructureError::ParsingError)?
+            .is_none()
+        {
+            return Ok(None);
+        }
+        crate::network::tensor_symmetry::TensorSlotSymmetry::validate_function(function)
+            .map_err(StructureError::ParsingError)?;
+        OrderedStructure::<LibraryRep, Aind>::structure_from_parser(state)
+            .map(|structure| Some(Self::from_ordered_atom(function.as_view(), structure)))
+    }
 }
 
 impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep, Aind> {
@@ -859,6 +907,11 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
         match value {
+            AtomView::Fun(fun) if fun.get_symbol().has_tag(&matcher.tags().tensor_word) => {
+                Err(StructureError::ParsingError(
+                    "tensor word component-shadow realization requires an explicit policy; use a symbolic tensor network".to_owned(),
+                ))
+            }
             AtomView::Fun(fun)
                 if fun.get_symbol() != matcher.tags().chain
                     && fun.get_symbol() != matcher.tags().trace
@@ -885,6 +938,16 @@ impl<Aind: AbsInd + ParseableAind> NamedStructure<Symbol, Vec<Atom>, LibraryRep,
         value: FunView<'_>,
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
+        crate::network::tensor_symmetry::TensorSlotSymmetry::validate_function(value)
+            .map_err(StructureError::ParsingError)?;
+        if crate::network::tensor_symmetry::TensorSlotSymmetry::from_symbol(value.get_symbol())
+            .map_err(StructureError::ParsingError)?
+            .is_some()
+        {
+            return Err(StructureError::ParsingError(
+                "selected-slot tensor component-shadow realization requires an explicit policy; use a symbolic tensor network".to_owned(),
+            ));
+        }
         match value.get_symbol() {
             s if s == matcher.index_bundle() => {
                 let mut structure = Vec::new();
@@ -1174,6 +1237,32 @@ mod tests {
                 OrderedStructure::<LibraryRep, AbstractIndex>::parse(malformed.as_view()).is_err()
             );
         }
+    }
+
+    #[test]
+    fn tensor_word_exposes_operand_interfaces_without_lowering_its_head() {
+        let rep = Minkowski {}.new_rep(4);
+        let a = function!(
+            tensor_symbol!("word_interface_a"),
+            rep.to_symbolic([Atom::num(93501)])
+        );
+        let b = function!(
+            tensor_symbol!("word_interface_b"),
+            rep.to_symbolic([Atom::num(93502)])
+        );
+        let head = symbol!("word_interface", tag = &SPENSO_TAG.tensor_word);
+        let word = function!(head, &a, &b);
+        assert!(word.is_tensorial(StrictTensorFilter::Tagged));
+        let expected =
+            OrderedStructure::<LibraryRep, AbstractIndex>::parse(bracket!(&a, &b).as_view())
+                .unwrap();
+        let actual = OrderedStructure::<LibraryRep, AbstractIndex>::parse(word.as_view()).unwrap();
+        assert_eq!(actual, expected);
+        let error = word
+            .infer_structure::<ShadowedStructure<AbstractIndex>>()
+            .unwrap_err();
+        assert!(error.to_string().contains("component-shadow realization"));
+        assert!(word.contains_symbol(head));
     }
 
     #[test]
