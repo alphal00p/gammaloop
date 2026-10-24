@@ -29,6 +29,8 @@ use super::SymbolicTensor;
 use super::inference::InterfaceInference;
 
 mod chain;
+mod word;
+use word::ProductAlgebra;
 
 #[cfg(test)]
 thread_local! {
@@ -50,7 +52,8 @@ impl SymbolicTensor<PartialStructure> {
     pub fn from_normalized_parts(atom: Atom, interface: PartialStructure) -> Self {
         let is_metric =
             matches!(atom.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-        let is_composite = !matches!(atom.as_view(), AtomView::Fun(_));
+        let is_composite = !matches!(atom.as_view(), AtomView::Fun(function)
+            if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
         Self {
             proofs: Default::default(),
             expression: atom,
@@ -629,6 +632,7 @@ impl super::TensorProofs {
 
 pub(super) fn is_composite_head(symbol: Symbol, tags: &SpensoTags) -> bool {
     symbol == tags.bracket
+        || symbol.has_tag(&tags.tensor_word)
         || symbol == tags.chain
         || symbol == tags.trace
         || symbol.has_tag(&tags.broadcast)
@@ -1421,6 +1425,15 @@ impl ProductPlan {
         left: &SymbolicTensor<PartialStructure>,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        self.apply_algebra(left, right, ProductAlgebra::Commuting)
+    }
+
+    fn apply_algebra(
+        &self,
+        left: &SymbolicTensor<PartialStructure>,
+        right: &SymbolicTensor<PartialStructure>,
+        algebra: ProductAlgebra,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         match self {
             Self::Scalar => {
                 let interface = if left.is_scalar() {
@@ -1432,13 +1445,25 @@ impl ProductPlan {
                         "scalar multiplication requires a scalar operand".into(),
                     ));
                 };
-                let atom = left.expression.as_ref() * right.expression.as_ref();
+                let atom = match algebra {
+                    ProductAlgebra::Commuting => {
+                        left.expression.as_ref() * right.expression.as_ref()
+                    }
+                    ProductAlgebra::Word(_) => {
+                        algebra.expression(left.expression.as_view(), right.expression.as_view())?
+                    }
+                };
                 validate_explicit_index_occurrences(&atom)?;
-                SymbolicTensor::new(atom, interface).validate_rewrite(&[left, right])
+                algebra.finish(atom, interface, &[left, right])
             }
-            Self::Outer => left.outer(right),
-            Self::Contract(pairs) => left.contract_ports(right, pairs),
+            Self::Outer => left.outer_algebra(right, algebra),
+            Self::Contract(pairs) => left.contract_ports_algebra(right, pairs, algebra),
             Self::Compose(left_channel, right_channel) => {
+                if matches!(algebra, ProductAlgebra::Word(_)) {
+                    return Err(TensorCompositionError::InvalidResultInterface(
+                        "tensor words require an explicit Contract plan; compact matrix-chain composition does not define a word policy".into(),
+                    ));
+                }
                 left.compose(right, *left_channel, *right_channel)
             }
         }
@@ -1738,6 +1763,80 @@ impl SymbolicTensor<PartialStructure> {
             .validate_rewrite(&[self])
     }
 
+    /// Restore selected public ports to occurrence-local unresolved arguments.
+    ///
+    /// Positions follow the public logical interface. Their native
+    /// representations and variance, all unselected labels, and exact-zero
+    /// shape are retained. Anonymous ports must keep their native occurrence
+    /// order: exact rematerialization rejects an inverse which would erase an
+    /// axis permutation. Custom normalizers require a separate proof policy.
+    /// Checked admission also requires explicit ports inside odd generators.
+    pub fn dematerialize_interface_ports(
+        &self,
+        positions: &[usize],
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        self.ensure_validated()
+            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
+        let original = self.structure.logical_slots();
+        let mut logical = original.clone();
+        let replacements = positions
+            .iter()
+            .map(|&position| {
+                let slot = validate_position(&logical, position)?;
+                logical[position].set_aind(PartialIndex::open(position));
+                Ok((position, slot.rep().to_symbolic([])))
+            })
+            .collect::<Result<HashMap<_, _>, TensorCompositionError>>()?;
+        if replacements.is_empty() {
+            return Ok(self.clone());
+        }
+        if !self.normalization_is_intrinsic() {
+            return Err(TensorCompositionError::InvalidResultInterface(
+                "dematerialization cannot certify ports through a custom normalizer".into(),
+            ));
+        }
+        let expression = rewrite_interface_ports(self, &replacements, None)?;
+        let restored = SymbolicTensor::from_declared_parts(
+            expression,
+            PartialStructure::from_logical_slots(logical),
+        )
+        .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?;
+        let allocator = std::cell::OnceCell::new();
+        let reference_indices = original
+            .iter()
+            .enumerate()
+            .filter(|(_, slot)| matches!(slot.aind, PartialIndex::Open(_)))
+            .map(|(position, _)| {
+                (
+                    position,
+                    allocator
+                        .get_or_init(|| Self::reserved_dummies([self]))
+                        .fresh_index(),
+                )
+            })
+            .collect::<HashMap<_, _>>();
+        let mut restored_indices = reference_indices.clone();
+        for &position in positions {
+            if let PartialIndex::Explicit(index) = original[position].aind {
+                restored_indices.insert(position, index);
+            }
+        }
+        let reference = if reference_indices.is_empty() {
+            self.clone()
+        } else {
+            self.reindex_interface_ports(&reference_indices)?
+        };
+        if !restored
+            .reindex_interface_ports(&restored_indices)?
+            .same_value(&reference)
+        {
+            return Err(TensorCompositionError::InvalidResultInterface(
+                "dematerialization would lose the ordered identities of anonymous ports".into(),
+            ));
+        }
+        Ok(restored)
+    }
+
     /// Canonicalize a root chain whose two explicit endpoints have become one contraction.
     pub fn normalize_closed_root_chain(
         self,
@@ -1786,6 +1885,14 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<Self, TensorCompositionError> {
+        self.outer_algebra(right, ProductAlgebra::Commuting)
+    }
+
+    fn outer_algebra(
+        &self,
+        right: &SymbolicTensor<PartialStructure>,
+        algebra: ProductAlgebra,
+    ) -> Result<Self, TensorCompositionError> {
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
         let collisions = compatible_pairs(&self.structure, &right.structure)
@@ -1801,17 +1908,17 @@ impl SymbolicTensor<PartialStructure> {
         let atom = if self.expression.as_view().is_zero() || right.expression.as_view().is_zero() {
             Atom::Zero
         } else {
-            SymbolicTensor::bracket_product(self.expression.as_view(), right.expression.as_view())
+            algebra.expression(self.expression.as_view(), right.expression.as_view())?
         };
         validate_explicit_index_occurrences(&atom)?;
-        SymbolicTensor::new(
+        algebra.finish(
             atom,
             concatenate_interfaces(
                 self.structure.logical_slots(),
                 right.structure.logical_slots(),
             ),
+            &[self, right],
         )
-        .validate_rewrite(&[self, right])
     }
 
     pub fn contract_ports(
@@ -1819,8 +1926,17 @@ impl SymbolicTensor<PartialStructure> {
         right: &SymbolicTensor<PartialStructure>,
         positions: &[PortPair],
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        self.contract_ports_algebra(right, positions, ProductAlgebra::Commuting)
+    }
+
+    fn contract_ports_algebra(
+        &self,
+        right: &SymbolicTensor<PartialStructure>,
+        positions: &[PortPair],
+        algebra: ProductAlgebra,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         if positions.is_empty() {
-            return self.outer(right);
+            return self.outer_algebra(right, algebra);
         }
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
@@ -1898,7 +2014,8 @@ impl SymbolicTensor<PartialStructure> {
         }
         let materialized_left = self.materialize_interface_ports(&left_indices)?;
         let materialized_right = right.materialize_interface_ports(&right_indices)?;
-        let atom = if self.rank() == 1
+        let atom = if matches!(algebra, ProductAlgebra::Commuting)
+            && self.rank() == 1
             && right.rank() == 1
             && [self, right].into_iter().all(|operand| {
                 matches!(operand.expression.as_view(), AtomView::Fun(vector)
@@ -1909,13 +2026,10 @@ impl SymbolicTensor<PartialStructure> {
             // the structural contractor can pack them into Schoonschip notation.
             self.compact_dot_expression(right)?
         } else {
-            SymbolicTensor::bracket_product(
-                materialized_left.as_view(),
-                materialized_right.as_view(),
-            )
+            algebra.expression(materialized_left.as_view(), materialized_right.as_view())?
         };
         validate_explicit_index_occurrences(&atom)?;
-        SymbolicTensor::new(atom, interface).validate_rewrite(&[self, right])
+        algebra.finish(atom, interface, &[self, right])
     }
 
     fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
@@ -2439,6 +2553,368 @@ mod tests {
 
     fn vector(name: &str, port: PartialSlot) -> SymbolicTensor<PartialStructure> {
         partial_tensor(SPENSO_TAG.rank_one_tensor_symbol(name), &[port], &[port])
+    }
+
+    #[test]
+    fn dematerialize_preserves_logical_ports_sums_variance_and_zero() {
+        crate::test_support::test_initialize();
+        let slots = [901, 902, 903]
+            .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let matrix = partial_tensor(
+            SPENSO_TAG.tensor_symbol("dematerialize_matrix"),
+            &slots,
+            &[slots[1], slots[0], slots[2]],
+        );
+        let other = partial_tensor(
+            SPENSO_TAG.tensor_symbol("dematerialize_other"),
+            &slots,
+            &[slots[1], slots[0], slots[2]],
+        );
+        let sum = matrix.try_add(&other).unwrap();
+        let zero =
+            SymbolicTensor::from_declared_parts(Atom::Zero, matrix.structure.clone()).unwrap();
+        let fundamental: Representation<LibraryRep> =
+            crate::test_support::test_initialize().cof_nc.cast();
+        let dual = partial_tensor(
+            SPENSO_TAG.tensor_symbol("dematerialize_dual"),
+            &[
+                fundamental.slot(PartialIndex::Explicit(AbstractIndex::Normal(904))),
+                fundamental
+                    .dual()
+                    .slot(PartialIndex::Explicit(AbstractIndex::Normal(905))),
+            ],
+            &[
+                fundamental.slot(PartialIndex::Explicit(AbstractIndex::Normal(904))),
+                fundamental
+                    .dual()
+                    .slot(PartialIndex::Explicit(AbstractIndex::Normal(905))),
+            ],
+        );
+        for (source, positions) in [
+            (vector("dematerialize_vector", slots[0]), vec![0]),
+            (matrix, vec![1, 2]),
+            (sum, vec![1, 2]),
+            (zero, vec![0, 2]),
+            (dual, vec![0, 1]),
+        ] {
+            assert!(
+                source
+                    .dematerialize_interface_ports(&[])
+                    .unwrap()
+                    .same_value(&source)
+            );
+            let restored = source.dematerialize_interface_ports(&positions).unwrap();
+            let repeated = positions
+                .iter()
+                .copied()
+                .chain(positions.iter().copied())
+                .collect::<Vec<_>>();
+            assert!(
+                source
+                    .dematerialize_interface_ports(&repeated)
+                    .unwrap()
+                    .same_value(&restored)
+            );
+            let source_slots = source.structure.logical_slots();
+            for (position, slot) in restored.structure.logical_slots().iter().enumerate() {
+                assert_eq!(slot.rep(), source_slots[position].rep());
+                if positions.contains(&position) {
+                    assert!(matches!(slot.aind, PartialIndex::Open(_)));
+                } else {
+                    assert_eq!(*slot, source_slots[position]);
+                }
+            }
+            assert!(
+                restored
+                    .dematerialize_interface_ports(&positions)
+                    .unwrap()
+                    .same_value(&restored)
+            );
+            SymbolicTensor::from_declared_parts(
+                restored.expression.clone(),
+                restored.structure.clone(),
+            )
+            .unwrap();
+            let replacements = positions
+                .iter()
+                .map(|&position| {
+                    let PartialIndex::Explicit(index) = source_slots[position].aind else {
+                        unreachable!()
+                    };
+                    (position, index)
+                })
+                .collect();
+            assert!(
+                restored
+                    .reindex_interface_ports(&replacements)
+                    .unwrap()
+                    .same_value(&source)
+            );
+            assert!(matches!(
+                source.dematerialize_interface_ports(&[source.rank()]),
+                Err(TensorCompositionError::InvalidPort { .. })
+            ));
+        }
+        let missing = SymbolicTensor::new(
+            Atom::one(),
+            PartialStructure::from_logical_slots([slots[0]]),
+        );
+        assert!(matches!(
+            missing.dematerialize_interface_ports(&[0]),
+            Err(TensorCompositionError::InvalidResultInterface(_))
+        ));
+    }
+
+    #[test]
+    fn dematerialize_refuses_erased_anonymous_occurrence_order() {
+        crate::test_support::test_initialize();
+        let slots = [901, 902, 903]
+            .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let matrix = partial_tensor(
+            SPENSO_TAG.tensor_symbol("dematerialize_swapped_matrix"),
+            &slots,
+            &[slots[2], slots[0], slots[1]],
+        );
+        let other = partial_tensor(
+            SPENSO_TAG.tensor_symbol("dematerialize_swapped_other"),
+            &slots,
+            &[slots[2], slots[0], slots[1]],
+        );
+        for source in [matrix.clone(), matrix.try_add(&other).unwrap()] {
+            let error = source.dematerialize_interface_ports(&[0, 2]).unwrap_err();
+            assert!(
+                error
+                    .to_string()
+                    .contains("ordered identities of anonymous ports")
+            );
+        }
+    }
+
+    #[test]
+    fn dematerialize_independent_factors_retain_order_across_sums() {
+        crate::test_support::test_initialize();
+        let slots = [931, 932, 933]
+            .map(|index| rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(index))));
+        let logical = PartialStructure::from_logical_slots([slots[2], slots[0], slots[1]]);
+        let first = vector("dematerialize_factor_a", slots[0]);
+        let second = vector("dematerialize_factor_b", slots[1]);
+        let explicit = vector("dematerialize_factor_c", slots[2]);
+        let atom = &first.expression * &second.expression * &explicit.expression;
+        let source = SymbolicTensor::from_declared_parts(atom.clone(), logical.clone()).unwrap();
+        let weight = Atom::var(symbolica::symbol!("dematerialize_factor_weight"));
+        let sum = SymbolicTensor::from_declared_parts(&atom + weight * &atom, logical).unwrap();
+        for source in [source, sum] {
+            let restored = source.dematerialize_interface_ports(&[1, 2]).unwrap();
+            assert!(
+                restored
+                    .reindex_interface_ports(&HashMap::from([
+                        (1, AbstractIndex::Normal(931)),
+                        (2, AbstractIndex::Normal(932)),
+                    ]))
+                    .unwrap()
+                    .same_value(&source)
+            );
+            SymbolicTensor::from_declared_parts(restored.expression, restored.structure).unwrap();
+        }
+    }
+
+    #[test]
+    fn dematerialize_refuses_custom_normalizers_without_replaying_them() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = spenso::vector_symbol!(
+            "dematerialize_callback_vector",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let slot = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(941)));
+        let source = partial_tensor(head, &[slot], &[slot]);
+        calls.store(0, Ordering::Relaxed);
+        let error = source.dematerialize_interface_ports(&[0]).unwrap_err();
+        assert!(error.to_string().contains("custom normalizer"));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert!(
+            source
+                .dematerialize_interface_ports(&[])
+                .unwrap()
+                .same_value(&source)
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn dematerialize_refuses_anonymous_occurrence_coalescence() {
+        crate::test_support::test_initialize();
+        let first = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(945)));
+        let second = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(946)));
+        let head = SPENSO_TAG.rank_one_tensor_symbol("dematerialize_repeated_factor");
+        let left = partial_tensor(head, &[first], &[first]);
+        let right = partial_tensor(head, &[second], &[second]);
+        let source = SymbolicTensor::from_declared_parts(
+            &left.expression * &right.expression,
+            PartialStructure::from_logical_slots([first, second]),
+        )
+        .unwrap();
+        // Plain scalar normalization would identify the two unresolved copies.
+        // No port identity may be reconstructed from that coalesced expression.
+        assert!(source.dematerialize_interface_ports(&[0, 1]).is_err());
+    }
+
+    #[test]
+    fn declared_interfaces_permit_explicit_interleaving_without_anonymous_permutation() {
+        crate::test_support::test_initialize();
+        let representations = [
+            rep(),
+            ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4)),
+        ];
+        let explicit = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(951)));
+        let first = representations[0].slot(PartialIndex::open(0));
+        let second = representations[1].slot(PartialIndex::open(1));
+        let atom = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("dematerialize_ordered_open"))
+            .add_args([port_atom(first), port_atom(explicit), port_atom(second)])
+            .finish();
+        let desired = PartialStructure::from_logical_slots([explicit, first, second]);
+        let admitted = SymbolicTensor::from_declared_parts(atom.clone(), desired.clone()).unwrap();
+        assert_eq!(admitted.structure.logical_slots(), desired.logical_slots());
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                atom.clone(),
+                PartialStructure::from_logical_slots([explicit, second, first]),
+            )
+            .is_err()
+        );
+        let foreign = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(952)));
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                atom.clone(),
+                PartialStructure::from_logical_slots([foreign, first, second]),
+            )
+            .is_err()
+        );
+        let wrong_dimension = ExtendibleReps::EUCLIDEAN
+            .new_rep(Dimension::Concrete(3))
+            .slot(PartialIndex::open(0));
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                atom,
+                PartialStructure::from_logical_slots([explicit, wrong_dimension, second]),
+            )
+            .is_err()
+        );
+        let reversed_atom =
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol("dematerialize_reversed_open"))
+                .add_args([port_atom(second), port_atom(explicit), port_atom(first)])
+                .finish();
+        let ordered_atom =
+            FunctionBuilder::new(SPENSO_TAG.tensor_symbol("dematerialize_forward_open"))
+                .add_args([port_atom(first), port_atom(explicit), port_atom(second)])
+                .finish();
+        assert!(
+            SymbolicTensor::from_declared_parts(ordered_atom + reversed_atom, desired).is_err()
+        );
+    }
+
+    #[test]
+    fn dematerialize_builtin_gamma_coefficients_retains_the_actual_derivative_interface() {
+        use crate::dirac::AGS;
+        crate::test_support::test_initialize();
+        let gamma = SymbolicTensor::<PartialStructure>::from_signature(
+            &AGS.gamma_strct::<AbstractIndex>(4),
+        )
+        .unwrap();
+        let gamma = gamma
+            .reindex_interface_ports(&HashMap::from([
+                (0, AbstractIndex::Normal(911)),
+                (1, AbstractIndex::Normal(912)),
+                (2, AbstractIndex::Normal(913)),
+            ]))
+            .unwrap();
+        let derivative = vector(
+            "dematerialize_derivative",
+            crate::test_support::test_initialize()
+                .mink4
+                .cast::<LibraryRep>()
+                .slot(PartialIndex::Explicit(AbstractIndex::Normal(914))),
+        );
+        let mut logical = derivative.structure.logical_slots();
+        logical.extend(gamma.structure.logical_slots());
+        let product = SymbolicTensor::from_declared_parts(
+            &gamma.expression * &derivative.expression,
+            PartialStructure::from_logical_slots(logical),
+        )
+        .unwrap();
+        for (source, positions) in [(gamma, vec![0, 1]), (product, vec![1, 2])] {
+            let restored = source.dematerialize_interface_ports(&positions).unwrap();
+            assert_eq!(restored.structure.open_positions(), positions);
+            let source_slots = source.structure.logical_slots();
+            let replacements = positions
+                .iter()
+                .map(|&position| {
+                    let PartialIndex::Explicit(index) = source_slots[position].aind else {
+                        unreachable!()
+                    };
+                    (position, index)
+                })
+                .collect();
+            assert!(
+                restored
+                    .reindex_interface_ports(&replacements)
+                    .unwrap()
+                    .same_value(&source)
+            );
+            SymbolicTensor::from_declared_parts(restored.expression, restored.structure).unwrap();
+        }
+    }
+
+    #[test]
+    fn dematerialize_keeps_odd_generators_explicit_and_allows_coefficient_ports() {
+        crate::test_support::test_initialize();
+        let head = symbolica::symbol!("dematerialize_exterior"; Flat, Linear, Antisymmetric; tag = &SPENSO_TAG.tensor_word);
+        let odd = vector(
+            "dematerialize_odd",
+            rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(921))),
+        );
+        let word = SymbolicTensor::word(head, &[odd]).unwrap();
+        assert!(word.dematerialize_interface_ports(&[0]).is_err());
+        let even = vector(
+            "dematerialize_coefficient",
+            rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(922))),
+        );
+        let product = even.multiply_word(head, &word).unwrap();
+        let coefficient_position = product
+            .structure
+            .logical_slots()
+            .iter()
+            .position(|slot| slot.aind == PartialIndex::Explicit(AbstractIndex::Normal(922)))
+            .unwrap();
+        let restored = product
+            .dematerialize_interface_ports(&[coefficient_position])
+            .unwrap();
+        assert_eq!(
+            restored.structure.open_positions(),
+            vec![coefficient_position]
+        );
+        assert!(
+            restored
+                .reindex_interface_ports(&HashMap::from([(
+                    coefficient_position,
+                    AbstractIndex::Normal(922)
+                )]))
+                .unwrap()
+                .same_value(&product)
+        );
+        let generator_position = 1 - coefficient_position;
+        assert!(
+            product
+                .dematerialize_interface_ports(&[generator_position])
+                .is_err()
+        );
     }
 
     fn factor_slots(atom: &Atom, symbol: Symbol) -> Vec<Slot<LibraryRep, AbstractIndex>> {
