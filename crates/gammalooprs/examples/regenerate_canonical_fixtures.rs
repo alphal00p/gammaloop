@@ -13,9 +13,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use feynkit_generator::{GenerationFilter, GenerationOptions, Generator, Process, VertexSelector};
+use feynkit_generator::{GenerationFilter, GenerationOptions, Process, VertexSelector};
 use feynkit_graph::{EdgeId, ExternalState, FeynmanDiagram, VertexId};
-use feynkit_model::{Model, ParameterCard};
+use feynkit_model::{Model, ParameterCard, ParticleId};
 use gammalooprs::{
     model::{InputParamCard, ModelGammaLoopExt},
     utils::F,
@@ -68,7 +68,29 @@ struct CandidateEdge {
     source: usize,
     target: usize,
     particle: String,
+    antiparticle: String,
     directed: bool,
+}
+
+impl CandidateEdge {
+    fn new(
+        id: EdgeId,
+        source: usize,
+        target: usize,
+        particle: ParticleId,
+        directed: bool,
+        model: &Model,
+    ) -> Result<Self, DynError> {
+        let particle = model.particle_by_id(particle)?;
+        Ok(Self {
+            id,
+            source,
+            target,
+            particle: particle.name.clone(),
+            antiparticle: model.particle_by_id(particle.antiparticle)?.name.clone(),
+            directed,
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -277,38 +299,77 @@ fn epemttbar_target() -> Target {
 }
 
 fn candidate_data(diagram: &FeynmanDiagram, model: &Model) -> Result<Candidate, DynError> {
+    diagram.validate()?;
     let vertices = diagram.vertices().collect::<Vec<_>>();
     let positions = vertices
         .iter()
         .enumerate()
         .map(|(position, (id, _))| (*id, position))
         .collect::<BTreeMap<VertexId, usize>>();
-    let candidate_vertices = vertices
+    let mut candidate_vertices = vertices
         .iter()
         .map(|(_, vertex)| {
             if let Some(interaction) = vertex.interaction {
                 Ok(CandidateVertex::Interaction(
                     model.vertex_rule_by_id(interaction)?.name.clone(),
                 ))
-            } else if let Some(external) = &vertex.external {
-                Ok(CandidateVertex::External(external.state))
             } else {
-                Err("diagram vertex has neither an interaction nor an external state".into())
+                Err("generated interaction vertex has no model rule".into())
             }
         })
         .collect::<Result<Vec<_>, DynError>>()?;
-    let edges = diagram
-        .edges()
-        .map(|(id, endpoints, edge)| {
-            Ok(CandidateEdge {
+    let mut edges = Vec::new();
+    for (id, endpoints, edge) in diagram.edges() {
+        let source = endpoints.source.map(|vertex| positions[&vertex]);
+        let target = endpoints.target.map(|vertex| positions[&vertex]);
+        if let Some(external) = &edge.external {
+            if let (Some(source), Some(target)) = (source, target) {
+                // The target descriptions retain their original external legs.
+                // Open the native sewn connection only in this matching view;
+                // both halves continue to identify the same owned native edge.
+                let incoming = candidate_vertices.len();
+                candidate_vertices.push(CandidateVertex::External(ExternalState::Incoming));
+                let outgoing = candidate_vertices.len();
+                candidate_vertices.push(CandidateVertex::External(ExternalState::Outgoing));
+                edges.push(CandidateEdge::new(
+                    id,
+                    incoming,
+                    target,
+                    edge.particle,
+                    edge.directed,
+                    model,
+                )?);
+                edges.push(CandidateEdge::new(
+                    id,
+                    source,
+                    outgoing,
+                    edge.particle,
+                    edge.directed,
+                    model,
+                )?);
+            } else {
+                let terminal = candidate_vertices.len();
+                candidate_vertices.push(CandidateVertex::External(external.state));
+                edges.push(CandidateEdge::new(
+                    id,
+                    source.unwrap_or(terminal),
+                    target.unwrap_or(terminal),
+                    edge.particle,
+                    edge.directed,
+                    model,
+                )?);
+            }
+        } else {
+            edges.push(CandidateEdge::new(
                 id,
-                source: positions[&endpoints.source],
-                target: positions[&endpoints.target],
-                particle: model.particle_by_id(edge.particle)?.name.clone(),
-                directed: edge.directed,
-            })
-        })
-        .collect::<Result<Vec<_>, DynError>>()?;
+                source.ok_or("internal candidate edge has no source")?,
+                target.ok_or("internal candidate edge has no target")?,
+                edge.particle,
+                edge.directed,
+                model,
+            )?);
+        }
+    }
     Ok(Candidate {
         vertices: candidate_vertices,
         edges,
@@ -328,13 +389,21 @@ fn vertex_matches(target: TargetVertex, candidate: &CandidateVertex) -> bool {
 }
 
 fn edge_matches(target: &TargetEdge, candidate: &CandidateEdge, vertex_mapping: &[usize]) -> bool {
-    if target.particle != candidate.particle || target.directed != candidate.directed {
+    if target.directed != candidate.directed {
         return false;
     }
     let source = vertex_mapping[target.source];
     let target_vertex = vertex_mapping[target.target];
-    (candidate.source == source && candidate.target == target_vertex)
-        || (!target.directed && candidate.source == target_vertex && candidate.target == source)
+    let forward = candidate.source == source && candidate.target == target_vertex;
+    let reversed = candidate.source == target_vertex && candidate.target == source;
+    if target.directed {
+        // Reversing a directed carrier is equivalent only together with charge
+        // conjugation, as in FeynKit's canonical particle-flow normalization.
+        (target.particle == candidate.particle && forward)
+            || (target.particle == candidate.antiparticle && reversed)
+    } else {
+        target.particle == candidate.particle && (forward || reversed)
+    }
 }
 
 fn match_edges(
@@ -345,13 +414,14 @@ fn match_edges(
     let mut used = BTreeSet::new();
     let mut mapping = BTreeMap::new();
     for target_edge in &target.edges {
-        let edge = candidate
+        let (index, edge) = candidate
             .edges
             .iter()
-            .filter(|edge| !used.contains(&edge.id))
-            .filter(|edge| edge_matches(target_edge, edge, vertex_mapping))
-            .min_by_key(|edge| edge.id)?;
-        used.insert(edge.id);
+            .enumerate()
+            .filter(|(index, _)| !used.contains(index))
+            .filter(|(_, edge)| edge_matches(target_edge, edge, vertex_mapping))
+            .min_by_key(|(index, edge)| (edge.id, *index))?;
+        used.insert(index);
         mapping.insert(target_edge.id, edge.id);
     }
     (used.len() == candidate.edges.len()).then_some(mapping)
@@ -473,10 +543,10 @@ fn select_target(
 
 fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError> {
     let model = standard_model()?;
-    let process = Process::cross_section(["a"], ["d", "d~"])
-        .with_final_state_alternatives([vec!["d", "d~"], vec!["d", "d~", "g"]])?
-        .with_loop_count(2, 2)?;
+    let process = Process::new(["a"], ["d", "d~"])
+        .with_final_state_alternatives([vec!["d", "d~"], vec!["d", "d~", "g"]])?;
     let options = GenerationOptions::default()
+        .with_loop_count(2, 2)?
         .threads(1)
         .max_vertices(4)
         .allow_zero_flow_edges(true)
@@ -487,7 +557,7 @@ fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError>
         ]))
         .with_graph_filter(GenerationFilter::BlobRange(1..=1))
         .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = Generator::new(model.clone()).generate(&process, &options)?;
+    let generated = process.generate_cross_section(model.clone(), &options)?;
     let target = addbar_target();
     let diagram = select_target(&target, &generated.diagrams, &model)?;
     Ok((model, vec![(target, diagram)]))
@@ -495,9 +565,9 @@ fn generate_addbar() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError>
 
 fn generate_scalars() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError> {
     let model = scalar_model()?;
-    let process =
-        Process::cross_section(["scalar_1"], ["scalar_1", "scalar_1"]).with_loop_count(1, 1)?;
+    let process = Process::new(["scalar_1"], ["scalar_1", "scalar_1"]);
     let options = GenerationOptions::default()
+        .with_loop_count(1, 1)?
         .threads(1)
         .max_vertices(4)
         .allow_self_loops(true)
@@ -507,7 +577,7 @@ fn generate_scalars() -> Result<(Model, Vec<(Target, FeynmanDiagram)>), DynError
         ]))
         .with_graph_filter(GenerationFilter::BlobRange(1..=1))
         .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = Generator::new(model.clone()).generate(&process, &options)?;
+    let generated = process.generate_cross_section(model.clone(), &options)?;
     let diagrams = scalar_targets()
         .into_iter()
         .map(|target| {
@@ -522,11 +592,11 @@ fn generate_epemttbar(model: &Model) -> Result<Vec<(Target, FeynmanDiagram)>, Dy
     // GL092 is the tree-level cross-section topology for the double-real
     // e+ e- -> t t~ H g g final state. Its four graph loops are the sewn
     // phase-space loops, not four virtual loops.
-    let process = Process::cross_section(["e+", "e-"], ["t", "t~", "H", "g", "g"])
+    let process = Process::new(["e+", "e-"], ["t", "t~", "H", "g", "g"]);
+    let options = GenerationOptions::default()
         .with_loop_count(4, 4)?
         .symmetrize_final(true)
-        .symmetrize_left_right(true);
-    let options = GenerationOptions::default()
+        .symmetrize_left_right(true)
         .threads(1)
         .max_vertices(10)
         .with_graph_filter(GenerationFilter::VertexAllow(vec![
@@ -541,7 +611,7 @@ fn generate_epemttbar(model: &Model) -> Result<Vec<(Target, FeynmanDiagram)>, Dy
         ])))
         .with_graph_filter(GenerationFilter::BlobRange(1..=1))
         .with_graph_filter(GenerationFilter::SpectatorRange(0..=0));
-    let generated = Generator::new(model.clone()).generate(&process, &options)?;
+    let generated = process.generate_cross_section(model.clone(), &options)?;
     let target = epemttbar_target();
     let diagram = select_target(&target, &generated.diagrams, model)?;
     Ok(vec![(target, diagram)])

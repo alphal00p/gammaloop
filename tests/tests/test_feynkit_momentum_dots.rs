@@ -1,11 +1,10 @@
 use std::collections::BTreeMap;
 
-use feynkit_generator::{
-    GenerationFilter, GenerationOptions, Generator, ParticleSelector, Process,
-};
+use feynkit_generator::{GenerationFilter, GenerationOptions, ParticleSelector, Process};
 use feynkit_model::Model;
-use idenso::shorthands::{metric::MetricSimplifier, schoonschip::Schoonschip};
-use symbolica::{atom::AtomCore, symbol};
+use gammalooprs::utils::GS;
+use idenso::tensor::{AlgebraContraction, AlgebraSettings};
+use symbolica::symbol;
 
 #[test]
 fn generated_qcd_numerator_contractions_convert_to_dots() {
@@ -13,10 +12,10 @@ fn generated_qcd_numerator_contractions_convert_to_dots() {
         "../../crates/feynkit-model/tests/fixtures/sm.json"
     ))
     .unwrap();
-    let process = Process::amplitude(["g"], ["g"])
-        .with_loop_count(1, 1)
-        .unwrap();
+    let process = Process::new(["g"], ["g"]);
     let options = GenerationOptions::default()
+        .with_loop_count(1, 1)
+        .unwrap()
         .max_vertices(2)
         .with_graph_filter(GenerationFilter::CouplingOrders(BTreeMap::from([
             ("QCD".to_owned(), (2, Some(2))),
@@ -28,7 +27,7 @@ fn generated_qcd_numerator_contractions_convert_to_dots() {
                 .map(ParticleSelector::from)
                 .collect(),
         ));
-    let generated = Generator::new(model).generate(&process, &options).unwrap();
+    let generated = process.generate_diagrams(model, &options).unwrap();
     let gluon_loop = generated
         .diagrams
         .iter()
@@ -42,16 +41,22 @@ fn generated_qcd_numerator_contractions_convert_to_dots() {
         })
         .expect("the QCD self-energy sample must contain its gluon loop");
     let numerator = gluon_loop.numerator().clone();
-    let momentum = symbol!("FeynKit::Momentum");
+    let momentum = GS.emr_mom;
+    assert_eq!(momentum, symbol!("gammalooprs::Q"));
     assert!(momentum.has_tag("spenso::tensor"));
     assert!(momentum.has_tag("spenso::rank1"));
 
     let contracted = numerator
-        .expand()
-        .simplify_metrics()
-        .to_dots()
+        .expanded(None, false)
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            contract: AlgebraContraction::Dots,
+            ..Default::default()
+        })
+        .unwrap()
+        .expression()
         .to_plain_string();
 
     assert!(contracted.contains("spenso::dot("), "{contracted}");
-    assert!(contracted.contains("FeynKit::Momentum"), "{contracted}");
+    assert!(contracted.contains("gammalooprs::Q"), "{contracted}");
 }
