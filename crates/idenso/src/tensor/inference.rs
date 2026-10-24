@@ -2167,7 +2167,15 @@ impl InterfaceInference {
     /// Observe local replacement ports without materialization or loss of
     /// encoded open-index owners. Scalar RHS expressions also undergo the
     /// normal syntax checks, including rejection of bare tagged tensor names.
-    pub(crate) fn replacement_interface(atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
+    ///
+    /// Observation does not rebuild the expression or invoke its normalization
+    /// callbacks. Native scalar metadata remains opaque, and encoded open
+    /// owners and axis identities remain explicit in the returned interface.
+    /// A closed interface alone does not certify ordinary commuting algebra.
+    /// Since this observes an expression rather than an established carrier,
+    /// an exact zero has a scalar interface; retain a typed zero's original
+    /// interface separately when checking a transformation.
+    pub fn replacement_interface(atom: AtomView<'_>) -> InferenceResult<PartialStructure> {
         Self::replacement_observation(atom, &mut SlotMatcher::default())
             .map(|(interface, _)| interface)
     }
@@ -3168,6 +3176,7 @@ impl InterfaceInference {
 pub(crate) mod tests {
     mod auto_axis;
     mod builtin_words;
+    mod replacement_observer;
     use super::*;
     use crate::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
     use spenso::structure::representation::ExtendibleReps;
