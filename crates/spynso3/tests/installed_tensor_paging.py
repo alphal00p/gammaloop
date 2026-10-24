@@ -649,7 +649,7 @@ class BrowserPagingTests(PagingAssertions):
                 self.assertIn(label, text)
         self.assertEqual(bytes(value.__getstate__()), source)
 
-    def test_paged_slash_carries_its_own_style(self):
+    def test_paged_slash_has_semantic_mathml(self):
         gamma = TensorExpression.dirac_gamma(4)
         p = TensorName.vector("paging_slash::p")(Representation.mink(4))
         value = (gamma("a", "b", "mu") * p("mu")).contract()
@@ -664,6 +664,8 @@ class BrowserPagingTests(PagingAssertions):
                 if node.get("data-spenso-cancel") == "updiagonal"
             ]
             self.assertEqual(len(strokes), 1)
+            self.assertEqual(strokes[0].tag.rsplit("}", 1)[-1], "menclose")
+            self.assertEqual(strokes[0].get("notation"), "updiagonalstrike")
             self.assertIn("linear-gradient", strokes[0].get("style", ""))
             self.assertIn("currentColor", strokes[0].get("style", ""))
         self.assertEqual(bytes(value.__getstate__()), source)
@@ -1021,6 +1023,8 @@ class TensorNotationTests(PagingAssertions):
                     ]
                     self.assertEqual(len(cancelled), strokes)
                     for node in cancelled:
+                        self.assertEqual(node.tag.rsplit("}", 1)[-1], "menclose")
+                        self.assertEqual(node.get("notation"), "updiagonalstrike")
                         self.assertIn("linear-gradient", node.get("style", ""))
                         self.assertIn("currentColor", node.get("style", ""))
 
@@ -1039,7 +1043,7 @@ class TensorNotationTests(PagingAssertions):
                     # complete HTML can keep the tagged index's own notation.
                     self.assertEqual(
                         self.visible(reference),
-                        "Scoped(mink4index_scope(scope,hedge(2,1)))",
+                        "Scoped(mink(4,index_scope(scope,h2.1)))",
                     )
                     self.assertEqual(
                         self.visible(root), "Scopedindex_scope(scope,h2.1)"
@@ -1055,6 +1059,8 @@ class TensorNotationTests(PagingAssertions):
                 ]
                 self.assertEqual(len(cancelled), strokes)
                 for node in cancelled:
+                    self.assertEqual(node.tag.rsplit("}", 1)[-1], "menclose")
+                    self.assertEqual(node.get("notation"), "updiagonalstrike")
                     self.assertIn("linear-gradient", node.get("style", ""))
                     self.assertIn("currentColor", node.get("style", ""))
                 self.assertEqual(self.tensorState(value), original)

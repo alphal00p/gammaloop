@@ -473,7 +473,7 @@ pub static ETS, ETS_INNER: ExplicitTensorSymbols = || ExplicitTensorSymbols {
     metric: tensor_symbol!("g";Symmetric,Real,Linear;print = |a, opt, state| {
 
         if opt.mode.is_mathml() {
-            return mathml::tensor(a, opt, state);
+            return mathml::render(a, opt, state, &|_, _| None);
         }
 
         if opt.mode.is_typst()

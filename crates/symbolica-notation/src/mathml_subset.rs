@@ -95,6 +95,23 @@ impl MathMlSubset {
         Ok(value)
     }
 
+    /// Whether raising this head to a power requires explicit parentheses.
+    /// Transparent rows are inspected structurally, including heads
+    /// carrying both an upper and a lower script.
+    ///
+    /// ```
+    /// use symbolica_notation::MathMlSubset;
+    /// let head = MathMlSubset::parse("<msubsup><mi>T</mi><mi>i</mi><mi>j</mi></msubsup>")?;
+    /// assert!(head.needs_power_fence());
+    /// let accent = MathMlSubset::parse("<mover><mi>ϵ</mi><mo>¯</mo></mover>")?;
+    /// assert!(!accent.needs_power_fence());
+    /// # Ok::<(), symbolica_notation::MathMlSubsetError>(())
+    /// ```
+    #[must_use]
+    pub fn needs_power_fence(&self) -> bool {
+        PresentationNode::needs_power_fence(&self.0)
+    }
+
     /// Reconstruct escaped MathML, grouped into one script base.
     /// See [`Self`] for an example.
     #[must_use]
@@ -109,6 +126,27 @@ impl MathMlSubset {
 }
 
 impl PresentationNode {
+    fn needs_power_fence(nodes: &[Self]) -> bool {
+        let mut nodes = nodes
+            .iter()
+            .filter(|node| !matches!(node, Self::Text(text) if text.trim().is_empty()));
+        let Some(node) = nodes.next() else {
+            return false;
+        };
+        if nodes.next().is_some() {
+            return true;
+        }
+        match node {
+            Self::Element { name, children, .. } if name == "mrow" => {
+                Self::needs_power_fence(children)
+            }
+            Self::Element { name, .. } => {
+                matches!(name.as_str(), "msup" | "msubsup" | "munderover")
+            }
+            Self::Text(_) => false,
+        }
+    }
+
     fn allowed_element(name: &str) -> bool {
         matches!(
             name,

@@ -506,7 +506,7 @@ let args = arg.pos().map(to-eq).join("")
             tag = SPENSO_TAG.lower,
             print = |a, opt, state| {
                 if opt.mode.is_mathml() {
-                    return mathml::representation(a, opt, state);
+                    return mathml::render(a, opt, state, &|_, _| None);
                 }
                 if matches!(
                     opt.custom_print_mode.get("typst"),

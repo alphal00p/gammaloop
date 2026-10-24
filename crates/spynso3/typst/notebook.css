@@ -22,18 +22,6 @@ math[data-spenso-math] {
   min-width: 100%;
 }
 
-/* Keep slash notation visible in native MathML, including scripted labels.
-   The stroke scales with the surrounding math and follows light/dark colors. */
-[data-spenso-math] [data-spenso-cancel] {
-  background-image: linear-gradient(
-    to bottom right,
-    transparent calc(50% - 0.025em),
-    currentColor calc(50% - 0.025em),
-    currentColor calc(50% + 0.025em),
-    transparent calc(50% + 0.025em)
-  );
-}
-
 /* MathML Core cannot break a math row. Wrap whole additive terms with CSS;
    each term still uses native math layout for fractions, fences and scripts. */
 [data-spenso-math] math[data-spenso-wrap] {

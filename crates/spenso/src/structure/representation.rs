@@ -1096,7 +1096,7 @@ impl LibraryRep {
             .with_user_data(metadata.to_user_data())
             .with_print_function(move |a, opt, state| {
                 if opt.mode.is_mathml() {
-                    return mathml::representation(a, opt, state);
+                    return mathml::render(a, opt, state, &|_, _| None);
                 }
                 if matches!(
                     opt.custom_print_mode.get("typst"),

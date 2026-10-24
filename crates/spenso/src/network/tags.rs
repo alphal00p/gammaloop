@@ -921,7 +921,7 @@ pub fn tensor_print(
     state: &PrintState,
 ) -> Option<String> {
     if options.mode.is_mathml() {
-        return mathml::tensor(atom, options, state);
+        return mathml::render(atom, options, state, &|_, _| None);
     }
     let resolved = SpensoPrintSettings::resolve(options)?;
     if let Some(custom) = tensor_custom_print(atom, options, state) {
@@ -1708,7 +1708,7 @@ impl SpensoTags {
 
     fn print_dot(a: AtomView<'_>, opt: &PrintOptions, state: &PrintState) -> Option<String> {
         if opt.mode.is_mathml() {
-            return mathml::dot(a, opt, state);
+            return mathml::render(a, opt, state, &|_, _| None);
         }
         let resolved = SpensoPrintSettings::resolve(opt)?;
         let settings = resolved.presentation;

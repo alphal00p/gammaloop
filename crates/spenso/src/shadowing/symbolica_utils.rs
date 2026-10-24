@@ -121,11 +121,11 @@ impl SpensoPrintSettings {
     /// ordinary Symbolica expression containing tensor atoms to render without
     /// callers knowing about Spenso's private custom-print flag.
     pub fn resolve(options: &PrintOptions) -> Option<ResolvedSpensoPrintSettings> {
-        let presentation = match options.custom_print_mode.get("spenso") {
-            Some(PrintUserData::Integer(encoded)) => Self::from_usize(*encoded as usize),
-            _ if options.mode.is_typst() => Self::typst(),
-            _ => return None,
-        };
+        // Text-only callbacks must decline rather than inject plain syntax into MathML.
+        if options.mode.is_mathml() {
+            return None;
+        }
+        let presentation = Self::presentation(options)?;
         let backend = if options.mode.is_typst() {
             SpensoPrintBackend::Typst
         } else if options.mode.is_latex() {
@@ -138,6 +138,14 @@ impl SpensoPrintSettings {
             presentation,
             backend,
         })
+    }
+
+    pub(crate) fn presentation(options: &PrintOptions) -> Option<Self> {
+        match options.custom_print_mode.get("spenso") {
+            Some(PrintUserData::Integer(encoded)) => Some(Self::from_usize(*encoded as usize)),
+            _ if options.mode.is_typst() => Some(Self::typst()),
+            _ => None,
+        }
     }
 
     pub fn typst() -> Self {
@@ -503,6 +511,17 @@ mod tests {
 
         assert_eq!(resolved.backend, SpensoPrintBackend::Typst);
         assert_eq!(resolved.presentation, SpensoPrintSettings::typst());
+    }
+
+    #[test]
+    fn text_backends_decline_mathml_without_discarding_presentation_settings() {
+        let mut options = PrintOptions::mathml();
+        options.custom_print_mode = SpensoPrintSettings::typst().into();
+        assert!(SpensoPrintSettings::resolve(&options).is_none());
+        assert_eq!(
+            SpensoPrintSettings::presentation(&options),
+            Some(SpensoPrintSettings::typst())
+        );
     }
 
     #[test]
