@@ -17,7 +17,7 @@ impl PyDiagramRender {
     /// See [`PyDiagramView::with_html`] for the equivalent preparation step.
     #[must_use]
     pub fn with_html(mut self, html: String) -> Self {
-        self.html = Some(html);
+        self.html = Some(Self::without_font(&html));
         self
     }
     /// Transform independent page strings and update their occurrences in HTML.
@@ -30,7 +30,7 @@ impl PyDiagramRender {
         let pages: Vec<String> = self.pages().iter().cloned().map(f).collect();
         if let Some(html) = &mut self.html {
             for (old, new) in self.pages.iter().zip(&pages) {
-                *html = html.replace(old, new);
+                *html = html.replace(&Self::without_font(old), &Self::without_font(new));
             }
         }
         self.pages = Arc::new(pages);
