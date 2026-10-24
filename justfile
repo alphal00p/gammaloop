@@ -332,6 +332,7 @@ docs-linnet-graph-check:
     uv venv "$test_root/venv" --python "$python_bin"
     maturin build --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml --out "$test_root/wheels"
     uv pip install --python "$test_root/venv/bin/python" --no-deps "$test_root"/wheels/*.whl
+    uv pip install --python "$test_root/venv/bin/python" symbolica-fonts
     "$test_root/venv/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.

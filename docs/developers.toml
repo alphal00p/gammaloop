@@ -1854,7 +1854,10 @@ end_anchor = "\nin\n{\n  inherit"
 # triggers remain owned by ci.typ.
 # Reviewed 2026-10-15: Terminal documentation checks receive the pinned font bundle through
 # SYMBOLICA_DATA_DIRECTORY; reusable compiler artifact ownership is unchanged.
-digest = "e27a783909bfe283190cb242f1325a1b94b77d0f"
+# No-impact attestation 2026-10-24: the pinned font bundle is copied into the
+# installed package only in the terminal documentation test script, after wheel
+# builds; reusable Cargo/crane producer inputs and cache boundaries are unchanged.
+digest = "a36c6354ece22a926dc6efb1ac634895402cf522"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

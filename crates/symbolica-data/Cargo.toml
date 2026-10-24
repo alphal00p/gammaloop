@@ -6,7 +6,11 @@ license = "MIT"
 description = "Verified external assets shared by native and WASM Symbolica hosts"
 
 [dependencies]
+pyo3 = { version = "0.28", default-features = false, features = ["macros"], optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
+
+[features]
+python = ["dep:pyo3"]
 

@@ -6583,6 +6583,7 @@ dependencies = [
 name = "symbolica-data"
 version = "0.1.0"
 dependencies = [
+ "pyo3",
  "serde",
  "serde_json",
  "sha2",
