@@ -196,6 +196,34 @@ Hash and selection checks here do not repeat or replace native authentication.
 A later published manifest or cache-inventory update is a separate validation;
 it must never be substituted for the D40 identity used in these timings.
 
+== Selecting a completed pilot cache
+
+An original #raw("phase: pilot") build remains a pilot build after a later
+selection. To retain that completed pack, the existing evidence index must also
+pin #raw("final_selection: {path, sha256}"), with schema
+#raw("vakint.cache-final-selection.v1"). The receipt records
+#raw("accepted: true"), #raw("decision: retain_complete_candidate"),
+#raw("producer_phase: pilot"), an actual UTC #raw("decided_utc"), and a nonempty
+#raw("reason"). It binds hashed #raw("cache"), #raw("build_report"),
+#raw("producer_workload"), #raw("consumer_workload"),
+#raw("candidate_acceptance") and #raw("cache_requalification") references.
+The latter must be the same accepted bridge pinned by the evidence index.
+
+The original candidate acceptance binds the same complete build, cache and
+selected training roots. Every strict-completion, successful-supervision,
+size, hash and failure check still applies. The accepted bridge checks the
+original and current workloads, proofs, own cohorts, D40 data, census and Native
+semantic binding, even if their revisions match. Qualification of an additional
+route may be a conservative exclusion check; it never increases the selected
+training count. Ordinary completed #raw("phase: final") builds retain their
+existing admission path.
+
+Root selection, consumer compatibility, execution release and final performance
+acceptance are separate decisions. The adapter issues none of them. It retains
+#raw("raw_report") unchanged, including the pilot phase, original source/proof
+and preparation time, and stores the later selection separately. Selecting an
+existing cache creates no new preparation or performance measurement.
+
 == Timing and rendering
 
 Medians and full observed ranges are recomputed from actual per-case samples.

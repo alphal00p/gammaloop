@@ -355,8 +355,13 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   } else {
     let build = five.cache.raw_report
     parbreak()
-    [#build.preparation.completed_roots / #build.preparation.total_roots selected roots complete;
-    strict Reject policy. Final compressed size: #fixed(build.compressed_bytes / 1048576, 3) MiB.
+    [Producer phase: #raw(build.phase).
+    #if five.cache.at("final_selection", default: none) != none [
+      Retained completed candidate; selection recorded separately as
+      #raw(five.cache.final_selection.evidence.sha256.slice(0, 12)).
+    ]
+    #build.preparation.completed_roots / #build.preparation.total_roots selected roots complete;
+    strict Reject policy. Compressed size: #fixed(build.compressed_bytes / 1048576, 3) MiB.
     Cumulative supervised preparation: #timing(build.elapsed_seconds) s.
     Cache SHA-256: #raw(build.cache_sha256). Training roots, capture diagnostics and
     source/proof bindings remain in the unmodified build receipt.]

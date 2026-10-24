@@ -13,6 +13,7 @@ import hashlib
 import json
 import math
 import statistics
+from datetime import datetime, timedelta
 from pathlib import Path
 
 PRIMARY = {
@@ -174,7 +175,8 @@ class ReportEvidence:
             "build/suite cache, data or census mismatch",
         )
         if (
-            identity["workload_sha256"] == build["workload_sha256"]
+            build.get("phase") != "pilot"
+            and identity["workload_sha256"] == build["workload_sha256"]
             and identity["owner_proof"] == build["owner_proof"]
             and identity["build_git_revision"]
             == build["build_identity"]["build"]["git_revision"]
@@ -302,6 +304,90 @@ class ReportEvidence:
             "requalification consumer artifact/stamps differ",
         )
         return {"evidence": evidence(path), "raw_receipt": accepted}
+
+    def final_selection(self, producer):
+        """Keep a selected pilot's original build separate from the later decision."""
+        path, selection = hashed_record(
+            self.index.get("final_selection"), self.path.parent
+        )
+        require(
+            selection.get("schema") == "vakint.cache-final-selection.v1"
+            and selection.get("accepted") is True
+            and selection.get("decision") == "retain_complete_candidate"
+            and selection.get("producer_phase") == "pilot"
+            and isinstance(selection.get("reason"), str)
+            and selection["reason"].strip(),
+            "pilot cache has no accepted final selection",
+        )
+        require(
+            isinstance(selection.get("decided_utc"), str)
+            and datetime.fromisoformat(selection["decided_utc"]).utcoffset()
+            == timedelta(0),
+            "final selection needs its actual UTC decision time",
+        )
+        refs = {
+            key: evidence(hashed_file(selection.get(key), path.parent))
+            for key in (
+                "cache",
+                "build_report",
+                "producer_workload",
+                "consumer_workload",
+                "candidate_acceptance",
+                "cache_requalification",
+            )
+        }
+        bridge_path, bridge = hashed_record(
+            self.index.get("cache_requalification"), self.path.parent
+        )
+        build = producer["raw_report"]
+        require(
+            refs["cache"] == producer["cache_file"]
+            and refs["build_report"] == producer["evidence"]
+            and refs["producer_workload"]["sha256"] == build["workload_sha256"]
+            and refs["consumer_workload"]["sha256"]
+            == bridge["consumer"]["final_workload"]["sha256"]
+            and refs["cache_requalification"] == evidence(bridge_path),
+            "final selection names another cache, build, workload or bridge",
+        )
+        candidate = read(refs["candidate_acceptance"]["path"])
+        require(
+            candidate.get("schema")
+            == "vakint.strict-complete-small-candidate-acceptance.v1"
+            and candidate.get("state")
+            == "STRICT_COMPLETE_CANDIDATE_NOT_FINAL_SELECTION"
+            and candidate["reports"]["build"]["sha256"]
+            == producer["evidence"]["sha256"]
+            and candidate["cache_file"]["sha256"] == producer["cache_file"]["sha256"]
+            and candidate["workload_sha256"] == build["workload_sha256"]
+            and candidate["selected_training_roots"]
+            == candidate["completed_strict_roots"]
+            == build["preparation"]["total_roots"],
+            "final selection names another completed candidate",
+        )
+        _, workload = hashed_record(selection["consumer_workload"], path.parent)
+        _, cohort = hashed_record(
+            bridge["consumer"]["compiled_cohort"], bridge_path.parent
+        )
+        _, proof = hashed_record(bridge["consumer"]["owner_proof"], bridge_path.parent)
+        identity = {
+            "cache_sha256": refs["cache"]["sha256"],
+            "data_manifest_sha256": workload["data_manifest_sha256"],
+            "source_census_sha256": workload["source_census_sha256"],
+            "workload_sha256": refs["consumer_workload"]["sha256"],
+            "build_git_revision": cohort["main_revision"],
+            "executable_sha256": proof["measurement_executable_sha256"],
+            "owner_proof": {
+                **bridge["consumer"]["owner_proof"],
+                "compiled_cohort": cohort,
+            },
+        }
+        # Reuse the full provenance/semantic checks, even for an unchanged cohort.
+        qualification = self.cache_qualification(identity, producer)
+        return {
+            "evidence": evidence(path),
+            "raw_receipt": selection,
+            "cache_requalification": qualification,
+        }
 
     def qualify(self, bundle, binary, case_id, variant, sample, supervision=None):
         launcher, artifact = bundle["launcher"], bundle["artifact"]
@@ -505,18 +591,18 @@ def summarize(values):
     }
 
 
-def build_record(path, cache):
+def build_record(path, cache, provenance=None):
     build = read(path)
     require(
         build.get("schema") == "vakint.five-loop-cache-build.v2", "unknown build schema"
     )
     prep = build["preparation"]
     require(
-        build["phase"] == "final"
+        build["phase"] in ("final", "pilot")
         and build["complete"] is True
         and build["publishable"] is True
         and prep["status"] == "complete",
-        "only completed final cache preparation may enter a measured report",
+        "only completed cache preparation may enter a measured report",
     )
     require(
         build["supervision"]["success"] is True
@@ -547,11 +633,15 @@ def build_record(path, cache):
     require(
         build["within_50_mib_target"] is True, "size exception needs separate review"
     )
-    return {
+    producer = {
         "evidence": evidence(path),
         "cache_file": evidence(cache),
         "raw_report": build,
     }
+    if build["phase"] == "pilot":
+        require(provenance is not None, "pilot cache requires final-selection evidence")
+        producer["final_selection"] = provenance.final_selection(producer)
+    return producer
 
 
 def suite_record(path, kind, producer, provenance):
@@ -1396,7 +1486,7 @@ def main():
     )
     provenance = ReportEvidence(args.evidence)
     require(args.build or provenance.records, "no report evidence supplied")
-    build = build_record(args.build, args.cache) if args.build else None
+    build = build_record(args.build, args.cache, provenance) if args.build else None
     run = {
         "schema": "vakint.five-loop-report-run.v1",
         "cache": build,

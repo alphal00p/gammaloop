@@ -1212,6 +1212,330 @@ class ReportContractTests(unittest.TestCase):
             },
         )
 
+    def selected_pilot_fixture(self):
+        identity, producer, bridge_path, index_path = self.cross_cohort_fixture()
+        strict = merge.read(self.strict_build())
+        build = copy.deepcopy(producer["raw_report"])
+        build.update(
+            {key: value for key, value in strict.items() if key != "preparation"}
+        )
+        build["phase"] = "pilot"
+        build["preparation"].update(strict["preparation"])
+        build_path = Path(producer["evidence"]["path"])
+        build_path.write_text(json.dumps(build))
+        bridge = merge.read(bridge_path)
+        bridge["producer"]["build_report"] = merge.evidence(build_path)
+        self.refresh_acceptance(bridge_path, index_path, bridge)
+        candidate_path = self.write(
+            "candidate-acceptance.json",
+            {
+                "schema": "vakint.strict-complete-small-candidate-acceptance.v1",
+                "state": "STRICT_COMPLETE_CANDIDATE_NOT_FINAL_SELECTION",
+                "utc": "2026-10-23T12:00:00Z",
+                "test_fixture": True,
+                "reports": {"build": merge.evidence(build_path)},
+                "cache_file": {
+                    **merge.evidence(self.cache),
+                    "compressed_bytes": self.cache.stat().st_size,
+                },
+                "workload_sha256": build["workload_sha256"],
+                "selected_training_roots": build["preparation"]["total_roots"],
+                "completed_strict_roots": build["preparation"]["completed_roots"],
+            },
+        )
+        selection_path = self.write(
+            "final-selection.json",
+            {
+                "schema": "vakint.cache-final-selection.v1",
+                "accepted": True,
+                "decision": "retain_complete_candidate",
+                "reason": "SYNTHETIC explicit final selection of this complete unchanged candidate",
+                "decided_utc": "2026-10-24T12:00:00Z",
+                "producer_phase": "pilot",
+                "test_fixture": True,
+                "cache": merge.evidence(self.cache),
+                "build_report": merge.evidence(build_path),
+                "producer_workload": bridge["producer"]["workload"],
+                "consumer_workload": bridge["consumer"]["final_workload"],
+                "candidate_acceptance": merge.evidence(candidate_path),
+                "cache_requalification": merge.evidence(bridge_path),
+            },
+        )
+        index = merge.read(index_path)
+        index["final_selection"] = merge.evidence(selection_path)
+        index_path.write_text(json.dumps(index))
+        return {
+            "identity": identity,
+            "build": build_path,
+            "bridge": bridge_path,
+            "index": index_path,
+            "candidate": candidate_path,
+            "selection": selection_path,
+        }
+
+    def selected_pilot(self, fixture):
+        return merge.build_record(
+            fixture["build"], self.cache, merge.ReportEvidence(fixture["index"])
+        )
+
+    def change_pilot_selection(self, fixture, edit):
+        selection = merge.read(fixture["selection"])
+        edit(selection)
+        fixture["selection"].write_text(json.dumps(selection))
+        index = merge.read(fixture["index"])
+        index["final_selection"] = merge.evidence(fixture["selection"])
+        fixture["index"].write_text(json.dumps(index))
+
+    def test_explicit_final_selection_preserves_complete_pilot_provenance(self):
+        fixture = self.selected_pilot_fixture()
+        originals = {
+            name: fixture[name].read_bytes()
+            for name in ("build", "bridge", "candidate", "selection")
+        }
+        result = self.selected_pilot(fixture)
+        self.assertEqual(result["raw_report"], json.loads(originals["build"]))
+        self.assertEqual(result["raw_report"]["phase"], "pilot")
+        self.assertEqual(
+            result["final_selection"]["evidence"], merge.evidence(fixture["selection"])
+        )
+        self.assertEqual(result["cache_file"], merge.evidence(self.cache))
+        for name, contents in originals.items():
+            self.assertEqual(fixture[name].read_bytes(), contents)
+
+    def test_unselected_pilot_stays_ineligible_with_or_without_provenance(self):
+        fixture = self.selected_pilot_fixture()
+        with self.assertRaises(ValueError):
+            merge.build_record(fixture["build"], self.cache)
+        index = merge.read(fixture["index"])
+        del index["final_selection"]
+        fixture["index"].write_text(json.dumps(index))
+        with self.assertRaises(ValueError):
+            self.selected_pilot(fixture)
+
+    def test_original_final_build_needs_no_pilot_selection(self):
+        path = self.strict_build()
+        original = path.read_bytes()
+        record = merge.build_record(path, self.cache)
+        self.assertEqual(record["raw_report"], json.loads(original))
+        self.assertEqual(record["raw_report"]["phase"], "final")
+        self.assertIsNone(record.get("final_selection"))
+
+    def test_final_selection_decision_flags_reason_and_utc_are_explicit(self):
+        fixture = self.selected_pilot_fixture()
+        original = merge.read(fixture["selection"])
+        for field, value in (
+            ("accepted", False),
+            ("accepted", "true"),
+            ("decision", "automatic"),
+            ("producer_phase", "final"),
+            ("reason", ""),
+            ("reason", "   "),
+            ("decided_utc", None),
+            ("decided_utc", "not-a-date"),
+            ("decided_utc", "2026-10-24T12:00:00"),
+            ("decided_utc", "2026-10-24T12:00:00+02:00"),
+        ):
+            with self.subTest(field=field, value=value):
+                self.change_pilot_selection(
+                    fixture,
+                    lambda selection, original=original: (
+                        selection.clear(),
+                        selection.update(copy.deepcopy(original)),
+                    ),
+                )
+                self.change_pilot_selection(
+                    fixture,
+                    lambda selection, field=field, value=value: selection.update(
+                        {field: value}
+                    ),
+                )
+                with self.assertRaises((ValueError, TypeError)):
+                    self.selected_pilot(fixture)
+
+    def test_final_selection_reference_bytes_cannot_change_silently(self):
+        fixture = self.selected_pilot_fixture()
+        paths = [fixture[name] for name in ("selection", "candidate", "bridge")] + [
+            self.cache
+        ]
+        for path in paths:
+            original = path.read_bytes()
+            with self.subTest(path=path.name):
+                path.write_bytes(b"ALTERED")
+                with self.assertRaises(ValueError):
+                    self.selected_pilot(fixture)
+                path.write_bytes(original)
+
+    def test_final_selection_cannot_point_to_different_cache_or_workloads(self):
+        fixture = self.selected_pilot_fixture()
+        original = merge.read(fixture["selection"])
+        for field in ("cache", "producer_workload", "consumer_workload"):
+            replacement = self.write(
+                f"different-{field}.json", {"SYNTHETIC_DIFFERENT": field}
+            )
+            with self.subTest(field=field):
+                self.change_pilot_selection(
+                    fixture,
+                    lambda selection, original=original: (
+                        selection.clear(),
+                        selection.update(copy.deepcopy(original)),
+                    ),
+                )
+                self.change_pilot_selection(
+                    fixture,
+                    lambda selection, field=field, replacement=replacement: (
+                        selection.update({field: merge.evidence(replacement)})
+                    ),
+                )
+                with self.assertRaises((ValueError, KeyError)):
+                    self.selected_pilot(fixture)
+
+    def test_final_selection_and_index_must_pin_the_same_accepted_bridge(self):
+        fixture = self.selected_pilot_fixture()
+        bridge = merge.read(fixture["bridge"])
+        alternate = self.write(
+            "different-bridge.json", {**bridge, "different_receipt": True}
+        )
+        self.change_pilot_selection(
+            fixture,
+            lambda selection: selection.update(
+                cache_requalification=merge.evidence(alternate)
+            ),
+        )
+        with self.assertRaises(ValueError):
+            self.selected_pilot(fixture)
+
+    def test_selected_pilot_bridge_acceptance_cannot_be_revoked_or_omitted(self):
+        fixture = self.selected_pilot_fixture()
+        bridge = merge.read(fixture["bridge"])
+        bridge["accepted"] = False
+        self.refresh_acceptance(fixture["bridge"], fixture["index"], bridge)
+        self.change_pilot_selection(
+            fixture,
+            lambda selection: selection.update(
+                cache_requalification=merge.evidence(fixture["bridge"])
+            ),
+        )
+        with self.assertRaisesRegex(ValueError, "no accepted requalification"):
+            self.selected_pilot(fixture)
+        index = merge.read(fixture["index"])
+        del index["cache_requalification"]
+        fixture["index"].write_text(json.dumps(index))
+        with self.assertRaises((ValueError, KeyError)):
+            self.selected_pilot(fixture)
+
+    def test_pilot_never_uses_same_cohort_shortcut_without_accepted_bridge(self):
+        fixture = self.selected_pilot_fixture()
+        build = merge.read(fixture["build"])
+        identity = {
+            **build,
+            "build_git_revision": build["build_identity"]["build"]["git_revision"],
+        }
+        producer = {
+            "raw_report": build,
+            "evidence": merge.evidence(fixture["build"]),
+            "cache_file": merge.evidence(self.cache),
+        }
+        index = merge.read(fixture["index"])
+        del index["cache_requalification"]
+        fixture["index"].write_text(json.dumps(index))
+        with self.assertRaisesRegex(ValueError, "missing hashed evidence"):
+            merge.ReportEvidence(fixture["index"]).cache_qualification(
+                identity, producer
+            )
+
+    def test_selected_pilot_still_rejects_partial_failed_or_nonstrict_builds(self):
+        fixture = self.selected_pilot_fixture()
+        original = fixture["build"].read_bytes()
+        for change in (
+            lambda build: build.update(complete=False),
+            lambda build: build.update(publishable=False),
+            lambda build: build["preparation"].update(status="partial"),
+            lambda build: build["preparation"].update(completed_roots=0),
+            lambda build: build["preparation"].update(failure="synthetic failure"),
+            lambda build: build["supervision"].update(success=False),
+            lambda build: build["supervision"].update(hard_deadline_exhausted=True),
+            lambda build: build["preparation"]["native_profile"].update(strict=False),
+            lambda build: build["preparation"]["native_profile"].update(
+                unresolved_policy="preserve"
+            ),
+        ):
+            with self.subTest(change=change):
+                build = json.loads(original)
+                change(build)
+                fixture["build"].write_text(json.dumps(build))
+                with self.assertRaises(ValueError):
+                    self.selected_pilot(fixture)
+
+    def test_candidate_acceptance_counts_and_original_build_binding_are_checked(self):
+        fixture = self.selected_pilot_fixture()
+        original = fixture["candidate"].read_bytes()
+        for change in (
+            lambda candidate: candidate.update(schema="other-schema"),
+            lambda candidate: candidate.update(state="INCOMPLETE"),
+            lambda candidate: candidate.update(selected_training_roots=2),
+            lambda candidate: candidate.update(completed_strict_roots=0),
+            lambda candidate: candidate.update(workload_sha256="0" * 64),
+            lambda candidate: candidate["reports"]["build"].update(sha256="0" * 64),
+        ):
+            with self.subTest(change=change):
+                candidate = json.loads(original)
+                change(candidate)
+                fixture["candidate"].write_text(json.dumps(candidate))
+                self.change_pilot_selection(
+                    fixture,
+                    lambda selection: selection.update(
+                        candidate_acceptance=merge.evidence(fixture["candidate"])
+                    ),
+                )
+                with self.assertRaises(ValueError):
+                    self.selected_pilot(fixture)
+
+    def test_selected_pilot_append_preserves_raw_phase_and_all_history(self):
+        fixture = self.selected_pilot_fixture()
+        historical = {
+            "selected_reduction_run": "OLD_4L",
+            "reduction_runs": {"OLD_4L": {"raw": [1, 2]}},
+            "selected_five_loop_run": "OLD_5L",
+            "five_loop_runs": {"OLD_5L": {"phase": "pilot", "raw": [3, 4]}},
+        }
+        base = self.write("pilot-history.json", historical)
+        output = self.root / "appended-selected-pilot.json"
+        original_build = fixture["build"].read_bytes()
+        args = [
+            "adapter",
+            "--base",
+            str(base),
+            "--build",
+            str(fixture["build"]),
+            "--cache",
+            str(self.cache),
+            "--evidence",
+            str(fixture["index"]),
+            "--output",
+            str(output),
+        ]
+        with patch("sys.argv", args):
+            merge.main()
+        result = merge.read(output)
+        self.assertEqual(merge.read(base), historical)
+        self.assertEqual(
+            result["selected_reduction_run"], historical["selected_reduction_run"]
+        )
+        self.assertEqual(
+            result["selected_five_loop_run"], historical["selected_five_loop_run"]
+        )
+        self.assertEqual(result["reduction_runs"], historical["reduction_runs"])
+        self.assertEqual(
+            result["five_loop_runs"]["OLD_5L"], historical["five_loop_runs"]["OLD_5L"]
+        )
+        new = next(
+            value for key, value in result["five_loop_runs"].items() if key != "OLD_5L"
+        )
+        self.assertEqual(new["cache"]["raw_report"], json.loads(original_build))
+        self.assertEqual(new["cache"]["raw_report"]["phase"], "pilot")
+        self.assertIsNotNone(new["cache"]["final_selection"])
+        self.assertEqual(fixture["build"].read_bytes(), original_build)
+
     def test_primary_performance_requires_matching_completed_cache(self):
         self.paired()
         base = self.write("base.json", {"test_fixture": True})
