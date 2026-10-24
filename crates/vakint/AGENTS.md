@@ -46,3 +46,11 @@ Never hand-edit timings or carry old measurements forward as new results.
 Review the rendered PDF and commit its source, measured JSON and PDF
 together. Keep the large coloured comparison cells and the explicit
 RustRed/FMFT ratio convention when changing the layout.
+
+For five-loop report integration, follow
+[the benchmark maintenance contract](docs/benchmark/maintenance.typ). Use the
+existing report adapter to append hashed cache/suite/primary evidence into a new
+workspace JSON. Functional evidence never supplies performance medians: final
+comparisons require matched fresh samples and an explicitly accepted serialized
+window. Preserve original cohorts, full result/guard checks, and unmeasured null
+phases. The adapter's synthetic file-contract tests do not run reductions.

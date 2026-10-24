@@ -760,6 +760,7 @@ fn main() -> Result<()> {
                             "error":"interrupted attempt retained without retry"})
                     } else {
                         let started = Instant::now();
+                        let wall_started = SystemTime::now();
                         let deadline = now + options.max_case_seconds as f64;
                         write_json(
                             &active_path,
@@ -788,6 +789,8 @@ fn main() -> Result<()> {
                             .spawn();
                         match launched {
                             Ok(mut child) => {
+                                let child_pid = child.id();
+                                let supervisor_pid = std::process::id();
                                 let (status, expired) = loop {
                                     let expired = started.elapsed()
                                         >= Duration::from_secs(options.max_case_seconds)
@@ -804,10 +807,15 @@ fn main() -> Result<()> {
                                     }
                                     std::thread::sleep(Duration::from_millis(200));
                                 };
+                                let wall_finished = SystemTime::now();
                                 json!({"success":status.success() && !expired,
                                     "exit_code":status.code(),"exit_status":status.to_string(),
                                     "deadline_exhausted":expired || status.code()==Some(124),
-                                    "elapsed_seconds":started.elapsed().as_secs_f64()})
+                                    "elapsed_seconds":started.elapsed().as_secs_f64(),
+                                    "child_pid":child_pid,"supervisor_pid":supervisor_pid,
+                                    "started_unix_seconds":wall_started.duration_since(UNIX_EPOCH)?.as_secs_f64(),
+                                    "finished_unix_seconds":wall_finished.duration_since(UNIX_EPOCH)?.as_secs_f64(),
+                                    "interval_scope":"supervisor pre-spawn setup through supervisor-observed worker completion"})
                             }
                             Err(error) => json!({"success":false,"launch_error":error.to_string(),
                                 "elapsed_seconds":started.elapsed().as_secs_f64()}),
