@@ -444,6 +444,68 @@ Each family retains its internal kernel:
 - `Cookable` replaces selected functions or representation-index payloads with compact symbols,
   either as readable flattened names or reversible Symbolica `UserData::Atom` encodings.
 
+Color-only algebra reduces complete selected products. Intermediate collector
+frontiers do not choose identities: generated terms need the whole selected
+product for dummy-index canonicalization and exact cancellation. Each completed
+row first contracts prerequisite paths incident to enabled color seeds, with
+the planner's seed policy and status rule. Metrics are prerequisites, not
+identity seeds, but remain color algebra: closed delta loops, delta chains and
+foreign tensors joined by a delta are rows of their own. With trace evaluation
+disabled, a symmetric trace seeds no prerequisite contraction; its row still
+applies invariant identities that need no trace, and a changed row may absorb
+the trace's own metric. Selected sums stay whole rows. The kernel distributes
+them and renames the summand dummies another factor spells, so
+`f(p,q,r) f(p,q,s) [g(z,x) g(x,y) + f(p,q,z) f(p,q,y)]` keeps its two dummy
+scopes apart for every label order. Only foreign tensors that no color algebra
+reaches stay outside the rows. If no completed row changes, it returns the
+original expression with the rows' completion state. Existing no-metric and
+external-metric guards avoid unnecessary contraction networks.
+
+The same direct `simplify_algebra` call with `AlgebraContraction::None` therefore
+proves color zeros beside indexed momentum and Lorentz spectators without a
+separate generator proof.
+Regression tests vary index-registration order, label order, contraction mode
+and spectators, and check completion, exact disabled-trace results,
+factorization and retained logical interfaces.
+
+Color and Dirac completion share the exact polynomial collector in tensor
+collection. With coefficient collection enabled, completed color rows register
+their terminal results after output contraction. The single-product path finishes
+its row through this same owner before reattaching scalar spectators. Factored
+collection combines the registered rows with their final weights, grouping by
+additive interface before common spectators are reattached. Unchanged complete
+rows participate too, so generated and untouched like terms merge and cancel
+independently of symbol registration order.
+
+The collector uses rational multivariate polynomials over opaque atom variables.
+Source scalar sums retain their boundaries in selected products and power bases;
+coefficient collection and numerical distribution expose exact cancellation.
+Sum factors containing generators or invariant color tensors remain opaque main variables, so
+the terminal trace decomposition is not expanded again by coefficient collection.
+Their scalar weights still combine, and numerical distribution can certify a
+literal zero against an opened copy without changing any surviving decomposition.
+Metric-only sums remain polynomial arithmetic, including their indexed Lorentz
+coefficients. A complete row with no color identities and only external color
+metrics is terminal even though those free color ports remain.
+Exact complex rationals use the same
+rational polynomial owner with an opaque numerical imaginary unit, whose powers
+normalize on materialization.
+Function payloads never receive temporary atom symbols. Unsupported coefficient
+domains and excessive degrees retain atom arithmetic. This lets traceless
+generator products cancel to literal zero beside scalar or indexed coefficients,
+while powers and common spectator products remain factored. Numerical weights
+inside scalar power bases may take their canonical distributed form without
+expanding the powers.
+
+Color certification remains local to the enabled policy. Collection that changes
+the sum or power context of surviving color work revokes the row's fixed-point
+certificate; scalar cancellation alone does not require another kernel pass.
+Ordinary observations are restored before publishing the result, keeping disabled
+traces and foreign-domain work visible to later simplification policies. Confirming
+rows can still certify a literal zero across their combined coefficients. Otherwise
+a call whose color kernels are unchanged keeps its original grouping, so structural
+contraction and coefficient collection cannot alternate equivalent nonzero forms.
+
 Formal SU(N) color reduction recognizes complete invariant fundamental networks
 with zero or one external adjoint. Singlet/adjoint projection and the local
 cubic symmetric-trace contractions retain other open lines and scalar factors.

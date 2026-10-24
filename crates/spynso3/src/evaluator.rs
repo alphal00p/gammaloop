@@ -32,6 +32,9 @@ impl Spensor {
     /// and JIT settings as Expression.evaluator. Fixed values can be substituted
     /// before construction. Evaluation returns one Tensor per input row, retaining
     /// the logical axes and data identity. JIT compilation occurs on first use.
+    /// Set `horner_use_cpe=True` to include common-pair elimination when scoring
+    /// Horner candidates. Final common-pair elimination remains enabled in both
+    /// modes and is bounded by `cpe_iterations`.
     ///
     /// >>> from symbolica import S
     /// >>> from symbolica.community.tensor import Tensor, TensorName, Representation
@@ -44,7 +47,7 @@ impl Spensor {
         n_cores=4, verbose=false, jit_compile=true, direct_translation=true,
         jit_direct_translation=false, jit_optimization_level=3, jit_options=HashMap::default(),
         max_horner_scheme_variables=500, max_common_pair_cache_entries=1_000_000,
-        max_common_pair_distance=100))]
+        max_common_pair_distance=100, horner_use_cpe=false))]
     pub fn evaluator(
         &self,
         params: Vec<PythonExpression>,
@@ -61,6 +64,7 @@ impl Spensor {
         max_horner_scheme_variables: usize,
         max_common_pair_cache_entries: usize,
         max_common_pair_distance: usize,
+        horner_use_cpe: bool,
         py: Python<'_>,
     ) -> PyResult<SpensoExpressionEvaluator> {
         // Public component order may differ from canonical storage order.
@@ -89,7 +93,7 @@ impl Spensor {
             max_horner_scheme_variables,
             max_common_pair_cache_entries,
             max_common_pair_distance,
-            false,
+            horner_use_cpe,
             py,
         )?;
         Ok(SpensoExpressionEvaluator {
