@@ -149,19 +149,13 @@ fn stored_power_defaults_to_one_for_existing_json() {
 
 #[cfg(feature = "svg")]
 #[test]
-fn native_scene_displays_dots_and_factored_numerators() {
+fn native_scene_displays_dots_without_an_automatic_title() {
     let diagram = master_diagram();
     let scene = diagram
         .to_scene(None, &Default::default(), None, &SceneOptions::default())
         .unwrap();
     assert!(scene.pages.iter().any(|label| label.contains("^(2)")));
-    assert!(
-        scene
-            .title
-            .as_deref()
-            .unwrap()
-            .starts_with("#\"Numerator: ")
-    );
+    assert!(scene.title.is_none());
     assert!(
         scene
             .edges
