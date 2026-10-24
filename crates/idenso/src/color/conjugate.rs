@@ -10,7 +10,7 @@ use spenso::{
     structure::{
         abstract_index::AbstractIndex,
         representation::{LibraryRep, RepName},
-        slot::{IsAbstractSlot, Slot},
+        slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher},
     },
 };
 use symbolica::{
@@ -45,22 +45,6 @@ static COLOR_CONJ_GENERATOR_TRANSPOSITIONS: LazyLock<[Replacement; 1]> = LazyLoc
             cof.to_symbolic([RS.d_, RS.a_]),
         ),
     )]
-});
-
-static COLOR_CONJ_REPRESENTATION_SWAPS: LazyLock<[Replacement; 2]> = LazyLock::new(|| {
-    let cof = ColorFundamental {};
-    let coaf = ColorFundamental {}.dual();
-
-    [
-        Replacement::new(
-            coaf.to_symbolic([RS.d_, RS.a_]).to_pattern(),
-            cof.to_symbolic([RS.d_, RS.a_]),
-        ),
-        Replacement::new(
-            cof.to_symbolic([RS.d_, RS.a_]).to_pattern(),
-            coaf.to_symbolic([RS.d_, RS.a_]),
-        ),
-    ]
 });
 
 struct ColorConjugator;
@@ -145,6 +129,7 @@ impl ColorConjugator {
 }
 
 pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
+    let mut slots = SlotMatcher::default();
     expression
         .replace_map(|arg, _context, out| {
             let AtomView::Fun(conjugate) = arg else {
@@ -179,7 +164,24 @@ pub fn color_conj_impl(expression: AtomView<'_>) -> Atom {
             }
         })
         .replace_multiple(&*COLOR_CONJ_GENERATOR_TRANSPOSITIONS)
-        .replace_multiple(&*COLOR_CONJ_REPRESENTATION_SWAPS)
+        .replace_map(|arg, _, out| {
+            // Conjugation dualizes every tensor space, including user-defined
+            // representations. Keep scalar metadata and compact representations
+            // opaque, and preserve exact dimension and index payloads.
+            if matches!(arg, AtomView::Fun(fun) if fun.get_symbol().is_scalar()) {
+                **out = arg.to_owned();
+                return;
+            }
+            match slots.classify(arg) {
+                SlotMatch::Explicit(slot) => {
+                    if let Ok(rep) = slots.representation(slot) {
+                        **out = rep.dual().to_symbolic([slot.dimension(), slot.index()]);
+                    }
+                }
+                SlotMatch::Opaque => **out = arg.to_owned(),
+                SlotMatch::Other => {}
+            }
+        })
 }
 
 #[cfg(test)]
