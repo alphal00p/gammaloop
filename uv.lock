@@ -2235,7 +2235,7 @@ wheels = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = { git = "https://github.com/symbolica-dev/symbolica.git?branch=main#170ba932d0cf73508da34cc78fbe82361158147e" }
+source = { git = "https://github.com/symbolica-dev/symbolica.git?branch=main#07a7fd206bcdeea5a502c5b706827cb95407b252" }
 
 [[package]]
 name = "terminado"
