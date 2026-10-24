@@ -3,8 +3,8 @@
 //! See the [materialization](SymbolicTensor::materialized) and
 //! [matrix composition](SymbolicTensor::compose) examples.
 
-use super::SymbolicTensor;
 use super::inference::InterfaceInference;
+use super::{SymbolicTensor, TensorProofs};
 use crate::tensor::inference::TensorInferenceError;
 use crate::{CookSettings, CookingError};
 use ahash::AHashMap;
@@ -2114,7 +2114,7 @@ impl ProductPlan {
                 } else {
                     SymbolicTensor::new(atom, interface)
                 };
-                value.validate_rewrite(&[left, right])
+                value.validate_rewrite("multiply", &[left, right])
             }
             Self::Outer => left.outer(right),
             Self::Contract(pairs) => left.contract_ports(right, pairs),
@@ -2257,7 +2257,11 @@ impl SymbolicTensor<PartialStructure> {
         self.graph_port_indices(&HashMap::from([(pair.left, target), (pair.right, target)]))
     }
 
-    fn validate_rewrite(self, sources: &[&Self]) -> Result<Self, TensorCompositionError> {
+    fn validate_rewrite(
+        self,
+        _operation: &str,
+        sources: &[&Self],
+    ) -> Result<Self, TensorCompositionError> {
         if sources
             .iter()
             .all(|source| source.structure.open_positions().is_empty())
@@ -2268,6 +2272,17 @@ impl SymbolicTensor<PartialStructure> {
                 let occurrences = ExplicitIndexOccurrences::product(sources)?;
                 let _ = self.proofs.occurrences.set(Arc::new(occurrences));
             }
+            #[cfg(debug_assertions)]
+            TensorProofs::assert_normalization_preserves_interface(
+                _operation,
+                &sources
+                    .iter()
+                    .map(|source| &source.expression)
+                    .collect::<Vec<_>>(),
+                &self.expression,
+                Ok(&self.structure),
+                None,
+            );
             let _ = self.proofs.validated.set(true);
             if sources
                 .iter()
@@ -2514,7 +2529,8 @@ impl SymbolicTensor<PartialStructure> {
     /// # Errors
     ///
     /// Rejects invalid positions, missing source ports, or a relabeling that introduces
-    /// more than two compatible uses of an index.
+    /// more than two compatible uses of an index. Debug builds panic if a user
+    /// normalizer violates its free-index preservation contract.
     pub fn reindex_interface_ports(
         &self,
         replacements: &HashMap<usize, AbstractIndex>,
@@ -2588,9 +2604,16 @@ impl SymbolicTensor<PartialStructure> {
         }
         value.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
         if explicit {
+            TensorProofs::assert_normalization_preserves_interface(
+                "reindex_interface_ports",
+                &[&self.expression],
+                &value.expression,
+                Ok(&value.structure),
+                None,
+            );
             Ok(value)
         } else {
-            value.validate_rewrite(&[self])
+            value.validate_rewrite("reindex_interface_ports", &[self])
         }
     }
 
@@ -2645,7 +2668,8 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             interface_in_atom_order(&atom, &interface)?
         };
-        SymbolicTensor::from_normalized_parts(atom, interface).validate_rewrite(&[&self])
+        SymbolicTensor::from_normalized_parts(atom, interface)
+            .validate_rewrite("normalize_closed_root_chain", &[&self])
     }
 
     /// See the [example](Self::materialized).
@@ -2687,7 +2711,7 @@ impl SymbolicTensor<PartialStructure> {
                 right.structure.logical_slots(),
             ),
         )
-        .validate_rewrite(&[self, right])
+        .validate_rewrite("outer", &[self, right])
     }
 
     /// See the [example](Self::materialized).
@@ -2809,7 +2833,7 @@ impl SymbolicTensor<PartialStructure> {
             validate_explicit_index_occurrences(&atom)?;
         }
         SymbolicTensor::from_normalized_parts(atom, interface)
-            .validate_rewrite(&[&materialized_left, &materialized_right])
+            .validate_rewrite("contract_ports", &[&materialized_left, &materialized_right])
     }
 
     fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
@@ -3047,7 +3071,7 @@ impl SymbolicTensor<PartialStructure> {
         if self.expression.as_view().is_zero() || right.expression.as_view().is_zero() {
             let value = SymbolicTensor::from_normalized_parts(Atom::Zero, interface);
             let _ = value.proofs.occurrences.set(Arc::new(occurrences));
-            return value.validate_rewrite(&[self, right]);
+            return value.validate_rewrite("compose", &[self, right]);
         }
 
         let (coefficient, factors) = self.chain_parts(left_channel)?;
@@ -3064,7 +3088,7 @@ impl SymbolicTensor<PartialStructure> {
             let value = SymbolicTensor::from_normalized_parts(atom, interface);
             let _ = value.proofs.occurrences.set(Arc::new(occurrences));
             value
-                .validate_rewrite(&[self, right])?
+                .validate_rewrite("compose", &[self, right])?
                 .normalize_closed_root_chain()
         } else {
             validate_explicit_index_occurrences(&atom)?;
@@ -3072,7 +3096,7 @@ impl SymbolicTensor<PartialStructure> {
             let _ = value.proofs.occurrences.set(Arc::new(occurrences));
             value
                 .normalize_closed_root_chain()?
-                .validate_rewrite(&[self, right])
+                .validate_rewrite("compose", &[self, right])
         }
     }
 
@@ -3295,6 +3319,16 @@ impl SymbolicTensor<PartialStructure> {
             let value = Self::from_validated_parts(expression, interface);
             let _ = value.proofs.occurrences.set(Arc::new(occurrences));
             let _ = value.proofs.normalized_product.set(true);
+            #[cfg(debug_assertions)]
+            if compact_dot {
+                TensorProofs::assert_normalization_preserves_interface(
+                    "multiply",
+                    &[&self.expression, &right.expression],
+                    &value.expression,
+                    Ok(&value.structure),
+                    None,
+                );
+            }
             return Ok(value);
         }
         plan.apply(self, right)
@@ -3360,7 +3394,7 @@ impl SymbolicTensor<PartialStructure> {
         if self.expression.as_view().is_zero() {
             let value = SymbolicTensor::from_normalized_parts(Atom::Zero, interface);
             let _ = value.proofs.occurrences.set(Arc::new(occurrences));
-            return value.validate_rewrite(&[self]);
+            return value.validate_rewrite("trace_ports", &[self]);
         }
 
         if !root_chain_channel_is_live(self, channel)
@@ -3382,7 +3416,7 @@ impl SymbolicTensor<PartialStructure> {
             };
             let value = SymbolicTensor::new(atom, interface);
             let _ = value.proofs.occurrences.set(Arc::new(occurrences));
-            return value.validate_rewrite(&[self]);
+            return value.validate_rewrite("trace_ports", &[self]);
         }
         if contains_chain_like(self.expression.as_view())
             && !root_chain_channel_is_live(self, channel)
@@ -3399,7 +3433,7 @@ impl SymbolicTensor<PartialStructure> {
         };
         let value = SymbolicTensor::from_normalized_parts(atom, interface);
         let _ = value.proofs.occurrences.set(Arc::new(occurrences));
-        value.validate_rewrite(&[self])
+        value.validate_rewrite("trace_ports", &[self])
     }
 
     /// See the [example](Self::compose).

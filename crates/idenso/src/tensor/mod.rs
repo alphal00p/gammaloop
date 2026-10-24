@@ -1,4 +1,7 @@
 use self::composition::ExplicitIndexOccurrences;
+#[cfg(debug_assertions)]
+use self::inference::InterfaceInference;
+use self::inference::TensorInterface;
 use crate::NetworkToolingError;
 use delegate::delegate;
 use linnet::half_edge::subgraph::subset::SubSet;
@@ -59,19 +62,33 @@ pub use replacement::TensorRule;
 #[cfg(test)]
 pub mod tests;
 
-impl<S> FunctionLibrary<SymbolicTensor<S>, Atom> for Wrap {
+impl<S: TensorInterface> FunctionLibrary<SymbolicTensor<S>, Atom> for Wrap {
     type Key = Symbol;
     fn apply(
         &self,
         key: &Self::Key,
         tensor: SymbolicTensor<S>,
     ) -> eyre::Result<SymbolicTensor<S>, FunctionLibraryError<Self::Key>> {
+        let expression = function!(*key, &tensor.expression);
+        #[cfg(debug_assertions)]
+        if !InterfaceInference::intrinsic_normalization_head(*key)
+            || !InterfaceInference::normalization_is_intrinsic(tensor.expression.as_view())
+        {
+            let structure = tensor.structure.to_partial_interface(&expression);
+            TensorProofs::assert_normalization_preserves_interface(
+                "Wrap::apply",
+                &[&tensor.expression],
+                &expression,
+                structure.as_ref(),
+                Some(*key),
+            );
+        }
         Ok(SymbolicTensor {
             proofs: tensor.proofs.algebra_result(),
             structure: tensor.structure,
             is_composite: true,
             is_metric: false,
-            expression: function!(*key, tensor.expression),
+            expression,
         })
     }
 

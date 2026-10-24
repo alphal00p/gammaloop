@@ -38,19 +38,19 @@ impl SymbolicTensor<PartialStructure> {
         // Opening notation allocates index identities. Establish those new
         // identities at this materialization boundary rather than carrying a
         // source mask which cannot name them.
-        self.with_materialized_expression(expression)
+        self.with_materialized_expression("undo_dots", expression)
     }
 
     /// Expose chain factors with fresh compatible dummy indices and unchanged endpoints.
     pub fn undo_chain(&self) -> Result<Self, TensorInferenceError> {
         let expression = self.expression().undo_chain::<AbstractIndex>()?;
-        self.with_materialized_expression(expression)
+        self.with_materialized_expression("undo_chain", expression)
     }
 
     /// Replace trace notation with a closed chain, without evaluating it.
     pub fn undo_trace(&self) -> Result<Self, TensorInferenceError> {
         let expression = self.expression().undo_trace::<AbstractIndex>()?;
-        self.with_materialized_expression(expression)
+        self.with_materialized_expression("undo_trace", expression)
     }
 }
 

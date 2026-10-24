@@ -22,14 +22,20 @@ use spenso::network::parsing::{AtomStructureExt, ParseState, StrictTensorFilter}
 use spenso::network::tags::SPENSO_TAG;
 use spenso::shadowing;
 use spenso::shadowing::{ANTISYM, CYCLIC, SYM};
+#[cfg(debug_assertions)]
+use spenso::structure::StructureContract;
 use spenso::structure::abstract_index::{AIND_SYMBOLS, AbstractIndex};
 use spenso::structure::dimension::Dimension;
 use spenso::structure::partial::{
     PartialIndex, PartialSlot, PartialStructure, PartialStructureExt,
 };
 use spenso::structure::representation::{LibraryRep, Minkowski, RepName, Representation};
-use spenso::structure::slot::{IsAbstractSlot, Slot, SlotError, SlotMatch, SlotMatcher, SlotView};
-use spenso::structure::{Canonicalized, OrderedStructure, StructureError, TensorStructure};
+use spenso::structure::slot::{
+    AbsInd, IsAbstractSlot, ParseableAind, Slot, SlotError, SlotMatch, SlotMatcher, SlotView,
+};
+use spenso::structure::{
+    Canonicalized, IndexedStructure, OrderedStructure, StructureError, TensorStructure,
+};
 use std::collections::{HashMap, HashSet};
 use std::slice;
 use std::sync::{Arc, OnceLock};
@@ -88,6 +94,145 @@ pub(super) struct BorrowedTensorParts<'a> {
     pub(super) is_metric: bool,
     pub(super) is_composite: bool,
     pub(super) proofs: &'a TensorProofs,
+}
+
+/// Project stored wrapping interfaces without rebuilding index atoms. Generic
+/// index types are matched against existing result slots; metadata remains the
+/// authority for their identities, including the nominal slots of zero.
+pub(super) trait TensorInterface {
+    #[cfg(debug_assertions)]
+    fn to_partial_interface(&self, expression: &Atom) -> InferenceResult<PartialStructure>;
+}
+
+impl TensorInterface for PartialStructure {
+    #[cfg(debug_assertions)]
+    fn to_partial_interface(&self, _expression: &Atom) -> InferenceResult<PartialStructure> {
+        Ok(self.clone())
+    }
+}
+
+impl TensorInterface for IndexedStructure {
+    #[cfg(debug_assertions)]
+    fn to_partial_interface(&self, _expression: &Atom) -> InferenceResult<PartialStructure> {
+        Ok(self.clone().into_partial())
+    }
+}
+
+impl<A: AbsInd + ParseableAind> TensorInterface for OrderedStructure<LibraryRep, A> {
+    #[cfg(debug_assertions)]
+    fn to_partial_interface(&self, expression: &Atom) -> InferenceResult<PartialStructure> {
+        let mut interface = self.clone();
+        interface.trace_out();
+        if expression.is_zero() {
+            // Zero has no syntax witnessing labels; its stored shape suffices
+            // because the contract permits zero with every nominal interface.
+            return Ok(PartialStructure::from_logical_slots(
+                interface
+                    .external_reps_iter()
+                    .enumerate()
+                    .map(|(axis, rep)| rep.slot(PartialIndex::open(axis))),
+            ));
+        }
+        let mut indices = interface
+            .external_structure_iter()
+            .map(|slot| (slot, None::<AbstractIndex>))
+            .collect::<HashMap<_, _>>();
+        expression.visitor(&mut |node| {
+            if let Ok(slot) = Slot::<LibraryRep, A>::try_from(node)
+                && let Some(index) = indices.get_mut(&slot)
+                && let Ok(observed) = Slot::<LibraryRep, AbstractIndex>::try_from(node)
+            {
+                *index = Some(observed.aind());
+            }
+            true
+        });
+        let slots = interface
+            .external_structure_iter()
+            .map(|slot| {
+                let index = indices[&slot].ok_or_else(|| {
+                    TensorInferenceError::invalid(
+                        "wrapped result does not contain an admitted free index",
+                    )
+                })?;
+                Ok(slot.rep().slot(PartialIndex::Explicit(index)))
+            })
+            .collect::<InferenceResult<Vec<_>>>()?;
+        Ok(PartialStructure::from_logical_slots(slots))
+    }
+}
+
+impl TensorProofs {
+    /// Check the user-normalizer contract without replaying normalization.
+    /// Release builds trust the producer; zero keeps its nominal interface.
+    /// `rebuilt_head` identifies a newly applied head even if its callback removes it.
+    /// Explicit encoded indices retain their owner/axis identities during observation.
+    pub(crate) fn assert_normalization_preserves_interface(
+        operation: &str,
+        sources: &[&Atom],
+        expression: &Atom,
+        structure: Result<&PartialStructure, &TensorInferenceError>,
+        rebuilt_head: Option<Symbol>,
+    ) {
+        #[cfg(debug_assertions)]
+        if rebuilt_head.is_some_and(|head| !InterfaceInference::intrinsic_normalization_head(head))
+            || sources
+                .iter()
+                .any(|source| !InterfaceInference::normalization_is_intrinsic(source.as_view()))
+        {
+            let source = sources
+                .iter()
+                .find(|source| !InterfaceInference::normalization_is_intrinsic(source.as_view()))
+                .or_else(|| sources.first());
+            Self::assert_interface_agreement(
+                operation,
+                source.copied(),
+                rebuilt_head,
+                expression,
+                structure,
+            );
+        }
+        #[cfg(not(debug_assertions))]
+        let _ = (operation, sources, expression, structure, rebuilt_head);
+    }
+    #[cfg(debug_assertions)]
+    fn assert_interface_agreement(
+        operation: &str,
+        source: Option<&Atom>,
+        rebuilt_head: Option<Symbol>,
+        expression: &Atom,
+        structure: Result<&PartialStructure, &TensorInferenceError>,
+    ) {
+        let checked = structure.ok().map(|structure| {
+            InterfaceInference::merge_explicit_interface_sequence(slice::from_ref(structure))
+                .and_then(|external| {
+                    let policy = if external.logical_slots().iter().any(|slot| {
+                        matches!(
+                            slot.aind,
+                            PartialIndex::Explicit(AbstractIndex::Open { .. })
+                        )
+                    }) {
+                        LeafInference::ObserveEncoded
+                    } else {
+                        LeafInference::Observe
+                    };
+                    SymbolicTensor::validate_observed_interface(expression, &external, policy)?;
+                    Ok(())
+                })
+        });
+        let head = rebuilt_head
+            .filter(|head| !InterfaceInference::intrinsic_normalization_head(*head))
+            .or_else(|| {
+                source
+                    .into_iter()
+                    .flat_map(|source| source.get_all_symbols(true))
+                    .find(|head| !InterfaceInference::intrinsic_normalization_head(*head))
+            })
+            .or(rebuilt_head);
+        assert!(
+            matches!(&checked, Some(Ok(()))),
+            "normalization callback contract violated in {operation}; head {head:?}; source {source:?}; result {expression}; admitted interface {structure:?}: {checked:?}"
+        );
+    }
 }
 
 impl<'a> BorrowedTensorParts<'a> {
@@ -616,7 +761,11 @@ impl SymbolicTensor<PartialStructure> {
     /// free interface; only index uses are observed here, without re-inferring
     /// tensor powers or replaying normalization. Retain conservative history
     /// which the source payload may already have lost through simplification.
-    pub(crate) fn with_materialized_expression(&self, expression: Atom) -> InferenceResult<Self> {
+    pub(crate) fn with_materialized_expression(
+        &self,
+        operation: &str,
+        expression: Atom,
+    ) -> InferenceResult<Self> {
         self.ensure_validated()?;
         if expression == self.expression {
             return Ok(self.clone());
@@ -628,6 +777,13 @@ impl SymbolicTensor<PartialStructure> {
         let mut result = Self::from_normalized_parts(expression, self.structure.clone());
         result.proofs = self.proofs.algebra_result();
         result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        TensorProofs::assert_normalization_preserves_interface(
+            operation,
+            &[&self.expression],
+            &result.expression,
+            Ok(&result.structure),
+            None,
+        );
         Ok(result)
     }
 
@@ -964,7 +1120,7 @@ impl SymbolicTensor<PartialStructure> {
 
     /// Expand scalar algebra while retaining the established tensor interface.
     /// A selected variable or polynomial mode uses the corresponding Symbolica
-    /// operation unchanged. Callback-sensitive results retain normal validation.
+    /// operation unchanged. Debug builds check the user-normalizer contract.
     ///
     /// # Errors
     ///
@@ -1026,8 +1182,17 @@ impl SymbolicTensor<PartialStructure> {
             self.expression.expand()
         };
         if self.structure.open_positions().is_empty() {
-            self.borrowed_parts()
-                .with_established_expression(expression)
+            let result = self
+                .borrowed_parts()
+                .with_established_expression(expression)?;
+            TensorProofs::assert_normalization_preserves_interface(
+                "expanded",
+                &[&self.expression],
+                &result.expression,
+                Ok(&result.structure),
+                None,
+            );
+            Ok(result)
         } else {
             self.with_algebra_result(expression)
         }
@@ -1188,6 +1353,13 @@ impl SymbolicTensor<PartialStructure> {
             value.is_metric = self.is_metric;
             value.is_composite = self.is_composite;
         }
+        TensorProofs::assert_normalization_preserves_interface(
+            "map_representation_dimensions",
+            &[&self.expression],
+            &value.expression,
+            Ok(&value.structure),
+            None,
+        );
         Ok(value)
     }
 
@@ -1231,6 +1403,13 @@ impl SymbolicTensor<PartialStructure> {
         let mut result = Self::from_normalized_parts(expression, structure);
         result.proofs = self.proofs.algebra_result();
         result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        TensorProofs::assert_normalization_preserves_interface(
+            "wrap_indices",
+            &[&self.expression],
+            &result.expression,
+            Ok(&result.structure),
+            None,
+        );
         Ok(result)
     }
 
@@ -1282,6 +1461,13 @@ impl SymbolicTensor<PartialStructure> {
         .canonicalize_open_ports();
         let value = Self::from_validated_parts(expression, structure);
         let _ = value.proofs.occurrences.set(Arc::new(occurrences));
+        TensorProofs::assert_normalization_preserves_interface(
+            "with_cooked_indices",
+            &[&self.expression],
+            &value.expression,
+            Ok(&value.structure),
+            None,
+        );
         Ok(value)
     }
 
@@ -1340,6 +1526,13 @@ impl SymbolicTensor<PartialStructure> {
         );
         result.proofs = self.proofs.algebra_result();
         result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        TensorProofs::assert_normalization_preserves_interface(
+            "with_renamed_symbols",
+            &[&self.expression],
+            &result.expression,
+            Ok(&result.structure),
+            None,
+        );
         Ok(result)
     }
 
@@ -1446,6 +1639,13 @@ impl SymbolicTensor<PartialStructure> {
         result.proofs = self.proofs.algebra_result();
         result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
         result.proofs.normalized_product = self.proofs.normalized_product.clone();
+        TensorProofs::assert_normalization_preserves_interface(
+            "with_renamed_indices",
+            &[&self.expression],
+            &result.expression,
+            Ok(&result.structure),
+            None,
+        );
         Ok(result)
     }
 

@@ -55,14 +55,15 @@ impl SymbolicTensor<PartialStructure> {
         let projected = projector.apply(payload);
         let expression =
             coefficient * SPENSO_TAG.chain(port_atom(slots[0]), port_atom(slots[1]), [projected]);
-        Self::new(expression, value.structure).validate_rewrite(&factors.iter().collect::<Vec<_>>())
+        Self::new(expression, value.structure)
+            .validate_rewrite("project_factors", &factors.iter().collect::<Vec<_>>())
     }
 
     /// Expand only normalized factor projectors, preserving the tensor interface
     /// and leaving unrelated products and sums factored.
     pub fn expand_projectors(&self) -> Result<Self, TensorCompositionError> {
         Self::new(self.expression.expand_projectors(), self.structure.clone())
-            .validate_rewrite(&[self])
+            .validate_rewrite("expand_projectors", &[self])
     }
 
     /// Choose the explicit index shared by a contracted pair, avoiding dummy capture.
@@ -90,7 +91,7 @@ impl SymbolicTensor<PartialStructure> {
         let value = Self::checked_parts(expression, PartialStructure::from_logical_slots(logical))
             .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?
             .normalize_closed_root_chain()?;
-        value.validate_rewrite(&[self])
+        value.validate_rewrite("indexed", &[self])
     }
 
     /// Explicitly choose dot notation for the sole ports of two rank-one tensors.
@@ -114,7 +115,8 @@ impl SymbolicTensor<PartialStructure> {
             self.compact_dot_expression(right)?
         };
         super::validate_explicit_index_occurrences(&atom)?;
-        Self::new(atom, PartialStructure::from_logical_slots([])).validate_rewrite(&[self, right])
+        Self::new(atom, PartialStructure::from_logical_slots([]))
+            .validate_rewrite("dot", &[self, right])
     }
 
     /// Present one selected channel first while retaining spectator-port order.
@@ -154,7 +156,7 @@ impl SymbolicTensor<PartialStructure> {
                     .map(|(_, slot)| slot),
             ),
         );
-        Self::new(expression, structure).validate_rewrite(&[self])
+        Self::new(expression, structure).validate_rewrite("chain_form", &[self])
     }
 
     /// Build an ordered chain with explicit input and output slots.

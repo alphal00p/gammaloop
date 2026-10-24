@@ -52,8 +52,8 @@ must not treat printed names alone as a complete serialized registry.
 Tensor metadata is authoritative after initial admission. Raw Atom input is checked against
 the tensor grammar, declared or inferred interface, placeholder scopes and index multiplicities
 at that boundary. Ordinary typed algebra derives its result from admitted operands and carries
-their structure and scoped index usage; it does not reconstruct or revalidate the resulting
-Atom to recover facts already established by the operation. Symbolica normalization may erase
+their structure and scoped index usage. Release fast paths do not reconstruct or revalidate
+the resulting Atom to recover facts already established by the operation. Symbolica normalization may erase
 visible factors without erasing their construction history. Callbacks used by ordinary algebra
 must preserve the admitted tensor meaning; arbitrary interface-changing transformations belong
 at a checked raw-expression boundary.
@@ -233,24 +233,37 @@ performance limitation, not an algebraic equivalence assumption.
 Contraction, rule application and polynomial materialization are separate
 operations. `TensorExpression.expand()` explicitly materializes arithmetic
 sums and products while preserving the checked external tensor interface.
-User callbacks retain their checked boundaries. Kernel observations avoid
-re-inferring known interfaces solely because a trusted transformation returned.
+User normalization callbacks must preserve free indices. Metadata-authoritative
+fast paths trust this contract in release builds and check it with debug
+assertions; intrinsic normalization skips this observation. Diagnostics name
+the operation and source head/payload without replaying callbacks. Zero retains
+its nominal rank. Paths which already validate callback output in release keep
+returning typed errors, including `with_identity_result`, positional composition
+and callback-sensitive unresolved expansion. Debug checks never preempt those
+validators. Kernel observations avoid re-inferring known interfaces solely
+because a trusted transformation returned.
+
+Function-library wrapping projects the stored interface, including ranked zeros,
+rather than recovering it from the source payload. Explicit encoded open indices
+retain their owner/axis identities during observation. Generic index projection
+matches admitted keys against existing slots without rebuilding index atoms.
 
 Frontier growth is bounded before processing the next factor. The current guard
 counts generated alternatives and estimates state bytes; it is not a
 strict heap cap on coefficient buffers. If the guard fires, the result retains
 exact pending factors, and its internal completion flag remains false. It must
 not be certified as fully contracted. Callback-sensitive inputs continue through
-the existing checked contractor, including the rank-loss rejection for a
-normalizer that turns `T(b)` in `g(a,b)*T(a)` into a scalar.
+the same contractor. A normalizer that turns a free `T(b)` into a scalar
+violates the contract and remains a typed-error rejection on checked paths.
 
 Source-attached algebra preserves established interfaces and construction metadata when its
 operation owns the invariant. Attaching unrelated raw parts does not establish that invariant:
 inference can retain raw repeated ports until `checked_parts` merges their explicit
 contractions. This intermediate boundary also lets bindings discard stored-data identity when
 a declaration becomes a contraction, even if its input and final result have the same rank.
-Arbitrary expression replacement and callback-sensitive rewrites which cannot certify their
-interface check the actual output, because normalization can remove tensor ports. That boundary
+Arbitrary expression replacement and existing callback-sensitive identity
+finishers check the actual output in release builds. Metadata-authoritative
+fast paths carry metadata and check free-index preservation only in debug builds. That boundary
 observes existing ports without temporary index materialization or callback replay;
 constructor inference retains its materialization semantics within the same inference owner.
 Index substitution distinguishes graph storage identities from logical unresolved
@@ -600,7 +613,8 @@ contain local dummy pairs finish that scalar scope before the power is applied.
 Callback-sensitive syntax uses the existing ordered substitution schedule and
 checked result construction. It does not acquire a trusted interface merely
 because a substitution was algebraically a contraction. The example
-`g(a,b)*T(a)` whose normalizer turns `T(b)` into a scalar remains a rejection.
+`g(a,b)*T(a)` whose normalizer turns the free `T(b)` into a scalar violates
+the normalization contract and remains a rejection on the checked contractor path.
 
 Ordered substitutions publish the checked surviving interface, including when
 the ordered fallback exposes more work for the component reducer. Discovery

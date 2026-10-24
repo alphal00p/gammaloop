@@ -28,15 +28,15 @@ impl SymbolicTensor<PartialStructure> {
     /// Canonically label internal indices while retaining the ordered external interface.
     ///
     /// The shared network canonicalizer owns signed zeros and dummy labels. The
-    /// checked tensor finisher preserves typed zeros and rejects callback-induced
-    /// port changes, including reordered encoded AUTO identities.
+    /// tensor finisher preserves typed zeros. Debug builds check the user-normalizer
+    /// free-index preservation contract.
     pub fn canonize(&self) -> Result<Self, CanonicalizationError> {
         let expression = self
             .expression
             .canonize::<AbstractIndex>(AbstractIndex::Dummy)?;
         // Canonicalization chooses new dummy identities, so this is an index
         // construction boundary rather than scalar algebra on the old names.
-        Ok(self.with_materialized_expression(expression)?)
+        Ok(self.with_materialized_expression("canonize", expression)?)
     }
 }
 
