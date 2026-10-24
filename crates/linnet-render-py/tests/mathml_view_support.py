@@ -182,8 +182,11 @@ def verify_native():
         assert [label["id"] for label in request["labels"]] == list(range(6))
         assert "Native protocol" in request["labels"][0]["mathml"]
         assert all("<math" not in label["mathml"] for label in request["labels"])
-        for action in (view.measured, view.to_svg, view.to_html, view.to_svg_pages):
-            raises(RuntimeError, "measurement is pending", action)
+        raises(RuntimeError, "measurement is pending", view.measured)
+        assert "<svg" in view.to_svg()
+        assert "<svg" in view.to_html()
+        assert len(view.to_svg_pages()) == 1
+        raises(RuntimeError, "measurement is pending", view.measured)
         raises(ValueError, "chromium", lambda: view.measured(browser="webkit"))
         valid = protocol_receipt(request)
         raises(

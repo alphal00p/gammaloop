@@ -85,7 +85,12 @@ def check_render_snapshot(value):
     assert isinstance(drawing, render.DiagramRender)
     svg, html = drawing.to_svg(), drawing.to_html()
     ET.fromstring(svg)
-    assert svg in html
+    # HTML shares the font at document scope; standalone SVG retains its copy.
+    without_font = re.sub(
+        r'<style data-linnet-font="true">.*?</style>', "", svg, flags=re.DOTALL
+    )
+    assert without_font in html
+    assert html.count("data:font/woff2;base64,") == 1
     assert drawing._repr_svg_() == svg
     assert drawing._repr_html_() == html
     assert drawing._mime_() == ("text/html", html)

@@ -3,7 +3,10 @@ const documentOwners = new WeakMap();
 const FONT_VERSIONS = 3;
 const METRIC_COUNT = 2048;
 const MATHML_BYTES = 2 * 1024 * 1024;
-const TIMEOUT_MS = 15000;
+// Remote widget comms have 15 seconds to transfer the font before the separate
+// five-second browser layout deadline starts. Static output survives either.
+const FONT_TRANSFER_TIMEOUT_MS = 15000;
+const TIMEOUT_MS = 5000;
 const PROBE_VERSION = 1;
 const EMPTY_FONT_KEY = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855';
 
@@ -16,7 +19,7 @@ function ownerFor(doc) {
   return owner;
 }
 
-function waitFor(promise, win, signal, message) {
+function waitFor(promise, win, signal, message, timeout = TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     let settled = false;
     const finish = (complete, value) => {
@@ -27,7 +30,7 @@ function waitFor(promise, win, signal, message) {
       complete(value);
     };
     const cancel = () => finish(reject, signal.reason || new Error('Diagram view disposed'));
-    const timer = win.setTimeout(() => finish(reject, new Error(message)), TIMEOUT_MS);
+    const timer = win.setTimeout(() => finish(reject, new Error(message)), timeout);
     signal.addEventListener('abort', cancel, { once: true });
     if (signal.aborted) cancel();
     Promise.resolve(promise).then(value => finish(resolve, value), error => finish(reject, error));
@@ -53,7 +56,8 @@ async function fontCSS(request, model, win, signal) {
       changed();
       if (!received && !signal.aborted) model.send({ action: 'font', key: request.font_key });
     });
-    return await waitFor(available, win, signal, 'Timed out waiting for the bundled diagram font');
+    return await waitFor(available, win, signal, 'Timed out waiting for the bundled diagram font',
+      FONT_TRANSFER_TIMEOUT_MS);
   } finally {
     if (changed) model.off('change:font', changed);
   }
@@ -186,6 +190,7 @@ class DocumentMeasurements {
   async measureMissing(request, font, missing) {
     font.refs += 1;
     const frame = this.doc.createElement('iframe');
+    frame.setAttribute('sandbox', 'allow-same-origin');
     Object.assign(frame.style, {
       position: 'fixed', left: '-100000px', top: '0', visibility: 'hidden',
       pointerEvents: 'none', width: '1000px', height: '1000px', border: '0',
@@ -287,7 +292,7 @@ async function measureDocument(request, doc, owner) {
         width: box.width / matrix.a, height: box.height / matrix.d,
         baseline: (baseline.getBoundingClientRect().top - box.top) / matrix.d,
       };
-      if (!Object.values(metric).every(Number.isFinite) || metric.width <= 0 || metric.height <= 0) {
+      if (!Object.values(metric).every(Number.isFinite) || metric.width < 0 || metric.height < 0) {
         throw new Error(`The diagram label ${id} has invalid measured dimensions`);
       }
       return { id, ...metric };
@@ -309,6 +314,7 @@ export default {
     let frame;
     let mountAbort;
     let resize;
+    let controls;
     let shown;
     let font;
     let revision = 0;
@@ -345,9 +351,11 @@ export default {
         const resolved = needsFont ? await resource() : null;
         if (disposed || current !== revision) return;
         resize?.disconnect();
+        controls?.disconnect();
         mountAbort?.abort();
         frame?.remove();
         const mounted = owner.doc.createElement('iframe');
+        mounted.setAttribute('sandbox', 'allow-same-origin');
         mountAbort = new owner.win.AbortController();
         const signal = mountAbort.signal;
         frame = mounted;
@@ -360,6 +368,21 @@ export default {
             if (needsFont) await fontReady(doc, owner, signal);
             else await doc.fonts.ready;
             if (disposed || frame !== mounted || mounted.contentDocument !== doc) return;
+            // The sandbox blocks all document scripts, including imported markup.
+            // Controls come from Rust templates before label substitution. Run
+            // only exact trusted sources in the parent, also for lazy children.
+            const trusted = new Set(model.get('scripts') || []);
+            const executed = new WeakSet();
+            const activate = () => {
+              for (const script of doc.querySelectorAll('script')) {
+                if (executed.has(script) || !trusted.has(script.textContent)) continue;
+                executed.add(script);
+                new Function('document', 'window', script.textContent)(doc, mounted.contentWindow);
+              }
+            };
+            controls = new owner.win.MutationObserver(activate);
+            controls.observe(doc.body, { childList: true, subtree: true });
+            activate();
             const fit = () => {
               if (mounted.isConnected) mounted.style.height = `${Math.ceil(doc.body.getBoundingClientRect().height)}px`;
             };
@@ -378,8 +401,7 @@ export default {
             }
           }
         }, { once: true });
-        // Mounting executes the existing trusted SVG/domain controls. The small
-        // host-owned Blob font CSS is installed before those controls and fonts.
+        // The host-owned Blob font CSS precedes content; scripts stay inert.
         const css = resolved ? `<style data-linnet-font>${resolved.css.replace(/<\/style/gi, '<\\/style')}</style>` : '';
         mounted.srcdoc = `<!doctype html><html><head><meta charset="utf-8">${css}<style>html{overflow:hidden}body{margin:0;display:flow-root}</style></head><body data-linnet-frame-owner>${result.html}</body></html>`;
         el.replaceChildren(mounted);
@@ -389,16 +411,21 @@ export default {
     model.on('change:rendered', update);
     model.send({ action: 'attach', view });
     update();
-    if (!shown) {
+    if (request.pending !== false && (request.labels.length || !shown)) {
       try {
         const measurements = request.labels.length
-          ? await owner.measure(request, await resource()) : { id: request.id, metrics: [] };
+          // Resolve the font before starting the layout timer: a remote comm
+          // transfer must retain its independent 15-second allowance.
+          ? await waitFor(owner.measure(request, await resource()), owner.win,
+              owner.abort.signal, 'Diagram measurement exceeded 5 seconds')
+          : { id: request.id, metrics: [] };
         if (!disposed) model.send({ action: 'measure', measurements });
       } catch (error) { fail(error); }
     }
     return () => {
       disposed = true;
       resize?.disconnect();
+      controls?.disconnect();
       mountAbort?.abort();
       model.off('change:rendered', update);
       model.send({ action: 'dispose', view });

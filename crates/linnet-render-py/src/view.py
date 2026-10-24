@@ -17,12 +17,46 @@ def available(module):
     return True
 
 
-def widget(view, request, javascript, completed=None):
+def scripts(templates, interactive):
+    """Only Rust-authored templates supply executable notebook controls.
+
+    Extract before inserting any user labels or snapshot SVG. The iframe itself
+    cannot execute scripts; the parent runs only these exact trusted sources.
+    """
+    from html.parser import HTMLParser
+
+    class Controls(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.active = False
+            self.parts = []
+            self.sources = [interactive]
+
+        def handle_starttag(self, tag, attrs):
+            self.active = tag == "script" and not dict(attrs).get("type")
+
+        def handle_data(self, data):
+            if self.active:
+                self.parts.append(data)
+
+        def handle_endtag(self, tag):
+            if tag == "script" and self.active:
+                self.sources.append("".join(self.parts))
+                self.parts.clear()
+                self.active = False
+
+    parser = Controls()
+    for template in templates:
+        parser.feed(template)
+    return list(dict.fromkeys(parser.sources))
+
+
+def widget(view, request, javascript, completed=None, scripts=()):
     # Imports may release the GIL. lru_cache alone permits concurrent initial
     # misses to construct separate classes for the same source.
     with _widget_lock:
         cls = _widget_class(javascript)
-    return cls(view, request, completed)
+    return cls(view, request, completed, scripts)
 
 
 @lru_cache(maxsize=1)
@@ -52,13 +86,15 @@ def _widget_class(javascript):
         request = traitlets.Dict().tag(sync=True)
         rendered = traitlets.Dict().tag(sync=True)
         font = traitlets.Dict().tag(sync=True)
+        scripts = traitlets.List(traitlets.Unicode()).tag(sync=True)
 
-        def __init__(self, owner, initial, html):
+        def __init__(self, owner, initial, html, scripts):
             initial = dict(initial)
             self._font_css = initial.pop("font_css")
-            super().__init__(request=initial)
+            super().__init__(request=initial, scripts=list(scripts))
             self._view = owner
             self._views = set()
+            self._measured = not initial.get("pending", True)
             if html is not None:
                 self.rendered = {
                     "id": self.request["id"],
@@ -77,14 +113,25 @@ def _widget_class(javascript):
                 if content.get("key") == self.request["font_key"]:
                     self.font = {"key": self.request["font_key"], "css": self._font_css}
             elif action == "measure" and self._view is not None:
+                receipt = content.get("measurements", {})
+                if (
+                    not isinstance(receipt, dict)
+                    or self._measured
+                    or receipt.get("id") != self.request["id"]
+                ):
+                    return
                 try:
-                    snapshot = self._view.measured(measurements=content["measurements"])
+                    snapshot = self._view.measured(measurements=receipt)
+                    self._measured = True
                     self.rendered = {
                         "id": self.request["id"],
                         "html": self._notebook_html(snapshot.to_html()),
                     }
                 except Exception as error:  # noqa: BLE001 -- Report failures in the widget.
-                    self.rendered = {"id": self.request["id"], "error": str(error)}
+                    # A reentrant/concurrent completion may already have won.
+                    # Keep the initial static snapshot on malformed receipts.
+                    if not self.rendered.get("html"):
+                        self.rendered = {"id": self.request["id"], "error": str(error)}
 
         def _notebook_html(self, html):
             # Only the exact block owned by native capture is transported as a
@@ -95,6 +142,9 @@ def _widget_class(javascript):
                     + self._font_css
                     + "]]></style>",
                     "",
+                )
+                html = html.replace(
+                    '<style data-linnet-font="true">' + self._font_css + "</style>", ""
                 )
             return html
 
@@ -109,6 +159,7 @@ def _widget_class(javascript):
 
 
 def headless(request, javascript):
+    """Measure explicitly; a five-second browser deadline raises TimeoutError."""
     import asyncio
 
     try:
@@ -140,6 +191,8 @@ def _headless(request, javascript):
         try:
             page = browser.new_page()
             # Every required byte is in the request/module. Never resolve a CDN.
+            # The inline font needs no widget transfer allowance; bound browser
+            # layout by the same five seconds used after notebook font transfer.
             page.route("**/*", lambda route: route.abort())
             return page.evaluate(
                 """async ({request, javascript}) => {
@@ -147,10 +200,18 @@ def _headless(request, javascript):
                         {type: 'text/javascript'}));
                     try {
                         const module = await import(url);
-                        return await module.measure(request);
+                        return await Promise.race([
+                            module.measure(request),
+                            new Promise((_, reject) => setTimeout(() =>
+                                reject(new Error('LINNET_MEASUREMENT_TIMEOUT')), 5000)),
+                        ]);
                     } finally { URL.revokeObjectURL(url); }
                 }""",
                 {"request": request, "javascript": javascript},
             )
+        except Exception as error:
+            if "LINNET_MEASUREMENT_TIMEOUT" in str(error):
+                raise TimeoutError("Diagram measurement exceeded 5 seconds") from error
+            raise
         finally:
             browser.close()

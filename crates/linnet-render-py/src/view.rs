@@ -1,4 +1,4 @@
-//! Prepared native scenes become immutable snapshots after real label measurement.
+//! Prepared native scenes provide static snapshots and optional live measurements.
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::path::PathBuf;
@@ -8,7 +8,7 @@ use std::sync::{Arc, OnceLock};
 use linnest::svg::{LabelMetrics, LabelSource, Scene};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::sync::PyOnceLock;
-use pyo3::types::{PyAny, PyAnyMethods, PyBytes, PyDict, PyDictMethods, PyModule};
+use pyo3::types::{PyAny, PyAnyMethods, PyBytes, PyDict, PyDictMethods, PyModule, PyTuple};
 use pyo3::{pyclass, pymethods, Bound, Py, PyResult, Python};
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
@@ -38,7 +38,7 @@ struct FontResource {
     key: String,
 }
 
-/// A resolved drawing awaiting its notebook browser's label measurements.
+/// A resolved drawing with static exports and optional browser measurements.
 ///
 /// Clones retain the same scenes, receipt identity, and completion cells. A
 /// widget and its caller therefore observe the same completed snapshot. Each
@@ -253,6 +253,18 @@ impl PyDiagramView {
                 }
             }
             Source::Captured(_) => {}
+        }
+    }
+
+    // Templates are trusted Rust-authored controls, before label substitution.
+    fn templates<'a>(&'a self, templates: &mut Vec<&'a str>) {
+        if let Some(template) = &self.html_template {
+            templates.push(template);
+        }
+        if let Source::Views(views) = self.source.as_ref() {
+            for view in views {
+                view.templates(templates);
+            }
         }
     }
 
@@ -683,7 +695,7 @@ impl PyDiagramView {
     /// Propagates label validation, optional compiler, and rendering errors.
     #[pyo3(signature = (*, browser=None))]
     pub fn snapshot(&self, py: Python<'_>, browser: Option<&str>) -> PyResult<PyDiagramRender> {
-        if browser.is_some() || self.completed.get().is_some() {
+        if browser.is_some() || self.completed.get().is_some() || self.label_count() == 0 {
             return self.measured(py, None, browser);
         }
         if Self::python(py)?
@@ -696,28 +708,28 @@ impl PyDiagramView {
         }
     }
 
-    /// Return the completed single-page SVG; see [`Self`] for an example.
+    /// Return a static single-page SVG; see [`Self`] for an example.
     ///
     /// # Errors
     /// Propagates [`Self::snapshot`] errors and rejects multipage snapshots.
     pub fn to_svg(&self, py: Python<'_>) -> PyResult<String> {
         self.snapshot(py, None)?.to_svg()
     }
-    /// Return independent strings for all completed pages; see [`Self`].
+    /// Return independent strings for all static pages; see [`Self`].
     ///
     /// # Errors
-    /// Propagates [`Self::snapshot`] errors if completion is unavailable.
+    /// Propagates [`Self::snapshot`] errors.
     pub fn to_svg_pages(&self, py: Python<'_>) -> PyResult<Vec<String>> {
         self.snapshot(py, None)?.to_svg_pages()
     }
-    /// Return completed HTML with its font resource; see [`Self`].
+    /// Return static HTML with its shared font resource; see [`Self`].
     ///
     /// # Errors
-    /// Propagates [`Self::snapshot`] errors if completion is unavailable.
+    /// Propagates [`Self::snapshot`] errors.
     pub fn to_html(&self, py: Python<'_>) -> PyResult<String> {
         self.snapshot(py, None)?.to_html()
     }
-    /// Save the completed snapshot, selecting the format by suffix.
+    /// Save a static snapshot, selecting the format by suffix.
     ///
     /// ```no_run
     /// use linnet_render_py::PyDiagramView;
@@ -754,6 +766,9 @@ impl PyDiagramView {
     pub fn widget(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let completed = Some(self.to_html(py)?);
         let request = self.measurement_request(py)?;
+        request
+            .bind(py)
+            .set_item("pending", self.completed.get().is_none())?;
         // Captured children can already contain MathML without pending probes.
         if completed
             .as_ref()
@@ -763,6 +778,15 @@ impl PyDiagramView {
             request.bind(py).set_item("font_css", &font.css)?;
             request.bind(py).set_item("font_key", &font.key)?;
         }
+        let mut templates = Vec::new();
+        self.templates(&mut templates);
+        let scripts = Self::python(py)?.call_method1(
+            "scripts",
+            (
+                templates,
+                include_str!("../../linnest/src/svg/interactive.js"),
+            ),
+        )?;
         Self::python(py)?
             .call_method1(
                 "widget",
@@ -771,12 +795,14 @@ impl PyDiagramView {
                     request,
                     include_str!("view.js"),
                     completed,
+                    scripts,
                 ),
             )
             .map(Bound::unbind)
     }
 
-    /// Jupyter MIME bundle hook; see [`Self::widget`] for notebook construction.
+    /// Static Jupyter bundle with an optional widget, respecting MIME filters.
+    /// See [`Self::widget`] for explicit notebook construction.
     ///
     /// # Errors
     /// Propagates widget setup and Python MIME protocol errors.
@@ -812,7 +838,12 @@ impl PyDiagramView {
                 .extract::<bool>()?
         {
             let live = self.widget(py)?.call_method0(py, "_repr_mimebundle_")?;
-            let live = live.bind(py).cast::<PyDict>()?;
+            let live = if live.bind(py).is_instance_of::<PyTuple>() {
+                live.bind(py).get_item(0)?
+            } else {
+                live.bind(py).clone()
+            };
+            let live = live.cast::<PyDict>()?;
             if let Some(value) = live.get_item("application/vnd.jupyter.widget-view+json")? {
                 bundle.set_item("application/vnd.jupyter.widget-view+json", value)?;
             }
@@ -820,7 +851,8 @@ impl PyDiagramView {
         Ok(bundle.into_any().unbind())
     }
 
-    /// Marimo adapter for the retained widget; see [`Self::widget`].
+    /// Marimo adapter: retained widget when available, otherwise static HTML.
+    /// See [`Self::widget`] for explicit widget construction.
     ///
     /// # Errors
     /// Propagates widget errors and missing/failed Marimo imports or adapters.
@@ -1020,11 +1052,12 @@ try:
     widget._receive(widget, {'action': 'font', 'key': request['font_key']}, [])
     assert widget.font == {'key': request['font_key'], 'css': request['font_css']}
     block = '<style data-linnet-font="true"><![CDATA[' + request['font_css'] + ']]></style>'
-    assert block in svg and block in html
-    assert widget.rendered['html'] == html.replace(block, '')
+    html_block = '<style data-linnet-font="true">' + request['font_css'] + '</style>'
+    assert block in svg and html_block in html
+    assert widget.rendered['html'] == html.replace(html_block, '')
     assert 'transport &lt;font&gt;' in widget.rendered['html']
     widget._receive(widget, {'action':'measure', 'measurements':receipt}, [])
-    assert widget.rendered['html'] == html.replace(block, '')
+    assert widget.rendered['html'] == html.replace(html_block, '')
     assert view.to_svg() == svg and view.to_html() == html
     # Exact owned-block removal preserves text and arbitrary other styles.
     literal = '<mtext>data-linnet-font="true"</mtext><style>mtext{color:red}</style>'
@@ -1042,6 +1075,52 @@ assert widget._view is None and widget._font_css == ''
                 Some(&locals),
                 Some(&locals),
             )?;
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn estimated_empty_labels_remain_pending_and_static_without_anywidget() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let mut view = channel_view(py, 1)?;
+            let Source::Scenes(scenes) = Arc::get_mut(&mut view.source).unwrap() else {
+                unreachable!()
+            };
+            scenes[0].pages.push(LabelSource::text(""));
+            scenes[0].nodes[0].label = Some(0);
+            let locals = PyDict::new(py);
+            locals.set_item("view", Py::new(py, view.clone())?)?;
+            py.run(
+                cr#"
+import sys
+from unittest.mock import patch
+with patch.dict(sys.modules, {'anywidget': None, 'typst': None}):
+    bundle = view._repr_mimebundle_()
+    assert {'text/plain', 'text/html', 'image/svg+xml'} == set(bundle)
+    assert '<svg' in view.to_svg() and '<svg' in view.to_html()
+    assert set(view._repr_mimebundle_(include=['text/html'])) == {'text/html'}
+    assert 'image/svg+xml' not in view._repr_mimebundle_(exclude=['image/svg+xml'])
+"#,
+                Some(&locals),
+                Some(&locals),
+            )?;
+            assert!(view.completed.get().is_none());
+            assert!(view.measured(py, None, None).is_err());
+            let request = view.measurement_request(py)?;
+            locals.set_item("request", request)?;
+            py.run(
+                cr#"
+receipt = {'id': request['id'], 'metrics': [
+    {'id': 0, 'width': 0, 'height': 0, 'baseline': 0}]}
+view.measured(measurements=receipt)
+assert '<svg' in view.to_svg()
+"#,
+                Some(&locals),
+                Some(&locals),
+            )?;
+            assert!(view.completed.get().is_some());
             Ok(())
         })
         .unwrap();
@@ -1201,6 +1280,7 @@ assert handler not in widget._msg_callbacks.callbacks
             }).collect::<PyResult<Vec<_>>>()?;
             let locals = PyDict::new(py);
             locals.set_item("documents", documents)?;
+            locals.set_item("controls", include_str!("../../linnest/src/svg/interactive.js"))?;
             locals.set_item("javascript", include_str!("view.js"))?;
             py.run(cr#"
 import os
@@ -1211,7 +1291,7 @@ with sync_playwright() as driver:
     try:
         page = browser.new_page()
         for html in documents:
-            page.evaluate('''async ({javascript, html}) => {
+            page.evaluate('''async ({javascript, html, controls}) => {
                 const url = URL.createObjectURL(new Blob([javascript], {type: 'text/javascript'}));
                 const el = document.createElement('div');
                 el.style.width = '350px';
@@ -1224,7 +1304,7 @@ with sync_playwright() as driver:
                     const module = await import(url);
                     const original = [...new DOMParser().parseFromString(html, 'text/html')
                         .querySelectorAll('svg[data-linnet-interactive]')].map(attributes);
-                    const state = {request: {id: 'channels', labels: []}, rendered: {id: 'channels', html}};
+                    const state = {request: {id: 'channels', labels: []}, scripts: [controls], rendered: {id: 'channels', html: html + '<script>window.untrustedScriptRan = true</script>'}};
                     const ready = new Promise((resolve, reject) => {
                         timer = setTimeout(() => reject(new Error('render event timed out')), 10000);
                         el.addEventListener('linnet:rendered', resolve, {once: true});
@@ -1232,6 +1312,8 @@ with sync_playwright() as driver:
                     const model = {get: name => state[name], on() {}, off() {}, send() {}};
                     cleanup = await module.default.render({model, el});
                     const doc = (await ready).detail.document;
+                    assert(el.querySelector('iframe').getAttribute('sandbox') === 'allow-same-origin', 'mount frame sandbox changed');
+                    assert(!doc.defaultView.untrustedScriptRan, 'snapshot script escaped the sandbox');
                     const settle = async () => {
                         for (let i = 0; i < 4; i++) await new Promise(resolve => doc.defaultView.requestAnimationFrame(resolve));
                     };
@@ -1272,7 +1354,7 @@ with sync_playwright() as driver:
                     el.remove();
                     URL.revokeObjectURL(url);
                 }
-            }''', {'javascript': javascript, 'html': html})
+            }''', {'javascript': javascript, 'html': html, 'controls': controls})
     finally:
         browser.close()
 "#, Some(&locals), Some(&locals))?;
@@ -1369,6 +1451,8 @@ class Browser:
     def evaluate(self, javascript, payload):
         if payload['request'] == 'failure':
             raise RuntimeError('evaluation failed')
+        if payload['request'] == 'timeout':
+            raise RuntimeError('LINNET_MEASUREMENT_TIMEOUT')
         return {'id': payload['request'], 'metrics': []}
     def close(self):
         self.closed = True
@@ -1391,7 +1475,14 @@ with patch.dict(sys.modules, {'playwright': playwright, 'playwright.sync_api': s
         assert str(error) == 'evaluation failed'
     else:
         raise AssertionError('evaluation failure was swallowed')
-assert len(browsers) == len(exits) == 2
+    try:
+        adapter.headless('timeout', 'source')
+    except TimeoutError as error:
+        assert '5 seconds' in str(error)
+        assert error.__cause__ is not None
+    else:
+        raise AssertionError('measurement timeout was swallowed')
+assert len(browsers) == len(exits) == 3
 assert all(browser.closed for browser in browsers)
 "#,
                 Some(&locals),

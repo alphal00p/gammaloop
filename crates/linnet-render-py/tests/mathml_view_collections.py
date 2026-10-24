@@ -42,7 +42,8 @@ assert len(snapshot.to_svg_pages()) == len(snapshot.diagrams) == 2
 assert first.to_svg() == snapshot.diagrams[0].to_svg()
 assert second.to_svg() == snapshot.diagrams[1].to_svg()
 html = snapshot.to_html()
-assert html.startswith("<section data-collection='native'>")
+assert "<section data-collection='native'>" in html
+assert html.count("data:font/woff2;base64,") == 1
 assert html.index("Native child-b") < html.index("Native child-a")
 assert "<!--linnet-svg-" not in html
 assert collection.to_html() == html
