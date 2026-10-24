@@ -2252,6 +2252,8 @@ impl InterfaceInference {
         &mut self,
         function: symbolica::atom::representation::FunView<'_>,
     ) -> InferenceResult<()> {
+        spenso::network::tensor_symmetry::TensorSlotSymmetry::validate_function(function)
+            .map_err(TensorInferenceError::invalid)?;
         let symbol = function.get_symbol();
         for argument in function.iter() {
             if self
