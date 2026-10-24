@@ -29,6 +29,8 @@ use super::SymbolicTensor;
 use super::inference::InterfaceInference;
 
 mod chain;
+mod word;
+use word::ProductAlgebra;
 
 #[cfg(test)]
 thread_local! {
@@ -50,7 +52,8 @@ impl SymbolicTensor<PartialStructure> {
     pub fn from_normalized_parts(atom: Atom, interface: PartialStructure) -> Self {
         let is_metric =
             matches!(atom.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
-        let is_composite = !matches!(atom.as_view(), AtomView::Fun(_));
+        let is_composite = !matches!(atom.as_view(), AtomView::Fun(function)
+            if !function.get_symbol().has_tag(&SPENSO_TAG.tensor_word));
         Self {
             proofs: Default::default(),
             expression: atom,
@@ -629,6 +632,7 @@ impl super::TensorProofs {
 
 pub(super) fn is_composite_head(symbol: Symbol, tags: &SpensoTags) -> bool {
     symbol == tags.bracket
+        || symbol.has_tag(&tags.tensor_word)
         || symbol == tags.chain
         || symbol == tags.trace
         || symbol.has_tag(&tags.broadcast)
@@ -1421,6 +1425,15 @@ impl ProductPlan {
         left: &SymbolicTensor<PartialStructure>,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        self.apply_algebra(left, right, ProductAlgebra::Commuting)
+    }
+
+    fn apply_algebra(
+        &self,
+        left: &SymbolicTensor<PartialStructure>,
+        right: &SymbolicTensor<PartialStructure>,
+        algebra: ProductAlgebra,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         match self {
             Self::Scalar => {
                 let interface = if left.is_scalar() {
@@ -1432,13 +1445,25 @@ impl ProductPlan {
                         "scalar multiplication requires a scalar operand".into(),
                     ));
                 };
-                let atom = left.expression.as_ref() * right.expression.as_ref();
+                let atom = match algebra {
+                    ProductAlgebra::Commuting => {
+                        left.expression.as_ref() * right.expression.as_ref()
+                    }
+                    ProductAlgebra::Word(_) => {
+                        algebra.expression(left.expression.as_view(), right.expression.as_view())?
+                    }
+                };
                 validate_explicit_index_occurrences(&atom)?;
-                SymbolicTensor::new(atom, interface).validate_rewrite(&[left, right])
+                algebra.finish(atom, interface, &[left, right])
             }
-            Self::Outer => left.outer(right),
-            Self::Contract(pairs) => left.contract_ports(right, pairs),
+            Self::Outer => left.outer_algebra(right, algebra),
+            Self::Contract(pairs) => left.contract_ports_algebra(right, pairs, algebra),
             Self::Compose(left_channel, right_channel) => {
+                if matches!(algebra, ProductAlgebra::Word(_)) {
+                    return Err(TensorCompositionError::InvalidResultInterface(
+                        "tensor words require an explicit Contract plan; compact matrix-chain composition does not define a word policy".into(),
+                    ));
+                }
                 left.compose(right, *left_channel, *right_channel)
             }
         }
@@ -1786,6 +1811,14 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<Self, TensorCompositionError> {
+        self.outer_algebra(right, ProductAlgebra::Commuting)
+    }
+
+    fn outer_algebra(
+        &self,
+        right: &SymbolicTensor<PartialStructure>,
+        algebra: ProductAlgebra,
+    ) -> Result<Self, TensorCompositionError> {
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
         let collisions = compatible_pairs(&self.structure, &right.structure)
@@ -1801,17 +1834,17 @@ impl SymbolicTensor<PartialStructure> {
         let atom = if self.expression.as_view().is_zero() || right.expression.as_view().is_zero() {
             Atom::Zero
         } else {
-            SymbolicTensor::bracket_product(self.expression.as_view(), right.expression.as_view())
+            algebra.expression(self.expression.as_view(), right.expression.as_view())?
         };
         validate_explicit_index_occurrences(&atom)?;
-        SymbolicTensor::new(
+        algebra.finish(
             atom,
             concatenate_interfaces(
                 self.structure.logical_slots(),
                 right.structure.logical_slots(),
             ),
+            &[self, right],
         )
-        .validate_rewrite(&[self, right])
     }
 
     pub fn contract_ports(
@@ -1819,8 +1852,17 @@ impl SymbolicTensor<PartialStructure> {
         right: &SymbolicTensor<PartialStructure>,
         positions: &[PortPair],
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
+        self.contract_ports_algebra(right, positions, ProductAlgebra::Commuting)
+    }
+
+    fn contract_ports_algebra(
+        &self,
+        right: &SymbolicTensor<PartialStructure>,
+        positions: &[PortPair],
+        algebra: ProductAlgebra,
+    ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         if positions.is_empty() {
-            return self.outer(right);
+            return self.outer_algebra(right, algebra);
         }
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
@@ -1898,7 +1940,8 @@ impl SymbolicTensor<PartialStructure> {
         }
         let materialized_left = self.materialize_interface_ports(&left_indices)?;
         let materialized_right = right.materialize_interface_ports(&right_indices)?;
-        let atom = if self.rank() == 1
+        let atom = if matches!(algebra, ProductAlgebra::Commuting)
+            && self.rank() == 1
             && right.rank() == 1
             && [self, right].into_iter().all(|operand| {
                 matches!(operand.expression.as_view(), AtomView::Fun(vector)
@@ -1909,13 +1952,10 @@ impl SymbolicTensor<PartialStructure> {
             // the structural contractor can pack them into Schoonschip notation.
             self.compact_dot_expression(right)?
         } else {
-            SymbolicTensor::bracket_product(
-                materialized_left.as_view(),
-                materialized_right.as_view(),
-            )
+            algebra.expression(materialized_left.as_view(), materialized_right.as_view())?
         };
         validate_explicit_index_occurrences(&atom)?;
-        SymbolicTensor::new(atom, interface).validate_rewrite(&[self, right])
+        algebra.finish(atom, interface, &[self, right])
     }
 
     fn compact_dot_expression(&self, right: &Self) -> Result<Atom, TensorCompositionError> {
