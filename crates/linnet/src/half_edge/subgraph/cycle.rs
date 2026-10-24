@@ -1,7 +1,10 @@
-use std::{num::TryFromIntError, ops::Add};
+use std::convert::Infallible;
+use std::error::Error;
+use std::ops::Add;
 
 use ahash::AHashSet;
 
+use crate::half_edge::CycleEnumerationError;
 use crate::half_edge::{
     nodestore::NodeStorageOps,
     subgraph::{ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
@@ -148,18 +151,46 @@ impl Cycle {
     pub fn all_sum_powerset_filter_map(
         set: &[Self],
         filter_map: &impl Fn(Self) -> Option<Self>,
-    ) -> Result<AHashSet<Self>, TryFromIntError> {
+    ) -> Result<AHashSet<Self>, CycleEnumerationError> {
+        Self::try_all_sum_powerset_filter_map(set, filter_map, || Ok::<(), Infallible>(()))
+    }
+
+    /// Enumerate cycle sums with a fallible cooperative checkpoint per combination.
+    ///
+    /// The callback may stop work without returning an incomplete cycle set.
+    /// See [`HedgeGraph::all_cycles_of_with_control`] for a graph-level caller.
+    pub fn try_all_sum_powerset_filter_map<E: Error + 'static>(
+        set: &[Self],
+        filter_map: &impl Fn(Self) -> Option<Self>,
+        mut checkpoint: impl FnMut() -> Result<(), E>,
+    ) -> Result<AHashSet<Self>, CycleEnumerationError<E>> {
+        let max_supported = usize::BITS as usize - 1;
+        if set.len() > max_supported {
+            return Err(CycleEnumerationError::PowerSetNotRepresentable {
+                elements: set.len(),
+                max_supported,
+            });
+        }
+        let rank = u8::try_from(set.len()).map_err(|_| {
+            CycleEnumerationError::PowerSetNotRepresentable {
+                elements: set.len(),
+                max_supported,
+            }
+        })?;
+        checkpoint().map_err(CycleEnumerationError::Control)?;
         let mut s = AHashSet::new();
-        let mut pset = PowersetIterator::<usize>::new(set.len().try_into()?);
+        let mut pset = PowersetIterator::<usize>::new(rank);
 
         pset.next().unwrap(); //Skip the empty set
 
         for i in pset {
+            checkpoint().map_err(CycleEnumerationError::Control)?;
             let mut ones = i.included_iter();
 
             let mut union = set[ones.next().unwrap()].clone();
 
             for o in ones {
+                checkpoint().map_err(CycleEnumerationError::Control)?;
                 union = &union + &set[o];
             }
 
@@ -168,6 +199,7 @@ impl Cycle {
             }
         }
 
+        checkpoint().map_err(CycleEnumerationError::Control)?;
         Ok(s)
     }
 }

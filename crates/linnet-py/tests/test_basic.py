@@ -1310,6 +1310,11 @@ class TestHedgeGraphTopology(unittest.TestCase):
 
                 cycles = graph.all_cycles(max_results=1)
                 self.assertEqual(len(cycles), 1)
+                self.assertEqual(len(graph.all_cycles()), len(cycles))
+                with self.assertRaisesRegex(ValueError, "elapsed time"):
+                    graph.all_cycles(max_elapsed_seconds=0)
+                with self.assertRaisesRegex(ValueError, "finite and nonnegative"):
+                    graph.all_cycles(max_elapsed_seconds=float("nan"))
                 self.assertEqual(
                     {edge.name for edge in graph.edges_of(cycles[0].filter)},
                     {"ab", "bc", "ca"},

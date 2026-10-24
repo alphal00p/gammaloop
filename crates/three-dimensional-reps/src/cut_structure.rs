@@ -1,8 +1,9 @@
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use symbolica::utils::resources::{self, ResourceLimitError};
 use thiserror::Error;
 
-use crate::utils::{determinant_i32_is_nonzero, determinant_i32_signum};
+use crate::utils;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub(crate) enum ContourClosure {
@@ -20,6 +21,8 @@ pub(crate) struct EnergyResidue {
 
 #[derive(Debug, Error)]
 pub enum CutStructureError {
+    #[error("{0}")]
+    Resource(#[from] ResourceLimitError),
     #[error("empty loop-line signature list")]
     EmptySignatures,
     #[error("contour closure has length {actual}, expected {expected}")]
@@ -43,33 +46,37 @@ pub(crate) fn energy_residues(
         });
     }
 
-    let spanning_trees = spanning_tree_generators(loop_line_signatures);
+    resources::checkpoint()?;
+    let spanning_trees = spanning_tree_generators(loop_line_signatures)?;
     let mut residues = Vec::new();
     for sigmas in (0..n_loops).map(|_| [1, -1]).multi_cartesian_product() {
+        resources::checkpoint()?;
         for (tree_index, tree) in spanning_trees.iter().enumerate() {
-            residues.extend(tree.residues_per_tree(&sigmas, contour_closure, tree_index));
+            residues.extend(tree.residues_per_tree(&sigmas, contour_closure, tree_index)?);
         }
     }
+    resources::checkpoint()?;
     residues.sort_by_key(|residue| residue.spanning_tree_index);
+    resources::checkpoint()?;
     Ok(residues)
 }
 
-fn spanning_tree_generators(loop_line_signatures: &[Vec<i32>]) -> Vec<SpanningTreeGenerator> {
+fn spanning_tree_generators(
+    loop_line_signatures: &[Vec<i32>],
+) -> Result<Vec<SpanningTreeGenerator>> {
     let n_loops = loop_line_signatures[0].len();
-    (0..loop_line_signatures.len())
-        .combinations(n_loops)
-        .filter_map(|basis| {
-            let matrix = basis
-                .iter()
-                .map(|edge_id| loop_line_signatures[*edge_id].clone())
-                .collect::<Vec<_>>();
-            if !determinant_i32_is_nonzero(&matrix) {
-                None
-            } else {
-                Some(SpanningTreeGenerator { matrix, basis })
-            }
-        })
-        .collect()
+    let mut generators = Vec::new();
+    for basis in (0..loop_line_signatures.len()).combinations(n_loops) {
+        resources::checkpoint()?;
+        let matrix = basis
+            .iter()
+            .map(|edge_id| loop_line_signatures[*edge_id].clone())
+            .collect::<Vec<_>>();
+        if utils::determinant_i32_is_nonzero(&matrix) {
+            generators.push(SpanningTreeGenerator { matrix, basis });
+        }
+    }
+    Ok(generators)
 }
 
 #[derive(Debug, Clone)]
@@ -84,35 +91,35 @@ impl SpanningTreeGenerator {
         sigmas: &[i32],
         contour_closure: &[ContourClosure],
         tree_index: usize,
-    ) -> Vec<EnergyResidue> {
-        let residue_generators = self.residue_generators();
-        let mut residues = residue_generators
-            .into_iter()
-            .filter_map(|generator| {
-                generator
-                    .residue_sign(sigmas, contour_closure)
-                    .map(|sign| EnergyResidue {
-                        basis: self.basis.clone(),
-                        sigmas: sigmas.to_vec(),
-                        sign,
-                        spanning_tree_index: tree_index,
-                    })
-            })
-            .collect::<Vec<_>>();
+    ) -> Result<Vec<EnergyResidue>> {
+        let residue_generators = self.residue_generators()?;
+        let mut residues = Vec::new();
+        for generator in residue_generators {
+            resources::checkpoint()?;
+            if let Some(sign) = generator.residue_sign(sigmas, contour_closure) {
+                residues.push(EnergyResidue {
+                    basis: self.basis.clone(),
+                    sigmas: sigmas.to_vec(),
+                    sign,
+                    spanning_tree_index: tree_index,
+                });
+            }
+        }
 
         let mut index = 0;
         while index < residues.len() {
-            let opposite =
-                residues
-                    .iter()
-                    .enumerate()
-                    .skip(index + 1)
-                    .find_map(|(other_index, other)| {
-                        (other.sign == -residues[index].sign
-                            && other.basis == residues[index].basis
-                            && other.sigmas == residues[index].sigmas)
-                            .then_some(other_index)
-                    });
+            resources::checkpoint()?;
+            let mut opposite = None;
+            for (other_index, other) in residues.iter().enumerate().skip(index + 1) {
+                resources::checkpoint()?;
+                if other.sign == -residues[index].sign
+                    && other.basis == residues[index].basis
+                    && other.sigmas == residues[index].sigmas
+                {
+                    opposite = Some(other_index);
+                    break;
+                }
+            }
             if let Some(other_index) = opposite {
                 residues.remove(other_index);
                 residues.remove(index);
@@ -120,28 +127,35 @@ impl SpanningTreeGenerator {
                 index += 1;
             }
         }
-        residues
+        Ok(residues)
     }
 
-    fn residue_generators(&self) -> Vec<ResidueGenerator> {
+    fn residue_generators(&self) -> Result<Vec<ResidueGenerator>> {
         let n_loops = self.matrix.len();
-        (0..n_loops)
-            .permutations(n_loops)
-            .filter_map(|permutation| {
-                let permuted = permutation
-                    .iter()
-                    .map(|row_index| self.matrix[*row_index].clone())
-                    .collect::<Vec<_>>();
-                let allowed = (0..n_loops).all(|rank| {
-                    let sub = leading_submatrix(&permuted, rank + 1);
-                    determinant_i32_is_nonzero(&sub)
-                });
-                allowed.then_some(ResidueGenerator {
+        let mut generators = Vec::new();
+        for permutation in (0..n_loops).permutations(n_loops) {
+            resources::checkpoint()?;
+            let permuted = permutation
+                .iter()
+                .map(|row_index| self.matrix[*row_index].clone())
+                .collect::<Vec<_>>();
+            let mut allowed = true;
+            for rank in 0..n_loops {
+                resources::checkpoint()?;
+                let sub = leading_submatrix(&permuted, rank + 1);
+                if !utils::determinant_i32_is_nonzero(&sub) {
+                    allowed = false;
+                    break;
+                }
+            }
+            if allowed {
+                generators.push(ResidueGenerator {
                     matrix: permuted,
                     permutation,
-                })
-            })
-            .collect()
+                });
+            }
+        }
+        Ok(generators)
     }
 }
 
@@ -165,7 +179,7 @@ impl ResidueGenerator {
             -1
         };
         let sigma_sign = sigmas.iter().product::<i32>();
-        let det_sign = determinant_i32_signum(&self.matrix);
+        let det_sign = utils::determinant_i32_signum(&self.matrix);
         let heaviside_sign = self.heaviside_sign(sigmas, contour_closure)?;
         Some(contour_sign * sigma_sign * det_sign * heaviside_sign)
     }
@@ -174,7 +188,7 @@ impl ResidueGenerator {
         let n_loops = self.matrix.len();
         for (rank, contour) in contour_closure.iter().enumerate().take(n_loops) {
             let sub = leading_submatrix(&self.matrix, rank + 1);
-            let det_sub_sign = determinant_i32_signum(&sub);
+            let det_sub_sign = utils::determinant_i32_signum(&sub);
             let mut values = vec![None; n_loops];
 
             if rank == 0 {
@@ -189,7 +203,7 @@ impl ResidueGenerator {
                     } else {
                         -1
                     };
-                    let numerator_sign = cofactor_sign * determinant_i32_signum(&minor);
+                    let numerator_sign = cofactor_sign * utils::determinant_i32_signum(&minor);
                     let value_sign = numerator_sign * det_sub_sign * sigmas[basis_index];
                     values[basis_index] = Some(value_sign);
                 }

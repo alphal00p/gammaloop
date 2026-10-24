@@ -18,6 +18,7 @@ path = "src/bin/stubgen.rs"
 required-features = ["python-stubs"]
 
 [dependencies]
+symbolica = { workspace = true, default-features = false }
 include_dir = { workspace = true }
 ciborium = "0.2.2"
 dot-parser = { workspace = true }
