@@ -1346,7 +1346,7 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
             AtomView::Var(variable) => variable.get_symbol(),
             _ => return true,
         };
-        if !symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG) {
+        if !Notation::has_custom_print(symbol).expect("notation registry must not be poisoned") {
             return true;
         }
         let value = view.to_owned();

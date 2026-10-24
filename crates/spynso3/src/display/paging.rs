@@ -4,9 +4,10 @@ use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
 use idenso::tensor::{SymbolicTensor, composition};
 use pyo3::exceptions::PyValueError;
 use pyo3::{Py, PyAny, PyErr, PyResult, Python};
+use spenso::network::tags;
+use spenso::network::tags::SPENSO_TAG;
 use spenso::network::tags::mathml;
 use spenso::network::tags::mathml::ExportError;
-use spenso::network::tags::{SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX};
 use spenso::structure::abstract_index::AIND_SYMBOLS;
 use spenso::structure::partial::{PartialStructure, PartialStructureExt};
 use spenso::structure::representation::RepresentationMetadata;
@@ -18,6 +19,7 @@ use symbolica::api::python::PythonExpression;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::domains::SelfRing;
 use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
+use symbolica_notation::Notation;
 
 pub(crate) const DEFAULT_PAGE_SIZE: usize = 25;
 const MAX_LEAF_NODES: usize = 256;
@@ -175,11 +177,10 @@ impl TensorLeaves {
             || symbol.has_tag("tensor")
             || symbol.has_tag(&SPENSO_TAG.index)
             || symbol.has_tag(&SPENSO_TAG.representation)
-            || symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
-            || symbol
-                .get_tags()
-                .iter()
-                .any(|tag| tag.starts_with(TENSOR_PRINT_HEAD_PREFIX))
+            || tags::tensor_has_custom_print(symbol)
+            || Notation::lookup(symbol)
+                .expect("notation registry must not be poisoned")
+                .is_some()
             || matches!(
                 symbol.get_name(),
                 "spenso::bracket"

@@ -24,6 +24,7 @@ use symbolica::{
     printer::{PrintState, PrintUserData},
     symbol,
 };
+use symbolica_notation::{IndexDisplay, Notation};
 use symbolica_utils::{PrintSettingsExt, TypstMode};
 
 use crate::{cff::orientations::GraphOrientation, graph::LoopMomentumBasis};
@@ -576,18 +577,26 @@ pub static GS, GS_INNER: GammaloopSymbols = || GammaloopSymbols {
     ),
 
     localizing_integrand: symbol!("int_loc"),
-    uvaind: symbol!(
+    uvaind: { let symbol = symbol!(
         "uvind",
         print = spenso::network::tags::tensor_print,
-        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:u".to_owned()]
-    ),
+        tags = [SPENSO_TAG.index.clone()]
+    );
+        Notation { index_label: Some(IndexDisplay::symbol("u").expect("the canonical index label is valid")), ..Notation::default() }
+            .register(symbol).expect("the canonical index symbol has one notation");
+        symbol
+    },
     edgeaind: feynkit_graph::symbols::edge_index(),
     vertexaind: feynkit_graph::symbols::vertex_index(),
-    dummyaind: symbol!(
+    dummyaind: { let symbol = symbol!(
         "dummy",
         print = spenso::network::tags::tensor_print,
-        tags = [SPENSO_TAG.index.clone(), "spenso::index-label:d".to_owned()]
-    ),
+        tags = [SPENSO_TAG.index.clone()]
+    );
+        Notation { index_label: Some(IndexDisplay::symbol("d").expect("the canonical index label is valid")), ..Notation::default() }
+            .register(symbol).expect("the canonical index symbol has one notation");
+        symbol
+    },
     hedgeaind: feynkit_graph::symbols::hedge_index(),
     uv_subgraph: symbol!(
         "gammalooprs::uv::subgraph",

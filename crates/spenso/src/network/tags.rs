@@ -18,28 +18,51 @@ use symbolica::{
     printer::{PrintOptions, PrintState},
     symbol, tag,
 };
-use symbolica_notation::IndexDisplay;
+use symbolica_notation::{IndexDisplay, Notation};
 pub mod mathml;
 
-/// Presentation-only tensor head sources, carried with the symbol's tags.
-pub const TENSOR_PRINT_HEAD_PREFIX: &str = "spenso::print-head:";
-/// Marks a user callable, as distinct from Spenso's own tensor print callback.
-pub const TENSOR_PRINT_CALLBACK_TAG: &str = "spenso::print-callback";
 /// Component labels that identify indexed objects, rather than function arguments.
 pub const COMPONENT_LABELS_SUBSCRIPT_TAG: &str = "spenso::component-labels:subscript";
 
-/// Resolve a user-supplied head without interpreting it as a literal symbol name.
+/// Resolve a process-local head without reading serialized presentation tags.
 pub fn tensor_head_print(symbol: Symbol, backend: SpensoPrintBackend) -> Option<String> {
-    let backend = match backend {
-        SpensoPrintBackend::Plain => "plain:",
-        SpensoPrintBackend::Latex => "latex:",
-        SpensoPrintBackend::Typst => "typst:",
+    let notation = Notation::lookup(symbol).expect("notation registry must not be poisoned")?;
+    let text = match backend {
+        SpensoPrintBackend::Plain => &notation.text.plain,
+        SpensoPrintBackend::Latex => &notation.text.latex,
+        SpensoPrintBackend::Typst => &notation.text.typst,
     };
-    symbol.get_tags().iter().find_map(|tag| {
-        tag.strip_prefix(TENSOR_PRINT_HEAD_PREFIX)?
-            .strip_prefix(backend)
-            .map(str::to_owned)
-    })
+    text.as_ref()
+        .map(|text| text.as_str().to_owned())
+        .or_else(|| {
+            notation.head.as_ref().map(|head| match backend {
+                SpensoPrintBackend::Typst => head.to_typst_source(),
+                SpensoPrintBackend::Plain | SpensoPrintBackend::Latex => head.to_native_string(),
+            })
+        })
+}
+
+/// Whether a printer owns a complete leaf instead of delegating to Spenso.
+///
+/// Scalar symbols expose this directly through Symbolica's callback API.
+/// Tensor/index callbacks may delegate back into Spenso, so their explicit
+/// process-local ownership flag disambiguates them and prevents re-entry.
+/// See [`tensor_custom_print`] for invocation through this predicate.
+pub fn tensor_has_custom_print(symbol: Symbol) -> bool {
+    Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
+        || (symbol.get_print_function().is_some()
+            && !symbol.has_tag("spenso::tensor")
+            && !symbol.has_tag("spenso::index")
+            && !symbol.has_tag("spenso::representation")
+            && ![
+                SPENSO_TAG.dot,
+                SPENSO_TAG.chain,
+                SPENSO_TAG.trace,
+                SPENSO_TAG.bracket,
+                SPENSO_TAG.tensor_display,
+                AIND_SYMBOLS.dind,
+            ]
+            .contains(&symbol))
 }
 
 /// A callable owns the complete tensor display; `None` defers to tensor notation.
@@ -53,7 +76,7 @@ pub fn tensor_custom_print(
         AtomView::Var(variable) => variable.get_symbol(),
         _ => return None,
     };
-    if !symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG) {
+    if !tensor_has_custom_print(symbol) {
         return None;
     }
     (symbol.get_print_function()?)(atom, options, state)
@@ -295,11 +318,7 @@ fn typst_tensor_head(symbol: Symbol) -> String {
         _ => {}
     }
 
-    let name = symbol
-        .get_tags()
-        .iter()
-        .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
-        .unwrap_or_else(|| symbol.get_stripped_name());
+    let name = symbol.get_stripped_name();
     if (name.chars().count() == 1
         && name
             .chars()
@@ -811,12 +830,6 @@ fn tensor_component_print(
         source
     } else if resolved.backend == SpensoPrintBackend::Typst {
         typst_tensor_head(head)
-    } else if let Some(label) = head
-        .get_tags()
-        .iter()
-        .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
-    {
-        label.to_owned()
     } else {
         Atom::var(head).format_string(options, PrintState::new())
     };
@@ -894,8 +907,8 @@ fn tensor_component_print(
 /// rows. The opposite row receives a hidden copy, following Physica's tensor
 /// layout technique. Each representation owns its preferred row; only the
 /// dual orientation of a dualizable representation flips that row. Tagged index
-/// calls share this hook for plain, LaTeX, and Typst label rendering. The
-/// `spenso::tensor-label:<name>` tag supplies a presentation-only head label
+/// calls share this hook for plain, LaTeX, and Typst label rendering.
+/// Process-local registered notation supplies a presentation-only head label
 /// for both native printers and portable notebook rendering.
 pub fn tensor_print(
     atom: AtomView<'_>,
@@ -920,14 +933,12 @@ pub fn tensor_print(
     let AtomView::Fun(function) = atom else {
         return None;
     };
-    // Index labels share the same hook in every consumer. The label tag also
-    // travels with portable render trees, where Typst supplies its own layout.
+    // Index labels are process-local presentation, independent of symbol identity.
     if function.get_symbol().has_tag(&SPENSO_TAG.index) {
         let symbol = function.get_symbol();
-        let label = symbol
-            .get_tags()
-            .iter()
-            .find_map(|tag| tag.strip_prefix("spenso::index-label:"))?;
+        let notation = Notation::lookup(symbol).expect("notation registry must not be poisoned")?;
+        let label = notation.index_label.as_ref()?.to_native_string();
+        let label = label.as_str();
         if !matches!(label, "s" | "t" | "e" | "v" | "d" | "u") {
             return None;
         }
@@ -979,10 +990,7 @@ pub fn tensor_print(
     if symbol.has_tag(&SPENSO_TAG.tensor)
         && symbol.has_tag(&SPENSO_TAG.rank1)
         && !has_open
-        && let Some(label) = symbol
-            .get_tags()
-            .iter()
-            .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
+        && let Some(label) = tensor_head_print(symbol, resolved.backend)
     {
         // Typst enables semantic printing without a caller-supplied Spenso flag.
         // The indexed-head helper must receive the same resolved settings as
@@ -2151,7 +2159,7 @@ mod tests {
         printer::{PrintOptions, PrintState},
         symbol, wrap_symbol,
     };
-    use symbolica_notation::IndexDisplay;
+    use symbolica_notation::{DisplayText, IndexDisplay, Notation, TextOverrides};
 
     use crate::{
         cyclic, dind, lor, mink,
@@ -2490,14 +2498,16 @@ mod tests {
     #[test]
     fn tensor_component_printing_preserves_labels_and_groups_powers() {
         let head = SymbolBuilder::new(wrap_symbol!("component_print_test::Momentum"))
-            .with_tags([
-                SPENSO_TAG.tensor.as_str(),
-                SPENSO_TAG.rank1.as_str(),
-                "spenso::tensor-label:q",
-            ])
+            .with_tags([SPENSO_TAG.tensor.as_str(), SPENSO_TAG.rank1.as_str()])
             .with_print_function(super::tensor_print)
             .build()
             .unwrap();
+        Notation {
+            head: Some(IndexDisplay::symbol("q").unwrap()),
+            ..Notation::default()
+        }
+        .register(head)
+        .unwrap();
         let component = crate::shadowing::symbolica_utils::atomic_expanded_label_id(
             &[0],
             head,
@@ -2537,14 +2547,19 @@ mod tests {
     #[test]
     fn tensor_print_mappings_keep_components_and_abstract_indices() {
         let head = SymbolBuilder::new(wrap_symbol!("mapped_tensor_print::Jbar"))
-            .with_tags([
-                SPENSO_TAG.tensor.as_str(),
-                "spenso::print-head:typst:overline(J)",
-                r"spenso::print-head:latex:\bar{J}",
-                "spenso::print-head:plain:Jbar",
-            ])
+            .with_tags([SPENSO_TAG.tensor.as_str()])
             .build()
             .unwrap();
+        Notation {
+            text: TextOverrides {
+                plain: Some(DisplayText::new("Jbar").unwrap()),
+                latex: Some(DisplayText::new(r"\bar{J}").unwrap()),
+                typst: Some(DisplayText::new("overline(J)").unwrap()),
+            },
+            ..Notation::default()
+        }
+        .register(head)
+        .unwrap();
         let abstract_tensor = function!(head, mink!(4, symbol!("a")));
         let rendered = prepare_tensor_print(&abstract_tensor)
             .printer(PrintOptions::typst())
@@ -2574,11 +2589,19 @@ mod tests {
     #[test]
     fn tensor_custom_printers_override_or_defer_to_component_notation() {
         let head = SymbolBuilder::new(wrap_symbol!("callable_tensor_print::Jbar"))
-            .with_tags([SPENSO_TAG.tensor.as_str(), super::TENSOR_PRINT_CALLBACK_TAG])
+            .with_tags([SPENSO_TAG.tensor.as_str()])
             .with_print_function(|_, options, _| {
                 options.mode.is_typst().then(|| "overline(J)".to_owned())
             })
             .build()
+            .inspect(|symbol| {
+                Notation {
+                    custom_print: true,
+                    ..Notation::default()
+                }
+                .register(*symbol)
+                .unwrap();
+            })
             .unwrap();
         let component = function!(
             head,
@@ -3104,14 +3127,16 @@ mod tests {
     #[test]
     fn tensor_labels_preserve_indexed_momentum_notation() {
         let head = SymbolBuilder::new(wrap_symbol!("spenso_typst_tests::Momentum"))
-            .with_tags([
-                SPENSO_TAG.tensor.as_str(),
-                SPENSO_TAG.rank1.as_str(),
-                "spenso::tensor-label:q",
-            ])
+            .with_tags([SPENSO_TAG.tensor.as_str(), SPENSO_TAG.rank1.as_str()])
             .with_print_function(super::tensor_print)
             .build()
             .unwrap();
+        Notation {
+            head: Some(IndexDisplay::symbol("q").unwrap()),
+            ..Notation::default()
+        }
+        .register(head)
+        .unwrap();
         let momentum = function!(head, 6, 16);
         assert_eq!(
             momentum
@@ -3137,12 +3162,15 @@ mod tests {
             let head = SymbolBuilder::new(NamespacedSymbol::parse(&format!(
                 "spenso_index_label_tests::{label}"
             )))
-            .with_tags([
-                "spenso::index".to_owned(),
-                format!("spenso::index-label:{label}"),
-            ])
+            .with_tags(["spenso::index".to_owned()])
             .with_print_function(super::tensor_print)
             .build()
+            .unwrap();
+            Notation {
+                index_label: Some(IndexDisplay::symbol(label).unwrap()),
+                ..Notation::default()
+            }
+            .register(head)
             .unwrap();
             for (slot, decimal, unicode) in
                 [(0, "7.0", "₇.₀"), (1, "7.1", "₇.₁"), (2, "7.2", "₇.₂")]

@@ -71,7 +71,7 @@ pub struct TextOverrides {
 /// Index labels and structured heads are separate: `hedge(owner, local)` may
 /// use the index label `h` while its ordinary function head has other notation.
 /// The public structured trees retain [`IndexDisplay`]'s per-renderer bounds.
-/// No renderer consults this registry yet. A future portable attachment may
+/// A future portable attachment may
 /// explicitly export notation; symbol strings and state exports never do so
 /// implicitly. See [`Self::register`] for a runnable example.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
@@ -82,6 +82,10 @@ pub struct Notation {
     pub head: Option<IndexDisplay>,
     /// Optional target-specific text. See [`Self::register`].
     pub text: TextOverrides,
+    /// The symbol's callback owns the complete leaf, rather than delegating to
+    /// the tensor renderer. This flag never enters serialized symbol state.
+    /// See [`Self::register`] for registration and conflict behavior.
+    pub custom_print: bool,
 }
 
 // The initializer only allocates an empty map. It never calls Symbolica, so it
@@ -118,6 +122,15 @@ pub enum RegistryError {
 }
 
 impl Notation {
+    /// Whether a symbol declares a callback that owns the whole display leaf.
+    ///
+    /// # Errors
+    /// Returns [`RegistryError::Poisoned`] if storage is poisoned.
+    /// See [`Self::register`] for an example of the registry lifetime.
+    pub fn has_custom_print(symbol: Symbol) -> Result<bool, RegistryError> {
+        Ok(Self::lookup(symbol)?.is_some_and(|notation| notation.custom_print))
+    }
+
     /// Register notation or return the existing shared handle when it is equal.
     ///
     /// The symbol must already belong to the current Symbolica state. The
@@ -143,6 +156,7 @@ impl Notation {
     ///         latex: Some(DisplayText::new("h")?),
     ///         typst: Some(DisplayText::new("h")?),
     ///     },
+    ///     ..Notation::default()
     /// };
     /// let first = notation.register(symbol)?;
     /// let second = Notation::lookup(symbol)?.expect("registered above");

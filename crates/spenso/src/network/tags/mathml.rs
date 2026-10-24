@@ -9,7 +9,7 @@
 //! Each entry point has an example demonstrating its distinct boundary.
 use super::{
     COMPONENT_LABELS_SUBSCRIPT_TAG, ChainOrientation, CompactPolarity, RepresentationValue,
-    SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX,
+    SPENSO_TAG,
 };
 use crate::network::library::symbolic::ETS;
 use crate::network::tags;
@@ -24,7 +24,7 @@ use symbolica::atom::{Atom, AtomCore, AtomView, Symbol, UserData};
 use symbolica::coefficient::CoefficientView;
 use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
 use symbolica::state::State;
-use symbolica_notation::{IndexDisplay, MathMl};
+use symbolica_notation::{IndexDisplay, MathMl, Notation};
 use thiserror::Error;
 
 const MAX_BYTES: usize = 4096;
@@ -119,31 +119,21 @@ pub fn fragment(value: String) -> Option<String> {
 }
 
 fn head(symbol: Symbol, options: Option<&PrintOptions>) -> Option<String> {
-    if let Some(source) = symbol.get_tags().iter().find_map(|tag| {
-        tag.strip_prefix(TENSOR_PRINT_HEAD_PREFIX)?
-            .strip_prefix("mathml:")
-    }) {
-        return (source.len() + "<mrow></mrow>".len() <= MAX_BYTES)
-            .then(|| format!("<mrow>{source}</mrow>"));
-    }
-    if let Some(display) = IndexDisplay::from_symbol(symbol) {
+    if let Some(notation) =
+        Notation::lookup(symbol).expect("notation registry must not be poisoned")
+        && let Some(display) = &notation.head
+    {
         return display.to_mathml();
     }
-    let label = symbol
-        .get_tags()
-        .iter()
-        .find_map(|tag| tag.strip_prefix("spenso::tensor-label:"))
-        .unwrap_or_else(|| {
-            if options.is_some_and(|options| {
-                !options.hide_all_namespaces
-                    && options.hide_namespace.as_deref() != Some(symbol.get_namespace())
-                    && !State::BUILTIN_SYMBOLS.contains(&symbol)
-            }) {
-                symbol.get_name()
-            } else {
-                symbol.get_stripped_name()
-            }
-        });
+    let label = if options.is_some_and(|options| {
+        !options.hide_all_namespaces
+            && options.hide_namespace.as_deref() != Some(symbol.get_namespace())
+            && !State::BUILTIN_SYMBOLS.contains(&symbol)
+    }) {
+        symbol.get_name()
+    } else {
+        symbol.get_stripped_name()
+    };
     (label.len() <= 1024).then(|| format!("<mi>{}</mi>", MathMl::escape(label)))
 }
 
@@ -209,10 +199,9 @@ pub(crate) fn tensor(
         }
     }
     if symbol.has_tag(&SPENSO_TAG.index) {
-        let label = symbol
-            .get_tags()
-            .iter()
-            .find_map(|tag| tag.strip_prefix("spenso::index-label:"))?;
+        let notation = Notation::lookup(symbol).expect("notation registry must not be poisoned")?;
+        let label = notation.index_label.as_ref()?.to_native_string();
+        let label = label.as_str();
         if values.is_empty() || label.len() > 128 {
             return None;
         }
@@ -374,7 +363,7 @@ fn vector<'a>(
     let symbol = function.get_symbol();
     if !symbol.has_tag(&SPENSO_TAG.tensor)
         || !symbol.has_tag(&SPENSO_TAG.rank1)
-        || symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
+        || Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
     {
         return None;
     }
@@ -700,11 +689,9 @@ impl<'a> Render<'a> {
     }
 
     fn head(&self, symbol: Symbol) -> Option<String> {
-        if symbol
-            .get_tags()
-            .iter()
-            .any(|tag| tag.starts_with("spenso::print-head:mathml:"))
-            || IndexDisplay::from_symbol(symbol).is_some()
+        if Notation::lookup(symbol)
+            .expect("notation registry must not be poisoned")
+            .is_some_and(|notation| notation.head.is_some())
         {
             return self.fragment(head(symbol, None)?);
         }
@@ -728,7 +715,7 @@ impl<'a> Render<'a> {
         let symbol = atom.get_symbol()?;
         // Static scalar variables go straight to Symbol::format(), which owns
         // both their callback and native name. A declined callback runs once.
-        if symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
+        if Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
             && !(self.export.is_some() && matches!(atom, AtomView::Var(_)) && !self.owns(atom))
             && let Some(custom) = tags::tensor_custom_print(atom, self.options, state)
         {
@@ -800,10 +787,10 @@ impl<'a> Render<'a> {
         };
         let arguments = function.iter().collect::<Vec<_>>();
         if symbol.has_tag(&SPENSO_TAG.index) {
-            let label = symbol
-                .get_tags()
-                .iter()
-                .find_map(|tag| tag.strip_prefix("spenso::index-label:"))?;
+            let notation =
+                Notation::lookup(symbol).expect("notation registry must not be poisoned")?;
+            let label = notation.index_label.as_ref()?.to_native_string();
+            let label = label.as_str();
             if arguments.is_empty() || label.len() > 128 {
                 return None;
             }
@@ -1016,7 +1003,7 @@ impl<'a> Render<'a> {
                 // Semantic callbacks were already tried by leaf(). Ordinary
                 // callables receive the original Atom and surrounding state.
                 if !self.owns(atom)
-                    && !symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
+                    && !Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
                     && let Some(custom) = symbol.get_print_function()
                     && let Some(custom) = custom(atom, self.options, state)
                     && let Some(custom) = self.fragment(custom)
@@ -1238,7 +1225,7 @@ impl<'a> Render<'a> {
         let symbol = function.get_symbol();
         if !symbol.has_tag(&SPENSO_TAG.tensor)
             || !symbol.has_tag(&SPENSO_TAG.rank1)
-            || symbol.has_tag(TENSOR_PRINT_CALLBACK_TAG)
+            || Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
         {
             return None;
         }
@@ -1881,7 +1868,7 @@ mod tests {
         let callback_calls = Arc::clone(&calls);
         let symbol = SymbolBuilder::new(wrap_symbol!("static_mathml::declined_scalar"))
             .with_attributes(vec![SymbolAttribute::Scalar])
-            .with_tags([TENSOR_PRINT_CALLBACK_TAG])
+            
             .with_print_function(move |atom, options, state| {
                 assert!(matches!(atom, AtomView::Var(_)));
                 assert!(options.mode.is_mathml());
@@ -1890,7 +1877,12 @@ mod tests {
                 (callback_calls.fetch_add(1, Ordering::SeqCst) != 0)
                     .then(|| "<mi>later-render</mi>".to_owned())
             })
-            .build()
+            .build().inspect(|symbol| {
+                if true {
+                    Notation { custom_print: true, ..Notation::default() }
+                        .register(*symbol).unwrap();
+                }
+            })
             .unwrap();
         let value = Atom::var(symbol);
         let original = value.as_view().get_data().to_vec();
@@ -1920,11 +1912,6 @@ mod tests {
         .map(|(name, tagged)| {
             let calls = Arc::clone(&calls);
             SymbolBuilder::new(NamespacedSymbol::parse(name))
-                .with_tags(if tagged {
-                    vec![TENSOR_PRINT_CALLBACK_TAG]
-                } else {
-                    Vec::new()
-                })
                 .with_print_function(move |atom, options, state| {
                     assert!(matches!(atom, AtomView::Fun(function) if function.get_nargs() == 1));
                     assert!(options.mode.is_mathml());
@@ -1932,7 +1919,12 @@ mod tests {
                     calls.fetch_add(1, Ordering::SeqCst);
                     None
                 })
-                .build()
+                .build().inspect(|symbol| {
+                if tagged {
+                    Notation { custom_print: true, ..Notation::default() }
+                        .register(*symbol).unwrap();
+                }
+            })
                 .unwrap()
         });
         let argument = Atom::var(symbol!("static_mathml::declined_function_argument"));
@@ -2026,11 +2018,16 @@ mod tests {
         ));
 
         let callback = SymbolBuilder::new(wrap_symbol!("static_mathml::oversized"))
-            .with_tags([SPENSO_TAG.tensor.as_str(), TENSOR_PRINT_CALLBACK_TAG])
+            .with_tags([SPENSO_TAG.tensor.as_str()])
             .with_print_function(|_, _, _| {
                 Some(format!("<mtext>{}</mtext>", "x".repeat(MAX_EXPORT_BYTES)))
             })
-            .build()
+            .build().inspect(|symbol| {
+                if true {
+                    Notation { custom_print: true, ..Notation::default() }
+                        .register(*symbol).unwrap();
+                }
+            })
             .unwrap();
         let value = function!(callback, 1);
         let original = value.as_view().get_data().to_vec();
@@ -2517,13 +2514,18 @@ mod tests {
         let calls = Arc::new(AtomicUsize::new(0));
         let callback_calls = Arc::clone(&calls);
         let head = SymbolBuilder::new(wrap_symbol!("scoped_mathml::oversized_callable"))
-            .with_tags([SPENSO_TAG.tensor.as_str(), TENSOR_PRINT_CALLBACK_TAG])
+            .with_tags([SPENSO_TAG.tensor.as_str()])
             .with_print_function(move |_, options, _| {
                 assert!(options.mode.is_mathml());
                 callback_calls.fetch_add(1, Ordering::SeqCst);
                 Some(format!("<mtext>{}</mtext>", "x".repeat(5000)))
             })
-            .build()
+            .build().inspect(|symbol| {
+                if true {
+                    Notation { custom_print: true, ..Notation::default() }
+                        .register(*symbol).unwrap();
+                }
+            })
             .unwrap();
         let value = function!(head, 1, 2);
         let original = value.as_view().get_data().to_vec();
@@ -2712,7 +2714,7 @@ mod tests {
             .with_tags([
                 SPENSO_TAG.tensor.as_str(),
                 SPENSO_TAG.rank1.as_str(),
-                TENSOR_PRINT_CALLBACK_TAG,
+                
             ])
             .with_print_function(|_, options, _| {
                 options
@@ -2720,7 +2722,12 @@ mod tests {
                     .is_mathml()
                     .then(|| "<mi>custom-vector</mi>".to_owned())
             })
-            .build()
+            .build().inspect(|symbol| {
+                if true {
+                    Notation { custom_print: true, ..Notation::default() }
+                        .register(*symbol).unwrap();
+                }
+            })
             .unwrap();
         let p = vector_symbol!("native_mathml_print::ordinary_vector");
         let value = function!(

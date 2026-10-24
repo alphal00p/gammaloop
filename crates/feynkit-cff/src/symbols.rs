@@ -3,7 +3,6 @@
 use spenso::network::tags::mathml;
 use std::sync::LazyLock;
 
-use spenso::network::tags::TENSOR_PRINT_CALLBACK_TAG;
 use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
 use spenso::structure::abstract_index::AIND_SYMBOLS;
 use spenso::symbolica_init::SymbolicaInitLazy;
@@ -11,6 +10,7 @@ use spenso::utils;
 use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
 use symbolica::printer::{PrintOptions, PrintState};
 use symbolica::{function, symbol};
+use symbolica_notation::Notation;
 
 use crate::EdgeId;
 
@@ -86,21 +86,33 @@ fn print_energy(
 }
 
 static ON_SHELL: LazyLock<Symbol> = LazyLock::new(|| {
-    symbol!(
+    let symbol = symbol!(
         "gammalooprs::OSE"; Scalar;
-        tag = TENSOR_PRINT_CALLBACK_TAG,
         print = |a, opt, state| print_energy(a, opt, state, true),
         der = |_, arg, out| {
             if arg == 1 { **out = Atom::num(1); }
         }
-    )
+    );
+    Notation {
+        custom_print: true,
+        ..Notation::default()
+    }
+    .register(symbol)
+    .expect("the canonical energy symbol has one notation");
+    symbol
 });
 static ENERGY: LazyLock<Symbol> = LazyLock::new(|| {
-    symbol!(
+    let symbol = symbol!(
         "gammalooprs::E",
-        tag = TENSOR_PRINT_CALLBACK_TAG,
         print = |a, opt, state| print_energy(a, opt, state, false)
-    )
+    );
+    Notation {
+        custom_print: true,
+        ..Notation::default()
+    }
+    .register(symbol)
+    .expect("the canonical energy symbol has one notation");
+    symbol
 });
 
 pub fn on_shell() -> Symbol {
@@ -139,7 +151,7 @@ mod tests {
         let canonical = energy.to_canonical_string();
         assert_eq!(energy, symbolica::parse!("gammalooprs::OSE(3)"));
         assert!(canonical.ends_with("::OSE(3)"));
-        assert!(on_shell().has_tag(TENSOR_PRINT_CALLBACK_TAG));
+        assert!(Notation::has_custom_print(on_shell()).unwrap());
         assert_eq!(
             energy.printer(PrintOptions::typst()).to_string(),
             "E^(\"os\")_(3)"
