@@ -1779,18 +1779,19 @@ fn feyngen_from_spec_args(
     let mut amp_filters: Vec<GenerationFilter> = Vec::new();
     let mut xs_filters: Vec<GenerationFilter> = Vec::new();
 
-    // Loop counts
+    // The options owner installs the graph loop range once. Cross sections
+    // retain the independent amplitude restriction in the cut-amplitude scope.
     if let Some(n) = pert.loops_sum_amp_or_sum {
-        amp_filters.push(GenerationFilter::LoopCountRange((n as usize, n as usize)));
-        if generation_type == GenerationType::Amplitude {
-            loop_count = (n as usize, n as usize);
+        let range = (n as usize, n as usize);
+        match generation_type {
+            GenerationType::Amplitude => loop_count = range,
+            GenerationType::CrossSection => {
+                amp_filters.push(GenerationFilter::LoopCountRange(range));
+            }
         }
     }
-    if let Some(n) = pert.loops_forward_graph {
-        xs_filters.push(GenerationFilter::LoopCountRange((n as usize, n as usize)));
-        if generation_type == GenerationType::CrossSection {
-            loop_count = (n as usize, n as usize);
-        }
+    if let (GenerationType::CrossSection, Some(n)) = (generation_type, pert.loops_forward_graph) {
+        loop_count = (n as usize, n as usize);
     }
 
     // Perturbative orders (only to matching container)
@@ -2512,6 +2513,57 @@ mod tests {
             assert!(!options.symmetrizes_final());
             assert!(options.symmetrizes_left_right());
             assert!(options.symmetrizes_external_fermions());
+        }
+    }
+
+    #[test]
+    fn generation_options_install_loop_ranges_once_per_scope() {
+        test_initialise().unwrap();
+        let model = load_generic_model("sm");
+        for (mode, tokens, graph_loops, amplitude_loops) in [
+            (
+                GenerationType::Amplitude,
+                "e+ e- > mu+ mu- [ {2} ]",
+                2,
+                None,
+            ),
+            (
+                GenerationType::CrossSection,
+                "e+ e- > mu+ mu- [ {{3}} ]",
+                3,
+                None,
+            ),
+            (
+                GenerationType::CrossSection,
+                "e+ e- > mu+ mu- [ {1} {{2}} ]",
+                2,
+                Some(1),
+            ),
+            (GenerationType::Amplitude, "e+ e- > mu+ mu-", 1, None),
+            (GenerationType::CrossSection, "e+ e- > mu+ mu-", 1, None),
+        ] {
+            let spec = parse_spec_with_model(&base_args(tokens), mode, &model).unwrap();
+            let options = spec.process_definition.generation_options;
+            for (scope, expected) in [
+                (FilterScope::Graph, vec![(graph_loops, graph_loops)]),
+                (
+                    FilterScope::CutAmplitude,
+                    amplitude_loops
+                        .map(|loops| (loops, loops))
+                        .into_iter()
+                        .collect(),
+                ),
+            ] {
+                let actual = options
+                    .filters(scope)
+                    .iter()
+                    .filter_map(|filter| match filter {
+                        GenerationFilter::LoopCountRange(range) => Some(*range),
+                        _ => None,
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(actual, expected, "{mode:?}: {tokens}, scope {scope:?}");
+            }
         }
     }
 
