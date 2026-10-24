@@ -2,6 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use ahash::{HashMap, HashSet, HashSetExt};
 use dyn_clone::DynClone;
+use symbolica::atom::ZeroTestSettings;
 use symbolica::{
     atom::{Atom, AtomCore, AtomOrView, AtomView, Indeterminate, KeyLookup, Symbol},
     coefficient::{Coefficient, CoefficientView, ConvertToRing},
@@ -370,8 +371,10 @@ pub trait TensorAtomMaps {
         const_map: &HashMap<A, T>,
     ) -> Result<Self::ContainerData<T>, EvaluationError>;
 
-    /// Check if the expression could be 0, using (potentially) numerical sampling with
-    /// a given tolerance and number of iterations.
+    /// Test whether coefficients are identically zero with at most `iterations` samples.
+    ///
+    /// Zero iterations requests only a quick check. The legacy `tolerance` argument
+    /// is ignored; a small nonzero value is never treated as zero.
     fn zero_test(&self, iterations: usize, tolerance: f64) -> Self::ContainerData<ConditionResult>;
 
     /// Set the coefficient ring to the multivariate rational polynomial with `vars` variables.
@@ -1154,10 +1157,20 @@ impl<S: StorageTensor<Data = Atom>> TensorAtomMaps for S {
         self.map_data_ref_result(|a| a.evaluate(const_map))
     }
 
-    /// Check if the expression could be 0, using (potentially) numerical sampling with
-    /// a given tolerance and number of iterations.
-    fn zero_test(&self, iterations: usize, tolerance: f64) -> Self::ContainerData<ConditionResult> {
-        self.map_data_ref(|a| a.zero_test(iterations, tolerance))
+    /// Test whether coefficients are identically zero with at most `iterations` samples.
+    ///
+    /// Zero iterations requests only a quick check. The legacy `tolerance` argument
+    /// is ignored; a small nonzero value is never treated as zero.
+    fn zero_test(
+        &self,
+        iterations: usize,
+        _tolerance: f64,
+    ) -> Self::ContainerData<ConditionResult> {
+        let settings = ZeroTestSettings::default()
+            .finite_field_samples(iterations)
+            .numerical_samples(iterations)
+            .exact_fallback(iterations != 0);
+        self.map_data_ref(|a| a.check_zero_with(&settings))
     }
 
     /// Set the coefficient ring to the multivariate rational polynomial with `vars` variables.

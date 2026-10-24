@@ -9,7 +9,7 @@ use linnet::half_edge::subgraph::{
     cut::OrientedCut, cycle::Cycle, Inclusion, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps,
 };
 use linnet::half_edge::tree::SimpleTraversalTree;
-use linnet::half_edge::NodeIndex;
+use linnet::half_edge::{CycleEnumerationError, NodeIndex};
 use pyo3::class::gc::{PyTraverseError, PyVisit};
 use pyo3::exceptions::{PyIndexError, PyReferenceError, PyValueError};
 use pyo3::prelude::*;
@@ -1611,51 +1611,62 @@ impl PyGraph {
             .map_err(|_| {
                 PyValueError::new_err("max_elapsed_seconds must be finite and nonnegative")
             })?;
-        ResourceBudget::new(ResourceLimits { max_process_rss_bytes, max_elapsed }).run(|| {
-        resources::checkpoint().map_err(|error| PyValueError::new_err(error.to_string()))?;
-        let revision = slf.borrow(py).revision()?;
-        let (filter, _) = selected_filter(&slf, py, revision, subgraph)?;
-        let rank = {
-            let graph = slf.borrow(py);
-            let state = graph.state.borrow();
-            state
-                .as_ref()
-                .expect("checked")
-                .graph
-                .cyclotomatic_number(&filter)
+        let checkpoint = || {
+            py.check_signals()?;
+            resources::checkpoint().map_err(|error| PyValueError::new_err(error.to_string()))
         };
-        let Some(candidates) = (rank < usize::BITS as usize).then(|| (1usize << rank) - 1) else {
-            return Err(PyValueError::new_err(format!(
-                "cycle-space powerset at rank {rank} is not representable by this platform's usize iterator"
-            )));
-        };
-        if let Some(max_results) = max_results.filter(|limit| candidates > *limit) {
-            return Err(PyValueError::new_err(format!(
-                "cycle space has {candidates} candidate combinations, exceeding max_results={max_results}"
-            )));
-        }
-        let cycles = {
-            let graph = slf.borrow(py);
-            let state = graph.state.borrow();
-            state
-                .as_ref()
-                .expect("checked")
-                .graph
-                .all_cycles_of(&filter, rank, resources::checkpoint)
-                .map_err(|error| PyValueError::new_err(error.to_string()))?
-        };
-        let result = cycles
-            .into_iter()
-            .map(|cycle| {
-                resources::checkpoint().map_err(|error| PyValueError::new_err(error.to_string()))?;
-                Ok(PyCycle {
-                graph: Some(slf.clone_ref(py)),
-                revision,
-                cycle,
+        ResourceBudget::new(ResourceLimits {
+            max_process_rss_bytes,
+            max_elapsed,
+        })
+        .run(|| {
+            checkpoint()?;
+            let revision = slf.borrow(py).revision()?;
+            let (filter, _) = selected_filter(&slf, py, revision, subgraph)?;
+            let rank = {
+                let graph = slf.borrow(py);
+                let state = graph.state.borrow();
+                state
+                    .as_ref()
+                    .expect("checked")
+                    .graph
+                    .cyclotomatic_number(&filter)
+            };
+            let Some(candidates) = (rank < usize::BITS as usize).then(|| (1usize << rank) - 1) else {
+                return Err(PyValueError::new_err(format!(
+                    "cycle-space powerset at rank {rank} is not representable by this platform's usize iterator"
+                )));
+            };
+            if let Some(max_results) = max_results.filter(|limit| candidates > *limit) {
+                return Err(PyValueError::new_err(format!(
+                    "cycle space has {candidates} candidate combinations, exceeding max_results={max_results}"
+                )));
+            }
+            let cycles = {
+                let graph = slf.borrow(py);
+                let state = graph.state.borrow();
+                state
+                    .as_ref()
+                    .expect("checked")
+                    .graph
+                    .all_cycles_of(&filter, rank, &checkpoint)
+                    .map_err(|error| match error {
+                        CycleEnumerationError::Control(error) => error,
+                        error => PyValueError::new_err(error.to_string()),
+                    })?
+            };
+            let result = cycles
+                .into_iter()
+                .map(|cycle| {
+                    checkpoint()?;
+                    Ok(PyCycle {
+                        graph: Some(slf.clone_ref(py)),
+                        revision,
+                        cycle,
+                    })
                 })
-            })
                 .collect::<PyResult<Vec<_>>>()?;
-            resources::checkpoint().map_err(|error| PyValueError::new_err(error.to_string()))?;
+            checkpoint()?;
             Ok(result)
         })
     }

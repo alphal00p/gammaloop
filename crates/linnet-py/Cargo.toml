@@ -36,7 +36,9 @@ walkdir = { workspace = true }
 
 
 [features]
-default = []
+default = ["native"]
+native = ["symbolica/integer-gmp", "symbolica/float-mpfr"]
+wasm = ["symbolica/wasm"]
 abi3 = ["pyo3/abi3-py310"]
 extension-module = ["pyo3/extension-module"]
 python-stubs = ["dep:pyo3-stub-gen"]

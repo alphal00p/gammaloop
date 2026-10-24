@@ -1,6 +1,7 @@
 use std::ops::{Index, IndexMut};
 
 use std::cell::RefCell;
+use std::error::Error as StdError;
 
 use linnet::half_edge::algorithms::DirectionBasis;
 use linnet::half_edge::builder::{HedgeData, HedgeGraphBuilder};
@@ -16,7 +17,6 @@ use linnet::half_edge::{EdgeAccessors, HedgeGraph, HedgeGraphError, NodeIndex};
 use linnet::permutation::Permutation;
 use linnet::tree::{child_vec::ChildVecStore, Forest};
 use pyo3::prelude::*;
-use symbolica::utils::resources::ResourceLimitError;
 
 use crate::graph::{EdgeRecord, HalfEdgeRecord, NodeRecord};
 
@@ -460,12 +460,12 @@ impl PyHedgeGraph {
         }
     }
 
-    pub(crate) fn all_cycles_of(
+    pub(crate) fn all_cycles_of<ControlError: StdError + 'static>(
         &self,
         subgraph: &SuBitGraph,
         max_cycle_rank: usize,
-        checkpoint: impl FnMut() -> Result<(), ResourceLimitError>,
-    ) -> Result<Vec<Cycle>, CycleEnumerationError<ResourceLimitError>> {
+        checkpoint: impl FnMut() -> Result<(), ControlError>,
+    ) -> Result<Vec<Cycle>, CycleEnumerationError<ControlError>> {
         match self {
             Self::Vec(graph) => {
                 graph.all_cycles_of_with_control(subgraph, max_cycle_rank, checkpoint)

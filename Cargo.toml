@@ -129,6 +129,6 @@ lto = "fat"
 
 
 [patch.crates-io]
-symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
-numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
-graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", branch = "community" }
