@@ -8795,7 +8795,8 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
 
         Examples
         --------
@@ -8826,7 +8827,8 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
 
         Examples
         --------
@@ -8969,7 +8971,8 @@ class TensorNetwork:
         -----
         This depicts the current graph, including execution progress. For the
         symbolic computation in tensor notation, use formatted() or to_svg().
-        Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
+        Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+        otherwise use optional Typst or estimated MathML label sizes.
 
         Examples
         --------
@@ -8985,6 +8988,8 @@ class TensorNetwork:
     def to_svg(self, show_dimensions: typing.Optional[builtins.bool] = None, *, settings: typing.Optional[DisplaySettings] = None, notation_source: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
         Render static mathematical tensor notation to SVG.
+        Requires the optional `typst` Python package. For the network diagram
+        without that compiler, use `network.render().to_svg()` instead.
 
         Parameters
         ----------

@@ -472,14 +472,14 @@ impl PyAmplitude {
         view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Return Marimo MIME data for the browser-measured amplitude view.
+    /// Return Marimo MIME data with static output and an optional live widget.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``Amplitude`` class example:
     ///
     /// >>> view = amplitude.render()
-    /// >>> view  # notebook display measures labels before mounting diagrams
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let view = self.render(py, None, None, Some(PREVIEW_LIMIT), None)?;

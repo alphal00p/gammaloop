@@ -4536,7 +4536,7 @@ impl PyFeynmanDiagram {
         Ok(drawing.with_html(html))
     }
 
-    /// Export a measured HTML figure with the same options as ``render``.
+    /// Export a complete static HTML figure with the same options as ``render``.
     ///
     /// Examples
     /// --------
@@ -4559,8 +4559,9 @@ impl PyFeynmanDiagram {
     ///     Region to highlight in the complete diagram.
     /// browser : {"chromium"} or None, optional
     ///     Explicit headless browser for script exports; none is started implicitly.
-    ///     For notebook measurements, use ``render().measured().to_html()`` on
-    ///     the displayed view instead.
+    ///     Defaults use a completed measurement, optional Typst, or estimated
+    ///     MathML label sizes. For exact notebook measurements, use
+    ///     ``render().measured().to_html()`` on the displayed view instead.
     #[pyo3(signature = (*, config=None, style=None, momenta=false, lmb=None, highlight=None, browser=None))]
     #[allow(clippy::too_many_arguments)] // Mirrors render's Python keywords plus explicit browser selection.
     fn to_html(

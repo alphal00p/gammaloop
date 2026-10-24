@@ -667,14 +667,14 @@ impl PyProcess {
         view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Return Marimo MIME data for the browser-measured process schematic.
+    /// Return Marimo MIME data with static output and an optional live widget.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``Process`` class example:
     ///
     /// >>> view = process.render()
-    /// >>> view  # notebook display measures labels before mounting the schematic
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let view = self.render(py, None, None)?;
@@ -2817,7 +2817,7 @@ impl PyGenerationResult {
     /// Using the setup in the ``GenerationResult`` class example:
     ///
     /// >>> view = result.render()
-    /// >>> view  # notebook display measures labels before mounting diagrams
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
     /// >>> snapshot = view.measured(browser="chromium")
     ///
     /// Parameters
@@ -2837,14 +2837,14 @@ impl PyGenerationResult {
         view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Return Marimo MIME data for the browser-measured generation-result view.
+    /// Return Marimo MIME data with static output and an optional live widget.
     ///
     /// Examples
     /// --------
     /// Using the setup in the ``GenerationResult`` class example:
     ///
     /// >>> view = result.render(max_diagrams=None)
-    /// >>> view  # notebook display measures labels before mounting diagrams
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let view = self.render(py, None, None, Some(PREVIEW_LIMIT))?;

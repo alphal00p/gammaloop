@@ -194,24 +194,33 @@ def _headless(request, javascript):
             # The inline font needs no widget transfer allowance; bound browser
             # layout by the same five seconds used after notebook font transfer.
             page.route("**/*", lambda route: route.abort())
-            return page.evaluate(
+            receipt = page.evaluate(
                 """async ({request, javascript}) => {
                     const url = URL.createObjectURL(new Blob([javascript],
                         {type: 'text/javascript'}));
+                    let timer;
                     try {
                         const module = await import(url);
                         return await Promise.race([
                             module.measure(request),
-                            new Promise((_, reject) => setTimeout(() =>
-                                reject(new Error('LINNET_MEASUREMENT_TIMEOUT')), 5000)),
+                            new Promise((_, reject) => { timer = setTimeout(() => {
+                                const error = new Error('Diagram measurement exceeded 5 seconds');
+                                error.name = 'LinnetMeasurementTimeout';
+                                reject(error);
+                            }, 5000); }),
                         ]);
-                    } finally { URL.revokeObjectURL(url); }
+                    } catch (error) {
+                        if (error.name === 'LinnetMeasurementTimeout')
+                            return {__linnet_timeout: error.message};
+                        throw error;
+                    } finally { clearTimeout(timer); URL.revokeObjectURL(url); }
                 }""",
                 {"request": request, "javascript": javascript},
             )
-        except Exception as error:
-            if "LINNET_MEASUREMENT_TIMEOUT" in str(error):
-                raise TimeoutError("Diagram measurement exceeded 5 seconds") from error
-            raise
+            if "__linnet_timeout" in receipt:
+                raise TimeoutError(
+                    "Diagram measurement exceeded 5 seconds"
+                ) from RuntimeError(receipt["__linnet_timeout"])
+            return receipt
         finally:
             browser.close()

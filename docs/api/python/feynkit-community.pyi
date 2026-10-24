@@ -218,14 +218,14 @@ class Amplitude:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured amplitude view.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         Using the setup in the ``Amplitude`` class example:
 
         >>> view = amplitude.render()
-        >>> view  # notebook display measures labels before mounting diagrams
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
 
@@ -610,12 +610,12 @@ class CffOrientation:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured orientation explorer.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         >>> view = orientation.render()
-        >>> view  # notebook display measures labels before mounting the explorer
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
@@ -995,21 +995,21 @@ class CffRepresentation:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured CFF explorer.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         Using the setup in the ``CffRepresentation`` class example:
 
         >>> view = result.render()
-        >>> view  # notebook display measures labels before mounting the explorer
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
         r"""
-        Return the browser-measured explorer widget.
+        Return a Marimo widget when available, otherwise static HTML.
 
-        Notebook MIME hooks use the same widget without requiring Marimo.
+        Notebook MIME hooks use the same DiagramView display contract.
 
         Examples
         --------
@@ -1447,12 +1447,12 @@ class CrossFreeFamily:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured family explorer.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         >>> view = family.render()
-        >>> view  # notebook display measures labels before mounting the explorer
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
@@ -3921,7 +3921,7 @@ class FeynmanDiagram:
         """
     def to_html(self, *, config: typing.Optional[RenderSettings] = None, style: typing.Optional[DiagramStyle] = None, momenta: builtins.bool = False, lmb: typing.Optional[LoopMomentumBasis] = None, highlight: Subgraph | None = None, browser: typing.Optional[builtins.str] = None) -> builtins.str:
         r"""
-        Export a measured HTML figure with the same options as ``render``.
+        Export a complete static HTML figure with the same options as ``render``.
 
         Examples
         --------
@@ -3944,8 +3944,9 @@ class FeynmanDiagram:
             Region to highlight in the complete diagram.
         browser : {"chromium"} or None, optional
             Explicit headless browser for script exports; none is started implicitly.
-            For notebook measurements, use ``render().measured().to_html()`` on
-            the displayed view instead.
+            Defaults use a completed measurement, optional Typst, or estimated
+            MathML label sizes. For exact notebook measurements, use
+            ``render().measured().to_html()`` on the displayed view instead.
         """
     def _repr_mimebundle_(self, include: typing.Optional[typing.Sequence[builtins.str]] = None, exclude: typing.Optional[typing.Sequence[builtins.str]] = None) -> typing.Any:
         r"""
@@ -4906,7 +4907,7 @@ class GenerationResult:
         Using the setup in the ``GenerationResult`` class example:
 
         >>> view = result.render()
-        >>> view  # notebook display measures labels before mounting diagrams
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
 
         Parameters
@@ -4918,14 +4919,14 @@ class GenerationResult:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured generation-result view.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         Using the setup in the ``GenerationResult`` class example:
 
         >>> view = result.render(max_diagrams=None)
-        >>> view  # notebook display measures labels before mounting diagrams
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
     def _repr_pretty_(self, pretty: typing.Any, cycle: builtins.bool) -> None:
@@ -7122,19 +7123,19 @@ class LtdRepresentation:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured LTD explorer.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         Using the setup in ``LtdRepresentation``:
 
         >>> view = ltd.render()
-        >>> view  # notebook display measures labels before mounting the explorer
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
         r"""
-        Return the browser-measured explorer widget.
+        Return a Marimo widget when available, otherwise static HTML.
 
         Examples
         --------
@@ -7304,12 +7305,12 @@ class LtdResidue:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured residue explorer.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         >>> view = residue.render()
-        >>> view  # notebook display measures labels before mounting the explorer
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
     def _display_(self) -> typing.Any:
@@ -9527,14 +9528,14 @@ class Process:
         """
     def _mime_(self) -> typing.Any:
         r"""
-        Return Marimo MIME data for the browser-measured process schematic.
+        Return Marimo MIME data with static output and an optional live widget.
 
         Examples
         --------
         Using the setup in the ``Process`` class example:
 
         >>> view = process.render()
-        >>> view  # notebook display measures labels before mounting the schematic
+        >>> view  # static output is immediate; an optional widget refines label sizes
         >>> snapshot = view.measured(browser="chromium")
         """
     def with_final_state_alternatives(self, alternatives: typing.Sequence[typing.Sequence[Particle | ParticleSelector | builtins.str | builtins.int]]) -> Process:

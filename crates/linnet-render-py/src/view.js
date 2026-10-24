@@ -30,7 +30,11 @@ function waitFor(promise, win, signal, message, timeout = TIMEOUT_MS) {
       complete(value);
     };
     const cancel = () => finish(reject, signal.reason || new Error('Diagram view disposed'));
-    const timer = win.setTimeout(() => finish(reject, new Error(message)), timeout);
+    const timer = win.setTimeout(() => {
+      const error = new Error(message);
+      error.name = 'LinnetMeasurementTimeout';
+      finish(reject, error);
+    }, timeout);
     signal.addEventListener('abort', cancel, { once: true });
     if (signal.aborted) cancel();
     Promise.resolve(promise).then(value => finish(resolve, value), error => finish(reject, error));
@@ -348,7 +352,13 @@ export default {
       shown = result.html;
       const current = ++revision;
       try {
-        const resolved = needsFont ? await resource() : null;
+        // A missing/timed-out comm resource must not hide the initial snapshot.
+        // The browser's fallback font keeps it visible while exact measurement
+        // remains pending; saved static exports still carry the bundled font.
+        let resolved = null;
+        if (needsFont) {
+          try { resolved = await resource(); } catch (_) { /* Keep static output. */ }
+        }
         if (disposed || current !== revision) return;
         resize?.disconnect();
         controls?.disconnect();
@@ -365,7 +375,9 @@ export default {
           try {
             if (disposed || frame !== mounted || !mounted.contentDocument) return;
             const doc = mounted.contentDocument;
-            if (needsFont) await fontReady(doc, owner, signal);
+            if (resolved) {
+              try { await fontReady(doc, owner, signal); } catch (_) { /* Keep static output. */ }
+            }
             else await doc.fonts.ready;
             if (disposed || frame !== mounted || mounted.contentDocument !== doc) return;
             // The sandbox blocks all document scripts, including imported markup.

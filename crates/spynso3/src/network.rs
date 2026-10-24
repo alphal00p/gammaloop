@@ -1476,7 +1476,8 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
+    /// Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+    /// otherwise use optional Typst or estimated MathML label sizes.
     ///
     /// Examples
     /// --------
@@ -1511,7 +1512,8 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
+    /// Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+    /// otherwise use optional Typst or estimated MathML label sizes.
     ///
     /// Examples
     /// --------
@@ -1705,7 +1707,8 @@ impl SpensoNet {
     /// -----
     /// This depicts the current graph, including execution progress. For the
     /// symbolic computation in tensor notation, use formatted() or to_svg().
-    /// Graph geometry is drawn in Rust after the notebook browser measures MathML labels.
+    /// Graph geometry is drawn in Rust. Static exports reuse completed measurements,
+    /// otherwise use optional Typst or estimated MathML label sizes.
     ///
     /// Examples
     /// --------

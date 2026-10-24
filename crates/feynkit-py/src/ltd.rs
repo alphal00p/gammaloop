@@ -316,21 +316,21 @@ impl PyLtdRepresentation {
         view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Return Marimo MIME data for the browser-measured LTD explorer.
+    /// Return Marimo MIME data with static output and an optional live widget.
     ///
     /// Examples
     /// --------
     /// Using the setup in ``LtdRepresentation``:
     ///
     /// >>> view = ltd.render()
-    /// >>> view  # notebook display measures labels before mounting the explorer
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let view = self.render(py)?;
         view._mime_(py)
     }
 
-    /// Return the browser-measured explorer widget.
+    /// Return a Marimo widget when available, otherwise static HTML.
     ///
     /// Examples
     /// --------
@@ -620,12 +620,12 @@ impl PyLtdResidue {
         view._repr_mimebundle_(py, include, exclude)
     }
 
-    /// Return Marimo MIME data for the browser-measured residue explorer.
+    /// Return Marimo MIME data with static output and an optional live widget.
     ///
     /// Examples
     /// --------
     /// >>> view = residue.render()
-    /// >>> view  # notebook display measures labels before mounting the explorer
+    /// >>> view  # static output is immediate; an optional widget refines label sizes
     /// >>> snapshot = view.measured(browser="chromium")
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         let view = self.render(py)?;

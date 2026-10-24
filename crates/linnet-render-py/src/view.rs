@@ -492,13 +492,6 @@ impl PyDiagramView {
         if let Some(done) = self.completed.get() {
             return Ok(done.snapshot.clone());
         }
-        if let Source::Views(views) = self.source.as_ref() {
-            let diagrams = views
-                .iter()
-                .map(|view| view.estimated(py))
-                .collect::<PyResult<Vec<_>>>()?;
-            return self.present(diagrams, true);
-        }
         let mut labels = Vec::new();
         self.labels(&mut labels);
         let metrics = labels
@@ -614,6 +607,10 @@ impl PyDiagramView {
     /// See [`Self`] for an example. Calling without arguments reuses completion;
     /// pending labels need either an external receipt or explicit browser mode.
     /// The same receipt is idempotent, including through a retained clone.
+    /// Notebook widgets allow 15 seconds for font-resource transfer, followed by
+    /// a separate five-second browser layout deadline. Explicit Chromium capture
+    /// has the font inline and a five-second measurement deadline; expiry raises
+    /// Python `TimeoutError`. Widgets retain static output on either timeout.
     ///
     /// # Errors
     /// Returns `ValueError` for conflicting arguments, an unsupported browser,
@@ -697,6 +694,15 @@ impl PyDiagramView {
     pub fn snapshot(&self, py: Python<'_>, browser: Option<&str>) -> PyResult<PyDiagramRender> {
         if browser.is_some() || self.completed.get().is_some() || self.label_count() == 0 {
             return self.measured(py, None, browser);
+        }
+        // Each child keeps the same precedence, including a measured child
+        // alongside pending or already captured siblings.
+        if let Source::Views(views) = self.source.as_ref() {
+            let diagrams = views
+                .iter()
+                .map(|view| view.snapshot(py, None))
+                .collect::<PyResult<Vec<_>>>()?;
+            return self.present(diagrams, true);
         }
         if Self::python(py)?
             .call_method1("available", ("typst",))?
@@ -1126,6 +1132,143 @@ assert '<svg' in view.to_svg()
         .unwrap();
     }
 
+    #[test]
+    #[ignore = "requires Playwright and installed Chromium"]
+    fn notebook_empty_labels_measure_in_a_sandbox() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let mut view = channel_view(py, 1)?;
+            let Source::Scenes(scenes) = Arc::get_mut(&mut view.source).unwrap() else { unreachable!() };
+            scenes[0].title = Some(LabelSource::text(""));
+            scenes[0].pages.push(LabelSource { mathml: String::new(), typst: Some("\"\"".into()) });
+            scenes[0].nodes[0].label = Some(0);
+            let locals = PyDict::new(py);
+            locals.set_item("request", view.measurement_request(py)?)?;
+            locals.set_item("javascript", include_str!("view.js"))?;
+            py.run(cr#"
+import os
+from playwright.sync_api import sync_playwright
+with sync_playwright() as driver:
+    browser = driver.chromium.launch(executable_path=os.environ.get('LINNET_TEST_CHROMIUM'))
+    try:
+        page = browser.new_page()
+        receipt = page.evaluate('''async ({request, javascript}) => {
+            const frames = [];
+            const create = document.createElement.bind(document);
+            document.createElement = (...args) => {
+                const element = create(...args);
+                if (args[0] === 'iframe') frames.push(element);
+                return element;
+            };
+            const url = URL.createObjectURL(new Blob([javascript], {type:'text/javascript'}));
+            try {
+                const module = await import(url);
+                const receipt = await module.measure(request);
+                if (!frames.length || frames.some(frame => frame.getAttribute('sandbox') !== 'allow-same-origin'))
+                    throw new Error('measurement frame is not sandboxed');
+                return receipt;
+            } finally {
+                document.createElement = create;
+                URL.revokeObjectURL(url);
+            }
+        }''', {'request':request, 'javascript':javascript})
+        assert len(receipt['metrics']) == 2
+        assert all(metric['width'] == 0 for metric in receipt['metrics'])
+    finally:
+        browser.close()
+"#, Some(&locals), Some(&locals))?;
+            let receipt = locals.get_item("receipt")?.unwrap();
+            view.measured(py, Some(receipt.cast()?), None)?;
+            assert!(view.completed.get().is_some());
+            Ok(())
+        }).unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires the optional Typst compiler"]
+    fn empty_label_outlining_retains_explicit_measurement_lifecycle() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let mut view = channel_view(py, 1)?;
+            let Source::Scenes(scenes) = Arc::get_mut(&mut view.source).unwrap() else {
+                unreachable!()
+            };
+            scenes[0].title = Some(LabelSource::text(""));
+            scenes[0].pages.push(LabelSource::text(""));
+            scenes[0].nodes[0].label = Some(0);
+            let svg = view.outlined(py)?.to_svg()?;
+            Document::parse(&svg).unwrap();
+            assert!(view.completed.get().is_none());
+            // A captured MathML sibling has no Typst source to recompile.
+            // Static collections must preserve each child's snapshot choice.
+            let captured = PyDiagramView::from_render(view.estimated(py)?);
+            let collection = PyDiagramView::from_views(vec![captured, view], None)?;
+            let snapshot = collection.snapshot(py, None)?;
+            assert_eq!(snapshot.pages().len(), 2);
+            assert_eq!(
+                snapshot
+                    .to_html()?
+                    .matches("data:font/woff2;base64,")
+                    .count(),
+                1
+            );
+            assert!(collection.completed.get().is_none());
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    #[ignore = "requires Playwright and installed Chromium"]
+    fn notebook_timeout_retains_the_static_snapshot() {
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let locals = PyDict::new(py);
+            locals.set_item("javascript", include_str!("view.js"))?;
+            py.run(cr#"
+import os
+from playwright.sync_api import sync_playwright
+with sync_playwright() as driver:
+    browser = driver.chromium.launch(executable_path=os.environ.get('LINNET_TEST_CHROMIUM'))
+    try:
+        page = browser.new_page()
+        result = page.evaluate('''async javascript => {
+            const url = URL.createObjectURL(new Blob([javascript], {type:'text/javascript'}));
+            const element = document.createElement('div');
+            document.body.append(element);
+            let cleanup;
+            try {
+                const module = await import(url);
+                const state = {
+                    request: {id:'timeout', labels:[{id:0,mathml:'<mtext>x</mtext>'}],font_key:'unanswered'},
+                    rendered: {id:'timeout',html:'<figure>Static snapshot survives timeout</figure>'},
+                };
+                const model = {get:name=>state[name],on(){},off(){},send(){}};
+                const started = performance.now();
+                const ready = new Promise(resolve => element.addEventListener('linnet:rendered', resolve, {once:true}));
+                const rendering = module.default.render({model,el:element});
+                // The layout timer must not expire while the font is in transit.
+                await new Promise(resolve => setTimeout(resolve, 6000));
+                const earlyFailure = element.querySelector('[role="alert"]')?.textContent;
+                cleanup = await rendering;
+                const event = await ready;
+                return {text:event.detail.document.body.innerText,elapsed:performance.now()-started,earlyFailure};
+            } finally {
+                cleanup?.();
+                element.remove();
+                URL.revokeObjectURL(url);
+            }
+        }''', javascript)
+        assert 'Static snapshot survives timeout' in result['text']
+        assert result.get('earlyFailure') is None, result
+        assert 14500 <= result['elapsed'] < 18000, result
+    finally:
+        browser.close()
+"#, Some(&locals), Some(&locals))?;
+            Ok(())
+        }).unwrap();
+    }
+
     fn channel_view(py: Python<'_>, count: usize) -> PyResult<PyDiagramView> {
         let stroke = Stroke {
             paint: "#333333".into(),
@@ -1452,7 +1595,7 @@ class Browser:
         if payload['request'] == 'failure':
             raise RuntimeError('evaluation failed')
         if payload['request'] == 'timeout':
-            raise RuntimeError('LINNET_MEASUREMENT_TIMEOUT')
+            return {'__linnet_timeout': 'browser measurement timer elapsed'}
         return {'id': payload['request'], 'metrics': []}
     def close(self):
         self.closed = True
