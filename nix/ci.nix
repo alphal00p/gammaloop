@@ -5,6 +5,7 @@
 }: let
   # Compile the integration crate once; groups select disjoint test binaries.
   testFeatures."gammaloop-integration-tests" = ["python-api-tests"];
+  testFeatures.vakint = ["feynkit-ingress"];
   groups = [
     {
       name = "core";

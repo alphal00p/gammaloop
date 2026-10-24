@@ -11,7 +11,6 @@ rewrite families:
 - `IndexTooling` covers canonicalization, conjugation, index wrapping, and dangling-index
   inspection for Symbolica atoms;
 - `Cookable`, `CookSettings`, and the cook filters control reversible or flattening encodings;
-- `SelectiveExpand` expands terms by recognized representation families;
 - `dirac`, `color`, `epsilon`, and shorthand modules implement algebra-specific rewrites;
 - `representations::initialize` installs the standard representation and tensor symbols.
 
