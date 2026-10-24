@@ -25,7 +25,11 @@ let
 
   docsTypst = typst015.withPackages (
     typstPackages: with typstPackages; [
-      cetz_0_5_1
+      # Linnest's marker batching uses the same reviewed CeTZ extension as
+      # the embedded renderer and Python wheels.
+      (cetz_0_5_1.overrideAttrs (_: {
+        src = workspaceRoot + "/vendor/typst-packages/preview/cetz/0.5.1";
+      }))
       mitex_0_2_6
       tidy_0_4_3
     ]

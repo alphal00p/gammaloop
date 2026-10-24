@@ -582,7 +582,10 @@
     "alphal00p-docs-catalogs" = [
       "docs/api/python"
     ];
-    clinnet = ["docs/assets/typst/portal-graphs/edge-style.typ"];
+    clinnet = [
+      "docs/assets/typst/portal-graphs/edge-style.typ"
+      "docs/assets/typst/theme.typ"
+    ];
     "gammaloop-api" = [
       "tests/resources/graphs/scalar_bubble.dot"
     ];
