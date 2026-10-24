@@ -138,13 +138,20 @@ class Gallery:
 
     @classmethod
     def footer(cls, mo):
+        runtime = cls.receipt("runtime")
+        provenance = ""
+        if isinstance(runtime, dict):
+            provenance = "<br>" + " · ".join(
+                f"{html.escape(str(label))}: {html.escape(str(value))}"
+                for label, value in runtime.get("display", [])
+            )
         return mo.Html(
             '<footer class="vg-foot">Native Symbolica expressions · shared HEPKit '
             "diagrams · precision-aware Vakint records<br>"
             '<a href="https://www.hepkit.org/gallery/notebooks/four_loop_numerator.py">'
             "HEPKit numerator tutorial</a> · "
             '<a href="https://github.com/alphal00p/vakint-external-data">'
-            "External data and provenance</a></footer>"
+            "External data and provenance</a>" + provenance + "</footer>"
         )
 
     @staticmethod
