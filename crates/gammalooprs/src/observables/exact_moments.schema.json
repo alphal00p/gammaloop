@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:gammaboard:exact-f64-moments:v1",
+  "title": "Exact moments of final represented binary64 samples v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "sample_count",
+    "max_order",
+    "sum",
+    "sum_abs",
+    "sum_squared"
+  ],
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1
+    },
+    "sample_count": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$",
+      "maxLength": 19
+    },
+    "max_order": {
+      "type": "integer",
+      "enum": [
+        2,
+        4
+      ]
+    },
+    "sum": {
+      "$ref": "#/$defs/order1"
+    },
+    "sum_abs": {
+      "$ref": "#/$defs/order1"
+    },
+    "sum_squared": {
+      "$ref": "#/$defs/order2"
+    },
+    "sum_cubed": {
+      "$ref": "#/$defs/order3"
+    },
+    "sum_fourth": {
+      "$ref": "#/$defs/order4"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "max_order": {
+            "const": 4
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "sum_cubed",
+          "sum_fourth"
+        ]
+      },
+      "else": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "sum_cubed"
+              ]
+            },
+            {
+              "required": [
+                "sum_fourth"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "order1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "string",
+          "pattern": "^(0|-?[1-9][0-9]*)$",
+          "maxLength": 652
+        },
+        "denominator": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "maxLength": 324
+        }
+      },
+      "$comment": "Checked decoder additionally enforces at most 651 numerator digits excluding sign, numerator significant_bits <= 2161, positive power-of-two denominator <= 2^1074, reduction, canonical zero0/1 and exact domain bounds."
+    },
+    "order2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "string",
+          "pattern": "^(0|-?[1-9][0-9]*)$",
+          "maxLength": 1284
+        },
+        "denominator": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "maxLength": 647
+        }
+      },
+      "$comment": "Checked decoder additionally enforces at most 1283 numerator digits excluding sign, numerator significant_bits <= 4259, positive power-of-two denominator <= 2^2148, reduction, canonical zero0/1 and exact domain bounds."
+    },
+    "order3": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "string",
+          "pattern": "^(0|-?[1-9][0-9]*)$",
+          "maxLength": 1915
+        },
+        "denominator": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "maxLength": 971
+        }
+      },
+      "$comment": "Checked decoder additionally enforces at most 1914 numerator digits excluding sign, numerator significant_bits <= 6357, positive power-of-two denominator <= 2^3222, reduction, canonical zero0/1 and exact domain bounds."
+    },
+    "order4": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "numerator",
+        "denominator"
+      ],
+      "properties": {
+        "numerator": {
+          "type": "string",
+          "pattern": "^(0|-?[1-9][0-9]*)$",
+          "maxLength": 2547
+        },
+        "denominator": {
+          "type": "string",
+          "pattern": "^[1-9][0-9]*$",
+          "maxLength": 1294
+        }
+      },
+      "$comment": "Checked decoder additionally enforces at most 2546 numerator digits excluding sign, numerator significant_bits <= 8455, positive power-of-two denominator <= 2^4296, reduction, canonical zero0/1 and exact domain bounds."
+    }
+  },
+  "$comment": "Checked decoder additionally enforces duplicate-key rejection, canonical dyadic bounds and moment consistency; strict enclosing APIs establish exact capability."
+}

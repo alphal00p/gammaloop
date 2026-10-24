@@ -8,8 +8,9 @@ use gammalooprs::{
     observables::{
         AdditionalWeightKey, DiscreteBinOrdering, Event, EventGroup, GenericAdditionalWeightInfo,
         GenericThresholdCountertermComponentWeight, GenericThresholdCountertermEventInfo,
-        HistogramAccumulatorState, HistogramSnapshot, HistogramStatisticsSnapshot,
-        ThresholdCountertermComponentOccurrence,
+        HistogramAccumulatorState, HistogramBinSnapshot, HistogramSnapshot,
+        HistogramStatisticsSnapshot, ThresholdCountertermComponentOccurrence,
+        exact_moments::ExactF64Moments,
     },
     processes::{
         DotExportSettings, ProcessCollection, ThresholdCountertermAssociationMetadata,
@@ -598,9 +599,61 @@ mod settings_wrapper_tests {
             sum_weights: base + (base + 1.0),
             sum_weights_squared: base * base + (base + 1.0) * (base + 1.0),
             centered_sum_weights_squared: Some(0.5),
+            exact_moments_json: None,
             mitigated_fill_count: 0,
         };
-        assert!((bin.error(2) - 0.5).abs() < f64::EPSILON);
+        assert!((bin.error(2).unwrap() - 0.5).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn histogram_wrapper_preserves_exact_moments_in_every_bin() {
+        use gammalooprs::observables::exact_moments::MomentOrder;
+
+        Python::initialize();
+        let base = (1u64 << 27) as f64;
+        let mut exact = ExactF64Moments::empty(MomentOrder::Second);
+        let mut state = HistogramAccumulatorState::continuous(
+            "exact-wrapper".to_string(),
+            "AL".to_string(),
+            gammalooprs::observables::ObservablePhase::Real,
+            gammalooprs::observables::ObservableValueTransform::Identity,
+            0.0,
+            1.0,
+            false,
+            false,
+            1,
+        );
+        for value in [base, base + 1.0] {
+            exact.push(value).unwrap();
+            state
+                .fill_continuous_sample(&[(-1.0, value), (0.5, value), (2.0, value)])
+                .unwrap();
+        }
+        let mut snapshot = state.snapshot();
+        for bin in snapshot
+            .bins
+            .iter_mut()
+            .chain([&mut snapshot.underflow_bin, &mut snapshot.overflow_bin])
+        {
+            bin.exact_moments = Some(exact.clone());
+        }
+        let wrapped = py_histogram_snapshot_from_snapshot(snapshot).unwrap();
+        for bin in wrapped
+            .bins
+            .iter()
+            .chain([&wrapped.underflow_bin, &wrapped.overflow_bin])
+        {
+            let json = bin.exact_moments_json.as_deref().unwrap();
+            assert_eq!(ExactF64Moments::from_json(json.as_bytes()).unwrap(), exact);
+            assert_eq!(bin.average(2).unwrap(), base + 0.5);
+            assert_eq!(bin.error(2).unwrap(), 0.5);
+            assert!(bin.average(1).is_err());
+            assert!(bin.error(1).is_err());
+        }
+        let mut invalid = wrapped.bins[0].clone();
+        invalid.exact_moments_json = Some("{}".to_string());
+        assert!(invalid.average(2).is_err());
+        assert!(invalid.error(2).is_err());
     }
 
     #[test]
@@ -1415,7 +1468,7 @@ impl PyHistogramAccumulator {
     }
 
     /// Return an immutable snapshot including committed and pending samples.
-    fn snapshot(&self) -> PyHistogramSnapshot {
+    fn snapshot(&self) -> PyResult<PyHistogramSnapshot> {
         py_histogram_snapshot_from_snapshot(self.inner.snapshot())
     }
 
@@ -1543,6 +1596,8 @@ pub struct PyHistogramBinSnapshot {
     pub sum_weights_squared: f64,
     /// Optional centered M2 across all histogram samples, including implicit zeros.
     pub centered_sum_weights_squared: Option<f64>,
+    /// Canonical exact represented-sample moments, or ``None`` for legacy statistics.
+    pub exact_moments_json: Option<String>,
     /// Number of fills produced by paired boundary-misbinning mitigation.
     pub mitigated_fill_count: usize,
 }
@@ -1754,7 +1809,7 @@ pub struct PyIntegrationResult {
 #[cfg_attr(feature = "python-stubs", pyo3_stub_gen::derive::gen_stub_pymethods)]
 #[pymethods]
 impl PyHistogramBinSnapshot {
-    /// Compute this bin's Monte Carlo mean from its raw weight sum.
+    /// Compute this bin's Monte Carlo mean, preserving exact moments when supplied.
     ///
     /// Parameters
     /// ----------
@@ -1764,12 +1819,22 @@ impl PyHistogramBinSnapshot {
     /// Returns
     /// -------
     /// float
-    ///     ``sum_weights / sample_count``, or zero when ``sample_count`` is zero.
-    fn average(&self, sample_count: usize) -> f64 {
-        if sample_count == 0 {
-            0.0
+    ///     The certified exact mean when exact moments are present; otherwise
+    ///     ``sum_weights / sample_count``, or zero for an empty legacy state.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If exact data, sample counts or final reporting bounds are invalid.
+    fn average(&self, sample_count: usize) -> PyResult<f64> {
+        let native = self.native_snapshot()?;
+        if native.exact_moments.is_some() {
+            let count = u64::try_from(sample_count).map_err(|_| {
+                exceptions::PyValueError::new_err("sample_count exceeds the exact count range")
+            })?;
+            native.average_exact(count).map_err(to_py_value_error)
         } else {
-            self.sum_weights / sample_count as f64
+            Ok(native.average(sample_count))
         }
     }
 
@@ -1783,10 +1848,37 @@ impl PyHistogramBinSnapshot {
     /// Returns
     /// -------
     /// float
-    ///     Sample-mean standard error. Supplied centered moments are preferred;
-    ///     invalid centered moments return NaN. Absent moments retain legacy behavior.
-    fn error(&self, sample_count: usize) -> f64 {
-        gammalooprs::observables::HistogramBinSnapshot {
+    ///     The certified exact sample-mean standard error when exact moments are
+    ///     present. Otherwise centered M2 or legacy raw statistics are used.
+    ///
+    /// Raises
+    /// ------
+    /// ValueError
+    ///     If exact data, sample counts or final reporting bounds are invalid.
+    fn error(&self, sample_count: usize) -> PyResult<f64> {
+        let native = self.native_snapshot()?;
+        if native.exact_moments.is_some() {
+            let count = u64::try_from(sample_count).map_err(|_| {
+                exceptions::PyValueError::new_err("sample_count exceeds the exact count range")
+            })?;
+            native.error_exact(count).map_err(to_py_value_error)
+        } else {
+            Ok(native.error(sample_count))
+        }
+    }
+}
+
+impl PyHistogramBinSnapshot {
+    fn native_snapshot(&self) -> PyResult<HistogramBinSnapshot> {
+        let exact_moments = self
+            .exact_moments_json
+            .as_deref()
+            .map(|json| {
+                ExactF64Moments::from_json(json.as_bytes())
+                    .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))
+            })
+            .transpose()?;
+        Ok(HistogramBinSnapshot {
             x_min: self.x_min,
             x_max: self.x_max,
             bin_id: self.bin_id,
@@ -1795,9 +1887,9 @@ impl PyHistogramBinSnapshot {
             sum_weights: self.sum_weights,
             sum_weights_squared: self.sum_weights_squared,
             centered_sum_weights_squared: self.centered_sum_weights_squared,
+            exact_moments,
             mitigated_fill_count: self.mitigated_fill_count,
-        }
-        .error(sample_count)
+        })
     }
 }
 
@@ -2530,7 +2622,10 @@ fn py_observable_dict_from_bundle<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let dict = PyDict::new(py);
     for (name, histogram) in &bundle.histograms {
-        dict.set_item(name, py_histogram_snapshot_from_snapshot(histogram.clone()))?;
+        dict.set_item(
+            name,
+            py_histogram_snapshot_from_snapshot(histogram.clone())?,
+        )?;
     }
     Ok(dict)
 }
@@ -2575,8 +2670,36 @@ fn to_py_value_error(error: eyre::Report) -> PyErr {
     exceptions::PyValueError::new_err(error.to_string())
 }
 
-fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogramSnapshot {
-    PyHistogramSnapshot {
+fn py_histogram_bin_from_snapshot(bin: HistogramBinSnapshot) -> PyResult<PyHistogramBinSnapshot> {
+    let exact_moments_json = bin
+        .exact_moments
+        .as_ref()
+        .map(|moments| {
+            let bytes = moments
+                .to_canonical_json()
+                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))?;
+            String::from_utf8(bytes)
+                .map_err(|error| exceptions::PyValueError::new_err(error.to_string()))
+        })
+        .transpose()?;
+    Ok(PyHistogramBinSnapshot {
+        x_min: bin.x_min,
+        x_max: bin.x_max,
+        bin_id: bin.bin_id,
+        label: bin.label,
+        entry_count: bin.entry_count,
+        sum_weights: bin.sum_weights,
+        sum_weights_squared: bin.sum_weights_squared,
+        centered_sum_weights_squared: bin.centered_sum_weights_squared,
+        exact_moments_json,
+        mitigated_fill_count: bin.mitigated_fill_count,
+    })
+}
+
+fn py_histogram_snapshot_from_snapshot(
+    snapshot: HistogramSnapshot,
+) -> PyResult<PyHistogramSnapshot> {
+    Ok(PyHistogramSnapshot {
         kind: format!("{:?}", snapshot.kind).to_lowercase(),
         title: snapshot.title,
         type_description: snapshot.type_description,
@@ -2595,42 +2718,12 @@ fn py_histogram_snapshot_from_snapshot(snapshot: HistogramSnapshot) -> PyHistogr
         bins: snapshot
             .bins
             .into_iter()
-            .map(|bin| PyHistogramBinSnapshot {
-                x_min: bin.x_min,
-                x_max: bin.x_max,
-                bin_id: bin.bin_id,
-                label: bin.label,
-                entry_count: bin.entry_count,
-                sum_weights: bin.sum_weights,
-                sum_weights_squared: bin.sum_weights_squared,
-                centered_sum_weights_squared: bin.centered_sum_weights_squared,
-                mitigated_fill_count: bin.mitigated_fill_count,
-            })
-            .collect(),
-        underflow_bin: PyHistogramBinSnapshot {
-            x_min: snapshot.underflow_bin.x_min,
-            x_max: snapshot.underflow_bin.x_max,
-            bin_id: snapshot.underflow_bin.bin_id,
-            label: snapshot.underflow_bin.label,
-            entry_count: snapshot.underflow_bin.entry_count,
-            sum_weights: snapshot.underflow_bin.sum_weights,
-            sum_weights_squared: snapshot.underflow_bin.sum_weights_squared,
-            centered_sum_weights_squared: snapshot.underflow_bin.centered_sum_weights_squared,
-            mitigated_fill_count: snapshot.underflow_bin.mitigated_fill_count,
-        },
-        overflow_bin: PyHistogramBinSnapshot {
-            x_min: snapshot.overflow_bin.x_min,
-            x_max: snapshot.overflow_bin.x_max,
-            bin_id: snapshot.overflow_bin.bin_id,
-            label: snapshot.overflow_bin.label,
-            entry_count: snapshot.overflow_bin.entry_count,
-            sum_weights: snapshot.overflow_bin.sum_weights,
-            sum_weights_squared: snapshot.overflow_bin.sum_weights_squared,
-            centered_sum_weights_squared: snapshot.overflow_bin.centered_sum_weights_squared,
-            mitigated_fill_count: snapshot.overflow_bin.mitigated_fill_count,
-        },
+            .map(py_histogram_bin_from_snapshot)
+            .collect::<PyResult<Vec<_>>>()?,
+        underflow_bin: py_histogram_bin_from_snapshot(snapshot.underflow_bin)?,
+        overflow_bin: py_histogram_bin_from_snapshot(snapshot.overflow_bin)?,
         statistics: py_histogram_statistics_from_snapshot(snapshot.statistics),
-    }
+    })
 }
 
 fn py_histogram_statistics_from_snapshot(

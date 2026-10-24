@@ -21,6 +21,7 @@ use std::path::Path;
 pub mod clustering;
 pub mod events;
 pub mod exact_moments;
+mod exact_snapshots;
 
 pub use clustering::{ClusteringResult, Jet, JetAlgorithm, JetClustering};
 pub use events::{
@@ -2046,6 +2047,10 @@ pub struct HistogramBinSnapshot {
         deserialize_with = "deserialize_centered_moment"
     )]
     pub centered_sum_weights_squared: Option<f64>,
+    /// Authoritative moments only in the explicitly selected exact mode. Legacy
+    /// getters cannot establish that mode; use the checked exact owner methods.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exact_moments: Option<exact_moments::ExactF64Moments>,
     pub mitigated_fill_count: usize,
 }
 
@@ -2101,6 +2106,9 @@ impl HistogramBinSnapshot {
         sample_count: usize,
         other_sample_count: usize,
     ) -> Result<()> {
+        if self.exact_moments.is_some() || other.exact_moments.is_some() {
+            return self.merge_exact_samples(other, sample_count, other_sample_count);
+        }
         self.validate_moments(sample_count)?;
         other.validate_moments(other_sample_count)?;
         let total = checked_histogram_count(sample_count, other_sample_count)?;
@@ -2153,6 +2161,11 @@ impl HistogramBinSnapshot {
     }
 
     fn rescale_in_place(&mut self, factor: f64) -> Result<()> {
+        if self.exact_moments.is_some() {
+            return Err(eyre!(
+                "Exact represented-sample moments do not support rescaling"
+            ));
+        }
         self.sum_weights = checked_histogram_product(self.sum_weights, factor)?;
         self.sum_weights_squared =
             checked_histogram_square_scale(self.sum_weights_squared, factor)?;
@@ -2228,6 +2241,7 @@ pub enum HistogramMedianPosition {
 
 impl HistogramSnapshot {
     pub fn to_json_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        self.require_legacy("bare JSON export; use to_exact_json")?;
         let writer = BufWriter::new(File::create(path.as_ref())?);
         serde_json::to_writer_pretty(writer, self)?;
         Ok(())
@@ -2235,10 +2249,21 @@ impl HistogramSnapshot {
 
     pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let reader = BufReader::new(File::open(path.as_ref())?);
-        Ok(serde_json::from_reader(reader)?)
+        let snapshot: Self = serde_json::from_reader(reader)?;
+        snapshot.require_legacy("bare JSON import; use from_exact_json")?;
+        Ok(snapshot)
     }
 
     fn write_hwu_block<W: Write>(&self, writer: &mut W) -> std::io::Result<()> {
+        if let Some(order) = self.first_exact_order() {
+            self.validate_exact(order).map_err(std::io::Error::other)?;
+            for bin in &self.bins {
+                bin.average_exact(self.sample_count as u64)
+                    .map_err(std::io::Error::other)?;
+                bin.error_exact(self.sample_count as u64)
+                    .map_err(std::io::Error::other)?;
+            }
+        }
         let x_axis_mode = if self.log_x_axis { "LOG" } else { "LIN" };
         let y_axis_mode = if self.log_y_axis { "LOG" } else { "LIN" };
 
@@ -2269,8 +2294,18 @@ impl HistogramSnapshot {
                 "  {:.8e}   {:.8e}   {:.8e}   {:.8e}",
                 x_min,
                 x_max,
-                bin.average(self.sample_count),
-                bin.error(self.sample_count),
+                if bin.exact_moments.is_some() {
+                    bin.average_exact(self.sample_count as u64)
+                        .map_err(std::io::Error::other)?
+                } else {
+                    bin.average(self.sample_count)
+                },
+                if bin.exact_moments.is_some() {
+                    bin.error_exact(self.sample_count as u64)
+                        .map_err(std::io::Error::other)?
+                } else {
+                    bin.error(self.sample_count)
+                },
             )?;
         }
 
@@ -2279,6 +2314,12 @@ impl HistogramSnapshot {
     }
 
     pub fn merge(&self, other: &HistogramSnapshot) -> Result<Self> {
+        if let Some(order) = self
+            .first_exact_order()
+            .or_else(|| other.first_exact_order())
+        {
+            return self.merge_exact(other, order);
+        }
         let mut merged = self.clone();
         merged.merge_samples_in_place(other)?;
         Ok(merged)
@@ -2431,6 +2472,9 @@ impl HistogramSnapshot {
                 self.title
             ));
         }
+        if let Some(order) = self.first_exact_order() {
+            self.validate_exact(order)?;
+        }
         self.discrete_ordering = Some(ordering);
         sort_discrete_snapshot_bins(&mut self.bins, ordering, self.sample_count);
         Ok(())
@@ -2443,6 +2487,7 @@ impl HistogramSnapshot {
     }
 
     pub fn rebin(&self, contiguous_bins: usize) -> Result<Self> {
+        self.require_legacy("spatial rebin without cross-bin moments")?;
         if self.kind == HistogramSnapshotKind::Discrete {
             return Ok(self.clone());
         }
@@ -2512,8 +2557,9 @@ impl HistogramSnapshot {
     /// Preserve supplied centered moments for the represented sample set.
     /// Appending live samples currently returns this state to raw-only moments;
     /// use snapshot merge to retain centered moments across independent batches.
-    pub fn into_accumulator_state(self) -> HistogramAccumulatorState {
-        HistogramAccumulatorState::from_snapshot(&self)
+    pub fn into_accumulator_state(self) -> Result<HistogramAccumulatorState> {
+        self.require_legacy("live continuation without exact grouped-sample updates")?;
+        Ok(HistogramAccumulatorState::from_snapshot(&self))
     }
 }
 
@@ -2778,6 +2824,7 @@ impl HistogramAccumulatorState {
                         sum_weights: bin.total_sum_weights(),
                         sum_weights_squared: bin.total_sum_weights_squared(),
                         centered_sum_weights_squared: bin.centered_moment(sample_count),
+                        exact_moments: None,
                         mitigated_fill_count: bin.total_mitigated_fill_count(),
                     }
                 })
@@ -2796,6 +2843,7 @@ impl HistogramAccumulatorState {
                         sum_weights: bin.total_sum_weights(),
                         sum_weights_squared: bin.total_sum_weights_squared(),
                         centered_sum_weights_squared: bin.centered_moment(sample_count),
+                        exact_moments: None,
                         mitigated_fill_count: bin.total_mitigated_fill_count(),
                     }
                 })
@@ -2826,6 +2874,7 @@ impl HistogramAccumulatorState {
                 sum_weights: self.underflow_bin.total_sum_weights(),
                 sum_weights_squared: self.underflow_bin.total_sum_weights_squared(),
                 centered_sum_weights_squared: self.underflow_bin.centered_moment(sample_count),
+                exact_moments: None,
                 mitigated_fill_count: self.underflow_bin.total_mitigated_fill_count(),
             },
             overflow_bin: HistogramBinSnapshot {
@@ -2837,6 +2886,7 @@ impl HistogramAccumulatorState {
                 sum_weights: self.overflow_bin.total_sum_weights(),
                 sum_weights_squared: self.overflow_bin.total_sum_weights_squared(),
                 centered_sum_weights_squared: self.overflow_bin.centered_moment(sample_count),
+                exact_moments: None,
                 mitigated_fill_count: self.overflow_bin.total_mitigated_fill_count(),
             },
             statistics: HistogramStatisticsSnapshot {
@@ -3069,7 +3119,7 @@ impl HistogramAccumulatorState {
     pub fn rebin(&self, contiguous_bins: usize) -> Result<Self> {
         self.snapshot()
             .rebin(contiguous_bins)
-            .map(|s| s.into_accumulator_state())
+            .and_then(|s| s.into_accumulator_state())
     }
 
     pub fn rescale(&mut self, factor: f64) -> Result<()> {
@@ -3189,11 +3239,13 @@ impl ObservableAccumulatorBundle {
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, JsonSchema)]
 pub struct ObservableSnapshotBundle {
+    #[serde(deserialize_with = "exact_snapshots::deserialize_unique_histograms")]
     pub histograms: BTreeMap<String, HistogramSnapshot>,
 }
 
 impl ObservableSnapshotBundle {
     pub fn to_json_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        self.require_legacy("bare JSON export; use to_exact_json")?;
         let writer = BufWriter::new(File::create(path.as_ref())?);
         serde_json::to_writer_pretty(writer, self)?;
         Ok(())
@@ -3201,10 +3253,26 @@ impl ObservableSnapshotBundle {
 
     pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self> {
         let reader = BufReader::new(File::open(path.as_ref())?);
-        Ok(serde_json::from_reader(reader)?)
+        let bundle: Self = serde_json::from_reader(reader)?;
+        bundle.require_legacy("bare JSON import; use from_exact_json")?;
+        Ok(bundle)
     }
 
     pub fn write_hwu_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        if let Some(order) = self
+            .histograms
+            .values()
+            .find_map(HistogramSnapshot::first_exact_order)
+        {
+            self.validate_exact(order)?;
+            // Validate every report before opening/truncating the destination.
+            for histogram in self.histograms.values() {
+                for bin in &histogram.bins {
+                    bin.average_exact(histogram.sample_count as u64)?;
+                    bin.error_exact(histogram.sample_count as u64)?;
+                }
+            }
+        }
         let mut writer = BufWriter::new(File::create(path.as_ref())?);
         for histogram in self.histograms.values() {
             histogram.write_hwu_block(&mut writer)?;
@@ -3212,17 +3280,30 @@ impl ObservableSnapshotBundle {
         Ok(())
     }
 
-    pub fn into_accumulator_bundle(self) -> ObservableAccumulatorBundle {
-        ObservableAccumulatorBundle {
+    pub fn into_accumulator_bundle(self) -> Result<ObservableAccumulatorBundle> {
+        self.require_legacy("live continuation without exact grouped-sample updates")?;
+        Ok(ObservableAccumulatorBundle {
             histograms: self
                 .histograms
                 .into_iter()
-                .map(|(name, histogram)| (name, histogram.into_accumulator_state()))
-                .collect(),
-        }
+                .map(|(name, histogram)| {
+                    histogram
+                        .into_accumulator_state()
+                        .map(|state| (name, state))
+                })
+                .collect::<Result<_>>()?,
+        })
     }
 
     pub fn merge_in_place(&mut self, other: &ObservableSnapshotBundle) -> Result<()> {
+        if let Some(order) = self
+            .histograms
+            .values()
+            .chain(other.histograms.values())
+            .find_map(HistogramSnapshot::first_exact_order)
+        {
+            return self.merge_exact_in_place(other, order);
+        }
         for (name, other_histogram) in other.histograms.iter() {
             let histogram = self
                 .histograms
@@ -3534,6 +3615,7 @@ impl EventProcessingRuntime {
     }
 
     pub fn restore_snapshot_bundle(&mut self, bundle: &ObservableSnapshotBundle) -> Result<()> {
+        bundle.require_legacy("live restore without exact grouped-sample updates")?;
         if self.observables.len() != bundle.histograms.len() {
             return Err(eyre!(
                 "Cannot restore observables from a snapshot with a different histogram count"
@@ -4557,7 +4639,7 @@ impl Observables {
 
 impl HistogramObservable {
     fn restore_snapshot(&mut self, snapshot: &HistogramSnapshot) -> Result<()> {
-        let restored_state = snapshot.clone().into_accumulator_state();
+        let restored_state = snapshot.clone().into_accumulator_state()?;
         self.state.ensure_compatible(&restored_state)?;
         self.state = restored_state;
         self.pending_contributions.clear();
@@ -4625,6 +4707,14 @@ fn sort_discrete_snapshot_bins(
     sample_count: usize,
 ) {
     bins.sort_by(|lhs, rhs| {
+        if let (Some(left), Some(right)) = (&lhs.exact_moments, &rhs.exact_moments) {
+            let base = match ordering {
+                DiscreteBinOrdering::AscendingBinId => Ordering::Equal,
+                DiscreteBinOrdering::ValueDescending => right.sum().cmp(left.sum()),
+                DiscreteBinOrdering::AbsValueDescending => right.sum().abs().cmp(&left.sum().abs()),
+            };
+            return base.then_with(|| lhs.bin_id.cmp(&rhs.bin_id));
+        }
         let base = match ordering {
             DiscreteBinOrdering::AscendingBinId => Ordering::Equal,
             DiscreteBinOrdering::ValueDescending => rhs
@@ -4729,7 +4819,7 @@ mod tests {
     use std::collections::BTreeMap;
     use std::fs;
 
-    fn sample_histogram_snapshot() -> HistogramSnapshot {
+    pub(super) fn sample_histogram_snapshot() -> HistogramSnapshot {
         HistogramSnapshot {
             kind: HistogramSnapshotKind::Continuous,
             title: "top_pt".to_string(),
@@ -4753,6 +4843,7 @@ mod tests {
                 sum_weights: 3.75,
                 sum_weights_squared: 5.625,
                 centered_sum_weights_squared: None,
+                exact_moments: None,
                 mitigated_fill_count: 2,
             }],
             underflow_bin: HistogramBinSnapshot {
@@ -4764,6 +4855,7 @@ mod tests {
                 sum_weights: 1.5,
                 sum_weights_squared: 2.25,
                 centered_sum_weights_squared: None,
+                exact_moments: None,
                 mitigated_fill_count: 0,
             },
             overflow_bin: HistogramBinSnapshot {
@@ -4775,6 +4867,7 @@ mod tests {
                 sum_weights: 0.5,
                 sum_weights_squared: 0.25,
                 centered_sum_weights_squared: None,
+                exact_moments: None,
                 mitigated_fill_count: 1,
             },
             statistics: HistogramStatisticsSnapshot {
@@ -4915,7 +5008,7 @@ mod tests {
     fn centered_snapshot_roundtrip_and_rescale_keep_sample_identity() {
         let base = (1u64 << 27) as f64;
         let snapshot = centered_histogram(&[base, base + 1.0]);
-        let mut live = snapshot.clone().into_accumulator_state();
+        let mut live = snapshot.clone().into_accumulator_state().unwrap();
         assert_eq!(live.snapshot(), snapshot);
         assert_close(live.bins[0].error(2), 0.5);
         let encoded = serde_json::to_vec(&live).unwrap();
@@ -4958,7 +5051,7 @@ mod tests {
                 .to_string()
                 .contains("covariance")
         );
-        assert!(snapshot.into_accumulator_state().rebin(2).is_err());
+        assert!(snapshot.into_accumulator_state().unwrap().rebin(2).is_err());
     }
 
     #[test]
@@ -4986,7 +5079,13 @@ mod tests {
         let mut invalid = centered_histogram(&[1.0]);
         invalid.bins[0].centered_sum_weights_squared = Some(1.0);
         assert!(invalid.clone().rescale(0.0).is_err());
-        assert!(invalid.into_accumulator_state().rescale(0.0).is_err());
+        assert!(
+            invalid
+                .into_accumulator_state()
+                .unwrap()
+                .rescale(0.0)
+                .is_err()
+        );
         overflowing.sample_count = usize::MAX;
         let before = overflowing.clone();
         assert!(overflowing.merge_in_place(&original).is_err());
@@ -5095,7 +5194,7 @@ mod tests {
         let checkpoint = uninterrupted.snapshot();
         let loaded: HistogramSnapshot =
             serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
-        let mut resumed = loaded.into_accumulator_state();
+        let mut resumed = loaded.into_accumulator_state().unwrap();
         assert_eq!(resumed.snapshot(), checkpoint);
 
         let mut worker = uninterrupted.cleared_clone();
@@ -5112,11 +5211,11 @@ mod tests {
     #[test]
     fn continuous_histogram_checkpoint_preserves_explicit_label_guard() {
         let mut checkpoint = sample_histogram_snapshot();
-        let mut unlabeled = checkpoint.clone().into_accumulator_state();
+        let mut unlabeled = checkpoint.clone().into_accumulator_state().unwrap();
         checkpoint.bins[0].label = Some("region".to_string());
         let loaded: HistogramSnapshot =
             serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
-        let mut labeled = loaded.into_accumulator_state();
+        let mut labeled = loaded.into_accumulator_state().unwrap();
         assert_eq!(labeled.bin_labels, vec![Some("region".to_string())]);
         assert!(unlabeled.merge_in_place(&mut labeled).is_err());
     }
@@ -5145,7 +5244,7 @@ mod tests {
         assert_eq!(checkpoint.bins[0].bin_id, Some(1));
         let loaded: HistogramSnapshot =
             serde_json::from_slice(&serde_json::to_vec(&checkpoint).unwrap()).unwrap();
-        let mut resumed = loaded.into_accumulator_state();
+        let mut resumed = loaded.into_accumulator_state().unwrap();
         assert_eq!(resumed.snapshot(), checkpoint);
         assert_eq!(resumed.bin_labels, uninterrupted.bin_labels);
         assert_eq!(resumed.discrete_ordering, uninterrupted.discrete_ordering);
