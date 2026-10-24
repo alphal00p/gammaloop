@@ -960,7 +960,7 @@ mod typed_tests {
     }
 
     #[test]
-    fn typed_canonize_retains_authoritative_ports_through_callbacks() {
+    fn typed_canonize_preserves_compliant_callback_interface() {
         test_support::test_initialize();
         let calls = Arc::new(AtomicUsize::new(0));
         let seen = Arc::clone(&calls);
@@ -972,6 +972,59 @@ mod typed_tests {
             .to_atom();
         let head = tensor_symbol!(
             "typed_canonize_callback_T",
+            norm = move |view, out| {
+                if let AtomView::Fun(function) = view
+                    && function.iter().any(|arg| arg == canonical_slot.as_view())
+                {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                    **out = Atom::num(2)
+                        * FunctionBuilder::new(tensor_symbol!("canonize_compliant_result"))
+                            .add_args(function.iter())
+                            .finish();
+                }
+            }
+        );
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let a = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(86301))
+            .to_atom();
+        let b = rep
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(86302))
+            .to_atom();
+        let expression = FunctionBuilder::new(head).add_arg(&a).add_arg(&b).finish()
+            * function!(vector_symbol!("typed_canonize_callback_p"), a);
+        let source = SymbolicTensor::infer(expression).unwrap();
+        assert_eq!(calls.load(Ordering::SeqCst), 0);
+        let canonical = source.canonize().unwrap();
+        assert_eq!(canonical.structure(), source.structure());
+        assert!(
+            source
+                .with_checked_expression(canonical.expression().clone())
+                .is_ok()
+        );
+        assert_eq!(
+            SymbolicTensor::infer(canonical.expression().clone())
+                .unwrap()
+                .structure(),
+            canonical.structure()
+        );
+        assert!(calls.load(Ordering::SeqCst) > 0);
+    }
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "normalization callback contract violated in canonize")]
+    fn canonize_checks_callback_contract() {
+        test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        // Dummy indices serialize as ordinary named symbols; parsing that atom
+        // yields Symbol, not the in-memory Dummy enum variant.
+        let canonical_slot = LibraryRep::from(Minkowski {})
+            .new_rep(4)
+            .slot::<AbstractIndex, _>(AbstractIndex::Dummy(0))
+            .to_atom();
+        let head = tensor_symbol!(
+            "typed_canonize_callback_T_violation",
             norm = move |view, out| {
                 if let AtomView::Fun(function) = view
                     && function.iter().any(|arg| arg == canonical_slot.as_view())
@@ -989,18 +1042,9 @@ mod typed_tests {
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(86302))
             .to_atom();
         let expression = FunctionBuilder::new(head).add_arg(&a).add_arg(&b).finish()
-            * function!(vector_symbol!("typed_canonize_callback_p"), a);
+            * function!(vector_symbol!("typed_canonize_callback_p_violation"), a);
         let source = SymbolicTensor::infer(expression).unwrap();
         assert_eq!(calls.load(Ordering::SeqCst), 0);
-        let canonical = source.canonize().unwrap();
-        assert_eq!(canonical.structure(), source.structure());
-        // Normalizers used by this ordinary identity must preserve its tensor
-        // meaning. Arbitrary raw replacement still checks physical ports.
-        assert!(
-            source
-                .with_checked_expression(canonical.expression().clone())
-                .is_err()
-        );
-        assert!(calls.load(Ordering::SeqCst) > 0);
+        source.canonize().unwrap();
     }
 }

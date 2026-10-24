@@ -3780,6 +3780,8 @@ pub(crate) mod tests {
     use super::*;
     use crate::shorthands::schoonschip::{Schoonschip, SchoonschipSettings};
     use crate::{CookSettings, test_support};
+    use spenso::network::library::FunctionLibrary;
+    use spenso::network::library::function_lib::Wrap;
     use spenso::structure::representation::ExtendibleReps;
     use spenso::tensor_symbol;
     use std::mem;
@@ -5453,7 +5455,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn symbol_renaming_retains_authoritative_ports_without_callback_replay() {
+    fn symbol_renaming_preserves_compliant_callback_interface() {
         test_support::test_initialize();
         let source_index = symbol!("rename_callback_source");
         let target_index = symbol!("rename_callback_target");
@@ -5467,7 +5469,10 @@ pub(crate) mod tests {
                     && let Some(AtomView::Fun(slot)) = function.iter().next()
                     && slot.iter().nth(1) == Some(Atom::var(target_index).as_view())
                 {
-                    **out = Atom::one();
+                    **out = Atom::num(2)
+                        * FunctionBuilder::new(tensor_symbol!("rename_compliant_result"))
+                            .add_args(function.iter())
+                            .finish();
                 }
             }
         );
@@ -5485,7 +5490,12 @@ pub(crate) mod tests {
         let renamed = source
             .rename_symbols(&HashMap::from([(source_index, target_index)]))
             .unwrap();
-        assert!(renamed.expression.is_one());
+        assert_eq!(
+            SymbolicTensor::infer(renamed.expression.clone())
+                .unwrap()
+                .structure,
+            renamed.structure
+        );
         assert_eq!(renamed.rank(), source.rank());
         assert_eq!(
             renamed.structure.logical_slots()[0].aind,
@@ -5540,7 +5550,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn lorentz_dimension_maps_authoritative_ports_without_replaying_callbacks() {
+    fn dimension_mapping_preserves_compliant_callback_interface() {
         let calls = Arc::new(Mutex::new(Vec::new()));
         let observed = Arc::clone(&calls);
         let head = tensor_symbol!(
@@ -5553,7 +5563,14 @@ pub(crate) mod tests {
                 {
                     let mode = function.iter().next().unwrap();
                     if mode == Atom::Zero.as_view() || mode == Atom::one().as_view() {
-                        **output = mode.to_owned();
+                        **output = if mode.is_zero() {
+                            Atom::Zero
+                        } else {
+                            Atom::num(2)
+                                * FunctionBuilder::new(tensor_symbol!("dimension_compliant_result"))
+                                    .add_args(function.iter())
+                                    .finish()
+                        };
                     }
                 }
             }
@@ -5598,11 +5615,16 @@ pub(crate) mod tests {
                 assert!(!expected_calls.is_empty());
                 let result = value.with_lorentz_dimension(Dimension::Concrete(6));
                 assert_eq!(*calls.lock().unwrap(), expected_calls);
-                if mode == 1 {
-                    assert_eq!(expected, Atom::one());
-                }
                 let result = result.unwrap();
                 assert_eq!(result.expression, expected);
+                if !result.is_zero() {
+                    assert_eq!(
+                        SymbolicTensor::infer(result.expression.clone())
+                            .unwrap()
+                            .structure,
+                        result.structure
+                    );
+                }
                 assert_eq!(
                     result.structure.logical_slots(),
                     vec![
@@ -5614,10 +5636,7 @@ pub(crate) mod tests {
             }
         }
 
-        let tensor = FunctionBuilder::new(tensor_symbol!("dimension_promoted_tensor"))
-            .add_arg(ExtendibleReps::MINKOWSKI.new_rep(6).to_symbolic([]))
-            .finish();
-        let promoted_tensor = tensor.clone();
+        let promoted_tensor = Atom::num(7);
         let observed = Arc::clone(&calls);
         let scalar = symbol!(
             "dimension_scalar_callback"; Scalar;
@@ -5645,18 +5664,18 @@ pub(crate) mod tests {
         let expected = value
             .expression
             .with_lorentz_dimension(Atom::num(6).as_view());
-        assert_eq!(expected, tensor);
+        assert_eq!(expected, Atom::num(7));
         let expected_calls = mem::take(&mut *calls.lock().unwrap());
         let mapped = value
             .with_lorentz_dimension(Dimension::Concrete(6))
             .unwrap();
-        assert_eq!(mapped.expression, tensor);
+        assert_eq!(mapped.expression, Atom::num(7));
         assert!(mapped.is_scalar());
         assert_eq!(*calls.lock().unwrap(), expected_calls);
     }
 
     #[test]
-    fn cooking_preserves_logical_order_without_reinferring_and_rejects_callback_rank_loss() {
+    fn cooking_preserves_logical_order_and_rejects_invalid_source() {
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
         let named = symbol!("shared_cooking_index", tags = [&SPENSO_TAG.index]);
         let slots = [73101, 73103].map(|owner| {
@@ -5722,7 +5741,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn typed_scoping_preserves_authoritative_ports_and_ranked_zero() {
+    fn typed_scoping_preserves_compliant_callback_interface_and_ranked_zero() {
         let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
         let scope = symbol!("shared_scope_test");
         let index = AbstractIndex::Normal(73201);
@@ -5734,7 +5753,10 @@ pub(crate) mod tests {
                 if let AtomView::Fun(function) = node
                     && function.iter().any(|arg| arg == target.as_view())
                 {
-                    **output = Atom::one();
+                    **output = Atom::num(2)
+                        * FunctionBuilder::new(tensor_symbol!("scope_compliant_result"))
+                            .add_args(function.iter())
+                            .finish();
                 }
             }
         );
@@ -5745,7 +5767,12 @@ pub(crate) mod tests {
             PartialStructure::from_logical_slots([slot]),
         );
         let scoped = value.wrap_indices(scope, false).unwrap();
-        assert!(scoped.expression.is_one());
+        assert_eq!(
+            SymbolicTensor::infer(scoped.expression.clone())
+                .unwrap()
+                .structure,
+            scoped.structure
+        );
         assert_eq!(
             scoped.structure.logical_slots(),
             [rep.slot(PartialIndex::Explicit(index.scoped(scope)))]
@@ -7647,5 +7674,379 @@ pub(crate) mod tests {
         );
         assert!(!inference.normalization_is_intrinsic_cached(component.as_view()));
         assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "normalization callback contract violated in with_renamed_symbols")]
+    fn symbol_renaming_checks_callback_contract() {
+        test_support::test_initialize();
+        let source_index = symbol!("rename_callback_source_violation");
+        let target_index = symbol!("rename_callback_target_violation");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let head = tensor_symbol!(
+            "rename_callback_tensor_violation",
+            norm = move |node, out| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().next()
+                    && slot.iter().nth(1) == Some(Atom::var(target_index).as_view())
+                {
+                    **out = Atom::one();
+                }
+            }
+        );
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(head)
+                .add_arg(
+                    ExtendibleReps::MINKOWSKI
+                        .new_rep(4)
+                        .to_symbolic([Atom::var(source_index)]),
+                )
+                .finish(),
+        )
+        .unwrap();
+        calls.store(0, Ordering::Relaxed);
+        source
+            .rename_symbols(&HashMap::from([(source_index, target_index)]))
+            .unwrap();
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(
+        expected = "normalization callback contract violated in map_representation_dimensions"
+    )]
+    fn dimension_mapping_checks_callback_contract() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let head = tensor_symbol!(
+            "dimension_result_normalizer_violation",
+            norm = move |node, output| {
+                observed.lock().unwrap().push(node.to_owned());
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().last()
+                    && slot.iter().next() == Some(Atom::num(6).as_view())
+                {
+                    let mode = function.iter().next().unwrap();
+                    if mode == Atom::Zero.as_view() || mode == Atom::one().as_view() {
+                        **output = mode.to_owned();
+                    }
+                }
+            }
+        );
+        let representation = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
+        for index in [
+            PartialIndex::open(0),
+            PartialIndex::Explicit(AbstractIndex::Normal(73321)),
+        ] {
+            for mode in [0, 1, 2] {
+                let port = representation.slot(index);
+                let expression = FunctionBuilder::new(head)
+                    .add_arg(mode)
+                    .add_arg(composition::port_atom(port))
+                    .finish();
+                let value = SymbolicTensor::<PartialStructure>::new(
+                    expression,
+                    PartialStructure::from_logical_slots([port]),
+                );
+                calls.lock().unwrap().clear();
+                let unchanged = value
+                    .expression
+                    .with_lorentz_dimension(Atom::num(4).as_view());
+                let unchanged_calls = mem::take(&mut *calls.lock().unwrap());
+                let mut mapped_pairs = Vec::new();
+                let actual = value
+                    .map_representation_dimensions(|representation, dimension| {
+                        mapped_pairs.push((representation, dimension.to_owned()));
+                        dimension.to_owned()
+                    })
+                    .unwrap();
+                assert_eq!(actual.expression, unchanged);
+                assert_eq!(actual.structure, value.structure);
+                assert_eq!(*calls.lock().unwrap(), unchanged_calls);
+                assert_eq!(mapped_pairs, vec![(representation.rep, Atom::num(4))]);
+
+                calls.lock().unwrap().clear();
+                let expected = value
+                    .expression
+                    .with_lorentz_dimension(Atom::num(6).as_view());
+                let expected_calls = mem::take(&mut *calls.lock().unwrap());
+                assert!(!expected_calls.is_empty());
+                let result = value.with_lorentz_dimension(Dimension::Concrete(6));
+                assert_eq!(*calls.lock().unwrap(), expected_calls);
+                if mode == 1 {
+                    assert_eq!(expected, Atom::one());
+                }
+                let result = result.unwrap();
+                assert_eq!(result.expression, expected);
+                assert_eq!(
+                    result.structure.logical_slots(),
+                    vec![
+                        ExtendibleReps::MINKOWSKI
+                            .new_rep(Dimension::Concrete(6))
+                            .slot(index)
+                    ]
+                );
+            }
+        }
+
+        let tensor = FunctionBuilder::new(tensor_symbol!("dimension_promoted_tensor_violation"))
+            .add_arg(ExtendibleReps::MINKOWSKI.new_rep(6).to_symbolic([]))
+            .finish();
+        let promoted_tensor = tensor.clone();
+        let observed = Arc::clone(&calls);
+        let scalar = symbol!(
+            "dimension_scalar_callback_violation"; Scalar;
+            norm = move |node, output| {
+                observed.lock().unwrap().push(node.to_owned());
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().next()
+                    && slot.iter().next() == Some(Atom::num(6).as_view())
+                {
+                    **output = promoted_tensor.clone();
+                }
+            }
+        );
+        let expression = FunctionBuilder::new(scalar)
+            .add_arg(representation.to_symbolic([]))
+            .finish();
+        assert!(!InterfaceInference::has_structured_syntax(
+            expression.as_view()
+        ));
+        let value = SymbolicTensor::<PartialStructure>::new(
+            expression,
+            PartialStructure::from_logical_slots([]),
+        );
+        calls.lock().unwrap().clear();
+        let expected = value
+            .expression
+            .with_lorentz_dimension(Atom::num(6).as_view());
+        assert_eq!(expected, tensor);
+        let expected_calls = mem::take(&mut *calls.lock().unwrap());
+        let mapped = value
+            .with_lorentz_dimension(Dimension::Concrete(6))
+            .unwrap();
+        assert_eq!(mapped.expression, tensor);
+        assert!(mapped.is_scalar());
+        assert_eq!(*calls.lock().unwrap(), expected_calls);
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "normalization callback contract violated in wrap_indices")]
+    fn scoping_checks_callback_contract() {
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let scope = symbol!("shared_scope_test_violation");
+        let index = AbstractIndex::Normal(73201);
+        let slot = rep.slot(PartialIndex::Explicit(index));
+        let target = rep.slot::<AbstractIndex, _>(index.scoped(scope)).to_atom();
+        let callback = tensor_symbol!(
+            "scope_callback_strips_ports_violation",
+            norm = move |node, output| {
+                if let AtomView::Fun(function) = node
+                    && function.iter().any(|arg| arg == target.as_view())
+                {
+                    **output = Atom::one();
+                }
+            }
+        );
+        let value = SymbolicTensor::<PartialStructure>::new(
+            FunctionBuilder::new(callback)
+                .add_arg(composition::port_atom(slot))
+                .finish(),
+            PartialStructure::from_logical_slots([slot]),
+        );
+        value.wrap_indices(scope, false).unwrap();
+    }
+
+    fn cooking_callback_case(violate: bool) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        let name = if violate {
+            "cooking_contract_bad"
+        } else {
+            "cooking_contract_good"
+        };
+        let index_head = symbol!("cooking_contract_index", tags = [&SPENSO_TAG.index]);
+        let head = tensor_symbol!(
+            &name,
+            norm = move |node, out| {
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().next()
+                    && let Some(AtomView::Fun(index)) = slot.iter().nth(1)
+                    && index.get_symbol() == index_head
+                    && index.get_nargs() == 1
+                {
+                    **out = if violate {
+                        Atom::one()
+                    } else {
+                        Atom::num(3)
+                            * FunctionBuilder::new(tensor_symbol!("cooking_contract_result"))
+                                .add_args(function.iter())
+                                .finish()
+                    };
+                }
+            }
+        );
+        // Both spellings denote the same supported native index. Cooking
+        // canonicalizes local zero from head(owner, 0) to head(owner), rebuilding
+        // the callback-bearing parent without changing any logical index.
+        let alias = FunctionBuilder::new(index_head)
+            .add_arg(73901)
+            .add_arg(0)
+            .finish();
+        let slot = ExtendibleReps::EUCLIDEAN.new_rep(3).to_symbolic([alias]);
+        let source = SymbolicTensor::infer(FunctionBuilder::new(head).add_arg(slot).finish())?;
+        source.with_cooked_indices(&CookSettings::indices())
+    }
+
+    #[test]
+    fn cooking_preserves_compliant_callback_interface() {
+        let result = cooking_callback_case(false).unwrap();
+        assert_eq!(
+            SymbolicTensor::infer(result.expression.clone())
+                .unwrap()
+                .structure,
+            result.structure
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "normalization callback contract violated in with_cooked_indices")]
+    fn cooking_checks_callback_contract() {
+        cooking_callback_case(true).unwrap();
+    }
+    #[test]
+    fn wrapping_preserves_compliant_callback_interface() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let seen = Arc::clone(&calls);
+        let label = symbol!(
+            "wrapping_contract_index",
+            tags = [&SPENSO_TAG.index],
+            norm = move |_, _| {
+                seen.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let source_head = tensor_symbol!("wrapping_contract_source");
+        let head = tensor_symbol!(
+            "wrapping_contract_good",
+            norm = |node, out| {
+                if let AtomView::Fun(function) = node {
+                    **out = Atom::num(3) * function.iter().next().unwrap();
+                }
+            }
+        );
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(3);
+        for index in [
+            AbstractIndex::Normal(73931),
+            AbstractIndex::Open {
+                owner: 73931,
+                axis: 0,
+            },
+            AbstractIndex::Named(label.into(), 73931, 0),
+        ] {
+            let source = SymbolicTensor::infer(
+                FunctionBuilder::new(source_head)
+                    .add_arg(rep.to_symbolic([Atom::from(index)]))
+                    .finish(),
+            )
+            .unwrap();
+            let zero = source.with_checked_expression(Atom::Zero).unwrap();
+            let raw = SymbolicTensor {
+                structure: OrderedStructure::new(vec![rep.slot::<AbstractIndex, _>(index)])
+                    .into_canonical(),
+                expression: source.expression.clone(),
+                is_metric: false,
+                is_composite: false,
+                proofs: TensorProofs::default(),
+            };
+            let raw_zero = SymbolicTensor {
+                structure: raw.structure.clone(),
+                expression: Atom::Zero,
+                is_metric: false,
+                is_composite: true,
+                proofs: TensorProofs::default(),
+            };
+            let indexed = (!matches!(index, AbstractIndex::Open { .. }))
+                .then(|| source.clone().try_into_indexed().unwrap());
+            calls.store(0, Ordering::Relaxed);
+            let wrapped_zero = Wrap {}.apply(&head, zero).unwrap();
+            assert!(wrapped_zero.is_zero());
+            assert_eq!(wrapped_zero.structure, source.structure);
+            let raw_zero = Wrap {}.apply(&head, raw_zero).unwrap();
+            assert!(raw_zero.expression.is_zero());
+            assert_eq!(raw_zero.structure.order(), 1);
+            let raw = Wrap {}.apply(&head, raw).unwrap();
+            let indexed = indexed.map(|source| Wrap {}.apply(&head, source).unwrap());
+            let wrapped = Wrap {}.apply(&head, source).unwrap();
+            assert_eq!(raw.expression, wrapped.expression);
+            assert_eq!(
+                calls.load(Ordering::Relaxed),
+                0,
+                "wrapping checks must not replay index normalizers"
+            );
+            let inferred = SymbolicTensor::infer(wrapped.expression.clone()).unwrap();
+            assert_eq!(inferred.structure, wrapped.structure);
+            if let Some(indexed) = indexed {
+                assert_eq!(
+                    inferred.try_into_indexed().unwrap().structure,
+                    indexed.structure
+                );
+            }
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "normalization callback contract violated in Wrap::apply")]
+    fn wrapping_checks_callback_contract() {
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(tensor_symbol!("wrapping_contract_bad_source"))
+                .add_arg(
+                    ExtendibleReps::EUCLIDEAN
+                        .new_rep(3)
+                        .to_symbolic([Atom::num(73933)]),
+                )
+                .finish(),
+        )
+        .unwrap();
+        let head = tensor_symbol!(
+            "wrapping_contract_bad",
+            norm = |_, out| {
+                **out = Atom::one();
+            }
+        );
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        Wrap {}.apply(&head, zero).unwrap();
+    }
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "normalization callback contract violated in Wrap::apply")]
+    fn wrapping_checks_encoded_free_index_identity() {
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(3);
+        let index = AbstractIndex::Open {
+            owner: 73941,
+            axis: 0,
+        };
+        let source = SymbolicTensor::checked_parts(
+            FunctionBuilder::new(tensor_symbol!("wrapping_encoded_source"))
+                .add_arg(rep.to_symbolic([Atom::from(index)]))
+                .finish(),
+            PartialStructure::from_logical_slots([rep.slot(PartialIndex::Explicit(index))]),
+        )
+        .unwrap();
+        let target = FunctionBuilder::new(tensor_symbol!("wrapping_encoded_target"))
+            .add_arg(rep.to_symbolic([Atom::from(AbstractIndex::Open {
+                owner: 73943,
+                axis: 0,
+            })]))
+            .finish();
+        let head = tensor_symbol!(
+            "wrapping_encoded_bad",
+            norm = move |_, out| {
+                **out = target.clone();
+            }
+        );
+        Wrap {}.apply(&head, source).unwrap();
     }
 }

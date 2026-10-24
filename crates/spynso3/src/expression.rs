@@ -7616,7 +7616,7 @@ mod tests {
     }
 
     #[test]
-    fn expansion_does_not_replay_materialization_callbacks() {
+    fn expansion_preserves_compliant_callback_interface_without_replay() {
         use std::sync::{Arc, Mutex};
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
@@ -7653,6 +7653,9 @@ mod tests {
             let expected = expected.borrow(py);
             assert_eq!(actual.atom(), expected.atom());
             assert_eq!(actual.interface(), expected.interface());
+            let inferred = SymbolicTensor::<PartialStructure>::infer(actual.atom().clone())
+                .map_err(TensorExpression::inference_error)?;
+            assert_eq!(actual.interface(), inferred.structure());
             Ok(())
         })
         .unwrap();

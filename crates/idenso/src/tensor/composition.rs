@@ -3873,7 +3873,7 @@ mod tests {
     }
 
     #[test]
-    fn relabeling_retains_admitted_metadata_after_callback_normalization() {
+    fn relabeling_preserves_callback_interface_and_ranked_zero() {
         let zero = Arc::new(AtomicBool::new(false));
         let emit_zero = Arc::clone(&zero);
         let target = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(419)));
@@ -3888,6 +3888,9 @@ mod tests {
                         Atom::Zero
                     } else {
                         Atom::num(7)
+                            * FunctionBuilder::new(tensor_symbol!("relabel_compliant_result"))
+                                .add_args(function.iter())
+                                .finish()
                     };
                 }
             }
@@ -3898,10 +3901,13 @@ mod tests {
             value.expression.as_view()
         ));
         let replacements = HashMap::from([(0, AbstractIndex::Normal(419))]);
-        // The relabelling operation determines the target interface. Normalizer
-        // output does not replace admitted tensor metadata, even when scalar.
         let rewritten = value.reindex_interface_ports(&replacements).unwrap();
-        assert_eq!(rewritten.expression, Atom::num(7));
+        assert_eq!(
+            SymbolicTensor::infer(rewritten.expression.clone())
+                .unwrap()
+                .structure,
+            rewritten.structure
+        );
         assert_eq!(rewritten.structure.logical_slots(), [target]);
         assert_eq!(
             rewritten
@@ -3913,7 +3919,12 @@ mod tests {
         let renamed = rewritten
             .reindex_interface_ports(&HashMap::from([(0, AbstractIndex::Normal(425))]))
             .unwrap();
-        assert_eq!(renamed.expression, Atom::num(7));
+        assert_eq!(
+            SymbolicTensor::infer(renamed.expression.clone())
+                .unwrap()
+                .structure,
+            renamed.structure
+        );
         assert_eq!(
             renamed.structure.logical_slots(),
             [rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(425)))]
@@ -6623,5 +6634,39 @@ mod tests {
                 output: 1
             })
         ));
+    }
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(
+        expected = "normalization callback contract violated in reindex_interface_ports"
+    )]
+    fn relabeling_checks_callback_contract() {
+        let zero = Arc::new(AtomicBool::new(false));
+        let emit_zero = Arc::clone(&zero);
+        let target = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(419)));
+        let target_atom = port_atom(target);
+        let head = tensor_symbol!(
+            "relabel_result_rank_violation",
+            norm = move |function, output| {
+                if let AtomView::Fun(function) = function
+                    && function.iter().any(|arg| arg == target_atom.as_view())
+                {
+                    **output = if emit_zero.load(Ordering::Relaxed) {
+                        Atom::Zero
+                    } else {
+                        Atom::num(7)
+                    };
+                }
+            }
+        );
+        let port = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(421)));
+        let value = partial_tensor(head, &[port], &[port]);
+        assert!(!PortRewriteState::exact_arithmetic(
+            value.expression.as_view()
+        ));
+        let replacements = HashMap::from([(0, AbstractIndex::Normal(419))]);
+        // The relabelling operation determines the target interface. Normalizer
+        // output does not replace admitted tensor metadata, even when scalar.
+        value.reindex_interface_ports(&replacements).unwrap();
     }
 }
