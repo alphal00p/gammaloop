@@ -1,6 +1,10 @@
 #![allow(uncommon_codepoints)]
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cell::RefCell,
+    collections::{BTreeMap, BTreeSet},
+    sync::atomic::{AtomicU64, Ordering},
+};
 
 use linnet::{
     half_edge::subgraph::{BaseSubgraph, ModifySubSet, SuBitGraph, SubSetLike},
@@ -9,7 +13,7 @@ use linnet::{
 use shorthands::metric::{list_dangling_impl, wrap_dummies_impl, wrap_indices_impl};
 use spenso::{
     network::{
-        graph::{NetworkEdge, NetworkLeaf, NetworkNode},
+        graph::{NetworkEdge, NetworkLeaf, NetworkNode, NetworkOp},
         library::function_lib::INBUILTS,
         library::symbolic::ETS,
         parsing::{ParseSettings, ParseState, SchoonschipExpansionMode, ShorthandParsing},
@@ -26,12 +30,12 @@ use spenso::{
     symbolica_init::in_symbolica_initializer,
 };
 use symbolica::{
-    atom::{Atom, AtomCore, AtomView, Symbol},
+    atom::{Atom, AtomCore, AtomView, Symbol, SymbolBuilder},
     function,
     id::{AliasedAtom, Pattern, Replacement},
     initialize,
     printer::AtomPrinter,
-    symbol,
+    wrap_symbol,
 };
 use thiserror::Error;
 
@@ -42,7 +46,7 @@ use crate::{
     rep_symbols::RS,
     representations::{Bispinor, ColorAdjoint, ColorFundamental, ColorSextet, SpinFundamental},
     shorthands::{UndoShorthands, chain::Chain},
-    tensor::{SymbolicNetExt, SymbolicNetParse},
+    tensor::{SymbolicNetExt, SymbolicNetParse, inference::InterfaceInference},
 };
 
 initialize!(|| {
@@ -333,6 +337,10 @@ mod syntax_macro_tests {
 
 #[derive(Error, Debug)]
 pub enum AdjointError {
+    #[error(
+        "tensor words require an explicit adjoint policy; adjoint their operands and choose their order through the typed word constructor"
+    )]
+    ImplicitTensorWordAdjoint,
     #[error(transparent)]
     Composition(#[from] tensor::composition::TensorCompositionError),
     #[error("Dummies already present:{0}")]
@@ -350,6 +358,61 @@ pub enum AdjointError {
 }
 
 impl tensor::SymbolicTensor<PartialStructure> {
+    /// Prepare one admitted positive-power scope through the collection owner.
+    /// The caller's native index type and operation-wide fresh-index reservation
+    /// survive reversible encoding into the existing typed collection engine.
+    fn prepare_canonical_power<Aind: DummyAind + ParseableAind + AbsInd>(
+        value: AtomView<'_>,
+        state: &ParseState<Aind>,
+    ) -> Result<Atom, CanonicalizationError> {
+        use spenso::structure::{representation::LibraryRep, slot::SlotMatcher};
+        use std::collections::{HashMap, HashSet};
+
+        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
+        let result = (|| {
+            let cooked = cooking.try_cook(value).map_err(|error| error.to_string())?;
+            let mut slots = SlotMatcher::default();
+            let mut written = HashSet::new();
+            cooked.visitor(&mut |part| {
+                if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(part) {
+                    written.insert(slot.aind);
+                    return false;
+                }
+                true
+            });
+            if written.is_empty() {
+                return Ok(None);
+            }
+            let tensor = Self::infer(cooked.clone()).map_err(|error| error.to_string())?;
+            let prepared = tensor
+                .collect_with_map(
+                    tensor::CollectionMode::Factored,
+                    None,
+                    |_| true,
+                    |value, _, _| Ok(value),
+                )
+                .map_err(|error| error.to_string())?;
+            if prepared.expression() == &cooked {
+                return Ok(None);
+            }
+            let mut fresh = HashMap::new();
+            let expression = prepared.expression().replace_map(|part, _, out| {
+                if let Ok(slot) = slots.parse::<LibraryRep, AbstractIndex>(part)
+                    && !written.contains(&slot.aind)
+                {
+                    let index = *fresh
+                        .entry(slot.aind)
+                        .or_insert_with(|| state.fresh_index());
+                    **out = slot.rep().slot::<Aind, Aind>(index).to_atom();
+                }
+            });
+            Ok::<_, String>(Some(cooking.uncook(expression.as_view())))
+        })();
+        result
+            .map(|prepared| prepared.unwrap_or_else(|| value.to_owned()))
+            .map_err(|reason| CanonicalizationError::Prepare { reason })
+    }
+
     /// Dirac adjunction with the source's ordered logical axes. The external
     /// representations are dualized; zero retains those axes without parsing.
     /// As for axis permutation, unresolved axes acquire independent graph labels
@@ -420,6 +483,21 @@ impl tensor::SymbolicTensor<PartialStructure> {
         source: AtomView<'_>,
         preserve_indices: bool,
     ) -> Result<(Atom, bool), AdjointError> {
+        let mut tensor_word = false;
+        source.visitor(&mut |value| {
+            if let AtomView::Fun(function) = value {
+                if function.get_symbol().is_scalar() {
+                    return false;
+                }
+                tensor_word |= function
+                    .get_symbol()
+                    .has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word);
+            }
+            !tensor_word
+        });
+        if tensor_word {
+            return Err(AdjointError::ImplicitTensorWordAdjoint);
+        }
         let net = source
             .parse_to_symbolic_net::<Aind>(&ParseSettings {
                 shorthand_parsing: ShorthandParsing::Expand {
@@ -544,12 +622,140 @@ impl IndexTooling for AtomView<'_> {
         // Admit the complete source before algebraic zero pruning. The chosen
         // index parser owns accepted label syntax; canonicalization uses those
         // parsed identities without imposing another spelling restriction.
+        // Retain each native scalar operand until its graph role has been
+        // handled; a closed tensor word must not absorb its scalar coefficient.
+        let settings = ParseSettings {
+            precontract_scalars: false,
+            ..ParseSettings::default()
+        };
         let mut net = self
-            .parse_to_symbolic_net::<Aind>(&ParseSettings::default())
+            .parse_to_symbolic_net::<Aind>(&settings)
             .map_err(|error| NetworkToolingError::Parse {
                 reason: error.to_string(),
             })?;
 
+        // Native graph leaves own their private payloads. Alias scalar leaves
+        // only at that boundary; identical syntax inside tensor metadata remains
+        // untouched. Fresh registrations reject all existing global attributes.
+        static NEXT_SCALAR_ALIAS: AtomicU64 = AtomicU64::new(0);
+        let aliases = RefCell::new(BTreeMap::new());
+        let scalar_alias = |original: Atom| {
+            aliases
+                .borrow_mut()
+                .entry(original)
+                .or_insert_with(|| {
+                    loop {
+                        let serial = NEXT_SCALAR_ALIAS.fetch_add(1, Ordering::Relaxed);
+                        let builder = SymbolBuilder::new(wrap_symbol!(format!(
+                            "idenso::canonical_scalar_{serial}"
+                        )));
+                        if let Ok(heads) = SymbolBuilder::build_group(vec![builder]) {
+                            break Atom::var(heads[0]);
+                        }
+                    }
+                })
+                .clone()
+        };
+        let opaque_scalar = |value: AtomView<'_>| {
+            !matches!(value, AtomView::Num(_) | AtomView::Var(_))
+                && !InterfaceInference::has_structured_syntax(value)
+        };
+        let state = ParseState::<Aind>::default();
+        state.reserve_indices(*self);
+        let nested_dummy = RefCell::new(&mut new_dummy as &mut dyn FnMut(usize) -> Aind);
+        let canonical_power = |base: AtomView<'_>, exponent: AtomView<'_>| {
+            if !base
+                .list_dangling::<Aind>()
+                .map_err(|error| CanonicalizationError::Prepare {
+                    reason: error.to_string(),
+                })?
+                .is_empty()
+            {
+                return Err(CanonicalizationError::Prepare {
+                    reason: "a non-scalar tensor power requires a non-negative integer exponent"
+                        .into(),
+                });
+            }
+            let canonical = base.canonize::<Aind>(&mut **nested_dummy.borrow_mut())?;
+            Ok::<_, CanonicalizationError>(
+                tensor::SymbolicTensor::<PartialStructure>::scalar_power_expression(canonical)
+                    .pow(exponent),
+            )
+        };
+        let native_error =
+            |error| spenso::network::TensorNetworkError::Other(eyre::eyre!("{error}"));
+        let tree = net.graph.expr_tree().cast::<ChildVecStore<()>>();
+        let root = net.graph.graph.node_id(net.graph.head());
+        let prepared = net
+            .graph
+            .to_expression_at_with_operation(
+                &tree,
+                root,
+                &mut |_, node| match node {
+                    NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
+                        Ok(Some(net.store.tensors[*index].expression.clone()))
+                    }
+                    NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
+                        let scalar = net.store.get_scalar_ref(*index);
+                        let value = match scalar.as_view() {
+                            AtomView::Num(_) | AtomView::Var(_) => scalar.clone(),
+                            AtomView::Pow(power)
+                                if !i64::try_from(power.get_exp()).is_ok_and(|n| n > 0) =>
+                            {
+                                let (base, exponent) = power.get_base_exp();
+                                scalar_alias(canonical_power(base, exponent).map_err(native_error)?)
+                            }
+                            _ if InterfaceInference::has_structured_syntax(scalar.as_view()) => {
+                                scalar.clone()
+                            }
+                            _ => scalar_alias(scalar.clone()),
+                        };
+                        Ok(Some(value))
+                    }
+                    NetworkNode::Op(_) => Ok(None),
+                    _ => Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
+                        "canonicalization requires stored symbolic leaves"
+                    ))),
+                },
+                &mut |_, operation, children| {
+                    let NetworkOp::Power(power) = operation else {
+                        return Ok(None);
+                    };
+                    let [base] = children else {
+                        unreachable!(
+                            "native emitter checks unary arity before the operation callback"
+                        )
+                    };
+                    if *power > 1 {
+                        let expression =
+                            tensor::SymbolicTensor::<PartialStructure>::scalar_power_expression(
+                                base.clone(),
+                            )
+                            .pow(*power);
+                        return tensor::SymbolicTensor::prepare_canonical_power::<Aind>(
+                            expression.as_view(),
+                            &state,
+                        )
+                        .map(Some)
+                        .map_err(native_error);
+                    }
+                    if *power < 0 {
+                        let exponent = Atom::num(*power);
+                        return canonical_power(base.as_view(), exponent.as_view())
+                            .map(|power| Some(scalar_alias(power)))
+                            .map_err(native_error);
+                    }
+                    Ok(None)
+                },
+            )
+            .map_err(|error| CanonicalizationError::Prepare {
+                reason: error.to_string(),
+            })?;
+        net = prepared
+            .parse_to_symbolic_net::<Aind>(&settings)
+            .map_err(|error| NetworkToolingError::Parse {
+                reason: error.to_string(),
+            })?;
         net.remove_antisymmetric_zero_terms();
 
         // Keep duality wrappers in the expression graph. The canonicalizer
@@ -566,6 +772,36 @@ impl IndexTooling for AtomView<'_> {
                 dummies.insert(slot.to_atom(), slot.rep());
             }
         }
+        // A variadic tensor word exposes only its free ports to the outer
+        // network. Give Symbolica its internal slot inventory as well; its
+        // canonicalizer owns deciding which of these slots are contracted.
+        let mut slots = spenso::structure::slot::SlotMatcher::default();
+        prepared.visitor(&mut |value| {
+            let AtomView::Fun(function) = value else {
+                return true;
+            };
+            if function
+                .get_symbol()
+                .has_tag(&spenso::network::tags::SPENSO_TAG.tensor_word)
+            {
+                value.visitor(&mut |part| {
+                    if let Ok(slot) =
+                        slots.parse::<spenso::structure::representation::LibraryRep, Aind>(part)
+                    {
+                        let slot = if slot.rep_name().is_dual() {
+                            slot.dual()
+                        } else {
+                            slot
+                        };
+                        dummies.insert(slot.to_atom(), slot.rep());
+                        return false;
+                    }
+                    !matches!(part, AtomView::Fun(function) if function.get_symbol().is_scalar())
+                });
+                return false;
+            }
+            !function.get_symbol().is_scalar()
+        });
 
         let external = net.graph.dangling_indices();
         // Reconstruct the admitted operation graph, without running tensor algebra
@@ -576,10 +812,26 @@ impl IndexTooling for AtomView<'_> {
             .graph
             .to_expression_at(&tree, root, &mut |_, node| match node {
                 NetworkNode::Leaf(NetworkLeaf::LocalTensor(index)) => {
-                    Ok(Some(net.store.tensors[*index].expression.clone()))
+                    let expression = &net.store.tensors[*index].expression;
+                    let encoded = if let AtomView::Fun(function) = expression.as_view() {
+                        spenso::network::tensor_symmetry::TensorSlotSymmetry::canonical_view(
+                            function,
+                        )
+                        .map_err(|error| {
+                            spenso::network::TensorNetworkError::Other(eyre::eyre!(error))
+                        })?
+                    } else {
+                        expression.clone()
+                    };
+                    Ok(Some(encoded))
                 }
                 NetworkNode::Leaf(NetworkLeaf::Scalar(index)) => {
-                    Ok(Some(net.store.get_scalar_ref(*index).clone()))
+                    let scalar = net.store.get_scalar_ref(*index);
+                    Ok(Some(if opaque_scalar(scalar.as_view()) {
+                        scalar_alias(scalar.clone())
+                    } else {
+                        scalar.clone()
+                    }))
                 }
                 NetworkNode::Op(_) => Ok(None),
                 _ => Err(spenso::network::TensorNetworkError::Other(eyre::eyre!(
@@ -589,45 +841,8 @@ impl IndexTooling for AtomView<'_> {
             .map_err(|error| CanonicalizationError::Prepare {
                 reason: error.to_string(),
             })?;
-        // Symbolica rejects tensor-containing negative powers even when their
-        // base is a closed scalar network. Canonicalize those independent
-        // contractions recursively, then keep them opaque during outer labeling.
-        let mut aliases = BTreeMap::new();
-        let mut used = expr.get_all_symbols(true);
-        let mut serial = 0;
-        let mut failure = None;
-        let expr = expr.replace_map(|atom, _, out| {
-            let AtomView::Pow(power) = atom else {
-                return;
-            };
-            let (base, exponent) = power.get_base_exp();
-            if i64::try_from(exponent).is_ok_and(|n| n > 0) {
-                return;
-            }
-            let canonical =
-                match base.canonize::<Aind>(&mut new_dummy as &mut dyn FnMut(usize) -> Aind) {
-                    Ok(canonical) => canonical.pow(exponent),
-                    Err(error) => {
-                        failure = Some(error);
-                        return;
-                    }
-                };
-            let alias = aliases.entry(canonical).or_insert_with(|| {
-                loop {
-                    let name = symbol!(&format!("idenso::canonical_scalar_{serial}"));
-                    serial += 1;
-                    if used.insert(name) {
-                        break Atom::var(name);
-                    }
-                }
-            });
-            **out = alias.clone();
-        });
-        if let Some(error) = failure {
-            return Err(error);
-        }
         let mut scalar_definitions = AliasedAtom::from(Atom::Zero);
-        for (original, alias) in aliases {
+        for (original, alias) in aliases.into_inner() {
             scalar_definitions.register_alias(alias, original);
         }
         // Spenso supplies validated incidence and external slots. Symbolica
@@ -652,7 +867,7 @@ impl IndexTooling for AtomView<'_> {
             reserved.insert(slot);
         }
 
-        let mut reps = vec![];
+        let mut reps = BTreeMap::new();
         let mut next_dummy = 0;
 
         // Only relabel names that Symbolica validated as contracted indices;
@@ -664,21 +879,30 @@ impl IndexTooling for AtomView<'_> {
             .filter(|(index, _)| canonical.canonical_form.contains(index))
         {
             let target = loop {
-                let candidate = r.slot::<Aind, Aind>(new_dummy(next_dummy)).to_atom();
+                let candidate = r.slot::<Aind, Aind>(new_dummy(next_dummy));
                 next_dummy += 1;
-                if reserved.insert(candidate.clone()) {
-                    break candidate;
+                if reserved.insert(candidate.to_atom()) {
+                    break candidate.aind();
                 }
             };
-            reps.push(Replacement::new(
-                Pattern::Literal(d),
-                Pattern::Literal(target),
-            ));
+            reps.insert(d, target);
         }
 
-        Ok(scalar_definitions
-            .map_root(|_| canonical.canonical_form.replace_multiple(&reps))
-            .into_inner())
+        let relabeled = spenso::structure::slot::SlotMatcher::default()
+            .map_expression_indices::<Aind>(canonical.canonical_form.as_view(), |slot| {
+                let slot = if slot.rep_name().is_dual() {
+                    slot.dual()
+                } else {
+                    *slot
+                };
+                reps.get(&slot.to_atom()).copied()
+            });
+        let canonical =
+            spenso::network::tensor_symmetry::TensorSlotSymmetry::restore_canonical_view(
+                &relabeled,
+            )
+            .map_err(|reason| CanonicalizationError::Prepare { reason })?;
+        Ok(scalar_definitions.map_root(|_| canonical).into_inner())
     }
     fn spenso_conj(&self) -> Atom {
         let conjugate = self
@@ -782,6 +1006,224 @@ pub mod test {
         AdjointError, CanonicalizationError, Cookable, IndexTooling, NetworkToolingError, gamma,
         test_support::test_initialize, u,
     };
+
+    #[test]
+    fn canonicalization_of_closed_scalar_power_matches_fresh_contracted_copies() {
+        test_initialize();
+        let a = SPENSO_TAG.tensor_symbol("canonical_power::a");
+        let b = SPENSO_TAG.tensor_symbol("canonical_power::b");
+        let index = spenso::mink!(4, 701);
+        let norm =
+            crate::tensor::SymbolicTensor::infer(function!(a, &index) * function!(b, &index))
+                .unwrap();
+        for power in [2, 3] {
+            let powered = norm
+                .pow(&crate::tensor::SymbolicTensor::infer(Atom::num(power)).unwrap())
+                .unwrap();
+            let mut explicit = crate::tensor::SymbolicTensor::infer(Atom::one()).unwrap();
+            for copy in 0..power {
+                explicit = explicit
+                    .multiply(
+                        &norm
+                            .wrap_indices(symbol!(&format!("canonical_power::copy_{copy}")), true)
+                            .unwrap(),
+                    )
+                    .unwrap();
+            }
+            let expected = explicit.canonize().unwrap();
+            let actual = powered.canonize().unwrap();
+            assert_eq!(actual.expression(), expected.expression());
+            assert_eq!(
+                powered
+                    .expanded(None, false)
+                    .unwrap()
+                    .canonize()
+                    .unwrap()
+                    .expression(),
+                expected.expression()
+            );
+            assert_eq!(actual.canonize().unwrap().expression(), actual.expression());
+            assert_ne!(actual.expression(), norm.canonize().unwrap().expression());
+            assert_eq!(
+                powered.expression().canonize(AbstractIndex::Dummy).unwrap(),
+                *expected.expression()
+            );
+        }
+    }
+
+    #[test]
+    fn canonicalization_of_complex_norm_power_in_scalar_density() {
+        use crate::tensor::SymbolicTensor;
+        use spenso::structure::{
+            representation::{LibraryRep, RepName},
+            slot::IsAbstractSlot,
+        };
+        test_initialize();
+        let h = SPENSO_TAG.tensor_symbol("canonical_complex_power::h");
+        let rep = LibraryRep::new_dual("canonical_complex_power::weak")
+            .unwrap()
+            .new_rep(2);
+        let scope = symbol!("canonical_complex_power::scope");
+        let index = AbstractIndex::Normal(901).scoped(scope);
+        let norm = SymbolicTensor::infer(
+            spenso::network::library::function_lib::INBUILTS.conj(function!(
+                h,
+                rep.dual().slot::<AbstractIndex, _>(index).to_atom()
+            )) * function!(h, rep.slot::<AbstractIndex, _>(index).to_atom()),
+        )
+        .unwrap();
+        let square = norm
+            .pow(&SymbolicTensor::infer(Atom::num(2)).unwrap())
+            .unwrap();
+        let explicit = norm
+            .wrap_indices(symbol!("canonical_complex_power::left"), true)
+            .unwrap()
+            .multiply(
+                &norm
+                    .wrap_indices(symbol!("canonical_complex_power::right"), true)
+                    .unwrap(),
+            )
+            .unwrap();
+        let coefficient = SymbolicTensor::infer(
+            Atom::num((-1, 2)) * Atom::var(symbol!("canonical_complex_power::lambda"; Scalar)),
+        )
+        .unwrap();
+        let density = square
+            .multiply(&coefficient)
+            .unwrap()
+            .try_add(&norm)
+            .unwrap();
+        let expected = explicit
+            .multiply(&coefficient)
+            .unwrap()
+            .try_add(&norm)
+            .unwrap();
+        let callback = symbol!("canonical_complex_power::callback", norm = |_, _| {});
+        let wrapped_callback = spenso::network::library::function_lib::INBUILTS
+            .conj(function!(callback, &index.to_atom()));
+        assert!(
+            !crate::tensor::inference::InterfaceInference::normalization_is_intrinsic(
+                wrapped_callback.as_view()
+            )
+        );
+        assert_eq!(
+            density.canonize().unwrap().expression(),
+            expected.canonize().unwrap().expression()
+        );
+        assert_eq!(
+            density
+                .expanded(None, false)
+                .unwrap()
+                .canonize()
+                .unwrap()
+                .expression(),
+            expected.canonize().unwrap().expression()
+        );
+    }
+
+    #[test]
+    fn canonicalization_of_word_internal_dummies_keeps_external_names_and_signs() {
+        use crate::tensor::SymbolicTensor;
+        test_initialize();
+        let head = symbol!("canonical_word::exterior"; Flat, Linear, Antisymmetric;
+            tag = &SPENSO_TAG.tensor_word);
+        let a = SPENSO_TAG.tensor_symbol("canonical_word::a");
+        let b = SPENSO_TAG.tensor_symbol("canonical_word::b");
+        let index = symbol!("canonical_word::owned_index", tag = &SPENSO_TAG.index);
+        let density = |scope: usize, external: usize, reverse: bool| {
+            let internal = function!(index, scope, 0);
+            let left =
+                SymbolicTensor::infer(function!(a, crate::bis!(4, 71), crate::cof!(3, &internal)))
+                    .unwrap();
+            let right =
+                SymbolicTensor::infer(function!(b, crate::bis!(4, 72), crate::coaf!(3, &internal)))
+                    .unwrap();
+            let operands = if reverse {
+                [right, left]
+            } else {
+                [left, right]
+            };
+            let word = SymbolicTensor::word(head, &operands).unwrap();
+            word.multiply(
+                &SymbolicTensor::infer(gamma!(
+                    crate::bis!(4, 71),
+                    crate::bis!(4, 72),
+                    spenso::mink!(4, external as u64)
+                ))
+                .unwrap(),
+            )
+            .unwrap()
+        };
+        let canonical = density(1, 73, false).canonize().unwrap();
+        let renamed = density(2, 73, false).canonize().unwrap();
+        assert_eq!(canonical.expression(), renamed.expression());
+        assert_eq!(canonical.rank(), 1);
+        assert_eq!(
+            canonical.expression(),
+            &-density(2, 73, true).canonize().unwrap().expression()
+        );
+        assert_ne!(
+            canonical.expression(),
+            density(2, 74, false).canonize().unwrap().expression()
+        );
+        assert_eq!(
+            canonical.canonize().unwrap().expression(),
+            canonical.expression()
+        );
+        assert!(
+            !canonical
+                .expression()
+                .get_all_symbols(true)
+                .contains(&index)
+        );
+    }
+
+    #[test]
+    fn canonicalization_of_powered_sums_keeps_factorization_and_outer_ports() {
+        use crate::tensor::SymbolicTensor;
+        test_initialize();
+        let index = spenso::mink!(4, 801);
+        let pair = |left, right| {
+            SymbolicTensor::infer(
+                function!(SPENSO_TAG.tensor_symbol(left), &index)
+                    * function!(SPENSO_TAG.tensor_symbol(right), &index),
+            )
+            .unwrap()
+        };
+        let sum = pair("canonical_sum_power::a", "canonical_sum_power::b")
+            .try_add(&pair("canonical_sum_power::c", "canonical_sum_power::d"))
+            .unwrap();
+        let squared = sum
+            .pow(&SymbolicTensor::infer(Atom::num(2)).unwrap())
+            .unwrap();
+        let explicit = sum
+            .wrap_indices(symbol!("canonical_sum_power::left"), true)
+            .unwrap()
+            .multiply(
+                &sum.wrap_indices(symbol!("canonical_sum_power::right"), true)
+                    .unwrap(),
+            )
+            .unwrap();
+        let free = spenso::mink!(4, AbstractIndex::Dummy(0).to_atom());
+        let spectator = (Atom::var(symbol!("canonical_sum_power::x"; Scalar))
+            + Atom::var(symbol!("canonical_sum_power::y"; Scalar)))
+        .pow(7);
+        let outer = SymbolicTensor::infer(
+            function!(
+                SPENSO_TAG.tensor_symbol("canonical_sum_power::outer"),
+                &free
+            ) * &spectator,
+        )
+        .unwrap();
+        let actual = squared.multiply(&outer).unwrap().canonize().unwrap();
+        let expected = explicit.multiply(&outer).unwrap().canonize().unwrap();
+        assert_eq!(actual.expression(), expected.expression());
+        assert_eq!(actual.rank(), 1);
+        assert!(actual.expression().contains(&free));
+        assert!(actual.expression().contains(&spectator));
+        assert_ne!(actual.expression(), &actual.expression().expand());
+        assert_eq!(actual.canonize().unwrap().expression(), actual.expression());
+    }
 
     #[test]
     fn typed_adjoint_keeps_native_logical_axes_and_ranked_zero() {

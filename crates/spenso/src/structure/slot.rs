@@ -22,7 +22,7 @@ use std::{
 #[cfg(feature = "shadowing")]
 use symbolica::{
     atom::{
-        Atom, AtomView, FunctionBuilder, Symbol,
+        Atom, AtomCore, AtomView, FunctionBuilder, Symbol,
         representation::{FunView, ListIterator},
     },
     symbol,
@@ -562,6 +562,32 @@ impl SlotMatcher {
         self.classify(value).parse(value, self)
     }
 
+    /// Map typed index labels while preserving native representations.
+    ///
+    /// Functions or variables with the Scalar attribute are opaque. Each slot is
+    /// treated as one atomic payload: its dimension and index syntax are not
+    /// visited independently. Returning `None` retains that slot unchanged.
+    /// Generated labels are not revisited, so assignments are simultaneous.
+    /// This transforms syntax; callers retain responsibility for tensor validation.
+    pub fn map_expression_indices<Aind: AbsInd + ParseableAind>(
+        &mut self,
+        expression: AtomView<'_>,
+        mut map: impl FnMut(&LibrarySlot<Aind>) -> Option<Aind>,
+    ) -> Atom {
+        expression.replace_map(|value, _, output| {
+            if value.get_symbol().is_some_and(|symbol| symbol.is_scalar()) {
+                **output = value.to_owned();
+            } else if let Ok(mut slot) = self.parse::<LibraryRep, Aind>(value) {
+                if let Some(index) = map(&slot) {
+                    slot.aind = index;
+                    **output = slot.to_atom();
+                } else {
+                    **output = value.to_owned();
+                }
+            }
+        })
+    }
+
     /// Parse a compact representation with the same recognition and resolution
     /// caches used for explicit slots. Indexed or malformed arguments are not
     /// compact ports.
@@ -905,6 +931,198 @@ mod shadowing_tests {
             slot::{DualSlotTo, IsAbstractSlot, Slot, SlotError, SlotMatch, SlotMatcher},
         },
     };
+
+    #[test]
+    fn expression_index_mapping_is_simultaneous_and_preserves_native_variance() {
+        let rep = LibraryRep::from(Lorentz {}).new_rep(4);
+        let a = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(3101));
+        let b = rep
+            .dual()
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(3102));
+        let retained = LibraryRep::from(Minkowski {})
+            .new_rep(4)
+            .slot::<AbstractIndex, _>(AbstractIndex::Normal(3103));
+        let head = crate::tensor_symbol!("slot_index_map::variance");
+        let source = function!(head, a.to_atom(), b.to_atom(), retained.to_atom());
+        let expected = function!(
+            head,
+            a.reindex(AbstractIndex::Normal(3102)).to_atom(),
+            b.reindex(AbstractIndex::Normal(3101)).to_atom(),
+            retained.to_atom()
+        );
+        let mut seen = Vec::new();
+        let actual = SlotMatcher::default().map_expression_indices(source.as_view(), |slot| {
+            seen.push(*slot);
+            match slot.aind {
+                AbstractIndex::Normal(3101) => Some(AbstractIndex::Normal(3102)),
+                AbstractIndex::Normal(3102) => Some(AbstractIndex::Normal(3101)),
+                _ => None,
+            }
+        });
+        assert_eq!(actual, expected);
+        assert_eq!(seen, vec![a, b, retained]);
+        assert_eq!(
+            SlotMatcher::default()
+                .map_expression_indices::<AbstractIndex>(source.as_view(), |_| None),
+            source
+        );
+    }
+
+    #[test]
+    fn expression_index_mapping_uses_the_requested_generic_index_codec() {
+        use super::{AbsInd, ParseableAind};
+        use symbolica::atom::AtomView;
+
+        #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+        struct Index(usize);
+        impl std::fmt::Display for Index {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "index({})", self.0)
+            }
+        }
+        impl AbsInd for Index {}
+        // This carrier deliberately has no DummyAind implementation and uses
+        // syntax the concrete AbstractIndex parser does not accept.
+        impl ParseableAind for Index {
+            type Error = SlotError;
+            fn from_view(value: AtomView<'_>) -> Result<Self, Self::Error> {
+                let AtomView::Fun(function) = value else {
+                    return Err(SlotError::NotNatural);
+                };
+                if function.get_symbol() != symbol!("slot_index_map::custom_index")
+                    || function.get_nargs() != 1
+                {
+                    return Err(SlotError::NotNatural);
+                }
+                usize::try_from(function.iter().next().unwrap())
+                    .map(Self)
+                    .map_err(|_| SlotError::NotNatural)
+            }
+            fn to_atom(&self) -> Atom {
+                function!(symbol!("slot_index_map::custom_index"), self.0)
+            }
+        }
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let slot = rep.slot::<Index, _>(Index(41));
+        assert!(Slot::<LibraryRep>::try_from(slot.to_atom().as_view()).is_err());
+        let head = crate::tensor_symbol!("slot_index_map::generic");
+        let source = function!(head, slot.to_atom());
+        let mut calls = 0;
+        let actual = SlotMatcher::default().map_expression_indices(source.as_view(), |slot| {
+            assert_eq!(slot.aind, Index(41));
+            calls += 1;
+            Some(Index(42))
+        });
+        assert_eq!(calls, 1);
+        assert_eq!(actual, function!(head, slot.reindex(Index(42)).to_atom()));
+    }
+
+    #[test]
+    fn expression_index_mapping_preserves_scalar_metadata_hooks_and_interfaces() {
+        use crate::{
+            network::parsing::structure_inference::AtomStructureExt,
+            structure::{OrderedStructure, TensorStructure},
+        };
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let slot = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(3201));
+        let payload = function!(
+            symbol!("slot_index_map::private"; Scalar),
+            function!(
+                crate::tensor_symbol!("slot_index_map::inner"),
+                slot.to_atom()
+            )
+            .pow(2)
+        );
+        let altered = Arc::new(AtomicUsize::new(0));
+        let observed = altered.clone();
+        let expected_payload = payload.clone();
+        let head = crate::tensor_symbol!(
+            "slot_index_map::hooked",
+            norm = move |value, output| {
+                if !matches!(value, symbolica::atom::AtomView::Fun(function)
+                if function.iter().next() == Some(expected_payload.as_view()))
+                {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    output.to_num(0);
+                }
+            }
+        );
+        let source = function!(head, &payload, slot.to_atom());
+        let target = slot.reindex(AbstractIndex::Normal(3202));
+        let mut seen = Vec::new();
+        let actual = SlotMatcher::default().map_expression_indices(source.as_view(), |slot| {
+            seen.push(*slot);
+            Some(AbstractIndex::Normal(3202))
+        });
+        assert_eq!(seen, vec![slot]);
+        assert_eq!(actual, function!(head, &payload, target.to_atom()));
+        assert!(!actual.is_zero());
+        assert!(actual.contains(&payload));
+        assert_eq!(altered.load(Ordering::SeqCst), 0);
+        let interface = actual
+            .infer_structure::<OrderedStructure<LibraryRep, AbstractIndex>>()
+            .unwrap();
+        assert_eq!(interface.canonical().external_structure(), vec![target]);
+        assert_eq!(
+            SlotMatcher::default()
+                .map_expression_indices::<AbstractIndex>(Atom::Zero.as_view(), |_| panic!(
+                    "a zero has no slots"
+                )),
+            Atom::Zero
+        );
+    }
+
+    #[test]
+    fn expression_index_mapping_keeps_legacy_scope_selection_and_open_markers() {
+        let rep = LibraryRep::from(Minkowski {}).new_rep(4);
+        let selected = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(3301));
+        let retained = rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(3302));
+        let open = rep.slot::<AbstractIndex, _>(AbstractIndex::Open { owner: 42, axis: 0 });
+        let private = function!(
+            symbol!("slot_index_map::scope_private"; Scalar),
+            selected.to_atom()
+        );
+        let head = crate::tensor_symbol!("slot_index_map::scope_input");
+        let source = function!(
+            head,
+            &private,
+            selected.to_atom(),
+            retained.to_atom(),
+            open.to_atom()
+        );
+        let scope = symbol!("slot_index_map::scope");
+        let mut seen = Vec::new();
+        let wrapped = AbstractIndex::wrap_expression(source.as_view(), scope, |slot| {
+            seen.push(*slot);
+            slot.aind == selected.aind
+        });
+        assert_eq!(seen, vec![selected, retained]);
+        assert_eq!(
+            wrapped,
+            function!(
+                head,
+                &private,
+                selected.reindex(selected.aind.scoped(scope)).to_atom(),
+                retained.to_atom(),
+                open.to_atom()
+            )
+        );
+        assert_eq!(
+            AbstractIndex::wrap_expression(wrapped.as_view(), scope, |_| true),
+            function!(
+                head,
+                private,
+                selected.reindex(selected.aind.scoped(scope)).to_atom(),
+                retained.reindex(retained.aind.scoped(scope)).to_atom(),
+                open.to_atom()
+            )
+        );
+    }
 
     #[test]
     fn cached_representation_prefix_preserves_direct_conversion_grammar() {

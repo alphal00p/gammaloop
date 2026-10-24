@@ -10,7 +10,9 @@ use symbolica::{
     function, parse_lit, symbol,
 };
 
-use spenso::structure::{abstract_index::AbstractIndex, representation::RepName};
+use spenso::structure::{
+    abstract_index::AbstractIndex, representation::RepName, slot::IsAbstractSlot,
+};
 
 fn canonicalize(expression: &Atom) -> Atom {
     expression
@@ -382,6 +384,239 @@ fn inverse_scalar_contractions_preserve_their_boundary_during_canonicalization()
 }
 
 #[test]
+fn opaque_scalar_payloads_do_not_share_outer_dummy_indices() {
+    test_initialize();
+    let metadata = symbol!("opaque_scalar_canon::metadata"; Scalar);
+    let a = spenso::vector_symbol!("opaque_scalar_canon::a");
+    let b = spenso::vector_symbol!("opaque_scalar_canon::b");
+    let c = spenso::vector_symbol!("opaque_scalar_canon::c");
+    let d = spenso::vector_symbol!("opaque_scalar_canon::d");
+    let i = mink!(4, 701);
+    let payload = function!(a, &i) * function!(b, &i);
+    let scalar = function!(metadata, &payload);
+    let outer = function!(c, &i) * function!(d, &i);
+    let canonical = canonicalize(&(&scalar * &outer));
+    assert_eq!(canonical, scalar * canonicalize(&outer));
+    assert_eq!(canonical, canonicalize(&canonical));
+    assert!(!canonical.contains_symbol(spenso::network::tags::SPENSO_TAG.scalar));
+}
+
+#[test]
+fn nonlinear_scalar_payloads_preserve_their_literal_binding_on_repeated_canon() {
+    test_initialize();
+    let a = spenso::vector_symbol!("nonlinear_scalar_canon::a");
+    let b = spenso::vector_symbol!("nonlinear_scalar_canon::b");
+    let c = spenso::vector_symbol!("nonlinear_scalar_canon::c");
+    let d = spenso::vector_symbol!("nonlinear_scalar_canon::d");
+    let i = mink!(4, 702);
+    let payload = function!(a, &i) * function!(b, &i);
+    let outer = function!(c, &i) * function!(d, &i);
+    for payload in [payload.clone(), canonicalize(&payload)] {
+        let scalar = function!(symbolica::atom::Symbol::COS, payload);
+        let canonical = canonicalize(&(&scalar * &outer));
+        assert_eq!(canonical, scalar * canonicalize(&outer));
+        assert_eq!(canonical, canonicalize(&canonical));
+        assert!(!canonical.contains_symbol(spenso::network::tags::SPENSO_TAG.scalar));
+    }
+}
+
+#[test]
+fn opaque_scalar_hidden_powers_are_unchanged_by_outer_power_preparation() {
+    use crate::tensor::SymbolicTensor;
+    use spenso::structure::partial::PartialStructure;
+    test_initialize();
+    let metadata = symbol!("hidden_power_canon::metadata"; Scalar);
+    let i = mink!(4, 709);
+    let inner = SymbolicTensor::<PartialStructure>::infer(
+        tensor!(hidden_power_a, i.clone()) * tensor!(hidden_power_b, &i),
+    )
+    .unwrap();
+    let outer = tensor!(hidden_power_c, &i) * tensor!(hidden_power_d, i);
+    for exponent in [Atom::num(2), Atom::num(-1), Atom::num((1, 2))] {
+        let exponent = SymbolicTensor::infer(exponent).unwrap();
+        let power = inner.pow(&exponent).unwrap().into_expression();
+        for head in [metadata, symbolica::atom::Symbol::COS] {
+            let payload = function!(head, &power);
+            let canonical = canonicalize(&(&payload * &outer));
+            assert_eq!(canonical, payload * canonicalize(&outer));
+            assert_eq!(canonical, canonicalize(&canonical));
+        }
+    }
+}
+
+#[test]
+fn scalar_leaf_aliases_do_not_expose_temporary_metadata_to_tensor_hooks() {
+    use crate::tensor::SymbolicTensor;
+    use spenso::structure::partial::PartialStructure;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    test_initialize();
+    let metadata = symbol!("scalar_roles_canon::metadata"; Scalar);
+    let i = mink!(4, 710);
+    let inner = SymbolicTensor::<PartialStructure>::infer(
+        tensor!(scalar_roles_inner_a, &i) * tensor!(scalar_roles_inner_b, &i),
+    )
+    .unwrap();
+    for (case, exponent) in [None, Some(2), Some(-1)].into_iter().enumerate() {
+        let payload = if let Some(exponent) = exponent {
+            let exponent = SymbolicTensor::infer(Atom::num(exponent)).unwrap();
+            function!(metadata, inner.pow(&exponent).unwrap().expression())
+        } else {
+            function!(metadata, symbol!("scalar_roles_canon::x"))
+        };
+        let altered = Arc::new(AtomicUsize::new(0));
+        let observed = altered.clone();
+        let expected_metadata = payload.clone();
+        let head = spenso::tensor_symbol!(
+            format!("scalar_roles_canon::hooked_{case}"),
+            norm = move |value, output| {
+                if !matches!(value, symbolica::atom::AtomView::Fun(function)
+                    if function.iter().next() == Some(expected_metadata.as_view()))
+                {
+                    observed.fetch_add(1, Ordering::SeqCst);
+                    output.to_num(0);
+                }
+            }
+        );
+        let outer = function!(head, &payload, &i) * tensor!(scalar_roles_b, &i);
+        let source = &payload * &outer;
+        let canonical = canonicalize(&source);
+        assert_eq!(altered.load(Ordering::SeqCst), 0, "case {case}");
+        assert!(!canonical.is_zero(), "case {case}");
+        assert_eq!(canonical, payload * canonicalize(&outer), "case {case}");
+        assert_eq!(canonical, canonicalize(&canonical), "case {case}");
+        assert_eq!(altered.load(Ordering::SeqCst), 0, "case {case}");
+    }
+}
+
+#[test]
+fn opaque_scalar_aliases_do_not_capture_literal_native_handles() {
+    test_initialize();
+    let metadata = symbol!("literal_alias_canon::metadata"; Scalar);
+    let i = mink!(4, 703);
+    let outer = tensor!(literal_alias_a, &i) * tensor!(literal_alias_b, &i);
+    let native_handle = function!(spenso::network::tags::SPENSO_TAG.scalar, 0);
+    let canonical_name = Atom::var(symbol!("idenso::canonical_scalar_0"));
+    let payload = function!(metadata, native_handle, canonical_name);
+    let canonical = canonicalize(&(&payload * &outer));
+    assert_eq!(canonical, payload * canonicalize(&outer));
+    assert_eq!(canonical, canonicalize(&canonical));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn canonical_scalar_aliases_skip_preexisting_global_heads() {
+    const CHILD: &str = "IDENSO_CANONICAL_ALIAS_FRESHNESS_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        for mode in ["opaque", "inverse"] {
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "tensor::tests::canonicalization::canonical_scalar_aliases_skip_preexisting_global_heads",
+                    "--nocapture",
+                    "--test-threads=1",
+                ])
+                .env(CHILD, mode)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{mode}: {}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+        return;
+    }
+    use symbolica::{
+        atom::{Symbol, SymbolAttribute, SymbolBuilder},
+        wrap_symbol,
+    };
+    test_initialize();
+    // The isolated process starts the allocator at zero, so this exercises an
+    // occupied candidate without relying on parallel tests' global counters.
+    let occupied = SymbolBuilder::build_group(vec![
+        SymbolBuilder::new(wrap_symbol!("idenso::canonical_scalar_0"))
+            .with_attributes(vec![SymbolAttribute::Real, SymbolAttribute::Positive])
+            .with_normalization_function(|_, output| {
+                output.to_num(0);
+            }),
+    ])
+    .unwrap()[0];
+    let metadata = symbol!("fresh_alias_canon::metadata"; Scalar);
+    let payload = function!(metadata, symbol!("fresh_alias_canon::x"));
+    let i = mink!(4, 708);
+    let outer = tensor!(fresh_alias_a, i.clone()) * tensor!(fresh_alias_b, i);
+    let (source, expected) = if std::env::var(CHILD).unwrap() == "inverse" {
+        use crate::tensor::SymbolicTensor;
+        use spenso::structure::partial::PartialStructure;
+        let exponent = SymbolicTensor::<PartialStructure>::infer(Atom::num(-1)).unwrap();
+        let source = SymbolicTensor::<PartialStructure>::infer(outer.clone())
+            .unwrap()
+            .pow(&exponent)
+            .unwrap()
+            .into_expression();
+        let expected = SymbolicTensor::<PartialStructure>::infer(canonicalize(&outer))
+            .unwrap()
+            .pow(&exponent)
+            .unwrap()
+            .into_expression();
+        (source, expected)
+    } else {
+        (&payload * &outer, payload * canonicalize(&outer))
+    };
+    assert!(!source.contains_symbol(occupied));
+    let canonical = canonicalize(&source);
+    assert_eq!(canonical, expected);
+    assert_eq!(canonical, canonicalize(&canonical));
+    let fresh = Symbol::get_symbol(wrap_symbol!("idenso::canonical_scalar_1")).unwrap();
+    assert!(!fresh.is_real());
+    assert!(!fresh.is_positive());
+    assert!(fresh.get_normalization_function().is_none());
+    assert!(fresh.get_tags().is_empty());
+}
+
+#[test]
+fn equal_composite_scalar_coefficients_keep_signed_tensor_cancellation() {
+    test_initialize();
+    let metadata = symbol!("signed_alias_canon::metadata"; Scalar);
+    let coefficient = function!(metadata, symbol!("signed_alias_canon::x"));
+    let i = mink!(4, 704);
+    let j = mink!(4, 705);
+    let first = tensor!(signed_alias_a, i.clone()) * tensor!(signed_alias_b, i);
+    let second = tensor!(signed_alias_a, j.clone()) * tensor!(signed_alias_b, j);
+    assert!(canonicalize(&(coefficient * (first - second))).is_zero());
+}
+
+#[test]
+fn opaque_scalar_aliasing_retains_independent_inverse_and_fractional_base_canon() {
+    use crate::tensor::SymbolicTensor;
+    use spenso::structure::partial::PartialStructure;
+    test_initialize();
+    let i = mink!(4, 706);
+    let j = mink!(4, 707);
+    let first = SymbolicTensor::<PartialStructure>::infer(
+        tensor!(fractional_alias_a, i.clone()) * tensor!(fractional_alias_b, i),
+    )
+    .unwrap();
+    let second = SymbolicTensor::<PartialStructure>::infer(
+        tensor!(fractional_alias_a, j.clone()) * tensor!(fractional_alias_b, j),
+    )
+    .unwrap();
+    for exponent in [Atom::num(-1), Atom::num((1, 2)), Atom::num((-1, 2))] {
+        let exponent = SymbolicTensor::infer(exponent).unwrap();
+        let canonical = canonicalize(first.pow(&exponent).unwrap().expression());
+        assert_eq!(
+            canonical,
+            canonicalize(second.pow(&exponent).unwrap().expression())
+        );
+        assert_eq!(canonical, canonicalize(&canonical));
+    }
+}
+
+#[test]
 fn pruning_zero_arm_exposes_outer_signed_contraction() {
     test_initialize();
     let a = mink!(4, signed_exposed_a);
@@ -440,4 +675,176 @@ fn unparseable_indices_are_rejected_before_signed_zero_pruning() {
     // A caller with structured labels explicitly admits them once. Zero and
     // nonzero terms obey the same abstract-index boundary.
     assert!(canonicalize(&expression.cook_indices()).is_zero());
+}
+
+#[test]
+fn real_outer_power_preserves_scalar_metadata_without_hook_replay() {
+    use crate::tensor::SymbolicTensor;
+    use spenso::structure::{partial::PartialStructure, representation::Minkowski};
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    test_initialize();
+    let scope = symbol!("real_power_metadata_canon::scope");
+    let private_index = Minkowski {}
+        .new_rep(4)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(1701).scoped(scope))
+        .to_atom();
+    let outer_index = mink!(4, 1702);
+    let metadata = function!(
+        symbol!("real_power_metadata_canon::metadata"; Scalar),
+        tensor!(real_power_metadata_a, &private_index)
+            * tensor!(real_power_metadata_b, &private_index)
+    );
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = calls.clone();
+    let expected = metadata.clone();
+    let head = spenso::tensor_symbol!(
+        "real_power_metadata_canon::T",
+        norm = move |value, output| {
+            if !matches!(value, AtomView::Fun(function) if function.iter().next() == Some(expected.as_view()))
+            {
+                observed.fetch_add(1, Ordering::SeqCst);
+                output.to_num(0);
+            }
+        }
+    );
+    let source =
+        SymbolicTensor::<PartialStructure>::infer(function!(head, &metadata, &outer_index))
+            .unwrap();
+    let power = source
+        .pow(&SymbolicTensor::infer(Atom::num(2)).unwrap())
+        .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    let canonical = power.canonize().unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert!(!canonical.expression().is_zero());
+    assert!(canonical.expression().contains(&metadata));
+    assert_eq!(
+        canonical.expression(),
+        canonical.canonize().unwrap().expression()
+    );
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn exterior_word_scalar_coefficients_keep_independent_inner_bindings() {
+    use crate::tensor::SymbolicTensor;
+    use spenso::{network::tags::SPENSO_TAG, structure::partial::PartialStructure};
+    test_initialize();
+    type Tensor = SymbolicTensor<PartialStructure>;
+    let i = mink!(4, 1801);
+    let j = mink!(4, 1802);
+    let a = Tensor::infer(tensor!(word_scalar_canon_a, &i)).unwrap();
+    let b = Tensor::infer(tensor!(word_scalar_canon_b, &i)).unwrap();
+    let head = symbol!("word_scalar_canon::exterior"; Flat, Linear, Antisymmetric; tag=&SPENSO_TAG.tensor_word);
+    let word = Tensor::word(head, &[a, b]).unwrap();
+    let payload = function!(
+        symbolica::atom::Symbol::COS,
+        tensor!(word_scalar_canon_x, &i) * tensor!(word_scalar_canon_y, &i)
+    );
+    let weighted = Tensor::infer(&payload * word.expression()).unwrap();
+    assert_eq!(weighted.expression(), &(&payload * word.expression()));
+    let outer =
+        Tensor::infer(tensor!(word_scalar_canon_c, &j) * tensor!(word_scalar_canon_d, &j)).unwrap();
+    let source = weighted.multiply(&outer).unwrap();
+    let canonical = source.canonize().unwrap();
+    assert!(canonical.expression().contains(&payload));
+    assert_eq!(
+        canonical.expression(),
+        canonical.canonize().unwrap().expression()
+    );
+    let expected = &payload
+        * word
+            .multiply(&outer)
+            .unwrap()
+            .canonize()
+            .unwrap()
+            .expression();
+    assert_eq!(canonical.expression(), &expected);
+}
+
+#[test]
+fn raw_and_typed_non_scalar_inverse_powers_remain_rejected() {
+    use crate::tensor::SymbolicTensor;
+    use spenso::structure::partial::PartialStructure;
+    test_initialize();
+    let source = tensor!(open_inverse_canon_a, mink!(4, 1901));
+    let typed = SymbolicTensor::<PartialStructure>::infer(source.clone()).unwrap();
+    for exponent in [Atom::num(-1), Atom::num(-2), Atom::num((1, 2))] {
+        assert!(
+            typed
+                .pow(&SymbolicTensor::infer(exponent.clone()).unwrap())
+                .is_err()
+        );
+        let error = source
+            .clone()
+            .pow(exponent)
+            .canonize::<AbstractIndex>(AbstractIndex::Dummy)
+            .unwrap_err();
+        assert!(error.to_string().contains("non-scalar"), "{error}");
+    }
+    let square = typed
+        .pow(&SymbolicTensor::infer(Atom::num(2)).unwrap())
+        .unwrap();
+    assert!(square.canonize().is_ok());
+}
+
+#[test]
+fn operation_power_preparation_keeps_generic_index_storage() {
+    use spenso::structure::{
+        abstract_index::AbstractIndexError,
+        representation::Minkowski,
+        slot::{AbsInd, DummyAind, ParseableAind},
+    };
+    #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+    struct WrappedIndex(AbstractIndex);
+    impl std::fmt::Display for WrappedIndex {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            std::fmt::Display::fmt(&self.0, f)
+        }
+    }
+    impl AbsInd for WrappedIndex {}
+    impl ParseableAind for WrappedIndex {
+        type Error = AbstractIndexError;
+        fn from_view(view: AtomView<'_>) -> Result<Self, Self::Error> {
+            AbstractIndex::from_view(view).map(Self)
+        }
+        fn to_atom(&self) -> Atom {
+            self.0.to_atom()
+        }
+    }
+    impl DummyAind for WrappedIndex {
+        fn new_dummy() -> Self {
+            Self(AbstractIndex::new_dummy())
+        }
+        fn new_dummy_at(i: usize) -> Self {
+            Self(AbstractIndex::new_dummy_at(i))
+        }
+        fn is_dummy(&self) -> bool {
+            self.0.is_dummy()
+        }
+    }
+    test_initialize();
+    let scope = symbol!("generic_power_canon::scope");
+    let index = Minkowski {}
+        .new_rep(4)
+        .slot::<WrappedIndex, _>(WrappedIndex(AbstractIndex::Normal(2001).scoped(scope)))
+        .to_atom();
+    let metadata = function!(
+        symbol!("generic_power_canon::metadata"; Scalar),
+        tensor!(generic_power_canon_x, &index) * tensor!(generic_power_canon_y, &index)
+    );
+    let source = tensor!(generic_power_canon_a, &metadata, &index).pow(2);
+    let canonical = source
+        .canonize::<WrappedIndex>(|i| WrappedIndex(AbstractIndex::Dummy(i)))
+        .unwrap();
+    assert_eq!(canonical, canonicalize(&source));
+    assert_eq!(
+        canonical,
+        canonical
+            .canonize::<WrappedIndex>(|i| WrappedIndex(AbstractIndex::Dummy(i)))
+            .unwrap()
+    );
 }
