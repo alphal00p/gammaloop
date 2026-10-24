@@ -1,6 +1,6 @@
 //! Read-only validation of a local five-loop external-data replacement.
 //!
-//! cargo run --release -p vakint --example external_data_acceptance -- DATA REPORT
+//! cargo run --release -p vakint --features feynkit-ingress --example external_data_acceptance -- DATA REPORT
 
 #[path = "external_data_acceptance/dot.rs"]
 mod dot;
