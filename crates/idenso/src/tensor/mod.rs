@@ -53,6 +53,7 @@ mod collection;
 pub(crate) use collection::CollectionMode;
 #[cfg(test)]
 pub(crate) use collection::SELECTED_OPENS;
+pub use collection::{OriginalArithmeticAction, OriginalArithmeticOperation};
 pub mod composition;
 mod indexed;
 pub mod inference;
@@ -60,8 +61,11 @@ mod network;
 #[cfg(feature = "bincode")]
 mod persistence;
 mod replacement;
+mod scalar_algebra;
+mod scalar_payload;
 pub mod simplification;
 pub use replacement::TensorRule;
+pub use scalar_payload::ScalarPayloadPosition;
 
 #[cfg(test)]
 pub mod tests;

@@ -8,7 +8,10 @@ use std::collections::{HashMap, HashSet};
 use ahash::{AHashMap, AHashSet};
 use spenso::{
     network::{
-        library::symbolic::{ETS, ExplicitKey},
+        library::{
+            function_lib::INBUILTS,
+            symbolic::{ETS, ExplicitKey},
+        },
         parsing::{AtomStructureExt, ParseState, StrictTensorFilter},
         tags::SPENSO_TAG,
     },
@@ -1029,22 +1032,13 @@ impl SymbolicTensor<PartialStructure> {
         Ok(value)
     }
 
-    /// Rename symbols in the payload and its interface. The renaming must be
-    /// injective and avoid symbols already present, so the established
-    /// interface and validation carry over unchanged.
+    /// Rename symbols in the payload and its interface. The caller must check
+    /// injectivity and validate the resulting interface after normalization.
     pub(crate) fn with_renamed_symbols(
         &self,
         renaming: &HashMap<Symbol, Symbol>,
     ) -> InferenceResult<Self> {
-        let rename = |atom: AtomView<'_>| {
-            atom.replace_map(|node, _context, out| {
-                if let AtomView::Var(variable) = node
-                    && let Some(target) = renaming.get(&variable.get_symbol())
-                {
-                    **out = Atom::var(*target);
-                }
-            })
-        };
+        let rename = |atom: AtomView<'_>| atom.rename_symbols(renaming);
         let slots = self
             .structure
             .logical_slots()
@@ -1106,9 +1100,10 @@ impl SymbolicTensor<PartialStructure> {
                 Self::from_normalized_parts(Atom::Zero, physical).with_renamed_symbols(renaming)?;
             Self::validate_interface(&value.expression, &physical.structure)?;
         } else {
-            // Injectivity proves the mapped interface; validate scopes and index
-            // multiplicities in the actual rebuilt expression once.
-            Self::validate_atom(&value.expression)?;
+            // A renamed function can have different metadata or normalization.
+            // Check the rebuilt payload against the mapped interface without
+            // replaying the function's normalizer.
+            Self::validate_interface(&value.expression, &value.structure)?;
         }
         if value.expression == self.expression {
             value.is_metric = self.is_metric;
@@ -1222,12 +1217,14 @@ impl SymbolicTensor<PartialStructure> {
 impl InterfaceInference {
     // These structural builtins cannot invoke user code themselves. Delta only
     // compares fixed components; cyclic only unwraps a sole sym projector.
-    // Their descendants remain checked for user callbacks.
+    // Native conjugation only unwraps a double conjugation. Their descendants
+    // remain checked for user callbacks.
     pub(crate) fn intrinsic_normalization_head(symbol: Symbol) -> bool {
         symbol.get_evaluation_info().is_none()
             && (symbol == ETS.metric
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
+                || symbol == INBUILTS.conj
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)
@@ -1246,6 +1243,7 @@ impl InterfaceInference {
             && (symbol == *metric.get_or_insert_with(|| ETS.metric)
                 || symbol == ETS.delta
                 || symbol == SPENSO_TAG.dot
+                || symbol == INBUILTS.conj
                 || symbol.get_normalization_function().is_none()
                 || symbol == AIND_SYMBOLS.dind
                 || symbol == *shadowing::CYCLIC)
@@ -1939,6 +1937,12 @@ impl InterfaceInference {
         }
 
         match value {
+            AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor_word) => {
+                syntax_error = Some(TensorInferenceError::invalid(format!(
+                    "tensor word symbol `{}` must be called with operands",
+                    variable.get_symbol()
+                )));
+            }
             AtomView::Var(variable) if variable.get_symbol().has_tag(&SPENSO_TAG.tensor) => {
                 syntax_error = Some(TensorInferenceError::invalid(format!(
                     "tensor symbol `{}` must be called with at least one structural port",
@@ -1952,6 +1956,57 @@ impl InterfaceInference {
                     return false;
                 }
                 let symbol = function.get_symbol();
+                if symbol.has_tag(&SPENSO_TAG.tensor_word) {
+                    if symbol.is_scalar()
+                        || symbol.has_tag(&SPENSO_TAG.tensor)
+                        || symbol.has_tag(&SPENSO_TAG.rank1)
+                        || symbol.has_tag(&SPENSO_TAG.representation)
+                        || symbol.has_tag(&SPENSO_TAG.broadcast)
+                    {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "a tensor word head must carry only the tensor-word structural role",
+                        ));
+                        return false;
+                    }
+                    if function.get_nargs() == 0 {
+                        syntax_error = Some(TensorInferenceError::invalid(
+                            "tensor words require at least one operand; use the typed word constructor for the identity",
+                        ));
+                        return false;
+                    }
+                    for argument in function.iter() {
+                        if !SymbolicTensor::<PartialStructure>::is_word_operand(symbol, argument) {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "word operands must be individual generators or same-head words with scalar coefficients; keep commuting tensor coefficients outside the word",
+                            ));
+                            return false;
+                        }
+                        if self.slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
+                            || self.slots.parse_representation::<LibraryRep>(argument).is_ok()
+                        {
+                            syntax_error = Some(TensorInferenceError::invalid(
+                                "tensor word operands must be tensors or coefficients, not bare structural ports",
+                            ));
+                            return false;
+                        }
+                        if Self::has_structured_syntax(argument) {
+                            match self.infer_view(argument) {
+                                Ok(interface) if interface.open_positions().is_empty() => {}
+                                Ok(_) => {
+                                    syntax_error = Some(TensorInferenceError::invalid(
+                                        "tensor words with unresolved operands require the typed word constructor",
+                                    ));
+                                    return false;
+                                }
+                                Err(error) => {
+                                    syntax_error = Some(error);
+                                    return false;
+                                }
+                            }
+                        }
+                    }
+                    return true;
+                }
                 // Explicit scalar functions own their metadata, which may itself
                 // contain tensor syntax without exposing any tensor ports.
                 if SPENSO_TAG.is_scalar_metadata(symbol)
@@ -2530,7 +2585,7 @@ impl InterfaceInference {
                 return Self::merge_explicit_interface_sequence(&interfaces);
             }
 
-            if symbol == SPENSO_TAG.bracket {
+            if symbol == SPENSO_TAG.bracket || symbol.has_tag(&SPENSO_TAG.tensor_word) {
                 let mut interfaces = Vec::new();
                 for argument in arguments {
                     if !Self::has_structured_syntax(argument) {
@@ -2538,7 +2593,7 @@ impl InterfaceInference {
                     }
                     interfaces.push(self.infer_view(argument)?);
                 }
-                if interfaces.is_empty() {
+                if interfaces.is_empty() && !symbol.has_tag(&SPENSO_TAG.tensor_word) {
                     return Err(TensorInferenceError::invalid(
                         "ordered tensor products require at least one tensor operand",
                     ));
@@ -4831,6 +4886,150 @@ pub(crate) mod tests {
                     .is_err()
             );
         }
+    }
+
+    #[test]
+    fn checked_symbol_renaming_includes_tensor_and_representation_heads() {
+        crate::test_support::test_initialize();
+        let (dimension, target_dimension, scope, target_scope, coefficient, target_coefficient) = symbolica::symbol!(
+            "rename_heads_dimension",
+            "rename_heads_target_dimension",
+            "rename_heads_scope",
+            "rename_heads_target_scope",
+            "rename_heads_coefficient",
+            "rename_heads_target_coefficient"
+        );
+        let rep = LibraryRep::new_dual("idenso::rename_heads_rep")
+            .unwrap()
+            .new_rep(dimension);
+        let target_rep = LibraryRep::new_dual("idenso::rename_heads_target_rep")
+            .unwrap()
+            .new_rep(target_dimension);
+        let head = spenso::tensor_symbol!("rename_heads_source");
+        let target_head = spenso::tensor_symbol!("rename_heads_target");
+        let renaming = HashMap::from([
+            (head, target_head),
+            (rep.rep.symbol(), target_rep.rep.symbol()),
+            (dimension, target_dimension),
+            (scope, target_scope),
+            (coefficient, target_coefficient),
+        ]);
+        let source = SymbolicTensor::infer(
+            Atom::var(coefficient)
+                * FunctionBuilder::new(head)
+                    .add_arg(
+                        rep.slot::<AbstractIndex, _>(AbstractIndex::Normal(17).scoped(scope))
+                            .to_atom(),
+                    )
+                    .add_arg(rep.dual().to_symbolic([]))
+                    .finish(),
+        )
+        .unwrap();
+        let expected = SymbolicTensor::infer(
+            Atom::var(target_coefficient)
+                * FunctionBuilder::new(target_head)
+                    .add_arg(
+                        target_rep
+                            .slot::<AbstractIndex, _>(
+                                AbstractIndex::Normal(17).scoped(target_scope),
+                            )
+                            .to_atom(),
+                    )
+                    .add_arg(target_rep.dual().to_symbolic([]))
+                    .finish(),
+        )
+        .unwrap();
+        let renamed = source.rename_symbols(&renaming).unwrap();
+        assert_eq!(renamed.expression, expected.expression);
+        assert_eq!(renamed.structure, expected.structure);
+        let zero = source.with_checked_expression(Atom::Zero).unwrap();
+        let renamed_zero = zero.rename_symbols(&renaming).unwrap();
+        assert!(renamed_zero.expression.is_zero());
+        assert_eq!(renamed_zero.structure, expected.structure);
+    }
+
+    #[test]
+    fn checked_symbol_renaming_does_not_normalize_an_intermediate_head() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let (source_index, target_index) =
+            symbolica::symbol!("rename_head_source_index", "rename_head_target_index");
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let source_head = spenso::tensor_symbol!(
+            "rename_intermediate_source",
+            norm = move |node, out| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                if let AtomView::Fun(function) = node
+                    && let Some(AtomView::Fun(slot)) = function.iter().next()
+                    && slot.iter().nth(1) == Some(Atom::var(target_index).as_view())
+                {
+                    **out = Atom::one();
+                }
+            }
+        );
+        let target_head = spenso::tensor_symbol!("rename_intermediate_target");
+        let rep = ExtendibleReps::MINKOWSKI.new_rep(4);
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(source_head)
+                .add_arg(rep.to_symbolic([Atom::var(source_index)]))
+                .finish(),
+        )
+        .unwrap();
+        let expected = SymbolicTensor::infer(
+            FunctionBuilder::new(target_head)
+                .add_arg(rep.to_symbolic([Atom::var(target_index)]))
+                .finish(),
+        )
+        .unwrap();
+        calls.store(0, Ordering::Relaxed);
+        let renamed = source
+            .rename_symbols(&HashMap::from([
+                (source_head, target_head),
+                (source_index, target_index),
+            ]))
+            .unwrap();
+        assert_eq!(renamed.expression, expected.expression);
+        assert_eq!(renamed.structure, expected.structure);
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn checked_symbol_renaming_rejects_target_normalizer_port_loss() {
+        use std::sync::{
+            Arc,
+            atomic::{AtomicUsize, Ordering},
+        };
+        crate::test_support::test_initialize();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let source_head = spenso::tensor_symbol!("rename_target_loss_source");
+        let target_head = spenso::tensor_symbol!(
+            "rename_target_loss_target",
+            norm = move |_node, out| {
+                observed.fetch_add(1, Ordering::Relaxed);
+                **out = Atom::one();
+            }
+        );
+        let source = SymbolicTensor::infer(
+            FunctionBuilder::new(source_head)
+                .add_arg(
+                    ExtendibleReps::MINKOWSKI
+                        .new_rep(4)
+                        .to_symbolic([Atom::num(71)]),
+                )
+                .finish(),
+        )
+        .unwrap();
+        assert!(
+            source
+                .rename_symbols(&HashMap::from([(source_head, target_head)]))
+                .is_err()
+        );
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
 
     #[test]
