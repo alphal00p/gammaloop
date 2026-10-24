@@ -502,7 +502,10 @@ impl<Select: FnMut(AtomView<'_>) -> bool> CollectionInput<Select> {
                     }
                     if matches!(network.graph.graph[base], NetworkNode::Leaf(_)) {
                         let base_value = self.emit(network, tree, base)?;
-                        if matches!(base_value.as_view(), AtomView::Add(_) | AtomView::Mul(_)) {
+                        if matches!(base_value.as_view(), AtomView::Add(_) | AtomView::Mul(_))
+                            || matches!(base_value.as_view(), AtomView::Fun(function)
+                                if function.get_symbol() == spenso::network::tags::SPENSO_TAG.bracket)
+                        {
                             // Open the selected power before copying: internal
                             // dummy pairs belong to each copy, not its opaque leaf.
                             let value = self.emit(network, tree, node)?;
