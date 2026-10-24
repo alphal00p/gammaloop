@@ -825,6 +825,200 @@ def suite_record(path, kind, producer, provenance):
     }
 
 
+def primary_input(report, directory):
+    """Bind persisted bytes/provenance; scientific validation belongs to the native loader."""
+    mode = report.get("input_mode", "fresh")
+    require(
+        mode in ("fresh", "prepared")
+        and report["fresh_native_preparation"] is (mode == "fresh"),
+        "primary input/preparation mode differs",
+    )
+    persisted = report.get("prepared_input")
+    if mode == "prepared":
+        require(isinstance(persisted, dict), "prepared input requires its manifest")
+        require(
+            report.get("preparation") is None
+            and report.get("preparation_seconds") is None,
+            "historical preparation cannot become current-run work",
+        )
+        number(report.get("input_loading_seconds"))
+    else:
+        number(report["preparation_seconds"])
+        require(
+            report.get("input_loading_seconds") is None,
+            "fresh preparation cannot report prepared-input loading",
+        )
+    input_path = Path(directory) / "vakint-input.symbolica"
+    if persisted is not None:
+        path, manifest = hashed_record(
+            {
+                "path": persisted["manifest_path"],
+                "sha256": persisted["manifest_sha256"],
+            },
+            Path(directory),
+        )
+        require(
+            path.name == "prepared-input.json"
+            and manifest == persisted["manifest"]
+            and manifest["schema"] == "vakint.qcd-ladder.prepared-input.v1"
+            and manifest["definition"] == "massless-qcd-four-rung-native-uv-v1"
+            and manifest["projection"] == report["projection"],
+            "prepared manifest identity differs",
+        )
+        assembly = manifest["scientific_assembly_sha256"]
+        require(
+            isinstance(assembly, str)
+            and len(assembly) == 64
+            and all(c in "0123456789abcdefABCDEF" for c in assembly),
+            "missing scientific assembly identity",
+        )
+        for name, entry in (
+            ("vakint-input.symbolica", manifest["input"]),
+            ("projector-conditions.symbolica", manifest["nonzero_conditions_file"]),
+        ):
+            payload = path.parent / name
+            require(
+                payload.stat().st_size == entry["bytes"]
+                and digest(payload) == entry["sha256"],
+                "prepared input/guard payload changed",
+            )
+        require(
+            (path.parent / "projector-conditions.symbolica").read_text()
+            == "\n".join(manifest["nonzero_conditions"])
+            and report["prepared_nonzero_conditions"] == manifest["nonzero_conditions"],
+            "prepared projector guards differ",
+        )
+        producer, consumer = (
+            manifest["producer"]["fixture_sources_sha256"],
+            report["consumer_fixture_sources_sha256"],
+        )
+        require(
+            report["fixture_sources_sha256"] == producer
+            and set(manifest["scientific_sources_sha256"])
+            == {
+                "physical.rs",
+                "projector.rs",
+                "vacuum.rs",
+                "ladder.dot",
+                "qcd.json",
+                "phi3.json",
+            }
+            and all(
+                producer.get(name) == consumer.get(name) == value
+                for name, value in manifest["scientific_sources_sha256"].items()
+            )
+            and report["contributions"] == manifest["contributions"]
+            and report["scalar_terms"] == manifest["scalar_terms"],
+            "prepared producer/consumer definition differs",
+        )
+        number(manifest["preparation_seconds"])
+        for value in manifest["timings"].values():
+            number(value)
+        if mode == "fresh":
+            require(
+                report["preparation_seconds"] == manifest["preparation_seconds"]
+                and report["preparation"] == manifest["timings"],
+                "fresh preparation receipt differs",
+            )
+        input_path = path.parent / "vakint-input.symbolica"
+        require(
+            report["input_sha256"] == manifest["input"]["sha256"],
+            "prepared scalar identity differs",
+        )
+    require(digest(input_path) == report["input_sha256"], "primary input changed")
+    return {"mode": mode, "prepared": persisted if mode == "prepared" else None}
+
+
+def accepted_generator(reference, projection, base):
+    """Read existing scientific acceptance; this does not issue a new acceptance."""
+    path, accepted = hashed_record(reference, Path(base))
+    expected = {
+        "quadratic-transverse": (
+            "vakint.current-quadratic-preparation.scientific-parity.v1",
+            "PASS_ALL21_FRESH_CURRENT_DEPENDENCY_RAW_INPUT_PARITY",
+            21,
+        ),
+        "zero-momentum-metric": (
+            "vakint.current-q0-preparation.scientific-parity.v1",
+            "PASS_Q0_FRESH_CURRENT_DEPENDENCY_RAW_INPUT_PARITY",
+            1,
+        ),
+    }[projection]
+    require(
+        (accepted.get("schema"), accepted.get("status"), accepted.get("contributions"))
+        == expected
+        and accepted.get("collector_exit_code") == 0
+        and accepted.get("source_drift") == []
+        and accepted["input"]["exact_canonical_bytes_equal_accepted_input"] is True
+        and accepted["projector_guards"]["bytes_equal_accepted"] is True,
+        "primary generator acceptance is incomplete",
+    )
+    verified = evidence(path)
+    if reference.get("provenance_addendum") is not None:
+        extra_path, extra = hashed_record(reference["provenance_addendum"], Path(base))
+        require(
+            extra["schema"] == "vakint.current-q0-preparation.provenance-addendum.v1"
+            and extra["status"]
+            == "CORRECTS_FEYNKIT_OWNER_REVISION_ONLY_RAW_PARITY_UNCHANGED"
+            and extra["original_scientific_parity"]["sha256"] == verified["sha256"]
+            and extra["actual_compiled_workspace_revision"] == accepted["source_commit"]
+            and extra["immutable_elf"]["sha256"] == accepted["immutable_elf_sha256"]
+            and extra["input_sha256"] == accepted["input"]["sha256"]
+            and extra["scientific_definition_and_raw_input_changes"] is False,
+            "generator provenance addendum changed the scientific identity",
+        )
+        verified["provenance_addendum"] = evidence(extra_path)
+    return verified, accepted
+
+
+def primary_generator(report, launcher, base):
+    """Bind the accepted physical input, not merely mutually equal samples."""
+    reference, accepted = accepted_generator(
+        launcher.get("generator_acceptance"), report["projection"], base
+    )
+    require(
+        accepted["projection"] == report["projection"]
+        and accepted["input"]["sha256"] == report["input_sha256"]
+        and accepted["input"]["bytes"] == report["input_bytes"]
+        and accepted["contributions"] == report["contributions"]
+        and accepted["projector_guards"]["values"]
+        == report["prepared_nonzero_conditions"]
+        and accepted["projector_guards"]["sha256"]
+        == hashlib.sha256(
+            "\n".join(report["prepared_nonzero_conditions"]).encode()
+        ).hexdigest(),
+        "primary differs from the accepted complete physical fixture",
+    )
+    consumer = report.get(
+        "consumer_fixture_sources_sha256", report["fixture_sources_sha256"]
+    )
+    require(
+        all(
+            consumer.get(name) == accepted["compiled_fixture_source_hashes"].get(name)
+            for name in (
+                "physical.rs",
+                "projector.rs",
+                "vacuum.rs",
+                "ladder.dot",
+                "qcd.json",
+                "phi3.json",
+            )
+        ),
+        "primary scientific sources differ from accepted generator",
+    )
+    if report.get("input_mode", "fresh") == "prepared":
+        manifest = report["prepared_input"]["manifest"]
+        require(
+            manifest["producer"]["fixture_sources_sha256"]
+            == accepted["compiled_fixture_source_hashes"]
+            and manifest["producer"]["source_commit"] == accepted["source_commit"]
+            and manifest["producer"]["executable_sha256"]
+            == accepted["immutable_elf_sha256"],
+            "prepared producer provenance differs from accepted generator",
+        )
+    return reference
+
+
 def primary_record(bundle):
     """Retain original functional provenance; verify full outputs when present."""
     report = bundle["record"]
@@ -895,6 +1089,9 @@ def primary_record(bundle):
         )
         return result
     directory = Path(bundle["references"]["record"]["path"]).parent
+    input_identity = primary_input(report, directory)
+    result["input_mode"] = input_identity["mode"]
+    result["prepared_input"] = input_identity["prepared"]
     require(
         digest(directory / "result.symbolica") == report["result_sha256"],
         "primary exact result changed",
@@ -977,11 +1174,14 @@ def primary_records(provenance):
             qualified = provenance.qualify(
                 bundle, report["executable_sha256"], case_id, variant, index
             )
+            generator = primary_generator(
+                report, launcher, Path(bundle["references"]["launcher"]["path"]).parent
+            )
+            record["generator_acceptance"] = generator
             require(
                 report["source_commit"]
                 == qualified["stamps"]["VAKINT_CACHE_BUILD_GIT_REVISION"]
-                and report["source_dirty"] is False
-                and report["fresh_native_preparation"] is True,
+                and report["source_dirty"] is False,
                 "primary source/preparation context differs",
             )
             require(
@@ -1005,11 +1205,21 @@ def primary_records(provenance):
                 require(
                     digest(report["persistent_cache"]) == cache, "primary cache changed"
                 )
-            directory = Path(bundle["references"]["record"]["path"]).parent
+            mode = record["input_mode"]
             require(
-                digest(directory / "vakint-input.symbolica") == report["input_sha256"],
-                "primary input changed",
+                launcher.get("input_mode", "fresh") == mode,
+                "primary launcher input mode differs",
             )
+            manifest_sha = (
+                record["prepared_input"]["manifest_sha256"]
+                if mode == "prepared"
+                else None
+            )
+            if mode == "prepared":
+                require(
+                    launcher.get("prepared_input_manifest_sha256") == manifest_sha,
+                    "launcher did not bind the prepared input",
+                )
             representation = report.get("coefficient_representation", "sparse")
             require(
                 representation in ("sparse", "factorized"),
@@ -1038,6 +1248,12 @@ def primary_records(provenance):
                         "affinity": qualified["cpu_affinity"],
                         "threads": qualified["thread_environment"],
                         "representation": representation,
+                        "input_mode": mode,
+                        "generator_acceptance": generator,
+                        "prepared_input_manifest_sha256": manifest_sha,
+                        "consumer_fixture_sources_sha256": report.get(
+                            "consumer_fixture_sources_sha256"
+                        ),
                         "artifact": bundle["references"]["artifact"]["sha256"],
                         "window": qualified["window"]["sha256"],
                     },
@@ -1060,11 +1276,16 @@ def primary_records(provenance):
             len({cache for _, cache in samples["cached"].values()}) == 1,
             "primary samples used different caches",
         )
+        first_report = next(iter(samples["uncached"].values()))[0]
+        item["generator_acceptance"] = generator
+        item["input_mode"] = first_report.get("input_mode", "fresh")
+        item["prepared_input"] = (
+            first_report["prepared_input"] if item["input_mode"] == "prepared" else None
+        )
         for variant, indexed in samples.items():
             reports = [indexed[index][0] for index in sorted(indexed)]
             for row in reports:
                 for field in (
-                    "preparation_seconds",
                     "data_loading_seconds",
                     "reduction_seconds",
                     "end_to_end_seconds",
@@ -1072,6 +1293,7 @@ def primary_records(provenance):
                     number(row[field])
             metric_fields = (
                 "preparation_seconds",
+                "input_loading_seconds",
                 "data_loading_seconds",
                 "cache_loading_seconds",
                 "reduction_seconds",
@@ -1113,7 +1335,8 @@ def primary_records(provenance):
             preparation = {
                 field: summarize(row["preparation"][field] for row in reports)
                 if all(
-                    row.get("preparation", {}).get(field) is not None for row in reports
+                    (row.get("preparation") or {}).get(field) is not None
+                    for row in reports
                 )
                 else None
                 for field in (

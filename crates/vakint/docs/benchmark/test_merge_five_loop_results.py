@@ -66,6 +66,20 @@ class ReportContractTests(unittest.TestCase):
             ("unknown-masters.json", "[]"),
         ):
             (directory / name).write_text(content)
+        scientific = {
+            name: "e" * 64
+            for name in (
+                "physical.rs",
+                "projector.rs",
+                "vacuum.rs",
+                "ladder.dot",
+                "qcd.json",
+                "phi3.json",
+            )
+        }
+        sources = {**scientific, "mod.rs": "f" * 64}
+        conditions = ["TEST_GUARD"] if case == "quadratic-four-rung-uv" else []
+        contributions = 21 if case == "quadratic-four-rung-uv" else 1
         report = {
             "test_fixture": True,
             "schema": "vakint.qcd-ladder.benchmark.v1",
@@ -77,7 +91,12 @@ class ReportContractTests(unittest.TestCase):
             "fresh_native_preparation": True,
             "retained_result_available": True,
             "input_sha256": merge.digest(directory / "vakint-input.symbolica"),
-            "fixture_sources_sha256": {"TEST_SOURCE": "6" * 64},
+            "fixture_sources_sha256": sources,
+            "consumer_fixture_sources_sha256": sources,
+            "input_bytes": len("TEST_INPUT"),
+            "contributions": contributions,
+            "scalar_terms": 30,
+            "prepared_nonzero_conditions": conditions,
             "data_manifest_sha256": "7" * 64,
             "result_sha256": merge.digest(directory / "result.symbolica"),
             "guards": {
@@ -129,6 +148,40 @@ class ReportContractTests(unittest.TestCase):
                 else None,
             },
         )
+        generator = self.write(
+            f"{case}-generator.json",
+            {
+                "test_fixture": True,
+                "schema": "vakint.current-quadratic-preparation.scientific-parity.v1"
+                if contributions == 21
+                else "vakint.current-q0-preparation.scientific-parity.v1",
+                "status": "PASS_ALL21_FRESH_CURRENT_DEPENDENCY_RAW_INPUT_PARITY"
+                if contributions == 21
+                else "PASS_Q0_FRESH_CURRENT_DEPENDENCY_RAW_INPUT_PARITY",
+                "collector_exit_code": 0,
+                "source_drift": [],
+                "projection": merge.PRIMARY[case],
+                "contributions": contributions,
+                "input": {
+                    "sha256": report["input_sha256"],
+                    "bytes": report["input_bytes"],
+                    "exact_canonical_bytes_equal_accepted_input": True,
+                },
+                "projector_guards": {
+                    "sha256": merge.hashlib.sha256(
+                        "\n".join(conditions).encode()
+                    ).hexdigest(),
+                    "values": conditions,
+                    "bytes_equal_accepted": True,
+                },
+                "compiled_fixture_source_hashes": sources,
+                "source_commit": "9" * 40,
+                "immutable_elf_sha256": "8" * 64,
+            },
+        )
+        launch_doc = merge.read(launch)
+        launch_doc["generator_acceptance"] = merge.evidence(generator)
+        launch.write_text(json.dumps(launch_doc))
         refs = {
             "record": merge.evidence(path),
             "launcher": merge.evidence(launch),
@@ -919,6 +972,214 @@ class ReportContractTests(unittest.TestCase):
         self.refresh_acceptance(path, index, changed)
         with self.assertRaisesRegex(ValueError, "consumer artifact/stamps"):
             merge.ReportEvidence(index).cache_qualification(identity, producer)
+
+    def prepared_fixture(self, case="quadratic-four-rung-uv"):
+        selected = [i for i, row in enumerate(self.records) if row["case_id"] == case]
+        first = merge.read(self.records[selected[0]]["record"]["path"])
+        generator_ref = merge.read(self.records[selected[0]]["launcher"]["path"])[
+            "generator_acceptance"
+        ]
+        generator = merge.read(generator_ref["path"])
+        directory = self.root / ("SYNTHETIC_PREPARED_" + case)
+        directory.mkdir()
+        input_path = directory / "vakint-input.symbolica"
+        input_path.write_text("TEST_INPUT")
+        guard_path = directory / "projector-conditions.symbolica"
+        guard_path.write_text("\n".join(first["prepared_nonzero_conditions"]))
+        timings = {
+            name: 1.0
+            for name in (
+                "graph_generation_seconds",
+                "ingress_seconds",
+                "scalar_contraction_seconds",
+                "taylor_seconds",
+                "angular_seconds",
+                "total_seconds",
+            )
+        }
+        manifest = {
+            "schema": "vakint.qcd-ladder.prepared-input.v1",
+            "definition": "massless-qcd-four-rung-native-uv-v1",
+            "projection": merge.PRIMARY[case],
+            "scientific_sources_sha256": {
+                name: value
+                for name, value in first["fixture_sources_sha256"].items()
+                if name != "mod.rs"
+            },
+            "scientific_assembly_sha256": "7" * 64,
+            "producer": {
+                "fixture_sources_sha256": first["fixture_sources_sha256"],
+                "source_commit": generator["source_commit"],
+                "executable_sha256": generator["immutable_elf_sha256"],
+            },
+            "input": {
+                "bytes": input_path.stat().st_size,
+                "sha256": merge.digest(input_path),
+            },
+            "nonzero_conditions_file": {
+                "bytes": guard_path.stat().st_size,
+                "sha256": merge.digest(guard_path),
+            },
+            "nonzero_conditions": first["prepared_nonzero_conditions"],
+            "contributions": first["contributions"],
+            "scalar_terms": first["scalar_terms"],
+            "preparation_seconds": 999.0,
+            "timings": timings,
+        }
+        path = self.write(
+            str(directory.relative_to(self.root) / "prepared-input.json"), manifest
+        )
+        for index in selected:
+
+            def edit(report):
+                report.update(
+                    input_mode="prepared",
+                    fresh_native_preparation=False,
+                    input_loading_seconds=0.25,
+                    preparation=None,
+                    preparation_seconds=None,
+                    prepared_input={
+                        "manifest_path": str(path),
+                        "manifest_sha256": merge.digest(path),
+                        "manifest": manifest,
+                    },
+                )
+                report["consumer_fixture_sources_sha256"] = {
+                    **report["fixture_sources_sha256"],
+                    "mod.rs": "b" * 64,
+                }
+
+            self.change_report(index, edit)
+            (
+                Path(self.records[index]["record"]["path"]).parent
+                / "vakint-input.symbolica"
+            ).unlink()
+            launch_path = Path(self.records[index]["launcher"]["path"])
+            launcher = merge.read(launch_path)
+            launcher.update(
+                input_mode="prepared", prepared_input_manifest_sha256=merge.digest(path)
+            )
+            launch_path.write_text(json.dumps(launcher))
+            self.records[index]["launcher"] = merge.evidence(launch_path)
+            self.window_rows[index]["launcher_sha256"] = merge.digest(launch_path)
+        return path
+
+    def test_prepared_scope_loads_once_per_sample_without_charging_historical_preparation(
+        self,
+    ):
+        self.paired()
+        manifest = self.prepared_fixture()
+        row = self.evaluate()["quadratic-four-rung-uv"]
+        self.assertEqual(row["input_mode"], "prepared")
+        self.assertEqual(
+            row["prepared_input"]["manifest_sha256"], merge.digest(manifest)
+        )
+        self.assertEqual(row["prepared_input"]["manifest"]["preparation_seconds"], 999)
+        for variant in ("cached", "uncached"):
+            self.assertIsNone(row[variant]["metrics"]["preparation_seconds"])
+            self.assertEqual(
+                row[variant]["metrics"]["input_loading_seconds"]["median_seconds"], 0.25
+            )
+            self.assertEqual(
+                row[variant]["metrics"]["end_to_end_seconds"]["median_seconds"], 26
+            )
+            self.assertTrue(
+                all(value is None for value in row[variant]["preparation"].values())
+            )
+            self.assertIsNone(row[variant]["metrics"]["pure_ibp_seconds"])
+
+    def test_prepared_historical_work_cannot_be_reported_as_current(self):
+        self.paired()
+        self.prepared_fixture()
+        self.change_report(0, lambda row: row.update(preparation_seconds=999))
+        with self.assertRaisesRegex(ValueError, "historical preparation"):
+            self.evaluate()
+
+    def test_prepared_payload_and_projector_guards_are_rehashed(self):
+        self.paired()
+        path = self.prepared_fixture()
+        for name in ("vakint-input.symbolica", "projector-conditions.symbolica"):
+            with self.subTest(name=name):
+                payload = path.parent / name
+                original = payload.read_bytes()
+                payload.write_text("CORRUPTED_TEST_PAYLOAD")
+                with self.assertRaisesRegex(ValueError, "payload changed"):
+                    self.evaluate()
+                payload.write_bytes(original)
+
+    def test_prepared_modes_cannot_mix_fresh_and_reused_input(self):
+        self.paired()
+        path = self.prepared_fixture()
+        manifest = merge.read(path)
+        self.change_report(
+            0,
+            lambda row: row.update(
+                input_mode="fresh",
+                fresh_native_preparation=True,
+                preparation_seconds=manifest["preparation_seconds"],
+                preparation=manifest["timings"],
+                input_loading_seconds=None,
+            ),
+        )
+        launch_path = Path(self.records[0]["launcher"]["path"])
+        launcher = merge.read(launch_path)
+        launcher["input_mode"] = "fresh"
+        launch_path.write_text(json.dumps(launcher))
+        self.records[0]["launcher"] = merge.evidence(launch_path)
+        self.window_rows[0]["launcher_sha256"] = merge.digest(launch_path)
+        with self.assertRaisesRegex(ValueError, "parity differs"):
+            self.evaluate()
+
+    def test_mutually_equal_forged_prepared_input_is_not_the_accepted_physical_fixture(
+        self,
+    ):
+        self.paired()
+        path = self.prepared_fixture()
+        manifest = merge.read(path)
+        payload = path.parent / "vakint-input.symbolica"
+        payload.write_text("DIFFERENT_CANONICAL_LOOKING_TEST_INPUT")
+        manifest["input"] = {
+            "bytes": payload.stat().st_size,
+            "sha256": merge.digest(payload),
+        }
+        path.write_text(json.dumps(manifest))
+        for index in range(len(self.records)):
+            self.change_report(
+                index,
+                lambda row: row.update(
+                    input_sha256=manifest["input"]["sha256"],
+                    input_bytes=manifest["input"]["bytes"],
+                    prepared_input={
+                        "manifest_path": str(path),
+                        "manifest_sha256": merge.digest(path),
+                        "manifest": manifest,
+                    },
+                ),
+            )
+            launch_path = Path(self.records[index]["launcher"]["path"])
+            launcher = merge.read(launch_path)
+            launcher["prepared_input_manifest_sha256"] = merge.digest(path)
+            launch_path.write_text(json.dumps(launcher))
+            self.records[index]["launcher"] = merge.evidence(launch_path)
+            self.window_rows[index]["launcher_sha256"] = merge.digest(launch_path)
+        with self.assertRaisesRegex(ValueError, "accepted complete physical fixture"):
+            self.evaluate()
+
+    def test_prepared_manifest_and_generator_must_be_pinned_by_launcher(self):
+        self.paired()
+        self.prepared_fixture()
+        launch_path = Path(self.records[0]["launcher"]["path"])
+        original = merge.read(launch_path)
+        for field in ("prepared_input_manifest_sha256", "generator_acceptance"):
+            with self.subTest(field=field):
+                launcher = {
+                    key: value for key, value in original.items() if key != field
+                }
+                launch_path.write_text(json.dumps(launcher))
+                self.records[0]["launcher"] = merge.evidence(launch_path)
+                self.window_rows[0]["launcher_sha256"] = merge.digest(launch_path)
+                with self.assertRaises(ValueError):
+                    self.evaluate()
 
     def test_changed_hashed_artifact_rejected(self):
         self.paired()

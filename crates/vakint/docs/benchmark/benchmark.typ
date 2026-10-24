@@ -163,6 +163,8 @@ Refresh instructions: #raw("../../AGENTS.md").
       text(15pt, weight: "bold")[#timing(metric.median_seconds) s]
       linebreak()
       text(8pt)[#timing(metric.min_seconds)–#timing(metric.max_seconds) s]
+      linebreak()
+      text(7.5pt)[#if row.at("input_mode", default: "fresh") == "prepared" [Prepared input] else [Fresh preparation]]
       if variant == "cached" and ratio != none {
         linebreak()
         text(9pt, weight: "bold")[×#multiplier(ratio)]
@@ -278,7 +280,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
 
 #if five != none {
   pagebreak()
-  set text(font: "Libertinus Serif", size: 10pt, fill: black)
+  set text(font: "Libertinus Serif", size: 9.5pt, fill: black)
   align(center)[#text(20pt, weight: "bold", fill: navy)[Five-loop evidence and timing ledger]]
   v(0.35em)
   [Selected report: #raw(five-id). Raw reports and their hashed launcher/compiler
@@ -317,18 +319,27 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       [#row.uncached.metrics.reduction_seconds.samples_seconds.len() samples per mode;
       exact result/guard parity and catalogue closure passed.
       CPU #evidence.cpu_affinity · source #raw(evidence.stamps.VAKINT_CACHE_BUILD_GIT_REVISION.slice(0, 12)).]
+      let reused = row.at("input_mode", default: "fresh") == "prepared"
+      if reused {
+        parbreak()
+        text(8.5pt)[*Prepared-input scope.* Both modes load the same authenticated scalar fixture
+        #raw(row.prepared_input.manifest_sha256.slice(0, 12)). Original generator preparation:
+        #timing(row.prepared_input.manifest.preparation_seconds) s (historical, excluded from these timings).
+        Generator acceptance: #raw(row.generator_acceptance.sha256.slice(0, 12)).]
+      }
       v(0.2em)
       let ledger = (
-        ("Fresh graph preparation", "metrics", "preparation_seconds"),
+        if reused { ("Prepared input loading", "metrics", "input_loading_seconds") }
+          else { ("Fresh graph preparation", "metrics", "preparation_seconds") },
         ("Data/program loading", "metrics", "data_loading_seconds"),
         ("Manual 5L cache import", "metrics", "cache_loading_seconds"),
         ("Parent transport / scalar lowering", "stages", "parent_transport_and_scalar_lowering"),
         ("Deferred owner preparation (included)", "metrics", "owner_preparation_seconds"),
         ("Saved application (inclusive)", "stages", "saved_rule_application"),
         ("Complete public reduction", "metrics", "reduction_seconds"),
-        ("End to end (before report exit)", "metrics", "end_to_end_seconds"),
+        (if reused { "Input load → result serialization" } else { "End to end (before report exit)" }, "metrics", "end_to_end_seconds"),
       )
-      table(columns: (2.2fr, 1fr, 1fr), inset: 5pt, stroke: 0.4pt + luma(215),
+      table(columns: (2.2fr, 1fr, 1fr), inset: 4pt, stroke: 0.4pt + luma(215),
         fill: (x, y) => if y == 0 { pale } else { none },
         table.header([*Seconds: median (range)*], [*Uncached*], [*Cached*]),
         ..ledger.map(item => (item.at(0),
@@ -352,16 +363,15 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   }
   v(0.4em)
   block(fill: pale, inset: 9pt, radius: 4pt)[
-    *Timing boundaries.* Stage intervals can overlap; never add the ledger rows.
-    Deferred owner preparation is already included in the saved-application and
-    reduction intervals. The historical field #raw("ibp_excluding_owner_seconds")
-    means saved application minus deferred-owner preparation; it still includes
-    transport, exact combination and terminal substitution. Pure IBP and
-    terminal-only timings are unmeasured. The primary owner-subtracted interval
-    also remains null: counter subtraction across representation reloads is not
-    a validated timer. Initial application loading uses Sparse; a requested
-    representation reload belongs to the reduction interval.
-    Missing events are “—”, never zero. Full stage and preparation records remain in JSON.
+    *Timing boundaries.* Stages overlap; never sum them. Owner preparation is
+    included in saved-application/reduction times. #raw("ibp_excluding_owner_seconds")
+    means saved application minus owner preparation, including transport,
+    combination and terminal substitution. Pure IBP, terminal-only and primary
+    owner-subtracted times remain unmeasured. Prepared-input E2E includes current
+    input/data/cache loading and public reduction; generator preparation stays
+    historical. Fresh/prepared scopes never mix. Initial loading uses Sparse;
+    representation reload belongs to reduction. Missing events are “—”, never zero.
+    Full records remain in JSON.
   ]
   for (kind, label) in (("held_out", "Protected held-out inputs"), ("tuning", "Training-selection inputs (separate)")) {
     let suite = five.at(kind)
