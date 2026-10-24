@@ -305,7 +305,17 @@ label, an optional structured head, and bounded plain/LaTeX/Typst display text.
 `Notation::register` is idempotent for equal values and rejects conflicts;
 `Notation::lookup` returns a shared immutable handle. An empty lazy map makes no
 Symbolica calls during initialization. Locks cover only lookup and insertion,
-never print callbacks, and poisoned locks fail explicitly. No renderer consults
-this registry yet, and no tags or user data are changed by registration.
+never print callbacks, and poisoned locks fail explicitly. Renderers offer the
+symbol callback first, then registered notation, then an escaped symbol name.
+Display-only tags and tensor-head user data are never read for presentation.
+The callback ownership flag distinguishes user callbacks from Spenso callbacks
+that delegate back into the renderer. No tags or user data change on registration.
+Python print mappings validate display text and parse allowlisted MathML into a
+private escaped presentation tree, bounded by bytes, depth and node count.
+Typst source exports populate document settings keyed by full symbol name:
+`tensor-labels` contains head visuals, `index-labels` contains records with
+`label` and `visual`, and `callback-symbols` lists callback-owned functions.
+`print-heads` and `print-calls` retain target-specific overrides. Endpoint labels
+`s` and `t` still suppress their ordinary slot one.
 Notation is never implicitly serialized with symbols; a later opt-in portable
 attachment will provide an explicit export path.

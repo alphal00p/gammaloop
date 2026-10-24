@@ -702,7 +702,8 @@ symbol = "symbolica_notation::Notation"
 anchor = "pub struct Notation {"
 # Reviewed 2026-10-23: The note records process-local immutable notation, bounded
 # text, idempotence, conflicts and poisoning. No renderer or symbol metadata is changed.
-digest = "871f3b9edd06cf1866a6eea6c42c59eb9ecf5c95"
+# Reviewed 2026-10-24: notation now owns validated MathML and callback ownership; renderers and explicit Typst export settings use the local registry.
+digest = "a7987bfd0498cfebdde19ec8ff42728353beae72"
 
 [[section.note.scope]]
 path = "crates/spenso/src/structure.rs"

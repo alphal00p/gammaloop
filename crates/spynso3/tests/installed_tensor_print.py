@@ -2,6 +2,10 @@
 
 import importlib.util
 import re
+import subprocess
+import sys
+import tempfile
+import textwrap
 import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
@@ -34,11 +38,57 @@ def mathml(expression):
 
 
 class TensorPrintTests(unittest.TestCase):
+    def test_print_mapping_validation_and_registration(self):
+        mapping = {
+            "plain": "J",
+            "latex": r"\bar{J}",
+            "typst": "overline(J)",
+            "mathml": "<mover accent='true'><mi>J</mi><mo>¯</mo></mover>",
+        }
+        TensorName("validated_print::J", print=mapping)
+        TensorName("validated_print::J", print=mapping)
+        with self.assertRaisesRegex(ValueError, "different process-local notation"):
+            TensorName("validated_print::J", print={"plain": "K"})
+        for source, offending in [
+            ("<img src=x onerror=alert(1)>", "MathML"),
+            ("<img src='x' onerror='alert(1)'/>", "img"),
+            ("<mi onclick='x'>J</mi>", "onclick"),
+            ("<mi href='x'>J</mi>", "href"),
+            ("<mi style='color:red'>J</mi>", "style"),
+            ("<mi>&unknown;</mi>", "unknown"),
+        ]:
+            with (
+                self.subTest(source=source),
+                self.assertRaisesRegex(ValueError, offending),
+            ):
+                TensorName("validated_print::Rejected", print={"mathml": source})
+
+    def test_saved_notation_is_process_local_and_old_tags_are_inert(self):
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "expression.bin")
+            producer = textwrap.dedent("""
+                import sys
+                from symbolica import S
+                from symbolica.community.tensor import TensorName
+                head = TensorName("saved_print::SavedHead", print={"mathml": "<mi>LocalOnly</mi>"}).to_expression()
+                legacy = S("saved_print::LegacyHead", tags=["spenso::tensor", "spenso::print-head:mathml:<img src=x onerror=boom>"])
+                (head(1) + legacy(2)).save(sys.argv[1])
+            """)
+            consumer = textwrap.dedent("""
+                import sys
+                from symbolica import Expression
+                from symbolica.community.tensor import TensorExpression
+                html = TensorExpression(Expression.load(sys.argv[1])).to_html()
+                assert "SavedHead" in html and "LegacyHead" in html, html
+                assert "LocalOnly" not in html and "<img" not in html, html
+            """)
+            subprocess.run([sys.executable, "-c", producer, filename], check=True)
+            subprocess.run([sys.executable, "-c", consumer, filename], check=True)
+
     def test_scalar_print_callbacks_do_not_require_tensor_tags(self):
         head = S(
             "tensor_print_tests::ScalarEnergy",
             is_scalar=True,
-            tags=["spenso::print-callback"],
             print={"typst": "cal(E)", "mathml": "<mi>ℰ</mi>"},
         )
         expression = TensorExpression(head(27) ** 2)
@@ -51,7 +101,6 @@ class TensorPrintTests(unittest.TestCase):
 
         deferred = S(
             "tensor_print_tests::DeferredScalar",
-            tags=["spenso::print-callback"],
             print=lambda *args, **kwargs: None,
         )
         output = mathml(TensorExpression(deferred(27)))

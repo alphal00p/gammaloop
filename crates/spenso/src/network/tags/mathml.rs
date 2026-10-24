@@ -121,9 +121,13 @@ pub fn fragment(value: String) -> Option<String> {
 fn head(symbol: Symbol, options: Option<&PrintOptions>) -> Option<String> {
     if let Some(notation) =
         Notation::lookup(symbol).expect("notation registry must not be poisoned")
-        && let Some(display) = &notation.head
     {
-        return display.to_mathml();
+        if let Some(display) = &notation.mathml {
+            return Some(display.to_mathml());
+        }
+        if let Some(display) = &notation.head {
+            return display.to_mathml();
+        }
     }
     let label = if options.is_some_and(|options| {
         !options.hide_all_namespaces
@@ -363,7 +367,7 @@ fn vector<'a>(
     let symbol = function.get_symbol();
     if !symbol.has_tag(&SPENSO_TAG.tensor)
         || !symbol.has_tag(&SPENSO_TAG.rank1)
-        || Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
+        || tags::tensor_has_custom_print(symbol)
     {
         return None;
     }
@@ -691,7 +695,7 @@ impl<'a> Render<'a> {
     fn head(&self, symbol: Symbol) -> Option<String> {
         if Notation::lookup(symbol)
             .expect("notation registry must not be poisoned")
-            .is_some_and(|notation| notation.head.is_some())
+            .is_some_and(|notation| notation.head.is_some() || notation.mathml.is_some())
         {
             return self.fragment(head(symbol, None)?);
         }
@@ -715,7 +719,7 @@ impl<'a> Render<'a> {
         let symbol = atom.get_symbol()?;
         // Static scalar variables go straight to Symbol::format(), which owns
         // both their callback and native name. A declined callback runs once.
-        if Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
+        if tags::tensor_has_custom_print(symbol)
             && !(self.export.is_some() && matches!(atom, AtomView::Var(_)) && !self.owns(atom))
             && let Some(custom) = tags::tensor_custom_print(atom, self.options, state)
         {
@@ -1003,7 +1007,7 @@ impl<'a> Render<'a> {
                 // Semantic callbacks were already tried by leaf(). Ordinary
                 // callables receive the original Atom and surrounding state.
                 if !self.owns(atom)
-                    && !Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
+                    && !tags::tensor_has_custom_print(symbol)
                     && let Some(custom) = symbol.get_print_function()
                     && let Some(custom) = custom(atom, self.options, state)
                     && let Some(custom) = self.fragment(custom)
@@ -1225,7 +1229,7 @@ impl<'a> Render<'a> {
         let symbol = function.get_symbol();
         if !symbol.has_tag(&SPENSO_TAG.tensor)
             || !symbol.has_tag(&SPENSO_TAG.rank1)
-            || Notation::has_custom_print(symbol).expect("notation registry must not be poisoned")
+            || tags::tensor_has_custom_print(symbol)
         {
             return None;
         }
@@ -1529,6 +1533,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
     use symbolica::atom::{FunctionBuilder, NamespacedSymbol, SymbolAttribute, SymbolBuilder};
     use symbolica::{function, symbol, wrap_symbol};
+    use symbolica_notation::MathMlSubset;
 
     fn options() -> PrintOptions {
         PrintOptions {
@@ -1684,13 +1689,16 @@ mod tests {
     #[test]
     fn static_expression_derivatives_keep_rich_orders_heads_arguments_and_aliases() {
         let head = SymbolBuilder::new(wrap_symbol!("static_mathml::DerivativeHead"))
-            .with_tags([
-                SPENSO_TAG.tensor.as_str(),
-                "spenso::print-head:mathml:<mi mathcolor=\"purple\">𝒜</mi>",
-            ])
+            .with_tags([SPENSO_TAG.tensor.as_str()])
             .with_print_function(tensor_print)
             .build()
             .unwrap();
+        Notation {
+            mathml: Some(MathMlSubset::parse("<mi mathcolor=\"purple\">𝒜</mi>").unwrap()),
+            ..Notation::default()
+        }
+        .register(head)
+        .unwrap();
         let tensor = tensor_symbol!("static_mathml::DerivativeArgument");
         let index = symbol!("static_mathml::derivative_index");
         let rich = function!(tensor, mink!(4, Atom::var(index)));
@@ -1868,7 +1876,6 @@ mod tests {
         let callback_calls = Arc::clone(&calls);
         let symbol = SymbolBuilder::new(wrap_symbol!("static_mathml::declined_scalar"))
             .with_attributes(vec![SymbolAttribute::Scalar])
-            
             .with_print_function(move |atom, options, state| {
                 assert!(matches!(atom, AtomView::Var(_)));
                 assert!(options.mode.is_mathml());
@@ -1877,11 +1884,14 @@ mod tests {
                 (callback_calls.fetch_add(1, Ordering::SeqCst) != 0)
                     .then(|| "<mi>later-render</mi>".to_owned())
             })
-            .build().inspect(|symbol| {
-                if true {
-                    Notation { custom_print: true, ..Notation::default() }
-                        .register(*symbol).unwrap();
+            .build()
+            .inspect(|symbol| {
+                Notation {
+                    custom_print: true,
+                    ..Notation::default()
                 }
+                .register(*symbol)
+                .unwrap();
             })
             .unwrap();
         let value = Atom::var(symbol);
@@ -1919,12 +1929,17 @@ mod tests {
                     calls.fetch_add(1, Ordering::SeqCst);
                     None
                 })
-                .build().inspect(|symbol| {
-                if tagged {
-                    Notation { custom_print: true, ..Notation::default() }
-                        .register(*symbol).unwrap();
-                }
-            })
+                .build()
+                .inspect(|symbol| {
+                    if tagged {
+                        Notation {
+                            custom_print: true,
+                            ..Notation::default()
+                        }
+                        .register(*symbol)
+                        .unwrap();
+                    }
+                })
                 .unwrap()
         });
         let argument = Atom::var(symbol!("static_mathml::declined_function_argument"));
@@ -2022,11 +2037,14 @@ mod tests {
             .with_print_function(|_, _, _| {
                 Some(format!("<mtext>{}</mtext>", "x".repeat(MAX_EXPORT_BYTES)))
             })
-            .build().inspect(|symbol| {
-                if true {
-                    Notation { custom_print: true, ..Notation::default() }
-                        .register(*symbol).unwrap();
+            .build()
+            .inspect(|symbol| {
+                Notation {
+                    custom_print: true,
+                    ..Notation::default()
                 }
+                .register(*symbol)
+                .unwrap();
             })
             .unwrap();
         let value = function!(callback, 1);
@@ -2520,11 +2538,14 @@ mod tests {
                 callback_calls.fetch_add(1, Ordering::SeqCst);
                 Some(format!("<mtext>{}</mtext>", "x".repeat(5000)))
             })
-            .build().inspect(|symbol| {
-                if true {
-                    Notation { custom_print: true, ..Notation::default() }
-                        .register(*symbol).unwrap();
+            .build()
+            .inspect(|symbol| {
+                Notation {
+                    custom_print: true,
+                    ..Notation::default()
                 }
+                .register(*symbol)
+                .unwrap();
             })
             .unwrap();
         let value = function!(head, 1, 2);
@@ -2643,11 +2664,7 @@ mod tests {
     #[test]
     fn custom_head_fragments_remain_one_script_base() {
         let symbol = SymbolBuilder::new(wrap_symbol!("native_mathml_print::multi_root_head"))
-            .with_tags([
-                SPENSO_TAG.tensor.as_str(),
-                SPENSO_TAG.rank1.as_str(),
-                "spenso::print-head:mathml:<mi>A</mi><mo>′</mo>",
-            ])
+            .with_tags([SPENSO_TAG.tensor.as_str(), SPENSO_TAG.rank1.as_str()])
             .with_user_data(
                 IndexDisplay::math("overline", vec![IndexDisplay::symbol("B").unwrap()])
                     .unwrap()
@@ -2656,6 +2673,12 @@ mod tests {
             .with_print_function(tensor_print)
             .build()
             .unwrap();
+        Notation {
+            mathml: Some(MathMlSubset::parse("<mi>A</mi><mo>′</mo>").unwrap()),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .unwrap();
         let value = function!(symbol, 7, mink!(4, symbol!("native_mathml_print::mu")));
         let original = value.as_view().get_data().to_vec();
         let head = "<mrow><mi>A</mi><mo>′</mo></mrow>";
@@ -2687,15 +2710,57 @@ mod tests {
     }
 
     #[test]
+    fn parsed_legacy_display_metadata_does_not_style_unregistered_heads() {
+        let symbol = SymbolBuilder::new(NamespacedSymbol::parse("legacy_notation::LegacyHead"))
+            .with_tags([
+                SPENSO_TAG.tensor.as_str(),
+                "spenso::tensor-label:Wrong",
+                "spenso::print-head:mathml:<mi>Wrong</mi>",
+            ])
+            .with_user_data(IndexDisplay::symbol("Wrong").unwrap().symbol_user_data())
+            .build()
+            .unwrap();
+        let atom = Atom::var(symbol);
+        let parsed = Atom::parse(
+            atom.to_canonical_string(),
+            "legacy_notation",
+            Default::default(),
+        )
+        .unwrap();
+        assert!(
+            Notation::lookup(parsed.as_view().get_symbol().unwrap())
+                .unwrap()
+                .is_none()
+        );
+        let html = expression(parsed.as_view(), &options(), &PrintState::new(), &|_, _| {
+            None
+        })
+        .unwrap();
+        assert!(html.contains("<mi>LegacyHead</mi>"), "{html}");
+        assert!(!html.contains("Wrong"), "{html}");
+        let literal = SymbolBuilder::new(NamespacedSymbol::parse("legacy_notation::\"<&>\""))
+            .build()
+            .unwrap();
+        let escaped = head(literal, None).unwrap();
+        assert!(escaped.contains("&lt;&amp;&gt;"), "{escaped}");
+        assert!(!escaped.contains("<&>"), "{escaped}");
+    }
+
+    #[test]
     fn structured_tensor_heads_use_existing_mathml_bounds() {
         let display = IndexDisplay::Sequence(vec![IndexDisplay::Symbol("<".repeat(128)); 10]);
         let symbol =
             SymbolBuilder::new(wrap_symbol!("native_mathml_print::bounded_structured_head"))
                 .with_tags([SPENSO_TAG.tensor.as_str()])
-                .with_user_data(display.symbol_user_data())
                 .build()
                 .unwrap();
-        assert_eq!(IndexDisplay::from_symbol(symbol), Some(display));
+        Notation {
+            head: Some(display),
+            ..Notation::default()
+        }
+        .register(symbol)
+        .unwrap();
+        assert!(matches!(symbol.get_data(), UserData::None));
         assert!(head(symbol, None).is_none());
         assert!(
             render(
@@ -2711,22 +2776,21 @@ mod tests {
     #[test]
     fn dot_compaction_defers_to_callable_owned_vector_notation() {
         let symbol = SymbolBuilder::new(wrap_symbol!("native_mathml_print::callable_vector"))
-            .with_tags([
-                SPENSO_TAG.tensor.as_str(),
-                SPENSO_TAG.rank1.as_str(),
-                
-            ])
+            .with_tags([SPENSO_TAG.tensor.as_str(), SPENSO_TAG.rank1.as_str()])
             .with_print_function(|_, options, _| {
                 options
                     .mode
                     .is_mathml()
                     .then(|| "<mi>custom-vector</mi>".to_owned())
             })
-            .build().inspect(|symbol| {
-                if true {
-                    Notation { custom_print: true, ..Notation::default() }
-                        .register(*symbol).unwrap();
+            .build()
+            .inspect(|symbol| {
+                Notation {
+                    custom_print: true,
+                    ..Notation::default()
                 }
+                .register(*symbol)
+                .unwrap();
             })
             .unwrap();
         let p = vector_symbol!("native_mathml_print::ordinary_vector");

@@ -189,14 +189,19 @@ focused crates -> feynkit / feynkit-py
 
 `symbolica-notation` owns the small structured `IndexDisplay` tree and its
 bounded MathML/Typst/plain rendering and existing portable user-data encoding.
-It depends only on Symbolica and `thiserror`, below both Spenso and
+It depends on Symbolica, `thiserror` and the XML parser `roxmltree`, below both Spenso and
 `linnet-render-py`; graph presentation no longer needs Spenso for these labels.
 This extraction preserves rendering and the `spenso.math-display` attachment
 format. Representation palettes, classes and rows remain owned by Spenso.
 `Notation::register` and `Notation::lookup` provide process-local, immutable
 shared notation with idempotent registration and typed conflict/poison errors.
-The registry is not consulted by renderers yet and never writes symbol tags or
-user data. Export will require an explicit opt-in portable attachment.
+Renderers resolve callbacks, process-local notation, and escaped symbol names
+in that order. Display-only symbol tags and tensor-head user data are not read.
+Python MathML mappings use a bounded presentation allowlist and reconstruct
+escaped markup. Typst exports carry notation in explicit document settings;
+canonical symbol strings and saved states contain no display-only tags.
+Identity-derived index attachments retain their portable encoding. Portable
+presentation export will require a later explicit opt-in attachment.
 
 No FeynKit crate depends on `gammalooprs`, `gammaloop-api`,
 `GlobalSettings`, or GammaLoop `State`. Generation receives explicit

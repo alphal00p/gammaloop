@@ -14,7 +14,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import Mock, patch
 
-from symbolica import E, MathMLViewer, PrintMode, S
+from symbolica import AtomType, E, MathMLViewer, PrintMode, S
 from symbolica.community.tensor import (
     AUTO,
     DisplaySettings,
@@ -32,6 +32,25 @@ from symbolica.community.tensor import (
     trace,
 )
 from symbolica.community.tensor_native import _compile_typst
+
+
+def graph_index_print(expression, *, mode, **options):
+    if (
+        mode != PrintMode.MathML
+        or expression.get_type() != AtomType.Fn
+        or "spenso" not in options.get("custom_print_mode", {})
+    ):
+        return None
+    arguments = [str(argument) for argument in expression]
+    assert all(argument.isdecimal() for argument in arguments)
+    body = "<mo>.</mo>".join(f"<mn>{argument}</mn>" for argument in arguments)
+    return f"<msub><mi>h</mi><mrow>{body}</mrow></msub>"
+
+
+def graph_index_symbol():
+    return TensorName(
+        "paging_indices::hedge", tags=["spenso::index"], print=graph_index_print
+    ).to_expression()
 
 
 class TableCells(HTMLParser):
@@ -185,7 +204,6 @@ class DirectLeafPathTests(PagingAssertions):
         head = S(
             "paging_direct::OnlyMathML",
             is_scalar=True,
-            tags=["spenso::print-callback"],
             print=printer,
         )
         value = TensorExpression(head(7))
@@ -425,7 +443,6 @@ class DirectLeafPathTests(PagingAssertions):
         head = S(
             "paging_direct::Annotated",
             is_scalar=True,
-            tags=["spenso::print-callback"],
             print=printer,
         )
         for root in self.notationRoots(TensorExpression(head(1))):
@@ -619,7 +636,6 @@ class BrowserPagingTests(PagingAssertions):
         head = S(
             "paging_context::F",
             is_scalar=True,
-            tags=["spenso::print-callback"],
             print=printer,
         )
         leaf = head(1)
@@ -691,7 +707,8 @@ class BrowserPagingTests(PagingAssertions):
     def test_oversized_tensor_output_defers_to_native_argument_layout(self):
         value = TensorName(
             "paging_direct::Oversized",
-            print={"mathml": "<mtext>" + "μ" * 3000 + "</mtext>"},
+            # A bounded source can still exceed the leaf output bound after escaping.
+            print={"mathml": "<mtext>" + "'" * 1000 + "</mtext>"},
         )(Representation.mink(4)("mu"), Representation.euc(3)("i"))
         original = self.tensorState(value)
         viewer = value.paged()
@@ -699,7 +716,7 @@ class BrowserPagingTests(PagingAssertions):
         page = viewer._page()
         self.assertPage(page)
         self.assertEqual((page["kind"], page["unit"]), ("Function", "arguments"))
-        self.assertNotIn("μ" * 3000, page["html"])
+        self.assertNotIn("&#39;" * 1000, page["html"])
         self.assertEqual(self.tensorState(value), original)
 
     def test_callable_errors_follow_the_native_symbolica_fallback(self):
@@ -710,7 +727,6 @@ class BrowserPagingTests(PagingAssertions):
         head = S(
             "paging_direct::Broken",
             is_scalar=True,
-            tags=["spenso::print-callback"],
             print=printer,
         )
         value = TensorExpression(head(1))
@@ -768,7 +784,6 @@ class BrowserPagingTests(PagingAssertions):
         head = S(
             "paging_annotations::T",
             is_scalar=True,
-            tags=["spenso::print-callback"],
             print=printer,
         )
         for root in self.notationRoots(TensorExpression(head(1))):
@@ -934,10 +949,7 @@ class TensorNotationTests(PagingAssertions):
                 "typst": "macron(A)",
             },
         )(euc("i"))
-        graph_index = S(
-            "paging_indices::hedge",
-            tags=["spenso::index", "spenso::index-label:h"],
-        )
+        graph_index = graph_index_symbol()
         TensorName("paging_matrix::Scoped")
         scoped_source = S("paging_matrix::Scoped")(
             S("spenso::mink")(4, graph_index(2, 1))
@@ -1176,10 +1188,7 @@ class TensorNotationTests(PagingAssertions):
 
     def test_index_styles_scopes_and_typed_zero_preserve_all_source_metadata(self):
         TensorName("paging_scopes::T")
-        graph_index = S(
-            "paging_indices::hedge",
-            tags=["spenso::index", "spenso::index-label:h"],
-        )
+        graph_index = graph_index_symbol()
         value = TensorExpression(
             S("paging_scopes::T")(
                 S("spenso::mink")(4, graph_index(2, 1)),
@@ -1206,9 +1215,12 @@ class TensorNotationTests(PagingAssertions):
 
     def test_cached_fragments_are_path_neutral_and_reused_across_layouts(self):
         fragment = '<mrow data-symbolica-path="97"><mi>A</mi><mo>′</mo></mrow>'
-        tensor = TensorName("paging_paths::T", print={"mathml": fragment})(
-            Representation.mink(4)("mu")
-        )
+        tensor = TensorName(
+            "paging_paths::T",
+            print=lambda *args, **kwargs: (
+                fragment if kwargs.get("mode") == PrintMode.MathML else None
+            ),
+        )(Representation.mink(4)("mu"))
         f, g = S("paging_paths::F", "paging_paths::G", is_scalar=True)
         value = TensorExpression(f(tensor.to_expression()) + g(tensor.to_expression()))
         viewer = value.paged()

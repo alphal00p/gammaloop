@@ -1907,6 +1907,7 @@ dependencies = [
  "serde_json",
  "spenso",
  "symbolica",
+ "symbolica-notation",
  "thiserror 2.0.18",
  "three-dimensional-reps",
  "typed-index-collections",
@@ -2460,6 +2461,7 @@ dependencies = [
  "spenso-hep-lib",
  "statrs",
  "symbolica",
+ "symbolica-notation",
  "symbolica-utils",
  "tabled",
  "thiserror 2.0.18",
@@ -6590,6 +6592,7 @@ dependencies = [
 name = "symbolica-notation"
 version = "0.1.0"
 dependencies = [
+ "roxmltree 0.21.1",
  "symbolica",
  "thiserror 2.0.18",
 ]

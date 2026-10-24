@@ -7805,8 +7805,13 @@ class TensorName:
             and returns its normalized Expression; tensor interfaces must remain valid.
         print : dict of str to str or callable, optional
             A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
-            displayed tensor name. Values are source without math delimiters,
-            for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+            displayed tensor name. Plain, LaTeX and Typst values are bounded display
+            text without math delimiters, for example {"typst": "overline(J)"}.
+            MathML accepts a bounded presentation subset with validated attributes;
+            executable markup, namespaces and unknown entities raise ValueError.
+            Notation is process-local and is not saved with expressions. Equal
+            re-registration succeeds; conflicting notation raises ValueError.
+            Spenso adds arguments and indices.
             A callable uses Symbolica's print callback convention and replaces
             the complete display; returning None selects the standard display.
         derivative, series, eval : callable, optional
@@ -7823,7 +7828,7 @@ class TensorName:
         Examples
         --------
         >>> from symbolica.community.tensor import TensorName, Representation
-        >>> J = TensorName("Jbar", print={"typst": "macron(J)"})
+        >>> J = TensorName("Jbar", print={"typst": "overline(J)"})
         >>> vector = J(Representation.euc(3))
         >>> vector.rank
         1
@@ -7861,8 +7866,13 @@ class TensorName:
             and returns its normalized Expression; tensor interfaces must remain valid.
         print : dict of str to str or callable, optional
             A mapping with keys "plain", "latex", "typst", or "mathml" changes just the
-            displayed tensor name. Values are source without math delimiters,
-            for example {"typst": "macron(J)"}. Spenso adds arguments and indices.
+            displayed tensor name. Plain, LaTeX and Typst values are bounded display
+            text without math delimiters, for example {"typst": "overline(J)"}.
+            MathML accepts a bounded presentation subset with validated attributes;
+            executable markup, namespaces and unknown entities raise ValueError.
+            Notation is process-local and is not saved with expressions. Equal
+            re-registration succeeds; conflicting notation raises ValueError.
+            Spenso adds arguments and indices.
             A callable uses Symbolica's print callback convention and replaces
             the complete display; returning None selects the standard display.
         derivative, series, eval : callable, optional
@@ -7879,7 +7889,7 @@ class TensorName:
         Examples
         --------
         >>> from symbolica.community.tensor import TensorName, Representation
-        >>> J = TensorName.vector("Jbar_vector", print={"typst": "macron(J)"})
+        >>> J = TensorName.vector("Jbar_vector", print={"typst": "overline(J)"})
         >>> vector = J(Representation.euc(3))
         >>> vector.rank
         1

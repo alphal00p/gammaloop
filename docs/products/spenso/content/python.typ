@@ -857,14 +857,23 @@ from symbolica.community.tensor import Representation, TensorName
 Jbar = TensorName(
     "Jbar",
     print={
-        "typst": "macron(J)",
+        "typst": "overline(J)",
         "latex": r"\bar{J}",
         "mathml": "<mover><mi>J</mi><mo>¯</mo></mover>",
     },
 )(Representation.bis(4))
 ```
 
-Mapping values are trusted backend source without math delimiters. Spenso adds ordinary
+Plain, LaTeX and Typst mapping values are bounded display text without math delimiters.
+MathML accepts only presentation elements (`mi`, `mn`, `mo`, `mtext`, `mrow`,
+`msub`, `msup`, `msubsup`, `mover`, `munder`, `munderover`, `mfrac`, `msqrt`,
+`mroot`, `mspace`, `menclose`) and validated presentation attributes. Executable
+markup, namespaces, comments, processing instructions, CDATA, unknown entities,
+and unsupported attributes raise `ValueError`. Input is limited to 4096 bytes,
+256 nodes and 16 levels. Spenso reconstructs escaped output from the parsed tree.
+Equal notation may be registered repeatedly; a different mapping for the same
+symbol raises `ValueError`. Registration lives in this process and is not stored
+by `Expression.save` or canonical strings. Spenso adds ordinary
 arguments, abstract indices, and component coordinates, including inside concrete tensor
 matrices. An omitted backend keeps the ordinary name; `plain` can also be supplied.
 The `mathml` value is a fragment without a `<math>` root and supplies the head

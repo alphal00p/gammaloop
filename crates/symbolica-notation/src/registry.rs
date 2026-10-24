@@ -1,4 +1,4 @@
-use crate::IndexDisplay;
+use crate::{IndexDisplay, MathMlSubset};
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::sync::{Arc, LazyLock, RwLock};
@@ -82,6 +82,8 @@ pub struct Notation {
     pub head: Option<IndexDisplay>,
     /// Optional target-specific text. See [`Self::register`].
     pub text: TextOverrides,
+    /// Validated MathML head override. See [`MathMlSubset`].
+    pub mathml: Option<MathMlSubset>,
     /// The symbol's callback owns the complete leaf, rather than delegating to
     /// the tensor renderer. This flag never enters serialized symbol state.
     /// See [`Self::register`] for registration and conflict behavior.
