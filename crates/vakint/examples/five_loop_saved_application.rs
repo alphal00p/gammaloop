@@ -11,11 +11,18 @@ mod cancellation_fixtures;
 mod saved_application_dot;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::{path::PathBuf, time::Instant};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
+    path::{Path, PathBuf},
+    time::Instant,
+};
 
 use feynkit_graph::{FeynmanDiagram, IntegralFamily};
 use feynkit_kinematics::Kinematics;
 use feynkit_model::Model;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::id::Replacement;
 use symbolica::prelude::{Integer, Rational};
@@ -41,6 +48,262 @@ impl log::Log for ApplicationLogger {
     fn flush(&self) {}
 }
 static LOGGER: ApplicationLogger = ApplicationLogger;
+
+/// A supplementary cold/warm API measurement, without the demo's later
+/// expansion, routing and guard-factorization checks. Output is append-only;
+/// the completed cold record is synced before the warm evaluation starts.
+struct TimedPair {
+    directory: PathBuf,
+}
+
+impl TimedPair {
+    fn take_argument(
+        args: &mut Vec<PathBuf>,
+    ) -> Result<Option<PathBuf>, Box<dyn std::error::Error>> {
+        let mut directory = None;
+        let mut remaining = Vec::new();
+        let mut arguments = args.iter();
+        while let Some(argument) = arguments.next() {
+            if argument.as_os_str() == "--timed-pair-only" {
+                if directory.is_some() {
+                    return Err("--timed-pair-only must appear exactly once".into());
+                }
+                directory = Some(
+                    arguments
+                        .next()
+                        .filter(|value| !value.as_os_str().is_empty())
+                        .ok_or("--timed-pair-only requires a new OUTPUT_DIR")?
+                        .clone(),
+                );
+            } else {
+                remaining.push(argument.clone());
+            }
+        }
+        *args = remaining;
+        Ok(directory)
+    }
+
+    fn create(directory: PathBuf) -> Result<Self, Box<dyn std::error::Error>> {
+        // create_dir, rather than create_dir_all, reserves a new run and rejects
+        // accidental reuse. The caller supplies an existing parent directory.
+        fs::create_dir(&directory)?;
+        let parent = directory
+            .parent()
+            .filter(|path| !path.as_os_str().is_empty())
+            .unwrap_or(Path::new("."));
+        File::open(parent)?.sync_all()?;
+        Ok(Self { directory })
+    }
+
+    fn write(&self, name: &str, bytes: &[u8]) -> Result<Value, Box<dyn std::error::Error>> {
+        let path = self.directory.join(name);
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        File::open(&self.directory)?.sync_all()?;
+        Ok(json!({"file":name,"bytes":bytes.len(),"sha256":format!("{:x}",Sha256::digest(bytes))}))
+    }
+
+    fn write_json(&self, name: &str, value: &Value) -> Result<Value, Box<dyn std::error::Error>> {
+        self.write(name, &serde_json::to_vec_pretty(value)?)
+    }
+
+    fn file_identity(path: &Path) -> Result<Value, Box<dyn std::error::Error>> {
+        let path = path.canonicalize()?;
+        let mut file = File::open(&path)?;
+        let mut digest = Sha256::new();
+        let mut buffer = [0; 65536];
+        loop {
+            let count = file.read(&mut buffer)?;
+            if count == 0 {
+                break;
+            }
+            digest.update(&buffer[..count]);
+        }
+        Ok(
+            json!({"path":path,"bytes":file.metadata()?.len(),"sha256":format!("{:x}",digest.finalize())}),
+        )
+    }
+
+    fn cache_statistics(vakint: &Vakint) -> Result<Value, Box<dyn std::error::Error>> {
+        let mut loops = BTreeMap::new();
+        for count in 1..=5 {
+            let statistics = vakint.cache_statistics(count)?;
+            loops.insert(count, json!({
+                "attached":statistics.attached,
+                "statistics_debug":format!("{statistics:?}"),
+                "saved_application":statistics.saved_application.as_ref().map(|value|value.to_document()),
+            }));
+        }
+        Ok(json!({
+            "persistent":loops,
+            "application_debug":format!("{:?}",vakint.rustred_application_cache_statistics()?),
+            "application_work_debug":format!("{:?}",vakint.rustred_application_cache_work_statistics()?),
+            "owner_preparation_debug":format!("{:?}",vakint.rustred_application_owner_preparation_statistics()?),
+            "factor_debug":format!("{:?}",vakint.rustred_application_factor_cache_statistics()?),
+            "witness_debug":format!("{:?}",vakint.rustred_application_witness_cache_statistics()?),
+        }))
+    }
+
+    fn prepare(
+        &self,
+        application: &Path,
+        scalar: &saved_application_dot::ScalarDotInput,
+        input: &Atom,
+        settings: &VakintSettings,
+        vakint: &Vakint,
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let application = application.canonicalize()?;
+        let root = application
+            .ancestors()
+            .find(|root| {
+                root.join("manifest.json").is_file() && root.join("5L/manifest.json").is_file()
+            })
+            .ok_or("timed pairs require a local manifested external-data checkout")?;
+        let mut manifests = BTreeMap::new();
+        for name in [
+            "manifest.json",
+            "1L/manifest.json",
+            "2L/manifest.json",
+            "3L/manifest.json",
+            "4L/manifest.json",
+            "5L/manifest.json",
+        ] {
+            manifests.insert(name, Self::file_identity(&root.join(name))?);
+        }
+        let dot = self.write("input.dot", &fs::read(&scalar.path)?)?;
+        let input = self.write("input.symbolica", input.to_canonical_string().as_bytes())?;
+        self.write_json("input.json", &json!({
+            "schema":"vakint.five-loop-connected-timed-pair.v1",
+            "scope":"supplementary same-process cold/warm whole public evaluate_rustred_symbolic calls; not a persistent-cache comparison or pure IBP timer",
+            "timing_excludes":"pre-evaluation data/application loading, input preparation, result serialization, cache-statistics snapshots and parity checks",
+            "owner_preparation_scope":"on-demand owner preparation inside either timed public API call is included",
+            "warm_policy":"same engine, settings and input; no cache clear or extra evaluation between the two calls",
+            "cache_policy":"with_rustred_application default local-checkout loading, including any available prepared lower-loop caches",
+            "dot":dot,"dot_source":Self::file_identity(&scalar.path)?,"powers_native_order":scalar.powers,
+            "input":input,"mass_squared":"1","numerator":"1","settings_debug":format!("{settings:?}"),
+            "application_directory":application,"data_manifests":manifests,
+            "application":Self::file_identity(&application.join("application.json"))?,
+            "model_sha256":format!("{:x}",Sha256::digest(include_bytes!("../tests/fixtures/phi_3_4.json"))),
+            "compiled_example_sha256":format!("{:x}",Sha256::digest(include_bytes!("five_loop_saved_application.rs"))),
+            "compiled_dot_adapter_sha256":format!("{:x}",Sha256::digest(include_bytes!("saved_application/dot.rs"))),
+            "compiled_cargo_lock_sha256":format!("{:x}",Sha256::digest(include_bytes!("../../../Cargo.lock"))),
+            "executable":Self::file_identity(&std::env::current_exe()?)?,
+            "build_rustc":option_env!("VAKINT_CACHE_BUILD_RUSTC"),
+            "build_profile":option_env!("VAKINT_CACHE_BUILD_PROFILE"),
+            "build_git_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
+            "build_rustred_revision":option_env!("VAKINT_CACHE_BUILD_RUSTRED_REVISION"),
+            "build_symbolica_revision":option_env!("VAKINT_CACHE_BUILD_SYMBOLICA_REVISION"),
+            "build_main_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256"),
+            "build_native_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256"),
+            "cache_statistics_before_cold":Self::cache_statistics(vakint)?,
+        }))?;
+        Ok(())
+    }
+
+    fn record(
+        &self,
+        phase: &str,
+        seconds: f64,
+        result: &vakint::RustRedSymbolicEvaluation,
+        vakint: &Vakint,
+    ) -> Result<Value, Box<dyn std::error::Error>> {
+        let value = self.write(
+            &format!("{phase}.symbolica"),
+            result.value.to_canonical_string().as_bytes(),
+        )?;
+        let guards = result
+            .nonzero_conditions
+            .iter()
+            .map(AtomCore::to_canonical_string)
+            .collect::<Vec<_>>();
+        let guards = self.write_json(&format!("{phase}-guards.json"), &json!(guards))?;
+        let families = result
+            .families
+            .iter()
+            .map(|(symbol, family)| (symbol.to_canonical_string(), family))
+            .collect::<Vec<_>>();
+        let families = self.write_json(&format!("{phase}-families.json"), &json!(families))?;
+        self.write_json(&format!("{phase}.json"), &json!({
+            "phase":phase,"completed":true,"whole_public_application_seconds":seconds,
+            "value":value,"ordered_nonzero_conditions":guards,"families":families,
+            "nonzero_condition_count":result.nonzero_conditions.len(),"family_count":result.families.len(),
+            "cache_statistics_after":Self::cache_statistics(vakint)?,
+        }))
+    }
+}
+
+#[cfg(test)]
+mod timed_pair_tests {
+    use super::TimedPair;
+    use serde_json::json;
+    use std::{fs, path::PathBuf};
+
+    #[test]
+    fn optional_pair_arguments_preserve_the_existing_dot_parser() {
+        let original = ["application", "--dot", "fixture.dot", "--powers", "1,2,1"]
+            .map(PathBuf::from)
+            .to_vec();
+        let mut plain = original.clone();
+        assert!(TimedPair::take_argument(&mut plain).unwrap().is_none());
+        assert_eq!(plain, original);
+        for position in 0..=original.len() {
+            let mut args = original.clone();
+            args.splice(
+                position..position,
+                ["--timed-pair-only", "output"].map(PathBuf::from),
+            );
+            assert_eq!(
+                TimedPair::take_argument(&mut args).unwrap(),
+                Some(PathBuf::from("output"))
+            );
+            assert_eq!(args, original);
+        }
+    }
+
+    #[test]
+    fn missing_and_duplicate_pair_options_are_errors() {
+        for args in [
+            vec!["--timed-pair-only"],
+            vec!["--timed-pair-only", "one", "--timed-pair-only", "two"],
+        ] {
+            assert!(
+                TimedPair::take_argument(&mut args.into_iter().map(PathBuf::from).collect())
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn completed_records_cannot_be_overwritten() {
+        let parent = tempfile::tempdir().unwrap();
+        let directory = parent.path().join("pair");
+        let pair = TimedPair::create(directory.clone()).unwrap();
+        assert!(TimedPair::create(directory.clone()).is_err());
+        let cold = json!({"completed":true});
+        let identity = pair.write_json("cold.json", &cold).unwrap();
+        assert_eq!(
+            serde_json::from_slice::<serde_json::Value>(
+                &fs::read(directory.join("cold.json")).unwrap()
+            )
+            .unwrap(),
+            cold
+        );
+        assert_eq!(
+            TimedPair::file_identity(&directory.join("cold.json")).unwrap()["sha256"],
+            identity["sha256"]
+        );
+        assert!(
+            pair.write_json("cold.json", &json!({"completed":false}))
+                .is_err()
+        );
+        assert!(!directory.join("warm.json").exists());
+        assert!(!directory.join("pair.json").exists());
+    }
+}
 
 fn rerouted_fixture(input: &Atom) -> Result<Atom, Box<dyn std::error::Error>> {
     let routing = [
@@ -410,14 +673,19 @@ fn massive_bridge_fixtures() -> Result<Vec<MassiveBridgeFixture>, Box<dyn std::e
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     log::set_logger(&LOGGER)?;
     log::set_max_level(log::LevelFilter::Debug);
-    let args = std::env::args_os()
+    let mut args = std::env::args_os()
         .skip(1)
         .map(PathBuf::from)
         .collect::<Vec<_>>();
+    let pair_directory = TimedPair::take_argument(&mut args)?;
     let scalar_dot = saved_application_dot::ScalarDotInput::from_arguments(&args)?;
-    if args.is_empty() || (scalar_dot.is_none() && !(1..=2).contains(&args.len())) {
-        return Err("usage: five_loop_saved_application APPLICATION_DIRECTORY [VACUUM_DOT|--admitted-tadpoles|--admitted-rank11|--admitted-suite|--dot PATH --powers CSV]".into());
+    if pair_directory.is_some() && scalar_dot.is_none() {
+        return Err("--timed-pair-only requires explicit --dot PATH --powers CSV input".into());
     }
+    if args.is_empty() || (scalar_dot.is_none() && !(1..=2).contains(&args.len())) {
+        return Err("usage: five_loop_saved_application APPLICATION_DIRECTORY [VACUUM_DOT|--admitted-tadpoles|--admitted-rank11|--admitted-suite|--dot PATH --powers CSV] [--timed-pair-only OUTPUT_DIR]".into());
+    }
+    let timed_pair = pair_directory.map(TimedPair::create).transpose()?;
     let mut settings = VakintSettings {
         epsilon_symbol: "eps".into(),
         evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
@@ -566,6 +834,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let input = if let Some(input) = &scalar_dot {
         let prepared = input.prepare()?;
+        if timed_pair.is_some() && prepared.diagram.loop_count() != 5 {
+            return Err("timed pairs require a five-loop DOT fixture".into());
+        }
         println!(
             "scalar_dot_loops={} physical_denominators={} powers={:?} mass_squared=1 numerator=1",
             prepared.diagram.loop_count(),
@@ -617,6 +888,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )?;
         Atom::from(input)
     };
+    if let Some(pair) = &timed_pair {
+        pair.prepare(
+            &args[0],
+            scalar_dot.as_ref().unwrap(),
+            &input,
+            &settings,
+            &vakint,
+        )?;
+    }
     let mut inputs = vec![input];
     let mut guard_factors = GuardFactorCache::new();
     let mut guard_discrepancies = Vec::new();
@@ -628,21 +908,46 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("case={case}");
         let started = Instant::now();
         let first = vakint.evaluate_rustred_symbolic(&settings, input.as_view())?;
-        println!(
-            "first_application_seconds={:.6}",
-            started.elapsed().as_secs_f64()
-        );
+        let first_seconds = started.elapsed().as_secs_f64();
+        println!("first_application_seconds={:.6}", first_seconds);
+        let cold_record = timed_pair
+            .as_ref()
+            .map(|pair| pair.record("cold", first_seconds, &first, &vakint))
+            .transpose()?;
         let started = Instant::now();
-        let warm = vakint.evaluate_rustred_symbolic(&settings, input.as_view())?;
-        println!(
-            "warm_application_seconds={:.6}",
-            started.elapsed().as_secs_f64()
-        );
-        if first.value != warm.value
-            || first.nonzero_conditions != warm.nonzero_conditions
-            || first.families != warm.families
-        {
+        let warm = match vakint.evaluate_rustred_symbolic(&settings, input.as_view()) {
+            Ok(value) => value,
+            Err(error) => {
+                if let Some(pair) = &timed_pair {
+                    pair.write_json("warm-error.json", &json!({"completed":false,"error":error.to_string(),"whole_public_application_seconds":started.elapsed().as_secs_f64()}))?;
+                }
+                return Err(error.into());
+            }
+        };
+        let warm_seconds = started.elapsed().as_secs_f64();
+        println!("warm_application_seconds={:.6}", warm_seconds);
+        let exact_parity = first.value == warm.value
+            && first.nonzero_conditions == warm.nonzero_conditions
+            && first.families == warm.families;
+        if let Some(pair) = &timed_pair {
+            let warm_record = pair.record("warm", warm_seconds, &warm, &vakint)?;
+            pair.write_json(
+                "pair.json",
+                &json!({
+                    "schema":"vakint.five-loop-connected-timed-pair.v1","completed":exact_parity,
+                    "cold_record":cold_record,"warm_record":warm_record,
+                    "exact_value_parity":first.value == warm.value,
+                    "ordered_full_guard_parity":first.nonzero_conditions == warm.nonzero_conditions,
+                    "family_identity_parity":first.families == warm.families,
+                    "additional_demo_checks_run":false,
+                }),
+            )?;
+        }
+        if !exact_parity {
             return Err("warm application changed the exact result".into());
+        }
+        if timed_pair.is_some() {
+            return Ok(());
         }
         println!("phase=expanded_input");
         let expanded = vakint.evaluate_rustred_symbolic(&settings, input.expand().as_view())?;
