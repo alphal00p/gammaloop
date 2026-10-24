@@ -224,7 +224,7 @@ impl TensorExpression {
     ) -> PyResult<Py<Self>> {
         let original_rank = interface.canonical().order();
         let value =
-            SymbolicTensor::checked_parts(atom, interface).map_err(Self::inference_error)?;
+            SymbolicTensor::from_produced_parts(atom, interface).map_err(Self::inference_error)?;
         // A contraction is a derived expression, not a declaration of the original stored data.
         let (name, name_args) = if value.rank() == original_rank {
             (name, name_args)

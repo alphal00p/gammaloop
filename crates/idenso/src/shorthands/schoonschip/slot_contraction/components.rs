@@ -1752,7 +1752,7 @@ mod tests {
                     .is_none(),
                 "{source}"
             );
-            let typed = SymbolicTensor::<PartialStructure>::checked_parts(
+            let typed = SymbolicTensor::<PartialStructure>::from_produced_parts(
                 source.clone(),
                 PartialStructure::from_logical_slots([]),
             )
@@ -1771,7 +1771,7 @@ mod tests {
                 )
                 .is_none()
         );
-        let typed = SymbolicTensor::<PartialStructure>::checked_parts(
+        let typed = SymbolicTensor::<PartialStructure>::from_produced_parts(
             rounded.clone(),
             PartialStructure::from_logical_slots([]),
         )
@@ -2990,7 +2990,8 @@ mod tests {
         );
         assert_ne!(source, Atom::Zero);
         let inferred = SymbolicTensor::<PartialStructure>::infer(source.clone()).unwrap();
-        let typed = SymbolicTensor::checked_parts(inferred.expression, inferred.structure).unwrap();
+        let typed =
+            SymbolicTensor::from_produced_parts(inferred.expression, inferred.structure).unwrap();
         assert_eq!(typed.expression, source);
         let expected = SymbolicTensor::<PartialStructure>::infer(input("t(mink(4,b))")).unwrap();
         assert_eq!(typed.structure.logical_slots().len(), 1);

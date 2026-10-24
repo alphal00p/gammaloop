@@ -924,7 +924,7 @@ mod typed_tests {
         let layout = PartialStructure::from_logical_slots(
             [slots[1], slots[0]].map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind))),
         );
-        let source = SymbolicTensor::checked_parts(expression.clone(), layout).unwrap();
+        let source = SymbolicTensor::from_produced_parts(expression.clone(), layout).unwrap();
         let result = source.canonize().unwrap();
         assert_eq!(
             result.expression(),

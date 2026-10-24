@@ -701,9 +701,11 @@ impl SpensoNet {
                 "a non-scalar tensor cannot be used as a denominator",
             ));
         }
-        let exponent =
-            SymbolicTensor::checked_parts(Atom::num(-1), PartialStructure::from_logical_slots([]))
-                .map_err(TensorExpression::inference_error)?;
+        let exponent = SymbolicTensor::from_produced_parts(
+            Atom::num(-1),
+            PartialStructure::from_logical_slots([]),
+        )
+        .map_err(TensorExpression::inference_error)?;
         let structure = self
             .structure
             .pow(&exponent)

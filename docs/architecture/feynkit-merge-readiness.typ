@@ -2097,7 +2097,7 @@ Concrete Rust API difficulties found during implementation:
   caches are never serialized. Existing equality also observes the metric and
   composite flags, so those flags are retained to preserve exact round trips.
 - Portable declared source interfaces need `from_declared_parts`; merely
-  attaching `checked_parts` does not certify an arbitrary external payload
+  attaching `from_produced_parts` does not certify an arbitrary external payload
   against its declared ports. GammaLoop's boundary then requires strict indexed
   conversion; `from_indexed_parts` checks an explicitly declared runtime layout.
   Runtime DOT exports add `num_interface` only when the expression cannot recover

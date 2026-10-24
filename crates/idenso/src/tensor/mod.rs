@@ -225,7 +225,7 @@ where
 ///     vector.expression().clone(), vector.structure().clone(),
 /// )?;
 /// assert!(admitted.same_value(&vector));
-/// let nominal_zero = SymbolicTensor::checked_parts(Atom::Zero, vector.structure().clone())?;
+/// let nominal_zero = SymbolicTensor::from_produced_parts(Atom::Zero, vector.structure().clone())?;
 /// assert_eq!(nominal_zero.finish_parts()?.rank(), 1);
 /// # Ok::<(), TensorInferenceError>(())
 /// ```

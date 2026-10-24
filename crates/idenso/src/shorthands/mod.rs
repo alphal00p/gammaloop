@@ -562,7 +562,7 @@ mod typed_dot_tests {
         let inferred = SymbolicTensor::infer(expression.clone()).unwrap();
         let mut slots = inferred.structure().logical_slots();
         slots.reverse();
-        let source = SymbolicTensor::checked_parts(
+        let source = SymbolicTensor::from_produced_parts(
             expression.clone(),
             PartialStructure::from_logical_slots(slots),
         )

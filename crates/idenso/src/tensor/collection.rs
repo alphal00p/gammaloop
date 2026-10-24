@@ -2163,7 +2163,7 @@ mod tests {
     fn coefficient_list_preserves_empty_selection() {
         crate::test_support::test_initialize();
         let x = Atom::var(symbolica::symbol!("coefficient_output_scalar"));
-        let source = SymbolicTensor::checked_parts(
+        let source = SymbolicTensor::from_produced_parts(
             (&x + Atom::one()).pow(8),
             PartialStructure::from_logical_slots([]),
         )

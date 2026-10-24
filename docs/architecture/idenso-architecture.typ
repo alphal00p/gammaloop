@@ -258,7 +258,7 @@ violates the contract and remains a typed-error rejection on checked paths.
 
 Source-attached algebra preserves established interfaces and construction metadata when its
 operation owns the invariant. Attaching unrelated raw parts does not establish that invariant:
-inference can retain raw repeated ports until `checked_parts` merges their explicit
+inference can retain raw repeated ports until `from_produced_parts` merges their explicit
 contractions. This intermediate boundary also lets bindings discard stored-data identity when
 a declaration becomes a contraction, even if its input and final result have the same rank.
 Arbitrary expression replacement and existing callback-sensitive identity

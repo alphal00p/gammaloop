@@ -287,7 +287,7 @@ impl SymbolicTensor<PartialStructure> {
             let domain = if self.normalization_is_intrinsic() {
                 Self::from_validated_parts(value.to_owned(), interface)
             } else {
-                Self::checked_parts(value.to_owned(), interface)?
+                Self::from_produced_parts(value.to_owned(), interface)?
             };
             domain.observe_replacement(self);
             let nested = domain.contract_prerequisite_scopes(settings, selected, allowed_vector)?;
@@ -381,7 +381,7 @@ impl SymbolicTensor<PartialStructure> {
         let domain = if self.normalization_is_intrinsic() {
             Self::from_validated_parts(expression, interface)
         } else {
-            Self::checked_parts(expression, interface)?
+            Self::from_produced_parts(expression, interface)?
         };
         domain.observe_replacement(self);
         let contracted = domain.contract_parts(ContractSettings {
@@ -935,7 +935,7 @@ pub mod test {
             contracted.expression.expand(),
             source.expression.expand().schoonschip().expand()
         );
-        let zero = SymbolicTensor::checked_parts(
+        let zero = SymbolicTensor::from_produced_parts(
             Atom::Zero,
             PartialStructure::from_logical_slots([
                 rep.slot(PartialIndex::Explicit(AbstractIndex::from(92103)))
@@ -984,7 +984,7 @@ pub mod test {
 
         // Re-admission clears completion. The same expression must still be
         // stable without that shortcut.
-        let unattested = SymbolicTensor::checked_parts(
+        let unattested = SymbolicTensor::from_produced_parts(
             contracted.expression.clone(),
             contracted.structure.clone(),
         )

@@ -309,14 +309,13 @@ impl NumeratorInterface {
             let boundary = tensor.reindex_interface_ports(&replacements)?;
             return Ok(boundary.with_checked_expression(expression)?);
         }
-        let mapped = SymbolicTensor::checked_parts(
+        // Translation is an existing checked boundary: callback output must
+        // return a typed error in release and debug builds alike. Admit the
+        // declared result directly instead of claiming producer trust first.
+        Ok(SymbolicTensor::from_declared_parts(
             expression,
             PartialStructure::from_logical_slots(logical),
-        )?;
-        // Retain the correspondence check on the completed carrier, so later
-        // composition can reuse its admission instead of observing it again.
-        let (expression, structure) = mapped.into_parts();
-        Ok(SymbolicTensor::from_declared_parts(expression, structure)?)
+        )?)
     }
 }
 

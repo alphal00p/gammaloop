@@ -88,9 +88,10 @@ impl SymbolicTensor<PartialStructure> {
         for (&position, &index) in replacements {
             logical[position].set_aind(PartialIndex::Explicit(index));
         }
-        let value = Self::checked_parts(expression, PartialStructure::from_logical_slots(logical))
-            .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?
-            .normalize_closed_root_chain()?;
+        let value =
+            Self::from_produced_parts(expression, PartialStructure::from_logical_slots(logical))
+                .map_err(|error| TensorCompositionError::InvalidResultInterface(error.to_string()))?
+                .normalize_closed_root_chain()?;
         value.validate_rewrite("indexed", &[self])
     }
 
@@ -191,7 +192,7 @@ impl SymbolicTensor<PartialStructure> {
                     ]),
                 )
             };
-            return Self::checked_parts(expression, structure).map_err(|error| {
+            return Self::from_produced_parts(expression, structure).map_err(|error| {
                 TensorCompositionError::InvalidResultInterface(error.to_string())
             });
         };
@@ -232,7 +233,7 @@ impl SymbolicTensor<PartialStructure> {
         factors: &[Self],
     ) -> Result<Self, TensorCompositionError> {
         let Some((first, factors)) = factors.split_first() else {
-            return Self::checked_parts(
+            return Self::from_produced_parts(
                 SPENSO_TAG.trace(representation.to_symbolic([]), std::iter::empty::<Atom>()),
                 PartialStructure::from_logical_slots([]),
             )

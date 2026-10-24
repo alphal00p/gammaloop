@@ -217,7 +217,7 @@ mod tests {
                 .to_lib()
                 .slot(PartialIndex::Open(OpenPortId(1))),
         ]);
-        let source = SymbolicTensor::checked_parts(Atom::Zero, structure).unwrap();
+        let source = SymbolicTensor::from_produced_parts(Atom::Zero, structure).unwrap();
         let bytes = bincode::encode_to_vec(&source, config::standard()).unwrap();
         let (decoded, consumed): (SymbolicTensor<PartialStructure>, _) =
             bincode::decode_from_slice_with_context(

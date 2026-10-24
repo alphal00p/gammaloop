@@ -1264,9 +1264,12 @@ mod tests {
             Atom::Zero
         }));
         for source in [
-            SymbolicTensor::checked_parts(Atom::one(), PartialStructure::from_logical_slots([]))
-                .unwrap(),
-            SymbolicTensor::checked_parts(
+            SymbolicTensor::from_produced_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+            )
+            .unwrap(),
+            SymbolicTensor::from_produced_parts(
                 leaf(scalar, std::slice::from_ref(&fa)),
                 PartialStructure::from_logical_slots([]),
             )
@@ -1392,7 +1395,7 @@ mod tests {
         let f = spenso::tensor_symbol!("safe_replace_opaque_f");
         let fa = leaf(f, &[slot(81701)]);
         let scalar_head = symbolica::symbol!("safe_replace_opaque_scalar"; Scalar);
-        let source = SymbolicTensor::checked_parts(
+        let source = SymbolicTensor::from_produced_parts(
             leaf(scalar_head, std::slice::from_ref(&fa)),
             PartialStructure::from_logical_slots([]),
         )

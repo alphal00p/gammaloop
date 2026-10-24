@@ -3712,7 +3712,7 @@ mod tests {
             .finish();
         for exponent in [-1, -2, -3, 2, 3, 7] {
             let expression = product.pow(exponent);
-            let value = SymbolicTensor::checked_parts(
+            let value = SymbolicTensor::from_produced_parts(
                 expression.clone(),
                 PartialStructure::from_logical_slots([]),
             )
@@ -3954,7 +3954,7 @@ mod tests {
             ]))
             .unwrap();
         assert!(
-            SymbolicTensor::checked_parts(paired.expression, paired.structure)
+            SymbolicTensor::from_produced_parts(paired.expression, paired.structure)
                 .unwrap()
                 .is_scalar()
         );

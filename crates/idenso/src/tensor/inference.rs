@@ -679,7 +679,7 @@ impl<'a> BorrowedTensorParts<'a> {
             ));
         };
         let raw_rank = structure.canonical().order();
-        let value = SymbolicTensor::<PartialStructure>::checked_parts(expression, structure)?;
+        let value = SymbolicTensor::<PartialStructure>::from_produced_parts(expression, structure)?;
         let contracted = inferred_contraction || value.rank() != raw_rank;
         Ok((value, contracted))
     }
@@ -838,7 +838,7 @@ impl SymbolicTensor<PartialStructure> {
             PartialStructure::from_logical_slots(logical.into_iter().enumerate().map(
                 |(position, representation)| representation.slot(PartialIndex::open(position)),
             ));
-        Self::checked_parts(expression, structure)
+        Self::from_produced_parts(expression, structure)
     }
 
     /// Infer an ordered interface from symbolic syntax, lowering unresolved powers.
@@ -959,7 +959,7 @@ impl SymbolicTensor<PartialStructure> {
             TensorInferenceError::invalid("tensor power exponent is too large to materialize")
         })?;
         if repetitions == 0 {
-            return Self::checked_parts(Atom::one(), interface);
+            return Self::from_produced_parts(Atom::one(), interface);
         }
         if repetitions == 1 {
             return Ok(self.clone());
@@ -983,7 +983,7 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(result);
         }
         if self.is_zero() {
-            return Self::checked_parts(Atom::Zero, interface);
+            return Self::from_produced_parts(Atom::Zero, interface);
         }
         let mut result = self.clone();
         for _ in 1..repetitions {
@@ -1006,15 +1006,38 @@ impl SymbolicTensor<PartialStructure> {
         Ok(self.multiply(&inverse)?)
     }
 
-    /// Finish tensor-aware parts without inferring their established interface again.
-    /// See the [example](SymbolicTensor).
+    /// Finish parts whose producer guarantees payload/interface agreement.
+    ///
+    /// The caller must establish that the payload agrees with its logical ports.
+    /// External expressions and metadata must use [`Self::from_declared_parts`].
+    /// Debug builds check callback-sensitive payloads; intrinsic payloads and release
+    /// builds trust the producer.
+    /// Zero retains the declared rank. See also the [example](SymbolicTensor).
     ///
     /// # Errors
     ///
-    /// Rejects invalid placeholder scopes or explicit-index multiplicities. This producer
-    /// boundary does not check correspondence with an external declared interface; use
-    /// [`Self::from_declared_parts`] for that check.
-    pub fn checked_parts(expression: Atom, structure: PartialStructure) -> InferenceResult<Self> {
+    /// Rejects invalid placeholder scopes or explicit-index multiplicities.
+    ///
+    /// # Panics
+    ///
+    /// In debug builds, panics if the finished payload disagrees with its interface.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use idenso::tensor::SymbolicTensor;
+    /// use spenso::structure::partial::{PartialStructure, PartialStructureExt};
+    /// use symbolica::atom::{Atom, AtomCore};
+    /// let scalar = SymbolicTensor::from_produced_parts(
+    ///     Atom::num(3), PartialStructure::from_logical_slots([]),
+    /// )?;
+    /// assert!(scalar.is_scalar());
+    /// # Ok::<(), idenso::tensor::inference::TensorInferenceError>(())
+    /// ```
+    pub fn from_produced_parts(
+        expression: Atom,
+        structure: PartialStructure,
+    ) -> InferenceResult<Self> {
         let value = Self::from_normalized_parts(expression, structure).finish_parts()?;
         // This owner finishes an interface already established by its producer;
         // external declarations use `from_declared_parts` to check correspondence.
@@ -1025,6 +1048,13 @@ impl SymbolicTensor<PartialStructure> {
         occurrences.validate()?;
         let mut value = value;
         value.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        TensorProofs::assert_normalization_preserves_interface(
+            "from_produced_parts",
+            &[&value.expression],
+            &value.expression,
+            Ok(&value.structure),
+            None,
+        );
         Ok(value)
     }
 
@@ -3826,7 +3856,7 @@ pub(crate) mod tests {
             .add_arg(&y)
             .finish();
         let source = (&x + &f).pow(3) + (&x + &y) * (&f - &y);
-        let typed = SymbolicTensor::<PartialStructure>::checked_parts(
+        let typed = SymbolicTensor::<PartialStructure>::from_produced_parts(
             source.clone(),
             PartialStructure::from_logical_slots([]),
         )
@@ -3853,7 +3883,7 @@ pub(crate) mod tests {
                 "Expansion must be done wrt an indeterminate"
             );
         }
-        let mut unchanged = SymbolicTensor::<PartialStructure>::checked_parts(
+        let mut unchanged = SymbolicTensor::<PartialStructure>::from_produced_parts(
             source.expand(),
             PartialStructure::from_logical_slots([]),
         )
@@ -3928,7 +3958,7 @@ pub(crate) mod tests {
             .add_arg(FunctionBuilder::new(hook).add_arg(&leaf).finish())
             .finish();
         let source = (&x + &y) * scalar + Atom::num(1);
-        let typed = SymbolicTensor::<PartialStructure>::checked_parts(
+        let typed = SymbolicTensor::<PartialStructure>::from_produced_parts(
             source.clone(),
             PartialStructure::from_logical_slots([]),
         )
@@ -4514,7 +4544,7 @@ pub(crate) mod tests {
             SCOPE_VALIDATIONS.with(|count| count.set(0));
             SymbolicTensor::validate_interface(&expression, &source.structure).unwrap();
             let reference =
-                SymbolicTensor::checked_parts(expression.clone(), source.structure.clone())
+                SymbolicTensor::from_produced_parts(expression.clone(), source.structure.clone())
                     .unwrap();
             assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 2);
 
@@ -4565,7 +4595,10 @@ pub(crate) mod tests {
         ] {
             let reference = SymbolicTensor::validate_interface(&expression, &source.structure)
                 .and_then(|()| {
-                    SymbolicTensor::checked_parts(expression.clone(), source.structure.clone())
+                    SymbolicTensor::from_produced_parts(
+                        expression.clone(),
+                        source.structure.clone(),
+                    )
                 })
                 .unwrap_err()
                 .to_string();
@@ -5174,7 +5207,7 @@ pub(crate) mod tests {
             slots[2],
         ];
         for expression in [atom, Atom::Zero] {
-            let value = SymbolicTensor::<PartialStructure>::checked_parts(
+            let value = SymbolicTensor::<PartialStructure>::from_produced_parts(
                 expression,
                 PartialStructure::from_logical_slots(slots),
             )
@@ -5210,7 +5243,7 @@ pub(crate) mod tests {
         );
 
         let metric =
-            SymbolicTensor::<PartialStructure>::checked_parts(
+            SymbolicTensor::<PartialStructure>::from_produced_parts(
                 FunctionBuilder::new(ETS.metric)
                     .add_args([73303, 73305].map(|index| {
                         minkowski
@@ -5287,7 +5320,7 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn identity_dimension_mapping_still_finishes_unchecked_parts() {
+    fn identity_dimension_mapping_still_finishes_raw_parts() {
         test_support::test_initialize();
         let representation = ExtendibleReps::MINKOWSKI.new_rep(4);
         let slot = representation
@@ -5297,7 +5330,7 @@ pub(crate) mod tests {
             .add_args([&slot, &slot, &slot])
             .finish();
         let scalar = PartialStructure::from_logical_slots([]);
-        let expected = SymbolicTensor::checked_parts(malformed.clone(), scalar.clone())
+        let expected = SymbolicTensor::from_produced_parts(malformed.clone(), scalar.clone())
             .unwrap_err()
             .to_string();
         let unchecked = SymbolicTensor::from_normalized_parts(malformed, scalar.clone());
@@ -5518,7 +5551,7 @@ pub(crate) mod tests {
         let expression = FunctionBuilder::new(head)
             .add_args(ports.map(composition::port_atom))
             .finish();
-        let value = SymbolicTensor::<PartialStructure>::checked_parts(
+        let value = SymbolicTensor::<PartialStructure>::from_produced_parts(
             expression,
             PartialStructure::from_logical_slots(ports.into_iter().rev()),
         )
@@ -5536,7 +5569,7 @@ pub(crate) mod tests {
         let expression = FunctionBuilder::new(head)
             .add_args(ports.map(composition::port_atom))
             .finish();
-        let value = SymbolicTensor::<PartialStructure>::checked_parts(
+        let value = SymbolicTensor::<PartialStructure>::from_produced_parts(
             expression,
             PartialStructure::from_logical_slots(ports),
         )
@@ -6009,7 +6042,8 @@ pub(crate) mod tests {
             spin.slot(PartialIndex::open(0)),
             spin.slot(PartialIndex::open(1)),
         ]);
-        let source = SymbolicTensor::checked_parts(metric * gamma(ends, nu), logical).unwrap();
+        let source =
+            SymbolicTensor::from_produced_parts(metric * gamma(ends, nu), logical).unwrap();
         let result = gamma(ends, mu);
         // Both boundaries can retain the public order when encoded owners prove
         // that moving the explicit Lorentz port past AUTO axes is harmless.
@@ -6484,7 +6518,7 @@ pub(crate) mod tests {
             algebra.structure.logical_slots()
         );
 
-        let unresolved = SymbolicTensor::<PartialStructure>::checked_parts(
+        let unresolved = SymbolicTensor::<PartialStructure>::from_produced_parts(
             FunctionBuilder::new(tensor)
                 .add_arg(representation.to_symbolic([]))
                 .finish(),
@@ -6573,7 +6607,7 @@ pub(crate) mod tests {
     fn arbitrary_transform_reports_raw_contractions_without_losing_typed_zero() {
         crate::test_support::test_initialize();
         let x = Atom::var(symbolica::symbol!("transform_policy_x"));
-        let scalar = SymbolicTensor::checked_parts(
+        let scalar = SymbolicTensor::from_produced_parts(
             &x + Atom::one(),
             PartialStructure::from_logical_slots([]),
         )
@@ -6598,7 +6632,7 @@ pub(crate) mod tests {
         assert_eq!(value.rank(), 0);
         assert!(!contracted);
 
-        let tensor = SymbolicTensor::checked_parts(
+        let tensor = SymbolicTensor::from_produced_parts(
             FunctionBuilder::new(head)
                 .add_arg(composition::port_atom(slot))
                 .finish(),
@@ -7180,7 +7214,8 @@ pub(crate) mod tests {
         let rep = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
         let p = spenso::vector_symbol!("typed_power_boundary::p");
         let scalar = |atom| {
-            SymbolicTensor::checked_parts(atom, PartialStructure::from_logical_slots([])).unwrap()
+            SymbolicTensor::from_produced_parts(atom, PartialStructure::from_logical_slots([]))
+                .unwrap()
         };
         let explicit = SymbolicTensor::<PartialStructure>::infer(
             FunctionBuilder::new(p)
@@ -7203,7 +7238,8 @@ pub(crate) mod tests {
         assert_eq!(explicit.pow(&scalar(Atom::one())).unwrap(), explicit);
         assert!(explicit.pow(&scalar(Atom::Zero)).unwrap().is_scalar());
 
-        let zero = SymbolicTensor::checked_parts(Atom::Zero, explicit.structure.clone()).unwrap();
+        let zero =
+            SymbolicTensor::from_produced_parts(Atom::Zero, explicit.structure.clone()).unwrap();
         let squared_zero = zero.pow(&two).unwrap();
         assert!(squared_zero.is_zero());
         assert!(squared_zero.is_scalar());
@@ -7220,7 +7256,8 @@ pub(crate) mod tests {
             SymbolicTensor::validate_atom(&result.expression).unwrap();
             SymbolicTensor::validate_interface(&result.expression, &result.structure).unwrap();
         }
-        let open_zero = SymbolicTensor::checked_parts(Atom::Zero, open.structure.clone()).unwrap();
+        let open_zero =
+            SymbolicTensor::from_produced_parts(Atom::Zero, open.structure.clone()).unwrap();
         let result = open_zero.pow(&three).unwrap();
         assert!(result.is_zero());
         assert_eq!(
@@ -8021,6 +8058,23 @@ pub(crate) mod tests {
     }
     #[cfg(debug_assertions)]
     #[test]
+    #[should_panic(expected = "normalization callback contract violated in from_produced_parts")]
+    fn produced_parts_checks_callback_interface() {
+        let rep = ExtendibleReps::EUCLIDEAN.new_rep(3);
+        let head = tensor_symbol!("produced_parts_contract", norm = |_, _| {});
+        let expression = FunctionBuilder::new(head)
+            .add_arg(rep.to_symbolic([Atom::num(73921)]))
+            .finish();
+        SymbolicTensor::from_produced_parts(
+            expression,
+            PartialStructure::from_logical_slots([
+                rep.slot(PartialIndex::Explicit(AbstractIndex::Normal(73923)))
+            ]),
+        )
+        .unwrap();
+    }
+    #[cfg(debug_assertions)]
+    #[test]
     #[should_panic(expected = "normalization callback contract violated in Wrap::apply")]
     fn wrapping_checks_encoded_free_index_identity() {
         let rep = ExtendibleReps::EUCLIDEAN.new_rep(3);
@@ -8028,7 +8082,7 @@ pub(crate) mod tests {
             owner: 73941,
             axis: 0,
         };
-        let source = SymbolicTensor::checked_parts(
+        let source = SymbolicTensor::from_produced_parts(
             FunctionBuilder::new(tensor_symbol!("wrapping_encoded_source"))
                 .add_arg(rep.to_symbolic([Atom::from(index)]))
                 .finish(),

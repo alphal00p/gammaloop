@@ -558,7 +558,7 @@ fn factored_contract_preserves_typed_logical_order_and_zero() {
     ] {
         let inferred = SymbolicTensor::<PartialStructure>::infer(source).unwrap();
         let mut tensor =
-            SymbolicTensor::checked_parts(inferred.expression, inferred.structure).unwrap();
+            SymbolicTensor::from_produced_parts(inferred.expression, inferred.structure).unwrap();
         tensor.structure = PartialStructure::from_logical_slots(
             tensor.structure.logical_slots().into_iter().rev(),
         );
@@ -685,7 +685,8 @@ fn factored_contract_keeps_checked_metric_callback_rank_loss_rejection() {
     );
     let source = ETS.metric(&a, &b) * FunctionBuilder::new(head).add_arg(&a).finish();
     let inferred = SymbolicTensor::<PartialStructure>::infer(source.clone()).unwrap();
-    let tensor = SymbolicTensor::checked_parts(inferred.expression, inferred.structure).unwrap();
+    let tensor =
+        SymbolicTensor::from_produced_parts(inferred.expression, inferred.structure).unwrap();
     calls.lock().unwrap().clear();
     let expected = source.schoonschip();
     let transcript = calls.lock().unwrap().clone();
@@ -818,11 +819,13 @@ fn powered_scalar_metric_cycle_sum_preserves_dummy_scope() {
             actual, expected,
             "each metric cycle copy owns its internal dummies; source={source}; legacy raw={raw}"
         );
-        let rerun =
-            SymbolicTensor::checked_parts(actual.clone(), PartialStructure::from_logical_slots([]))
-                .unwrap()
-                .contract(Default::default())
-                .unwrap();
+        let rerun = SymbolicTensor::from_produced_parts(
+            actual.clone(),
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap()
+        .contract(Default::default())
+        .unwrap();
         assert_eq!(rerun.expression, actual);
     }
 }
