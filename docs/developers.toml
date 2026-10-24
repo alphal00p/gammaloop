@@ -892,7 +892,8 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # payload-specific caches; same_reduction_state also compares retained occurrence
 # identity. Raw mutation and arbitrary replacement still require admission.
 # Reviewed 2026-10-23: Certified construction stays crate-private; metadata sharing and borrowed composition preserve authoritative interfaces. Public API examples document the existing algebra contracts.
-digest = "61c5470a85e144f021e7382909eb5ee93a9618b9"
+# Reviewed 2026-10-24: normalization contract checks, explicit producer trust, scalar scope handling and value/history documentation are described in the Idenso note; existing release validators remain intact.
+digest = "b3b99b48e6f28d0a7d30568f84a4d1d05c16d470"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/indexed.rs"
@@ -918,7 +919,8 @@ end_anchor = "    /// Scope explicit indices"
 # cached facts; mapped results are not re-admitted from normalized Atom syntax.
 # Reviewed 2026-10-23: Cooking and slot failures retain typed causes through mapped metadata operations. The syntax observer and authoritative admission boundaries remain unchanged.
 # No-impact attestation 2026-10-23: direct error-constructor mapping preserves representation-dimension inference.
-digest = "ef4c76753e299b2aefa9ab93c042e5930a9466da"
+# Reviewed 2026-10-24: dimension mapping retains its metadata-authoritative release path and checks user callback free-index preservation in debug builds.
+digest = "baaf9cb6ea598edc83c1135da5ebb0d0394d0505"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/contract.rs"
@@ -942,7 +944,8 @@ anchor = "pub struct ContractSettings<'a> {"
 # with independent permissions. Factorized coefficients and logical interfaces retain
 # the shared graph/tape owner.
 # Reviewed 2026-10-19: only deferred-frontier test inputs change in this file; all completion assertions remain. The Idenso/readiness notes explain the newly supported vector-sum partner contraction and unchanged unsupported generic-tensor policy.
-digest = "80401bae3bb93c4cde4721ae682d6f7f2091a596"
+# Reviewed 2026-10-24: the produced-parts constructor is renamed explicitly; contractor algorithms and existing release-time callback validation are unchanged.
+digest = "94e9d8b2efc414ab4457e7f33d9e8ee4a41b439c"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification.rs"

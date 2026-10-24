@@ -230,6 +230,13 @@ where
 /// # Ok::<(), TensorInferenceError>(())
 /// ```
 ///
+/// Value comparisons exclude provenance and retained index-occurrence history.
+/// `same_value` and `Hash` compare the symbolic value and logical port order;
+/// `PartialEq` also compares the stored structure and classification flags.
+/// Equal values can therefore carry different collision histories or completion
+/// proofs. Consumers reusing such facts must compare the established facts too,
+/// rather than treating value equality as a metadata certificate.
+///
 /// With the `bincode` feature, tensor archives are trusted GammaLoop state files.
 /// Decode trusts stored interface and index-history metadata without observing the
 /// payload again. Symbolica's Atom decoder is not safe for untrusted bytes; the

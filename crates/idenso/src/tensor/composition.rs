@@ -84,7 +84,9 @@ impl SymbolicTensor<PartialStructure> {
     }
 
     /// Exact normalized tensor-value equality, including public logical port order.
-    /// Derived implementation flags and carried proofs are not mathematical data.
+    /// Derived implementation flags, provenance, carried index history and proofs
+    /// are not mathematical data. Value equality cannot certify identical future
+    /// collision checks or interchangeable cached facts.
     pub fn same_value(&self, other: &Self) -> bool {
         self.expression == other.expression
             && self.structure.logical_slots() == other.structure.logical_slots()
