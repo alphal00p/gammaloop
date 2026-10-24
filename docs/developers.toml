@@ -838,7 +838,8 @@ anchor = "pub struct SymbolicTensor<S = OrderedStructure<LibraryRep, AbstractInd
 # Reviewed 2026-10-16: Symbolic TensorFromExpression retains the canonical source layout; reviewed against the Idenso symbolic-target and Spenso realization descriptions.
 # Reviewed 2026-10-17: The Idenso note records retained reduction state, declared-interface persistence, consuming component handoff and its logical layout.
 # Reviewed 2026-10-18: The Idenso note documents indexed admission and checked methods, proof-preserving native interoperability, component lowering and explicit-slot archives; both interfaces share one algebra engine.
-digest = "f6aa7542185c7f83f9438d272e9ca1b5b289fe21"
+# Reviewed 2026-10-23: Shared exact collector exports remain crate-private; the tensor carrier is unchanged.
+digest = "6f0a47dc0f71c67e1afa1686b94d3436480dbe80"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/indexed.rs"
@@ -904,7 +905,12 @@ anchor = "pub struct AlgebraSettings {"
 # completion rules while moving owned input at the existing ownership boundary.
 # Idenso and readiness notes distinguish removed payload copies from remaining
 # metadata and adapter copies; no runtime improvement is claimed without measurement.
-digest = "4969892c1c56ffb37acd8c45bc58165f39b1c12c"
+# Reviewed 2026-10-22: the Idenso note records complete color rows, enabled-seed
+# prerequisites, retained disabled components and unchanged spectator factorization.
+# Reviewed 2026-10-23: unchanged here; the shared color seed policy no longer
+# recurses through arithmetic, and disabled components are color algebra again.
+# Reviewed 2026-10-23: The planner threads coefficient-collection permission into both color and Dirac kernels.
+digest = "3a0628ea619e65a4c7e10e270e7a4aa29fd4e07b"
 
 [[section.note.scope]]
 path = "crates/idenso/src/tensor/simplification/observation.rs"
@@ -931,6 +937,7 @@ end_anchor = "    /// Adjacent pairs remain cheapest."
 # Reviewed 2026-10-16: The architecture records weighted Dirac trace recurrence and strict physical gamma0 dimensions, preserving spectator powers.
 # Reviewed 2026-10-17: shared named fixes preserve formal dimensions in temporal
 # sandwiches and uniformly reversed adjacent pairs; mixed-orientation guards remain.
+# Reviewed 2026-10-23: Dirac now imports the tensor-level collector; trace identities and their scoped behavior are unchanged.
 digest = "95ebfc105ffb0f9e506105642a6e1629b0e28ae8"
 
 [[section.note.scope]]
@@ -954,7 +961,38 @@ anchor = "    fn simplify_product("
 # Reviewed 2026-10-17: normalized f-squares share the guarded two-f owner;
 # numeric phases and spectator powers remain factors, with no sum distribution.
 # Reviewed 2026-10-19: the Idenso and readiness notes record guarded closed quartic Gram reduction, raw-adjoint signs and spectator factorization; independent exact SU(2) matrix controls check the coefficient for all representation pairs.
-digest = "c8b1cab3f51883ca896853b12ae37030407d8ae7"
+# Reviewed 2026-10-22: complete selected products receive whole-product dummy
+# canonicalization; the note covers selective collection and exact no-op retention.
+# Reviewed 2026-10-22: the Idenso note records exact color-row coefficient
+# completion before certification and spectator reattachment, with opaque factors.
+# Reviewed 2026-10-23: selected sums stay whole rows again, so the kernel renames
+# captured summand dummies; metrics and disabled traces are color algebra as before
+# the retained-component change, and row prerequisites follow the planner's status rule.
+# Reviewed 2026-10-23: Certified color rows and final weights use the shared collector; external metrics certify terminal rows, metric-only sums remain arithmetic, and local facts are cleared before planner publication.
+digest = "34dfbdb59da43b47aa9966b4ae168452ddaa554d"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/collection/collected.rs"
+symbol = "idenso::tensor::CollectedOutput"
+anchor = "pub(crate) struct CollectedOutput"
+# Reviewed 2026-10-23: Dirac and color share exact polynomial coefficient
+# collection, opaque source sums and powers, and rational-domain/degree refusal.
+# Terminal atom results use the same owner as trace recurrence polynomials.
+# Reviewed 2026-10-23: Shared materialization preserves color sum factors and exact complex phases, with literal-zero normalization and existing refusal gates.
+# Reviewed 2026-10-23: Documented the scoped doc-hidden temporary-variable
+# exception; Dirac regressions pin shared exact complex collection and typed-zero
+# cancellation. The shared owner and architecture description remain unchanged.
+digest = "de3aeb2b35712816908c6f6490d548e46cb864ba"
+
+[[section.note.scope]]
+path = "crates/idenso/src/tensor/collection.rs"
+symbol = "idenso::tensor::SymbolicTensor::collect_with_map"
+anchor = "    pub(crate) fn collect_with_map("
+end_anchor = "    fn collection_observations("
+# Reviewed 2026-10-23: the two-argument finalizer combines completed rows;
+# source-origin bookkeeping is removed with the bespoke color arithmetic.
+# Callback timing, immutable spectators and frontier gates remain unchanged.
+digest = "fea694882a4b5be3160175636d9ecaeaa1b6ecfe"
 
 [[section.note]]
 id = "idenso-form-color-dirac-source-map"
@@ -1587,7 +1625,11 @@ anchor = "pub(crate) fn group_diagrams("
 # Reviewed 2026-10-17: Exact scalar ratios decode dimension metadata before the unchanged scalar predicate and respect formal versus concrete color choice; tensor bodies and numerical fallback policy remain unchanged.
 # Reviewed 2026-10-19: the same typed preparation body now uses caller iterators for explicit threads(1); parallel defaults, logical ordering and progress/cancellation remain. The readiness note records the scheduling change without claiming a speedup.
 # Reviewed 2026-10-19: exact preparation collects existing numerical content and scalar factors before its single index canonicalization. The added chiral-cycle control is red before this reorder and green afterward, preserves dummy/order variants and rejects a distinct matrix; no graph expansion or reference change.
-digest = "fc33f3fc768c2d69937c7c65535713b2f90df5de"
+# No architecture impact 2026-10-22: only the index-label regression changes here;
+# production grouping retains its direct color-only simplify_algebra call.
+# The Idenso note records the repair at the existing color simplification owner.
+# Reviewed 2026-10-23: Retained regression coverage and the documented shared-collection contract were rechecked.
+digest = "39d7284b3b43cb921e4a0085411bb630a35bc53c"
 
 [[section.note]]
 id = "nix-crane-cache-reuse"

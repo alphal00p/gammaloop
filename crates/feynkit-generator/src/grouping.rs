@@ -4084,6 +4084,72 @@ mod tests {
         assert_eq!(grouped.groups[0].members[0].source_diagram, 3);
     }
 
+    #[test]
+    fn zero_detection_does_not_depend_on_index_labels() {
+        let model = Arc::new(model());
+        // Index payloads are cooked to symbols in the order a process first
+        // meets them; for generated half-edge labels that order changes from
+        // process to process. Relabelling the dummies of a color zero must not
+        // change its proof, also beside an indexed momentum spectator. Each
+        // copy uses fresh labels, cooked in its own term order.
+        let numerator = |labels: [i64; 6]| {
+            let index = |label: i64| function!(symbol!("feynkit_grouping_test::label"), label);
+            let [a, b, c, d, e] = [0, 1, 2, 3, 4].map(|position| {
+                ColorAdjoint {}
+                    .new_rep(8)
+                    .to_symbolic([index(labels[position])])
+            });
+            let lorentz = Minkowski {}.new_rep(4).to_symbolic([index(labels[5])]);
+            let momentum = |edge: i64| {
+                FunctionBuilder::new(crate::momentum_symbol())
+                    .add_arg(edge)
+                    .add_arg(&lorentz)
+                    .finish()
+            };
+            idenso::color_f!(&a, &b, &c)
+                * idenso::color_f!(&a, &b, &d)
+                * idenso::color_f!(&c, &d, &e)
+                * momentum(0)
+                * momentum(2)
+        };
+        let inputs = (0..6)
+            .flat_map(|shift| [(shift, false), (shift, true)])
+            .map(|(shift, reversed)| {
+                // Rotations and reflections of one label order.
+                let offset = 1000 + 10 * (2 * shift + i64::from(reversed));
+                let labels = [0, 1, 2, 3, 4, 5].map(|position| {
+                    let position = (position + shift) % 6;
+                    offset + if reversed { 5 - position } else { position }
+                });
+                diagram_with_atoms(
+                    &model,
+                    &format!("relabelled-{shift}-{reversed}"),
+                    numerator(labels),
+                    Atom::one(),
+                    25,
+                    25,
+                )
+            })
+            .collect::<Vec<_>>();
+        let grouped = group_diagrams(
+            inputs,
+            &model,
+            &NumeratorGrouping::None,
+            false,
+            &GenerationOptions::default().filter_zero_color(true),
+        )
+        .unwrap();
+        assert_eq!(
+            grouped
+                .diagrams
+                .iter()
+                .map(|diagram| diagram.name())
+                .collect::<Vec<_>>(),
+            Vec::<&str>::new()
+        );
+        assert_eq!(grouped.zero_numerator_count, 12);
+    }
+
     #[cfg(not(target_arch = "wasm32"))]
     #[test]
     fn parallel_zero_detection_preserves_input_order_and_progress() {

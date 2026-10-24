@@ -20,8 +20,9 @@ use symbolica::atom::{Atom, AtomView};
 use super::is_four_dimension;
 use super::{THREE_GAMMA_METRIC_TERMS, is_minkowski_slot};
 use crate::epsilon::epsilon4;
+use crate::tensor::CollectedOutput;
 
-pub(super) mod collected;
+mod collected;
 mod factored;
 #[cfg(test)]
 mod sparse;
@@ -643,7 +644,7 @@ pub(super) fn evaluate_generic_with_metrics<'a>(
     trace_unit: AtomView<'a>,
     canonical_arguments: bool,
     _output: TraceOutput,
-    collect: Option<&mut collected::CollectedOutput<'_>>,
+    collect: Option<&mut CollectedOutput<'_>>,
     metric_value: impl FnMut(AtomView<'a>, AtomView<'a>) -> Option<Atom>,
 ) -> Option<Atom> {
     if indices.len() % 2 == 1 {
@@ -701,11 +702,11 @@ pub(super) fn evaluate_generic_with_metrics<'a>(
         };
     }
     if let Some(output) = collect {
-        output.begin_trace();
+        output.begin();
         let mut trace = trace.with_output(output);
         let result = trace.evaluate(&word);
         return (!trace.metric_refused)
-            .then(|| collected::CollectedOutput::finish(trace.output, result))
+            .then(|| CollectedOutput::finish(trace.output, result))
             .flatten();
     }
     let result = trace.evaluate(&word);

@@ -1,7 +1,9 @@
 #[cfg(test)]
 use crate::shorthands::schoonschip::Schoonschip;
+use crate::tensor::CollectedOutput;
 #[cfg(test)]
 use spenso::g;
+use std::cell::RefCell;
 use std::{collections::HashMap, sync::LazyLock};
 
 use spenso::{
@@ -535,9 +537,7 @@ impl SymbolicTensor<PartialStructure> {
         let representation = Bispinor {}.into();
         let dummies = Self::reserved_dummies([self]);
         let mut paired_metrics = HashMap::new();
-        let collected = std::cell::RefCell::new(trace_kernel::collected::CollectedOutput::new(
-            self.reduction_observations(),
-        ));
+        let collected = RefCell::new(CollectedOutput::new(self.reduction_observations()));
         let standalone_trace = matches!(self.expression.as_view(), AtomView::Fun(function)
             if function.get_symbol() == T.trace);
         let mut simplify = |selected: Self, complete: bool, coefficient: &mut Self| {
@@ -1054,7 +1054,7 @@ impl<'settings> DiracSimplifier<'settings> {
         expression: AtomView<'_>,
         coefficient: &mut SymbolicTensor<PartialStructure>,
         paired: &mut HashMap<Atom, SymbolicTensor<PartialStructure>>,
-        collected: Option<&std::cell::RefCell<trace_kernel::collected::CollectedOutput<'_>>>,
+        collected: Option<&RefCell<CollectedOutput<'_>>>,
     ) -> Result<Option<SymbolicTensor<PartialStructure>>, TensorInferenceError> {
         use crate::tensor::{ContractSettings, ReductionStatus, inference::InterfaceInference};
         use linnet::tree::child_vec::ChildVecStore;
