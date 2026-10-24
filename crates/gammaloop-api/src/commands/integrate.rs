@@ -1,66 +1,57 @@
-use std::{
-    any::Any,
-    collections::{BTreeMap, HashSet},
-    fmt, fs,
-    io::{self, IsTerminal, Write},
-    ops::Deref,
-    panic::{self, AssertUnwindSafe},
-    path::PathBuf,
-    sync::mpsc,
-    thread,
-    time::Duration,
-};
+use std::any::Any;
+use std::collections::{BTreeMap, HashSet};
+use std::fmt;
+use std::io::{self, IsTerminal, Write};
+use std::ops::Deref;
+use std::panic::{self, AssertUnwindSafe};
+use std::path::PathBuf;
+use std::slice;
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 use clap::{ArgAction, Args, ValueEnum};
-use crossterm::{
-    cursor::{Hide, MoveDown, MoveToColumn, MoveUp, Show},
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    execute, queue,
-    terminal::{
-        self, disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
-        LeaveAlternateScreen,
-    },
+use color_eyre::eyre::eyre;
+use color_eyre::{Report, Result, Section};
+use colored::Colorize;
+use crossterm::cursor::{Hide, MoveDown, MoveToColumn, MoveUp, Show};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
+use crossterm::terminal::{
+    self, disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen,
+    LeaveAlternateScreen,
 };
-use gammalooprs::integrands::process::GaussianReferenceFunction;
-use gammalooprs::utils::serde_utils::{IsDefault, SmartSerde};
+use crossterm::{execute, queue};
+use gammalooprs::integrands::process::{GaussianReferenceFunction, ProcessIntegrand};
+use gammalooprs::integrands::{HasIntegrand, Integrand};
+use gammalooprs::integrate;
+use gammalooprs::integrate::{
+    ContributionSortMode, HavanaIntegrateRequest, IntegrationCheckpoint,
+    IntegrationCheckpointError, IntegrationCheckpointRecovery, IntegrationSlot, IntegrationState,
+    IntegrationStatusKind, IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions,
+    IntegrationWorkspace, IntegrationWorkspaceManifest, IterationBatchingSettings,
+    LoadedIntegrationSlot, RatatuiDashboardState, SamplingCorrelationMode, SlotIndex, SlotMeta,
+    StatusUpdate, TabledRenderOptions, WorkspaceSnapshotControl,
+};
+use gammalooprs::model::{Model, SerializableInputParamCard};
+use gammalooprs::observables::ObservableSnapshotBundle;
+use gammalooprs::settings::runtime::{IntegratedPhase, IntegrationResult, SamplingSettings};
+use gammalooprs::settings::RuntimeSettings;
+use gammalooprs::utils::serde_utils::IsDefault;
+use gammalooprs::utils::F;
+use gammalooprs::{request_interrupt, request_iteration_abort};
+use itertools::{izip, Itertools};
+use ratatui::backend::CrosstermBackend;
+use ratatui::Terminal;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spenso::algebra::complex::Complex;
-use unicode_width::UnicodeWidthChar;
-
-use color_eyre::{eyre::eyre, Result};
-use colored::Colorize;
-use gammalooprs::{
-    integrands::{HasIntegrand, Integrand},
-    integrate::{
-        build_integration_result, emit_integration_status_via_tracing, havana_integrate,
-        latest_observable_resume_state_path, print_integral_result,
-        render_saved_integration_summary, render_status_update_tabled, slot_workspace_path,
-        workspace_manifest_path, workspace_state_path, ContributionSortMode,
-        HavanaIntegrateRequest, IntegrationSlot, IntegrationState, IntegrationStatusKind,
-        IntegrationStatusPhaseDisplay, IntegrationStatusViewOptions, IntegrationWorkspaceManifest,
-        IterationBatchingSettings, RatatuiDashboardState, SamplingCorrelationMode, SlotMeta,
-        StatusUpdate, TabledRenderOptions, WorkspaceSnapshotControl,
-    },
-    model::{Model, SerializableInputParamCard},
-    observables::ObservableSnapshotBundle,
-    request_interrupt, request_iteration_abort,
-    settings::{
-        runtime::{IntegratedPhase, IntegrationResult, SamplingSettings},
-        RuntimeSettings,
-    },
-    utils::F,
-};
-use itertools::{izip, Itertools};
-use ratatui::{backend::CrosstermBackend, Terminal};
 use symbolica::numerical_integration::Grid;
 use tracing::{info, warn};
+use unicode_width::UnicodeWidthChar;
 
-use crate::{
-    completion::CompletionArgExt,
-    state::{ProcessRef, State},
-    CLISettings,
-};
+use crate::completion::CompletionArgExt;
+use crate::state::{ProcessRef, State};
+use crate::CLISettings;
 
 #[cfg_attr(
     feature = "python_api",
@@ -68,7 +59,8 @@ use crate::{
 )]
 #[derive(Debug, Args, Serialize, Deserialize, Clone, JsonSchema, PartialEq)]
 pub struct Integrate {
-    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`; repeat with `-i` to select multiple integrands
+    /// Process reference: `#<id>`, `name:<name>`, or `<id>/<name>`;
+    /// repeat with `-i` to select multiple integrands
     #[arg(
         short = 'p',
         long = "process",
@@ -94,7 +86,8 @@ pub struct Integrate {
     #[arg(short = 'w', long, value_hint = clap::ValueHint::DirPath)]
     pub workspace_path: Option<PathBuf>,
 
-    /// Specify a target as either `re im` / `re,im` for one shared target or `process@integrand=re,im`
+    /// Specify a target as either `re im` / `re,im` for one shared target
+    /// or `process@integrand=re,im`
     #[arg(
         short = 't',
         long,
@@ -650,8 +643,9 @@ impl StreamingDisplayController {
         kind: IntegrationStatusKind,
         status_update: &StatusUpdate,
     ) -> Result<()> {
-        let status_block = render_status_update_tabled(status_update, &self.tabled_options);
-        emit_integration_status_via_tracing(kind, &status_block)
+        let status_block =
+            integrate::render_status_update_tabled(status_update, &self.tabled_options);
+        integrate::emit_integration_status_via_tracing(kind, &status_block)
     }
 
     fn handle_panic(&mut self, payload: Box<dyn Any + Send>) -> color_eyre::Report {
@@ -679,7 +673,7 @@ impl StreamingDisplayController {
         status_update: &StatusUpdate,
     ) -> String {
         if matches!(renderer_kind, RendererOption::Tabled) {
-            render_status_update_tabled(status_update, &tabled_options)
+            integrate::render_status_update_tabled(status_update, &tabled_options)
         } else {
             String::new()
         }
@@ -943,39 +937,6 @@ struct ResolvedIntegrandSlot {
     slot_meta: SlotMeta,
 }
 
-fn slot_settings_path(workspace: &std::path::Path, slot_meta: &SlotMeta) -> PathBuf {
-    slot_workspace_path(workspace, slot_meta).join("settings.toml")
-}
-
-fn read_existing_workspace_state(
-    workspace_path: &std::path::Path,
-) -> Result<(IntegrationWorkspaceManifest, IntegrationState)> {
-    let manifest = IntegrationWorkspaceManifest::from_file(
-        workspace_manifest_path(workspace_path),
-        "integration manifest",
-    )?;
-    manifest.validate_version()?;
-    let state_path = workspace_state_path(workspace_path);
-    let state_bytes = fs::read(&state_path).map_err(|err| {
-        eyre!(
-            "Could not read integration workspace state from {}: {err}",
-            state_path.display()
-        )
-    })?;
-    let integration_state = bincode::decode_from_slice::<IntegrationState, _>(
-        &state_bytes,
-        bincode::config::standard(),
-    )
-    .map_err(|err| {
-        eyre!(
-"Could not deserialize integration state from {}: {err}. The checkpoint may use an incompatible accumulator layout; use --restart to start a new integration.",
-            state_path.display()
-        )
-    })?
-    .0;
-    Ok((manifest, integration_state))
-}
-
 fn grids_have_compatible_sample_shape(lhs: &Grid<F<f64>>, rhs: &Grid<F<f64>>) -> bool {
     match (lhs, rhs) {
         (Grid::Continuous(lhs), Grid::Continuous(rhs)) => {
@@ -1010,6 +971,32 @@ fn grids_have_compatible_sample_shape(lhs: &Grid<F<f64>>, rhs: &Grid<F<f64>>) ->
 }
 
 impl Integrate {
+    fn checkpoint_diagnostic(&self, error: IntegrationCheckpointError) -> Report {
+        let hint = if self.show_summary_only {
+            None
+        } else {
+            match error.recovery_action() {
+                Some(IntegrationCheckpointRecovery::FreshWorkspace) => Some(
+                    "Choose a new --workspace-path, or delete the existing workspace folder \
+                     to start a fresh integration.",
+                ),
+                Some(IntegrationCheckpointRecovery::DedicatedWorkspace) => {
+                    Some("Choose a new --workspace-path dedicated to integration outputs.")
+                }
+                Some(IntegrationCheckpointRecovery::RestoreReference) => Some(
+                    "Repeat the saved --reference-gaussian descriptor, or use --restart \
+                     to change the reference configuration.",
+                ),
+                None => None,
+            }
+        };
+        let report = Report::new(error);
+        match hint {
+            Some(hint) => report.suggestion(hint),
+            None => report,
+        }
+    }
+
     pub fn from_slots<I, S>(slots: I) -> Self
     where
         I: IntoIterator<Item = (ProcessRef, S)>,
@@ -1040,7 +1027,7 @@ impl Integrate {
         self
     }
 
-    fn default_workspace_path(&self, global_cli_settings: &CLISettings) -> PathBuf {
+    pub(crate) fn default_workspace_path(global_cli_settings: &CLISettings) -> PathBuf {
         if global_cli_settings.session.read_only_state {
             global_cli_settings.cwd_output_path_with_state_name("integration_workspace")
         } else {
@@ -1077,7 +1064,8 @@ impl Integrate {
                 .collect::<Result<Vec<_>>>()?
         } else {
             return Err(eyre!(
-                "The integrate command expects repeated `-p/-i` pairs. Received {} process selector(s) and {} integrand selector(s).",
+                "The integrate command expects repeated `-p/-i` pairs. \
+                 Received {} process selector(s) and {} integrand selector(s).",
                 self.process.len(),
                 self.integrand_name.len()
             ));
@@ -1205,14 +1193,19 @@ impl Integrate {
     }
 
     fn parse_target_components(first: &str, second: Option<&str>) -> Result<Complex<F<f64>>> {
-        if let Some(second) = second {
-            return Ok(Complex::new(F(first.parse()?), F(second.parse()?)));
+        let (re, im) = match second {
+            Some(second) => (first, second),
+            None => first
+                .split_once(',')
+                .ok_or_else(|| eyre!("Targets must be provided as `re im` or `re,im`"))?,
+        };
+        let target = Complex::new(F(re.parse::<f64>()?), F(im.parse::<f64>()?));
+        if !target.re.0.is_finite() || !target.im.0.is_finite() {
+            return Err(eyre!(
+                "Integration targets must have finite real and imaginary components"
+            ));
         }
-
-        let (re, im) = first
-            .split_once(',')
-            .ok_or_else(|| eyre!("Targets must be provided as `re im` or `re,im`"))?;
-        Ok(Complex::new(F(re.parse()?), F(im.parse()?)))
+        Ok(target)
     }
 
     fn resolve_targets(
@@ -1241,7 +1234,8 @@ impl Integrate {
         for target in &self.target {
             let (slot_key, values) = target.split_once('=').ok_or_else(|| {
                 eyre!(
-                    "Multi-integrand targets must use the keyed form `--target process@integrand=re,im`"
+                    "Multi-integrand targets must use the keyed form \
+                     `--target process@integrand=re,im`"
                 )
             })?;
             let parsed = Self::parse_target_components(values, None)?;
@@ -1287,202 +1281,170 @@ impl Integrate {
         &self,
         state: &mut State,
         selected_slots: &[ResolvedIntegrandSlot],
-        requested: &mut IntegrationWorkspaceManifest,
-        workspace_path: &std::path::Path,
+        requested: &IntegrationWorkspaceManifest,
+        checkpoint: Option<&IntegrationCheckpoint>,
     ) -> Result<Option<IntegrationState>> {
-        let path_to_state = workspace_state_path(workspace_path);
-        let manifest_path = workspace_manifest_path(workspace_path);
-        match fs::read(&path_to_state) {
-            Ok(state_bytes) => {
-                let manifest: IntegrationWorkspaceManifest =
-                    IntegrationWorkspaceManifest::from_file(
-                        &manifest_path,
-                        "integration manifest",
-                    )?;
-                manifest.validate_version()?;
-                manifest.validate_reference_config(&requested.reference_gaussians)?;
-                if requested.reference_gaussians.iter().any(Option::is_some)
-                    && manifest.targets != requested.targets
-                {
-                    return Err(eyre!(
-                        "Reference workspace must retain both normalized observable targets equal to one"
-                    ));
-                }
-                if manifest.sampling_correlation_mode != self.sampling_correlation_mode() {
-                    return Err(eyre!(
-                        "Workspace integration sampling mode does not match the requested mode; use --restart to switch between correlated and uncorrelated integration"
-                    ));
-                }
-                if manifest.slots != requested.slots {
-                    return Err(eyre!(
-                        "Workspace integration slots do not match the currently selected integrands"
-                    ));
-                }
-                if manifest.targets != requested.targets {
-                    warn!("targets have changed with respect to workspace, reverting changes");
-                    requested.targets = manifest.targets.clone();
-                }
-                if manifest.integrand_fingerprints.len() != selected_slots.len() {
-                    return Err(eyre!(
-                        "Workspace integrand fingerprint metadata is inconsistent with the selected slots"
-                    ));
-                }
-                if manifest.effective_model_parameters.len() != selected_slots.len() {
-                    return Err(eyre!(
-                        "Workspace effective model parameter metadata is inconsistent with the selected slots"
-                    ));
-                }
-                if requested.effective_model_parameters.len() != selected_slots.len() {
-                    return Err(eyre!(
-                        "Current effective model parameter metadata is inconsistent with the selected slots"
-                    ));
-                }
-                let mismatched_slots = selected_slots
-                    .iter()
-                    .zip(manifest.effective_model_parameters.iter())
-                    .zip(requested.effective_model_parameters.iter())
-                    .filter(|((_, saved_card), current_card)| saved_card != current_card)
-                    .map(|((slot, _), _)| slot.slot_meta.key())
-                    .collect_vec();
-                if !mismatched_slots.is_empty() {
-                    return Err(eyre!(
-                        "Workspace effective model parameters do not match the current state for {}. Resume requires an exact match; use --restart or restore the shared/per-integrand model parameters.",
-                        mismatched_slots.join(", ")
-                    ));
-                }
-                let workspace_settings = selected_slots
-                    .iter()
-                    .map(|slot| {
-                        RuntimeSettings::from_file(
-                            slot_settings_path(workspace_path, &slot.slot_meta),
-                            &format!("workspace settings for {}", slot.slot_meta.key()),
-                        )
-                    })
-                    .collect::<Result<Vec<_>>>()?;
-                let comparison_integrand_fingerprints = izip!(
-                    selected_slots.iter(),
-                    workspace_settings.iter(),
-                    requested.integrand_fingerprints.iter(),
-                )
-                .map(|(slot, settings, current_fingerprint)| {
-                    if settings.sampling.selected_graph_names().is_empty() {
-                        return Ok(current_fingerprint.clone());
-                    }
-
-                    // A filtered workspace fingerprints the warmed full source. Recreate that
-                    // state on a clone with the saved non-model settings so a permitted settings
-                    // change cannot mutate the live source or invalidate resume prematurely.
-                    let mut integrand = state
-                        .process_list
-                        .get_integrand(slot.process_id, &slot.slot_meta.integrand_name)?
-                        .require_generated()?
-                        .clone();
-                    let preserved_model_overrides = integrand.get_settings().model.clone();
-                    *integrand.get_mut_settings() = settings.clone();
-                    integrand.get_mut_settings().model = preserved_model_overrides;
-                    let model = state.resolve_model_for_integrand(
-                        slot.process_id,
-                        &slot.slot_meta.integrand_name,
-                    )?;
-                    integrand.warm_up(&model)?;
-                    integrand.resume_fingerprint()
-                })
-                .collect::<Result<Vec<_>>>()?;
-                let mismatched_fingerprint_slots = selected_slots
-                    .iter()
-                    .zip(manifest.integrand_fingerprints.iter())
-                    .zip(comparison_integrand_fingerprints.iter())
-                    .filter(|&((_, saved), current)| saved != current)
-                    .map(|((slot, _), _)| slot.slot_meta.key())
-                    .collect_vec();
-                if !mismatched_fingerprint_slots.is_empty() {
-                    return Err(eyre!(
-                        "Workspace integrand fingerprints do not match the current generated integrands for {}. Resume requires the exact same generated integrands; use --restart or restore the previous generation.",
-                        mismatched_fingerprint_slots.join(", ")
-                    ));
-                }
-
-                info!(
-                    "{}",
-                    "Found integration state, result of previous integration:".yellow()
-                );
-                info!("");
-
-                let integration_state: IntegrationState =
-                    bincode::decode_from_slice::<IntegrationState, _>(
-                        &state_bytes,
-                        bincode::config::standard(),
-                    )
-                    .map_err(|err| {
-                        eyre!(
-"Could not deserialize integration state from {}: {err}. The checkpoint may use an incompatible accumulator layout; use --restart to start a new integration.",
-                            path_to_state.display()
-                        )
-                    })?
-                    .0;
-
-                for ((slot, target), workspace_settings) in selected_slots
-                    .iter()
-                    .zip(requested.targets.iter())
-                    .zip(workspace_settings)
-                {
-                    let gloop_integrand = state
-                        .process_list
-                        .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?;
-                    let current_settings = gloop_integrand.get_mut_settings();
-                    if *current_settings != workspace_settings {
-                        warn!(
-                            "settings for {} have changed with respect to workspace, reverting non-model changes",
-                            slot.slot_meta.key()
-                        );
-                        let preserved_model_overrides = current_settings.model.clone();
-                        *current_settings = workspace_settings;
-                        current_settings.model = preserved_model_overrides;
-                    }
-
-                    let label = format!("itg {}", slot.slot_meta.key());
-                    let saved_slot = integration_state
-                        .all_integrals
-                        .get(
-                            selected_slots
-                                .iter()
-                                .position(|candidate| candidate.slot_meta == slot.slot_meta)
-                                .expect("selected slot must exist"),
-                        )
-                        .expect("saved slot must exist");
-                    print_integral_result(
-                        &saved_slot.re,
-                        &label,
-                        integration_state.iter,
-                        "re",
-                        target.as_ref().map(|value| value.re),
-                    );
-                    print_integral_result(
-                        &saved_slot.im,
-                        &label,
-                        integration_state.iter,
-                        "im",
-                        target.as_ref().map(|value| value.im),
-                    );
-                }
-                info!("");
-                warn!(
-                    "Any changes to the settings will be ignored, integrate with the {} option for changes to take effect",
-                    "--restart".blue()
-                );
-                info!("{}", "Resuming integration".yellow());
-
-                Ok(Some(integration_state))
+        let Some(checkpoint) = checkpoint else {
+            if self.restart {
+                info!("Starting a fresh integration as requested by --restart");
+            } else {
+                info!("No integration checkpoint found, starting new integration");
             }
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {
-                info!("No integration state found, starting new integration");
-                Ok(None)
-            }
-            Err(err) => Err(eyre!(
-                "Could not read integration workspace state from {}: {err}",
-                path_to_state.display()
-            )),
+            return Ok(None);
+        };
+        let manifest = &checkpoint.manifest().workspace;
+        manifest
+            .validate_reference_config(&requested.reference_gaussians)
+            .map_err(|error| self.checkpoint_diagnostic(error))?;
+        if requested.reference_gaussians.iter().any(Option::is_some)
+            && manifest.targets != requested.targets
+        {
+            return Err(eyre!(
+                "Reference workspace must retain both normalized observable targets equal to one"
+            ));
         }
+        if manifest.sampling_correlation_mode != self.sampling_correlation_mode() {
+            return Err(eyre!(
+                "Workspace integration sampling mode does not match the requested mode; \
+                 use --restart to switch between correlated and uncorrelated integration"
+            ));
+        }
+        if manifest.slots != requested.slots {
+            return Err(eyre!(
+                "Workspace integration slots do not match the currently selected integrands"
+            ));
+        }
+        if manifest.targets != requested.targets {
+            warn!("targets have changed with respect to workspace, reverting changes");
+        }
+        let mismatched_slots = selected_slots
+            .iter()
+            .zip(manifest.effective_model_parameters.iter())
+            .zip(requested.effective_model_parameters.iter())
+            .filter(|((_, saved_card), current_card)| saved_card != current_card)
+            .map(|((slot, _), _)| slot.slot_meta.key())
+            .collect_vec();
+        if !mismatched_slots.is_empty() {
+            return Err(eyre!(
+                "Workspace effective model parameters do not match the current state for {}. \
+                 Resume requires an exact match; use --restart or restore the \
+                 shared/per-integrand model parameters.",
+                mismatched_slots.join(", ")
+            ));
+        }
+        let loaded = checkpoint
+            .load()
+            .map_err(|error| self.checkpoint_diagnostic(error))?;
+        let workspace_settings = loaded
+            .slots
+            .into_iter()
+            .map(|slot| slot.settings)
+            .collect_vec();
+        let comparison_integrand_fingerprints = izip!(
+            selected_slots.iter(),
+            workspace_settings.iter(),
+            requested.integrand_fingerprints.iter(),
+        )
+        .map(|(slot, settings, current_fingerprint)| {
+            if settings.sampling.selected_graph_names().is_empty() {
+                return Ok(current_fingerprint.clone());
+            }
+
+            // A filtered workspace fingerprints the warmed full source. Recreate that
+            // state on a clone with the saved non-model settings so a permitted settings
+            // change cannot mutate the live source or invalidate resume prematurely.
+            let mut integrand = state
+                .process_list
+                .get_integrand(slot.process_id, &slot.slot_meta.integrand_name)?
+                .require_generated()?
+                .clone();
+            let preserved_model_overrides = integrand.get_settings().model.clone();
+            *integrand.get_mut_settings() = settings.clone();
+            integrand.get_mut_settings().model = preserved_model_overrides;
+            let model = state
+                .resolve_model_for_integrand(slot.process_id, &slot.slot_meta.integrand_name)?;
+            integrand.warm_up(&model)?;
+            integrand.resume_fingerprint()
+        })
+        .collect::<Result<Vec<_>>>()?;
+        let mismatched_fingerprint_slots = selected_slots
+            .iter()
+            .zip(manifest.integrand_fingerprints.iter())
+            .zip(comparison_integrand_fingerprints.iter())
+            .filter(|&((_, saved), current)| saved != current)
+            .map(|((slot, _), _)| slot.slot_meta.key())
+            .collect_vec();
+        if !mismatched_fingerprint_slots.is_empty() {
+            return Err(eyre!(
+                "Workspace integrand fingerprints do not match the current generated \
+                 integrands for {}. Resume requires the exact same generated integrands; \
+                 use --restart or restore the previous generation.",
+                mismatched_fingerprint_slots.join(", ")
+            ));
+        }
+
+        info!(
+            "{}",
+            "Found integration state, result of previous integration:".yellow()
+        );
+        info!("");
+
+        let integration_state = loaded.state;
+
+        for ((slot, target), workspace_settings) in selected_slots
+            .iter()
+            .zip(manifest.targets.iter())
+            .zip(workspace_settings)
+        {
+            let gloop_integrand = state
+                .process_list
+                .get_integrand_mut(slot.process_id, &slot.slot_meta.integrand_name)?;
+            let current_settings = gloop_integrand.get_mut_settings();
+            if *current_settings != workspace_settings {
+                warn!(
+                    "settings for {} have changed with respect to workspace, \
+                     reverting non-model changes",
+                    slot.slot_meta.key()
+                );
+                let preserved_model_overrides = current_settings.model.clone();
+                *current_settings = workspace_settings;
+                current_settings.model = preserved_model_overrides;
+            }
+
+            let label = format!("itg {}", slot.slot_meta.key());
+            let saved_slot = integration_state
+                .all_integrals
+                .get(
+                    selected_slots
+                        .iter()
+                        .position(|candidate| candidate.slot_meta == slot.slot_meta)
+                        .expect("selected slot must exist"),
+                )
+                .expect("saved slot must exist");
+            integrate::print_integral_result(
+                &saved_slot.re,
+                &label,
+                integration_state.iter,
+                "re",
+                target.as_ref().map(|value| value.re),
+            );
+            integrate::print_integral_result(
+                &saved_slot.im,
+                &label,
+                integration_state.iter,
+                "im",
+                target.as_ref().map(|value| value.im),
+            );
+        }
+        info!("");
+        warn!(
+            "Any changes to the settings will be ignored, \
+             integrate with the {} option for changes to take effect",
+            "--restart".blue()
+        );
+        info!("{}", "Resuming integration".yellow());
+
+        Ok(Some(integration_state))
     }
 
     fn warm_and_clone_integrands(
@@ -1490,7 +1452,7 @@ impl Integrate {
         state: &mut State,
         selected_slots: &[ResolvedIntegrandSlot],
         slot_models: &[Model],
-    ) -> Result<Vec<gammalooprs::integrands::process::ProcessIntegrand>> {
+    ) -> Result<Vec<ProcessIntegrand>> {
         info!(
             "Gammaloop now integrates {}",
             selected_slots
@@ -1536,41 +1498,33 @@ impl Integrate {
 
     fn restore_workspace_observables(
         &self,
-        workspace_path: &std::path::Path,
+        checkpoint: Option<&IntegrationCheckpoint>,
         selected_slots: &[ResolvedIntegrandSlot],
-        integration_state: Option<&IntegrationState>,
-        slot_integrands: &mut [gammalooprs::integrands::process::ProcessIntegrand],
+        slot_integrands: &mut [ProcessIntegrand],
     ) -> Result<()> {
-        let Some(integration_state) = integration_state else {
+        let Some(checkpoint) = checkpoint else {
             return Ok(());
         };
-        if integration_state.iter == 0 {
-            return Ok(());
-        }
-
-        for ((slot, integrand), slot_meta) in selected_slots
-            .iter()
-            .zip(slot_integrands.iter_mut())
-            .zip(integration_state.slot_metas.iter())
+        if selected_slots.len() != slot_integrands.len()
+            || selected_slots.len() != checkpoint.manifest().workspace.slots.len()
         {
-            debug_assert_eq!(slot.slot_meta, *slot_meta);
-            if integrand.observable_snapshot_bundle().is_none() {
-                continue;
-            }
-
-            let snapshot_path =
-                latest_observable_resume_state_path(workspace_path, &slot.slot_meta);
-            let snapshot =
-                ObservableSnapshotBundle::from_json_file(&snapshot_path).map_err(|err| {
-                    eyre!(
-                        "Could not restore observable checkpoint for {} from {}: {err}",
-                        slot.slot_meta.key(),
-                        snapshot_path.display()
-                    )
-                })?;
-            integrand.restore_observable_snapshot_bundle(&snapshot)?;
+            return Err(eyre!("Checkpoint observable slot lengths disagree"));
         }
-
+        for (index, (slot, integrand)) in selected_slots.iter().zip(slot_integrands).enumerate() {
+            if slot.slot_meta != checkpoint.manifest().workspace.slots[index] {
+                return Err(eyre!("Checkpoint observable slot identity disagrees"));
+            }
+            let snapshot = checkpoint.read_observables(SlotIndex::from(index))?;
+            if integrand.has_observables() != snapshot.is_some() {
+                return Err(eyre!(
+                    "Checkpoint observable membership disagrees for {}",
+                    slot.slot_meta.key()
+                ));
+            }
+            if let Some(snapshot) = snapshot {
+                integrand.restore_observable_snapshot_bundle(&snapshot)?;
+            }
+        }
         Ok(())
     }
 
@@ -1622,7 +1576,7 @@ impl Integrate {
     fn validate_slot_compatibility(
         &self,
         selected_slots: &[ResolvedIntegrandSlot],
-        slot_integrands: &[gammalooprs::integrands::process::ProcessIntegrand],
+        slot_integrands: &[ProcessIntegrand],
     ) -> Result<()> {
         if self.uncorrelated || slot_integrands.len() <= 1 {
             return Ok(());
@@ -1646,45 +1600,20 @@ impl Integrate {
             };
             if !sampling_matches {
                 return Err(eyre!(
-                    "Integrand '{}' does not share the same sampling settings as the leading integrand '{}'",
+                    "Integrand '{}' does not share the same sampling settings \
+                     as the leading integrand '{}'",
                     slot.slot_meta.key(),
                     selected_slots[0].slot_meta.key()
                 ));
             }
             if !grids_have_compatible_sample_shape(&reference_grid, &integrand.create_grid()) {
                 return Err(eyre!(
-                    "Integrand '{}' does not have a sample shape compatible with the leading integrand '{}'",
+                    "Integrand '{}' does not have a sample shape compatible \
+                     with the leading integrand '{}'",
                     slot.slot_meta.key(),
                     selected_slots[0].slot_meta.key()
                 ));
             }
-        }
-
-        Ok(())
-    }
-
-    fn write_workspace_manifest_and_settings(
-        &self,
-        slot_integrands: &[gammalooprs::integrands::process::ProcessIntegrand],
-        selected_slots: &[ResolvedIntegrandSlot],
-        manifest: &IntegrationWorkspaceManifest,
-        workspace_path: &std::path::Path,
-    ) -> Result<()> {
-        if manifest.integrand_fingerprints.len() != selected_slots.len() {
-            return Err(eyre!(
-                "Resolved {} generated-integrand fingerprints for {} integration slots",
-                manifest.integrand_fingerprints.len(),
-                selected_slots.len(),
-            ));
-        }
-        manifest.to_file(workspace_manifest_path(workspace_path), true)?;
-
-        for (slot, integrand) in selected_slots.iter().zip(slot_integrands.iter()) {
-            let slot_workspace = slot_workspace_path(workspace_path, &slot.slot_meta);
-            fs::create_dir_all(&slot_workspace)?;
-            integrand
-                .get_settings()
-                .to_file(slot_settings_path(workspace_path, &slot.slot_meta), true)?;
         }
 
         Ok(())
@@ -1692,26 +1621,16 @@ impl Integrate {
 
     fn collect_workspace_observable_snapshots(
         &self,
-        workspace_path: &std::path::Path,
-        slot_metas: impl IntoIterator<Item = SlotMeta>,
-    ) -> Result<BTreeMap<String, ObservableSnapshotBundle>> {
+        checkpoint: &IntegrationCheckpoint,
+        slots: impl IntoIterator<Item = LoadedIntegrationSlot>,
+    ) -> BTreeMap<String, ObservableSnapshotBundle> {
         let mut observables = BTreeMap::new();
-        for slot_meta in slot_metas {
-            let snapshot_path = latest_observable_resume_state_path(workspace_path, &slot_meta);
-            if !snapshot_path.exists() {
-                continue;
+        for (slot, loaded) in checkpoint.manifest().workspace.slots.iter().zip(slots) {
+            if let Some(bundle) = loaded.observables {
+                observables.insert(slot.key(), bundle);
             }
-            let snapshot =
-                ObservableSnapshotBundle::from_json_file(&snapshot_path).map_err(|err| {
-                    eyre!(
-                        "Could not load observable snapshot for {} from {}: {err}",
-                        slot_meta.key(),
-                        snapshot_path.display()
-                    )
-                })?;
-            observables.insert(slot_meta.key(), snapshot);
         }
-        Ok(observables)
+        observables
     }
 
     pub fn run(
@@ -1721,7 +1640,8 @@ impl Integrate {
     ) -> Result<IntegrationOutput> {
         if self.show_summary_only && self.restart {
             return Err(eyre!(
-                "The integrate options `--show-summary-only` and `--restart` cannot be used together"
+                "The integrate options `--show-summary-only` and `--restart` \
+                 cannot be used together"
             ));
         }
         if self.max_table_width == 0 {
@@ -1741,11 +1661,12 @@ impl Integrate {
         }
         if self.min_time_between_status_updates < 0.0 {
             return Err(eyre!(
-                "The integrate option `--min-time-between-status-updates` must be greater than or equal to zero"
+                "The integrate option `--min-time-between-status-updates` \
+                 must be greater than or equal to zero"
             ));
         }
 
-        let default_workspace_path = self.default_workspace_path(global_cli_settings);
+        let default_workspace_path = Self::default_workspace_path(global_cli_settings);
         let workspace_path = if let Some(p) = self.workspace_path.clone() {
             p
         } else {
@@ -1753,10 +1674,22 @@ impl Integrate {
         };
 
         if self.show_summary_only {
-            let (manifest, integration_state) = read_existing_workspace_state(&workspace_path)?;
+            let checkpoint = IntegrationCheckpoint::open(&workspace_path)
+                .map_err(|error| self.checkpoint_diagnostic(error))?;
+            if checkpoint.pending_restart_cleanup()? {
+                warn!(
+                    workspace = %workspace_path.display(),
+                    "The restart checkpoint is committed, but output cleanup is pending; \
+                     presentation files may still belong to the previous run. \
+                     This summary uses the committed checkpoint."
+                );
+            }
+            let manifest = &checkpoint.manifest().workspace;
+            let loaded = checkpoint.load()?;
+            let integration_state = loaded.state;
             manifest.validate_reference_config(&manifest.reference_gaussians)?;
             let selected_slots = if self.process.is_empty() && self.integrand_name.is_empty() {
-                self.resolve_manifest_slots(state, &manifest)?
+                self.resolve_manifest_slots(state, manifest)?
             } else {
                 self.resolve_selected_slots(state)?
             };
@@ -1799,33 +1732,22 @@ impl Integrate {
             for (slot, reference) in manifest.slots.iter().zip(&manifest.reference_gaussians) {
                 if let Some(reference) = reference {
                     info!(
-                        "Saved reference acceptance {}: Re=normalization, Im=raw |K|² moment / {}; targets=1",
+                        "Saved reference acceptance {}: Re=normalization, \
+                         Im=raw |K|² moment / {}; targets=1",
                         slot.key(),
                         reference.expected_second_moment::<f64>()
                     );
                 }
             }
 
-            if integration_state.num_points == 0 {
-                return Err(eyre!(
-                    "No completed integration iteration is available in {}",
-                    workspace_path.display()
-                ));
-            }
-
-            let slot0_meta = manifest.slots.first().ok_or_else(|| {
-                eyre!("Integration workspace does not contain any integrand slots")
-            })?;
-            let slot0_settings: RuntimeSettings = RuntimeSettings::from_file(
-                slot_settings_path(&workspace_path, slot0_meta),
-                &format!("workspace settings for {}", slot0_meta.key()),
-            )?;
+            let integrator_settings =
+                &loaded.slots[manifest.integrator_settings_slot.index()].settings;
             let view_options =
-                self.build_render_options(std::slice::from_ref(&slot0_settings), true);
+                self.build_render_options(slice::from_ref(integrator_settings), true);
             let tabled_options = self.build_tabled_render_options();
-            emit_integration_status_via_tracing(
+            integrate::emit_integration_status_via_tracing(
                 IntegrationStatusKind::Final,
-                render_saved_integration_summary(
+                integrate::render_saved_integration_summary(
                     &integration_state,
                     &targets,
                     &view_options,
@@ -1834,11 +1756,8 @@ impl Integrate {
             )?;
 
             return Ok(IntegrationOutput {
-                result: build_integration_result(&integration_state, &targets),
-                observables: self.collect_workspace_observable_snapshots(
-                    &workspace_path,
-                    selected_slots.iter().map(|slot| slot.slot_meta.clone()),
-                )?,
+                result: integrate::build_integration_result(&integration_state, &targets),
+                observables: self.collect_workspace_observable_snapshots(&checkpoint, loaded.slots),
                 workspace_path,
             });
         }
@@ -1856,26 +1775,16 @@ impl Integrate {
                 let expected = Complex::new(F(1.0), F(1.0));
                 if target.as_ref().is_some_and(|target| *target != expected) {
                     return Err(eyre!(
-                        "Gaussian reference integration has two normalized targets (1,1); a different --target is contradictory"
+                        "Gaussian reference integration has two normalized targets (1,1); \
+                         a different --target is contradictory"
                     ));
                 }
                 *target = Some(expected);
             }
         }
 
-        if self.restart && workspace_path.exists() {
-            fs::remove_dir_all(&workspace_path)?;
-        }
-
-        if !workspace_path.exists() {
-            fs::create_dir_all(&workspace_path)?;
-            info!(
-                "Created workspace directory at {}",
-                workspace_path.display()
-            );
-        }
         let slot_models = self.resolve_slot_models(state, &selected_slots)?;
-        let mut manifest = IntegrationWorkspaceManifest {
+        let manifest = IntegrationWorkspaceManifest {
             version: IntegrationWorkspaceManifest::CURRENT_VERSION,
             slots: selected_slots
                 .iter()
@@ -1894,37 +1803,53 @@ impl Integrate {
             } else {
                 Vec::new()
             },
-            training_slot: 0,
-            integrator_settings_slot: 0,
+            training_slot: SlotIndex::from(0),
+            integrator_settings_slot: SlotIndex::from(0),
             sampling_correlation_mode: self.sampling_correlation_mode(),
+        };
+        let mut workspace = IntegrationWorkspace::acquire(&workspace_path, manifest)
+            .map_err(|error| self.checkpoint_diagnostic(error))?;
+        let checkpoint = if self.restart {
+            workspace
+                .prepare_restart()
+                .map_err(|error| self.checkpoint_diagnostic(error))?;
+            None
+        } else {
+            workspace
+                .checkpoint()
+                .map_err(|error| self.checkpoint_diagnostic(error))?
         };
         let integration_state = self.load_or_prepare_workspace_state(
             state,
             &selected_slots,
-            &mut manifest,
-            &workspace_path,
+            workspace.manifest(),
+            checkpoint.as_ref(),
         )?;
         let mut slot_integrands =
             self.warm_and_clone_integrands(state, &selected_slots, &slot_models)?;
         // Persist the post-warm full-source fingerprint for both filtered and unfiltered slots.
-        manifest.integrand_fingerprints =
-            self.resolve_integrand_fingerprints(state, &selected_slots)?;
+        workspace.set_integrand_fingerprints(
+            self.resolve_integrand_fingerprints(state, &selected_slots)?,
+        )?;
+        if let Some(checkpoint) = &checkpoint {
+            workspace.set_targets(checkpoint.manifest().workspace.targets.clone())?;
+        }
         self.restore_workspace_observables(
-            &workspace_path,
+            checkpoint.as_ref(),
             &selected_slots,
-            integration_state.as_ref(),
             &mut slot_integrands,
         )?;
         self.validate_slot_compatibility(&selected_slots, &slot_integrands)?;
         for ((slot, integrand), reference) in selected_slots
             .iter()
             .zip(&slot_integrands)
-            .zip(&manifest.reference_gaussians)
+            .zip(&workspace.manifest().reference_gaussians)
         {
             if let Some(reference) = reference {
                 reference.for_integrand(integrand)?;
                 info!(
-                    "Reference acceptance {}: Re=Gaussian normalization, Im=raw |K|² moment / {}; both targets=1; no physical events",
+                    "Reference acceptance {}: Re=Gaussian normalization, \
+                     Im=raw |K|² moment / {}; both targets=1; no physical events",
                     slot.slot_meta.key(),
                     reference.expected_second_moment::<f64>()
                 );
@@ -1937,12 +1862,6 @@ impl Integrate {
         let view_options =
             self.build_render_options(&slot_settings, !self.no_show_integration_statistics);
         let tabled_options = self.build_tabled_render_options();
-        self.write_workspace_manifest_and_settings(
-            &slot_integrands,
-            &selected_slots,
-            &manifest,
-            &workspace_path,
-        )?;
 
         let n_cores = self
             .n_cores
@@ -1953,7 +1872,8 @@ impl Integrate {
         let stream_iterations = !self.no_stream_iterations && stderr_is_tty;
         if !stderr_is_tty && (!self.no_stream_updates || !self.no_stream_iterations) {
             info!(
-                "Streaming integration updates disabled because stderr is not a TTY; live updates will be skipped and iteration summaries will be logged."
+                "Streaming integration updates disabled because stderr is not a TTY; \
+                 live updates will be skipped and iteration summaries will be logged."
             );
         }
         let stream_renderer_kind = self.renderer;
@@ -1968,7 +1888,7 @@ impl Integrate {
             slot_settings,
             slot_models,
             slot_integrands,
-            manifest.targets
+            workspace.manifest().targets.iter().copied()
         )
         .enumerate()
         .map(|(slot_index, (meta, settings, model, integrand, target))| {
@@ -1979,7 +1899,8 @@ impl Integrate {
                 Integrand::ProcessIntegrand(Box::new(integrand)),
                 target,
             );
-            slot.reference_gaussian = manifest
+            slot.reference_gaussian = workspace
+                .manifest()
                 .reference_gaussians
                 .get(slot_index)
                 .cloned()
@@ -1989,13 +1910,13 @@ impl Integrate {
         .collect();
 
         let result = match panic::catch_unwind(AssertUnwindSafe(|| {
-            havana_integrate(
+            integrate::havana_integrate(
                 HavanaIntegrateRequest {
                     slots,
                     sampling_correlation_mode: self.sampling_correlation_mode(),
                     n_cores,
                     state: integration_state,
-                    workspace: Some(workspace_path.clone()),
+                    workspace: Some(&mut workspace),
                     output_control: self.workspace_snapshot_control(),
                     batching: self.build_batching_settings(
                         stream_updates,
@@ -2010,12 +1931,23 @@ impl Integrate {
             Err(payload) => return Err(stream_controller.handle_panic(payload)),
         };
 
+        let pinned = workspace.committed_checkpoint().or(checkpoint.as_ref());
+        let (result, observables) = if let Some(pinned) = pinned {
+            // Both returned components come from one descriptor while its writer is still held.
+            let loaded = pinned.load()?;
+            (
+                integrate::build_integration_result(
+                    &loaded.state,
+                    &pinned.manifest().workspace.targets,
+                ),
+                self.collect_workspace_observable_snapshots(pinned, loaded.slots),
+            )
+        } else {
+            (result, BTreeMap::new())
+        };
         Ok(IntegrationOutput {
-            observables: self.collect_workspace_observable_snapshots(
-                &workspace_path,
-                selected_slots.iter().map(|slot| slot.slot_meta.clone()),
-            )?,
             result,
+            observables,
             workspace_path,
         })
     }
@@ -2023,33 +1955,35 @@ impl Integrate {
 
 #[cfg(test)]
 mod tests {
-    use super::Integrate;
-    use super::IntegrationOutput;
-    use super::ResolvedIntegrandSlot;
     use super::{
-        ContributionSortOption, DashboardKeyAction, RendererOption, ShowPhaseOption,
-        StreamingDisplayController, TabledKeyAction,
+        ContributionSortOption, DashboardKeyAction, Integrate, IntegrationOutput, RendererOption,
+        ResolvedIntegrandSlot, ShowPhaseOption, StreamingDisplayController, TabledKeyAction,
     };
-    use crate::{
-        state::{CommandHistory, ProcessRef, State},
-        CLISettings, Commands, SessionSettings, StateSettings,
-    };
+    use crate::state::{CommandHistory, ProcessRef, State};
+    use crate::{CLISettings, Commands, SessionSettings, StateSettings};
     use clap::Parser;
     use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-    use gammalooprs::{
-        integrate::{
-            workspace_manifest_path, workspace_state_path, ContributionSortMode,
-            IntegrationStatusPhaseDisplay, SlotMeta,
-        },
-        observables::ObservableSnapshotBundle,
-        settings::{runtime::IntegratedPhase, IntegratorSettings, RuntimeSettings},
-        utils::F,
+    use gammalooprs::initialisation;
+    use gammalooprs::integrands::process::GaussianReferenceFunction;
+    use gammalooprs::integrate;
+    use gammalooprs::integrate::{
+        ContributionSortMode, IntegrationCheckpointError, IntegrationStatusPhaseDisplay,
+        IntegrationWorkspaceManifest, SlotMeta,
     };
+    use gammalooprs::observables::ObservableSnapshotBundle;
+    use gammalooprs::settings::runtime::IntegratedPhase;
+    use gammalooprs::settings::{IntegratorSettings, RuntimeSettings};
+    use gammalooprs::utils::F;
     use spenso::algebra::complex::Complex;
     use std::collections::BTreeMap;
+    use std::fs;
+    use std::io::{Error as IoError, ErrorKind};
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
     use std::path::{Path, PathBuf};
+    use std::slice;
     use symbolica::numerical_integration::{ContinuousGrid, DiscreteGrid, Grid};
-    use tempfile::tempdir;
+    use tempfile::TempDir;
 
     #[test]
     fn non_streamed_panics_resume_the_original_payload() {
@@ -2104,80 +2038,185 @@ mod tests {
         }
     }
 
-    fn write_unversioned_workspace(
-        workspace: &Path,
-    ) -> gammalooprs::integrate::IntegrationWorkspaceManifest {
-        let state_path = workspace_state_path(workspace);
-        std::fs::create_dir_all(state_path.parent().unwrap()).unwrap();
-        std::fs::write(
-            workspace_manifest_path(workspace),
-            r#"{
-                "slots": [],
-                "targets": [],
-                "effective_model_parameters": [],
-                "integrand_fingerprints": [],
-                "training_slot": 0,
-                "integrator_settings_slot": 0,
-                "sampling_correlation_mode": "correlated"
-            }"#,
+    fn old_layout_workspace(workspace: &Path) {
+        fs::write(
+            integrate::workspace_manifest_path(workspace),
+            br#"{
+            "version": 3,
+            "slots": [{"process_name": "triangle", "integrand_name": "default"}],
+            "targets": [null], "effective_model_parameters": [{"data": {}}],
+            "integrand_fingerprints": ["old-generated-source"],
+            "training_slot": 0, "integrator_settings_slot": 0,
+            "sampling_correlation_mode": "correlated"
+        }"#,
         )
         .unwrap();
-        std::fs::write(state_path, b"not a bincode integration state").unwrap();
-        serde_json::from_slice(&std::fs::read(workspace_manifest_path(workspace)).unwrap()).unwrap()
     }
 
     #[test]
-    fn summary_rejects_unversioned_workspace_before_decoding_state() {
-        let temp = tempdir().unwrap();
-        write_unversioned_workspace(temp.path());
-
-        let error = super::read_existing_workspace_state(temp.path())
-            .err()
-            .expect("unversioned workspace must be rejected");
-        let message = error.to_string();
-        assert!(message.contains("unversioned"), "{message}");
-        assert!(message.contains("--restart"), "{message}");
-        assert!(!message.contains("deserialize"), "{message}");
-    }
-
-    #[test]
-    fn resume_rejects_unversioned_workspace_before_decoding_state() {
-        let temp = tempdir().unwrap();
-        let mut requested = write_unversioned_workspace(temp.path());
+    fn summary_rejects_old_layout_workspace_without_writing_or_destructive_hints() {
+        let temp = TempDir::new().unwrap();
+        old_layout_workspace(temp.path());
+        let manifest_path = integrate::workspace_manifest_path(temp.path());
+        let before = fs::read(&manifest_path).unwrap();
         let mut state = State::new_test();
-
-        let error = Integrate::default()
-            .load_or_prepare_workspace_state(&mut state, &[], &mut requested, temp.path())
-            .err()
-            .expect("unversioned workspace must be rejected");
-        let message = error.to_string();
-        assert!(message.contains("unversioned"), "{message}");
-        assert!(message.contains("--restart"), "{message}");
-        assert!(!message.contains("deserialize"), "{message}");
+        let error = Integrate {
+            workspace_path: Some(temp.path().to_owned()),
+            show_summary_only: true,
+            ..Default::default()
+        }
+        .run(&mut state, &CLISettings::default())
+        .err()
+        .unwrap();
+        let cause = error.downcast_ref::<IntegrationCheckpointError>().unwrap();
+        assert!(matches!(
+            cause,
+            IntegrationCheckpointError::LegacyLayout { path } if path.as_path() == temp.path()
+        ));
+        let diagnostic = format!("{error:?}");
+        assert!(
+            diagnostic.contains("older GammaLoop version"),
+            "{diagnostic}"
+        );
+        assert!(!diagnostic.contains("--workspace-path"), "{diagnostic}");
+        assert!(!diagnostic.contains("delete"), "{diagnostic}");
+        assert!(!temp.path().join(".snapshot.lock").exists());
+        assert_eq!(fs::read(&manifest_path).unwrap(), before);
     }
 
     #[test]
-    fn resume_propagates_workspace_state_read_errors() {
-        let temp = tempdir().unwrap();
-        let state_path = workspace_state_path(temp.path());
-        let mut requested = write_unversioned_workspace(temp.path());
-        std::fs::remove_file(&state_path).unwrap();
-        std::fs::create_dir_all(&state_path).unwrap();
-        let mut state = State::new_test();
+    fn checkpoint_diagnostics_preserve_variants_and_only_offer_applicable_hints() {
+        initialisation::test_initialise().unwrap();
+        for restart in [false, true] {
+            for show_summary_only in [false, true] {
+                let command = Integrate {
+                    restart,
+                    show_summary_only,
+                    ..Default::default()
+                };
+                let cause = IntegrationCheckpointError::UnsupportedVersion {
+                    found: 0,
+                    expected: IntegrationWorkspaceManifest::CURRENT_VERSION,
+                };
+                let source_message = cause.to_string();
+                let error = command.checkpoint_diagnostic(cause);
+                assert_eq!(error.to_string(), source_message);
+                assert!(matches!(
+                    error.downcast_ref::<IntegrationCheckpointError>(),
+                    Some(IntegrationCheckpointError::UnsupportedVersion { found: 0, .. })
+                ));
+                let diagnostic = format!("{error:?}");
+                assert_eq!(diagnostic.matches(source_message.as_str()).count(), 1);
+                assert_eq!(diagnostic.contains("Suggestion"), !show_summary_only);
+                assert_eq!(diagnostic.contains("--workspace-path"), !show_summary_only);
+                assert_eq!(diagnostic.contains("delete"), !show_summary_only);
 
-        let error = Integrate::default()
-            .load_or_prepare_workspace_state(&mut state, &[], &mut requested, temp.path())
-            .err()
-            .expect("workspace read error must be propagated");
-        let message = error.to_string();
-        assert!(
-            message.contains("Could not read integration workspace state"),
-            "{message}"
-        );
-        assert!(
-            message.contains(&state_path.display().to_string()),
-            "{message}"
-        );
+                let error = command
+                    .checkpoint_diagnostic(IntegrationCheckpointError::ReferenceConfiguration);
+                assert_eq!(
+                    error.to_string(),
+                    IntegrationCheckpointError::ReferenceConfiguration.to_string()
+                );
+                let diagnostic = format!("{error:?}");
+                assert_eq!(diagnostic.contains("Suggestion"), !show_summary_only);
+                assert_eq!(
+                    diagnostic.contains("--reference-gaussian"),
+                    !show_summary_only
+                );
+                assert_eq!(diagnostic.contains("--restart"), !show_summary_only);
+                assert!(!diagnostic.contains("delete"), "{diagnostic}");
+                assert!(!diagnostic.contains("--workspace-path"), "{diagnostic}");
+
+                let encoding = String::from_utf8(vec![0xff]).unwrap_err();
+                let error =
+                    command.checkpoint_diagnostic(IntegrationCheckpointError::SettingsEncoding {
+                        path: PathBuf::from("settings.toml"),
+                        source: encoding,
+                    });
+                let diagnostic = format!("{error:?}");
+                assert_eq!(diagnostic.contains("--workspace-path"), !show_summary_only);
+                assert_eq!(diagnostic.contains("delete"), !show_summary_only);
+                assert!(matches!(
+                    error.downcast_ref::<IntegrationCheckpointError>(),
+                    Some(IntegrationCheckpointError::SettingsEncoding { .. })
+                ));
+
+                let missing_path = PathBuf::from("checkpoint-state.bin");
+                let cause = IntegrationCheckpointError::MissingMember {
+                    path: missing_path.clone(),
+                    source: IoError::from(ErrorKind::NotFound),
+                };
+                let source_message = cause.to_string();
+                let error = command.checkpoint_diagnostic(cause);
+                assert_eq!(error.to_string(), source_message);
+                let diagnostic = format!("{error:?}");
+                assert_eq!(diagnostic.matches(source_message.as_str()).count(), 1);
+                assert_eq!(diagnostic.contains("Suggestion"), !show_summary_only);
+                assert_eq!(diagnostic.contains("--workspace-path"), !show_summary_only);
+                assert_eq!(diagnostic.contains("delete"), !show_summary_only);
+                assert!(matches!(
+                    error.downcast_ref::<IntegrationCheckpointError>(),
+                    Some(IntegrationCheckpointError::MissingMember { path, source })
+                        if path == &missing_path && source.kind() == ErrorKind::NotFound
+                ));
+
+                for kind in [ErrorKind::Interrupted, ErrorKind::NotFound] {
+                    let cause = IntegrationCheckpointError::Io {
+                        path: PathBuf::from("checkpoint-state.bin"),
+                        source: IoError::from(kind),
+                    };
+                    let source_message = cause.to_string();
+                    let error = command.checkpoint_diagnostic(cause);
+                    assert_eq!(error.to_string(), source_message);
+                    let diagnostic = format!("{error:?}");
+                    assert!(!diagnostic.contains("Suggestion"), "{diagnostic}");
+                    assert!(!diagnostic.contains("--workspace-path"), "{diagnostic}");
+                    assert!(!diagnostic.contains("delete"), "{diagnostic}");
+                    assert!(matches!(
+                        error.downcast_ref::<IntegrationCheckpointError>(),
+                        Some(IntegrationCheckpointError::Io { source, .. })
+                            if source.kind() == kind
+                    ));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fresh_workspace_has_no_resume_state() {
+        let mut state = State::new_test();
+        let manifest: IntegrationWorkspaceManifest = serde_json::from_value(serde_json::json!({
+            "version": IntegrationWorkspaceManifest::CURRENT_VERSION,
+            "slots": [], "targets": [], "effective_model_parameters": [],
+            "integrand_fingerprints": [], "training_slot": 0, "integrator_settings_slot": 0,
+            "sampling_correlation_mode": "correlated"
+        }))
+        .unwrap();
+        assert!(Integrate::default()
+            .load_or_prepare_workspace_state(&mut state, &[], &manifest, None)
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn summary_propagates_non_file_manifest_errors() {
+        let temp = TempDir::new().unwrap();
+        let manifest_path = integrate::workspace_manifest_path(temp.path());
+        fs::create_dir(&manifest_path).unwrap();
+        let error = Integrate {
+            workspace_path: Some(temp.path().to_owned()),
+            show_summary_only: true,
+            ..Default::default()
+        }
+        .run(&mut State::new_test(), &CLISettings::default())
+        .unwrap_err();
+        let cause = error.downcast_ref::<IntegrationCheckpointError>().unwrap();
+        assert!(matches!(
+            cause,
+            IntegrationCheckpointError::NotRegularFile { path } if path == &manifest_path
+        ));
+        assert!(!format!("{error:?}").contains("--workspace-path"));
+        assert!(!temp.path().join(".snapshot.lock").exists());
     }
 
     fn resolved_slot(process_name: &str, integrand_name: &str) -> ResolvedIntegrandSlot {
@@ -2198,7 +2237,6 @@ mod tests {
 
     #[test]
     fn read_only_state_uses_cwd_workspace_default() {
-        let integrate = Integrate::default();
         let mut settings = CLISettings {
             state: StateSettings {
                 folder: PathBuf::from("/tmp/saved_state"),
@@ -2212,26 +2250,29 @@ mod tests {
         };
 
         assert_eq!(
-            integrate.default_workspace_path(&settings),
+            Integrate::default_workspace_path(&settings),
             PathBuf::from("./integration_workspace_gg_hhh_1l")
         );
 
         settings.state.name = None;
         assert_eq!(
-            integrate.default_workspace_path(&settings),
+            Integrate::default_workspace_path(&settings),
             PathBuf::from("./integration_workspace")
         );
     }
 
     #[test]
     fn read_only_state_rejects_workspace_inside_active_state() {
+        let temp = TempDir::new().unwrap();
+        let state_folder = temp.path().join("saved_state");
+        let workspace = state_folder.join("integration_workspace");
         let integrate = Integrate {
-            workspace_path: Some(PathBuf::from("/tmp/saved_state/integration_workspace")),
+            workspace_path: Some(workspace.clone()),
             ..Integrate::default()
         };
         let settings = CLISettings {
             state: StateSettings {
-                folder: PathBuf::from("/tmp/saved_state"),
+                folder: state_folder,
                 ..StateSettings::default()
             },
             session: SessionSettings {
@@ -2244,6 +2285,71 @@ mod tests {
             .run(&mut State::new_test(), &settings)
             .unwrap_err();
         assert!(format!("{err:?}").contains("--read-only-state"));
+        assert!(!workspace.exists());
+        assert!(!workspace.join(".snapshot.lock").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_only_state_rejects_aliased_workspace_before_creating_any_files() {
+        let temp = TempDir::new().unwrap();
+        let physical = temp.path().join("physical");
+        let alias = temp.path().join("alias");
+        fs::create_dir(&physical).unwrap();
+        unix_fs::symlink(&physical, &alias).unwrap();
+        for state_exists in [false, true] {
+            let name = if state_exists {
+                "existing_state"
+            } else {
+                "missing_state"
+            };
+            if state_exists {
+                fs::create_dir(physical.join(name)).unwrap();
+            }
+            for alias_is_state in [false, true] {
+                let state_folder = if alias_is_state {
+                    alias.join(name)
+                } else {
+                    physical.join(name)
+                };
+                let workspace = if alias_is_state {
+                    physical.join(name)
+                } else {
+                    alias.join(name)
+                }
+                .join("integration_workspace");
+                let integrate = Integrate {
+                    workspace_path: Some(workspace.clone()),
+                    ..Default::default()
+                };
+                let settings = CLISettings {
+                    state: StateSettings {
+                        folder: state_folder,
+                        ..Default::default()
+                    },
+                    session: SessionSettings {
+                        read_only_state: true,
+                        ..Default::default()
+                    },
+                    ..Default::default()
+                };
+                let error = integrate
+                    .run(&mut State::new_test(), &settings)
+                    .unwrap_err();
+                assert!(
+                    format!("{error:?}").contains("--read-only-state"),
+                    "{error:?}"
+                );
+                assert!(!workspace.exists());
+                assert!(!physical
+                    .join(name)
+                    .join("integration_workspace/.snapshot.lock")
+                    .exists());
+                if !state_exists {
+                    assert!(!physical.join(name).exists());
+                }
+            }
+        }
     }
 
     #[test]
@@ -2268,6 +2374,28 @@ mod tests {
         let prepared = super::prepare_stream_block(block, 5);
 
         assert_eq!(prepared, "12345\r\nabcde");
+    }
+
+    #[test]
+    fn checkpoint_targets_reject_nonfinite_components() {
+        let slots = vec![
+            resolved_slot("triangle", "LO"),
+            resolved_slot("box", "scalar_box"),
+        ];
+        for target in [
+            vec!["inf,0".into()],
+            vec!["0,-inf".into()],
+            vec!["NaN".into(), "0".into()],
+            vec!["triangle@LO=inf,0".into()],
+        ] {
+            let command = Integrate {
+                target,
+                restart: true,
+                ..Default::default()
+            };
+            let error = command.resolve_targets(&slots).unwrap_err();
+            assert!(error.to_string().contains("finite"), "{error}");
+        }
     }
 
     #[test]
@@ -2332,10 +2460,6 @@ mod tests {
 
     #[test]
     fn reference_descriptor_cli_serde_and_workspace_contract() {
-        use clap::Parser;
-        use gammalooprs::{
-            integrands::process::GaussianReferenceFunction, integrate::IntegrationWorkspaceManifest,
-        };
         let parsed =
             IntegrateCli::try_parse_from(["test", "--reference-gaussian", r#"{"width":300}"#])
                 .unwrap();
@@ -2350,7 +2474,8 @@ mod tests {
         );
         let centered = GaussianReferenceFunction::centered(300.0, 4).unwrap();
         let manifest: IntegrationWorkspaceManifest = serde_json::from_value(serde_json::json!({
-            "version":IntegrationWorkspaceManifest::CURRENT_VERSION,"slots":[{"process_name":"p","integrand_name":"i"}],"targets":[],
+            "version": IntegrationWorkspaceManifest::CURRENT_VERSION,
+            "slots": [{"process_name": "p", "integrand_name": "i"}], "targets": [],
             "effective_model_parameters":[],"integrand_fingerprints":[],"training_slot":0,
             "integrator_settings_slot":0,"sampling_correlation_mode":"correlated",
             "reference_gaussians":[centered],
@@ -2413,7 +2538,12 @@ mod tests {
 
     #[test]
     fn command_history_parses_shared_target_for_multi_integrand_integration() {
-        let raw = "integrate -p aa_aa -i 1L -p aa_aa -i 1L_m_uv_UP -p aa_aa -i 1L_m_uv_DOWN -p aa_aa -i 1L_mu_r_UP -p aa_aa -i 1L_mu_r_DOWN --n-cores 5 --target -1.0214510394091818e-6 0.0 --renderer ratatui --batch-size 10000 --show-phase both --show-max-weight-info --show-top-discrete-grid --show-discrete-contributions-sum --write-results-for-each-iteration --restart";
+        let raw = "integrate -p aa_aa -i 1L -p aa_aa -i 1L_m_uv_UP \
+                   -p aa_aa -i 1L_m_uv_DOWN -p aa_aa -i 1L_mu_r_UP -p aa_aa -i 1L_mu_r_DOWN \
+                   --n-cores 5 --target -1.0214510394091818e-6 0.0 --renderer ratatui \
+                   --batch-size 10000 --show-phase both --show-max-weight-info \
+                   --show-top-discrete-grid --show-discrete-contributions-sum \
+                   --write-results-for-each-iteration --restart";
         let parsed = CommandHistory::from_raw_string(raw).unwrap();
 
         let Commands::Integrate(integrate) = parsed.command else {
@@ -2529,7 +2659,7 @@ mod tests {
             ..RuntimeSettings::default()
         };
 
-        let render_options = integrate.build_render_options(std::slice::from_ref(&settings), false);
+        let render_options = integrate.build_render_options(slice::from_ref(&settings), false);
 
         assert_eq!(
             render_options.phase_display,

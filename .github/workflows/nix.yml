@@ -14,8 +14,6 @@ concurrency:
   group: nix-${{ github.workflow }}-${{ github.run_id }}
   cancel-in-progress: false
 
-# Matrix evaluation embeds this value in derivations registered with Hestia, so
-# keep it public. Licensed worker builds re-evaluate their attributes locally.
 env:
   CARGO_TERM_COLOR: always
   HESTIA_CACHE_WRITABLE: true
@@ -23,9 +21,25 @@ env:
   # Bump this only for an intentional Hestia cache-format migration.
   HESTIA_CACHE_VERSION_SALT: gammaloop-no-closure-v1
   RUST_BACKTRACE: "1"
-  SYMBOLICA_LICENSE: GAMMALOOP_USER
 
 jobs:
+  runtime-guards:
+    name: Runtime guard self-tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nix-ci-cache
+        with:
+          netrc: ${{ secrets.NIXCI_NETRC }}
+      - name: Check lifecycle, workflow and credential boundary without a license
+        run: |
+          flake=$(python3 scripts/tracked_source.py --print-source)
+          nix build "$flake#checks.x86_64-linux.gammaloop-ci-runtime" --print-build-logs
+          nix run "$flake#ci-runtime-license-boundary" -- --flake-source "$flake" --report-dir target/ci-results/license-boundary
+      - name: Remove cache credentials
+        if: always()
+        run: rm -f "$RUNNER_TEMP/nixci.netrc"
+
   # Publish shared roots here so consumers wait on their manifest before
   # running in parallel.
   prepare:
@@ -35,6 +49,8 @@ jobs:
     outputs:
       matrix: ${{ steps.filter-matrix.outputs.matrix }}
       any-jobs: ${{ steps.filter-matrix.outputs.any-jobs }}
+      runtime-matrix: ${{ steps.runtime-matrix.outputs.matrix }}
+      any-runtime-jobs: ${{ steps.runtime-matrix.outputs.any-jobs }}
       manifest-version: ${{ steps.matrix.outputs.manifest-version }}
     steps:
       - uses: actions/checkout@v4
@@ -83,7 +99,6 @@ jobs:
           mkdir -p "$producer_roots"
           producer_output_lines=$(
             nix --option post-build-hook "" build \
-              --impure \
               --keep-going \
               --out-link "$producer_roots/result" \
               --print-build-logs \
@@ -92,10 +107,12 @@ jobs:
               .#packages.x86_64-linux.crane-ci-prebuild \
               .#packages.x86_64-linux.gammaloop \
               .#packages.x86_64-linux.gammaloop-python-module \
-              .#checks.x86_64-linux.gammaloop-nextest-binaries
+              .#checks.x86_64-linux.gammaloop-nextest-binaries \
+              .#packages.x86_64-linux.ci-runtime-environment \
+              .#packages.x86_64-linux.cargoCheckArtifacts
           )
           mapfile -t producer_outputs <<< "$producer_output_lines"
-          test "${#producer_outputs[@]}" -eq 5
+          test "${#producer_outputs[@]}" -eq 7
           df -h /nix/store "$RUNNER_TEMP"
           publish_path_lines=$(
             nix-store --query --requisites "${producer_outputs[@]}" | LC_ALL=C sort -u
@@ -124,48 +141,36 @@ jobs:
       - id: matrix
         name: Create Hestia matrix
         shell: bash
-        # Keep licensed checks uncached in this public evaluation. Workers
-        # re-evaluate them with the secret, which produces distinct drv paths.
-        env:
-          SYMBOLICA_LICENSE: GAMMALOOP_MATRIX_${{ github.run_id }}
         run: |
           set -euo pipefail
           check_collection=hydraJobs.x86_64-linux
-          if [ "${{ github.ref }}" = refs/heads/main ]; then
-            # Main runs full package checks and fast integration plus four
-            # long-test shards, including mandatory local soft-CT acceptance.
-            # All runtime checks reuse the published archives.
-            check_collection=hydraJobsMain.x86_64-linux
-          fi
           "$HESTIA_BIN" matrix \
             --flake ".#$check_collection" \
             --socket "$HESTIA_SOCKET" \
-            --nix-eval-jobs "nix run nixpkgs#nix-eval-jobs -- --impure" \
+            --nix-eval-jobs "nix run nixpkgs#nix-eval-jobs" \
             --attr-prefix "$check_collection" \
             --drain-timeout "$HESTIA_DRAIN_TIMEOUT"
       - id: filter-matrix
-        name: Filter unavailable licensed tests
+        name: Record pure build matrix
         env:
-          LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
           MATRIX: ${{ steps.matrix.outputs.matrix }}
         run: |
+          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
+          echo "any-jobs=$(jq -r '.include | length > 0' <<< "$MATRIX")" >> "$GITHUB_OUTPUT"
+      - id: runtime-matrix
+        name: Select runtime jobs independently of cached outputs
+        run: |
           set -euo pipefail
-          if [ -n "$LICENSE" ]; then
-            filtered="$MATRIX"
-          else
-            echo "::notice::Skipping Nix-sandboxed doctest and nextest rows because the Symbolica secret is unavailable"
-            filtered=$(jq -c '
-              .include |= map(select(
-                (.attr == "hydraJobs.x86_64-linux.gammaloop-doctest"
-                  or (.attr | startswith("hydraJobs.x86_64-linux.gammaloop-nextest-")))
-                | not
-              ))
-            ' <<< "$MATRIX")
+          selection=ci-runtime-jobs
+          if [ "${{ github.ref }}" = refs/heads/main ]; then
+            selection=ci-runtime-jobs-main
           fi
-          echo "matrix=$filtered" >> "$GITHUB_OUTPUT"
-          echo "any-jobs=$(jq -r '.include | length > 0' <<< "$filtered")" >> "$GITHUB_OUTPUT"
+          matrix_path=$(nix build --no-link --print-out-paths ".#$selection")
+          matrix=$(cat "$matrix_path")
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "any-jobs=$(jq -r '.include | length > 0' <<< "$matrix")" >> "$GITHUB_OUTPUT"
       - name: Confirm producer manifest
-        if: steps.filter-matrix.outputs.any-jobs == 'true' && env.HESTIA_CACHE_WRITABLE == 'true'
+        if: (steps.filter-matrix.outputs.any-jobs == 'true' || steps.runtime-matrix.outputs.any-jobs == 'true') && env.HESTIA_CACHE_WRITABLE == 'true'
         env:
           MANIFEST_VERSION: ${{ steps.matrix.outputs.manifest-version }}
         run: test "$MANIFEST_VERSION" -gt 0
@@ -202,31 +207,19 @@ jobs:
         name: Build checks
         env:
           CHECK_ATTR: ${{ matrix.attr }}
-          SYMBOLICA_LICENSE: ${{ secrets.SYMBOLICA_LICENSE_SIGNED || 'GAMMALOOP_USER' }}
         run: |
           set -euo pipefail
           df -h /nix/store "$RUNNER_TEMP"
           result_dir=target/ci-results
           mkdir -p "$result_dir"
-          rm -f "$result_dir/metrics.csv"
-          artifact_name=${CHECK_ATTR//[^a-zA-Z0-9_.-]/_}
-          echo "artifact-name=nix-metrics-$artifact_name" >> "$GITHUB_OUTPUT"
           printf 'check=%s\ncommit=%s\nrun=%s/%s/actions/runs/%s\nattempt=%s\n' \
             "$CHECK_ATTR" "$GITHUB_SHA" "$GITHUB_SERVER_URL" \
             "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
             > "$result_dir/provenance.txt"
-          nix_options=()
-          case "$CHECK_ATTR" in
-            *.gammaloop-doctest|*.gammaloop-nextest-*)
-              # Keep licensed test results out of the public Hestia cache.
-              nix_options+=(--option post-build-hook "")
-              ;;
-          esac
           exec 3> >(tee "$result_dir/nix-build.log" >&2)
           log_pid=$!
           set +e
-          nix "${nix_options[@]}" build \
-            --impure \
+          nix build \
             --keep-going \
             --out-link "$RUNNER_TEMP/nix-check-result" \
             --print-build-logs \
@@ -239,37 +232,13 @@ jobs:
           log_status=$?
           set -e
           printf 'build-exit-code=%s\n' "$build_status" >> "$result_dir/provenance.txt"
-          reports=()
-          while IFS= read -r output; do
-            [[ "$output" == /nix/store/* ]] || continue
-            for report in "$output"/*.xml; do
-              [ -f "$report" ] || continue
-              reports+=("$report")
-            done
-          done < "$result_dir/output-paths.txt"
-          export_status=0
-          if [ "${#reports[@]}" -gt 0 ]; then
-            # Only metadata CSV is uploaded; raw JUnit and licensed output stay local.
-            python3 .github/scripts/export-test-timings.py \
-              --check "$CHECK_ATTR" \
-              --output "$result_dir/metrics.csv" \
-              "${reports[@]}" || export_status=$?
-          fi
           if [ "$build_status" -ne 0 ]; then
             exit "$build_status"
           fi
           if [ "$log_status" -ne 0 ]; then
             exit "$log_status"
           fi
-          exit "$export_status"
-      - name: Upload test timing metadata
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.build-check.outputs.artifact-name }}
-          path: target/ci-results/metrics.csv
-          if-no-files-found: ignore
-          retention-days: 7
+          exit 0
       - name: Record final disk use and release job resources
         if: always()
         shell: bash
@@ -283,22 +252,102 @@ jobs:
           df -h /nix/store "$RUNNER_TEMP" || true
           rm -f "$RUNNER_TEMP"/nix-check-result*
 
+  runtime:
+    name: ${{ matrix.name }} (${{ matrix.system }})
+    needs: prepare
+    if: needs.prepare.outputs.any-runtime-jobs == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.runtime-matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/nix-ci-cache
+        with:
+          netrc: ${{ secrets.NIXCI_NETRC }}
+      - uses: Mic92/hestia@v3.1.0
+        with:
+          version: v3.1.0
+          drain-timeout: ${{ env.HESTIA_DRAIN_TIMEOUT }}
+          no-closure: true
+          upstream-cache-filter: true
+          wait-manifest-version: ${{ needs.prepare.outputs.manifest-version }}
+      - name: Prepare runtime launcher
+        env:
+          RUNNER_PACKAGE: ${{ matrix.package }}
+        run: |
+          nix build --out-link "$RUNNER_TEMP/runtime-launcher" ".#$RUNNER_PACKAGE"
+      - id: execute
+        name: Execute tests on every invocation
+        env:
+          RUNNER_PACKAGE: ${{ matrix.package }}
+          CHECK_NAME: ${{ matrix.name }}
+          SYMBOLICA_LICENSE_SIGNED: ${{ secrets.SYMBOLICA_LICENSE_SIGNED }}
+        run: |
+          set +x
+          set -euo pipefail
+          result_dir="$PWD/target/ci-results"
+          mkdir -p "$result_dir"
+          printf 'check=%s\ncommit=%s\nrun=%s/%s/actions/runs/%s\nattempt=%s\n' \
+            "$CHECK_NAME" "$GITHUB_SHA" "$GITHUB_SERVER_URL" \
+            "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" \
+            > "$result_dir/provenance.txt"
+          set +e
+          "$RUNNER_TEMP/runtime-launcher/bin/$RUNNER_PACKAGE" --report-dir "$result_dir/reports"
+          runtime_status=$?
+          set -e
+          printf 'runtime-exit-code=%s\n' "$runtime_status" >> "$result_dir/provenance.txt"
+          shopt -s nullglob
+          reports=("$result_dir/reports/"*.xml)
+          export_status=0
+          if [ "${#reports[@]}" -gt 0 ]; then
+            python3 .github/scripts/export-test-timings.py \
+              --check "$CHECK_NAME" --output "$result_dir/metrics.csv" \
+              "${reports[@]}" || export_status=$?
+          fi
+          [ "$runtime_status" -eq 0 ] || exit "$runtime_status"
+          exit "$export_status"
+      - name: Upload test timing metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nix-runtime-metrics-${{ matrix.name }}-${{ matrix.system }}
+          path: target/ci-results/metrics.csv
+          if-no-files-found: ignore
+          retention-days: 7
+      - name: Drain producer uploads and release roots
+        if: always()
+        run: |
+          trap 'rm -f "$RUNNER_TEMP/nixci.netrc"; rm -f "$RUNNER_TEMP/runtime-launcher"' EXIT
+          "$HESTIA_BIN" drain --socket "$HESTIA_SOCKET" --timeout "$HESTIA_DRAIN_TIMEOUT"
+
   flake-checks:
     name: Flake checks
-    needs: [prepare, build]
+    needs: [prepare, build, runtime, runtime-guards]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Confirm matrix result
         env:
           PREPARE_RESULT: ${{ needs.prepare.result }}
+          GUARDS_RESULT: ${{ needs.runtime-guards.result }}
           BUILD_RESULT: ${{ needs.build.result }}
+          RUNTIME_RESULT: ${{ needs.runtime.result }}
+          ANY_RUNTIME_JOBS: ${{ needs.prepare.outputs.any-runtime-jobs }}
           ANY_JOBS: ${{ needs.prepare.outputs.any-jobs }}
         run: |
           test "$PREPARE_RESULT" = success
+          test "$GUARDS_RESULT" = success
           if [ "$ANY_JOBS" = true ]; then
             test "$BUILD_RESULT" = success
           else
             test "$ANY_JOBS" = false
             test "$BUILD_RESULT" = skipped
+          fi
+          if [ "$ANY_RUNTIME_JOBS" = true ]; then
+            test "$RUNTIME_RESULT" = success
+          else
+            test "$ANY_RUNTIME_JOBS" = false
+            test "$RUNTIME_RESULT" = skipped
           fi

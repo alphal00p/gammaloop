@@ -5,14 +5,14 @@ use std::{
     env, fs,
     ops::{ControlFlow, Deref, DerefMut},
     path::{Path, PathBuf},
-    sync::{Mutex, MutexGuard, OnceLock},
+    sync::{Mutex, MutexGuard},
 };
 
 use color_eyre::Result;
 use feynkit_generator::GenerationType;
 use gammaloop_api::{
     CLISettings, OneShot, StateLoadOption,
-    state::{CommandHistory, CommandsBlock, RunHistory},
+    state::{CommandHistory, CommandsBlock, ResolvedStateSnapshot, RunHistory},
 };
 use gammaloop_integration_tests::{CLIState, clean_test, get_test_cli, get_tests_workspace_path};
 use gammalooprs::{
@@ -21,21 +21,24 @@ use gammalooprs::{
     settings::{RuntimeSettings, global::GenerationSettings},
 };
 
-static TEMPLATE_CLI: OnceLock<Mutex<CLIState>> = OnceLock::new();
+static CLI_TEST_LOCK: Mutex<()> = Mutex::new(());
 
-struct SharedCli<'a>(MutexGuard<'a, CLIState>);
+struct SharedCli<'a> {
+    cli: CLIState,
+    _guard: MutexGuard<'a, ()>,
+}
 
 impl Deref for SharedCli<'_> {
     type Target = CLIState;
 
     fn deref(&self) -> &Self::Target {
-        &self.0
+        &self.cli
     }
 }
 
 impl DerefMut for SharedCli<'_> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        &mut self.cli
     }
 }
 
@@ -80,16 +83,12 @@ impl Drop for CurrentDirGuard {
 }
 
 fn new_cli(name: &str) -> Result<SharedCli<'static>> {
-    let template = TEMPLATE_CLI.get_or_init(|| {
-        Mutex::new(
-            get_test_cli(None, cli_state_path("_template"), None, true)
-                .expect("template CLI should initialize"),
-        )
-    });
-    let mut cli = SharedCli(template.lock().unwrap());
+    // Serialize cwd changes under libtest without sharing a persisted template
+    // between the independent processes used by Nextest.
+    let guard = CLI_TEST_LOCK.lock().unwrap();
     let state_folder = cli_state_path(name);
-    *cli = get_test_cli(None, &state_folder, None, true)?;
-    Ok(cli)
+    let cli = get_test_cli(None, &state_folder, None, true)?;
+    Ok(SharedCli { cli, _guard: guard })
 }
 
 fn command(raw: &str) -> CommandHistory {
@@ -264,7 +263,11 @@ fn run_command_block_substitutes_define_variables() -> Result<()> {
         vec!["run set_display -D level=warn"]
     );
     cli.save_state()?;
-    let persisted = fs::read_to_string(cli.cli_settings.state.folder.join("run.toml"))?;
+    let persisted = fs::read_to_string(
+        ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+            .payload_root()
+            .join("run.toml"),
+    )?;
     assert!(persisted.contains("run set_display -D level=warn"));
     Ok(())
 }
@@ -398,7 +401,11 @@ fn boot_run_history_merges_blocks_and_persists_commands_once() -> Result<()> {
 
     cli.save_state()?;
 
-    let persisted = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
+    let persisted = RunHistory::load(
+        ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+            .payload_root()
+            .join("run.toml"),
+    )?;
     assert_eq!(persisted.command_blocks.len(), 1);
     assert_eq!(persisted.commands.len(), 2);
     assert_eq!(persisted.cli_settings.global, frozen_global);
@@ -798,7 +805,9 @@ fn save_state_writes_global_settings_file() -> Result<()> {
 
     cli.save_state()?;
 
-    let global_settings_path = cli.cli_settings.state.folder.join("global_settings.toml");
+    let global_settings_path = ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+        .payload_root()
+        .join("global_settings.toml");
     let global_settings_contents = fs::read_to_string(&global_settings_path)?;
 
     assert!(global_settings_path.exists());
@@ -1109,7 +1118,11 @@ commands = ["quit -n --override-state $(overwrite)"]
         ControlFlow::Continue(())
     ));
     cli.save_state()?;
-    cli.run_history = RunHistory::load(cli.cli_settings.state.folder.join("run.toml"))?;
+    cli.run_history = RunHistory::load(
+        ResolvedStateSnapshot::open(&cli.cli_settings.state.folder)?
+            .payload_root()
+            .join("run.toml"),
+    )?;
     let flow = cli
         .run_command_flow("run quit_template -D overwrite=true")?
         .flow;

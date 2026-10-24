@@ -630,6 +630,7 @@ fn is_valid_ident(name: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use alphal00p_workspace::{WorkspaceMarker, WorkspaceRoot};
     use std::{
         collections::{BTreeMap, BTreeSet},
         fs,
@@ -689,14 +690,32 @@ mod tests {
 
     #[test]
     fn all_run_card_log_directives_parse() {
-        let run_cards_root =
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/resources/run_cards");
+        let workspace = WorkspaceRoot::discover_runtime(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &[WorkspaceMarker::File(
+                "crates/gammaloop-tracing-filter/Cargo.toml",
+            )],
+        )
+        .expect("log directive tests require a runtime GammaLoop workspace");
+        let run_cards_root = workspace.as_path().join("tests/resources/run_cards");
+        assert!(
+            run_cards_root.is_dir(),
+            "expected run-card fixtures at {}",
+            run_cards_root.display()
+        );
         let mut files = Vec::new();
         collect_toml_files(&run_cards_root, &mut files);
+        assert!(
+            !files.is_empty(),
+            "expected TOML run cards in {}",
+            run_cards_root.display()
+        );
 
+        let mut directive_count = 0;
         for path in files {
             let content = fs::read_to_string(&path).unwrap();
             for (key, spec) in extract_log_specs(&content) {
+                directive_count += 1;
                 assert!(
                     GammaLogFilter::parse(&spec).is_ok(),
                     "{key} in {} should parse: {spec}",
@@ -704,6 +723,11 @@ mod tests {
                 );
             }
         }
+        assert!(
+            directive_count > 0,
+            "expected display_directive or logfile_directive coverage in {}",
+            run_cards_root.display()
+        );
     }
 
     #[test]

@@ -10,6 +10,12 @@
 //! selected. Dropping [`LoadedState`] does not save it. Commands decide whether to mutate the
 //! in-memory state, write an explicitly requested export, or return a save/quit request.
 //!
+//! Saved sessions use version 22: `state_manifest.toml` points to one immutable
+//! directory under `generations/`, containing domain data, history and settings.
+//! Earlier saved-state layouts must be regenerated; there is no legacy loader.
+//! Old committed generations are retained so concurrent readers keep their files.
+//! Only explicit save commands publish a new generation.
+//!
 //! # Embedded lifecycle
 //!
 //! The following example is compile-checked but not run as a doctest because GammaLoop startup
@@ -46,12 +52,14 @@
 use ::tracing::info;
 use ::tracing::level_filters::LevelFilter;
 use ::tracing::warn;
+use alphal00p_persistence::{ManifestName, OutputPath, SnapshotWriter};
 use clap::parser::ValueSource;
 use clap::{CommandFactory, FromArgMatches, Parser};
 use commands::save::SaveState;
-use commands::Commands;
+use commands::{Cleanup, Commands};
+use gammalooprs::{INTEGRATION_MANIFEST_FILE, STATE_MANIFEST_FILE};
 
-use gammalooprs::utils::serde_utils::{SerdeFileError, SHOWDEFAULTS};
+use gammalooprs::utils::serde_utils::SHOWDEFAULTS;
 use session::{CliSession, CliSessionState};
 use tracing::{
     configure_file_log_boot_mode, set_file_log_filter, set_file_log_filter_override,
@@ -63,7 +71,7 @@ use tracing::{
 //     ClapEditor, ReadCommandOutput,
 // };
 
-use color_eyre::Result;
+use color_eyre::{Result, Section};
 use colored::Colorize;
 use eyre::{eyre, Context};
 use gammaloop_tracing_filter::LogFormat;
@@ -73,14 +81,19 @@ use gammalooprs::{
     settings::{GlobalSettings, RuntimeSettings},
     utils::serde_utils::IsDefault,
     utils::{
-        serde_utils::{get_schema_folder, is_false, is_true, SmartSerde},
+        serde_utils::{get_local_schema_folder, is_false, is_true, SerdeDefaults, SmartSerde},
         tracing::LogLevel,
     },
 };
 use schemars::{schema_for, JsonSchema};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-use state::{classify_state_folder, RunHistory, State, StateFolderKind, SyncSettings};
+#[cfg(test)]
+use alphal00p_workspace as workspace;
+use state::{
+    ResolvedStateSnapshot, RunHistory, State, StateFolderKind, SyncSettings, RUN_HISTORY_FILE,
+};
+use std::io::ErrorKind;
 use std::{ffi::OsString, path::Path, path::PathBuf, sync::atomic::Ordering};
 use std::{fs, fs::File, ops::ControlFlow, time::Duration, time::Instant};
 use walkdir::WalkDir;
@@ -122,44 +135,8 @@ pub mod tracing;
 pub(crate) static LOG_TEST_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[cfg(test)]
-fn is_test_workspace_root(path: &Path) -> bool {
-    path.join("Cargo.toml").is_file()
-        && path.join("tests/resources").is_dir()
-        && path.join("examples/cli").is_dir()
-}
-
-#[cfg(test)]
 pub(crate) fn test_workspace_root() -> &'static Path {
-    static WORKSPACE_ROOT: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-
-    WORKSPACE_ROOT
-        .get_or_init(|| {
-            let current_dir = std::env::current_dir().ok();
-            let current_exe = std::env::current_exe().ok();
-            let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-
-            let mut candidates = Vec::new();
-            if let Some(dir) = current_dir.clone() {
-                candidates.extend(dir.ancestors().map(Path::to_path_buf));
-            }
-            if let Some(exe) = current_exe.clone() {
-                candidates.extend(exe.ancestors().skip(1).map(Path::to_path_buf));
-            }
-            candidates.extend(manifest_dir.ancestors().map(Path::to_path_buf));
-
-            candidates
-                .into_iter()
-                .find(|path| is_test_workspace_root(path))
-                .unwrap_or_else(|| {
-                    panic!(
-                        "Failed to locate workspace root from current dir '{:?}', current exe '{:?}', or manifest dir '{}'",
-                        current_dir,
-                        current_exe,
-                        manifest_dir.display()
-                    )
-                })
-        })
-        .as_path()
+    workspace::test_workspace_root(Path::new(env!("CARGO_MANIFEST_DIR")))
 }
 
 pub(crate) const GLOBAL_SETTINGS_FILENAME: &str = "global_settings.toml";
@@ -175,44 +152,13 @@ const BANNER_ART: &str = r"              ██         ▄███████
 ";
 
 pub(crate) fn render_smart_toml<T: SmartSerde>(value: &T) -> Result<String> {
-    let mut toml_string = if let Some(schema_path) = value.has_schema_path(true) {
-        let schema_path = schema_path?;
-        format!("#:schema {}\n", schema_path.display())
-    } else {
-        String::new()
-    };
-    toml_string.push_str(&toml::to_string_pretty(value)?);
-    Ok(toml_string)
-}
-
-fn lexically_normalized_absolute_path(path: &Path) -> Result<PathBuf> {
-    let absolute_path = if path.is_absolute() {
-        path.to_path_buf()
-    } else {
-        std::env::current_dir()?.join(path)
-    };
-
-    let mut normalized = PathBuf::new();
-    for component in absolute_path.components() {
-        match component {
-            std::path::Component::Prefix(prefix) => normalized.push(prefix.as_os_str()),
-            std::path::Component::RootDir => normalized.push(component.as_os_str()),
-            std::path::Component::CurDir => {}
-            std::path::Component::ParentDir => {
-                normalized.pop();
-            }
-            std::path::Component::Normal(part) => normalized.push(part),
-        }
-    }
-
-    Ok(normalized)
+    Ok(value.to_toml(SerdeDefaults::Omit)?)
 }
 
 fn path_lies_within(base: &Path, candidate: &Path) -> Result<bool> {
-    let normalized_base = lexically_normalized_absolute_path(base)?;
-    let normalized_candidate = lexically_normalized_absolute_path(candidate)?;
-    Ok(normalized_candidate == normalized_base
-        || normalized_candidate.strip_prefix(&normalized_base).is_ok())
+    let base = OutputPath::new(base)?;
+    let candidate = OutputPath::new(candidate)?;
+    Ok(candidate.as_path().starts_with(base.as_path()))
 }
 
 #[derive(Parser, Debug)]
@@ -232,7 +178,9 @@ pub struct Repl {
 )]
 #[command(next_line_help = true)]
 pub struct OneShot {
-    /// Remove the resolved state folder before startup so the session starts from a blank state
+    /// Lock and remove the state before startup, refusing while a state or nested writer is busy.
+    /// Retry after the writer finishes. Unlocked leftovers from interrupted removal of this state
+    /// are also deleted. A selected root symlink is only unlinked; its target is preserved.
     #[arg(long, default_value_t = false)]
     pub clean_state: bool,
 
@@ -576,7 +524,10 @@ fn path_safe_suffix(value: &str) -> String {
 /// cannot be combined with read-only mode.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct StateLoadOption {
-    /// Remove the resolved state folder before loading so the session starts from a blank state.
+    /// Lock and remove the resolved state before loading, refusing while a state or nested
+    /// writer is busy. Retry after the writer finishes. Also remove unlocked remnants of
+    /// interrupted removal of this state. A selected root symlink is only unlinked, preserving
+    /// its target. Cannot be combined with read-only mode or process/integrand selection.
     pub clean_state: bool,
     /// Optional run card whose settings and commands are applied during boot.
     pub boot_commands_path: Option<PathBuf>,
@@ -1048,8 +999,8 @@ impl OneShot {
         }
     }
 
-    fn current_state_folder_kind(&self) -> Result<StateFolderKind> {
-        classify_state_folder(&self.state_folder)
+    fn resolve_current_state(&self) -> Result<StateFolderKind> {
+        Ok(state::classify_state_folder(&self.state_folder)?)
     }
 
     fn clean_resolved_state_folder(&self) -> Result<()> {
@@ -1070,28 +1021,76 @@ impl OneShot {
             ));
         }
 
-        let metadata = match fs::symlink_metadata(&self.state_folder) {
-            Ok(metadata) => metadata,
-            Err(err) if err.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        // Remove terminal separators and `.` without resolving the selected symlink:
+        // symlink_metadata("alias/") would otherwise inspect the target on Unix.
+        let state_path: PathBuf = self.state_folder.components().collect();
+        let metadata = match fs::symlink_metadata(&state_path) {
+            Ok(metadata) => Some(metadata),
+            Err(err) if err.kind() == ErrorKind::NotFound => None,
             Err(err) => {
                 return Err(err).wrap_err_with(|| {
                     format!(
                         "Failed to inspect state path '{}' before cleaning",
                         self.state_folder.display()
                     )
-                })
+                });
             }
         };
 
-        if metadata.file_type().is_dir() && !metadata.file_type().is_symlink() {
-            fs::remove_dir_all(&self.state_folder).wrap_err_with(|| {
+        if !metadata
+            .as_ref()
+            .is_some_and(|entry| entry.file_type().is_symlink())
+        {
+            SnapshotWriter::remove_retired_roots(&state_path)
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to finish interrupted removal of state '{}'",
+                        self.state_folder.display()
+                    )
+                })
+                .suggestion(
+                    "Retry --clean-state. If it still fails, remove the detached \
+                     '.snapshot-retired-…' directory identified in the error and retry.",
+                )?;
+        }
+        let Some(metadata) = metadata else {
+            return Ok(());
+        };
+
+        // A selected symlink is only unlinked below; its target is never acquired
+        // or changed, even when the target has an active writer.
+        if metadata.file_type().is_dir() {
+            let manifests = [
+                ManifestName::new(STATE_MANIFEST_FILE)?,
+                ManifestName::new(INTEGRATION_MANIFEST_FILE)?,
+            ];
+            let writer = SnapshotWriter::acquire(&state_path, &manifests)
+                .map_err(Cleanup::snapshot_diagnostic)
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to acquire the writer lock for state '{}' before --clean-state",
+                        self.state_folder.display()
+                    )
+                })?;
+            // Lock existing nested writers, detach the old tree, and retain the locks
+            // until deletion of only that tree completes.
+            let retired = writer
+                .retire_root()
+                .map_err(Cleanup::snapshot_diagnostic)
+                .wrap_err_with(|| {
+                    format!(
+                        "Failed to finish detaching state '{}' for --clean-state",
+                        self.state_folder.display()
+                    )
+                })?;
+            retired.remove().wrap_err_with(|| {
                 format!(
-                    "Failed to remove state folder '{}' before startup",
+                    "Failed to complete removal or synchronization of the detached state for '{}'",
                     self.state_folder.display()
                 )
             })?;
         } else {
-            fs::remove_file(&self.state_folder).wrap_err_with(|| {
+            fs::remove_file(&state_path).wrap_err_with(|| {
                 format!(
                     "Failed to remove state path '{}' before startup",
                     self.state_folder.display()
@@ -1104,20 +1103,15 @@ impl OneShot {
 
     fn initial_cli_settings_for_startup(
         &self,
-        state_folder_kind: &StateFolderKind,
+        snapshot: Option<&ResolvedStateSnapshot>,
         boot_run_history: Option<&RunHistory>,
         settings_file_overrides: &SettingsFileOverrides,
     ) -> Result<CLISettings> {
-        let mut cli_settings = match state_folder_kind {
-            StateFolderKind::Saved => Self::load_global_settings_file(&self.state_folder)?,
-            StateFolderKind::Missing | StateFolderKind::Scratch | StateFolderKind::Unmanifested => {
-                boot_run_history
-                    .map(|run_history| run_history.cli_settings.clone())
-                    .unwrap_or_else(|| self.new_cli_settings(GlobalSettings::default()))
-            }
-            StateFolderKind::Invalid(reason) => {
-                return Err(eyre::eyre!(reason.clone()));
-            }
+        let mut cli_settings = match snapshot {
+            Some(snapshot) => Self::load_global_settings_file(snapshot)?,
+            None => boot_run_history
+                .map(|run_history| run_history.cli_settings.clone())
+                .unwrap_or_else(|| self.new_cli_settings(GlobalSettings::default())),
         };
         cli_settings.override_with(self);
         if let Some(global) = &settings_file_overrides.global {
@@ -1193,13 +1187,10 @@ impl OneShot {
         })
     }
 
-    fn load_global_settings_file(state_folder: &std::path::Path) -> Result<CLISettings> {
-        let global_settings_path = state_folder.join(GLOBAL_SETTINGS_FILENAME);
-        match CLISettings::from_file_typed(&global_settings_path) {
-            Ok(settings) => Ok(settings),
-            Err(SerdeFileError::FileError(_)) => Ok(CLISettings::default()),
-            Err(err) => Err(err.into()),
-        }
+    fn load_global_settings_file(snapshot: &ResolvedStateSnapshot) -> Result<CLISettings> {
+        let path = snapshot.payload_root().join(GLOBAL_SETTINGS_FILENAME);
+        CLISettings::from_file_typed(&path)
+            .with_context(|| format!("Reading saved global settings {}", path.display()))
     }
 
     fn subcmd_input_string(
@@ -1334,7 +1325,7 @@ impl OneShot {
     )> {
         let process_selection = self.process_load_selection()?;
         if process_selection.is_some() {
-            if !matches!(state_folder_kind, StateFolderKind::Saved) {
+            if !matches!(state_folder_kind, StateFolderKind::Saved(_)) {
                 return Err(eyre!(
                     "--processes/--integrands require an existing saved state"
                 ));
@@ -1344,8 +1335,12 @@ impl OneShot {
             self.no_save_state = true;
             self.read_only_state = true;
         }
+        let snapshot = match &state_folder_kind {
+            StateFolderKind::Saved(snapshot) => Some(snapshot),
+            _ => None,
+        };
         let startup_cli_settings = self.initial_cli_settings_for_startup(
-            &state_folder_kind,
+            snapshot,
             boot_run_history,
             settings_file_overrides,
         )?;
@@ -1353,11 +1348,11 @@ impl OneShot {
 
         let (state, run_history, cli_settings, default_runtime_settings, load_summary) =
             match state_folder_kind {
-                StateFolderKind::Saved => {
+                StateFolderKind::Saved(snapshot) => {
                     let load_started = Instant::now();
-                    let mut state = State::load_with_selection(
-                        self.state_folder.clone(),
-                        self.model_file.clone(),
+                    let mut state = State::load_snapshot(
+                        &snapshot,
+                        self.model_file.as_deref(),
                         self.trace_logs_filename.clone(),
                         process_selection.as_ref(),
                     )
@@ -1379,23 +1374,19 @@ impl OneShot {
                             );
                     state.activate_loaded_integrand_backends(allow_symjit_fallback)?;
 
-                    let default_runtime = match RuntimeSettings::from_file_typed(
-                        self.state_folder.join(DEFAULT_RUNTIME_SETTINGS_FILENAME),
-                    ) {
-                        Ok(a) => a,
-                        Err(SerdeFileError::FileError(_)) => RuntimeSettings::default(),
-                        Err(e) => return Err(e.into()),
-                    };
-                    let run_path = self.state_folder.join("run.toml");
-                    let run_history = if run_path.exists() {
-                        RunHistory::load(run_path)?
-                    } else {
-                        RunHistory::default()
-                    };
+                    let runtime_path = snapshot
+                        .payload_root()
+                        .join(DEFAULT_RUNTIME_SETTINGS_FILENAME);
+                    let default_runtime = RuntimeSettings::from_file_typed(&runtime_path)
+                        .with_context(|| {
+                            format!("Reading saved runtime defaults {}", runtime_path.display())
+                        })?;
+                    let run_history =
+                        RunHistory::load(snapshot.payload_root().join(RUN_HISTORY_FILE))?;
 
                     let load_summary = StateLoadSummary {
                         elapsed: load_started.elapsed(),
-                        serialized_size_bytes: serialized_size_of_path(&self.state_folder),
+                        serialized_size_bytes: serialized_size_of_path(snapshot.payload_root()),
                         total_graphs: total_graph_count(&state),
                     };
 
@@ -1431,7 +1422,7 @@ impl OneShot {
                     warn!(
                         "State folder '{}' has no {}; treating leftover contents as blank scratch state.",
                         self.state_folder.display(),
-                        "state_manifest.toml",
+                        STATE_MANIFEST_FILE,
                     );
                     info!(
                         "{} {}",
@@ -1452,7 +1443,6 @@ impl OneShot {
                         None,
                     )
                 }
-                StateFolderKind::Invalid(_) => unreachable!(),
             };
 
         cli_settings.sync_settings()?;
@@ -1479,10 +1469,7 @@ impl OneShot {
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
         self.clean_resolved_state_folder()?;
-        let state_folder_kind = self.current_state_folder_kind()?;
-        if let StateFolderKind::Invalid(reason) = &state_folder_kind {
-            return Err(eyre::eyre!(reason.clone()));
-        }
+        let state_folder_kind = self.resolve_current_state()?;
         self.load_with_boot_context(
             state_folder_kind,
             boot_run_history.as_ref(),
@@ -1495,11 +1482,8 @@ impl OneShot {
         let settings_file_overrides = self.load_settings_file_overrides()?;
         self.state_folder = self.resolve_initial_state_folder(boot_run_history.as_ref())?;
         self.clean_resolved_state_folder()?;
-        let state_folder_kind = self.current_state_folder_kind()?;
-        if let StateFolderKind::Invalid(reason) = &state_folder_kind {
-            return Err(eyre::eyre!(reason.clone()));
-        }
-        let booted_existing_state = matches!(state_folder_kind, StateFolderKind::Saved);
+        let state_folder_kind = self.resolve_current_state()?;
+        let booted_existing_state = matches!(state_folder_kind, StateFolderKind::Saved(_));
 
         let (
             mut state,
@@ -1628,13 +1612,17 @@ impl OneShot {
             )?;
         if requested_active_state_save_after_auto_read_only {
             warn!(
-                "Skipping save state to {} because boot card settings differ from the frozen settings stored in {} and this session was forced into --read-only-state. The active state was left unchanged; save to a path outside the active state folder if you want a separate snapshot.",
+                "Skipping save state to {} because boot card settings differ from \
+                 the frozen settings \
+                 stored in saved state {} and this session was forced into --read-only-state. \
+                 The active state was left unchanged; save to a path outside the active state \
+                 folder if you want a separate snapshot.",
                 save_state
                     .path
                     .as_deref()
                     .unwrap_or(&cli_settings.state.folder)
                     .display(),
-                cli_settings.state.folder.join("run.toml").display()
+                cli_settings.state.folder.display()
             );
         }
         if !self.no_save_state
@@ -1870,7 +1858,7 @@ pub fn write_schemas() -> Result<()> {
     let global_schema = schema_for!(GlobalSettings);
     let runtime_schema = schema_for!(RuntimeSettings);
     let runhistory_schema = schema_for!(RunHistory);
-    let folder = get_schema_folder(false)?;
+    let folder = get_local_schema_folder()?;
 
     let mut global_file = File::create(folder.join("global.json"))?;
     let mut runtime_file = File::create(folder.join("runtime.json"))?;
@@ -1888,20 +1876,27 @@ pub fn write_schemas() -> Result<()> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::ErrorKind;
     use std::{ffi::OsString, fs, path::PathBuf};
 
+    use alphal00p_persistence::{ManifestName, SnapshotError, SnapshotWriter, SNAPSHOT_LOCK_FILE};
     use clap::Parser;
+    use gammalooprs::initialisation;
+    use gammalooprs::processes::PROCESSES_DIRECTORY;
+    use gammalooprs::{INTEGRATION_MANIFEST_FILE, LOGS_DIRECTORY, STATE_MANIFEST_FILE};
     use serde_json::Value as JsonValue;
+    #[cfg(unix)]
+    use std::os::unix::fs as unix_fs;
     use tempfile::tempdir;
 
     use gammalooprs::{
         settings::{GlobalSettings, RuntimeSettings},
-        utils::serde_utils::{ShowDefaultsGuard, SmartSerde},
+        utils::serde_utils::{SerdeFileError, SmartSerde},
     };
 
     use crate::commands::{Duplicate, Remove};
     use crate::settings_tree::serialize_settings_with_defaults;
-    use crate::state::ProcessRef;
+    use crate::state::{ProcessRef, ResolvedStateSnapshot, StateSaveContext, StateSaveMode};
     use crate::tracing::{
         configure_file_log_boot_mode, get_file_log_filter, get_stderr_log_filter,
         set_file_log_filter, set_file_log_filter_override, set_log_format_override, set_log_style,
@@ -1910,7 +1905,7 @@ mod tests {
 
     use super::{
         CLISettings, Commands, LogFormat, LogLevel, OneShot, Repl, RunHistory, StateSettings,
-        GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX,
+        GLOBAL_SETTINGS_FILENAME, LOG_TEST_MUTEX, RUN_HISTORY_FILE,
     };
     #[cfg(feature = "cli")]
     use {
@@ -1924,6 +1919,47 @@ mod tests {
     const ENV_FILE_LOG_FILTER: &str = "GL_LOGFILE_FILTER";
     const ENV_DISPLAY_LOG_FILTER: &str = "GL_DISPLAY_FILTER";
     const ENV_ALL_LOG_FILTER: &str = "GL_ALL_LOG_FILTER";
+
+    #[cfg(unix)]
+    #[test]
+    fn read_only_state_resolves_ancestor_aliases_without_creating_outputs() {
+        let temporary = tempdir().unwrap();
+        let physical = temporary.path().join("physical");
+        let alias = temporary.path().join("alias");
+        fs::create_dir(&physical).unwrap();
+        unix_fs::symlink(&physical, &alias).unwrap();
+        let state = physical.join("state");
+        let aliased_state = alias.join("state");
+        let mut settings = CLISettings::default();
+        settings.session.set_user_requested_read_only_state(true);
+
+        // Neither a missing state nor an existing state may be written through an ancestor alias.
+        for existing in [false, true] {
+            if existing {
+                fs::create_dir(&state).unwrap();
+                fs::write(state.join("sentinel"), b"old run").unwrap();
+            }
+            for (active, destination) in [(&state, &aliased_state), (&aliased_state, &state)] {
+                settings.state.folder = active.to_owned();
+                let target = destination.join("integration_workspace");
+                let error = settings
+                    .ensure_write_target_outside_active_state(&target, "integrate")
+                    .unwrap_err();
+                assert!(error.to_string().contains("inside the active state folder"));
+                assert!(!target.exists());
+                settings
+                    .ensure_write_target_outside_active_state(&physical.join("outside"), "save")
+                    .unwrap();
+            }
+            if existing {
+                assert_eq!(fs::read(state.join("sentinel")).unwrap(), b"old run");
+                assert_eq!(fs::read_dir(&state).unwrap().count(), 1);
+            } else {
+                assert!(!state.exists());
+            }
+        }
+        assert!(!physical.join("outside").exists());
+    }
 
     struct LogEnvGuard {
         file: Option<OsString>,
@@ -2001,7 +2037,7 @@ mod tests {
     #[test]
     fn resolve_initial_state_folder_prefers_explicit_cli_value() {
         let temp = tempdir().unwrap();
-        let run_path = temp.path().join("run.toml");
+        let run_path = temp.path().join(RUN_HISTORY_FILE);
         write_run_card(&run_path, "./from_run_card");
 
         let mut one_shot =
@@ -2018,7 +2054,7 @@ mod tests {
     #[test]
     fn resolve_initial_state_folder_uses_run_card_when_cli_not_explicit() {
         let temp = tempdir().unwrap();
-        let run_path = temp.path().join("run.toml");
+        let run_path = temp.path().join(RUN_HISTORY_FILE);
         write_run_card(&run_path, "./from_run_card");
 
         let one_shot =
@@ -2091,7 +2127,7 @@ mod tests {
     fn clean_state_removes_resolved_run_card_state_before_validation() {
         let temp = tempdir().unwrap();
         let state_path = temp.path().join("from_run_card");
-        let run_path = temp.path().join("run.toml");
+        let run_path = temp.path().join(RUN_HISTORY_FILE);
         write_run_card(&run_path, state_path.to_string_lossy().as_ref());
 
         fs::create_dir_all(&state_path).unwrap();
@@ -2136,6 +2172,249 @@ mod tests {
         };
         assert!(format!("{err:?}").contains("--read-only-state"));
         assert!(state_path.join("stale.txt").exists());
+    }
+
+    #[test]
+    fn clean_state_refuses_an_active_snapshot_writer() {
+        initialisation::test_initialise().unwrap();
+        let temp = tempdir().unwrap();
+        let state_path = temp.path().join("state");
+        let writer = SnapshotWriter::acquire(
+            &state_path,
+            &[ManifestName::new(STATE_MANIFEST_FILE).unwrap()],
+        )
+        .unwrap();
+        fs::write(state_path.join("sentinel"), b"keep active state").unwrap();
+        let one_shot = OneShot::try_parse_from([
+            "gammaloop",
+            "--clean-state",
+            "-s",
+            state_path.to_str().unwrap(),
+        ])
+        .unwrap();
+
+        let error = one_shot.clean_resolved_state_folder().unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<SnapshotError>(),
+            Some(SnapshotError::Busy { .. })
+        ));
+        let diagnostic = format!("{error:?}");
+        assert_eq!(diagnostic.matches("retry when it finishes").count(), 1);
+        assert!(diagnostic.contains("Failed to acquire the writer lock for state"));
+        assert_eq!(
+            fs::read(state_path.join("sentinel")).unwrap(),
+            b"keep active state"
+        );
+        drop(writer);
+        one_shot.clean_resolved_state_folder().unwrap();
+        assert!(!state_path.exists());
+    }
+
+    #[test]
+    fn clean_state_refuses_an_active_nested_integration_writer() {
+        initialisation::test_initialise().unwrap();
+        let temp = tempdir().unwrap();
+        let state_path = temp.path().join("state");
+        let integration_path = state_path.join("integration_workspace");
+        let writer = SnapshotWriter::acquire(
+            &integration_path,
+            &[ManifestName::new(INTEGRATION_MANIFEST_FILE).unwrap()],
+        )
+        .unwrap();
+        fs::write(integration_path.join("sentinel"), b"keep integration").unwrap();
+        let one_shot = OneShot::try_parse_from([
+            "gammaloop",
+            "--clean-state",
+            "-s",
+            state_path.to_str().unwrap(),
+        ])
+        .unwrap();
+
+        let error = one_shot.clean_resolved_state_folder().unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<SnapshotError>(),
+            Some(SnapshotError::Busy { .. })
+        ));
+        let diagnostic = format!("{error:?}");
+        assert_eq!(diagnostic.matches("retry when it finishes").count(), 1);
+        assert!(diagnostic.contains("Failed to finish detaching state"));
+        assert_eq!(
+            fs::read(integration_path.join("sentinel")).unwrap(),
+            b"keep integration"
+        );
+        drop(writer);
+        one_shot.clean_resolved_state_folder().unwrap();
+        assert!(!state_path.exists());
+    }
+
+    #[test]
+    fn clean_state_retries_detached_removal_even_without_a_live_state() {
+        for recreate_root in [false, true] {
+            let temporary = tempdir().unwrap();
+            let root = temporary.path().join("state");
+            let writer =
+                SnapshotWriter::acquire(&root, &[ManifestName::new(STATE_MANIFEST_FILE).unwrap()])
+                    .unwrap();
+            fs::write(root.join("sentinel"), b"interrupted removal").unwrap();
+            let retired = writer.retire_root().unwrap();
+            assert!(!root.exists());
+            let detached = fs::read_dir(temporary.path())
+                .unwrap()
+                .next()
+                .unwrap()
+                .unwrap()
+                .path();
+            assert_eq!(
+                fs::read(detached.join("sentinel")).unwrap(),
+                b"interrupted removal"
+            );
+            drop(retired);
+            if recreate_root {
+                fs::create_dir(&root).unwrap();
+            }
+            let mut one_shot = OneShot::new_test(root.clone());
+            one_shot.clean_state = true;
+            one_shot.read_only_state = true;
+            assert!(one_shot.clean_resolved_state_folder().is_err());
+            assert!(detached.join("sentinel").exists());
+            one_shot.read_only_state = false;
+            one_shot.clean_resolved_state_folder().unwrap();
+            assert!(!root.exists());
+            assert!(!detached.exists());
+            assert_eq!(fs::read_dir(temporary.path()).unwrap().count(), 0);
+        }
+    }
+
+    #[test]
+    fn clean_state_explains_how_to_retry_failed_retired_tree_removal() {
+        initialisation::test_initialise().unwrap();
+        let temporary = tempdir().unwrap();
+        let root = temporary.path().join("state");
+        let writer = SnapshotWriter::acquire(&root, &[]).unwrap();
+        let retired = writer.retire_root().unwrap();
+        drop(retired);
+        let detached = fs::read_dir(temporary.path())
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        // An invalid lock entry prevents the sweep from acquiring the abandoned tree.
+        let lock = detached.join(SNAPSHOT_LOCK_FILE);
+        fs::remove_file(&lock).unwrap();
+        fs::create_dir(&lock).unwrap();
+        let mut one_shot = OneShot::new_test(root.clone());
+        one_shot.clean_state = true;
+
+        let error = one_shot.clean_resolved_state_folder().unwrap_err();
+        assert!(error.downcast_ref::<SnapshotError>().is_some());
+        let diagnostic = format!("{error:?}");
+        assert!(diagnostic.contains("Failed to finish interrupted removal of state"));
+        assert!(diagnostic.contains("Retry --clean-state."));
+        assert!(diagnostic.contains("remove the detached"));
+        assert!(diagnostic.contains(detached.to_str().unwrap()));
+        assert!(!root.exists());
+        assert!(detached.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clean_state_unlinks_alias_without_touching_its_busy_target() {
+        let temp = tempdir().unwrap();
+        let target = temp.path().join("target");
+        let alias = temp.path().join("alias");
+        let name = ManifestName::new(STATE_MANIFEST_FILE).unwrap();
+        let writer = SnapshotWriter::acquire(&target, &[name]).unwrap();
+        let generation = "gen-00000001-00000000000000000000000000000001-0000000000000001";
+        let temporary = target.join(format!(".{STATE_MANIFEST_FILE}.{generation}.tmp"));
+        fs::write(&temporary, b"do not recover the alias target").unwrap();
+        unix_fs::symlink(&target, &alias).unwrap();
+        let one_shot =
+            OneShot::try_parse_from(["gammaloop", "--clean-state", "-s", alias.to_str().unwrap()])
+                .unwrap();
+
+        one_shot.clean_resolved_state_folder().unwrap();
+        assert!(fs::symlink_metadata(&alias).is_err());
+        assert_eq!(
+            fs::read(&temporary).unwrap(),
+            b"do not recover the alias target"
+        );
+        assert!(matches!(
+            SnapshotWriter::acquire(&target, &[name]),
+            Err(SnapshotError::Busy { .. })
+        ));
+        assert_eq!(fs::read_dir(&target).unwrap().count(), 2);
+        drop(writer);
+
+        let missing = temp.path().join("missing");
+        unix_fs::symlink(&missing, &alias).unwrap();
+        one_shot.clean_resolved_state_folder().unwrap();
+        assert!(fs::symlink_metadata(alias).is_err());
+        assert!(!missing.exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clean_state_unlinks_trailing_separator_aliases_without_removing_the_target() {
+        for busy in [false, true] {
+            let temporary = tempdir().unwrap();
+            let target = temporary.path().join("target");
+            let alias = temporary.path().join("alias");
+            fs::create_dir(&target).unwrap();
+            fs::write(target.join("sentinel"), b"preserve target").unwrap();
+            let name = ManifestName::new(STATE_MANIFEST_FILE).unwrap();
+            let writer = busy.then(|| SnapshotWriter::acquire(&target, &[name]).unwrap());
+            for suffix in ["/", "/."] {
+                unix_fs::symlink(&target, &alias).unwrap();
+                let selected = format!("{}{suffix}", alias.display());
+                let one_shot =
+                    OneShot::try_parse_from(["gammaloop", "--clean-state", "-s", &selected])
+                        .unwrap();
+                one_shot.clean_resolved_state_folder().unwrap();
+                assert_eq!(
+                    fs::symlink_metadata(&alias).unwrap_err().kind(),
+                    ErrorKind::NotFound
+                );
+                assert_eq!(
+                    fs::read(target.join("sentinel")).unwrap(),
+                    b"preserve target"
+                );
+                assert_eq!(
+                    fs::read_dir(&target).unwrap().count(),
+                    if busy { 2 } else { 1 }
+                );
+                if busy {
+                    assert!(matches!(
+                        SnapshotWriter::acquire(&target, &[name]),
+                        Err(SnapshotError::Busy { .. })
+                    ));
+                }
+            }
+            drop(writer);
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clean_state_removes_tree_without_following_internal_symlinks() {
+        let temp = tempdir().unwrap();
+        let root = temp.path().join("state");
+        let outside = temp.path().join("outside");
+        fs::create_dir(&root).unwrap();
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("sentinel"), b"preserve external data").unwrap();
+        unix_fs::symlink(&outside, root.join("external")).unwrap();
+        let one_shot =
+            OneShot::try_parse_from(["gammaloop", "--clean-state", "-s", root.to_str().unwrap()])
+                .unwrap();
+
+        one_shot.clean_resolved_state_folder().unwrap();
+        assert!(!root.exists());
+        assert_eq!(
+            fs::read(outside.join("sentinel")).unwrap(),
+            b"preserve external data"
+        );
+        assert_eq!(fs::read_dir(temp.path()).unwrap().count(), 1);
     }
 
     #[cfg(feature = "cli")]
@@ -2194,7 +2473,13 @@ mod tests {
             )
             .unwrap();
 
-        let persisted = RunHistory::load(state_path.join("run.toml")).unwrap();
+        let persisted = RunHistory::load(
+            ResolvedStateSnapshot::open(&state_path)
+                .unwrap()
+                .payload_root()
+                .join(RUN_HISTORY_FILE),
+        )
+        .unwrap();
         let commands = persisted
             .commands
             .iter()
@@ -2232,7 +2517,13 @@ mod tests {
             &cli_settings,
         )
         .unwrap();
-        let saved_run_toml = fs::read_to_string(state_path.join("run.toml")).unwrap();
+        let saved_run_toml = fs::read_to_string(
+            ResolvedStateSnapshot::open(&state_path)
+                .unwrap()
+                .payload_root()
+                .join(RUN_HISTORY_FILE),
+        )
+        .unwrap();
 
         let mut boot_runtime = RuntimeSettings::default();
         boot_runtime.general.mu_r = 29.0;
@@ -2262,7 +2553,13 @@ mod tests {
         one_shot.run("quit -o".to_string()).unwrap();
 
         assert_eq!(
-            fs::read_to_string(state_path.join("run.toml")).unwrap(),
+            fs::read_to_string(
+                ResolvedStateSnapshot::open(&state_path)
+                    .unwrap()
+                    .payload_root()
+                    .join(RUN_HISTORY_FILE)
+            )
+            .unwrap(),
             saved_run_toml
         );
     }
@@ -2856,7 +3153,6 @@ mod tests {
     #[test]
     fn saved_global_settings_file_keeps_default_directives_visible() {
         let temp = tempdir().unwrap();
-        let _show_defaults_guard = ShowDefaultsGuard::new(true);
         CLISettings::default()
             .to_file(temp.path().join(GLOBAL_SETTINGS_FILENAME), true)
             .unwrap();
@@ -2901,34 +3197,44 @@ mod tests {
     }
 
     #[test]
-    fn load_global_settings_file_uses_default_when_missing() {
+    fn load_global_settings_file_requires_the_pinned_member() {
         let temp = tempdir().unwrap();
-
         let mut new_settings = CLISettings::default();
         new_settings.global.display_directive = "warn".into();
-        fs::write(
-            temp.path().join(GLOBAL_SETTINGS_FILENAME),
-            toml::to_string_pretty(&new_settings).unwrap(),
-        )
-        .unwrap();
-
-        let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
+        let mut state = State::new_test();
+        state
+            .save(
+                temp.path(),
+                StateSaveContext {
+                    run_history: &RunHistory::default(),
+                    default_runtime_settings: &RuntimeSettings::default(),
+                    cli_settings: &new_settings,
+                },
+                StateSaveMode::CreateNew,
+            )
+            .unwrap();
+        let snapshot = ResolvedStateSnapshot::open(temp.path()).unwrap();
+        let loaded = OneShot::load_global_settings_file(&snapshot).unwrap();
         assert_eq!(loaded.global.display_directive, "warn");
-
-        fs::remove_file(temp.path().join(GLOBAL_SETTINGS_FILENAME)).unwrap();
-        let loaded = OneShot::load_global_settings_file(temp.path()).unwrap();
-        assert_eq!(loaded, CLISettings::default());
-        assert_eq!(
-            loaded.global.log_style.log_format,
-            gammalooprs::utils::tracing::LogFormat::Long
-        );
+        let settings_path = snapshot.payload_root().join(GLOBAL_SETTINGS_FILENAME);
+        fs::remove_file(&settings_path).unwrap();
+        let error = OneShot::load_global_settings_file(&snapshot).unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<SerdeFileError>(),
+            Some(SerdeFileError::FileError(source)) if source.kind() == ErrorKind::NotFound
+        ));
+        assert!(error
+            .to_string()
+            .contains(&settings_path.display().to_string()));
+        let error = ResolvedStateSnapshot::open(temp.path()).unwrap_err();
+        assert!(format!("{error:?}").contains(GLOBAL_SETTINGS_FILENAME));
     }
 
     #[test]
     fn load_treats_logs_only_folder_as_blank_state() {
         let temp = tempdir().unwrap();
-        std::fs::create_dir_all(temp.path().join("logs")).unwrap();
-        std::fs::write(temp.path().join("logs").join("gammalog.jsonl"), "").unwrap();
+        fs::create_dir_all(temp.path().join(LOGS_DIRECTORY)).unwrap();
+        fs::write(temp.path().join(LOGS_DIRECTORY).join("gammalog.jsonl"), "").unwrap();
 
         let mut cli = OneShot::new_test(temp.path().to_path_buf());
         let (_state, run_history, cli_settings, runtime_settings, summary) = cli.load().unwrap();
@@ -2942,7 +3248,7 @@ mod tests {
     #[test]
     fn load_treats_unmanifested_state_folder_as_blank_state() {
         let temp = tempdir().unwrap();
-        std::fs::create_dir_all(temp.path().join("processes").join("amplitudes")).unwrap();
+        fs::create_dir_all(temp.path().join(PROCESSES_DIRECTORY).join("amplitudes")).unwrap();
 
         let mut cli = OneShot::new_test(temp.path().to_path_buf());
         let (_state, run_history, cli_settings, runtime_settings, summary) = cli.load().unwrap();

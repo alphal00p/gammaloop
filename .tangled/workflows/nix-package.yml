@@ -1,6 +1,5 @@
 # Separate package pipeline to mirror the non-blocking package job in GitHub CI.
-# Required pipeline secrets:
-# - SYMBOLICA_LICENSE
+# Pure package compilation requires no runtime license.
 
 when:
   - event: ["push", "manual"]
@@ -25,6 +24,8 @@ dependencies:
     - gnugrep
     - gnused
     - nix
+    - python3
+    - just
 
 environment:
   CARGO_TERM_COLOR: "always"
@@ -37,4 +38,4 @@ steps:
       # fallback HOME path to be absent in that mode.
       rm -rf /homeless-shelter
 
-      nix build .#default --print-build-logs
+      just nix-build default --print-build-logs

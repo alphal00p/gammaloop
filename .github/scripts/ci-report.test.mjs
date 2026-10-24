@@ -63,12 +63,11 @@ test('transfer timeouts retain numeric retry evidence without inventing complete
   assert.equal(summarizeSuite(spec, { status: 'running' }, [], [{ ...result, logStatus: 'ok' }]).transferTimeoutCount, 2);
 });
 
-test('wrapper substitution is unknown; actual result substitution establishes reuse', () => {
+test('wrapper substitution is unknown; cached status establishes reuse', () => {
   const job = { type: 'test', status: 'success', attribute: attr };
   assert.equal(parseLog(wrapper, job).testExecution, 'unknown');
-  const result = wrapper.replaceAll('nix-ci-check-gammaloop-nextest-core', 'gammaloop-nextest-core');
-  assert.equal(parseLog(result, job).testExecution, 'reused');
   assert.equal(parseLog(wrapper, { ...job, status: 'cached' }).testExecution, 'reused');
+  assert.equal(parseLog(overlap, { ...job, status: 'cached' }).testExecution, 'executed');
   assert.throws(() => parseLog(''), /empty log/);
   assert.throws(() => parseLog('{"log_message":"partial"}'), /invalid log record/);
   assert.throws(() => parseLog(overlap + '{'), /invalid NDJSON/);

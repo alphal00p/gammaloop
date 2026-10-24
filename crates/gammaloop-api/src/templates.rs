@@ -1,11 +1,22 @@
+use alphal00p_persistence::OutputPath;
 use color_eyre::Result;
 use include_dir::Dir;
-use std::fs;
 use std::path::Path;
 
 const LINNEST_PACKAGE_DIR: &str = "crates/linnest/typst";
 const KURVST_PACKAGE_DIR: &str = "crates/kurvst/typst";
 
+/// Embedded drawing assets written beneath a caller-selected output root.
+///
+/// ```no_run
+/// use gammaloop_api::templates::Assets;
+/// # use color_eyre::Result;
+/// # fn main() -> Result<()> {
+/// Assets::extract_templates("drawing-export")?;
+/// Assets::extract_justfile("drawing-export")?;
+/// assert!(Assets::template_paths().any(|name| name == "figure.typ"));
+/// # Ok(()) }
+/// ```
 pub struct Assets;
 
 include!(concat!(env!("OUT_DIR"), "/embedded_assets.rs"));
@@ -19,48 +30,63 @@ impl Assets {
     }
 
     /// Extract all drawing templates to drawings/templates relative to target_dir.
+    /// See [`Assets`] for an example.
+    ///
+    /// # Errors
+    /// Rejects invalid embedded names and symlinks inside the selected root, and
+    /// propagates directory creation and checked file-write failures.
     pub fn extract_templates<P: AsRef<Path>>(target_dir: P) -> Result<()> {
-        let target = target_dir.as_ref().join("drawings/templates");
-
-        fs::create_dir_all(&target)?;
-
-        extract_package(&GAMMALOOP_TEMPLATE_ASSETS, &target)?;
-        extract_package(&LINNEST_PACKAGE_ASSETS, &target.join(LINNEST_PACKAGE_DIR))?;
-        extract_package(&KURVST_PACKAGE_ASSETS, &target.join(KURVST_PACKAGE_DIR))?;
-
-        Ok(())
-    }
-
-    /// Extract the Justfile to the target directory
-    pub fn extract_justfile<P: AsRef<Path>>(target_dir: P) -> Result<()> {
-        let justfile_path = target_dir.as_ref().join("justfile");
-
-        fs::write(
-            &justfile_path,
-            include_bytes!("../../../assets/embedded/drawing/justfile"),
+        let target = OutputPath::new(target_dir.as_ref())?
+            .join("drawings")?
+            .join("templates")?;
+        target.ensure_directory()?;
+        Self::extract_package(&GAMMALOOP_TEMPLATE_ASSETS, &target)?;
+        Self::extract_package(
+            &LINNEST_PACKAGE_ASSETS,
+            &target.join_relative(Path::new(LINNEST_PACKAGE_DIR))?,
+        )?;
+        Self::extract_package(
+            &KURVST_PACKAGE_ASSETS,
+            &target.join_relative(Path::new(KURVST_PACKAGE_DIR))?,
         )?;
 
         Ok(())
     }
-}
 
-fn extract_package(assets: &Dir<'_>, target: &Path) -> Result<()> {
-    fs::create_dir_all(target)?;
-    for file in assets.files() {
-        let target_path = target.join(file.path());
-        if let Some(parent) = target_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        fs::write(&target_path, file.contents())?;
+    /// Extract the Justfile to the target directory. See [`Assets`] for an example.
+    ///
+    /// # Errors
+    /// Rejects symlinks inside the selected root and propagates creation and write failures.
+    pub fn extract_justfile<P: AsRef<Path>>(target_dir: P) -> Result<()> {
+        let target = OutputPath::new(target_dir.as_ref())?;
+        let justfile = target.join("justfile")?;
+        target.ensure_directory()?;
+        justfile.write(include_bytes!("../../../assets/embedded/drawing/justfile"))?;
+        Ok(())
     }
 
-    Ok(())
+    fn extract_package(assets: &Dir<'_>, target: &OutputPath) -> Result<()> {
+        target.ensure_directory()?;
+        for file in assets.files() {
+            let target_path = target.join_relative(file.path())?;
+            if let Some(parent) = file
+                .path()
+                .parent()
+                .filter(|path| !path.as_os_str().is_empty())
+            {
+                target.join_relative(parent)?.ensure_directory()?;
+            }
+            target_path.write(file.contents())?;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use gammalooprs::model::ModelGammaLoopExt;
+    use std::fs;
 
     #[test]
     fn extract_templates_uses_canonical_package_layout() -> Result<()> {

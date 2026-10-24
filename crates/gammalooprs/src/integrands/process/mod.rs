@@ -1,6 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::Path;
+use std::result::Result as StdResult;
+
+use crate::GammaLoopContextContainer;
+use alphal00p_persistence::OutputPath;
+use bincode::{Decode as BinaryDecode, config};
 
 use crate::cff::OrientationID;
 use crate::graph::{FeynmanGraph, Graph, GraphGroup, GroupId, LmbIndex, LoopMomentumBasis};
@@ -17,8 +23,12 @@ use crate::observables::{
     AdditionalWeightKey, EventProcessingRuntime, GenericEvent, HistogramProcessInfo,
     ObservableAccumulatorBundle, ObservableFileFormat, ObservableSnapshotBundle,
 };
-use crate::processes::{CutGroupId, GraphGroupSelectionSpec, StandaloneExportSettings};
+use crate::processes::{
+    CutGroupId, GraphGroupSelectionSpec, INTEGRAND_BINARY_FILE, INTEGRAND_DIRECTORY,
+    INTEGRAND_SETTINGS_FILE, ProcessPayloadError, StandaloneExportSettings,
+};
 use crate::subtraction::lu_counterterm::LUSharedOverlaps;
+use crate::utils::serde_utils::{SerdeDefaults, SmartSerde};
 use crate::utils::{
     ArbPrec, F, FloatLike, RuntimeCache, SamplingFloat, SamplingPrecision, f128,
     format_for_compare_digits, get_n_dim_for_n_loop_momenta,
@@ -30,10 +40,10 @@ use enum_dispatch::enum_dispatch;
 use eyre::{Context, eyre};
 use gammaloop_sample::{DiscreteGraphSample, GammaLoopSample, parameterize};
 use itertools::Itertools;
-use linnet::half_edge::involution::EdgeVec;
-use linnet::half_edge::involution::Orientation;
+use linnet::half_edge::involution::{EdgeVec, Orientation};
 use linnet::half_edge::subgraph::{SubSetLike, subset::SubSet};
 use momtrop::SampleGenerator;
+use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use smallvec::SmallVec;
 use spenso::algebra::algebraic_traits::IsZero;
@@ -268,6 +278,50 @@ pub(crate) fn resolve_discrete_selection_for_sampling(
     }
 }
 
+// Binary data and settings are one persisted payload; both variants share the
+// same checked paths and preserve the original read/decode error sources.
+struct IntegrandSnapshot<Data> {
+    data: Data,
+    settings: RuntimeSettings,
+}
+
+impl<Data> IntegrandSnapshot<Data> {
+    fn load<'a>(
+        path: &OutputPath,
+        context: GammaLoopContextContainer<'a>,
+    ) -> StdResult<Self, ProcessPayloadError>
+    where
+        Data: BinaryDecode<GammaLoopContextContainer<'a>>,
+    {
+        let binary_path = path.join_relative(Path::new(INTEGRAND_BINARY_FILE))?;
+        let binary =
+            fs::read(binary_path.as_path()).map_err(|source| ProcessPayloadError::Read {
+                path: binary_path.as_path().to_owned(),
+                source,
+            })?;
+        let (data, _) =
+            bincode::decode_from_slice_with_context(&binary, config::standard(), context).map_err(
+                |source| ProcessPayloadError::Decode {
+                    path: binary_path.as_path().to_owned(),
+                    source,
+                },
+            )?;
+        let settings_path = path.join_relative(Path::new(INTEGRAND_SETTINGS_FILE))?;
+        let settings = fs::read_to_string(settings_path.as_path()).map_err(|source| {
+            ProcessPayloadError::Read {
+                path: settings_path.as_path().to_owned(),
+                source,
+            }
+        })?;
+        let settings =
+            toml::from_str(&settings).map_err(|source| ProcessPayloadError::SettingsDecode {
+                path: settings_path.as_path().to_owned(),
+                source,
+            })?;
+        Ok(Self { data, settings })
+    }
+}
+
 impl ProcessIntegrand {
     pub fn clone_with_selected_graph_groups(
         &self,
@@ -370,9 +424,25 @@ impl ProcessIntegrand {
         self.variant_tag()
     }
 
+    /// Export this generated integrand and its runtime data beneath a checked root.
+    ///
+    /// # Errors
+    /// Returns path-validation, serialization, filesystem, or unsupported-export errors.
+    ///
+    /// ```no_run
+    /// # use alphal00p_persistence::OutputPath;
+    /// # use color_eyre::Result;
+    /// # use gammalooprs::integrands::process::ProcessIntegrand;
+    /// # use gammalooprs::processes::StandaloneExportSettings;
+    /// # fn export(integrand: &ProcessIntegrand) -> Result<()> {
+    /// let output = OutputPath::new("standalone-export".as_ref())?;
+    /// output.ensure_directory()?;
+    /// integrand.export_standalone(&output, &StandaloneExportSettings::default())?;
+    /// # Ok(()) }
+    /// ```
     pub fn export_standalone(
         &self,
-        path: impl AsRef<Path>,
+        path: &OutputPath,
         settings: &StandaloneExportSettings,
     ) -> Result<()> {
         match self {
@@ -429,48 +499,62 @@ impl ProcessIntegrand {
         }
     }
 
-    pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let path = path.as_ref().join("integrand");
-
-        let r = fs::create_dir_all(&path).with_context(|| {
-            format!(
-                "Trying to create directory to save amplitude {}",
-                path.display()
-            )
-        });
-        if override_existing {
-            r?;
+    /// Write generated binary data and complete runtime settings into a new payload.
+    /// The caller publishes the containing snapshot only after all members succeed.
+    ///
+    /// # Errors
+    /// Refuses unsafe or existing payload paths and preserves encoder and I/O errors.
+    pub(crate) fn save(&self, path: &OutputPath) -> StdResult<(), ProcessPayloadError> {
+        path.join(INTEGRAND_DIRECTORY)?.create_directory()?;
+        let binary_path = path.join_relative(Path::new(INTEGRAND_BINARY_FILE))?;
+        let binary = match self {
+            Self::Amplitude(integrand) => {
+                bincode::encode_to_vec(&integrand.data, config::standard())
+            }
+            Self::CrossSection(integrand) => {
+                bincode::encode_to_vec(&integrand.data, config::standard())
+            }
         }
-        match self {
-            ProcessIntegrand::Amplitude(integrand) => integrand.save(path, override_existing),
-            ProcessIntegrand::CrossSection(integrand) => integrand.save(path, override_existing),
+        .map_err(|source| ProcessPayloadError::Encode {
+            path: binary_path.as_path().to_owned(),
+            source,
+        })?;
+        let settings_path = path.join_relative(Path::new(INTEGRAND_SETTINGS_FILE))?;
+        let settings = self
+            .get_settings()
+            .to_toml(SerdeDefaults::Include)
+            .map_err(|source| ProcessPayloadError::SettingsEncode {
+                path: settings_path.as_path().to_owned(),
+                source,
+            })?;
+        for (path, bytes) in [
+            (binary_path.as_path(), binary.as_slice()),
+            (settings_path.as_path(), settings.as_bytes()),
+        ] {
+            let mut file = File::create_new(path).map_err(|source| ProcessPayloadError::Write {
+                path: path.to_owned(),
+                source,
+            })?;
+            file.write_all(bytes)
+                .and_then(|()| file.flush())
+                .map_err(|source| ProcessPayloadError::Write {
+                    path: path.to_owned(),
+                    source,
+                })?;
         }
+        Ok(())
     }
 
     pub(crate) fn compile(
         &mut self,
-        path: impl AsRef<Path>,
-        override_existing: bool,
-        thread_pool: &rayon::ThreadPool,
-    ) -> Result<Vec<(String, std::time::Duration)>> {
-        let path = path.as_ref().join("integrand");
-
-        let r = fs::create_dir_all(&path).with_context(|| {
-            format!(
-                "Trying to create directory to save amplitude {}",
-                path.display()
-            )
-        });
-        if override_existing {
-            r?;
-        }
+        path: &OutputPath,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<(String, Duration)>> {
+        let path = path.join(INTEGRAND_DIRECTORY)?;
+        path.ensure_directory()?;
         match self {
-            ProcessIntegrand::Amplitude(integrand) => {
-                integrand.compile(path, override_existing, thread_pool)
-            }
-            ProcessIntegrand::CrossSection(integrand) => {
-                integrand.compile(path, override_existing, thread_pool)
-            }
+            ProcessIntegrand::Amplitude(integrand) => integrand.compile(&path, thread_pool),
+            ProcessIntegrand::CrossSection(integrand) => integrand.compile(&path, thread_pool),
         }
     }
 

@@ -13,6 +13,8 @@
 
 use super::{EsurfaceRay, SamplingCatalogueEntry};
 use crate::model::ModelGammaLoopExt;
+use crate::model::UFOSymbol;
+use crate::processes::ProcessSnapshotIndex;
 use crate::{
     GammaLoopContextContainer,
     graph::FeynmanGraph,
@@ -29,10 +31,26 @@ use crate::{
     processes::ProcessList,
     utils::{ArbPrec, F, f128, newton_solver::RadialRootIdentity},
 };
+use alphal00p_persistence::{GENERATIONS_DIRECTORY, GenerationId, OutputPath};
 use color_eyre::eyre::{Result, WrapErr, ensure, eyre};
+use linnet::half_edge::subgraph::{SuBitGraph, SubSetLike};
+use serde::Deserialize;
 use serde_json::{Value, json};
 use std::{fs, path::Path};
+use symbolica::state::State as SymbolicaState;
 use symbolica::{domains::float::SingleFloat, numerical_integration::Sample};
+
+// This opt-in lower-crate gate reads only the descriptor needed for its domain
+// payload. Full saved-session validation and settings loading belong to the API.
+// There is one v22 manifest read and no old-layout/directory-scan fallback.
+#[derive(Debug, Deserialize)]
+struct SamplingStateManifest {
+    version: u32,
+    generation: GenerationId,
+    processes: ProcessSnapshotIndex,
+    ufo_print_symbols: Vec<String>,
+    linnet_subgraph_print_labels: Vec<String>,
+}
 
 // Complete estimators and cut totals use their own component magnitudes. Only
 // their decomposition may use the sum of absolute contributions, separately
@@ -143,19 +161,38 @@ fn native_sampling_saved_state_boundary() -> Result<()> {
         agrees(left, right, &absolute, &relative, scale)
     };
 
+    let state_root = OutputPath::new(state)?;
+    let manifest: SamplingStateManifest =
+        toml::from_str(&fs::read_to_string(state.join("state_manifest.toml"))?)?;
+    ensure!(
+        manifest.version == 22,
+        "the sampling gate requires saved-state version 22"
+    );
+    manifest.processes.validate()?;
+    let payload = state_root
+        .join(GENERATIONS_DIRECTORY)?
+        .join(manifest.generation.as_str())?;
+    let payload_root = payload.as_path();
     initialise()?;
     // Preserve State::load's owner ordering, especially model parameter values
     // and custom UFO symbol printers before the Symbolica ID remapping.
-    let mut model = Model::from_path(state.join("model.json"))?;
+    for name in &manifest.ufo_print_symbols {
+        let _ = UFOSymbol::from(name);
+    }
+    for label in &manifest.linnet_subgraph_print_labels {
+        let _ = SuBitGraph::symbol_from_label(label.clone());
+    }
+    let mut model = Model::from_path(payload_root.join("model.json"))?;
     model.apply_param_card(&InputParamCard::from_file(
-        state.join("model_parameters.json"),
+        payload_root.join("model_parameters.json"),
     )?)?;
-    let state_map = symbolica::state::State::import(
-        &mut fs::File::open(state.join("symbolica_state.bin"))?,
+    let state_map = SymbolicaState::import(
+        &mut fs::File::open(payload_root.join("symbolica_state.bin"))?,
         None,
     )?;
     let mut processes = ProcessList::load(
-        state,
+        &payload,
+        &manifest.processes,
         GammaLoopContextContainer {
             state_map: &state_map,
             model: &model,

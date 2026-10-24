@@ -1,9 +1,12 @@
+use super::IntegrandSnapshot;
+use crate::processes::ProcessPayloadError;
+use alphal00p_persistence::OutputPath;
+use rayon::ThreadPool;
+use std::result::Result as StdResult;
 use std::{
     collections::HashSet,
-    fs::{self},
-    path::Path,
     sync::LazyLock,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use bincode_trait_derive::{Decode, Encode};
@@ -88,7 +91,7 @@ use crate::{
     },
     utils::{
         ArbPrec, DEFAULT_ESURFACE_EXISTENCE_THRESHOLD, GS, RuntimeCache, W_, compute_shift_part,
-        serde_utils::SmartSerde, symbolica_ext::LOGPRINTOPTS,
+        symbolica_ext::LOGPRINTOPTS,
     },
 };
 
@@ -734,42 +737,50 @@ impl AmplitudeGraphTerm {
         ))
     }
 
+    /// Compile the graph's evaluators using the selected frozen backend.
+    ///
+    /// See [`crate::processes::ProcessList::compile`] for an example.
+    ///
+    /// # Errors
+    /// Returns artifact directory or evaluator compilation failures.
     #[instrument(
           name = "compile",
           level = "info",
-          skip(self, path, override_existing, frozen_mode),
+          skip(self, path, frozen_mode),
           fields(
               graph.name = %self.graph.name,
-              path = %path.as_ref().display(),
+              path = %path.as_path().display(),
           )
       )]
     pub fn compile(
         &mut self,
-        path: impl AsRef<Path>,
-        override_existing: bool,
+        path: &OutputPath,
         frozen_mode: &FrozenCompilationMode,
-    ) -> Result<std::time::Duration> {
-        let compile_started = std::time::Instant::now();
-        let graph_path = path.as_ref().join(&self.graph.name);
+    ) -> Result<Duration> {
+        let compile_started = Instant::now();
+        let graph_path = path.join(&self.graph.name)?;
 
-        fs::create_dir_all(&graph_path).with_context(|| {
+        graph_path.ensure_directory().with_context(|| {
             format!(
-                "Trying to create directory to save amplitude {}",
-                graph_path.display()
+                "Trying to create directory to compile amplitude graph {}",
+                graph_path.as_path().display()
             )
         })?;
 
+        graph_path.check_tree()?;
+        let graph_path = graph_path.as_path();
+
         self.original_integrand.compile(
             "orientation_parametric_integrand",
-            &graph_path,
+            graph_path,
             frozen_mode,
         )?;
         for (index, (_, sector)) in self.fermi_surfaces.iter_mut().enumerate() {
-            sector.compile(format!("fermi_surface_{index}"), &graph_path, frozen_mode)?;
+            sector.compile(format!("fermi_surface_{index}"), graph_path, frozen_mode)?;
         }
 
         self.threshold_counterterm
-            .compile(&graph_path, override_existing, frozen_mode)?;
+            .compile(graph_path, frozen_mode)?;
 
         Ok(compile_started.elapsed())
     }
@@ -2510,17 +2521,16 @@ impl AmplitudeIntegrand {
 
     pub(crate) fn compile(
         &mut self,
-        path: impl AsRef<Path> + Sync,
-        override_existing: bool,
-        thread_pool: &rayon::ThreadPool,
-    ) -> Result<Vec<(String, std::time::Duration)>> {
+        path: &OutputPath,
+        thread_pool: &ThreadPool,
+    ) -> Result<Vec<(String, Duration)>> {
         let frozen_mode = self.data.compilation.clone();
         let compile_times = thread_pool.install(|| {
             self.data
                 .graph_terms
                 .par_iter_mut()
                 .map(|a| {
-                    a.compile(path.as_ref(), override_existing, &frozen_mode)
+                    a.compile(path, &frozen_mode)
                         .map(|duration| (a.graph.name.clone(), duration))
                 })
                 .collect::<Result<Vec<_>>>()
@@ -2531,29 +2541,11 @@ impl AmplitudeIntegrand {
         Ok(compile_times)
     }
 
-    pub(crate) fn save(&self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let binary = bincode::encode_to_vec(&self.data, bincode::config::standard())?;
-        fs::write(path.as_ref().join("integrand.bin"), binary)?;
-
-        // debug!("HE3");
-        //
-        self.settings
-            .to_file(path.as_ref().join("settings.toml"), override_existing)
-            .with_context(|| "Error saving settings.toml file for amplitude integrand")?;
-        // debug!("HE");
-
-        Ok(())
-    }
-
-    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("integrand.bin"))?;
-        let (data, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
-
-        let settings = SmartSerde::from_file(
-            path.as_ref().join("settings.toml"),
-            "runtime settings for amplitude integrand",
-        )?;
+    pub(crate) fn load(
+        path: &OutputPath,
+        context: GammaLoopContextContainer<'_>,
+    ) -> StdResult<Self, ProcessPayloadError> {
+        let IntegrandSnapshot { data, settings } = IntegrandSnapshot::load(path, context)?;
 
         Ok(AmplitudeIntegrand {
             settings,

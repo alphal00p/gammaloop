@@ -1,12 +1,20 @@
+#[cfg(test)]
+use super::output_tests::{self, SaveStep};
+use super::{
+    CROSS_SECTION_PAYLOAD_FILE, INTEGRAND_DIRECTORY, IntegrandPayload, ProcessPayloadError,
+    StandaloneExportSettings,
+};
 use crate::model::ModelGammaLoopExt;
+use alphal00p_persistence::OutputPath;
+use bincode::config;
 use feynkit_generator::GenerationType;
+use std::result::Result as StdResult;
 use std::{
     collections::{BTreeMap, BTreeSet},
     fmt::{Display, Formatter},
     fs::{self, File},
     io::Write,
     ops::{Index, IndexMut},
-    path::{Path, PathBuf},
     sync::Mutex,
 };
 
@@ -814,15 +822,36 @@ impl CrossSection {
         Ok(())
     }
 
-    fn storage_path(&self, base: &Path) -> PathBuf {
-        base.join(&self.name)
-    }
-
+    /// Export this cross section's generated integrand and standalone loader.
+    ///
+    /// Pass an existing directory derived from the checked user-selected export
+    /// root. [`ProcessList::export_standalone`](super::ProcessList::export_standalone)
+    /// creates the process hierarchy when exporting a complete list.
+    ///
+    /// # Errors
+    /// Returns an error if the integrand is ungenerated, the output tree contains
+    /// symlinks or unsupported file types, export settings are unsupported, or
+    /// serialization or filesystem operations fail.
+    ///
+    /// ```no_run
+    /// use alphal00p_persistence::OutputPath;
+    /// use eyre::Result;
+    /// use gammalooprs::processes::{CrossSection, StandaloneExportSettings};
+    /// # fn export(
+    /// #     cross_section: &CrossSection, settings: &StandaloneExportSettings,
+    /// # ) -> Result<()> {
+    /// let root = OutputPath::new("exports".as_ref())?;
+    /// let output = root.join(&cross_section.name)?;
+    /// output.ensure_directory()?;
+    /// cross_section.export_standalone(&output, settings)?;
+    /// # Ok(()) }
+    /// ```
     pub fn export_standalone(
         &self,
-        path: impl AsRef<Path>,
-        settings: &crate::processes::StandaloneExportSettings,
+        path: &OutputPath,
+        settings: &StandaloneExportSettings,
     ) -> Result<()> {
+        path.check_tree()?;
         if let Some(integrand) = &self.integrand {
             integrand.export_standalone(path, settings)?;
         } else {
@@ -1179,28 +1208,37 @@ impl CrossSection {
         Ok(graph_reports)
     }
 
+    /// Compile this cross section's generated integrand into checked artifact directories.
+    ///
+    /// See [`super::ProcessList::compile`] for an example.
+    ///
+    /// # Errors
+    /// Returns path, directory creation, or evaluator compilation failures.
     pub fn compile(
         &mut self,
-        path: impl AsRef<Path>,
-        override_existing: bool,
+        path: &OutputPath,
         thread_pool: &ThreadPool,
     ) -> Result<Vec<NamedGraphGenerationReport>> {
         info!("Compiling cross section {}", self.name);
-        let p = self.storage_path(path.as_ref());
+        let p = path.join(&self.name)?;
 
-        let result = fs::create_dir_all(&p).with_context(|| {
+        p.ensure_directory().with_context(|| {
             format!(
                 "Trying to create directory to compile cross section {}",
-                p.display()
+                p.as_path().display()
             )
-        });
-
-        if override_existing {
-            result?;
-        }
+        })?;
 
         if let Some(integrand) = &mut self.integrand {
-            let compile_times = integrand.compile(&p, override_existing, thread_pool)?;
+            let root = p.join(INTEGRAND_DIRECTORY)?;
+            root.check_tree()?;
+            for id in 0..integrand.graph_count() {
+                let name = integrand
+                    .graph_name_by_id(id)
+                    .ok_or_else(|| eyre!("Missing graph name for compile graph ID {id}"))?;
+                root.join(name)?;
+            }
+            let compile_times = integrand.compile(&p, thread_pool)?;
             return Ok(compile_times
                 .into_iter()
                 .map(|(graph_name, duration)| NamedGraphGenerationReport {
@@ -1217,44 +1255,96 @@ impl CrossSection {
         Ok(Vec::new())
     }
 
-    pub fn save(&mut self, path: impl AsRef<Path>, override_existing: bool) -> Result<()> {
-        let p = self.storage_path(path.as_ref());
-        let r = fs::create_dir_all(&p).with_context(|| {
-            format!(
-                "Trying to create directory to save cross section {}",
-                p.display()
-            )
-        });
-
-        if override_existing {
-            r?;
-        }
-
+    pub(super) fn write_snapshot(
+        &mut self,
+        path: &OutputPath,
+    ) -> StdResult<(), ProcessPayloadError> {
+        let p = path.join(&self.name)?;
+        p.create_directory()?;
         let integrand = self.integrand.take();
-        if let Some(integrand) = &integrand {
-            integrand.save(&p, override_existing)?;
-        }
-
-        let binary = bincode::encode_to_vec(&(*self), bincode::config::standard())?;
-        if override_existing {
-            fs::write(p.join("cs.bin"), &binary)?;
-        } else {
-            let mut file = File::create_new(p.join("cs.bin"))?;
-            file.write_all(&binary)?;
-        }
-
+        // Metadata encodes an absent integrand; restore the live owner on every
+        // ordinary serialization/write failure, without copying evaluators.
+        let result = (|| -> StdResult<(), ProcessPayloadError> {
+            #[cfg(test)]
+            {
+                let integrand_path = p.join(INTEGRAND_DIRECTORY)?;
+                output_tests::save_step(SaveStep::Integrand, integrand_path.as_path()).map_err(
+                    |source| ProcessPayloadError::Write {
+                        path: integrand_path.as_path().to_owned(),
+                        source,
+                    },
+                )?;
+            }
+            if let Some(integrand) = &integrand {
+                integrand.save(&p)?;
+            }
+            let metadata_path = p.join(CROSS_SECTION_PAYLOAD_FILE)?.as_path().to_owned();
+            #[cfg(test)]
+            output_tests::save_step(SaveStep::Metadata, &metadata_path).map_err(|source| {
+                ProcessPayloadError::Write {
+                    path: metadata_path.clone(),
+                    source,
+                }
+            })?;
+            let binary = bincode::encode_to_vec(&*self, config::standard()).map_err(|source| {
+                ProcessPayloadError::Encode {
+                    path: metadata_path.clone(),
+                    source,
+                }
+            })?;
+            let mut file =
+                File::create_new(&metadata_path).map_err(|source| ProcessPayloadError::Write {
+                    path: metadata_path.clone(),
+                    source,
+                })?;
+            file.write_all(&binary)
+                .and_then(|()| file.flush())
+                .map_err(|source| ProcessPayloadError::Write {
+                    path: metadata_path,
+                    source,
+                })?;
+            Ok(())
+        })();
         self.integrand = integrand;
-        Ok(())
+        result
     }
 
-    pub(crate) fn load(path: impl AsRef<Path>, context: GammaLoopContextContainer) -> Result<Self> {
-        let binary = fs::read(path.as_ref().join("cs.bin"))?;
+    pub(crate) fn load(
+        path: &OutputPath,
+        context: GammaLoopContextContainer,
+        payload: IntegrandPayload,
+    ) -> StdResult<Self, ProcessPayloadError> {
+        let metadata_path = path.join(CROSS_SECTION_PAYLOAD_FILE)?.as_path().to_owned();
+        let binary = fs::read(&metadata_path).map_err(|source| ProcessPayloadError::Read {
+            path: metadata_path.clone(),
+            source,
+        })?;
         let (mut cs, _): (Self, _) =
-            bincode::decode_from_slice_with_context(&binary, bincode::config::standard(), context)?;
+            bincode::decode_from_slice_with_context(&binary, config::standard(), context).map_err(
+                |source| ProcessPayloadError::Decode {
+                    path: metadata_path.clone(),
+                    source,
+                },
+            )?;
 
-        if path.as_ref().join("integrand").exists() {
-            let integrand = CrossSectionIntegrand::load(path.as_ref().join("integrand"), context)?;
-            cs.integrand = Some(ProcessIntegrand::CrossSection(integrand));
+        if cs.integrand.is_some() {
+            return Err(ProcessPayloadError::MetadataIntegrand {
+                path: metadata_path,
+            });
+        }
+        match payload {
+            IntegrandPayload::Generated => {
+                let integrand = CrossSectionIntegrand::load(path, context)?;
+                if integrand.data.name != cs.name {
+                    return Err(ProcessPayloadError::GeneratedNameMismatch {
+                        path: path.join(INTEGRAND_DIRECTORY)?.as_path().to_owned(),
+                        expected: cs.name,
+                        actual: integrand.data.name,
+                    });
+                }
+                cs.integrand = Some(ProcessIntegrand::CrossSection(integrand));
+            }
+            IntegrandPayload::MetadataOnly => {}
         }
 
         Ok(cs)
@@ -4624,6 +4714,8 @@ pub(crate) fn params_for_iterated_threshold_ct(
 #[cfg(test)]
 mod tests {
     use crate::model::ModelGammaLoopExt;
+    use alphal00p_persistence::OutputPath;
+    use rayon::ThreadPoolBuilder;
     use std::{
         fs,
         path::PathBuf,
@@ -5003,9 +5095,13 @@ mod tests {
     #[test]
     fn cross_section_storage_path_stays_inside_process_folder() {
         let temp = fresh_temp_dir("cross-section-storage-path");
-        let cross_section = super::CrossSection::new("NLO".to_string());
+        let mut cross_section = super::CrossSection::new("NLO".to_string());
+        let root = OutputPath::new(&temp).unwrap();
+        let pool = ThreadPoolBuilder::new().num_threads(1).build().unwrap();
 
-        assert_eq!(cross_section.storage_path(&temp), temp.join("NLO"));
+        cross_section.compile(&root, &pool).unwrap();
+        assert!(temp.join("NLO").is_dir());
+        assert_eq!(fs::read_dir(&temp).unwrap().count(), 1);
         fs::remove_dir_all(temp).unwrap();
     }
 

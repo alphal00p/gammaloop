@@ -162,8 +162,9 @@ impl<'a> CliSession<'a> {
 
     /// Reapply the stored session settings and commands without appending duplicate history.
     ///
-    /// Replay mutates the current state and can perform the same command-specific effects as normal
-    /// execution. Callers must honor a returned [`ControlFlow::Break`] save/quit request.
+    /// Replay mutates the current state and can perform command-specific effects, including
+    /// cleanup within named blocks. Callers must honor a returned [`ControlFlow::Break`]
+    /// save/quit request.
     pub fn replay_run_history(&mut self) -> Result<ControlFlow<SaveState>> {
         self.run_history
             .apply_session_settings(self.cli_settings, self.default_runtime_settings)?;
@@ -218,8 +219,11 @@ impl<'a> CliSession<'a> {
                 .frozen_boot_settings_match(boot_run_history)
         {
             let warning = format!(
-                "Boot card settings differ from the frozen settings stored in {}. This session is forced into --read-only-state. Line up cli_settings.global and default_runtime_settings in the boot card with the frozen settings in run.toml if you want to boot this state without read-only mode.",
-                self.cli_settings.state.folder.join("run.toml").display()
+                "Boot card settings differ from the frozen settings stored in saved state {}. \
+                 This session is forced into --read-only-state. Line up cli_settings.global and \
+                 default_runtime_settings in the boot card with the frozen settings in run.toml \
+                 if you want to boot this state without read-only mode.",
+                self.cli_settings.state.folder.display()
             );
             self.cli_settings
                 .session
@@ -246,9 +250,12 @@ impl<'a> CliSession<'a> {
                 .is_read_only_due_to_boot_settings_mismatch()
             {
                 let warning = format!(
-                    "{}. The boot card settings differ from the frozen settings stored in {}; this session remains in --read-only-state for reproducibility, but will use the boot card command block definitions for this process only.",
+                    "{}. The boot card settings differ from the frozen settings \
+                     stored in saved state {}; \
+                     this session remains in --read-only-state for reproducibility, but will use \
+                     the boot card command block definitions for this process only.",
                     format_command_block_conflict_message(&conflicting_blocks),
-                    self.cli_settings.state.folder.join("run.toml").display()
+                    self.cli_settings.state.folder.display()
                 );
                 self.cli_settings
                     .session
@@ -1023,8 +1030,10 @@ fn raised_cut_signature_inventory(
 }
 
 fn normalize_persisted_command_history(command: &CommandHistory) -> Option<CommandHistory> {
+    if !command.command.should_persist() {
+        return None;
+    }
     match &command.command {
-        Commands::Quit(_) | Commands::StartCommandsBlock(_) | Commands::FinishCommandsBlock => None,
         Commands::Run(run) => normalize_persisted_run_history(command, run),
         _ => Some(normalize_command_history(command)),
     }
@@ -1121,8 +1130,51 @@ fn truncate_multiline_display_command(display: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{display_command, MAX_DISPLAY_COMMAND_LINES};
-    use crate::{commands::run::Run, commands::Commands, state::CommandHistory};
+    use super::{display_command, normalize_persisted_command_history, MAX_DISPLAY_COMMAND_LINES};
+    use crate::commands::run::Run;
+    use crate::commands::Commands;
+    use crate::state::CommandHistory;
+
+    #[test]
+    fn persisted_history_excludes_cleanup_commands() {
+        for raw in [
+            "cleanup state",
+            "cleanup integration --workspace-path integration-workspace",
+        ] {
+            let command = CommandHistory::from_raw_string(raw).unwrap();
+            assert!(normalize_persisted_command_history(&command).is_none());
+        }
+    }
+
+    #[test]
+    fn persisted_inline_history_excludes_cleanup_and_preserves_other_commands() {
+        let command = CommandHistory::from_raw_string(
+            "run -c 'cleanup state; display processes; \
+             cleanup integration --workspace-path integration-workspace'",
+        )
+        .unwrap();
+        let normalized = normalize_persisted_command_history(&command).unwrap();
+        let Commands::Run(run) = &normalized.command else {
+            panic!("the retained display command must remain inside run");
+        };
+        let inline = run.parse_inline_commands().unwrap();
+        assert_eq!(inline.len(), 1);
+        assert_eq!(inline[0].raw_string.as_deref(), Some("display processes"));
+        assert!(!normalized.raw_string.as_ref().unwrap().contains("cleanup"));
+        assert_eq!(
+            normalize_persisted_command_history(&normalized).as_ref(),
+            Some(&normalized)
+        );
+    }
+
+    #[test]
+    fn persisted_history_omits_runs_containing_only_cleanup_commands() {
+        let command = CommandHistory::from_raw_string(
+            "run -c 'cleanup state; cleanup integration --workspace-path integration-workspace'",
+        )
+        .unwrap();
+        assert!(normalize_persisted_command_history(&command).is_none());
+    }
 
     #[test]
     fn display_command_preserves_multiline_commands_up_to_line_limit() {

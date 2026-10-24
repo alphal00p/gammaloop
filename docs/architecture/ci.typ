@@ -2,7 +2,9 @@
 
 Use `just ci-checks` for the selected local suite and `just ci-checks-and-upload`
 before final review. The latter runs static checks and publishes compiled runtime
-producers without running the runtime suite. NixCI runs that suite after the push.
+producers without running the runtime suite. The dummy-credential license-boundary probe
+runs first; runtime guards build alongside the other static checks and gate upload.
+NixCI runs the runtime suite after the push.
 See #link("../../CONTRIBUTING.typ#nixci-cache")[CONTRIBUTING.typ] for credentials,
 licenses and retries. `just check` runs Cargo checking only.
 
@@ -46,14 +48,46 @@ collection keeps a 4–8 GiB free-space watermark; the producer checks for at le
 of temporary compiler/store usage.
 
 Automatic NixCI work covers tests, Clippy, doctests, formatting, graph validation,
-the full five-product documentation check, necessary producers and final success.
+the `gammaloop-ci-runtime` guard check, the full six-product documentation check,
+necessary producers and final success.
 The documentation check validates generated references and examples, renders
 latest and snapshot sites, checks their HTML, and exercises publication behavior.
-It uses the existing licensed-check runner with `SYMBOLICA_LICENSE_SIGNED`; its
+It uses a runtime launcher with `SYMBOLICA_LICENSE_SIGNED`; its
 reusable Cargo artifacts are scheduled separately. `just ci-checks` selects the
 same documentation check; uploads select its launcher and compiled producers.
 Packaging, standalone Rustdoc, the persistent Typst renderer and WASM remain
-additional checks in `nix flake check --impure`.
+additional pure checks in `just nix-flake-check`. That command builds archives and
+checks preparation; licensed runtime jobs execute through `just ci-checks`.
+
+All checkout-facing Nix recipes use tracked-source snapshots exported through
+`scripts/tracked_source.py --print-source` before Nix sees them. The exporter
+requires Python 3 and Git or Jujutsu, honors the user's VCS ignore configuration,
+and excludes untracked files, including credentials in `.envrc`. In a Jujutsu workspace,
+its `jj file list` snapshots new nonignored files into `@`. A non-colocated
+Jujutsu checkout must not be passed directly as a `path:` flake. Source insertion
+retains the user's Nix configuration while removing license environment variables.
+Exporter failures preserve the underlying command error and stderr.
+
+`just nix-develop`, `nix-run`, `nix-build`, and `nix-flake-check` expose this boundary
+for individual commands. `CI_FLAKE_SOURCE` pins `nix-source`, `nix-build`, and
+`nix-run` to an existing Nix-store directory containing `flake.nix`, optionally
+prefixed with `path:`. Validation checks that location, not freshness against the
+checkout; unset the variable to include later edits. `ci-checks` always exports
+once, passes that snapshot explicitly to `ci-runtime-check`, and shares it with
+the remaining child recipes through `CI_FLAKE_SOURCE`. A bare
+`just ci-runtime-check` always exports fresh source; its optional `SOURCE`
+argument reuses an explicit snapshot. The Tangled step likewise exports once
+and passes the snapshot to every check. `nix-develop` and `nix-flake-check` always
+export fresh source.
+
+The runtime guard builds `gammaloop-ci-runtime` before forwarding the immutable
+`--flake-source` to the boundary probe. The pre-push `ci-checks-and-upload` path
+runs the probe before its selected static-check and producer builds. Both paths
+require probe success. The probe checks every explicitly named producer root,
+plus the selected launchers and test archives, using only an unsigned dummy
+credential for pass A and both credential forms for pass B. Real licenses are
+loaded only by runtime launchers after preparation. Workflow tests and
+`scripts/check-runtime-license-boundary.py` are review triggers for this note.
 
 Compilation stays per crate. Source filtering preserves unaffected packages;
 manifest and lockfile changes still invalidate broadly. Test dependencies avoid
@@ -67,6 +101,15 @@ separate because their global type registries can change the generated APIs when
 combined. Unit-test crates and Rustdoc snippets still require their own compilation.
 Clippy and doctests share check dependencies but retain workspace-wide source
 inputs, so their rebuild isolation differs from package test artifacts.
+
+The internal `alphal00p-workspace` crate centralizes read-only workspace
+discovery. Tool callers supply their required markers and a start directory, or use
+the shared environment/current-directory constructor. Runtime test callers share one
+marker set and cached root helper.
+Relocated tests honor an explicit runtime `CARGO_MANIFEST_DIR`; only when it is
+absent do they search cwd, executable ancestry and their compile-time manifest
+directory. An invalid explicit runtime path fails instead of selecting another
+checkout.
 
 Prebuild and normal dependency commands omit feature selections already encoded
 by their generated Cargo anchors. Test dependency commands retain features on
@@ -97,25 +140,30 @@ The measured extended scalar matrix contributes 139 cases to this fast lane;
 the GL16 quartic case belongs to the long lane. A fast suite can still take
 longer than four minutes because the limit applies to each test.
 
-Every main push runs the supported full suite through `hydraJobsMain`.
+Every main push runs the supported full suite through `ci-runtime-jobs-main`.
 Non-integration package groups use `ci_full`. Integration runs its ordinary
 fast selection plus four disjoint `ci_slow` partitions, including all six
 mandatory soft-counterterm acceptance cases. These partitions reuse the
 existing optimized archives and do not introduce another feature set or
 compile each shard independently. Missing main-run license credentials fail
 the workflow rather than silently dropping licensed tests. Standard branch
-Nix jobs continue to use `hydraJobs` and do not select the long partitions.
+Nix jobs use `ci-runtime-jobs` and do not select the long partitions.
+`hydraJobs` contains pure build checks only. Hestia may
+remove cached pure rows; the independent runtime matrix always runs its selected
+launchers, and the final Actions aggregate requires runtime success and
+`runtime-guards` too.
 
 `ci_full` includes nonignored slow cases. Existing quarantines and manual
 external-backend checks remain explicit exclusions in the configuration;
 their absence from automatic coverage does not establish that they are
 unsupported. Ignored tests are not enabled wholesale.
 
-Each successful Nix runtime result retains per-package JUnit reports with
-individual case durations. GitHub Actions exports test names, statuses and
-durations to a CSV artifact. Captured test output, expressions and raw logs
-are excluded. A failed Nix derivation has no registered report output; the
-build still fails, even when there is no timing CSV to upload.
+Each runtime invocation writes available package JUnit reports and a runtime log
+to `--report-dir PATH`, defaulting to `target/ci-results/<runner-name>`.
+Reports survive failing execution and scratch cleanup. GitHub Actions exports
+test names, statuses and durations to a CSV artifact; expressions, raw logs and
+captured output stay out of that artifact. Reporting preserves the test exit
+status, including when no timing report could be produced.
 Nextest reservations continue to protect shared
 generated-state folders and large evaluator allocations. Four shards permit
 separate workers to run long cases concurrently; they do not remove these
@@ -130,13 +178,29 @@ test mocks Typst and checks the missing-optional-renderer behavior.
 Merged artifacts are self-contained compressed archives. Recursive inheritance,
 writable extraction, Cargo fingerprints and epoch-1 timestamps must survive
 changes to archive handling. Stable publication outputs depend on the artifacts,
-not the commit. Lightweight test runners request the corresponding Nix check
-result before fetching compiler state or test binaries. NixCI launches a cached
-runner too, but a matching cached check result can avoid executing its tests.
-The local upload command selects static checks, runtime launchers and compiled
-producers, not runtime check results. Uncached runtime checks run in NixCI using
-those prepared inputs. An empty successful test output alone does not retain
-the necessary producers. Test groups are scheduled and reported independently.
+not the commit. Runtime launchers retain actual Nix references to source,
+artifacts, native libraries and a pure environment recording. They execute the
+Nextest/doctest or documentation bodies outside the Nix build sandbox on every
+invocation. Pure producers remain sandboxed and cacheable; runtime results are
+never substituted. Uploads prepare static checks, launchers and compiled inputs.
+Test groups are scheduled and reported independently.
+
+The lifecycle disables xtrace and loads the caller's license before replacing
+HOME, following the precedence in #link("../../CONTRIBUTING.typ#nixci-cache")[the
+contributor guide]. Credentials remain in the process environment. Each execution
+cleans its private writable source, HOME and temporary directory on exit. Cargo
+restores Crane artifacts with the pinned compiler/native environment and offline
+vendor configuration; relocation may still require runtime compilation.
+
+`just doctest-nix` and `just test-nix-all` execute the runtime launchers.
+`just docs-check-nix` runs the complete generated-reference, example, isolated
+Python exporter, wheel/import, asset, six-product latest/snapshot and publication
+assertions. `just doc-nix` remains static Rustdoc. Pages builds the pure
+`alphal00p-docs-build` launcher, then executes it into a fresh runtime directory
+with `--channel latest|snapshot`, `--snapshot-tag TAG` and `--output PATH`.
+Historical native builds are accepted only after rejecting Nix sources that
+capture a license during evaluation. The old licensed Pages and snapshot result
+attributes are removed.
 
 The local upload command keeps all selected outputs rooted through temporary
 result links until cache publication finishes. The command removes those links
@@ -493,10 +557,12 @@ its Python-stub workflow was preserved but stub generation was not rerun. A
 pre-existing probe expecting a `feynkit-py` edit to affect only that crate failed:
 its API consumer also depends on it. That assertion was not changed. An unchanged
 retry passed two intermittent main state-file failures; that failed attempt is
-excluded from successful timings. The final runner fix separately passed eight
+excluded from successful timings. The historical runner fix separately passed eight
 cached checks without compiler artifacts/downloads, a real five-test Clinnet cache
 miss, and a missing-license failure. Consolidation preserved all 63 compared Nix
 output identities and all 11 required local checks; those checks reused results.
+These measurements predate the runtime launchers; current runtime jobs execute
+on every invocation.
 
 Detailed evidence remains in these file histories, ending at the pre-cleanup
 commit `0cc8cd2`:

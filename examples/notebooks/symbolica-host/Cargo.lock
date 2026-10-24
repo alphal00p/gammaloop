@@ -1536,6 +1536,7 @@ dependencies = [
  "num-integer",
  "num-traits",
  "numerica",
+ "once_cell",
  "proc-macro2",
  "quote",
  "rand 0.8.6",

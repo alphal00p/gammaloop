@@ -1481,13 +1481,6 @@
       PYTHONPATH = "${pkgs.python313}/lib/python3.13/site-packages";
     };
 
-  licensePreCheck = ''
-    if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
-      echo "Missing SYMBOLICA_LICENSE environment variable" >&2
-      exit 1
-    fi
-  '';
-
   gammaloop-cli = pkgs.runCommand "gammaloop-api-${apiMeta.version}" {
     # Compressed artifacts hide native binary references until extraction.
     # Declare both the stdenv and forced GCC linker runtimes so Nix retains them.
@@ -2537,13 +2530,7 @@
   workspaceChecks = lib.mapAttrs (name: command:
     craneLib.mkCargoDerivation (ciArgs
       // {
-        cargoArtifacts =
-          if name == "doctest"
-          then mergeCargoArtifacts "gammaloop-workspace-doctest-inputs" [
-            cargoCheckArtifacts
-            cranePackageDependencyArtifacts."gammaloop-api"
-          ]
-          else cargoCheckArtifacts;
+        cargoArtifacts = cargoCheckArtifacts;
         pname = "gammaloop-workspace-${name}";
         src = workspaceTestSrc;
         postPatch = workspaceMissingCargoTargetsScript;
@@ -2559,16 +2546,10 @@
         checkPhaseCargoCommand = "";
         doCheck = false;
         installPhaseCommand = "";
-      }
-      // lib.optionalAttrs (name == "doctest") {
-        preBuild = licensePreCheck;
-        SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-        SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
       })) {
     check = "cargoWithProfile check ${ciArgs.cargoExtraArgs} --all-targets";
     clippy = "cargoWithProfile clippy ${ciArgs.cargoExtraArgs} --all-targets --no-deps -- --deny warnings";
     doc = "cargoWithProfile doc ${ciArgs.cargoExtraArgs} --no-deps";
-    doctest = "cargoWithProfile test --doc ${ciArgs.cargoExtraArgs} --exclude alphal00p-docs-python-exporter";
   };
 
   cranePythonDependencyArtifacts =
@@ -2908,211 +2889,382 @@
     })
     checkedNextestPackageGroups);
 
-  nextestCheckFor = {
-    target,
-    profile ? nextestProfile,
-    partition ? null,
-    name ? "gammaloop-nextest-${target.name}",
+  ciRuntimeShell = pkgs.mkShell (lib.getAttrs [
+      "CC"
+      "CXX"
+      cargoLinkerVar
+      "RUSTFLAGS"
+      "LD_LIBRARY_PATH"
+      "DYLD_LIBRARY_PATH"
+      "PYO3_PYTHON"
+      "PYTHONPATH"
+      "NO_SYMBOLICA_OEM_LICENSE"
+      "CARGO_PROFILE"
+      "CARGO_BUILD_INCREMENTAL"
+    ]
+    ciArgs
+    // {
+      buildInputs = lib.unique (ciArgs.buildInputs ++ [pkgs.stdenv.cc.cc.lib pkgs.gcc.cc.lib]);
+      nativeBuildInputs =
+        ciArgs.nativeBuildInputs
+        ++ [
+          ciToolchain
+          pkgs.cargo-nextest
+          pkgs.form
+          pkgs.coreutils
+          pkgs.findutils
+          pkgs.gnutar
+          pkgs.zstd
+          pkgs.rsync
+          pkgs.diffutils
+          pkgs.gnugrep
+          pkgs.gnused
+          pkgs.git
+          pkgs.jujutsu
+          pkgs.maturin
+          pkgs.uv
+          docsTypst
+          nextestFailureSummary
+        ];
+      TYPST_FONT_PATHS = docsFontPath;
+      TYPST_PACKAGE_CACHE_PATH = "${docsTypst}/lib/typst/packages";
+    });
+
+  # Record only the public compile/runtime environment in a sandbox. Keeping a
+  # .drv path in the launcher would retain compiler source/debug build inputs.
+  ciRuntimeEnvironment = ciRuntimeShell.overrideAttrs (_: {
+    name = "gammaloop-ci-runtime-environment";
+    buildPhase = ''
+      mkdir -p "$out"
+      for variable in $(export -p | sed -n 's/^declare -x \([A-Za-z0-9_]*\).*/\1/p' | sort); do
+        case "$variable" in
+          PATH|CC|CXX|CARGO_*|RUST*|PYO3_*|PYTHONPATH|LD_LIBRARY_PATH|DYLD_LIBRARY_PATH|TYPST_*|NO_SYMBOLICA_OEM_LICENSE|PKG_CONFIG*|NIX_CFLAGS*|NIX_LDFLAGS*|NIX_CC*|NIX_BINTOOLS*|NIX_HARDENING*)
+            declare -p "$variable" >> "$out/environment" ;;
+        esac
+      done
+      test -s "$out/environment"
+      grep -q '^declare -x PATH=' "$out/environment"
+    '';
+  });
+
+  # Store contexts retain source, archives, native libraries and the prepared
+  # environment. A cached launcher always executes its runtime body again.
+  runtimeCheckFor = {
+    name,
+    source,
+    setup ? "",
+    body,
   }: let
-    junitPath = "target/nextest/${profile}/junit.xml";
+    # writeShellScript checks the generated body with bash -n during its build.
+    script = pkgs.writeShellScript "${name}-runtime.sh" (''
+        runtime_name=${lib.escapeShellArg name}
+      ''
+      + builtins.readFile (workspaceRoot + "/scripts/ci-runtime.sh")
+      + ''
+        (
+          set -euo pipefail
+          cp -R --preserve=timestamps ${source}/. "$runtime_scratch/source/"
+          chmod -R u+w "$runtime_scratch/source"
+          cd "$runtime_scratch/source"
+          ${setup}
+          ${body}
+        ) 2>&1 | tee "$runtime_reports/runtime.log"
+        runtime_statuses=("''${PIPESTATUS[@]}")
+        runtime_status=''${runtime_statuses[0]}
+        [[ "$runtime_status" -ne 0 ]] || runtime_status=''${runtime_statuses[1]}
+        exit "$runtime_status"
+      '');
   in
-    pkgs.runCommand name ({
-      nativeBuildInputs = [
-        ciToolchain
-        pkgs.cargo-nextest
-        pkgs.form
-        pkgs.gcc
-        nextestFailureSummary
-      ] ++ lib.optionals (nextestUsesPythonModule target) [nextestPython]
-      ++ lib.optionals (nextestUsesUfoSupport target) [nextestUfoPython]
-      ++ (target.runtimeTools or []);
-      CC = nixCc;
-      CXX = nixCxx;
-      "${cargoLinkerVar}" = nixCc;
-      LD_LIBRARY_PATH = runtimeLibPath;
-      DYLD_LIBRARY_PATH = runtimeLibPath;
-      NEXTEST_SHOW_PROGRESS = "counter";
-      RUST_BACKTRACE = "1";
-      RUST_LIB_BACKTRACE = "1";
-      SYMBOLICA_LICENSE = builtins.getEnv "SYMBOLICA_LICENSE";
-    } // lib.optionalAttrs (target.runtimeRenderData or false) {
-      SYMBOLICA_DATA_DIRECTORY = symbolicaRenderData;
-    }) (''
-      if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
-        echo "Missing SYMBOLICA_LICENSE environment variable" >&2
-        exit 1
-      fi
+    pkgs.writeShellApplication {
+      inherit name;
+      runtimeInputs = [pkgs.bash pkgs.coreutils];
+      text = ''
+        set +x
+        # shellcheck source=/dev/null
+        source ${ciRuntimeEnvironment}/environment
+        exec bash ${script} "$@"
+      '';
+    };
 
-      mkdir -p /build/source
-      cp -R ${nextestRuntimeSrcFor target}/. /build/source/
-      chmod -R u+w /build/source
-      cd /build/source
-      # Workspace-root discovery checks these directories even for test
-      # targets that do not consume any files from them.
-      mkdir -p tests/resources examples/cli
-      ${workspaceMissingCargoTargetsScript}
-    '' + lib.optionalString (target.name == "docs") ''
-      # Tests such as trybuild invoke Cargo again at runtime. Point
-      # those nested invocations at the same vendored dependency
-      # graph used to compile the archived test binaries.
-      export CARGO_HOME="$PWD/.cargo-home"
-      mkdir -p "$CARGO_HOME"
-      cp ${cargoVendorDir}/config.toml "$CARGO_HOME/config.toml"
-      export CARGO_NET_OFFLINE=true
-      # The remapped Nix test source deliberately has no .git directory.
-      # Give generated test pages stable, explicitly non-publishing
-      # provenance rather than making the runner depend on repository
-      # metadata outside its declared source closure.
-      export ALPHAL00P_DOCS_GIT_COMMIT=0000000000000000000000000000000000000000
-      export ALPHAL00P_DOCS_GIT_TIMESTAMP=1
-      # Nix's TMPDIR is normally /build, which also contains the copied
-      # workspace. Isolate tempfile-based containment tests so /build is
-      # not mistaken for a general persistent-cache namespace.
-      export TMPDIR="$PWD/target/nix-ci-tmp"
-      mkdir -p "$TMPDIR"
-    '' + lib.optionalString (nextestUsesPythonModule target) ''
-      export PYO3_PYTHON=${nextestPython}/bin/python3
-      export PYTHON=${nextestPython}/bin/python3
-      export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
-    '' + lib.optionalString (nextestUsesUfoSupport target) ''
-      # Embedded Python uses the shared compile interpreter and imports its
-      # UFO dependencies from this separately packaged runtime environment.
-      export PYTHONPATH=${nextestUfoPython}/${pythonSitePackages}''${PYTHONPATH:+:$PYTHONPATH}
-    '' + ''
-      # Nextest runs with the workspace root as cwd, while some insta
-      # snapshots are stored under each crate src. Mirror those snapshot
-      # directories into the workspace-level src tree in the disposable
-      # Nix build directory so insta can find them.
-      if [ -d crates ]; then
-        while IFS= read -r snapshots; do
-          rel="''${snapshots#crates/*/src/}"
-          mkdir -p "src/$rel"
-          cp -R "$snapshots/." "src/$rel/"
-        done < <(find crates -type d -name snapshots | sort)
-      fi
-
-      # Respect the sandbox's CPU budget while retaining the CI profile's
-      # 16-process cap on large hosts. Test-internal worker reservations remain
-      # accounted for by nextest's existing threads-required settings.
-      nextest_threads=$(nproc)
-      if (( NIX_BUILD_CORES > 0 && NIX_BUILD_CORES < nextest_threads )); then
-        nextest_threads=$NIX_BUILD_CORES
-      fi
-      export NEXTEST_TEST_THREADS=$((nextest_threads < 16 ? nextest_threads : 16))
-      echo "Nextest worker budget: $NEXTEST_TEST_THREADS"
-    '' + lib.optionalString (profile == "ci_slow") ''
-      # These archive runners replace the separate soft-CT acceptance jobs.
-      # Preserve their stack allowance and retain failed generated states in
-      # the build tree, while keeping internal Rayon work within this budget.
-      export RUST_MIN_STACK=134217728
-      export RAYON_NUM_THREADS="$NEXTEST_TEST_THREADS"
-      export GAMMALOOP_TESTS_NO_CLEAN_STATE=1
-    '' + ''
-      mkdir -p target/nextest "$out"
-      set +e
-      status=0
-      ${lib.concatMapStringsSep "\n" (package: ''
-          rm -f ${lib.escapeShellArg junitPath}
-          cargo nextest run \
-            --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
-            --extract-to . \
-            --extract-overwrite \
-            --workspace-remap . \
-            --profile ${lib.escapeShellArg profile} \
-            ${lib.optionalString ((target.runFilter or null) != null) "-E ${lib.escapeShellArg target.runFilter}"} \
-            --no-fail-fast --final-status-level fail --no-tests=pass \
-            ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"}
-          package_status=$?
-          nextest-failure-summary ${lib.escapeShellArg junitPath} || true
-          if [ -f ${lib.escapeShellArg junitPath} ]; then
-            cp ${lib.escapeShellArg junitPath} "$out/${package}.xml"
-          fi
-          if [ "$package_status" -ne 0 ] && [ "$status" -eq 0 ]; then
-            status="$package_status"
-          fi
-        '')
-        target.packages}
-      exit "$status"
-    '');
-
-  nextestRunChecks = lib.listToAttrs (map (target: {
-      name = "gammaloop-nextest-${target.name}";
-      value = nextestCheckFor {inherit target;};
-    })
-    checkedNextestPackageGroups);
-
-  nextestChecks =
-    {
-      gammaloop-nextest-binaries = nextestBinarySetAggregate;
-    }
-    // nextestBinarySets
-    // nextestRunChecks;
-
-  nextestAggregate = pkgs.runCommand "gammaloop-nextest" {} ''
-    ${lib.concatMapStringsSep "\n" (check: "test -d ${check}") (builtins.attrValues nextestRunChecks)}
-    mkdir -p "$out"
+  runtimeCargoSetup = artifacts: targetDir: ''
+    export CARGO_HOME="$HOME/.cargo" CARGO_NET_OFFLINE=true
+    export CARGO_TARGET_DIR="$PWD/${targetDir}"
+    mkdir -p "$CARGO_HOME"
+    cp ${cargoVendorDir}/config.toml "$CARGO_HOME/config.toml"
+    export CARGO_BUILD_JOBS="$runtime_cores" RUST_TEST_THREADS="$runtime_cores"
+    export CARGO_PROFILE=${ciCargoProfile} CARGO_BUILD_INCREMENTAL=true
+    # Use the logger's runtime override instead of its baked build-directory path.
+    export GL_TEST_LOG_DIR="$PWD/target/test-logs"
+    doNotLinkInheritedArtifacts=1
+    source ${craneLib.cargoHelperFunctionsHook}/nix-support/setup-hook
+    source ${craneLib.inheritCargoArtifactsHook}/nix-support/setup-hook
+    # The hook's diagnostic wrapper enables xtrace; keep runtime commands quiet.
+    cargo() { command cargo "$@"; }
+    ${lib.optionalString (artifacts != null) ''
+      inheritCargoArtifacts ${artifacts} ${lib.escapeShellArg targetDir}
+      chmod -R u+w ${lib.escapeShellArg targetDir}
+      find ${lib.escapeShellArg targetDir} -name '.cargo*lock' -delete
+    ''}
   '';
 
-  impureCheckRunnerTargets =
-    [
-      {
-        runnerAttr = "nix-ci-check-alphal00p-docs";
-        checkAttr = "alphal00p-docs";
-        inputs = [documentation.alphal00pDocsCargoArtifacts symbolicaRenderData];
+  doctestArtifacts = mergeCargoArtifacts "gammaloop-workspace-doctest-inputs" [
+    cargoCheckArtifacts
+    cranePackageDependencyArtifacts."gammaloop-api"
+  ];
+  doctestRunner = runtimeCheckFor {
+    name = "nix-ci-check-gammaloop-doctest";
+    source = workspaceTestSrc;
+    setup = workspaceMissingCargoTargetsScript + runtimeCargoSetup doctestArtifacts "target";
+    body = ''
+      export SYMBOLICA_DATA_DIRECTORY=${symbolicaRenderData}
+      [[ -z "$runtime_filter$runtime_output$runtime_channel$runtime_snapshot_tag" ]] || {
+        echo "Doctests accept --package and --report-dir" >&2; exit 2;
       }
-      {
-        runnerAttr = "nix-ci-check-gammaloop-doctest";
-        checkAttr = "gammaloop-doctest";
-        inputs = [cargoCheckArtifacts cranePackageDependencyArtifacts."gammaloop-api" symbolicaRenderData];
-      }
-      {
-        runnerAttr = "nix-ci-check-gammaloop-nextest";
-        checkAttr = "gammaloop-nextest";
-        inputs = builtins.attrValues nextestBinarySets ++ [gammaloop-python-module symbolicaRenderData]
-          ++ lib.optional (builtins.any nextestUsesUfoSupport checkedNextestPackageGroups) nextestUfoPython;
-      }
-    ]
-    ++ map (target: {
-      runnerAttr = "nix-ci-check-gammaloop-nextest-${target.name}";
-      checkAttr = "gammaloop-nextest-${target.name}";
-      inputs =
-        [(nextestBinarySetForTarget target)]
-        ++ lib.optional (nextestUsesPythonModule target) gammaloop-python-module
-        ++ lib.optional (nextestUsesUfoSupport target) nextestUfoPython
-        ++ lib.optional (target.runtimeRenderData or false) symbolicaRenderData;
-    })
-    checkedNextestPackageGroups;
+      case "$runtime_package" in
+        "") cargoWithProfile test --doc ${ciArgs.cargoExtraArgs} --exclude alphal00p-docs-python-exporter ;;
+        ${lib.concatMapStringsSep "\n" (package: ''
+        ${lib.escapeShellArg package}) cargoWithProfile test --doc ${cargoPackagesArgsFor [package] craneCiFeaturesFor} ;;
+      '') (lib.subtractLists ["alphal00p-docs-python-exporter"] workspaceMemberPackages)}
+        *) echo "Unknown doctest package" >&2; exit 2 ;;
+      esac
+    '';
+  };
 
-  impureCheckRunnerPackages = lib.listToAttrs (map (target: {
-      name = target.runnerAttr;
-      value = pkgs.writeShellApplication {
-        name = target.runnerAttr;
-        # CI publishes the pure test inputs separately, including when this
-        # runner is cached. Let the check fetch them only on a result cache miss.
-        # Version the launcher with those inputs: NixCI can start a cached
-        # launcher before its manually ordered producers. Retain only a digest
-        # so a cached test result does not require downloading their closures.
-        runtimeInputs = [pkgs.nix];
-        text = ''
-          # CI input identity: ${builtins.hashString "sha256" (builtins.unsafeDiscardStringContext (
-            builtins.toJSON (map (input: input.drvPath) target.inputs)
-          ))}
-          set -euo pipefail
-          if [[ -n "''${SYMBOLICA_LICENSE_SIGNED:-}" ]]; then
-            export SYMBOLICA_LICENSE="$SYMBOLICA_LICENSE_SIGNED"
+  nextestRunnerFor = {
+    target,
+    profile,
+    partition,
+    name,
+  }: let
+    junitPath = "target/nextest/${profile}/junit.xml";
+    runFilter =
+      if (target.runFilter or null) == null
+      then ""
+      else target.runFilter;
+  in
+    runtimeCheckFor {
+      name = "nix-ci-check-${name}";
+      source = nextestRuntimeSrcFor target;
+      setup = runtimeCargoSetup null "target";
+      body =
+        ''
+              [[ -z "$runtime_output$runtime_channel$runtime_snapshot_tag" ]] || {
+                echo "Nextest accepts --package, --filter and --report-dir" >&2; exit 2;
+              }
+              case "$runtime_package" in
+                ""|${lib.concatMapStringsSep "|" lib.escapeShellArg target.packages}) ;;
+                *) echo "Package is not in this Nextest group" >&2; exit 2 ;;
+              esac
+              [[ -z "$runtime_filter" || -n "$runtime_package" ]] || {
+            echo "--filter requires --package" >&2; exit 2;
+          }
+          export PATH=${lib.makeBinPath (target.runtimeTools or [])}:"$PATH"
+              export NEXTEST_SHOW_PROGRESS=counter RUST_BACKTRACE=1 RUST_LIB_BACKTRACE=1
+              # Insta macros retain the producer manifest path; snapshot I/O belongs here.
+              export INSTA_WORKSPACE_ROOT="$PWD"
+              ${lib.optionalString (target.runtimeRenderData or false) ''
+            export SYMBOLICA_DATA_DIRECTORY=${symbolicaRenderData}
+          ''}
+              # Workspace-root discovery checks these directories even for test
+              # targets that do not consume any files from them.
+              mkdir -p tests/resources examples/cli
+              ${workspaceMissingCargoTargetsScript}
+        ''
+        + lib.optionalString (target.name == "docs") ''
+          export ALPHAL00P_DOCS_GIT_COMMIT=0000000000000000000000000000000000000000
+          export ALPHAL00P_DOCS_GIT_TIMESTAMP=1
+        ''
+        + lib.optionalString (nextestUsesPythonModule target) ''
+          export PYO3_PYTHON=${nextestPython}/bin/python3
+          export PYTHON=${nextestPython}/bin/python3
+          export PYTHONPATH=${gammaloop-python-module}/${pythonSitePackages}:${nextestPython}/${pythonSitePackages}
+        ''
+        + lib.optionalString (nextestUsesUfoSupport target) ''
+          # Embedded Python uses the shared compile interpreter and imports its
+          # UFO dependencies from this separately packaged runtime environment.
+          export PYTHONPATH=${nextestUfoPython}/${pythonSitePackages}''${PYTHONPATH:+:$PYTHONPATH}
+        ''
+        + ''
+          # Nextest runs with the workspace root as cwd, while some insta
+          # snapshots are stored under each crate src. Mirror those snapshot
+          # directories into the workspace-level src tree in the disposable
+          # runtime source directory so insta can find them.
+          if [ -d crates ]; then
+            while IFS= read -r snapshots; do
+              rel="''${snapshots#crates/*/src/}"
+              mkdir -p "src/$rel"
+              cp -R "$snapshots/." "src/$rel/"
+            done < <(find crates -type d -name snapshots | sort)
           fi
-          exec nix \
-            --extra-experimental-features nix-command \
-            --extra-experimental-features flakes \
-            build \
-            --no-link \
-            --print-build-logs \
-            --impure \
-            .#checks.${system}.${target.checkAttr}
+
+          # Respect the caller's CPU budget while retaining the CI profile's
+          # 16-process cap on large hosts. Test-internal worker reservations remain
+          # accounted for by nextest's existing threads-required settings.
+          export NEXTEST_TEST_THREADS="$runtime_cores"
+          echo "Nextest worker budget: $NEXTEST_TEST_THREADS"
+        ''
+        + lib.optionalString (profile == "ci_slow") ''
+          # These archive runners replace the separate soft-CT acceptance jobs.
+          # Preserve their stack allowance and keep failed generated states until
+          # runtime scratch cleanup, with internal Rayon work within this budget.
+          export RUST_MIN_STACK=134217728
+          export RAYON_NUM_THREADS="$NEXTEST_TEST_THREADS"
+          export GAMMALOOP_TESTS_NO_CLEAN_STATE=1
+        ''
+        + ''
+          mkdir -p target/nextest
+          status=0
+          report_status=0
+          ${lib.concatMapStringsSep "\n" (package: ''
+              if [[ -z "$runtime_package" || "$runtime_package" == ${lib.escapeShellArg package} ]]; then
+                rm -f ${lib.escapeShellArg junitPath} "$runtime_reports/${package}.xml"
+                selection=()
+                run_filter=${lib.escapeShellArg runFilter}
+                if [[ -n "$runtime_filter" ]]; then
+                  if [[ -n "$run_filter" ]]; then
+                    run_filter="($run_filter) & ($runtime_filter)"
+                  else
+                    run_filter=$runtime_filter
+                  fi
+                fi
+                [[ -z "$run_filter" ]] || selection+=(-E "$run_filter")
+                no_tests=pass
+                [[ -z "$runtime_package$runtime_filter" ]] || no_tests=fail
+                set +e
+                cargo nextest run \
+                  --archive-file ${nextestBinarySetForTarget target}/${nextestArchiveNameFor target package} \
+                  --extract-to . \
+                  --extract-overwrite \
+                  --workspace-remap . \
+                  --profile ${lib.escapeShellArg profile} \
+                  --no-fail-fast --final-status-level fail --no-tests="$no_tests" "''${selection[@]}" \
+                  ${lib.optionalString (partition != null) "--partition ${lib.escapeShellArg partition}"}
+                package_status=$?
+                set -e
+              if [ "$package_status" -ne 0 ] && [ "$status" -eq 0 ]; then
+                status="$package_status"
+              fi
+                nextest-failure-summary ${lib.escapeShellArg junitPath} || true
+                if [ -f ${lib.escapeShellArg junitPath} ]; then
+                cp ${lib.escapeShellArg junitPath} "$runtime_reports/${package}.xml" || {
+                  copy_status=$?
+                  [ "$report_status" -ne 0 ] || report_status="$copy_status"
+                }
+                fi
+              fi
+            '')
+            target.packages}
+          [ "$status" -eq 0 ] || exit "$status"
+          exit "$report_status"
+        '';
+    };
+
+  nextestRuntimeJobs = lib.filter (job: job.group != null);
+  nextestRuntimePackages = lib.listToAttrs (map (job: {
+      name = job.package;
+      value = nextestRunnerFor {
+        inherit (job) name profile partition;
+        target = lib.findFirst (target: target.name == job.group)
+          (throw "runtime job ${job.name} requires group ${job.group}")
+          checkedNextestPackageGroups;
+      };
+    }) (nextestRuntimeJobs (runtimeJobs ++ mainRuntimeJobs)));
+
+  documentationRuntimeSetup =
+    runtimeCargoSetup documentation.alphal00pDocsCargoArtifacts documentation.alphal00pDocsCargoTarget
+    + documentation.runtimeSetup;
+  runtimeCheckPackages =
+    nextestRuntimePackages
+    // {
+      nix-ci-check-gammaloop-doctest = doctestRunner;
+      nix-ci-check-alphal00p-docs = runtimeCheckFor {
+        name = "nix-ci-check-alphal00p-docs";
+        source = documentation.documentationSrc;
+        setup = documentationRuntimeSetup;
+        body = documentation.runtimeCheck;
+      };
+      alphal00p-docs-build = runtimeCheckFor {
+        name = "alphal00p-docs-build";
+        source = documentation.documentationSrc;
+        setup = documentationRuntimeSetup;
+        body = documentation.runtimeBuild;
+      };
+      nix-ci-check-runtime-fixture = runtimeCheckFor {
+        name = "nix-ci-check-runtime-fixture";
+        source = pkgs.writeTextDir "fixture" "runtime contract";
+        body = ''
+          [[ "$SYMBOLICA_LICENSE" == "$CI_RUNTIME_EXPECTED" ]]
+          [[ -z "''${SYMBOLICA_LICENSE_SIGNED:-}" ]]
+          [[ "$runtime_output" == "''${CI_RUNTIME_OUTPUT_EXPECTED:-}" ]]
+          [[ "$HOME" == "$runtime_scratch/"* && "$TMPDIR" == "$runtime_scratch/"* ]]
+          printf 'executed\n' >> "$CI_RUNTIME_COUNTER"
+          printf 'retained\n' > "$runtime_reports/fixture.txt"
+          printf '%s\n' "$runtime_scratch" > "$runtime_reports/scratch-path.txt"
+          [[ "$(stat -c %a "$runtime_scratch")" == 700 ]]
+          exit "''${CI_RUNTIME_EXIT:-0}"
         '';
       };
-    })
-    impureCheckRunnerTargets);
+      nix-ci-check-gammaloop-nextest = pkgs.writeShellApplication {
+        name = "nix-ci-check-gammaloop-nextest";
+        text = ''
+          report_root="$PWD/target/ci-results/nextest"
+          if [[ $# -eq 2 && "$1" == --report-dir ]]; then
+            report_root=$2
+          elif [[ $# -ne 0 ]]; then
+            echo "Aggregate Nextest accepts --report-dir; use a group runner for narrow tests" >&2
+            exit 2
+          fi
+          status=0
+          ${lib.concatMapStringsSep "\n" (job: ''
+              ${nextestRuntimePackages.${job.package}}/bin/${job.package} \
+                --report-dir "$report_root/${job.group}" || { group_status=$?; [[ "$status" -ne 0 ]] || status=$group_status; }
+            '')
+            (nextestRuntimeJobs runtimeJobs)}
+          exit "$status"
+        '';
+      };
+    };
+  runtimeJobs = ci.runtimeJobs;
+  mainRuntimeJobs = ci.mainRuntimeJobs;
+
+  ciRuntimeLicenseBoundary = pkgs.writeShellApplication {
+    name = "ci-runtime-license-boundary";
+    runtimeInputs = [pkgs.nix pkgs.python313];
+    text = ''
+      exec python3 ${runtimeGuardSrc}/scripts/check-runtime-license-boundary.py "$@"
+    '';
+  };
+
+  runtimeGuardSrc = lib.fileset.toSource {
+    root = workspaceRoot;
+    fileset = lib.fileset.unions (map (path: workspaceRoot + path) [
+      "/scripts/tracked_source.py"
+      "/just/ci.just"
+      "/crates/linnet/Justfile"
+      "/scripts/test-tracked-source-recipes.py"
+      "/scripts/check-runtime-license-boundary.py"
+      "/scripts/test-ci-runtime.py"
+      "/scripts/test-ci-runtime-workflow.py"
+      "/.github/workflows/nix.yml"
+      "/.github/workflows/docs-pages.yml"
+    ]);
+  };
+  runtimeGuardCheck = pkgs.runCommand "gammaloop-ci-runtime" {
+    nativeBuildInputs = [pkgs.bash pkgs.coreutils pkgs.jq pkgs.just (pkgs.python313.withPackages (p: [p.pyyaml]))];
+  } ''
+    export HOME="$TMPDIR/home" PYTHONDONTWRITEBYTECODE=1
+    mkdir -p "$HOME" "$out"
+    cp -R ${runtimeGuardSrc}/. .
+    python3 scripts/tracked_source.py --self-test
+    python3 scripts/test-tracked-source-recipes.py
+    python3 -O scripts/check-runtime-license-boundary.py --self-test
+    python3 scripts/test-ci-runtime.py \
+      ${runtimeCheckPackages.nix-ci-check-runtime-fixture}/bin/nix-ci-check-runtime-fixture \
+      --report-dir "$out/lifecycle"
+    python3 scripts/test-ci-runtime-workflow.py \
+      ${runtimeCheckPackages.nix-ci-check-runtime-fixture}/bin/nix-ci-check-runtime-fixture \
+      --report-dir "$out/workflow"
+  '';
 
   nixCiPassed = pkgs.writeShellApplication {
     name = "nix-ci-passed";
@@ -3131,10 +3283,7 @@
       gammaloop-clippy = workspaceChecks.clippy;
 
       gammaloop-doc = workspaceChecks.doc;
-      alphal00p-docs = documentation.alphal00pDocsCheck;
       alphal00p-docs-watch = documentation.watchCheck;
-
-      gammaloop-doctest = workspaceChecks.doctest;
 
       gammaloop-fmt = craneLib.cargoFmt {
         src = workspaceFmtSrc;
@@ -3143,73 +3292,46 @@
       };
 
       gammaloop-guppy-workspace-graph = guppyWorkspaceGraphCheck;
+      gammaloop-ci-runtime = runtimeGuardCheck;
 
-      linnest-wasm = pkgs.runCommand "linnest-wasm-check" {
-        nativeBuildInputs = [pkgs.wasm-tools];
-      } ''
-        test -s ${linnest-wasm}/linnest.wasm
-        test -s ${linnest-wasm}/ec-layout.wasm
-        test -s ${linnest-wasm}/kurvst.wasm
-        test -s ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
-        test -s ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
-        test -s ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
-        cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
-        cmp ${linnest-wasm}/ec-layout.wasm ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
-        cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
-        wasm-tools validate ${linnest-wasm}/linnest.wasm
-        wasm-tools validate ${linnest-wasm}/ec-layout.wasm
-        wasm-tools validate ${linnest-wasm}/kurvst.wasm
-        test -s ${linnest-wasm}/templates/layout.typ
-        test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ
-        test -s ${linnest-wasm}/templates/crates/linnest/typst/src/curve.typ
-        test -s ${linnest-wasm}/templates/crates/kurvst/typst/src/lib.typ
-        mkdir -p "$out"
-      '';
+      linnest-wasm =
+        pkgs.runCommand "linnest-wasm-check" {
+          nativeBuildInputs = [pkgs.wasm-tools];
+        } ''
+          test -s ${linnest-wasm}/linnest.wasm
+          test -s ${linnest-wasm}/ec-layout.wasm
+          test -s ${linnest-wasm}/kurvst.wasm
+          test -s ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+          test -s ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
+          test -s ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
+          cmp ${linnest-wasm}/linnest.wasm ${linnest-wasm}/templates/crates/linnest/typst/linnest.wasm
+          cmp ${linnest-wasm}/ec-layout.wasm ${linnest-wasm}/templates/crates/linnest/typst/ec-layout.wasm
+          cmp ${linnest-wasm}/kurvst.wasm ${linnest-wasm}/templates/crates/kurvst/typst/kurvst.wasm
+          wasm-tools validate ${linnest-wasm}/linnest.wasm
+          wasm-tools validate ${linnest-wasm}/ec-layout.wasm
+          wasm-tools validate ${linnest-wasm}/kurvst.wasm
+          test -s ${linnest-wasm}/templates/layout.typ
+          test -s ${linnest-wasm}/templates/crates/linnest/typst/src/lib.typ
+          test -s ${linnest-wasm}/templates/crates/linnest/typst/src/curve.typ
+          test -s ${linnest-wasm}/templates/crates/kurvst/typst/src/lib.typ
+          mkdir -p "$out"
+        '';
     }
-    // nextestChecks
-    // {
-      gammaloop-nextest = nextestAggregate;
-    };
+    // {gammaloop-nextest-binaries = nextestBinarySetAggregate;} // nextestBinarySets;
 
-  # Hestia builds the binary producers before evaluating this consumer
-  # matrix. Omit those producers and the aggregate nextest check so each
-  # nextest execution remains an independent row without racing its leaves.
   hestiaChecks = builtins.removeAttrs allChecks (
-    [
-      "gammaloop-nextest"
-      "gammaloop-nextest-binaries"
-    ]
+    # The dedicated Actions runtime-guards job builds this check once.
+    ["gammaloop-nextest-binaries" "gammaloop-ci-runtime"]
     ++ map (target: "gammaloop-nextest-binaries-${target.name}") checkedNextestPackageGroups
   );
-  # Main includes unmeasured slow tests in every package. Integration's fast
-  # check and four long-test partitions cover the same full selection while
-  # reusing its archives. Keep these results outside NixCI's fast scheduling.
-  mainTestChecks =
-    hestiaChecks
-    // lib.listToAttrs (map (target: {
-      name = "gammaloop-nextest-${target.name}";
-      value = nextestCheckFor {
-        inherit target;
-        profile = "ci_full";
-      };
-    }) (lib.filter (target: target.name != "integration") checkedNextestPackageGroups))
-    // lib.listToAttrs (map (index: let
-      name = "gammaloop-nextest-long-${toString index}";
-    in {
-      inherit name;
-      value = nextestCheckFor {
-        inherit name;
-        target =
-          lib.findFirst (target: target.name == "integration")
-          (throw "main test partitions require the integration group")
-          checkedNextestPackageGroups;
-        profile = "ci_slow";
-        partition = "hash:${toString index}/4";
-      };
-    }) [1 2 3 4]);
 in {
-  inherit (documentation) docsTypst docsFontPath linnetPython alphal00pDocsCargoArtifacts
-    alphal00pDocsPages alphal00pDocsSnapshotFixture;
+  inherit
+    (documentation)
+    docsTypst
+    docsFontPath
+    linnetPython
+    alphal00pDocsCargoArtifacts
+    ;
   inherit
     workspaceDependencySrc
     craneTestDependencyArtifacts
@@ -3217,7 +3339,6 @@ in {
     cranePythonBuildArtifacts
     allChecks
     hestiaChecks
-    mainTestChecks
     gammaloop-cli
     clinnet-cli
     gammaloop-python-module
@@ -3238,7 +3359,13 @@ in {
     craneTestDependencyOutputs
     craneTestBinaryPackageOutputs
     nextestContextualTestOutputs
-    impureCheckRunnerPackages
+    runtimeCheckPackages
+    ciRuntimeShell
+    ciRuntimeEnvironment
+    ciRuntimeLicenseBoundary
+    runtimeJobs
+    mainRuntimeJobs
+    doctestArtifacts
     commonArgs
     workspaceTestSrc
     nixCc

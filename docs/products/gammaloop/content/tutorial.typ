@@ -59,6 +59,12 @@ block and persist the result on exit:
 
 #callout([`--clean-state` removes the resolved state first], [
   Use it only for this first, reproducible run. Omit it when resuming work you want to keep.
+  GammaLoop takes the state writer lock and tries every existing nested writer lock before
+  deleting anything. If another process is writing, wait for it to finish and retry.
+  Stop processes that could start new nested workspaces while cleanup is running.
+  Cleanup renames the locked directory to a hidden sibling before deleting it; a later
+  `--clean-state` also removes unlocked leftovers from an interrupted deletion of that state.
+  A selected symlink is only unlinked; its target is preserved.
   Its generated #link("reference/cli/commands/gammaloop/#argument-gammaloop-clean-state-349074e9fab4dbbb")[argument reference] records the exact
   valueless-flag semantics.
   The example card resolves its state to `examples/cli/gg_hhh/1L/state` and requests ten
@@ -67,10 +73,11 @@ block and persist the result on exit:
 
 The block imports `sm-default.json`, generates the selected one-loop pentagon amplitude
 contribution, applies the card's explicit helicity and color choices, builds its integrand,
-saves DOT data, and writes the state. A successful run exits without an error and leaves at
-least `run.toml`, `global_settings.toml`,
-`default_runtime_settings.toml`, and `processes/` in the state folder. `run.toml` records the
-commands and settings needed to replay the run; it is not merely a log file.
+saves DOT data, and writes the state. A successful run leaves `state_manifest.toml` in the state
+folder, selecting the complete saved payload under `generations/<generation>/`. That payload
+contains `run.toml`, `global_settings.toml`, `default_runtime_settings.toml`, and `processes/`.
+`run.toml` records the commands and settings needed to replay the run; it is not merely a log file.
+Keep the manifest and its selected generation together when copying the state.
 
 Use #link("guides/dot-input/")[GammaLoop DOT input] to inspect a diagram interactively or
 render the exported drawing bundle with `just draw`.
@@ -90,6 +97,15 @@ keeping the same state. You can now run the card's `integrate_euclidean` or
 `integrate_physical` block, but those are deliberately beyond the first-success path because
 they request a substantial Monte Carlo integration and require a separate normalization and
 validation plan.
+
+Those integration blocks use a separate integration workspace. Its `manifest.json` selects a
+completed iteration under `generations/<generation>/`, including the scalar/grid state and
+per-slot settings and observable checkpoints. Resume without `--restart` to continue that
+iteration history. A restart preserves the previous checkpoint and every previous output until
+its first new iteration commits; it then removes the replaced run's outputs and generations.
+Ordinary commits keep every generation until explicit `cleanup integration` removes superseded
+ones. Coordinate cleanup with readers, or copy a quiescent workspace for long-lived inspection. See
+#link("guides/process-generation/")[the workspace layout and restart rules].
 
 == Inspect before expensive work
 

@@ -54,6 +54,7 @@ result/
 /tydenso/target/
 examples/amplitude_computation/GL_*
 gammaloop_state/
+**/.snapshot-retired-*/
 # Keep the modern qq_aaa example while ignoring its legacy cards, backup DOT, and local outputs.
 examples/cli/qq_aaa/*
 !examples/cli/qq_aaa/qqx_aaa_subtracted.dot

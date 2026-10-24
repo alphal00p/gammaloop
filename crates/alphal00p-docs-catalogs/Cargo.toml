@@ -17,6 +17,9 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 vakint = { path = "../vakint", default-features = false, optional = true }
 
+[dev-dependencies]
+alphal00p-workspace.workspace = true
+
 [features]
 default = []
 gammaloop-reference = ["dep:gammaloop-api", "dep:gammalooprs", "dep:schemars"]

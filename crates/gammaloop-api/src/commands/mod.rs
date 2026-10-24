@@ -23,6 +23,8 @@ pub mod approach;
 pub use approach::Approach;
 pub mod bench;
 pub use bench::Bench;
+mod cleanup;
+pub use cleanup::Cleanup;
 pub mod commands_block;
 pub use commands_block::StartCommandsBlock;
 pub mod display;
@@ -164,6 +166,10 @@ pub enum Commands {
     #[clap(subcommand)]
     Save(Save),
 
+    /// Remove superseded saved-state or integration generations under the writer lock.
+    #[clap(subcommand)]
+    Cleanup(Cleanup),
+
     /// Execute a stored command block or an inline command list.
     Run(Run),
     /// Begin recording subsequent commands under a reusable block name.
@@ -244,6 +250,17 @@ impl FromStr for Commands {
 }
 
 impl Commands {
+    /// Whether this command belongs in the persisted execution history.
+    pub(crate) fn should_persist(&self) -> bool {
+        !matches!(
+            self,
+            Self::Quit(_)
+                | Self::Cleanup(_)
+                | Self::StartCommandsBlock(_)
+                | Self::FinishCommandsBlock
+        )
+    }
+
     pub fn run(
         self,
         state: &mut State,
@@ -325,6 +342,7 @@ impl Commands {
                 bench.run(state)?;
             }
             Commands::Import(s) => s.run(state, global_cli_settings)?,
+            Commands::Cleanup(command) => command.run(global_cli_settings)?,
             Commands::Save(s) => s.run(
                 state,
                 run_history,
@@ -349,7 +367,6 @@ impl Commands {
                 g.run(
                     state,
                     &global_cli_settings.state.folder,
-                    global_cli_settings.override_state,
                     &global_cli_settings.global,
                     default_runtime_settings,
                 )?

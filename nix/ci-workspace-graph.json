@@ -2,6 +2,8 @@
   "normal_dependencies": {
     "alphal00p-docs-builder": [
       "alphal00p-docs-schema",
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "linnest"
     ],
     "alphal00p-docs-catalogs": [
@@ -33,6 +35,7 @@
     ],
     "alphal00p-docs-macros": [],
     "alphal00p-docs-python-exporter": [
+      "alphal00p-workspace",
       "feynkit-py",
       "gammaloop-api",
       "linnet-py",
@@ -40,6 +43,8 @@
       "vakint"
     ],
     "alphal00p-docs-schema": [],
+    "alphal00p-persistence": [],
+    "alphal00p-workspace": [],
     "clinnet": [],
     "feynkit": [
       "feynkit-amplitude",
@@ -118,6 +123,7 @@
       "feynkit-model"
     ],
     "gammaloop-api": [
+      "alphal00p-persistence",
       "feynkit-cff",
       "feynkit-generator",
       "feynkit-graph",
@@ -132,6 +138,8 @@
       "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-generator",
       "feynkit-graph",
       "feynkit-model",
@@ -152,6 +160,7 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "alphal00p-persistence",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -234,6 +243,8 @@
   "normal_dependency_features": {
     "alphal00p-docs-builder": {
       "alphal00p-docs-schema": [],
+      "alphal00p-persistence": [],
+      "alphal00p-workspace": [],
       "linnest": [
         "svg"
       ]
@@ -284,6 +295,7 @@
     },
     "alphal00p-docs-macros": {},
     "alphal00p-docs-python-exporter": {
+      "alphal00p-workspace": [],
       "feynkit-py": [
         "python_stubgen"
       ],
@@ -302,6 +314,8 @@
       ]
     },
     "alphal00p-docs-schema": {},
+    "alphal00p-persistence": {},
+    "alphal00p-workspace": {},
     "clinnet": {},
     "feynkit": {
       "feynkit-amplitude": [],
@@ -409,6 +423,7 @@
       "feynkit-model": []
     },
     "gammaloop-api": {
+      "alphal00p-persistence": [],
       "feynkit-cff": [],
       "feynkit-generator": [],
       "feynkit-graph": [],
@@ -438,6 +453,8 @@
       ]
     },
     "gammaloop-integration-tests": {
+      "alphal00p-persistence": [],
+      "alphal00p-workspace": [],
       "feynkit-generator": [],
       "feynkit-graph": [],
       "feynkit-model": [],
@@ -466,6 +483,7 @@
     "gammaloop-tracing-filter-macros": {},
     "gammaloop-workspace-hack": {},
     "gammalooprs": {
+      "alphal00p-persistence": [],
       "feynkit-amplitude": [],
       "feynkit-cff": [],
       "feynkit-generator": [],
@@ -603,6 +621,8 @@
     "alphal00p-docs-macros": "crates/alphal00p-docs-macros",
     "alphal00p-docs-python-exporter": "crates/alphal00p-docs-python-exporter",
     "alphal00p-docs-schema": "crates/alphal00p-docs-schema",
+    "alphal00p-persistence": "crates/alphal00p-persistence",
+    "alphal00p-workspace": "crates/alphal00p-workspace",
     "clinnet": "crates/clinnet",
     "feynkit": "crates/feynkit",
     "feynkit-amplitude": "crates/feynkit-amplitude",
@@ -643,6 +663,8 @@
     "alphal00p-docs-macros",
     "alphal00p-docs-python-exporter",
     "alphal00p-docs-schema",
+    "alphal00p-persistence",
+    "alphal00p-workspace",
     "clinnet",
     "feynkit",
     "feynkit-amplitude",
@@ -679,6 +701,8 @@
   "resolved_normal_dependencies": {
     "alphal00p-docs-builder": [
       "alphal00p-docs-schema",
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "kurvst",
       "linnest",
       "linnet"
@@ -691,6 +715,7 @@
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "alphal00p-persistence",
       "feynkit",
       "feynkit-amplitude",
       "feynkit-cff",
@@ -715,8 +740,12 @@
       "vakint"
     ],
     "alphal00p-docs-macros": [],
-    "alphal00p-docs-python-exporter": [],
+    "alphal00p-docs-python-exporter": [
+      "alphal00p-workspace"
+    ],
     "alphal00p-docs-schema": [],
+    "alphal00p-persistence": [],
+    "alphal00p-workspace": [],
     "clinnet": [],
     "feynkit": [
       "feynkit-amplitude",
@@ -833,6 +862,7 @@
       "linnet"
     ],
     "gammaloop-api": [
+      "alphal00p-persistence",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -855,6 +885,8 @@
       "vakint"
     ],
     "gammaloop-integration-tests": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -887,6 +919,7 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "alphal00p-persistence",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -991,18 +1024,22 @@
   "resolved_test_dependencies": {
     "alphal00p-docs-builder": [
       "alphal00p-docs-schema",
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "kurvst",
       "linnest",
       "linnet"
     ],
     "alphal00p-docs-catalogs": [
       "alphal00p-docs-macros",
-      "alphal00p-docs-schema"
+      "alphal00p-docs-schema",
+      "alphal00p-workspace"
     ],
     "alphal00p-docs-examples": [
       "alphal00p-docs-catalogs",
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "alphal00p-persistence",
       "feynkit",
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1029,9 +1066,15 @@
     "alphal00p-docs-macros": [
       "alphal00p-docs-schema"
     ],
-    "alphal00p-docs-python-exporter": [],
+    "alphal00p-docs-python-exporter": [
+      "alphal00p-workspace"
+    ],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "alphal00p-persistence": [],
+    "alphal00p-workspace": [],
+    "clinnet": [
+      "alphal00p-workspace"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1147,6 +1190,8 @@
       "linnet"
     ],
     "gammaloop-api": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -1169,6 +1214,8 @@
       "vakint"
     ],
     "gammaloop-integration-tests": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -1191,6 +1238,7 @@
       "vakint"
     ],
     "gammaloop-tracing-filter": [
+      "alphal00p-workspace",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
       "linnet",
@@ -1201,6 +1249,8 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -1361,11 +1411,14 @@
   "test_dependencies": {
     "alphal00p-docs-builder": [
       "alphal00p-docs-schema",
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "linnest"
     ],
     "alphal00p-docs-catalogs": [
       "alphal00p-docs-macros",
       "alphal00p-docs-schema",
+      "alphal00p-workspace",
       "gammaloop-api",
       "gammalooprs",
       "vakint"
@@ -1394,6 +1447,7 @@
       "alphal00p-docs-schema"
     ],
     "alphal00p-docs-python-exporter": [
+      "alphal00p-workspace",
       "feynkit-py",
       "gammaloop-api",
       "linnet-py",
@@ -1401,7 +1455,11 @@
       "vakint"
     ],
     "alphal00p-docs-schema": [],
-    "clinnet": [],
+    "alphal00p-persistence": [],
+    "alphal00p-workspace": [],
+    "clinnet": [
+      "alphal00p-workspace"
+    ],
     "feynkit": [
       "feynkit-amplitude",
       "feynkit-cff",
@@ -1481,6 +1539,8 @@
       "feynkit-model"
     ],
     "gammaloop-api": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-cff",
       "feynkit-generator",
       "feynkit-graph",
@@ -1495,6 +1555,8 @@
       "three-dimensional-reps"
     ],
     "gammaloop-integration-tests": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-generator",
       "feynkit-graph",
       "feynkit-model",
@@ -1508,6 +1570,7 @@
       "vakint"
     ],
     "gammaloop-tracing-filter": [
+      "alphal00p-workspace",
       "gammaloop-tracing-filter-macros",
       "gammaloop-workspace-hack",
       "spenso"
@@ -1515,6 +1578,8 @@
     "gammaloop-tracing-filter-macros": [],
     "gammaloop-workspace-hack": [],
     "gammalooprs": [
+      "alphal00p-persistence",
+      "alphal00p-workspace",
       "feynkit-amplitude",
       "feynkit-cff",
       "feynkit-generator",
@@ -1598,6 +1663,8 @@
   "test_dependency_features": {
     "alphal00p-docs-builder": {
       "alphal00p-docs-schema": [],
+      "alphal00p-persistence": [],
+      "alphal00p-workspace": [],
       "linnest": [
         "svg"
       ]
@@ -1605,6 +1672,7 @@
     "alphal00p-docs-catalogs": {
       "alphal00p-docs-macros": [],
       "alphal00p-docs-schema": [],
+      "alphal00p-workspace": [],
       "gammaloop-api": [
         "cli"
       ],
@@ -1650,6 +1718,7 @@
       "alphal00p-docs-schema": []
     },
     "alphal00p-docs-python-exporter": {
+      "alphal00p-workspace": [],
       "feynkit-py": [
         "python_stubgen"
       ],
@@ -1668,7 +1737,11 @@
       ]
     },
     "alphal00p-docs-schema": {},
-    "clinnet": {},
+    "alphal00p-persistence": {},
+    "alphal00p-workspace": {},
+    "clinnet": {
+      "alphal00p-workspace": []
+    },
     "feynkit": {
       "feynkit-amplitude": [],
       "feynkit-cff": [],
@@ -1777,6 +1850,8 @@
       "feynkit-model": []
     },
     "gammaloop-api": {
+      "alphal00p-persistence": [],
+      "alphal00p-workspace": [],
       "feynkit-cff": [],
       "feynkit-generator": [],
       "feynkit-graph": [],
@@ -1806,6 +1881,8 @@
       ]
     },
     "gammaloop-integration-tests": {
+      "alphal00p-persistence": [],
+      "alphal00p-workspace": [],
       "feynkit-generator": [],
       "feynkit-graph": [],
       "feynkit-model": [],
@@ -1824,6 +1901,7 @@
       "vakint": []
     },
     "gammaloop-tracing-filter": {
+      "alphal00p-workspace": [],
       "gammaloop-tracing-filter-macros": [],
       "gammaloop-workspace-hack": [],
       "spenso": [
@@ -1834,6 +1912,8 @@
     "gammaloop-tracing-filter-macros": {},
     "gammaloop-workspace-hack": {},
     "gammalooprs": {
+      "alphal00p-persistence": [],
+      "alphal00p-workspace": [],
       "feynkit-amplitude": [],
       "feynkit-cff": [],
       "feynkit-generator": [],
