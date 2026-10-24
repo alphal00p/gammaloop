@@ -305,6 +305,10 @@ parser. Compact model input instantiates missing model rules and the default
 external-state projector while retaining explicitly supplied local factors,
 including literal zero or one. Native topology parsing alone does not apply
 Feynman rules; rule construction belongs to the generator's explicit extension.
+It instantiates each Lorentz structure in the shortest form that vertex
+momentum conservation allows (`LorentzStructure::reduced_by_momentum_conservation`),
+so the FeynRules ghost rule `P(3,2) + P(3,3)` becomes `-P(3,1)`; the model keeps
+the literal UFO expression.
 Compact and runtime source annotations pass graph-specific momentum checks
 before tensor admission. Graph-wide validation borrows the retained tensor
 payload and scalar overall factor, checking all `Q3` structures before `Q`

@@ -3257,9 +3257,12 @@ impl Generator {
                 {
                     let coupling = self.model.coupling_by_id(*coupling)?;
                     let coupling = Atom::var(symbol!(&format!("UFO::{}", coupling.name)));
-                    let lorentz = &self.model.lorentz_structure_by_id(*lorentz_name)?.structure;
+                    let lorentz = self
+                        .model
+                        .lorentz_structure_by_id(*lorentz_name)?
+                        .reduced_by_momentum_conservation();
                     let color = instantiation.instantiate(color, NumeratorSector::Color)?;
-                    let lorentz = instantiation.instantiate(lorentz, NumeratorSector::Spin)?;
+                    let lorentz = instantiation.instantiate(&lorentz, NumeratorSector::Spin)?;
                     terms.push(coupling * color * lorentz);
                 }
             }

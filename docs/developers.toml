@@ -192,7 +192,9 @@ anchor = "pub fn generate("
 # Reviewed 2026-10-17: Only toy-model fixtures change: singlet summands have matching scalar color factors, the dedicated colored test retains matching color tensors, and incompatible sums remain rejected before caching.
 # Reviewed 2026-10-17: The toy fermion propagator now uses standard UFO PSlash with valid spinor and contracted Lorentz ports; its original graph/sign/cut assertions remain intact.
 # Reviewed 2026-10-19: the architecture note records caller-thread execution for explicit threads(1), unchanged multi-worker behavior, exact epsilon import normalization and the new regression coverage; the readiness note keeps timing qualification separate.
-digest = "c410fad778b921428a9713a8e1579f30f06ea31d"
+# Reviewed 2026-10-19: Rule construction instantiates the model's momentum-conservation-reduced
+# Lorentz structures; the current architecture documents this and the literal model data.
+digest = "f6a8ece36f44224bd9f9e98f3ff65e4464887b5a"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"
@@ -218,7 +220,9 @@ anchor = "pub struct Model {"
 # models without ZERO retain the exact proof on their internal parameters.
 # Reviewed 2026-10-16: The architecture distinguishes structural mass classification from a known zero pole in a massive covariant multiplet.
 # Reviewed 2026-10-16: Canonical expression export makes fingerprints independent of registration order; model ownership and strict import validation remain unchanged.
-digest = "0fdae8e4e1028c7e0cf0aa8e27f2443b53076d10"
+# Reviewed 2026-10-19: LorentzStructure owns the momentum-conservation reduction used for rule
+# instantiation; stored structures, export and validation keep the literal UFO form.
+digest = "d6d1fbfb2b67884c5a8b063706ed0494ae6f2f88"
 
 [[section.note.scope]]
 path = "crates/feynkit-graph/src/lib.rs"

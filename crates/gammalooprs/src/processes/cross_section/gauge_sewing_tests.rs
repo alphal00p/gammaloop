@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use itertools::Itertools;
 use linnet::half_edge::{
-    involution::{Flow, HedgePair},
+    involution::{EdgeIndex, Flow, HedgePair},
     subgraph::Inclusion,
 };
 use spenso::{
@@ -16,7 +16,7 @@ use spenso::{
         ExecutionResult, Sequential, SmallestDegree,
         library::{
             LibraryTensor,
-            symbolic::{ExplicitKey, TensorLibrary},
+            symbolic::{ETS, ExplicitKey, TensorLibrary},
         },
         parsing::ParseSettings,
     },
@@ -26,16 +26,267 @@ use spenso::{
     },
     tensors::parametric::ParamTensor,
 };
-use symbolica::atom::{Atom, AtomCore};
+use symbolica::{
+    atom::{Atom, AtomCore},
+    function, parse,
+};
 
 use crate::{
+    graph::{FinalizedCut, Graph},
     initialisation::test_initialise,
-    model::{ModelGammaLoopExt, ParticleIdGammaLoopExt, UFOSymbol},
+    model::{
+        Model, ModelGammaLoopExt, ParticleGammaLoopExt, ParticleId, ParticleIdGammaLoopExt,
+        UFOSymbol,
+    },
     numerator::{ParsingNet, aind::Aind},
     processes::{Process, ProcessCollection, ProcessDefinition},
-    settings::GlobalSettings,
-    utils::{FUN_LIB, GS, load_generic_model},
+    settings::{GlobalSettings, global::VectorPolarizationSumGauge},
+    utils::{FUN_LIB, GS, W_, load_generic_model},
 };
+
+type ExactMomentum = [Atom; 4];
+/// An external leg: its PDG code and exact momentum.
+type Leg = (i64, ExactMomentum);
+
+fn minkowski_square(p: &ExactMomentum) -> Atom {
+    (&p[0] * &p[0] - &p[1] * &p[1] - &p[2] * &p[2] - &p[3] * &p[3]).expand()
+}
+
+fn scaled(sign: i64, p: &ExactMomentum) -> ExactMomentum {
+    std::array::from_fn(|mu| Atom::num(sign) * &p[mu])
+}
+
+fn substitute(expression: &Atom, parameters: &[(&str, Atom)]) -> Atom {
+    parameters
+        .iter()
+        .fold(expression.clone(), |expression, (name, value)| {
+            expression
+                .replace(Atom::from(UFOSymbol::from(*name)).to_pattern())
+                .with(value.clone())
+        })
+}
+
+/// Contract a graph's complete production numerator at exact edge momenta and
+/// parameter values. The generic metric has Atom entries so that its spatial
+/// signs remain exact during component contraction.
+fn production_numerator_at(
+    graph: &Graph,
+    model: &Model,
+    momenta: &BTreeMap<EdgeIndex, ExactMomentum>,
+    parameters: &[(&str, Atom)],
+) -> eyre::Result<Atom> {
+    let mut library = spenso_hep_lib::hep_lib_atom::<Aind, ParamTensor<ExplicitKey<Aind>>>();
+    library.insert_generic(
+        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::id(Minkowski {}.into()),
+        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric,
+    );
+    for (edge, momentum) in momenta {
+        let key = ExplicitKey::from_iter(
+            [Minkowski {}.new_rep(4)],
+            GS.emr_mom,
+            Some(vec![Atom::num(edge.0)]),
+        );
+        let tensor = ParamTensor::from_dense(key.into_canonical(), momentum.to_vec())?;
+        library.insert_explicit(Canonicalized::identity(tensor));
+    }
+    let expression = substitute(
+        &model.expand_couplings(&graph.production_numerator_atom_for_full_3d_expression()),
+        parameters,
+    );
+    let mut network =
+        ParsingNet::try_from_view(expression.as_view(), &library, &ParseSettings::default())?;
+    network.execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)?;
+    // Read the scalar Atom directly instead of materializing a rank-zero
+    // tensor and extracting its component again.
+    Ok(match network.result_scalar()? {
+        ExecutionResult::Zero => Atom::Zero,
+        ExecutionResult::One => Atom::one(),
+        ExecutionResult::Val(value) => value.into_owned(),
+    })
+}
+
+/// The particle crossing a split cut edge from left to right, with the sign
+/// relating its outgoing momentum to the edge momentum.
+fn left_to_right(pair: HedgePair, particle: ParticleId, model: &Model) -> (ParticleId, i64) {
+    match pair {
+        HedgePair::Split { split: flow, .. } | HedgePair::Unpaired { flow, .. } => {
+            if flow == Flow::Source {
+                (particle, 1)
+            } else {
+                (particle.antiparticle(model), -1)
+            }
+        }
+        HedgePair::Paired { .. } => panic!("cut edge must be split"),
+    }
+}
+
+/// Initial-state momenta enter the left amplitude. An initial-state edge whose
+/// source lies on the left carries the antiparticle and minus that momentum.
+fn enters_against_edge(pair: HedgePair, cut: &FinalizedCut) -> bool {
+    let source = match pair {
+        HedgePair::Paired { source, .. } | HedgePair::Split { source, .. } => source,
+        HedgePair::Unpaired { hedge, .. } => hedge,
+    };
+    cut.left.includes(&source)
+}
+
+/// Exact momenta of every edge of one finalized cut, with the width-free
+/// uncut propagator denominators that the production numerator omits.
+struct CutKinematics {
+    momenta: BTreeMap<EdgeIndex, ExactMomentum>,
+    /// PDG codes crossing the cut from left to right, sorted.
+    channel: Vec<i64>,
+    /// Cut vector edges with their symbolic masses.
+    vectors: Vec<(EdgeIndex, Atom)>,
+    denominator: Atom,
+}
+
+impl CutKinematics {
+    /// Cut edges take the outgoing momentum of the first unused final-state
+    /// leg with their physical label, initial-state edges their incoming
+    /// momentum, and conservation fixes the tree edges on both sides.
+    fn new(
+        graph: &Graph,
+        model: &Model,
+        cut: &FinalizedCut,
+        labels: &BTreeMap<isize, isize>,
+        (initial, finals): (&[Leg], &[Leg]),
+        parameters: &[(&str, Atom)],
+    ) -> Self {
+        let mut momenta = BTreeMap::new();
+        let mut channel = Vec::new();
+        let mut vectors = Vec::new();
+        let mut unused = finals.iter().collect_vec();
+        for (pair, edge, data) in graph.iter_edges_of(&cut.cut) {
+            let (particle, sign) = left_to_right(pair, data.data.particle().unwrap(), model);
+            let particle = particle.resolve(model);
+            let label = labels
+                .get(&(particle.pdg_code as isize))
+                .map_or(particle.pdg_code, |label| *label as i64);
+            let leg = unused
+                .iter()
+                .position(|(pdg, _)| *pdg == label)
+                .expect("every cut particle labels an unused final-state leg");
+            momenta.insert(edge, scaled(sign, &unused.remove(leg).1));
+            channel.push(particle.pdg_code);
+            if particle.spin == 3 {
+                vectors.push((edge, particle.symbolic_mass(model)));
+            }
+        }
+        let mut unused = initial.iter().collect_vec();
+        for (pair, edge, data) in graph.iter_edges_of(&graph.initial_state_cut) {
+            let against = enters_against_edge(pair, cut);
+            let particle = data.data.particle().unwrap();
+            let pdg = if against {
+                particle.antiparticle(model)
+            } else {
+                particle
+            }
+            .resolve(model)
+            .pdg_code;
+            let leg = unused
+                .iter()
+                .position(|(incoming, _)| *incoming == pdg)
+                .expect("every initial-state edge carries an unused incoming leg");
+            let sign = if against { -1 } else { 1 };
+            momenta.insert(edge, scaled(sign, &unused.remove(leg).1));
+        }
+
+        // Momentum entering minus leaving a node, and its unrouted edges.
+        let balance = |momenta: &BTreeMap<EdgeIndex, ExactMomentum>, node| {
+            let mut balance: ExactMomentum = std::array::from_fn(|_| Atom::Zero);
+            let mut unrouted = Vec::new();
+            for hedge in graph.underlying.iter_crown(node) {
+                let edge = graph.underlying[&hedge];
+                let sign = if graph.underlying.flow(hedge) == Flow::Sink {
+                    1
+                } else {
+                    -1
+                };
+                match momenta.get(&edge) {
+                    Some(p) => balance = std::array::from_fn(|mu| &balance[mu] + sign * &p[mu]),
+                    None => unrouted.push((edge, sign)),
+                }
+            }
+            (balance, unrouted)
+        };
+        let mut denominator = Atom::one();
+        while let Some((edge, momentum)) = graph.underlying.iter_nodes().find_map(|(node, _, _)| {
+            let (balance, unrouted) = balance(&momenta, node);
+            let [(edge, sign)] = unrouted[..] else {
+                return None;
+            };
+            Some((edge, scaled(-sign, &balance).map(|p| p.expand())))
+        }) {
+            let mass = graph.underlying[edge]
+                .particle()
+                .unwrap()
+                .resolve(model)
+                .symbolic_mass(model);
+            denominator *= minkowski_square(&momentum) - substitute(&mass, parameters).pow(2);
+            momenta.insert(edge, momentum);
+        }
+        assert_eq!(momenta.len(), graph.underlying.n_edges(), "{}", graph.name);
+        for (node, _, _) in graph.underlying.iter_nodes() {
+            let (balance, _) = balance(&momenta, node);
+            assert!(
+                balance.iter().all(|p| p.expand().is_zero()),
+                "{}",
+                graph.name
+            );
+        }
+        let denominator = denominator.expand();
+        assert!(
+            !denominator.is_zero(),
+            "on-shell propagator in {}",
+            graph.name
+        );
+        channel.sort();
+        Self {
+            momenta,
+            channel,
+            vectors,
+            denominator,
+        }
+    }
+
+    /// The covariant cut, and for a vector-only channel the same cut with
+    /// every vector summed over its physical polarizations, -g + k k / M^2.
+    fn evaluate(
+        &self,
+        graph: &Graph,
+        model: &Model,
+        parameters: &[(&str, Atom)],
+    ) -> eyre::Result<(Atom, Option<Atom>)> {
+        let value = |graph: &Graph| -> eyre::Result<Atom> {
+            let numerator = production_numerator_at(graph, model, &self.momenta, parameters)?;
+            Ok((numerator / &self.denominator).expand())
+        };
+        let covariant = value(graph)?;
+        if self.vectors.len() != self.channel.len() {
+            return Ok((covariant, None));
+        }
+        let mut physical = graph.clone();
+        for (edge, mass) in &self.vectors {
+            let metric = function!(ETS.metric, W_.a_, W_.b_);
+            let proca = &metric - GS.emr_mom(*edge, W_.a_) * GS.emr_mom(*edge, W_.b_) / mass.pow(2);
+            let numerator = &physical.underlying[*edge].num.value;
+            let replaced = numerator
+                .expression()
+                .replace(metric.to_pattern())
+                .with(proca.to_pattern());
+            assert_ne!(
+                &replaced,
+                numerator.expression(),
+                "cut vector without metric"
+            );
+            physical.underlying[*edge].num.value = numerator
+                .with_checked_expression(replaced)
+                .map_err(|error| eyre::eyre!("{error}"))?;
+        }
+        Ok((covariant, Some(value(&physical)?)))
+    }
+}
 
 #[test]
 fn declared_covariant_cut_states_preserve_multisets_and_physical_labels() -> eyre::Result<()> {
@@ -274,91 +525,37 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
                     let cuts = forward.process_valid_cuts(&model, process, &settings.generation)?;
                     assert_eq!(cuts.len(), 1, "each Higgs Born graph has one cut");
                     let cut = &cuts[super::CutId(0)];
-                    // Build the generic metric with Atom entries so its
-                    // spatial signs remain exact before component contraction.
-                    let mut library =
-                        spenso_hep_lib::hep_lib_atom::<Aind, ParamTensor<ExplicitKey<Aind>>>();
-                    library.insert_generic(
-                        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::id(
-                            Minkowski {}.into(),
-                        ),
-                        TensorLibrary::<ParamTensor<ExplicitKey<Aind>>, Aind>::diag_unimodular_metric,
-                    );
-                    let cut_edges = graph.iter_edges_of(&cut.cut).collect_vec();
                     let mut particles = Vec::new();
-                    for (position, (pair, eid, edge)) in cut_edges.iter().enumerate() {
-                        let flow = match pair {
-                            HedgePair::Split { split, .. }
-                            | HedgePair::Unpaired { flow: split, .. } => *split,
-                            HedgePair::Paired { .. } => panic!("cut edge must be split"),
-                        };
-                        let particle = edge.data.particle().unwrap();
-                        particles.push(if flow == Flow::Source {
-                            particle.resolve(&model).pdg_code
-                        } else {
-                            particle.antiparticle(&model).resolve(&model).pdg_code
-                        } as i64);
-                        let sign = if flow == Flow::Source { 1 } else { -1 };
-                        let key = ExplicitKey::from_iter(
-                            [Minkowski {}.new_rep(4)],
-                            GS.emr_mom,
-                            Some(vec![Atom::num(eid.0)]),
-                        );
-                        let tensor = ParamTensor::from_dense(
-                            key.into_canonical(),
-                            q[position].iter().map(|p| Atom::num(sign) * p).collect(),
-                        )?;
-                        library.insert_explicit(Canonicalized::identity(tensor));
+                    let mut momenta = BTreeMap::new();
+                    for (position, (pair, eid, edge)) in graph.iter_edges_of(&cut.cut).enumerate() {
+                        let (particle, sign) =
+                            left_to_right(pair, edge.data.particle().unwrap(), &model);
+                        particles.push(particle.resolve(&model).pdg_code);
+                        momenta.insert(eid, scaled(sign, &q[position]));
                     }
                     for (pair, eid, _) in graph.iter_edges_of(&graph.initial_state_cut) {
-                        let source = match pair {
-                            HedgePair::Paired { source, .. } | HedgePair::Split { source, .. } => {
-                                source
-                            }
-                            HedgePair::Unpaired { hedge, .. } => hedge,
+                        let sign = if enters_against_edge(pair, cut) {
+                            -1
+                        } else {
+                            1
                         };
-                        let sign = if cut.left.includes(&source) { -1 } else { 1 };
-                        let key = ExplicitKey::from_iter(
-                            [Minkowski {}.new_rep(4)],
-                            GS.emr_mom,
-                            Some(vec![Atom::num(eid.0)]),
-                        );
-                        let tensor = ParamTensor::from_dense(
-                            key.into_canonical(),
-                            total.iter().map(|p| Atom::num(sign) * p).collect(),
-                        )?;
-                        library.insert_explicit(Canonicalized::identity(tensor));
+                        momenta.insert(eid, scaled(sign, &total));
                     }
-                    let mut expression = model.expand_couplings(
-                        &graph.production_numerator_atom_for_full_3d_expression(),
-                    );
-                    for (name, value) in [
-                        ("ee", Atom::num((3, 5))),
-                        ("sw", Atom::num((3, 5))),
-                        ("cw", Atom::num((4, 5))),
-                        ("MW", Atom::num(3)),
-                        ("MZ", Atom::num((15, 4))),
-                        ("vev", Atom::num(6)),
-                        ("lam", higgs_mass.pow(2) / Atom::num(72)),
-                        ("MH", higgs_mass.clone()),
-                    ] {
-                        expression = expression
-                            .replace(Atom::from(UFOSymbol::from(name)).to_pattern())
-                            .with(value);
-                    }
-                    let mut network = ParsingNet::try_from_view(
-                        expression.as_view(),
-                        &library,
-                        &ParseSettings::default(),
+                    let value = production_numerator_at(
+                        graph,
+                        &model,
+                        &momenta,
+                        &[
+                            ("ee", Atom::num((3, 5))),
+                            ("sw", Atom::num((3, 5))),
+                            ("cw", Atom::num((4, 5))),
+                            ("MW", Atom::num(3)),
+                            ("MZ", Atom::num((15, 4))),
+                            ("vev", Atom::num(6)),
+                            ("lam", higgs_mass.pow(2) / Atom::num(72)),
+                            ("MH", higgs_mass.clone()),
+                        ],
                     )?;
-                    network.execute::<Sequential, SmallestDegree, _, _, _>(&library, &*FUN_LIB)?;
-                    // Read the scalar Atom directly instead of materializing
-                    // a rank-zero tensor and extracting its component again.
-                    let value = match network.result_scalar()? {
-                        ExecutionResult::Zero => Atom::Zero,
-                        ExecutionResult::One => Atom::one(),
-                        ExecutionResult::Val(value) => value.into_owned(),
-                    };
                     *channels
                         .entry(particles.into_iter().sorted().collect())
                         .or_default() += value;
@@ -408,4 +605,270 @@ fn generated_higgs_covariant_cuts_equal_three_physical_vector_polarizations() ->
         }
     }
     Ok(())
+}
+
+/// One exact on-shell point: MH, m_tau, incoming and outgoing momenta.
+type ExactPoint = (
+    &'static str,
+    &'static str,
+    [[&'static str; 4]; 2],
+    [[&'static str; 4]; 2],
+);
+
+/// tau- tau+ -> W+ W-. The s-channel photon, Z, G0 and H combine the neutral
+/// ghost-vector vertices V_18/V_19/V_26/V_27 with V_16/V_24 and V_17/V_25.
+const TAU_PAIR_TO_W_PAIR: [ExactPoint; 3] = [
+    (
+        "7",
+        "7/5",
+        [["5", "0", "0", "24/5"], ["5", "0", "0", "-24/5"]],
+        [["5", "8/3", "4/3", "8/3"], ["5", "-8/3", "-4/3", "-8/3"]],
+    ),
+    (
+        "5",
+        "9/4",
+        [
+            ["483/80", "81/16", "0", "12/5"],
+            ["267/80", "9/16", "0", "-12/5"],
+        ],
+        [
+            ["579/112", "405/112", "-27/14", "27/28"],
+            ["471/112", "225/112", "27/14", "-27/28"],
+        ],
+    ),
+    (
+        "11",
+        "3",
+        [
+            ["1363/140", "72/35", "923/140", "216/35"],
+            ["1003/140", "-72/35", "-13/140", "-216/35"],
+        ],
+        [
+            ["209/20", "-12/5", "169/20", "24/5"],
+            ["129/20", "12/5", "-39/20", "-24/5"],
+        ],
+    ),
+];
+
+/// tau- nu_tau~ -> W- Z. The s-channel W- and G- combine the charged
+/// ghost-vector vertices V_21/V_29/V_31/V_33 with V_20/V_28/V_30/V_32.
+const TAU_NEUTRINO_TO_W_Z: [ExactPoint; 3] = [
+    (
+        "7",
+        "2",
+        [
+            ["61565/8648", "26/21", "73/21", "-1044257/181608"],
+            ["35725/8648", "0", "0", "35725/8648"],
+        ],
+        [
+            ["5", "8/3", "4/3", "8/3"],
+            ["25/4", "-10/7", "15/7", "-30/7"],
+        ],
+    ),
+    (
+        "5",
+        "5/2",
+        [
+            ["6205/712", "187237/37380", "-41165/7476", "282607/74760"],
+            ["1805/712", "1805/2492", "5415/2492", "5415/4984"],
+        ],
+        [["5", "12/5", "0", "16/5"], ["25/4", "10/3", "-10/3", "5/3"]],
+    ),
+    (
+        "11",
+        "3/2",
+        [
+            ["66815/10952", "450423/76664", "-1829/9583", "9/14"],
+            ["42705/10952", "-25623/10952", "8541/2738", "0"],
+        ],
+        [
+            ["15/4", "-3/4", "3/2", "-3/2"],
+            ["25/4", "30/7", "10/7", "15/7"],
+        ],
+    ),
+];
+
+/// tau- tau+ -> Z Z. Only the Higgs ghost vertex V_34 enters, which every
+/// ghost-slot convention shares; this is a control of the kinematics.
+const TAU_PAIR_TO_Z_PAIR: [ExactPoint; 1] = [(
+    "7",
+    "7/4",
+    [["25/4", "0", "0", "6"], ["25/4", "0", "0", "-6"]],
+    [
+        ["25/4", "10/3", "10/3", "5/3"],
+        ["25/4", "-10/3", "-10/3", "-5/3"],
+    ],
+)];
+
+/// The tree-level BRST quartet identity in Feynman gauge: summed over every
+/// covariant cut channel (V V with the -g numerator, V G, G V, G G and both
+/// ghost-pair orientations), the forward cuts equal the V V channel with each
+/// cut vector summed over its physical polarizations, -g + k k / M^2.
+///
+/// A massive tau couples the s-channel vector current to its Goldstone partner
+/// through the Ward identity, so the ghost channels combine ghost-vector
+/// (UUV1) with ghost-Goldstone (UUS1) vertices. The UUS1 particle lists fix
+/// which slot holds the antighost (see docs/architecture/sm-conventions-audit.typ):
+/// UUV1 = P(3,2) + P(3,3) satisfies the identity exactly, while P(3,2) alone
+/// leaves a residual of 1.3-6.7% of the physical value at every W W and W Z
+/// point below.
+#[test]
+fn massive_tau_covariant_cuts_satisfy_the_brst_quartet_identity() -> eyre::Result<()> {
+    test_initialise()?;
+    let model = load_generic_model("sm");
+    let mut settings = GlobalSettings::default();
+    settings.n_cores.feyngen = 1;
+    let legs = |pdgs: [i64; 2], momenta: &[[&str; 4]; 2]| -> Vec<Leg> {
+        pdgs.into_iter()
+            .zip(momenta.map(|p| p.map(|component| parse!(component))))
+            .collect()
+    };
+
+    for (initial_pdgs, final_pdgs, graph_count, ghost_orientations, points) in [
+        ([15, -15], [24, -24], 114, 2, &TAU_PAIR_TO_W_PAIR[..]),
+        ([15, -16], [-24, 23], 48, 2, &TAU_NEUTRINO_TO_W_Z[..]),
+        ([15, -15], [23, 23], 20, 1, &TAU_PAIR_TO_Z_PAIR[..]),
+    ] {
+        let process = ProcessDefinition {
+            generation_type: GenerationType::CrossSection,
+            process: GenerationProcess::new(initial_pdgs, final_pdgs),
+            generation_options: GenerationOptions::default()
+                .with_loop_count(1, 1)?
+                .with_graph_filter(GenerationFilter::CouplingOrders(
+                    [("QED".into(), (4, Some(4)))].into_iter().collect(),
+                )),
+            ..Default::default()
+        };
+        let graphs = process.generate(&model, &settings)?;
+        assert_eq!(graphs.len(), graph_count, "{final_pdgs:?}");
+        let labels = process.covariant_cut_representatives(&model);
+        let imported = Process::from_graph_list(
+            "brst_quartet".into(),
+            "born".into(),
+            graphs,
+            GenerationType::CrossSection,
+            Some(process),
+            None,
+            &model,
+        )?;
+        let ProcessCollection::CrossSections(cross_sections) = &imported.collection else {
+            panic!("forward graphs must import as a cross section");
+        };
+        let mut forward = Vec::new();
+        for supergraph in &cross_sections["born"].supergraphs {
+            // Spin-sum the initial states with the model's completeness
+            // relations, one external edge at a time as in production.
+            let mut graph = supergraph.graph.clone();
+            let source = &supergraph.graph;
+            for (_, edge, data) in source.iter_edges_of(&source.initial_state_cut) {
+                let particle = data.data.particle().unwrap().resolve(&model);
+                let Some(sum) = particle.polarization_sum(
+                    &model,
+                    edge,
+                    false,
+                    VectorPolarizationSumGauge::Feynman,
+                )?
+                else {
+                    continue;
+                };
+                let projector = &graph.global_prefactor.projector;
+                graph.global_prefactor.projector = projector
+                    .with_checked_expression(projector.expression().replace_multiple(&[sum]))
+                    .map_err(|error| eyre::eyre!("{error}"))?;
+            }
+            let cuts = supergraph.process_valid_cuts(
+                &model,
+                &imported.definition,
+                &settings.generation,
+            )?;
+            forward.push((graph, cuts));
+        }
+
+        for (higgs_mass, tau_mass, incoming, outgoing) in points {
+            let parameters = quartet_parameters(parse!(higgs_mass), parse!(tau_mass));
+            let initial = legs(initial_pdgs, incoming);
+            let finals = legs(final_pdgs, outgoing);
+            for (pdg, momentum) in initial.iter().chain(&finals) {
+                let mass = model.get_particle_from_pdg(*pdg as isize).resolve(&model);
+                let mass = substitute(&mass.symbolic_mass(&model), &parameters);
+                assert_eq!(minkowski_square(momentum), mass.pow(2), "{pdg} on shell");
+            }
+            // Identical final states average both momentum assignments.
+            let assignments = if final_pdgs[0] == final_pdgs[1] {
+                vec![finals.clone(), finals.iter().rev().cloned().collect()]
+            } else {
+                vec![finals]
+            };
+            let weight = Atom::num((1, assignments.len() as i64));
+            let mut channels = BTreeMap::<Vec<i64>, Atom>::new();
+            let mut physical = Atom::Zero;
+            for (graph, cuts) in &forward {
+                for (cut, finals) in cuts.iter().cartesian_product(&assignments) {
+                    let kinematics = CutKinematics::new(
+                        graph,
+                        &model,
+                        cut,
+                        &labels,
+                        (&initial, finals),
+                        &parameters,
+                    );
+                    let (covariant, polarized) = kinematics.evaluate(graph, &model, &parameters)?;
+                    *channels.entry(kinematics.channel).or_default() += &weight * covariant;
+                    if let Some(polarized) = polarized {
+                        physical += &weight * polarized;
+                    }
+                }
+            }
+            let covariant = channels
+                .values()
+                .fold(Atom::Zero, |sum, value| sum + value)
+                .expand();
+            let physical = physical.expand();
+            assert_eq!(
+                covariant, physical,
+                "{final_pdgs:?}, MH={higgs_mass}: {channels:?}"
+            );
+            // The V V channel alone is the incomplete covariant metric sum, and
+            // both ghost-pair orientations contribute.
+            let vector_channel = final_pdgs.into_iter().sorted().collect_vec();
+            assert_ne!(channels[&vector_channel], physical);
+            let ghosts = channels
+                .iter()
+                .filter(|(channel, _)| {
+                    model
+                        .get_particle_from_pdg(channel[0] as isize)
+                        .resolve(&model)
+                        .is_ghost()
+                })
+                .collect_vec();
+            assert_eq!(ghosts.len(), ghost_orientations, "{channels:?}");
+            assert!(ghosts.iter().all(|(_, value)| !value.is_zero()));
+        }
+    }
+    Ok(())
+}
+
+/// ee=sw=3/5, cw=4/5 and vev=6 obey MW=ee vev/(2 sw)=3 and MZ=MW/cw=15/4, the
+/// tree-level relations the quartet identity requires. The Higgs self-coupling
+/// and the tau Yukawa coupling follow from MH and m_tau.
+fn quartet_parameters(higgs_mass: Atom, tau_mass: Atom) -> Vec<(&'static str, Atom)> {
+    let vev = Atom::num(6);
+    vec![
+        ("ee", Atom::num((3, 5))),
+        ("sw", Atom::num((3, 5))),
+        ("cw", Atom::num((4, 5))),
+        ("MW", Atom::num(3)),
+        ("MZ", Atom::num((15, 4))),
+        ("lam", higgs_mass.pow(2) / (Atom::num(2) * vev.pow(2))),
+        ("MH", higgs_mass),
+        // sqrt(2) = 2 (1/2)^(1/2) shares the radical of the model couplings, so
+        // exact products of both reduce to rationals.
+        (
+            "ytau",
+            Atom::num(2) * Atom::num((1, 2)).pow(Atom::num((1, 2))) * &tau_mass / &vev,
+        ),
+        ("ymtau", tau_mass.clone()),
+        ("MTA", tau_mass),
+        ("vev", vev),
+    ]
 }

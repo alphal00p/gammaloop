@@ -148,9 +148,10 @@ for name, (particles, coupling_name) in vertices.items():
         )
         assert residual == zero, (name, slots, residual)
 
-# Generation must also be linear before applying momentum conservation. Signed
-# remapping of Q inside a sum once collapsed -(-Q) and visited the new Q again;
-# a coefficient of two prevented that collapse and exposed the inconsistency.
+# Generation must also be linear. Signed remapping of Q inside a sum once
+# collapsed -(-Q) and visited the new Q again; a coefficient of two prevented
+# that collapse and exposed the inconsistency. FeynKit instantiates P2+P3 as the
+# equivalent -P1, so the probes compare numerators routed in the momentum basis.
 linearity = {}
 for label, tensor in (
     ("P2", p2),
@@ -181,7 +182,9 @@ for label, tensor in (
             .diagrams
         )
         assert len(diagrams) == 1, (name, label)
-        linearity[name, label] = diagrams[0].numerator_expression().to_expression()
+        linearity[name, label] = (
+            diagrams[0].numerator_expression(in_lmb=True).to_expression()
+        )
 for name in ("V_18", "V_19", "V_35"):
     for label, coefficient in (("P2+P3", 1), ("P2-P3", -1), ("P2+2P3", 2)):
         residual = (
