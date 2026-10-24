@@ -2,6 +2,7 @@
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
 mod fixture;
 use ::vakint;
+use rustred::solver::CandidateCacheRepresentation;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::{
@@ -75,6 +76,7 @@ fn main() -> fixture::Result<()> {
     let mut prepare_only = false;
     let mut dress_only = false;
     let mut warm = false;
+    let mut coefficient_representation = CandidateCacheRepresentation::Sparse;
     let mut projection = fixture::Projection::QuadraticTransverse;
     let mut arguments = std::env::args_os().skip(1);
     while let Some(argument) = arguments.next() {
@@ -85,14 +87,23 @@ fn main() -> fixture::Result<()> {
             Some("--prepare-only") => prepare_only = true,
             Some("--dress-only") => dress_only = true,
             Some("--warm") => warm = true,
+            Some("--coefficient-representation") => coefficient_representation = match arguments.next().and_then(|value| value.into_string().ok()).as_deref() {
+                Some("sparse") => CandidateCacheRepresentation::Sparse,
+                Some("factorized") => CandidateCacheRepresentation::Factorized,
+                _ => return Err("coefficient representation must be sparse or factorized".into()),
+            },
             Some("--projection") => projection = match arguments.next().and_then(|value| value.into_string().ok()).as_deref() {
                 Some("quadratic") => fixture::Projection::QuadraticTransverse,
                 Some("zero-momentum") => fixture::Projection::ZeroMomentumMetric,
                 _ => return Err("projection must be quadratic or zero-momentum".into()),
             },
-            _ => return Err("usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepare-only|--dress-only] [--cache PATH] [--warm]".into()),
+            _ => return Err("usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepare-only|--dress-only] [--cache PATH] [--warm]".into()),
         }
     }
+    let representation_name = match coefficient_representation {
+        CandidateCacheRepresentation::Sparse => "sparse",
+        CandidateCacheRepresentation::Factorized => "factorized",
+    };
     let work = work.ok_or("--work-dir is required")?;
     std::fs::create_dir_all(&work)?;
     log::set_logger(&LOGGER).map_err(|error| error.to_string())?;
@@ -139,6 +150,7 @@ fn main() -> fixture::Result<()> {
         .map(|(name, bytes)| (name, format!("{:x}", Sha256::digest(bytes))))
         .collect::<BTreeMap<_, _>>();
     let mut report = json!({"schema":"vakint.qcd-ladder.benchmark.v1", "projection":prepared.projection,
+        "coefficient_representation":representation_name,
         "source_commit":git(&["rev-parse", "HEAD"]), "source_dirty":git(&["status", "--porcelain"]).map(|value| !value.is_empty()),
         "executable_sha256":format!("{:x}", Sha256::digest(std::fs::read(std::env::current_exe()?)?)),
         "fresh_native_preparation":true, "fixture_sources_sha256":source_hashes, "preparation":prepared.timings,
@@ -172,6 +184,17 @@ fn main() -> fixture::Result<()> {
     // the recorded options describe the application that actually runs.
     settings.rustred_application_options.unresolved_policy =
         rustred::solver::UnresolvedPolicy::Preserve;
+    settings.rustred_application_options.cache_representation = coefficient_representation;
+    // The public loader prepares its default Sparse session. Selecting
+    // Factorized reloads that session on the first evaluation; retain and
+    // report this setup cost instead of introducing another loading path.
+    report["representation_setup"] = json!({
+        "initial_data_load":"sparse",
+        "evaluation_requested":representation_name,
+        "first_evaluation_reloads_application":coefficient_representation != CandidateCacheRepresentation::Sparse,
+        "reload_timing_scope":"Any representation reload is included in reduction_seconds, not data_loading_seconds",
+        "owner_preparation_counter_scope":"Before/after counters belong to different sessions when the representation reloads; their subtraction is not an isolated same-session preparation measurement"
+    });
     report["conventions"] = json!({
         "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
         "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),
