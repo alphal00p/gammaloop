@@ -3,7 +3,8 @@ use crate::display;
 use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
 use idenso::tensor::{SymbolicTensor, composition};
 use pyo3::exceptions::PyValueError;
-use pyo3::{Py, PyAny, PyResult, Python};
+use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods};
+use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python};
 use spenso::network::tags;
 use spenso::network::tags::SPENSO_TAG;
 use spenso::network::tags::mathml;
@@ -14,12 +15,13 @@ use spenso::structure::representation::RepresentationMetadata;
 use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use symbolica::api::python::MathMLViewer;
 use symbolica::api::python::PythonExpression;
 use symbolica::atom::{Atom, AtomCore, AtomView, FunctionBuilder};
 use symbolica::domains::SelfRing;
 use symbolica::printer::{PrintMode, PrintOptions, PrintState, PrintUserData};
-use symbolica_notation::Notation;
+use symbolica_notation::{MathMl, Notation};
 
 pub(crate) const DEFAULT_PAGE_SIZE: usize = 25;
 const MAX_LEAF_NODES: usize = 256;
@@ -89,61 +91,139 @@ pub(super) fn html(
     py: Python<'_>,
     atom: &Atom,
     settings: &DisplaySettings,
-    aliases: &IndexAliases,
+    aliases: IndexAliases,
 ) -> PyResult<String> {
     let options = settings.mathml_options();
-    let label_error = RefCell::new(None);
-    let body = mathml::expression(
-        atom.as_view(),
-        &options,
-        &PrintState::new(),
-        &|representation, index| {
-            let key = (representation, index.to_owned());
-            if let Some((_, display)) = aliases.entries.get(&key) {
-                let rendered = display.to_mathml();
-                if rendered.is_none() {
-                    label_error
-                        .borrow_mut()
-                        .get_or_insert(ExportError::IncompleteOutput);
+    // Validate settings even for a scalar root, before optional leaf callbacks.
+    mathml::validate_options(&options).map_err(|error| export_error(py, error))?;
+    let aliases = Arc::new(aliases);
+    let mut body = None;
+    // Avoid allocating a viewer for inputs beyond its hard node/depth limits.
+    if fits(atom.as_view(), &mut 1000, 0, 64 * 1024, 500) {
+        let leaf_aliases = Arc::clone(&aliases);
+        let offered = Arc::new(AtomicUsize::new(0));
+        let leaf_offers = Arc::clone(&offered);
+        let leaf_options = settings.mathml_options();
+        // The Python viewer requires an independent immutable expression owner.
+        // This copy is bounded by the same small-input gate as its rendering.
+        let expression = Py::new(py, PythonExpression::from(atom.clone()))?;
+        let viewer = MathMLViewer::expression(
+            expression,
+            options
+                .clone()
+                .multiplication_operator('·')
+                .num_exp_as_superscript(true),
+            Some(Box::new(move |py, view, _, state| {
+                if !TensorLeaves::semantic(view) {
+                    return Ok(None);
                 }
-                return rendered;
-            }
-            aliases.source_indices.get(&key).and_then(|source| {
-                let rendered =
-                    mathml::expression(source.as_view(), &options, &PrintState::new(), &|_, _| {
-                        None
-                    });
-                match rendered {
-                    Ok(rendered) => Some(rendered),
-                    Err(error) => {
-                        label_error.borrow_mut().get_or_insert(error);
-                        None
-                    }
-                }
-            })
-        },
-    );
-    // A callback's missing fragment must not silently fall back to an encoded
-    // index. Preserve its typed failure until this Python export boundary.
-    let body = label_error
-        .into_inner()
-        .map_or(body, Err)
-        .map_err(|error| {
-            let exception = PyValueError::new_err(format!(
-                "complete MathML export failed: {error}; use paged() for bounded inspection"
-            ));
-            if let ExportError::InvalidSettings {
-                source: Some(source),
-                ..
-            } = error
-            {
-                exception.set_cause(py, Some(PyValueError::new_err(source.to_string())));
-            }
-            exception
-        })?;
+                let fragment = complete_body(view, &leaf_options, state, &leaf_aliases)
+                    .map_err(|error| export_error(py, error))?;
+                let serial = leaf_offers.fetch_add(1, Ordering::Relaxed);
+                // A declined semantic offer can become a complete native call.
+                // Track acceptance without changing the final leaf or its layout.
+                Ok(Some(format!(
+                    "<!--spenso-complete-leaf-{serial}-->{fragment}"
+                )))
+            })),
+        )
+        .page_size(500)
+        .into_python(py)?;
+        let result = viewer.call_method1(py, "_render_page", (0,));
+        // Close the temporary source on both success and failure.
+        let closed = viewer.call_method0(py, "close");
+        let page = result?;
+        closed?;
+        body = complete_page(page.bind(py), offered.load(Ordering::Relaxed));
+    }
+    let body = match body {
+        Some(body) => body,
+        None => complete_body(atom.as_view(), &options, &PrintState::new(), &aliases)
+            .map_err(|error| export_error(py, error))?,
+    };
     Ok(display::notebook_html_fragment(&format!(
         "<math xmlns=\"http://www.w3.org/1998/Math/MathML\"><mrow>{body}</mrow></math>"
     )))
+}
+
+// Symbolica's notebook page protocol has no public Rust page API at the pinned
+// commit. Arithmetic tests guard against silently falling back after a change.
+fn complete_page(page: &Bound<'_, PyAny>, offered: usize) -> Option<String> {
+    let page = page.cast::<PyDict>().ok()?;
+    let start: usize = page.get_item("start").ok()??.extract().ok()?;
+    let end: usize = page.get_item("end").ok()??.extract().ok()?;
+    let total: usize = page.get_item("total").ok()??.extract().ok()?;
+    let markers: Vec<Py<PyAny>> = page.get_item("markers").ok()??.extract().ok()?;
+    if start != 0 || end != total || !markers.is_empty() {
+        return None;
+    }
+    let mut html: String = page.get_item("html").ok()??.extract().ok()?;
+    for serial in 0..offered {
+        let marker = format!("<!--spenso-complete-leaf-{serial}-->");
+        if !html.contains(&marker) {
+            return None;
+        }
+        html = html.replace(&marker, "");
+    }
+    if html.contains("<mtext data-symbolica-marker=") {
+        return None;
+    }
+    let (root, rest) = html.split_once('>')?;
+    if root != "<math" && !root.starts_with("<math ") {
+        return None;
+    }
+    let fragment = rest.strip_suffix("</math>")?;
+    MathMl::fragment(fragment.to_owned(), 256 * 1024)
+}
+
+fn export_error(py: Python<'_>, error: ExportError) -> PyErr {
+    let exception = PyValueError::new_err(format!(
+        "complete MathML export failed: {error}; use paged() for bounded inspection"
+    ));
+    if let ExportError::InvalidSettings {
+        source: Some(source),
+        ..
+    } = error
+    {
+        exception.set_cause(py, Some(PyValueError::new_err(source.to_string())));
+    }
+    exception
+}
+
+/// Complete fallback beyond Symbolica's printer bounds. This walk has no
+/// sign/fraction layout; arithmetic layout belongs to Symbolica when it fits.
+fn complete_body(
+    atom: AtomView<'_>,
+    options: &PrintOptions,
+    state: &PrintState,
+    aliases: &IndexAliases,
+) -> Result<String, ExportError> {
+    let label_error = RefCell::new(None);
+    let body = mathml::expression(atom, options, state, &|representation, index| {
+        let key = (representation, index.to_owned());
+        if let Some((_, display)) = aliases.entries.get(&key) {
+            let rendered = display.to_mathml();
+            if rendered.is_none() {
+                label_error
+                    .borrow_mut()
+                    .get_or_insert(ExportError::IncompleteOutput);
+            }
+            return rendered;
+        }
+        aliases.source_indices.get(&key).and_then(|source| {
+            let rendered =
+                mathml::expression(source.as_view(), options, &PrintState::new(), &|_, _| None);
+            match rendered {
+                Ok(rendered) => Some(rendered),
+                Err(error) => {
+                    label_error.borrow_mut().get_or_insert(error);
+                    None
+                }
+            }
+        })
+    });
+    // Preserve callback failures instead of silently displaying encoded labels.
+    label_error.into_inner().map_or(body, Err)
 }
 
 struct TensorLeaves {
@@ -156,19 +236,11 @@ struct TensorLeaves {
 }
 
 impl TensorLeaves {
-    fn render(
-        &mut self,
-        value: &SymbolicTensor<PartialStructure>,
-        view: AtomView<'_>,
-        state: &PrintState,
-    ) -> Option<String> {
-        let symbol = view.get_symbol()?;
-        if !fits(view, &mut { MAX_LEAF_NODES }, 0, MAX_LEAF_BYTES, usize::MAX) {
-            return None;
-        }
-        // Arithmetic and ordinary calls belong to Symbolica. Only semantic
-        // tensor leaves enter the scoped semantic printer.
-        let semantic = symbol.has_tag(&SPENSO_TAG.tensor)
+    fn semantic(view: AtomView<'_>) -> bool {
+        let Some(symbol) = view.get_symbol() else {
+            return false;
+        };
+        symbol.has_tag(&SPENSO_TAG.tensor)
             || symbol.has_tag("tensor")
             || symbol.has_tag(&SPENSO_TAG.index)
             || symbol.has_tag(&SPENSO_TAG.representation)
@@ -191,8 +263,21 @@ impl TensorLeaves {
                     | "spenso::chain"
                     | "spenso::trace"
                     | "spenso::Nc"
-            );
-        if !semantic {
+            )
+    }
+
+    fn render(
+        &mut self,
+        value: &SymbolicTensor<PartialStructure>,
+        view: AtomView<'_>,
+        state: &PrintState,
+    ) -> Option<String> {
+        if !fits(view, &mut { MAX_LEAF_NODES }, 0, MAX_LEAF_BYTES, usize::MAX) {
+            return None;
+        }
+        // Arithmetic and ordinary calls belong to Symbolica. Only semantic
+        // tensor leaves enter the scoped semantic printer.
+        if !Self::semantic(view) {
             return None;
         }
         let root = value.expression().as_view().get_data();
@@ -455,6 +540,115 @@ mod tests {
     }
 
     #[test]
+    fn complete_arithmetic_uses_native_signs_and_fractions() {
+        Python::initialize();
+        Python::attach(|py| {
+            let mut cases = [
+                ("a-b", vec!["a", "−", "b"]),
+                ("x-3", vec!["−", "3", "+", "x"]),
+                ("-x", vec!["−", "x"]),
+                ("a-2*b", vec!["a", "−", "2", "b"]),
+                ("x/y", vec!["x", "y"]),
+            ]
+            .into_iter()
+            .map(|(input, tokens)| (parse!(input), tokens))
+            .collect::<Vec<_>>();
+            let representation = LibraryRep::from(Minkowski {});
+            let port = representation
+                .to_symbolic([Atom::num(4), Atom::var(symbol!("arithmetic_tests::i"))]);
+            let left = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("arithmetic_tests::A"))
+                .add_arg(&port)
+                .finish();
+            let right = FunctionBuilder::new(SPENSO_TAG.tensor_symbol("arithmetic_tests::B"))
+                .add_arg(port)
+                .finish();
+            cases.push((left - right, vec!["A", "i", "−", "B", "i"]));
+            for (atom, tokens) in cases {
+                let rendered = html(
+                    py,
+                    &atom,
+                    &DisplaySettings::default(),
+                    IndexAliases::default(),
+                )
+                .unwrap();
+                let math = rendered
+                    .split_once("<math ")
+                    .unwrap()
+                    .1
+                    .split_once("</math>")
+                    .unwrap()
+                    .0;
+                let visible = math
+                    .split('<')
+                    .filter_map(|part| {
+                        let (tag, text) = part.split_once('>')?;
+                        (matches!(tag.split_whitespace().next(), Some("mi" | "mn" | "mo"))
+                            && text != "&#x2062;")
+                            .then_some(text)
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(visible, tokens, "{atom}: {rendered}");
+                if tokens == ["x", "y"] {
+                    assert!(rendered.contains("<mfrac>"));
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn complete_fallback_preserves_every_term_when_viewer_cannot_fit() {
+        Python::initialize();
+        Python::attach(|py| {
+            let atom = Atom::add_many((0..600).map(|i| {
+                FunctionBuilder::new(symbol!("fallback_tests::f"))
+                    .add_arg(Atom::num(i))
+                    .finish()
+            }));
+            let rendered = html(
+                py,
+                &atom,
+                &DisplaySettings::default(),
+                IndexAliases::default(),
+            )
+            .unwrap();
+            assert!(!fits(atom.as_view(), &mut 1000, 0, 64 * 1024, 500));
+            for i in 0..600 {
+                assert!(rendered.contains(&format!("<mn>{i}</mn>")));
+            }
+            assert!(!rendered.contains("⋯"));
+            assert!(!rendered.contains("data-symbolica-marker"));
+        });
+    }
+
+    #[test]
+    fn changed_notebook_page_protocol_declines_without_panicking() {
+        Python::initialize();
+        Python::attach(|py| {
+            assert!(complete_page(py.None().bind(py), 0).is_none());
+            let page = PyDict::new(py);
+            assert!(complete_page(page.as_any(), 0).is_none());
+            page.set_item("start", 0).unwrap();
+            page.set_item("end", 1).unwrap();
+            page.set_item("total", 1).unwrap();
+            page.set_item("markers", Vec::<usize>::new()).unwrap();
+            page.set_item("html", "<math><mi>x</mi></math>").unwrap();
+            assert!(complete_page(page.as_any(), 0).is_some());
+            for key in ["start", "end", "total", "markers", "html"] {
+                let saved = page.get_item(key).unwrap().unwrap();
+                page.del_item(key).unwrap();
+                assert!(complete_page(page.as_any(), 0).is_none(), "{key}");
+                page.set_item(key, py.None()).unwrap();
+                assert!(complete_page(page.as_any(), 0).is_none(), "{key}");
+                page.set_item(key, saved).unwrap();
+            }
+            for root in ["<div><mi>x</mi></math>", "<math><mi>x</mi>", "garbage"] {
+                page.set_item("html", root).unwrap();
+                assert!(complete_page(page.as_any(), 0).is_none(), "{root}");
+            }
+        });
+    }
+
+    #[test]
     fn complete_export_preserves_decoded_label_errors() {
         let representation = LibraryRep::from(Minkowski {});
         let index = Atom::var(symbol!("paging_mathml_tests::i"));
@@ -475,7 +669,7 @@ mod tests {
             .insert((representation.symbol(), index), source);
         Python::initialize();
         Python::attach(|py| {
-            let error = html(py, &tensor, &DisplaySettings::default(), &aliases).unwrap_err();
+            let error = html(py, &tensor, &DisplaySettings::default(), aliases).unwrap_err();
             assert!(error.is_instance_of::<PyValueError>(py));
             assert!(error.to_string().contains("source exceeds"), "{error}");
         });

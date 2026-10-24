@@ -567,7 +567,7 @@ assert "stroke-dasharray" in snapshot.to_html()
 assert view.measured().to_svg() == snapshot.to_svg()
 assert not hasattr(diagram, "_repr_html_")
 assert "DiagramView" in diagram._repr_mimebundle_(include=["text/plain"])["text/plain"]
-# Complete direct MathML keeps normalized inverse factors; paging remains upstream.
+# Complete direct MathML uses fractions without changing normalized source factors.
 rational = indexed / core.Expression.parse("feynkit_py_test::x*feynkit_py_test::y")
 before_render = rational.to_expression()
 fraction_html = rational.to_html()
@@ -580,39 +580,7 @@ assert {base for base, exponent in source_inverses} == {
     core.S("feynkit_py_test::x"), core.S("feynkit_py_test::y"),
 }
 assert all(exponent == -1 for base, exponent in source_inverses)
-powers = fraction_math.findall(".//{*}msup")
-assert len(powers) == 2, fraction_html
-rendered_inverses = []
-for power in powers:
-    assert len(power) == 2, fraction_html
-    assert [node.tag.rsplit("}", 1)[-1] for node in power] == ["mrow", "mrow"], fraction_html
-    base, exponent = power
-    assert len(base) == 1 and base[0].tag.rsplit("}", 1)[-1] == "mi", fraction_html
-    assert base[0].text in {"x", "y"}, fraction_html
-    assert len(exponent) == 1 and exponent[0].tag.rsplit("}", 1)[-1] == "mrow", fraction_html
-    assert [(node.tag.rsplit("}", 1)[-1], node.text) for node in exponent[0]] == [
-        ("mo", "−"), ("mn", "1"),
-    ], fraction_html
-    rendered_inverses.append((core.S(f"feynkit_py_test::{base[0].text}"), -1))
-assert rendered_inverses == source_inverses, fraction_html
-# The product's immediate children retain the actual normalized source order.
-expected_order = [
-    ("msup" if factor.get_type() == core.AtomType.Pow else "mmultiscripts", factor[0])
-    for factor in source_factors
-]
-product_rows = [
-    node for node in fraction_math.findall(".//{*}mrow")
-    if [child.tag.rsplit("}", 1)[-1] for child in node
-        if child.tag.rsplit("}", 1)[-1] != "mspace"] == [kind for kind, value in expected_order]
-]
-assert len(product_rows) == 1, fraction_html
-rendered_order = [
-    (child.tag.rsplit("}", 1)[-1],
-     core.S(f"feynkit_py_test::{child[0][0].text}") if child.tag.rsplit("}", 1)[-1] == "msup"
-     else core.Expression.parse("".join(child[1].itertext())))
-    for child in product_rows[0] if child.tag.rsplit("}", 1)[-1] != "mspace"
-]
-assert rendered_order == expected_order, fraction_html
+assert fraction_html.count("<mfrac>") == 1, fraction_html
 assert rational.to_expression() == before_render
 html = indexed.to_html()
 # Standalone notebook fragments share a pinned font URL without embedding font files.

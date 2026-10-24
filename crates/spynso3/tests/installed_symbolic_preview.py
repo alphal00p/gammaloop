@@ -1,6 +1,8 @@
 """Bounded notebook previews, complete exports, and lazy backend caching."""
 
+import re
 import unittest
+import xml.etree.ElementTree as ET
 from unittest.mock import Mock
 
 from symbolica import E, FormattedOutput, PrintMode
@@ -8,6 +10,94 @@ from symbolica.community import tensor as sp
 
 
 class SymbolicDisplayTests(unittest.TestCase):
+    def test_complete_arithmetic_uses_symbolica_layout(self):
+        rep = sp.Representation.euc(3)
+        cases = [
+            (sp.TensorExpression(E(source)), expected)
+            for source, expected in [
+                ("a-b", ["a", "−", "b"]),
+                ("x-3", ["−", "3", "+", "x"]),
+                ("-x", ["−", "x"]),
+                ("a-2*b", ["a", "−", "2", "b"]),
+                ("x/y", ["x", "y"]),
+            ]
+        ]
+        cases.append(
+            (
+                sp.TensorName("arithmetic_tests::A")(rep("i"))
+                - sp.TensorName("arithmetic_tests::B")(rep("i")),
+                ["A", "i", "−", "B", "i"],
+            )
+        )
+        for value, expected in cases:
+            before = value.to_expression()
+            for render in (
+                value.to_html,
+                value._repr_html_,
+                value.formatted()._repr_html_,
+            ):
+                html = render()
+                root = ET.fromstring(
+                    re.search(r"<math\b[^>]*>.*?</math>", html, re.DOTALL).group()
+                )
+                tokens = [
+                    node.text
+                    for node in root.iter()
+                    if node.tag.rsplit("}", 1)[-1] in {"mi", "mn", "mo", "mtext"}
+                    and node.text != "\u2062"
+                ]
+                self.assertEqual(tokens, expected, html)
+                if expected == ["x", "y"]:
+                    fraction = root.find(".//{*}mfrac")
+                    self.assertIsNotNone(fraction)
+                    self.assertEqual(
+                        ["".join(child.itertext()) for child in fraction], ["x", "y"]
+                    )
+                self.assertNotIn("data-symbolica-marker", html)
+                self.assertNotIn("Expression preview", html)
+            self.assertEqual(value.to_expression(), before)
+
+    def test_complete_export_keeps_a_declined_semantic_leaf(self):
+        # The semantic fragment plus Symbolica's path wrapper exceeds 4 KiB,
+        # although the source and its ordinary native call fit the viewer.
+        name = "T" * 900
+        labels = [f"i{index}" for index in range(100)]
+        rep = sp.Representation.euc(3)
+        value = sp.TensorName(f"declined_leaf_tests::{name}")(
+            *(rep(label) for label in labels)
+        )
+        before = value.to_expression()
+        for render in (value.to_html, value._repr_html_):
+            html = render()
+            root = ET.fromstring(
+                re.search(r"<math\b[^>]*>.*?</math>", html, re.DOTALL).group()
+            )
+            self.assertIsNotNone(root.find(".//{*}mmultiscripts"))
+            tokens = [
+                node.text
+                for node in root.iter()
+                if node.tag.rsplit("}", 1)[-1] in {"mi", "mn", "mo"}
+            ]
+            self.assertEqual(tokens, [name, *labels])
+            self.assertNotIn("spenso-complete-leaf", html)
+            self.assertNotIn("data-symbolica-marker", html)
+        self.assertEqual(value.to_expression(), before)
+
+    def test_complete_arithmetic_fallback_retains_every_term(self):
+        value = sp.TensorExpression(
+            E("+".join(f"fallback_term_{i}" for i in range(600)))
+        )
+        html = value.to_html()
+        root = ET.fromstring(
+            re.search(r"<math\b[^>]*>.*?</math>", html, re.DOTALL).group()
+        )
+        tokens = [
+            node.text for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "mi"
+        ]
+        self.assertCountEqual(tokens, [f"fallback_term_{i}" for i in range(600)])
+        self.assertNotIn("data-symbolica-marker", html)
+        self.assertNotIn("⋯", html)
+
     def assertBoundedNotebookPreview(self, value, *, full_text=False):
         html = value._repr_html_()
         self.assertIn("<math", html)
@@ -336,11 +426,13 @@ class SymbolicDisplayTests(unittest.TestCase):
         tensor = sp.Tensor.dense(head, [1.0, 2.0])
         network = sp.TensorNetwork(tensor)
         for value in (head, tensor, network):
-            with self.subTest(kind=type(value).__name__):
-                with self.assertRaisesRegex(
+            with (
+                self.subTest(kind=type(value).__name__),
+                self.assertRaisesRegex(
                     ValueError, "does not accept Typst notation_source"
-                ):
-                    value.formatted(notation_source="")
+                ),
+            ):
+                value.formatted(notation_source="")
 
     def test_ready_formatted_output_remains_compatible(self):
         output = FormattedOutput("plain", "<em>rich</em>", "$$x$$")

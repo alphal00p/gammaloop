@@ -165,8 +165,39 @@ pub fn render(
     })?)
 }
 
+/// Validate tensor presentation options without rendering an expression.
+///
+/// Uses the same settings parser as [`render`] and [`expression`].
+///
+/// # Errors
+///
+/// Returns [`ExportError::InvalidSettings`] for an unsupported tensor layout or
+/// invalid index or factor spacing, preserving numeric parsing errors as sources.
+///
+/// # Examples
+///
+/// ```
+/// use spenso::network::tags::mathml;
+/// use spenso::network::tags::mathml::ExportError;
+/// use symbolica::printer::{PrintOptions, PrintUserData};
+///
+/// let mut options = PrintOptions::mathml();
+/// mathml::validate_options(&options)?;
+/// options.custom_print_mode.insert(
+///     "spenso.tensor_layout".into(), PrintUserData::String("unsupported".into()),
+/// );
+/// assert!(matches!(mathml::validate_options(&options), Err(ExportError::InvalidSettings { .. })));
+/// # Ok::<(), ExportError>(())
+/// ```
+pub fn validate_options(options: &PrintOptions) -> Result<(), ExportError> {
+    Render::new(options, &|_, _| None).map(|_| ())
+}
+
 /// Render a complete static MathML fragment using the interactive tensor notation.
 ///
+/// This complete walk has no sign or fraction layout. Python exports use it only
+/// beyond Symbolica's own MathML printer bounds; arithmetic otherwise belongs to
+/// Symbolica with these same tensor leaves.
 /// No arithmetic or function argument is paged or replaced by an omission marker.
 /// The source is limited to 1,000,000 nodes and depth 256, and generated fragments
 /// share a 16 MiB cumulative fragment-validation budget: the sum of the byte

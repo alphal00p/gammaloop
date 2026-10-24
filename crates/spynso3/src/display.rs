@@ -1679,7 +1679,7 @@ pub fn atom_to_html(
 ) -> PyResult<String> {
     reject_html_notation(notation_source)?;
     let aliases = IndexAliases::for_atom(atom, &settings.index_style);
-    paging::html(py, atom, settings, &aliases)
+    paging::html(py, atom, settings, aliases)
 }
 
 pub(crate) fn reject_html_notation(notation_source: Option<&str>) -> PyResult<()> {
@@ -1787,7 +1787,7 @@ pub fn structured_to_html(
 ) -> PyResult<String> {
     reject_html_notation(notation_source)?;
     let aliases = IndexAliases::for_descriptor(value, &settings.index_style);
-    paging::html(py, &value.presentation_atom(), settings, &aliases)
+    paging::html(py, &value.presentation_atom(), settings, aliases)
 }
 
 pub(crate) fn structured_to_svg(
