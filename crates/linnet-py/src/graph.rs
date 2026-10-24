@@ -1628,6 +1628,7 @@ impl PyGraph {
             .to_svg()
     }
 
+    #[pyo3(signature = ())]
     fn _mime_(slf: Py<PyGraph>, py: Python<'_>) -> PyResult<Py<PyAny>> {
         render::render_graph(py, &slf, None, None)?._mime_(py)
     }
