@@ -5,7 +5,7 @@ pub(crate) use components::{FactorizedContraction, ReductionStatus};
 
 use spenso::{
     network::{
-        library::symbolic::ETS,
+        library::{function_lib::INBUILTS, symbolic::ETS},
         parsing::ParseState,
         tags::{SPENSO_TAG, SpensoTags},
     },
@@ -26,6 +26,8 @@ struct Endpoint<'a> {
     representation: LibraryRep,
     dimension: AtomView<'a>,
     index: AtomView<'a>,
+    // Origin gates lazy replacement, independently of slot compatibility.
+    metric_source: bool,
 }
 
 impl<'a> Endpoint<'a> {
@@ -37,6 +39,7 @@ impl<'a> Endpoint<'a> {
             representation: slots.representation(view).ok()?,
             dimension: view.dimension(),
             index: view.index(),
+            metric_source: false,
         })
     }
 
@@ -432,7 +435,10 @@ impl SlotContraction {
                             selection.is_none_or(|selection| selection[*partner].partner)
                         }),
                         position,
-                        source,
+                        Endpoint {
+                            metric_source: true,
+                            ..source
+                        },
                         &|| replacement.to_owned(),
                         chain_like,
                         slots,
@@ -692,6 +698,29 @@ impl SlotContraction {
         let head = function.get_symbol();
         if head.is_scalar() || !matches!(slots.classify(function.as_view()), SlotMatch::Other) {
             return SlotReplacement::Absent;
+        }
+        if head == INBUILTS.conj && function.get_nargs() == 1 {
+            if !source.metric_source {
+                return SlotReplacement::Absent;
+            }
+            let replacement = replacement();
+            // Only rename an explicit metric port. Substituting a vector or
+            // scalar weight through conjugation would require an antilinear policy.
+            if Endpoint::parse(replacement.as_view(), slots).is_none() {
+                return SlotReplacement::Absent;
+            }
+            return match self.replace_linear(
+                function.iter().next().unwrap(),
+                source,
+                &(|| replacement.clone()) as &dyn Fn() -> Atom,
+                chain_like,
+                slots,
+            ) {
+                SlotReplacement::Replaced(value) => {
+                    SlotReplacement::Replaced(self.replace_argument(function, 0, value))
+                }
+                result => result,
+            };
         }
         if head.has_tag(&self.tags.rank1) {
             let Some((position, endpoint)) = self.rank_one_endpoint(function, slots) else {

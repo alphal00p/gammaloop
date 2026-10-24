@@ -724,8 +724,252 @@ pub mod test {
     use super::*;
     use crate::shorthands::schoonschip::Schoonschip;
     use crate::test_support::test_initialize;
-    use spenso::{g, mink, p};
+    use spenso::{g, mink, network::tags::SPENSO_TAG, p, structure::representation::Minkowski};
     use std::sync::Arc;
+
+    #[test]
+    fn native_conjugate_metric_ports_keep_variance_and_coefficients() {
+        use spenso::network::library::function_lib::INBUILTS;
+        use symbolica::atom::FunctionBuilder;
+        test_initialize();
+        let rep = LibraryRep::new_dual("conjugate_metric::R")
+            .unwrap()
+            .new_rep(3);
+        let i = rep.slot::<AbstractIndex, _>(98601).to_atom();
+        let j = rep.slot::<AbstractIndex, _>(98602).to_atom();
+        let di = rep.dual().slot::<AbstractIndex, _>(98601).to_atom();
+        let dj = rep.dual().slot::<AbstractIndex, _>(98602).to_atom();
+        let mi = mink!(4, 98601);
+        let mj = mink!(4, 98602);
+        for (target, metric_port, operand_port) in [
+            (di, j.clone(), dj),
+            (i, rep.dual().slot::<AbstractIndex, _>(98602).to_atom(), j),
+            (mi, mj.clone(), mj),
+        ] {
+            for name in ["conjugate_metric::field", "conjugate_metric::parameter"] {
+                let head = SPENSO_TAG.tensor_symbol(name);
+                let component = |slot: &Atom| FunctionBuilder::new(head).add_arg(slot).finish();
+                for conjugated in [false, true] {
+                    for inside in [Atom::one(), Atom::i()] {
+                        let wrap = |slot: &Atom| {
+                            let value = &inside * component(slot);
+                            if conjugated {
+                                INBUILTS.conj(value)
+                            } else {
+                                value
+                            }
+                        };
+                        let expected = SymbolicTensor::infer(Atom::i() * wrap(&target)).unwrap();
+                        let source = SymbolicTensor::infer(
+                            Atom::i() * g!(&target, &metric_port) * wrap(&operand_port),
+                        )
+                        .unwrap();
+                        for settings in [
+                            ContractSettings::default(),
+                            ContractSettings {
+                                rank_one: false,
+                                collect_chains: false,
+                                collect_traces: false,
+                                ..Default::default()
+                            },
+                        ] {
+                            let actual = source.contract(settings).unwrap();
+                            assert_eq!(actual.expression(), expected.expression());
+                            assert!(actual.same_value(&expected));
+                            assert_eq!(
+                                actual.structure().logical_slots(),
+                                expected.structure().logical_slots()
+                            );
+                            assert!(actual.contract(settings).unwrap().same_value(&actual));
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn native_conjugate_metric_substitution_retains_scalar_metadata() {
+        use spenso::network::library::function_lib::INBUILTS;
+        use symbolica::{atom::FunctionBuilder, symbol};
+        test_initialize();
+        let head = SPENSO_TAG.tensor_symbol("conjugate_metric::with_metadata");
+        let metadata_head = symbol!("conjugate_metric::metadata"; Scalar);
+        let source_port = mink!(4, 98612);
+        let target = mink!(4, 98611);
+        let metadata = FunctionBuilder::new(metadata_head)
+            .add_arg(&source_port)
+            .finish();
+        let component = |port: &Atom| {
+            INBUILTS.conj(
+                FunctionBuilder::new(head)
+                    .add_arg(&metadata)
+                    .add_arg(port)
+                    .finish(),
+            )
+        };
+        let expected = SymbolicTensor::infer(component(&target)).unwrap();
+        let source =
+            SymbolicTensor::infer(g!(&target, &source_port) * component(&source_port)).unwrap();
+        let actual = source.contract(ContractSettings::default()).unwrap();
+        assert!(actual.same_value(&expected));
+        assert_eq!(actual.expression(), expected.expression());
+        assert_eq!(
+            actual.structure().logical_slots(),
+            expected.structure().logical_slots()
+        );
+    }
+
+    #[test]
+    fn native_conjugate_metric_maps_each_exposed_sum_port() {
+        use spenso::network::library::function_lib::INBUILTS;
+        use symbolica::atom::FunctionBuilder;
+        test_initialize();
+        let heads = ["conjugate_metric::sum_a", "conjugate_metric::sum_b"]
+            .map(|name| SPENSO_TAG.tensor_symbol(name));
+        let [target, bound, spectator] = [98621, 98622, 98623].map(|i| {
+            Minkowski {}
+                .new_rep(4)
+                .slot::<AbstractIndex, _>(i)
+                .to_atom()
+        });
+        assert_ne!(target, bound);
+        assert_ne!(bound, spectator);
+        let component = |port: &Atom| {
+            INBUILTS.conj(
+                heads
+                    .iter()
+                    .map(|head| {
+                        FunctionBuilder::new(*head)
+                            .add_arg(port)
+                            .add_arg(&spectator)
+                            .finish()
+                    })
+                    .sum::<Atom>(),
+            )
+        };
+        let source = SymbolicTensor::infer(g!(&target, &bound) * component(&bound)).unwrap();
+        let expected = SymbolicTensor::infer(component(&target)).unwrap();
+        let actual = source
+            .contract(ContractSettings {
+                rank_one: false,
+                collect_chains: false,
+                collect_traces: false,
+                ..Default::default()
+            })
+            .unwrap();
+        assert!(actual.same_value(&expected));
+    }
+
+    #[test]
+    fn native_conjugate_metric_does_not_make_other_functions_transparent() {
+        use spenso::network::library::function_lib::INBUILTS;
+        use symbolica::{atom::FunctionBuilder, symbol};
+        test_initialize();
+        let head = SPENSO_TAG.tensor_symbol("conjugate_metric::opaque_field");
+        let arbitrary = symbol!(
+            "conjugate_metric::other_broadcast",
+            tag = SPENSO_TAG.broadcast
+        );
+        let [target, bound] = [98631, 98632].map(|i| {
+            Minkowski {}
+                .new_rep(4)
+                .slot::<AbstractIndex, _>(i)
+                .to_atom()
+        });
+        assert_ne!(target, bound);
+        let component = FunctionBuilder::new(head).add_arg(&bound).finish();
+        let wrapped = FunctionBuilder::new(arbitrary).add_arg(&component).finish();
+        let source = SymbolicTensor::infer(g!(&target, &bound) * wrapped).unwrap();
+        assert!(
+            source
+                .contract(ContractSettings::default())
+                .unwrap()
+                .same_value(&source)
+        );
+        let source = SymbolicTensor::infer(p!(&bound) * INBUILTS.conj(component)).unwrap();
+        assert!(
+            source
+                .contract(ContractSettings::default())
+                .unwrap()
+                .same_value(&source)
+        );
+    }
+
+    #[test]
+    fn native_conjugate_metric_rank_one_refusal_does_not_rebuild_vectors() {
+        use spenso::network::library::function_lib::INBUILTS;
+        use std::sync::Mutex;
+        use symbolica::atom::FunctionBuilder;
+        test_initialize();
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let observed = Arc::clone(&calls);
+        let vector = spenso::vector_symbol!(
+            "conjugate_metric::observed_vector",
+            norm = move |value, _| observed.lock().unwrap().push(value.to_owned())
+        );
+        let head = SPENSO_TAG.tensor_symbol("conjugate_metric::observed_field");
+        let bound = mink!(4, 98635);
+        let vector = FunctionBuilder::new(vector).add_arg(&bound).finish();
+        let field = INBUILTS.conj(FunctionBuilder::new(head).add_arg(&bound).finish());
+        let source = SymbolicTensor::infer(&vector * field).unwrap();
+        calls.lock().unwrap().clear();
+        let actual = source.contract(ContractSettings::default()).unwrap();
+        assert!(actual.same_value(&source));
+        assert_eq!(
+            actual.structure().logical_slots(),
+            source.structure().logical_slots()
+        );
+        let calls = calls.lock().unwrap();
+        let changed = calls.iter().filter(|value| **value != vector).count();
+        assert_eq!(
+            (calls.len(), changed),
+            (0, 0),
+            "refused vector rebuilds: {calls:?}; original={vector}; source={}; interface={:?}",
+            source.expression(),
+            source.structure()
+        );
+    }
+
+    #[test]
+    fn native_conjugate_metric_keeps_ranked_zero_and_rejects_bad_incidence() {
+        use spenso::network::library::function_lib::INBUILTS;
+        use symbolica::atom::FunctionBuilder;
+        test_initialize();
+        let head = SPENSO_TAG.tensor_symbol("conjugate_metric::zero_field");
+        let [target, bound] = [98641, 98642].map(|i| {
+            Minkowski {}
+                .new_rep(4)
+                .slot::<AbstractIndex, _>(i)
+                .to_atom()
+        });
+        assert_ne!(target, bound);
+        let source = SymbolicTensor::infer(
+            g!(&target, &bound)
+                * INBUILTS.conj(FunctionBuilder::new(head).add_arg(&bound).finish()),
+        )
+        .unwrap();
+        let zero =
+            SymbolicTensor::from_declared_parts(Atom::Zero, source.structure().clone()).unwrap();
+        assert!(
+            zero.contract(ContractSettings::default())
+                .unwrap()
+                .same_value(&zero)
+        );
+        let ambiguous = g!(&target, &bound)
+            * INBUILTS.conj(
+                FunctionBuilder::new(head)
+                    .add_arg(&bound)
+                    .add_arg(&bound)
+                    .finish(),
+            );
+        assert!(SymbolicTensor::infer(ambiguous).is_err());
+        let malformed = FunctionBuilder::new(INBUILTS.conj)
+            .add_arg(&target)
+            .add_arg(&bound)
+            .finish();
+        assert!(SymbolicTensor::infer(malformed).is_err());
+    }
 
     #[test]
     fn compact_vector_dot_exposes_closed_spinor_connection() {
