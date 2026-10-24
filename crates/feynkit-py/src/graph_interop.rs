@@ -2,6 +2,9 @@
 
 use std::{collections::BTreeSet, sync::Mutex};
 
+use linnet_py as graph_bindings;
+use linnet_py::{PyHalfEdgeSpec, PyNodeStore};
+
 use linnet::half_edge::{
     involution::{Flow, Hedge, HedgePair},
     subgraph::{ModifySubSet, SuBitGraph, SubSetLike},
@@ -242,12 +245,12 @@ impl LinnetExport {
         let mut items = Vec::new();
         for vertex in diagram.vertices() {
             let vertex = Py::new(py, vertex)?.into_any();
-            let node = linnet_py::node(py, None, Some(vertex), None)?;
+            let node = graph_bindings::node(py, None, Some(vertex), None)?;
             items.push(Py::new(py, node)?.into_any());
         }
         let edges = diagram.edges();
         for (pair, edge, data) in native.iter_edges() {
-            let endpoint = |hedge: Hedge, flow: Flow| -> PyResult<Py<linnet_py::PyHalfEdgeSpec>> {
+            let endpoint = |hedge: Hedge, flow: Flow| -> PyResult<Py<PyHalfEdgeSpec>> {
                 let node = native
                     .node_id(hedge)
                     .0
@@ -256,8 +259,8 @@ impl LinnetExport {
                     .unbind();
                 let data = hedge.0.into_pyobject(py)?.into_any().unbind();
                 let endpoint = match flow {
-                    Flow::Source => linnet_py::source(py, node, Some(data), None)?,
-                    Flow::Sink => linnet_py::sink(py, node, Some(data), None)?,
+                    Flow::Source => graph_bindings::source(py, node, Some(data), None)?,
+                    Flow::Sink => graph_bindings::sink(py, node, Some(data), None)?,
                 };
                 Py::new(py, endpoint)
             };
@@ -270,7 +273,7 @@ impl LinnetExport {
                 HedgePair::Split { .. } => unreachable!("whole diagrams have no split edges"),
             };
             let edge_data = Py::new(py, edges[edge.0].clone())?.into_any();
-            let edge = linnet_py::edge(
+            let edge = graph_bindings::edge(
                 py,
                 first,
                 Some(format!("e{}", edge.0)),
@@ -281,14 +284,14 @@ impl LinnetExport {
             )?;
             items.push(Py::new(py, edge)?.into_any());
         }
-        let graph = linnet_py::build(
+        let graph = graph_bindings::build(
             py,
             &PyTuple::new(py, items)?,
             Some(diagram.inner.name().to_owned()),
             None,
             None,
             None,
-            linnet_py::PyNodeStore::Vec,
+            PyNodeStore::Vec,
         )?;
         let graph = Bound::new(py, graph)?.into_any();
         let mut native_hedges = vec![0; native.n_hedges()];

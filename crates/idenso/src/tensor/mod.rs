@@ -50,9 +50,9 @@ use crate::NetworkToolingError;
 
 mod canonicalize;
 mod collection;
-pub(crate) use collection::CollectionMode;
 #[cfg(test)]
 pub(crate) use collection::SELECTED_OPENS;
+pub(crate) use collection::{CollectedOutput, CollectedPolynomial, CollectionMode};
 pub mod composition;
 mod indexed;
 pub mod inference;

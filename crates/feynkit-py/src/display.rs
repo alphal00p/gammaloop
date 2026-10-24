@@ -2,6 +2,8 @@ use feynkit_graph::FeynmanDiagram;
 use feynkit_model::{Model, ParticleId};
 use linnest::svg::Scene;
 use linnet_render_py::PyRenderSettings;
+use spynso3::display as tensor_display;
+use symbolica::api::python::PythonExpression;
 
 use crate::render_settings::PyDiagramStyle;
 use pyo3::prelude::*;
@@ -213,11 +215,8 @@ pub(crate) fn record_html(kind: &str, name: &str, rows: &[(&str, String)]) -> St
 }
 
 /// Domain formulas use Spenso's existing MathML/Typst printer without recooking indices.
-pub(crate) fn expression_html(
-    py: Python<'_>,
-    expression: symbolica::api::python::PythonExpression,
-) -> PyResult<String> {
-    spynso3::display::to_html(py, &expression, None, None, None)
+pub(crate) fn expression_html(py: Python<'_>, expression: PythonExpression) -> PyResult<String> {
+    tensor_display::to_html(py, &expression, None, None, None)
 }
 
 #[cfg(test)]

@@ -5,9 +5,11 @@ use feynkit_py::FeynkitModule;
 use linnet_py::GraphModule;
 #[cfg(not(feature = "linnet-python"))]
 use linnet_render_py::GraphModule;
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::types::{PyDict, PyDictMethods, PyModule};
+use pyo3::{PyResult, Python};
 use spynso3::SpensoModule;
-use symbolica::api::python::{SymbolicaCommunityModule, create_symbolica_module};
+use symbolica::api::python;
+use symbolica::api::python::SymbolicaCommunityModule;
 
 // Keep this host in its own process: installed-host tests register canonical
 // Python packages, which would hide a dependency on those import names.
@@ -16,7 +18,7 @@ fn standalone_host_requires_no_canonical_python_namespaces() {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {
         let core = PyModule::new(py, "standalone_core")?;
-        create_symbolica_module(&core)?;
+        python::create_symbolica_module(&core)?;
         let graph = PyModule::new(py, "standalone_graph")?;
         GraphModule::register_module(&graph)?;
         let tensor = PyModule::new(py, "standalone_tensor")?;

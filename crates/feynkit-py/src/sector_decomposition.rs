@@ -3,7 +3,8 @@
 //! The containing extension registers its linked backend without a dependency
 //! from FeynKit to FastSecDec or any Python module namespace.
 
-use pyo3::{prelude::*, types::PyDict};
+use pyo3::types::PyDict;
+use pyo3::{Bound, Py, PyAny, PyRef, PyResult, pymethods};
 use symbolica::api::python::{ExtensionPoint, PythonExtensionFunction};
 
 use crate::{graph::PyFeynmanDiagram, integrals::PyIntegralFamily};
@@ -13,6 +14,24 @@ use crate::{graph::PyFeynmanDiagram, integrals::PyIntegralFamily};
 /// Register a static `ExtensionImplementation<PythonExtensionFunction>` during
 /// host initialization. The backend retains ownership of argument validation,
 /// defaults, and scientific computation; no Python module lookup is performed.
+///
+/// ```no_run
+/// use feynkit_py::SECTOR_DECOMPOSE;
+/// use pyo3::types::{PyDict, PyTuple, PyTupleMethods};
+/// use pyo3::{Bound, Py, PyAny, PyErr, PyResult};
+/// use symbolica::api::python::{ExtensionImplementation, PythonExtensionFunction};
+///
+/// fn backend(
+///     args: &Bound<'_, PyTuple>,
+///     _kwargs: Option<&Bound<'_, PyDict>>,
+/// ) -> PyResult<Py<PyAny>> {
+///     Ok(args.get_item(0)?.unbind())
+/// }
+/// static BACKEND: ExtensionImplementation<PythonExtensionFunction> =
+///     ExtensionImplementation::new("linked-sector-backend", backend);
+/// SECTOR_DECOMPOSE.register(&BACKEND)?;
+/// # Ok::<(), PyErr>(())
+/// ```
 pub static SECTOR_DECOMPOSE: ExtensionPoint<PythonExtensionFunction> =
     ExtensionPoint::new("hepkit.sector_decompose");
 
@@ -22,7 +41,7 @@ impl PyFeynmanDiagram {
     /// Generate Laurent integrands through the optional sector-decomposition backend.
     ///
     /// The complete native diagram, all keyword values and observer exceptions are
-    /// forwarded unchanged to ``hepkit.sector_decomposition.sector_decompose``.
+    /// forwarded unchanged to the host's registered ``hepkit.sector_decompose`` backend.
     /// Supply numerical kinematics and external-state bindings explicitly. The
     /// backend uses this diagram's numerator and weights; compilation and numerical
     /// integration remain separate operations on the returned GeneratedIntegral.
@@ -63,7 +82,7 @@ impl PyFeynmanDiagram {
 impl PyIntegralFamily {
     /// Generate Laurent integrands for an explicitly specified member of this family.
     ///
-    /// Forward to ``hepkit.sector_decomposition.sector_decompose`` without changing
+    /// Forward to the host's registered ``hepkit.sector_decompose`` backend without changing
     /// any Python values. Supply signed powers in native denominator order and an
     /// already weighted scalar numerator. A completed family's auxiliary slots do
     /// not implicitly acquire power one. The backend owns validation and algebra.
@@ -238,15 +257,15 @@ pyo3_stub_gen::inventory::submit! {
 
 #[cfg(test)]
 mod tests {
+    use std::ffi::CString;
+
     use super::*;
     use feynkit_graph::FeynmanDiagram;
     use feynkit_kinematics::Kinematics;
     use feynkit_model::Model;
-    use pyo3::{
-        exceptions::PyRuntimeError,
-        types::{PyCFunction, PyTuple},
-    };
-    use std::ffi::CString;
+    use pyo3::exceptions::PyRuntimeError;
+    use pyo3::types::{PyAnyMethods, PyCFunction, PyDictMethods, PyTuple};
+    use pyo3::{PyErr, Python};
     use symbolica::api::python::ExtensionImplementation;
 
     fn observe(

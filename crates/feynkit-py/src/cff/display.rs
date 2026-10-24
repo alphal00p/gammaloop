@@ -3,6 +3,7 @@ use std::collections::BTreeMap;
 
 use pyo3::prelude::*;
 use serde_json::{Value, json};
+use spynso3::display as tensor_display;
 use symbolica::{
     api::python::PythonExpression,
     atom::{Atom, AtomCore},
@@ -69,7 +70,7 @@ impl PyCffRepresentation {
                 contributions.push(json!({"coefficient": term.coefficient.to_canonical_string(),
                     "energies": term.energies, "numerator": numerator.to_canonical_string(),
                     "numerator_html": math(numerator)?,
-                    "energy_map": term.energy_map.iter().map(|(e,a)| Ok((*e, spynso3::display::format_tensor(&PythonExpression { expr: a.clone() }, None, None)?))).collect::<PyResult<BTreeMap<_,_>>>()?,
+                    "energy_map": term.energy_map.iter().map(|(e,a)| Ok((*e, tensor_display::format_tensor(&PythonExpression { expr: a.clone() }, None, None)?))).collect::<PyResult<BTreeMap<_,_>>>()?,
                     "origin": term.origin,
                 }));
             }

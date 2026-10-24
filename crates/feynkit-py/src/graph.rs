@@ -1443,12 +1443,15 @@ impl PyLoopMomentumBasis {
                     unreachable!("momentum substitutions are symbolic patterns")
                 };
                 let rhs = rhs.to_atom().map_err(error::DiagramError::new_err)?;
+                // Symbolica's public conversion wrappers are constructed by typed
+                // Python extraction; their inner fields have no Rust constructor.
                 let pattern = PythonExpression { expr: pattern }
                     .into_pyobject(py)?
                     .extract()?;
                 let rhs = PythonExpression { expr: rhs }
                     .into_pyobject(py)?
                     .extract()?;
+                // Match Replacement's documented Python defaults.
                 PythonReplacement::new(pattern, rhs, None, None, 0, None, false, true, false, 100)
             })
             .collect()
