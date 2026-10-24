@@ -1392,7 +1392,7 @@ histogram. Contributions from all retained event groups are summed first
 per bin, and untouched bins are handled implicitly through the
 histogram-level `sample_count` rather than explicit zero fills.
 
-Histogram snapshots therefore remain fully mergeable and
+Legacy raw-stat histogram snapshots remain mergeable and
 re-constructible into live accumulator state. The Rust-facing histogram
 API exposes `merge(...)`, `merge_in_place(...)`, and `rebin(...)`.
 Restoring an unlabeled continuous histogram keeps the same empty label
@@ -1423,6 +1423,47 @@ represented in binary64. Coarsening continuous bins with M2 is rejected:
 their within-sample cross-bin covariance is not stored. Factor-one and
 discrete-bin copies preserve M2. Raw-only rebinning retains its historical
 sum-of-squares convention, which is not a general correlated-bin variance.
+
+==== Exact represented-sample snapshot mode
+
+The separately negotiated exact mode stores additive rational moments of each
+complete, finite binary64 sample: its value, absolute value and square, with
+optional third and fourth powers. The count includes cut and untouched-bin
+zeros. It does not reconstruct exact moments from rounded raw or centered
+statistics, and it does not change the precision boundary of the integrand.
+The exact variance numerator is `N S2 - S1^2`; histogram sample-mean error is
+its square root divided by `N sqrt(N - 1)`. Reporting certifies the final
+binary64 rounding cell after multiprecision evaluation, so an intermediate
+binary64 variance is unnecessary. Fewer than two samples or a nonrepresentable
+nonzero error is an explicit reporting failure, not successful zero uncertainty.
+
+`average_exact` and `error_exact` validate count, moment order and raw diagnostic
+agreement before reporting. The old `average` and `error` getters retain only
+legacy raw/M2 semantics, even if the bin carries an exact payload; exact-mode
+callers must use the checked methods. Python wrappers and HwU dispatch through
+those checked methods when exact data is present. Required raw diagnostic
+fields must remain finite; their range is an explicit v1 capability limit.
+
+Tagged `gammaloop_exact_histogram_v1` and `gammaloop_exact_observables_v1`
+JSON entrypoints validate every bin, underflow, overflow and enclosing count.
+They check original JSON tokens for duplicate keys and aggregate resource limits
+before constructing rationals. Independent sample-batch merges are transactional;
+mixed exact/legacy bin data is rejected, even for a populated zero-count
+layout. An empty bundle histogram map is the layout-free identity. Exact
+histogram layouts are fixed
+continuous partitions or declared discrete ID sets, with every bin present in
+every batch. Dynamic observed-ID histogram unions need an explicit metadata and
+zero-extension contract before they can be supported.
+
+Exact rescaling, spatial rebinning and restoration into live raw accumulators
+are unsupported. Rescaling can leave the represented-binary64 sample domain;
+rebinning needs within-sample cross-bin moments; live continuation needs an
+exact accumulator preserving grouped-sample and sparse-zero semantics. The
+conversion methods `into_accumulator_state` and `into_accumulator_bundle` are
+therefore fallible and reject exact payloads. Bare legacy file entrypoints reject
+exact data instead of silently dropping its authority. An external controller
+must negotiate and preserve exact capability across every scalar and histogram
+consumer; an optional field alone does not establish that guarantee.
 
 Current built-in quantities include:
 

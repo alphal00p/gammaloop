@@ -512,6 +512,19 @@ impl<'de> Deserialize<'de> for ExactF64Moments {
     }
 }
 
+impl schemars::JsonSchema for ExactF64Moments {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "ExactF64MomentsV1".into()
+    }
+
+    fn json_schema(_generator: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        // The checked decoder also enforces bounded reduced dyadics and moment
+        // inequalities; schema validation never replaces that decoder.
+        serde_json::from_str(include_str!("exact_moments.schema.json"))
+            .expect("checked-in exact moment schema is valid")
+    }
+}
+
 /// Correctly round a general rational, not only a dyadic stored moment. Final
 /// means and variance denominators contain factors of N and can be non-dyadic.
 pub fn certified_round_f64(value: &Rational, policy: ReportPolicy) -> Result<f64> {
