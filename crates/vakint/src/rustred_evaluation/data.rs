@@ -539,6 +539,7 @@ impl Vakint {
 mod tests {
     use super::*;
     use crate::{RustRedMasterMode, VakintSettings, vakint_parse};
+    use std::collections::BTreeSet;
 
     #[test]
     fn failed_vendored_initialization_remains_retryable_and_warm_hits_check_resources() {
@@ -850,6 +851,73 @@ mod tests {
             assert!(error.contains(&release.version), "{error}");
             assert!(error.contains(graph.to_str().unwrap()), "{error}");
             assert!(!error.contains("undeclared residual master"), "{error}");
+        }
+        // The common-family graph is a powered P640 representative, not a
+        // certified parent for an arbitrary residual in that family. Reuse the
+        // authenticated metadata's maximal-parent references without inferring
+        // another routing from positive slots alone.
+        let parent_references = data
+            .manifest
+            .masters
+            .iter()
+            .map(|master| {
+                let relative = master["parent_graph"].as_str().unwrap();
+                data.read(relative).unwrap();
+                data.path(relative).unwrap().unwrap()
+            })
+            .collect::<BTreeSet<_>>();
+        let expected_parents = [30527, 30699, 31740, 32745]
+            .map(|sector| {
+                data.path(&format!("graphs/parent-{sector}.dot"))
+                    .unwrap()
+                    .unwrap()
+            })
+            .into_iter()
+            .collect::<BTreeSet<_>>();
+        assert_eq!(parent_references, expected_parents);
+        let family_graph = data
+            .path(family["graph"].as_str().unwrap())
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            fs::read(&family_graph).unwrap(),
+            data.read("masters/P640/graph.dot").unwrap()
+        );
+        let mut dotted_powers = powers.clone();
+        dotted_powers[1] += 1;
+        let unknown = catalog.symbol(family["fingerprint"].as_str().unwrap(), &dotted_powers);
+        assert!(!catalog.masters.contains_key(&unknown));
+        for mode in [RustRedMasterMode::Symbolic, RustRedMasterMode::Numerical] {
+            let error = catalog
+                .finalize(unknown.clone(), &settings, 5, mode)
+                .unwrap_err()
+                .to_string();
+            assert!(error.contains("undeclared residual master"), "{error}");
+            assert!(error.contains("no unique parent inferred"), "{error}");
+            for parent in &parent_references {
+                assert_eq!(
+                    error.matches(parent.to_str().unwrap()).count(),
+                    1,
+                    "{error}"
+                );
+            }
+            let positions = parent_references
+                .iter()
+                .map(|parent| error.find(parent.to_str().unwrap()).unwrap())
+                .collect::<Vec<_>>();
+            assert!(
+                positions.windows(2).all(|pair| pair[0] < pair[1]),
+                "{error}"
+            );
+            assert!(!error.contains(family_graph.to_str().unwrap()), "{error}");
+            let cancel_unknown =
+                vakint_parse!("ep^-2*((1-ep)^-1-1-ep)-(1-ep)^-1").unwrap() * &unknown;
+            assert!(
+                catalog
+                    .finalize(cancel_unknown, &settings, 5, mode)
+                    .unwrap()
+                    .is_zero()
+            );
         }
         // The cancellation is meromorphic and requires exact combination of
         // rational epsilon coefficients before inspecting the unavailable data.
