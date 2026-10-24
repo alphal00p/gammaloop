@@ -87,7 +87,8 @@ impl FeynmanDiagram {
     /// Entries follow ascending edge IDs and use the same routing, masses and
     /// exclusions as [`Self::propagator_family`]. Repeated propagators and
     /// bridges retain separate entries, allowing consumers to preserve graph
-    /// provenance without reconstructing denominator-selection rules.
+    /// provenance without reconstructing denominator-selection rules. These are
+    /// quadratic forms; their powers remain on the corresponding graph edges.
     pub fn ordered_propagators(
         &self,
         kinematics: &Kinematics,
@@ -122,6 +123,12 @@ impl FeynmanDiagram {
         let rep = Minkowski {}.new_rep(kin.dimension());
         let mut denominators = BTreeMap::new();
         for factor in factors {
+            // Family entries are quadratic forms; their physical multiplicity
+            // remains available on the source edge rather than in the basis.
+            let factor = match factor {
+                AtomView::Pow(power) => power.get_base(),
+                factor => factor,
+            };
             let AtomView::Fun(propagator) = factor else {
                 return Err(DiagramError::Invariant {
                     operation: "extracting an integral family",
