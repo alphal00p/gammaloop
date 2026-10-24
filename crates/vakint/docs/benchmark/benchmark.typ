@@ -141,13 +141,44 @@ Refresh instructions: #raw("../../AGENTS.md").
 #pagebreak()
 #let ingress = report.five_loop_dot_ingress_acceptance
 #let pending = report.five_loop_performance_status
+#let five-id = report.at("selected_five_loop_run", default: none)
+#let five = if five-id == none { none } else { report.five_loop_runs.at(five-id) }
+#let primary(id) = if five == none { none } else { five.primary.at(id) }
+#let summary-time(value) = if value == none { [—] } else {
+  [#timing(value.median_seconds) #text(7.5pt)[(#timing(value.min_seconds)–#timing(value.max_seconds))]]
+}
+#let primary-cell(id, variant) = {
+  let row = primary(id)
+  if row == none or row.status != "measured" {
+    [Pending]
+    if row != none and row.functional_records.len() > 0 {
+      linebreak()
+      text(8pt)[Functional evidence only]
+    }
+  } else {
+    let metric = row.at(variant).metrics.reduction_seconds
+    let reference = row.uncached.metrics.reduction_seconds.median_seconds
+    let ratio = if reference > 0 { row.cached.metrics.reduction_seconds.median_seconds / reference } else { none }
+    table.cell(fill: if variant == "cached" and ratio != none and ratio > 0 { ratio-fill(ratio) } else { pale }, {
+      text(15pt, weight: "bold")[#timing(metric.median_seconds) s]
+      linebreak()
+      text(8pt)[#timing(metric.min_seconds)–#timing(metric.max_seconds) s]
+      if variant == "cached" and ratio != none {
+        linebreak()
+        text(9pt, weight: "bold")[×#multiplier(ratio)]
+      }
+    })
+  }
+}
 #assert(ingress.validation_passed, message: "Five-loop ingress checks must pass")
 #set text(font: "Libertinus Serif", size: 10pt, fill: black)
 
 #align(center)[
   #text(22pt, weight: "bold", fill: navy)[Five-loop validation and benchmarks]
   #v(0.2em)
-  #text(11.5pt, fill: luma(80))[640 declared, uncomputed masters · performance measurements pending]
+  #text(11.5pt, fill: luma(80))[
+    #if five == none [Historical acceptance · performance measurements pending] else [Retained-master comparisons · functional evidence reported separately]
+  ]
 ]
 
 #v(0.55em)
@@ -206,7 +237,12 @@ claim. Earlier interrupted checks are not a timing baseline.
       text(fill: white, weight: "bold")[With persistent cache],
     ),
     ..for case in pending.cases {
-      (case.label, [Pending], [Pending])
+      if case.id == "held-out-suite" {
+        (case.label, if five == none or five.held_out == none { [Pending] } else { [Individual rows below] },
+         if five == none or five.held_out == none { [Pending] } else { [Individual rows below] })
+      } else {
+        (case.label, primary-cell(case.id, "uncached"), primary-cell(case.id, "cached"))
+      }
     },
   )
 }
@@ -214,12 +250,13 @@ claim. Earlier interrupted checks are not a timing baseline.
 #v(0.35em)
 #block(fill: pale, inset: 9pt, radius: 4pt, width: 100%)[
   #set text(9pt)
-  *Required before filling these cells.* Complete reductions and exact result/guard
-  agreement; a completed, strict cache workload; three fresh-process runs per
-  mode with fixed affinity and worker counts. Report graph preparation, loading,
-  lowering, IBP, cache loading and end-to-end time separately. Cache size,
-  preparation cost, intermediate reuse and held-out regressions accompany the
-  comparison. No cache speedup is claimed yet.
+  *Eligibility and reading guide.* Primary cells require catalogue closure and
+  exact result/guard agreement, a completed strict cache, and at least three matched fresh processes per
+  mode in one accepted serialized window, with fixed workers and affinity.
+  Bold values are reduction seconds; small values give the full observed range.
+  Multipliers are _cached ÷ uncached_, using the same colour scale as page 1.
+  Functional runs, including the exploratory q0 cohort, never supply these medians.
+  Cache preparation and held-out performance retain separate evidence.
 ]
 
 #v(0.35em)
@@ -230,10 +267,160 @@ Symbolica #raw(ingress.protocol.symbolica_commit.slice(0, 12)).
 Exact patch, executable, data and per-graph digests remain in JSON.
 
 #v(0.2em)
-Latest validated integration cohort, separate from these historical timings:
+Historical compatibility record, separate from selected performance evidence:
 RustRed #raw(pending.validated_compatibility_cohort.rustred_revision.slice(0, 12));
 Symbolica #raw(pending.validated_compatibility_cohort.symbolica_numerica_graphica_revision.slice(0, 12)).
 Published upgrade: Symbolica
 #raw(pending.pending_upgrade.symbolica_numerica_graphica_revision.slice(0, 12)),
 FeynKit #raw(pending.pending_upgrade.feynkit_owner_source_revision.slice(0, 12));
-final coordinated acceptance pending. Full revisions: #raw("data/results.json").
+acceptance was pending in that historical record. Full revisions: #raw("data/results.json").
+
+
+#if five != none {
+  pagebreak()
+  set text(font: "Libertinus Serif", size: 10pt, fill: black)
+  align(center)[#text(20pt, weight: "bold", fill: navy)[Five-loop evidence and timing ledger]]
+  v(0.35em)
+  [Selected report: #raw(five-id). Raw reports and their hashed launcher/compiler
+  receipts remain in JSON. Qualified performance additionally binds complete
+  result/guard files, unknown-master inventories and accepted window receipts.
+  A successful retained expression alone does not establish catalogue closure
+  or numerical evaluability.]
+  v(0.4em)
+  text(13pt, weight: "bold", fill: navy)[Primary workloads]
+  for case in pending.cases.filter(case => case.id != "held-out-suite") {
+    let row = primary(case.id)
+    v(0.3em)
+    [*#case.label:* #row.status.]
+    if row.functional_records.len() > 0 {
+      let functional = row.functional_records.filter(record => not record.performance_eligible)
+      if functional.len() > 0 {
+        [ #functional.len() functional record(s); no performance aggregate.]
+        for record in functional {
+          let original = record.raw_report
+          let source = original.at("source_commit", default: none)
+          let native = record.artifact.at("native", default: none)
+          parbreak()
+          text(8pt)[#record.status · report #raw(record.evidence.record.sha256.slice(0, 12))
+            #if source != none [· source #raw(source.slice(0, 12))]
+            #if native != none [· original Native #raw(native.base_revision.slice(0, 12))
+              · Symbolica #raw(record.artifact.symbolica_revision.slice(0, 12))]
+            #if record.catalogue_closure != none [· unknown masters: #record.catalogue_closure.unknown_count]
+          ]
+        }
+      }
+    }
+    if row.status == "measured" {
+      parbreak()
+      let records = row.functional_records.filter(record => record.performance_eligible)
+      let evidence = records.first().performance_evidence
+      [#row.uncached.metrics.reduction_seconds.samples_seconds.len() samples per mode;
+      exact result/guard parity and catalogue closure passed.
+      CPU #evidence.cpu_affinity · source #raw(evidence.stamps.VAKINT_CACHE_BUILD_GIT_REVISION.slice(0, 12)).]
+      v(0.2em)
+      let ledger = (
+        ("Fresh graph preparation", "metrics", "preparation_seconds"),
+        ("Data/program loading", "metrics", "data_loading_seconds"),
+        ("Manual 5L cache import", "metrics", "cache_loading_seconds"),
+        ("Parent transport / scalar lowering", "stages", "parent_transport_and_scalar_lowering"),
+        ("Deferred owner preparation (included)", "metrics", "owner_preparation_seconds"),
+        ("Saved application (inclusive)", "stages", "saved_rule_application"),
+        ("Complete public reduction", "metrics", "reduction_seconds"),
+        ("End to end (before report exit)", "metrics", "end_to_end_seconds"),
+      )
+      table(columns: (2.2fr, 1fr, 1fr), inset: 5pt, stroke: 0.4pt + luma(215),
+        fill: (x, y) => if y == 0 { pale } else { none },
+        table.header([*Seconds: median (range)*], [*Uncached*], [*Cached*]),
+        ..ledger.map(item => (item.at(0),
+          summary-time(row.uncached.at(item.at(1)).at(item.at(2))),
+          summary-time(row.cached.at(item.at(1)).at(item.at(2))))).flatten(),
+      )
+    }
+  }
+  v(0.4em)
+  text(13pt, weight: "bold", fill: navy)[Strict cache preparation]
+  if five.cache == none {
+    [ Pending: no completed final strict-cache receipt selected.]
+  } else {
+    let build = five.cache.raw_report
+    parbreak()
+    [#build.preparation.completed_roots / #build.preparation.total_roots selected roots complete;
+    strict Reject policy. Final compressed size: #fixed(build.compressed_bytes / 1048576, 3) MiB.
+    Cumulative supervised preparation: #timing(build.elapsed_seconds) s.
+    Cache SHA-256: #raw(build.cache_sha256). Training roots, capture diagnostics and
+    source/proof bindings remain in the unmodified build receipt.]
+  }
+  v(0.4em)
+  block(fill: pale, inset: 9pt, radius: 4pt)[
+    *Timing boundaries.* Stage intervals can overlap; never add the ledger rows.
+    Deferred owner preparation is already included in the saved-application and
+    reduction intervals. The historical field #raw("ibp_excluding_owner_seconds")
+    means saved application minus deferred-owner preparation; it still includes
+    transport, exact combination and terminal substitution. Pure IBP and
+    terminal-only timings are unmeasured. The primary owner-subtracted interval
+    also remains null: counter subtraction across representation reloads is not
+    a validated timer. Initial application loading uses Sparse; a requested
+    representation reload belongs to the reduction interval.
+    Missing events are “—”, never zero. Full stage and preparation records remain in JSON.
+  ]
+  for (kind, label) in (("held_out", "Protected held-out inputs"), ("tuning", "Training-selection inputs (separate)")) {
+    let suite = five.at(kind)
+    if suite != none {
+      pagebreak()
+      text(18pt, weight: "bold", fill: navy)[#label]
+      parbreak()
+      [#suite.rows.len() distinct input rows · #suite.identity.repetitions fresh processes per mode.
+      Times below are saved application minus owner preparation, not pure IBP.
+      Ratio is cached ÷ uncached; individual case ranges are retained.]
+      if suite.at("cache_requalification", default: none) != none {
+        parbreak()
+        text(8pt)[Consumer source #raw(suite.identity.build_git_revision.slice(0, 12));
+        original cache producer #raw(five.cache.raw_report.build_identity.build.git_revision.slice(0, 12)).
+        Accepted requalification: #raw(suite.cache_requalification.evidence.sha256.slice(0, 12)).
+        Cache, census, D40 data and Native semantic binding are unchanged.]
+      }
+      v(0.3em)
+      table(columns: (1.5fr, 1fr, 1fr, 0.55fr, 0.8fr), inset: 5pt, stroke: 0.4pt + luma(215),
+        fill: (x, y) => if y == 0 { pale } else { none },
+        table.header([*Input*], [*Uncached s*], [*Cached s*], [*Ratio*], [*Unknowns / hits*]),
+        ..suite.rows.map(row => {
+          let u = row.variants.uncached.metrics.ibp_excluding_owner_seconds
+          let c = row.variants.cached.metrics.ibp_excluding_owner_seconds
+          let r = if u.median_seconds > 0 { c.median_seconds / u.median_seconds } else { none }
+          (text(8pt, row.id), summary-time(u), summary-time(c),
+           table.cell(fill: if r != none and r > 0 { ratio-fill(r) } else { none },
+             if r == none { [—] } else { [×#multiplier(r)] }),
+           [#row.catalogue_closure.unknown_count / #row.requested_root_hits + #row.intermediate_hits])
+        }).flatten(),
+      )
+      v(0.3em)
+      [Hits show requested-root + intermediate hits summed over cached samples;
+      unknowns are the exact combined final inventory. Catalogue closure is independent
+      of retained-result success. No median across different physical inputs is reported.]
+      v(0.4em)
+      text(13pt, weight: "bold", fill: navy)[Stage ledger]
+      [ Each cell gives uncached → cached median seconds. Ranges and every sample are in JSON.]
+      v(0.25em)
+      {
+        set text(size: 7.5pt)
+        let compact(row, section, field) = {
+          let u = row.variants.uncached.at(section).at(field)
+          let c = row.variants.cached.at(section).at(field)
+          [#if u == none [—] else [#timing(u.median_seconds)] → #if c == none [—] else [#timing(c.median_seconds)]]
+        }
+        table(columns: (1.5fr, 1fr, 1fr, 1fr, 1fr, 1fr, 1fr), inset: 4pt, stroke: 0.4pt + luma(215),
+          fill: (x, y) => if y == 0 { pale } else { none },
+          table.header([*Input*], [*Data load*], [*Cache load*], [*Lowering*], [*Owner prep*], [*Saved API*], [*E2E*]),
+          ..suite.rows.map(row => (row.id,
+            compact(row, "metrics", "data_loading_seconds"), compact(row, "metrics", "cache_loading_seconds"),
+            compact(row, "stages", "parent_transport_and_scalar_lowering"), compact(row, "metrics", "owner_preparation_seconds"),
+            compact(row, "metrics", "saved_application_including_owner_seconds"), compact(row, "metrics", "end_to_end_seconds"))).flatten(),
+        )
+      }
+      v(0.3em)
+      [Suite end-to-end timing spans worker spawn through exit, unlike the primary
+      before-exit timer. Graph preparation, pure IBP and terminal-only phases are
+      not separately measured here. Ratios never combine these two timing scopes.]
+    }
+  }
+}
