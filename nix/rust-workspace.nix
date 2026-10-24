@@ -508,13 +508,16 @@
       "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/feynkit-py/tests/standalone_host.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"
       "crates/linnet-py/python/symbolica/community/graph/__init__.py"
       "crates/linnet-render-py/python/symbolica/community/graph/__init__.py"
     ];
     "feynkit-tensor" = ["crates/feynkit-model/tests/fixtures"];
+    spynso3 = ["crates/spynso3/tests/evaluator_horner.py"];
     vakint = [
+      "crates/vakint/docs/benchmark/data/results.json"
       "crates/vakint/tests/inputs"
       "crates/vakint/tests/resources"
       "crates/vakint/tests/fixtures"
