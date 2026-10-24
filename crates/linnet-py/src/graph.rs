@@ -1624,7 +1624,7 @@ impl PyGraph {
         browser: Option<&str>,
     ) -> PyResult<String> {
         render::render_graph(py, &slf, config, None)?
-            .measured(py, None, browser)?
+            .snapshot(py, browser)?
             .to_svg()
     }
 

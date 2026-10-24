@@ -475,6 +475,36 @@ impl PyDiagramView {
         self.present(diagrams, collection)
     }
 
+    // Estimates never publish completion, including for retained child views.
+    fn estimated(&self, py: Python<'_>) -> PyResult<PyDiagramRender> {
+        if let Some(done) = self.completed.get() {
+            return Ok(done.snapshot.clone());
+        }
+        if let Source::Views(views) = self.source.as_ref() {
+            let diagrams = views
+                .iter()
+                .map(|view| view.estimated(py))
+                .collect::<PyResult<Vec<_>>>()?;
+            return self.present(diagrams, true);
+        }
+        let mut labels = Vec::new();
+        self.labels(&mut labels);
+        let metrics = labels
+            .iter()
+            .map(|label| {
+                label
+                    .estimated_metrics()
+                    .map_err(|error| PyValueError::new_err(error.to_string()))
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+        let css = if metrics.is_empty() {
+            ""
+        } else {
+            &Self::font_resource(py)?.css
+        };
+        self.capture(py, Some(&metrics), css)
+    }
+
     fn present(
         &self,
         diagrams: Vec<PyDiagramRender>,
@@ -643,26 +673,49 @@ impl PyDiagramView {
             .clone())
     }
 
+    /// Static export owner: completed measurement, optional Typst, then estimates.
+    ///
+    /// Estimates use [`LabelSource::estimated_metrics`] at the request's fixed
+    /// 9px STIX style. They never complete measurement; a later receipt replaces
+    /// them. See [`Self::to_svg`] for an export example.
+    ///
+    /// # Errors
+    /// Propagates label validation, optional compiler, and rendering errors.
+    #[pyo3(signature = (*, browser=None))]
+    pub fn snapshot(&self, py: Python<'_>, browser: Option<&str>) -> PyResult<PyDiagramRender> {
+        if browser.is_some() || self.completed.get().is_some() {
+            return self.measured(py, None, browser);
+        }
+        if Self::python(py)?
+            .call_method1("available", ("typst",))?
+            .extract::<bool>()?
+        {
+            self.outlined(py)
+        } else {
+            self.estimated(py)
+        }
+    }
+
     /// Return the completed single-page SVG; see [`Self`] for an example.
     ///
     /// # Errors
-    /// Propagates [`Self::measured`] errors and rejects multipage snapshots.
+    /// Propagates [`Self::snapshot`] errors and rejects multipage snapshots.
     pub fn to_svg(&self, py: Python<'_>) -> PyResult<String> {
-        self.measured(py, None, None)?.to_svg()
+        self.snapshot(py, None)?.to_svg()
     }
     /// Return independent strings for all completed pages; see [`Self`].
     ///
     /// # Errors
-    /// Propagates [`Self::measured`] errors if completion is unavailable.
+    /// Propagates [`Self::snapshot`] errors if completion is unavailable.
     pub fn to_svg_pages(&self, py: Python<'_>) -> PyResult<Vec<String>> {
-        self.measured(py, None, None)?.to_svg_pages()
+        self.snapshot(py, None)?.to_svg_pages()
     }
     /// Return completed HTML with its font resource; see [`Self`].
     ///
     /// # Errors
-    /// Propagates [`Self::measured`] errors if completion is unavailable.
+    /// Propagates [`Self::snapshot`] errors if completion is unavailable.
     pub fn to_html(&self, py: Python<'_>) -> PyResult<String> {
-        self.measured(py, None, None)?.to_html()
+        self.snapshot(py, None)?.to_html()
     }
     /// Save the completed snapshot, selecting the format by suffix.
     ///
@@ -676,10 +729,10 @@ impl PyDiagramView {
     /// ```
     ///
     /// # Errors
-    /// Propagates [`Self::measured`] errors, filesystem/export errors, and
+    /// Propagates [`Self::snapshot`] errors, filesystem/export errors, and
     /// invalid format/page-count errors. PDF/PNG need an outlined snapshot.
     pub fn save(&self, py: Python<'_>, output: PathBuf) -> PyResult<PathBuf> {
-        Py::new(py, self.measured(py, None, None)?)?
+        Py::new(py, self.snapshot(py, None)?)?
             .call_method1(py, "save", (output,))?
             .extract(py)
     }
@@ -699,11 +752,7 @@ impl PyDiagramView {
     /// # Errors
     /// Propagates font/request errors and Python import or widget setup errors.
     pub fn widget(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        let completed = self
-            .completed
-            .get()
-            .map(|done| done.snapshot.to_html())
-            .transpose()?;
+        let completed = Some(self.to_html(py)?);
         let request = self.measurement_request(py)?;
         // Captured children can already contain MathML without pending probes.
         if completed
@@ -746,23 +795,29 @@ impl PyDiagramView {
                     .as_ref()
                     .is_some_and(|values| values.iter().any(|value| value == mime))
         };
-        if !wanted("application/vnd.jupyter.widget-view+json") {
-            let bundle = PyDict::new(py);
-            if wanted("text/plain") {
-                bundle.set_item("text/plain", self.__repr__())?;
-            }
-            if wanted("text/html") {
-                if let Some(done) = self.completed.get() {
-                    bundle.set_item("text/html", done.snapshot.to_html()?)?;
-                }
-            }
-            return Ok(bundle.into_any().unbind());
+        let bundle = PyDict::new(py);
+        let snapshot = self.snapshot(py, None)?;
+        if wanted("text/plain") {
+            bundle.set_item("text/plain", self.__repr__())?;
         }
-        let kwargs = PyDict::new(py);
-        kwargs.set_item("include", include)?;
-        kwargs.set_item("exclude", exclude)?;
-        self.widget(py)?
-            .call_method(py, "_repr_mimebundle_", (), Some(&kwargs))
+        if wanted("text/html") {
+            bundle.set_item("text/html", snapshot.to_html()?)?;
+        }
+        if wanted("image/svg+xml") && snapshot.pages().len() == 1 {
+            bundle.set_item("image/svg+xml", snapshot.to_svg()?)?;
+        }
+        if wanted("application/vnd.jupyter.widget-view+json")
+            && Self::python(py)?
+                .call_method1("available", ("anywidget",))?
+                .extract::<bool>()?
+        {
+            let live = self.widget(py)?.call_method0(py, "_repr_mimebundle_")?;
+            let live = live.bind(py).cast::<PyDict>()?;
+            if let Some(value) = live.get_item("application/vnd.jupyter.widget-view+json")? {
+                bundle.set_item("application/vnd.jupyter.widget-view+json", value)?;
+            }
+        }
+        Ok(bundle.into_any().unbind())
     }
 
     /// Marimo adapter for the retained widget; see [`Self::widget`].
@@ -770,10 +825,20 @@ impl PyDiagramView {
     /// # Errors
     /// Propagates widget errors and missing/failed Marimo imports or adapters.
     pub fn _display_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
-        py.import("marimo")?
-            .getattr("ui")?
-            .call_method1("anywidget", (self.widget(py)?,))
-            .map(Bound::unbind)
+        let marimo = py.import("marimo")?;
+        if Self::python(py)?
+            .call_method1("available", ("anywidget",))?
+            .extract::<bool>()?
+        {
+            marimo
+                .getattr("ui")?
+                .call_method1("anywidget", (self.widget(py)?,))
+                .map(Bound::unbind)
+        } else {
+            marimo
+                .call_method1("Html", (self.to_html(py)?,))
+                .map(Bound::unbind)
+        }
     }
     /// Marimo MIME hook for [`Self::_display_`]; see [`Self::widget`].
     ///

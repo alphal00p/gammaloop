@@ -409,9 +409,7 @@ impl PySubgraph {
         >,
         browser: Option<&str>,
     ) -> PyResult<String> {
-        self.render(py, config)?
-            .measured(py, None, browser)?
-            .to_svg()
+        self.render(py, config)?.snapshot(py, browser)?.to_svg()
     }
 
     fn _mime_(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {

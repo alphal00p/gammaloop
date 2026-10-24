@@ -6,6 +6,17 @@ from threading import RLock
 _widget_lock = RLock()
 
 
+def available(module):
+    """Optional display dependencies are absent only when their import fails."""
+    from importlib import import_module
+
+    try:
+        import_module(module)
+    except ImportError:
+        return False
+    return True
+
+
 def widget(view, request, javascript, completed=None):
     # Imports may release the GIL. lru_cache alone permits concurrent initial
     # misses to construct separate classes for the same source.

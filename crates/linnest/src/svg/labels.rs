@@ -112,6 +112,70 @@ impl LabelSource {
         literal
     }
 
+    /// Estimate a label at the fixed 9px STIX Two Math display style.
+    ///
+    /// Counts decoded Unicode characters at 7 units each and reserves 12 units
+    /// per nested structural MathML level. Width is bounded to 16384 and height
+    /// to 4096 user units; empty labels have a zero rectangle. This deliberately
+    /// overestimates ordinary inline labels but cannot predict font shaping,
+    /// stretchy operators, tables, or CSS. Measure for accurate geometry.
+    ///
+    /// ```
+    /// use linnest::svg::LabelSource;
+    /// assert_eq!(LabelSource::text("").estimated_metrics()?.width, 0.0);
+    /// assert!(LabelSource::text("momentum").estimated_metrics()?.width > 9.0);
+    /// # Ok::<(), linnest::svg::LabelError>(())
+    /// ```
+    ///
+    /// # Errors
+    /// Returns the same invalid MathML errors as measured label import.
+    pub fn estimated_metrics(&self) -> Result<LabelMetrics, LabelError> {
+        let math = format!("<math>{}</math>", self.mathml);
+        let document = Document::parse(&math).map_err(LabelError::InvalidMathml)?;
+        let mut characters = 0usize;
+        let mut depth = 0usize;
+        for node in document.descendants().filter(|node| node.is_text()) {
+            characters = characters.saturating_add(node.text().unwrap_or("").chars().count());
+            depth = depth.max(
+                node.ancestors()
+                    .filter(|ancestor| {
+                        ancestor.is_element()
+                            && matches!(
+                                ancestor.tag_name().name(),
+                                "mfrac"
+                                    | "msqrt"
+                                    | "mroot"
+                                    | "msub"
+                                    | "msup"
+                                    | "msubsup"
+                                    | "munder"
+                                    | "mover"
+                                    | "munderover"
+                                    | "mtable"
+                                    | "mtr"
+                            )
+                    })
+                    .count(),
+            );
+        }
+        let metrics = if characters == 0 {
+            LabelMetrics {
+                width: 0.0,
+                height: 0.0,
+                baseline: 0.0,
+            }
+        } else {
+            let height = (12.0 + 12.0 * depth.min(340) as f64).min(4096.0);
+            LabelMetrics {
+                width: (7.0 * characters.min(2340) as f64 + 6.0).min(16384.0),
+                height,
+                baseline: height * 0.75,
+            }
+        };
+        self.typeset_mathml(metrics)?;
+        Ok(metrics)
+    }
+
     pub(super) fn typeset_mathml(&self, metrics: LabelMetrics) -> Result<LabelPage, LabelError> {
         metrics.validate()?;
         let math = format!(

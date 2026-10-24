@@ -4576,7 +4576,7 @@ impl PyFeynmanDiagram {
         browser: Option<&str>,
     ) -> PyResult<String> {
         let view = self.render(py, config, style, momenta, lmb, highlight)?;
-        view.measured(py, None, browser)?.to_html()
+        view.snapshot(py, browser)?.to_html()
     }
 
     /// Render the diagram as HTML in Marimo, Jupyter, and IPython.

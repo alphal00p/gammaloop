@@ -1723,9 +1723,7 @@ impl SpensoNet {
         config: Option<&PyRenderSettings>,
         browser: Option<&str>,
     ) -> PyResult<String> {
-        self.render(py, config)?
-            .measured(py, None, browser)?
-            .to_html()
+        self.render(py, config)?.snapshot(py, browser)?.to_html()
     }
 
     /// Render static mathematical tensor notation to SVG.
