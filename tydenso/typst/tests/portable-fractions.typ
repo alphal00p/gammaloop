@@ -43,10 +43,12 @@
   for slot in ("0", "1", "2") {
     let node = (
       kind: "function",
-      symbol: (name: "indices::" + label, tags: ("spenso::index", "spenso::index-label:" + label)),
+      symbol: (name: "indices::" + label, tags: ("spenso::index",)),
       arguments: ((kind: "number", source: "7"), (kind: "number", source: slot)),
     )
-    let rendered = notation.render(node)
+    let labels = (:)
+    labels.insert("indices::" + label, (label: label, visual: eval(label, mode: "math").body))
+    let rendered = notation.render(node, notation: notation.default-notation(settings: (index-labels: labels)))
     let expected = if label in ("s", "t") and slot == "1" { [7] } else { [7] + [.] + text(slot) }
     assert.eq(rendered, math.attach(eval(label, mode: "math").body, b: text(size: 0.75em, expected)))
   }

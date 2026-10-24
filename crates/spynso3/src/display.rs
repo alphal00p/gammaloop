@@ -8,7 +8,7 @@ use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fmt::Write;
 use std::sync::Arc;
-use symbolica_notation::IndexDisplay;
+use symbolica_notation::{DisplayText, IndexDisplay, Notation, TextOverrides};
 
 use linnet_render_py::data_assets::STIX_TWO_MATH_LICENSE;
 use linnet_render_py::typst_export;
@@ -22,9 +22,9 @@ use pyo3::{
 use spenso::algebra::complex::RealOrComplexRef;
 use spenso::iterators::IteratableTensor;
 use spenso::network::tags;
-use spenso::network::tags::{SPENSO_TAG, TENSOR_PRINT_CALLBACK_TAG, TENSOR_PRINT_HEAD_PREFIX};
+use spenso::network::tags::SPENSO_TAG;
 use spenso::portable_payload;
-use spenso::shadowing::symbolica_utils::{SpensoPrintBackend, SpensoPrintSettings};
+use spenso::shadowing::symbolica_utils::SpensoPrintSettings;
 use spenso::structure::TensorDataLayout;
 use spenso::structure::partial::PartialStructureExt;
 use spenso::structure::representation::{IndexPalette, IndexRow, RepName, RepresentationMetadata};
@@ -1012,24 +1012,42 @@ impl IndexAliases {
                 let name =
                     NamespacedSymbol::parse(&format!("spenso::display_source_index_{identity}"));
                 let symbol = Symbol::get_symbol(name.clone()).unwrap_or_else(|| {
-                    // The existing tensor_display wrapper reads these portable
-                    // head tags. Register no dynamic callback: formatting must
-                    // not make a subsequent Symbolica state export unportable.
-                    let mut tags = vec![SPENSO_TAG.tensor.clone(), SPENSO_TAG.index.clone()];
-                    for (backend, mode) in [
-                        ("plain", TensorDisplayMode::Plain),
-                        ("latex", TensorDisplayMode::Latex),
-                        ("typst", TensorDisplayMode::Typst),
-                    ] {
-                        tags.push(format!(
-                            "{TENSOR_PRINT_HEAD_PREFIX}{backend}:{}",
-                            format_atom_with_mode(source, mode, false)
-                        ));
-                    }
-                    SymbolBuilder::new(name)
-                        .with_tags(tags)
+                    let symbol = SymbolBuilder::new(name)
+                        .with_tags([SPENSO_TAG.tensor.clone(), SPENSO_TAG.index.clone()])
                         .build()
-                        .expect("presentation names encode the complete native index")
+                        .expect("presentation names encode the complete native index");
+                    Notation {
+                        text: TextOverrides {
+                            plain: Some(
+                                DisplayText::new(format_atom_with_mode(
+                                    source,
+                                    TensorDisplayMode::Plain,
+                                    false,
+                                ))
+                                .expect("source index display is bounded text"),
+                            ),
+                            latex: Some(
+                                DisplayText::new(format_atom_with_mode(
+                                    source,
+                                    TensorDisplayMode::Latex,
+                                    false,
+                                ))
+                                .expect("source index display is bounded text"),
+                            ),
+                            typst: Some(
+                                DisplayText::new(format_atom_with_mode(
+                                    source,
+                                    TensorDisplayMode::Typst,
+                                    false,
+                                ))
+                                .expect("source index display is bounded text"),
+                            ),
+                        },
+                        ..Notation::default()
+                    }
+                    .register(symbol)
+                    .expect("presentation indices have one notation");
+                    symbol
                 });
                 Atom::var(symbol)
             } else {
@@ -1332,9 +1350,29 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
     let options = display_options_with_settings(TensorDisplayMode::Typst, settings);
     let attachments = portable_attachments(atom).map_err(PyRuntimeError::new_err)?;
     let mut heads = labels::typst_heads(atom);
+    let mut tensor_labels = BTreeMap::new();
+    let mut index_labels = BTreeMap::new();
+    let mut callback_symbols = Vec::new();
     for symbol in atom.get_all_symbols(true) {
-        if let Some(source) = tags::tensor_head_print(symbol, SpensoPrintBackend::Typst) {
-            heads.insert(symbol.get_name().to_owned(), source);
+        if let Some(notation) =
+            Notation::lookup(symbol).map_err(|error| PyRuntimeError::new_err(error.to_string()))?
+        {
+            let name = symbol.get_name().to_owned();
+            if let Some(head) = &notation.head {
+                tensor_labels.insert(name.clone(), head.to_typst_source());
+            }
+            if let Some(label) = &notation.index_label {
+                index_labels.insert(
+                    name.clone(),
+                    (label.to_native_string(), label.to_typst_source()),
+                );
+            }
+            if let Some(text) = &notation.text.typst {
+                heads.insert(name.clone(), text.as_str().to_owned());
+            }
+            if notation.custom_print {
+                callback_symbols.push(name);
+            }
         }
     }
     let mut calls = BTreeMap::new();
@@ -1346,9 +1384,10 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
             AtomView::Var(variable) => variable.get_symbol(),
             _ => return true,
         };
-        if !Notation::has_custom_print(symbol).expect("notation registry must not be poisoned") {
+        if !tags::tensor_has_custom_print(symbol) {
             return true;
         }
+        callback_symbols.push(symbol.get_name().to_owned());
         let value = view.to_owned();
         if !seen.insert(value.clone()) {
             return true;
@@ -1399,8 +1438,32 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
             format!("(bytes(({bytes})), {normal}, {power}),")
         })
         .collect::<String>();
+    let tensor_labels = tensor_labels
+        .into_iter()
+        .map(|(name, source)| format!("{name:?}: ${source}$,"))
+        .collect::<String>();
+    let index_labels = index_labels
+        .into_iter()
+        .map(|(name, (label, source))| format!("{name:?}: (label: {label:?}, visual: ${source}$),"))
+        .collect::<String>();
+    callback_symbols.sort();
+    callback_symbols.dedup();
+    let callback_symbols = callback_symbols
+        .into_iter()
+        .map(|name| format!("{name:?},"))
+        .collect::<String>();
+    let tensor_labels = if tensor_labels.is_empty() {
+        ":"
+    } else {
+        &tensor_labels
+    };
+    let index_labels = if index_labels.is_empty() {
+        ":"
+    } else {
+        &index_labels
+    };
     Ok(format!(
-        "#let settings = (..settings, print-heads: ({heads}), print-calls: ({calls}))\n"
+        "#let settings = (..settings, print-heads: ({heads}), print-calls: ({calls}), tensor-labels: ({tensor_labels}), index-labels: ({index_labels}), callback-symbols: ({callback_symbols}))\n"
     ))
 }
 
@@ -3410,16 +3473,34 @@ mod tests {
 
     #[test]
     fn native_index_payloads_keep_source_labels_without_changing_tensor_state() {
-        let edge = symbol!(
-            "display_native_indices::edge",
-            print = spenso::network::tags::tensor_print,
-            tags = [SPENSO_TAG.index.clone(), "spenso::index-label:e".to_owned()]
-        );
-        let vertex = symbol!(
-            "display_native_indices::vertex",
-            print = spenso::network::tags::tensor_print,
-            tags = [SPENSO_TAG.index.clone(), "spenso::index-label:v".to_owned()]
-        );
+        let edge = {
+            let symbol = symbol!(
+                "display_native_indices::edge",
+                print = spenso::network::tags::tensor_print,
+                tags = [SPENSO_TAG.index.clone()]
+            );
+            Notation {
+                index_label: Some(IndexDisplay::symbol("e").unwrap()),
+                ..Notation::default()
+            }
+            .register(symbol)
+            .unwrap();
+            symbol
+        };
+        let vertex = {
+            let symbol = symbol!(
+                "display_native_indices::vertex",
+                print = spenso::network::tags::tensor_print,
+                tags = [SPENSO_TAG.index.clone()]
+            );
+            Notation {
+                index_label: Some(IndexDisplay::symbol("v").unwrap()),
+                ..Notation::default()
+            }
+            .register(symbol)
+            .unwrap();
+            symbol
+        };
         let raw = indexed_test_tensor([function!(edge, 7, 0), function!(vertex, 7, 0)]);
         // Exercise decoding explicitly: index-only cooking preserves these
         // already valid native labels.

@@ -18,6 +18,9 @@
   component-style: "superscript",
   invariant-style: "compact",
   print-heads: (:),
+  tensor-labels: (:),
+  index-labels: (:),
+  callback-symbols: (),
   print-calls: (),
   with-dim: false,
   parens: true,
@@ -198,20 +201,13 @@
   math.upright("?")
 }
 
-#let _payload-head(ctx) = {
-  let display = _attachment(
-    ctx,
-    "spenso.math-display",
-    ctx.identity,
-    (1,),
-  )
+#let _payload-head(ctx, settings) = {
+  let display = if "spenso::index" in ctx.tags {
+    _attachment(ctx, "spenso.math-display", ctx.identity, (1,))
+  } else { none }
   if display != none { return _display-node(display) }
-  let labels = ctx.tags.filter(tag => tag.starts-with("spenso::tensor-label:"))
-  if labels.len() > 0 {
-    _display-symbol(labels.first().slice("spenso::tensor-label:".len()))
-  } else {
-    (ctx.default)()
-  }
+  let label = settings.tensor-labels.at(ctx.symbol.at("name", default: "?"), default: none)
+  if label != none { label } else { (ctx.default)() }
 }
 
 #let _visual(ctx, node) = (ctx.render-visual)(node)
@@ -918,11 +914,13 @@
   } else {
     (ctx.default)()
   }
+  let callback-calls = (:)
+  for name in settings.callback-symbols { callback-calls.insert(name, printed-call) }
   let defaults = core.notation(
     heads: _merge(_merge(_default-heads, (
       "spenso::Nc": ctx => _color-label("Nc", settings),
     )), settings.print-heads),
-    calls: (
+    calls: _merge(callback-calls, (
       "spenso::bracket": ctx => {
         if ctx.arguments.len() == 0 { return (ctx.default)() }
         let body = ctx.arguments.map(argument => {
@@ -938,14 +936,14 @@
       "spenso::dot": ctx => _render-dot(ctx, settings),
       "spenso::chain": ctx => _render-chain(ctx, settings),
       "spenso::trace": ctx => _render-trace(ctx, settings),
-    ),
+    )),
     tags: (
       "spenso::index": ctx => {
-        let labels = ctx.tags.filter(tag => tag.starts-with("spenso::index-label:"))
-        if ctx.kind != "function" or labels.len() != 1 {
+        let registered = settings.index-labels.at(ctx.symbol.at("name", default: "?"), default: none)
+        if ctx.kind != "function" or registered == none {
           (ctx.default)()
         } else {
-          let label = labels.first().split(":").last()
+          let label = registered.label
           let arguments = ctx.visual-arguments
           // The first endpoint slot is implicit; higher-spin slots and dummy
           // identifiers remain visible, matching the native index printer.
@@ -958,7 +956,7 @@
           }
           // Use a math symbol, not italic text: text boxes scale incorrectly
           // when this label is itself nested inside a tensor's script.
-          let head = (ctx.render-visual)((kind: "variable", source: label, symbol: (name: label)))
+          let head = registered.visual
           // Math's smallest script style stops shrinking at deeper levels.
           // Keep the numeric identifier subordinate even inside a fraction.
           math.attach(head, b: text(size: 0.75em, arguments.join([.])))
@@ -966,9 +964,8 @@
       },
       tensor: printed-call,
       "spenso::tensor": printed-call,
-      "spenso::print-callback": printed-call,
     ),
-    fallback-head: _payload-head,
+    fallback-head: ctx => _payload-head(ctx, settings),
   )
   let document = core.notation(
     heads: heads,
