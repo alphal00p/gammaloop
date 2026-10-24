@@ -648,3 +648,136 @@ fn extraction_bounds_extension_metadata_before_tar_yields_file_entries() {
     );
     assert!(!destination.path().join("1L/value").exists());
 }
+
+// The bytes are package-authenticated but deliberately not a native cache.
+// A disabled cache policy must not even attempt native decoding/import.
+fn advertise_undecodable_cache(root: &Path, loops: usize) -> PathBuf {
+    let path = root.join(format!("{loops}L/cache/cache.json"));
+    fs::create_dir_all(path.parent().unwrap()).unwrap();
+    let bytes = b"authenticated bytes, not a native cache";
+    fs::write(&path, bytes).unwrap();
+    let manifest_path = root.join(format!("{loops}L/manifest.json"));
+    let mut manifest: serde_json::Value =
+        serde_json::from_slice(&fs::read(&manifest_path).unwrap()).unwrap();
+    manifest["cache"] = if loops == 5 {
+        serde_json::json!({"available":true,"path":"cache/cache.json",
+            "format":"rustred.saved-application-cache-file.v1",
+            "identity":{"compressed_bytes":bytes.len(),"compressed_blake3":vec![0u8;32],
+                "decoded_bytes":0,"decoded_blake3":vec![0u8;32]}})
+    } else {
+        serde_json::json!({"available":true,"path":"cache"})
+    };
+    manifest["files"]["cache/cache.json"] = serde_json::json!({
+        "bytes":bytes.len(),"sha256":format!("{:x}",Sha256::digest(bytes))});
+    let bytes = serde_json::to_vec(&manifest).unwrap();
+    fs::write(&manifest_path, &bytes).unwrap();
+    let release_path = root.join("manifest.json");
+    let mut release: ReleaseManifest =
+        serde_json::from_slice(&fs::read(&release_path).unwrap()).unwrap();
+    release
+        .loop_packs
+        .iter_mut()
+        .find(|pack| pack.loop_count == loops)
+        .unwrap()
+        .manifest_sha256 = format!("{:x}", Sha256::digest(bytes));
+    fs::write(release_path, serde_json::to_vec(&release).unwrap()).unwrap();
+    path
+}
+
+#[test]
+fn disabling_prepared_caches_skips_native_decode_but_preserves_dataset_authentication() {
+    assert!(OfficialExternalDataOptions::default().load_prepared_caches);
+    let directory = fixture();
+    let payload = advertise_undecodable_cache(directory.path(), 1);
+    let mut engine = Vakint::new().unwrap();
+    let active_data = engine.rustred_data().unwrap();
+    let active_caches = Arc::clone(&engine.rustred_lower_caches);
+    let options = OfficialExternalDataOptions {
+        local_artifacts_path: Some(directory.path().to_owned()),
+        ..Default::default()
+    };
+    // Default activation still attempts cache decoding, with the original
+    // transactional state preserved when the authenticated codec is invalid.
+    assert!(engine.load_official_external_data(1, &options).is_err());
+    assert!(Arc::ptr_eq(&active_data, &engine.rustred_data().unwrap()));
+    assert!(Arc::ptr_eq(&active_caches, &engine.rustred_lower_caches));
+    let disabled = OfficialExternalDataOptions {
+        load_prepared_caches: false,
+        ..options
+    };
+    let report = engine.load_official_external_data(1, &disabled).unwrap();
+    assert!(!report.load_prepared_caches);
+    assert!(report.loops[0].cache_available);
+    assert!(!report.loops[0].cache_loaded);
+    assert!(!engine.cache_statistics(1).unwrap().attached);
+    assert!(engine.rustred_application.lock().unwrap().is_none());
+    let active_data = engine.rustred_data().unwrap();
+    let active_caches = Arc::clone(&engine.rustred_lower_caches);
+    // Disabling import does not waive authentication of optional payload bytes.
+    fs::write(payload, b"tampered cache bytes").unwrap();
+    let error = engine
+        .load_official_external_data(1, &disabled)
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("incorrect size") || error.contains("SHA256 mismatch"),
+        "{error}"
+    );
+    assert!(Arc::ptr_eq(&active_data, &engine.rustred_data().unwrap()));
+    assert!(Arc::ptr_eq(&active_caches, &engine.rustred_lower_caches));
+}
+
+#[test]
+#[ignore = "requires the authenticated 5L application pack; no IBP reduction"]
+fn disabled_prepared_caches_leave_no_one_through_five_loop_backings() {
+    let source = super::super::cache_tests::external_path_through(5);
+    let directory = tempfile::tempdir().unwrap();
+    fs::copy(
+        source.join("manifest.json"),
+        directory.path().join("manifest.json"),
+    )
+    .unwrap();
+    for loops in 1..=5 {
+        copy_tree(
+            &source.join(format!("{loops}L")),
+            &directory.path().join(format!("{loops}L")),
+        );
+    }
+    // Both ends of the supported loop range advertise undecodable, correctly
+    // checksummed cache payloads. Scientific programs/catalogues are unchanged.
+    advertise_undecodable_cache(directory.path(), 1);
+    advertise_undecodable_cache(directory.path(), 5);
+    let mut engine = Vakint::new().unwrap();
+    let report = engine
+        .load_official_external_data(
+            5,
+            &OfficialExternalDataOptions {
+                local_artifacts_path: Some(directory.path().to_owned()),
+                load_prepared_caches: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert!(!report.load_prepared_caches);
+    assert!(
+        report
+            .loops
+            .iter()
+            .filter(|item| matches!(item.loop_count, 1 | 5))
+            .all(|item| item.cache_available)
+    );
+    assert!(report.loops.iter().all(|item| !item.cache_loaded));
+    for loops in 1..=5 {
+        assert!(
+            !engine.cache_statistics(loops).unwrap().attached,
+            "{loops}L backing attached"
+        );
+    }
+    assert!(
+        engine
+            .cache_statistics(5)
+            .unwrap()
+            .saved_application
+            .is_some()
+    );
+}

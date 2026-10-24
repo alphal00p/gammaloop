@@ -1,19 +1,30 @@
 """Exercise native FeynKit graph/family objects in one Symbolica/Vakint host."""
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from symbolica import E, S
-from symbolica.community import hepkit as fk
-from symbolica.community.hepkit.vakint import (
-    Vakint,
-    VakintEvaluationMethod,
-    integral_from_diagram,
-)
+if os.environ.get("VAKINT_TEST_HOST") == "standalone":
+    import vakint_hepkit_standalone as fk
+    from vakint_hepkit_standalone import (
+        E,
+        S,
+        Vakint,
+        VakintEvaluationMethod,
+        integral_from_diagram,
+    )
+else:
+    from symbolica import E, S
+    from symbolica.community import hepkit as fk
+    from symbolica.community.hepkit.vakint import (
+        Vakint,
+        VakintEvaluationMethod,
+        integral_from_diagram,
+    )
 
 
 def _model_path():

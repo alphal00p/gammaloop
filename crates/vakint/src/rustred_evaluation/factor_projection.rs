@@ -11,12 +11,24 @@ use spenso::structure::representation::{BaseRepName, Minkowski};
 use symbolica::atom::{AtomCore, AtomView, FunctionBuilder};
 use symbolica::id::Replacement;
 use symbolica::prelude::{Q, Z};
+use symbolica::utils::resources;
 
+use super::RustRedEvaluationError;
 use crate::{Vakint, VakintTerm, initialize_spenso_reps, symbols::S};
+
+fn error(error: impl std::error::Error + 'static) -> RustRedEvaluationError {
+    match RustRedEvaluationError::resource_cause(&error) {
+        Some(resource) => RustRedEvaluationError::ResourceLimit(resource.clone()),
+        None => RustRedEvaluationError::ScalarNumerator {
+            detail: error.to_string(),
+        },
+    }
+}
 
 pub(super) fn project(
     input: &VacuumTensorProjectionInput,
-) -> Result<VacuumTensorProjection, String> {
+) -> Result<VacuumTensorProjection, RustRedEvaluationError> {
+    resources::checkpoint()?;
     initialize_spenso_reps();
     let labels = input
         .component_loop_momenta
@@ -45,11 +57,12 @@ pub(super) fn project(
     let mut nonzero_conditions = BTreeSet::new();
     let mut offset = 0;
     for component in &input.component_loop_momenta {
+        resources::checkpoint()?;
         let mut reducer = TensorReducer::new(input.dimension.clone());
         for axis in offset..offset + component.len() {
             reducer = reducer
                 .with_integrated_vector(S.k.call((axis + 1, representation.clone())))
-                .map_err(|error| error.to_string())?;
+                .map_err(error)?;
         }
         offset += component.len();
         // Other blocks are numerator spectators. Registering them as external
@@ -64,8 +77,8 @@ pub(super) fn project(
             &input.dimension,
             &opaque_slots,
         );
-        let native = reducer.admit(native).map_err(|error| error.to_string())?;
-        let reduced = reducer.reduce(&native).map_err(|error| error.to_string())?;
+        let native = reducer.admit(native).map_err(error)?;
+        let reduced = reducer.reduce(&native).map_err(error)?;
         log::debug!(target: "vakint::saved_application",
             "phase=factor_tensor_projected component_loops={} residual_rank={} terms={}",
             component.len(), reduced.max_rank(), reduced.terms().len());
@@ -75,13 +88,10 @@ pub(super) fn project(
             let coefficient: Coefficient = term
                 .coefficient()
                 .try_to_rational_polynomial(&Q, &Z, None)
-                .map_err(|error| error.to_string())?;
+                .map_err(error)?;
             nonzero_conditions.insert(coefficient.denominator.to_expression());
         }
-        let reduced = reduced
-            .into_expression()
-            .map_err(|error| error.to_string())?
-            .into_expression();
+        let reduced = reduced.into_expression().map_err(error)?.into_expression();
         let bridged = VakintTerm::bridge_opaque_projectors(reduced.as_view(), &mut next_dummy);
         let bridged = VakintTerm::spenso_to_vakint_numerator(
             bridged.as_view(),
@@ -89,7 +99,9 @@ pub(super) fn project(
             &opaque_vectors,
         );
         if VakintTerm::contains_feynkit_bridge_syntax(bridged.as_view()) {
-            return Err("factor projection left internal tensor bridge syntax".into());
+            return Err(RustRedEvaluationError::ScalarNumerator {
+                detail: "factor projection left internal tensor bridge syntax".into(),
+            });
         }
         numerator = Vakint::convert_to_dot_notation(bridged.as_view()).expand();
     }
@@ -109,6 +121,7 @@ pub(super) fn project(
                     .finish();
             }
         });
+    resources::checkpoint()?;
     Ok(VacuumTensorProjection {
         numerator,
         nonzero_conditions: nonzero_conditions.into_iter().collect(),

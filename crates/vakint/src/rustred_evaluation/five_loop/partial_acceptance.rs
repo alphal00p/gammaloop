@@ -241,10 +241,12 @@ fn outside_recorded_rank(engine: &Vakint, settings: &VakintSettings) {
                 .is_zero()
         );
     }
-    // Tightened scalar limits stay errors even after a successful warm native
-    // request; preserving coverage misses must never suppress operational limits.
+    // Explicit scalar diagnostics stay errors after a successful warm native
+    // request; preserving coverage misses must never suppress that policy.
     let mut limited = settings.clone();
     limited.rustred_scalar_numerator_limits.max_input_nodes = 0;
+    limited.rustred_scalar_numerator_limits =
+        limited.rustred_scalar_numerator_limits.with_diagnostics();
     let error = engine
         .evaluate_rustred_symbolic(&limited, input.as_view())
         .unwrap_err()

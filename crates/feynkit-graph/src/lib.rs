@@ -3084,6 +3084,7 @@ impl DiagramSourceMap {
 mod tests {
     use super::*;
     use std::sync::Arc;
+    use symbolica::utils::resources::ResourceLimits;
 
     fn scalar_model() -> Arc<Model> {
         Arc::new(Model::from_json(
@@ -4093,7 +4094,12 @@ mod tests {
                     .expand()
                     .is_zero()
             );
-            assert!(family.find_mapping(&reference, 100).unwrap().is_some());
+            assert!(
+                family
+                    .find_mapping(&reference, None, ResourceLimits::default())
+                    .unwrap()
+                    .is_some()
+            );
         }
         assert!(matches!(
             directed_fermion_line().integral_family(&kin, &[]),

@@ -75,7 +75,6 @@ fn main() -> fixture::Result<()> {
     let mut prepare_only = false;
     let mut dress_only = false;
     let mut warm = false;
-    let mut scalar_work_limit = None;
     let mut projection = fixture::Projection::QuadraticTransverse;
     let mut arguments = std::env::args_os().skip(1);
     while let Some(argument) = arguments.next() {
@@ -86,13 +85,12 @@ fn main() -> fixture::Result<()> {
             Some("--prepare-only") => prepare_only = true,
             Some("--dress-only") => dress_only = true,
             Some("--warm") => warm = true,
-            Some("--scalar-work-limit") => scalar_work_limit = Some(arguments.next().ok_or("missing scalar work limit")?.into_string().map_err(|_| "non-UTF8 scalar work limit")?.parse::<usize>()?),
             Some("--projection") => projection = match arguments.next().and_then(|value| value.into_string().ok()).as_deref() {
                 Some("quadratic") => fixture::Projection::QuadraticTransverse,
                 Some("zero-momentum") => fixture::Projection::ZeroMomentumMetric,
                 _ => return Err("projection must be quadratic or zero-momentum".into()),
             },
-            _ => return Err("usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepare-only|--dress-only] [--cache PATH] [--warm] [--scalar-work-limit N]".into()),
+            _ => return Err("usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--prepare-only|--dress-only] [--cache PATH] [--warm]".into()),
         }
     }
     let work = work.ok_or("--work-dir is required")?;
@@ -145,8 +143,8 @@ fn main() -> fixture::Result<()> {
         "executable_sha256":format!("{:x}", Sha256::digest(std::fs::read(std::env::current_exe()?)?)),
         "fresh_native_preparation":true, "fixture_sources_sha256":source_hashes, "preparation":prepared.timings,
         "preparation_seconds":prepared.preparation_seconds, "scalar_terms":prepared.scalar_terms,
-        "preparation_limits":{"native_angular_output_terms":fixture::ANGULAR_OUTPUT_TERM_LIMIT},
-        "preparation_policy":{"optional_numerator_denominator_cancellation":false,
+        "preparation_policy":{"fixture_work_count_overrides":false,
+            "optional_numerator_denominator_cancellation":false,
             "optional_scalar_expansion":false,"scalar_term_count":"stored representation",
             "native_denominator_basis_lowering":"required by saved-index application"},
         "contributions":prepared.contributions, "input_sha256":format!("{:x}", Sha256::digest(input.as_bytes())),
@@ -174,12 +172,6 @@ fn main() -> fixture::Result<()> {
     // the recorded options describe the application that actually runs.
     settings.rustred_application_options.unresolved_policy =
         rustred::solver::UnresolvedPolicy::Preserve;
-    if let Some(limit) = scalar_work_limit {
-        settings
-            .rustred_scalar_numerator_limits
-            .exact_algebra
-            .max_term_operations = limit;
-    }
     report["conventions"] = json!({
         "integral_normalization":format!("{:?}",settings.integral_normalization_factor),
         "integral_normalization_expression":settings.get_integral_normalization_factor_atom()?.to_canonical_string(),

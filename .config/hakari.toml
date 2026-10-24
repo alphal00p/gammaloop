@@ -36,10 +36,8 @@ workspace-members = [
     "feynkit-cff",
     "feynkit-generator",
     "feynkit-graph",
-    "feynkit-tensor",
-    "linnet-render-py",
-    "typst-renderer",
     "feynkit-py",
+    "feynkit-tensor",
     "idenso",
     # These reusable crates expose a mutually exclusive `wasm` feature for
     # Tydenso's nested workspace. Their normal native feature sets are still
@@ -48,10 +46,13 @@ workspace-members = [
     "linnet",
     "linnest",
     "linnet-py",
+    "linnet-render-py",
     "spenso",
     "spenso-hep-lib",
     "spenso-macros",
     "spynso3",
+    # Full document rendering must not enable components in the lean compiler.
+    "typst-renderer",
     "symbolica-utils",
     "vakint",
 ]
@@ -89,6 +90,11 @@ workspace-members = [
 third-party = [
     { name = "arrayvec", version = "0.7" },
     { name = "indenter", version = "0.3" },
+    # Symbolica and Numerica feature anchors are maintained below.
+    # The workspace patch selects the coordinated official Symbolica revision.
+    { name = "symbolica", git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" },
+    { name = "numerica", git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" },
+    { name = "symbolica-typst-plugin", git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" },
     # Stub generation is opt-in and must not leak into ordinary abi3 builds.
     { name = "pyo3-stub-gen" },
 ]

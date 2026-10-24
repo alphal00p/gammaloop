@@ -42,7 +42,7 @@ impl EdgeGraph {
 pub(super) fn visit(
     source: &EdgeGraph,
     target: &EdgeGraph,
-    limit: usize,
+    limit: Option<usize>,
     work: &mut usize,
     mut visit: impl FnMut(&[usize]) -> Result<(), VakintError>,
 ) -> Result<(), VakintError> {
@@ -107,8 +107,10 @@ pub(super) fn visit(
                 .map(|&edge| generator[edge])
                 .collect::<Vec<_>>();
             if !seen.contains(&next) {
-                // Bound queued maps too, before retaining their payload.
-                if work.saturating_add(pending.len()).saturating_add(1) > limit {
+                // Explicit diagnostics also account for queued witnesses.
+                if let Some(limit) = limit
+                    && work.saturating_add(pending.len()).saturating_add(1) > limit
+                {
                     return Err(VakintError::MomentumMatchResourceLimit {
                         resource: "native edge automorphism witnesses",
                         requested: work.saturating_add(pending.len()).saturating_add(1),

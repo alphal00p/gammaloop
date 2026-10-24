@@ -621,12 +621,12 @@ class Graph:
         r"""
         Find one native inclusion-minimal cutset within an inclusive size range.
         """
-    def all_cycles(self, *, max_results: builtins.int, subgraph: typing.Optional[Subgraph] = None) -> builtins.list[Cycle]:
+    def all_cycles(self, *, max_results: typing.Optional[builtins.int] = None, subgraph: typing.Optional[Subgraph] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> builtins.list[Cycle]:
         r"""
-        Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+        Enumerate circuits with optional diagnostics and cooperative RAM/time controls.
 
-        `max_results` bounds all non-empty combinations of a cycle basis, not only
-        the combinations that ultimately form circuits.
+        `max_results` is an opt-in diagnostic over all non-empty cycle-basis
+        combinations, not only final circuits. None disables the count ceiling.
         """
     def tadpoles(self, externals: typing.Sequence[Node | builtins.int | builtins.str]) -> builtins.list[Subgraph]:
         r"""

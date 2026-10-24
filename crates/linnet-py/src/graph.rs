@@ -1903,21 +1903,30 @@ impl PyGraph {
         Self::find_bond(slf, py, subgraph, min_size, max_size)
     }
 
-    /// Enumerate circuits only when the complete cycle-space candidate count fits the bound.
+    /// Enumerate circuits with optional diagnostics and cooperative RAM/time controls.
     ///
-    /// `max_results` bounds all non-empty combinations of a cycle basis, not only
-    /// the combinations that ultimately form circuits.
+    /// `max_results` is an opt-in diagnostic over all non-empty cycle-basis
+    /// combinations, not only final circuits. None disables the count ceiling.
     #[pyo3(
         name = "all_cycles",
-        signature = (*, max_results, subgraph=None)
+        signature = (*, max_results=None, subgraph=None, max_process_rss_bytes=None, max_elapsed_seconds=None)
     )]
     fn py_all_cycles(
         slf: Py<PyGraph>,
         py: Python<'_>,
-        max_results: usize,
+        max_results: Option<usize>,
         subgraph: Option<&PySubgraph>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Vec<PyCycle>> {
-        Self::all_cycles(slf, py, max_results, subgraph)
+        Self::all_cycles(
+            slf,
+            py,
+            max_results,
+            subgraph,
+            max_process_rss_bytes,
+            max_elapsed_seconds,
+        )
     }
 
     /// Enumerate tadpole components after identifying a non-empty terminal node set.

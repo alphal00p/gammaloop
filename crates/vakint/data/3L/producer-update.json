@@ -6,12 +6,12 @@
       "sha256": "f2992d7479b2a48c088c4e380f70c9fbf542a322bc20d32f5838af7e36508ccc"
     },
     "symbolic_coverage": {
-      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/coverage-v24.json",
-      "sha256": "1da6a695e464d5a7c18736522a59cc6abef2d9e7ac9693e80fcd2628a9680299"
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/coverage-v25.json",
+      "sha256": "25707f3e9d611f53fd6ef0e61de04e45f55188cfb02098f92c10ee301573bf8a"
     },
     "symbolic_overlays": {
-      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/current-symbolic-overlays-v8.json",
-      "sha256": "63dc8283aaad7611c179ee1ff3e5a676edf78a81fc1bfa97cd7ce164234fa042"
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/current-symbolic-overlays-v9.json",
+      "sha256": "8829ba6f5e41a7797c3b8e76167200f49389889f3a9d2ab87a98db87c5757732"
     },
     "source_intake": {
       "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/external-data-PR14-v22-repository-update-source-v1/intake.json",
@@ -21,8 +21,8 @@
     "retained_supplemented_coefficients": 49,
     "numerical_accuracy_evidence_not_interval_proof": true,
     "previous_producer_update": {
-      "path": "provenance/PR10-PR15-v24-before/provenance/producer-update.json",
-      "sha256": "dce90157e55f056db2df4701492b7bbc4c8b6db3c9d8794922b7e8832d122e95"
+      "path": "provenance/PR10-epsilon1-v25-before/provenance/producer-update.json",
+      "sha256": "a9d41972366a6d91f51d387faa59e2d2a01ca5b1acc264bf3e02910a2d148645"
     },
     "actual_PR4_publication": {
       "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR4-direct10-acceptance-publication-source-v1/publication-output-v1/publication.json",
@@ -139,6 +139,84 @@
       "portable_proof_index": {
         "path": "provenance/PR10-PR15-v24/portable-proof-index.json",
         "sha256": "52c8be0a6fe4a6c347047ff52458004e9149fdfefea0efc9797bf6c21613b41b"
+      }
+    },
+    "actual_PR10_epsilon1_publication": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-four-entry-symbolic-publication-source-v1/publication-output-v1/publication.json",
+      "sha256": "10d42bf0f690f4015355cd9a1a876f5487b84d6efb4e09df6d29fc9bf3b355a8"
+    },
+    "actual_PR10_epsilon1_publication_audit": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-four-entry-symbolic-publication-source-v1/peer-independent-actual-four-epsilon1-publication-metadata-resources-generic-v1.json",
+      "sha256": "888f0ad684205ff03c07195729e0ea3794c6812fcfc38ae3a0530a29b6c2d24c"
+    },
+    "Root_actual_PR10_epsilon1_publication_adoption": {
+      "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-four-entry-symbolic-publication-source-v1/root-actual-four-epsilon1-symbolic-publication-adoption-v1.json",
+      "sha256": "147e7a121a507c87516369979e827b65e32ceccb604a8bc165045a00a36c02d8"
+    },
+    "new_PR10_epsilon1_exact_cells": 4,
+    "PR10_epsilon1_recurrence_assisted_recognition": {
+      "Root_adoption": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-residual-found-full-expression-bridge-source-v1/root-actual-recurrence-assisted-full-expression-recognition-adoption-v1.json",
+        "sha256": "7e9bb38a8043b7abeb173812972e911c8c53d5a002cdb564b9ada2223294e572"
+      },
+      "qualification": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-residual-found-full-expression-bridge-source-v1/observation-output-v1/qualification.json",
+        "sha256": "2245e48559737124d8718b0219af88624e582e7ac1b9aa22253f060f31105e9e"
+      },
+      "constructed_full_expression": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-residual-found-full-expression-bridge-source-v1/observation-output-v1/reconstructed-from-residual-PSLQ.json",
+        "sha256": "014075dbf3ffa39e6c39373a8c6d94e4c2afdc27e608fbd5e4d3575624577f8d"
+      },
+      "exact_full200_identity_binding": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-residual-found-full-expression-bridge-source-v1/observation-output-v1/found-full-expression-DR200-binding.json",
+        "sha256": "7caa84884680154840eb7f7a804704afe42f5084d1fbd173f4d2d6bbb63fd8dc"
+      },
+      "independent_science_review": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-residual-found-full-expression-bridge-source-v1/peer-independent-actual-full-expression-bridge-native-science-protocol-v1.json",
+        "sha256": "87ae53615174e137406afd135f8f9760c776ad3c7ea1affc2904a5913cb43df2"
+      },
+      "independent_resource_review": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-residual-found-full-expression-bridge-source-v1/peer-independent-actual-full-expression-bridge-resource-observer-census-v1.json",
+        "sha256": "5d3703755fcd0d51956fbc78e83b13572923b70917c2b575d03b774acda81b7c"
+      },
+      "partial_recognition_Root_adoption": {
+        "path": "/shared/codex-2/vacuum_masters/MASTERS/pslq/artifacts/PR10-epsilon1-five-vector-residual-recognition-source-v2/root-actual-five-vector-partial-period-recognition-adoption-v1.json",
+        "sha256": "b279e441d59f99f130a352228eb5c01b7bd7f14af8db071a83faba36c6768449"
+      },
+      "normalized_residual_relation": [
+        "8",
+        "189",
+        "27",
+        "-274",
+        "-30"
+      ],
+      "effective_residual_search_digits": [
+        100,
+        110
+      ],
+      "original_target_exposure_digits": [
+        140,
+        150
+      ],
+      "original_target_validated_digits": 200,
+      "known_lower_expression_fixed_by_exact_recurrence": true,
+      "canonical_native_full_expression_identity_binds_existing_DR200_checks": true,
+      "blind_full_coefficient_discovery": false,
+      "principal_symbolic_count_change_from_recognition": 0,
+      "published_direct_analytic_provenance_preserved": true
+    },
+    "PR10_epsilon1_direct_analytic_validation": {
+      "symbolic_coefficient_digits": 200,
+      "independent_D2_source_cap": 215,
+      "empirical_refinement_not_interval_bound": true,
+      "runtime_binding_provided": false,
+      "period_definitions": {
+        "path": "4L/provenance/PR10-epsilon1-v25/independent-D2-Taylor01-period-registry-v2.json",
+        "sha256": "242211f4a7278303df58c8ee6405d839b95eb67f5d6db468cff4caca04b416e7"
+      },
+      "portable_proof_index": {
+        "path": "provenance/PR10-epsilon1-v25/portable-proof-index.json",
+        "sha256": "3d10e05f328295d7956ba7cd92aac6565e6058d1c6943836a31bed6864013876"
       }
     }
   },

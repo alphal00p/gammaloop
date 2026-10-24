@@ -27,6 +27,8 @@ const TAR_PADDING_BYTES: u64 = 10 * 1024;
 #[derive(Clone, Debug)]
 pub struct RustRedCacheTransferOptions {
     pub expected_sha256: [u8; 32],
+    /// Enable the entry-count diagnostic; inactive during ordinary transfer.
+    pub diagnostics_enabled: bool,
     pub max_archive_bytes: u64,
     pub max_extracted_bytes: u64,
     /// Counts all tar entries, including directories; also bounds path metadata.
@@ -41,13 +43,18 @@ impl RustRedCacheTransferOptions {
     pub fn new(expected_sha256: [u8; 32]) -> Self {
         Self {
             expected_sha256,
-            max_archive_bytes: 16_000_000_000,
-            max_extracted_bytes: 16_000_000_000,
+            diagnostics_enabled: false,
+            max_archive_bytes: u64::MAX,
+            max_extracted_bytes: u64::MAX,
             max_entries: 100_000,
-            max_temporary_bytes: 48_000_000_000,
+            max_temporary_bytes: u64::MAX,
             timeout: Duration::from_secs(3600),
             storage: SavedApplicationCachePackLimits::default(),
         }
+    }
+    pub fn with_diagnostics(mut self) -> Self {
+        self.diagnostics_enabled = true;
+        self
     }
 }
 
@@ -148,6 +155,7 @@ impl<'a> Transfer<'a> {
         output: &'a Path,
         options: &'a RustRedCacheTransferOptions,
     ) -> Result<Self, AppError> {
+        checkpoint()?;
         if !(1..=4).contains(&loop_count) {
             return Err(input_error(
                 "cache transfer supports one through four loops",
@@ -162,7 +170,7 @@ impl<'a> Transfer<'a> {
             || options.timeout.is_zero()
             || options.max_archive_bytes == 0
             || options.max_extracted_bytes == 0
-            || options.max_entries == 0
+            || (options.diagnostics_enabled && options.max_entries == 0)
             || options.max_temporary_bytes == 0
         {
             return Err(input_error(
@@ -188,6 +196,7 @@ impl<'a> Transfer<'a> {
     }
 
     fn receive(&self, mut input: impl Read) -> Result<RustRedCacheTransferReport, VakintError> {
+        checkpoint().map_err(operation)?;
         let scratch = tempfile::Builder::new()
             .prefix(".vakint-cache-transfer-")
             .tempdir_in(self.parent)
@@ -243,15 +252,16 @@ impl<'a> Transfer<'a> {
         )
         .map_err(operation)?;
         drop(writer);
-        self.publish(&verified).map_err(operation)?;
-        Ok(RustRedCacheTransferReport {
+        let report = RustRedCacheTransferReport {
             output: self.output.to_path_buf(),
             archive_bytes,
             extracted_bytes,
             entries,
             sha256,
             copied,
-        })
+        };
+        self.publish(&verified).map_err(operation)?;
+        Ok(report)
     }
 
     fn spool(&self, input: &mut impl Read, output: &mut File) -> Result<(u64, [u8; 32]), AppError> {
@@ -263,6 +273,7 @@ impl<'a> Transfer<'a> {
         let mut hash = Sha256::new();
         let mut buffer = [0u8; BUFFER_BYTES];
         loop {
+            checkpoint()?;
             let read = input.read(&mut buffer).map_err(input_error)?;
             if read == 0 {
                 break;
@@ -290,23 +301,26 @@ impl<'a> Transfer<'a> {
             .options
             .max_extracted_bytes
             .min(self.options.max_temporary_bytes - archive_bytes);
-        let tar_allowance = (self.options.max_entries as u64)
-            .checked_mul(1024)
-            .and_then(|overhead| allowance.checked_add(overhead))
-            .and_then(|value| value.checked_add(TAR_PADDING_BYTES))
-            .ok_or_else(|| limit_error("tar allowance overflow"))?;
-        let mut decoded = MultiGzDecoder::new(archive).take(
-            tar_allowance
-                .checked_add(1)
-                .ok_or_else(|| limit_error("tar allowance overflow"))?,
-        );
+        // A count-derived transport allowance is diagnostic only. Ordinary
+        // transfers validate actual data bytes and ambient RAM/time budgets.
+        let tar_allowance = if self.options.diagnostics_enabled && allowance != u64::MAX {
+            (self.options.max_entries as u64)
+                .checked_mul(1024)
+                .and_then(|overhead| allowance.checked_add(overhead))
+                .and_then(|value| value.checked_add(TAR_PADDING_BYTES))
+                .ok_or_else(|| limit_error("tar allowance overflow"))?
+        } else {
+            u64::MAX
+        };
+        let mut decoded = MultiGzDecoder::new(archive).take(tar_allowance.saturating_add(1));
         let mut seen = BTreeSet::new();
         let mut bytes = 0u64;
         {
             let mut tar = tar::Archive::new(&mut decoded);
             for entry in tar.entries().map_err(input_error)?.raw(true) {
                 let mut entry = entry.map_err(input_error)?;
-                if seen.len() >= self.options.max_entries {
+                checkpoint()?;
+                if self.options.diagnostics_enabled && seen.len() >= self.options.max_entries {
                     return Err(limit_error("archive entry count exceeds allowance"));
                 }
                 let kind = entry.header().entry_type();
@@ -348,7 +362,19 @@ impl<'a> Transfer<'a> {
                         .create_new(true)
                         .open(destination)
                         .map_err(input_error)?;
-                    let copied = std::io::copy(&mut entry, &mut file).map_err(input_error)?;
+                    let mut copied = 0u64;
+                    let mut buffer = [0u8; BUFFER_BYTES];
+                    loop {
+                        checkpoint()?;
+                        let read = entry.read(&mut buffer).map_err(input_error)?;
+                        if read == 0 {
+                            break;
+                        }
+                        file.write_all(&buffer[..read]).map_err(input_error)?;
+                        copied = copied
+                            .checked_add(read as u64)
+                            .ok_or_else(|| limit_error("archive file byte count overflow"))?;
+                    }
                     if copied != size {
                         return Err(input_error("truncated cache archive file"));
                     }
@@ -359,6 +385,7 @@ impl<'a> Transfer<'a> {
         // beyond the tar terminator. Padding is bounded just like tar headers.
         let mut buffer = [0u8; BUFFER_BYTES];
         loop {
+            checkpoint()?;
             let read = decoded.read(&mut buffer).map_err(input_error)?;
             if read == 0 {
                 break;
@@ -374,6 +401,7 @@ impl<'a> Transfer<'a> {
     }
 
     fn publish(&self, verified: &Path) -> Result<(), AppError> {
+        checkpoint()?;
         #[cfg(any(target_os = "linux", target_os = "macos"))]
         rustix::fs::renameat_with(
             rustix::fs::CWD,
@@ -405,3 +433,7 @@ fn limit_error(message: &str) -> AppError {
 #[cfg(test)]
 #[path = "cache_transfer_tests.rs"]
 mod tests;
+
+fn checkpoint() -> Result<(), AppError> {
+    symbolica::utils::resources::checkpoint().map_err(AppError::resource)
+}

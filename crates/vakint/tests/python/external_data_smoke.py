@@ -9,8 +9,11 @@ import os
 import unittest
 from pathlib import Path
 
-from symbolica import E
-from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
+if os.environ.get("VAKINT_TEST_HOST") == "standalone":
+    from vakint_hepkit_standalone import E, Vakint, VakintEvaluationMethod
+else:
+    from symbolica import E
+    from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
 
 DATA = Path(os.environ["VAKINT_TEST_EXTERNAL_DATA"])
 DATA_VERSION = json.loads((DATA / "manifest.json").read_text())["version"]
@@ -34,6 +37,37 @@ class ExternalDataSmoke(unittest.TestCase):
         self.assertTrue(all(p["source"] == "local" for p in report["loops"]))
         self.assertTrue(all(p["cache_available"] for p in report["loops"]))
         self.assertFalse((DATA / ".vakint-external-data").exists())
+
+    def test_prepared_cache_loading_can_be_disabled(self):
+        instance, reference = engine(), engine()
+        report = instance.load_official_external_data(
+            2, local_artifacts_path=DATA, load_prepared_caches=False
+        )
+        default_report = reference.load_official_external_data(
+            2, local_artifacts_path=DATA
+        )
+        self.assertFalse(report["load_prepared_caches"])
+        self.assertTrue(default_report["load_prepared_caches"])
+        self.assertEqual(report["version"], default_report["version"])
+        self.assertEqual(report["path"], default_report["path"])
+        for disabled, default in zip(
+            report["loops"], default_report["loops"], strict=True
+        ):
+            self.assertTrue(disabled["cache_available"])
+            self.assertTrue(default["cache_available"])
+            self.assertFalse(disabled["cache_loaded"])
+            self.assertTrue(default["cache_loaded"])
+            self.assertEqual(
+                {k: v for k, v in disabled.items() if k != "cache_loaded"},
+                {k: v for k, v in default.items() if k != "cache_loaded"},
+            )
+            loop_count = disabled["loop_count"]
+            self.assertFalse(instance.cache_statistics(loop_count)["attached"])
+            self.assertTrue(reference.cache_statistics(loop_count)["attached"])
+        integral = E("topo(I1L(1,1))", default_namespace="vakint")
+        self.assertEqual(
+            instance.evaluate_integral(integral), reference.evaluate_integral(integral)
+        )
 
     def test_version_error_preserves_active_data(self):
         instance = engine()

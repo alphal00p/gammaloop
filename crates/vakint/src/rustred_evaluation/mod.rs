@@ -89,6 +89,8 @@ impl fmt::Display for RustRedEvaluationOptions {
 #[derive(Debug, Error, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum RustRedEvaluationError {
+    #[error("RustRed resource limit: {0}")]
+    ResourceLimit(#[from] symbolica::utils::resources::ResourceLimitError),
     #[error("RustRed external data: {detail}")]
     ExternalData { detail: String },
     #[error("RustRed master data capability: {detail}")]
@@ -141,6 +143,31 @@ pub enum RustRedEvaluationError {
         "RustRed common-mass exponent overflowed while adding reduction power {reduction} and scalar-numerator power {numerator}"
     )]
     MassExponentAdditionOverflow { reduction: i128, numerator: u32 },
+}
+
+impl RustRedEvaluationError {
+    pub(super) fn resource_cause<'a>(
+        error: &'a (dyn std::error::Error + 'static),
+    ) -> Option<&'a symbolica::utils::resources::ResourceLimitError> {
+        let mut source = Some(error);
+        while let Some(error) = source {
+            if let Some(error) =
+                error.downcast_ref::<symbolica::utils::resources::ResourceLimitError>()
+            {
+                return Some(error);
+            }
+            // io::Error's source() delegates to the wrapped error's source(),
+            // which can skip a ResourceLimitError leaf entirely.
+            source = match error
+                .downcast_ref::<std::io::Error>()
+                .and_then(std::io::Error::get_ref)
+            {
+                Some(inner) => Some(inner as &(dyn std::error::Error + 'static)),
+                None => error.source(),
+            };
+        }
+        None
+    }
 }
 
 /// Whether the opt-in scalar backend owns a shipped program for this matcher class.

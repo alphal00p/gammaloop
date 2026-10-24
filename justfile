@@ -224,14 +224,14 @@ docs-notebooks WHEEL PRODUCT="linnet" OUTPUT="target/alphal00p-docs":
         --wheel {{ quote(WHEEL) }} \
         --output {{ quote(OUTPUT + "/products/" + PRODUCT + "/latest/assets/notebooks") }}
 
-# Validate the five-product documentation registry and generated inputs.
+# Validate the documentation registry and generated inputs.
 docs-check:
     cargo run --locked -p alphal00p-docs-catalogs --features gammaloop-reference --bin alphal00p-docs-gammaloop-reference -- --check
     cargo run --locked -p alphal00p-docs-catalogs --features vakint-reference --bin alphal00p-docs-vakint-reference -- --check
     cargo run --locked -p alphal00p-docs-python-exporter --features gammaloop -- gammaloop-python docs/api/python/gammaloop-python.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-py docs/api/python/linnet-py.pyi --check
+    cargo run --locked -p alphal00p-docs-python-exporter --features linnet -- linnet-graph docs/api/python/linnet-graph.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features spenso -- spynso3 docs/api/python/spynso3.pyi --check
-    cargo run --locked -p alphal00p-docs-python-exporter --features idenso -- idenso-community docs/api/python/idenso-community.pyi --check
+    cargo run --locked -p alphal00p-docs-python-exporter --features feynkit -- feynkit-community docs/api/python/feynkit-community.pyi --check
     cargo run --locked -p alphal00p-docs-python-exporter --features vakint -- vakint-community docs/api/python/vakint-community.pyi --check
     cargo test --locked -p alphal00p-docs-python-exporter
     cargo test --locked -p alphal00p-docs-python-exporter --features gammaloop gammaloop_runtime_surface_and_signatures_match_the_docs_stub
@@ -240,7 +240,7 @@ docs-check:
     just docs-svg-assets-check
     just docs-linnet-python-check
 
-# Build Linnet's extension and compare its real import surface with the checked-in stub.
+# Build the shared notebook host and validate its installed graph API.
 docs-linnet-python-check:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -258,11 +258,10 @@ docs-linnet-python-check:
 
     python_bin=${PYTHON_BIN_PATH:-python3}
     uv venv "$test_root/venv" --python "$python_bin"
-    VIRTUAL_ENV="$test_root/venv" maturin develop --uv --locked --manifest-path crates/linnet-py/Cargo.toml --features extension-module,abi3-py310
-    "$test_root/venv/bin/python" -m unittest \
-      crates/linnet-py/tests/test_basic.py \
-      crates/linnet-py/tests/test_wasm.py \
-      crates/linnet-py/tests/test_streaming.py
+    maturin build --locked --manifest-path examples/notebooks/symbolica-host/Cargo.toml \
+      --interpreter "$test_root/venv/bin/python" --out "$test_root/wheels"
+    uv pip install --no-deps --python "$test_root/venv/bin/python" "$test_root"/wheels/*.whl
+    "$test_root/venv/bin/python" -m unittest discover -s crates/linnet-py/tests -p 'test_*.py'
 
 # Regenerate source-backed CLI/settings and topology/dependency snapshots.
 docs-generated:

@@ -121,6 +121,8 @@ use symbolica::{
 use utils::simplify_real;
 use utils::vakint_macros::{vk_parse, vk_symbol};
 
+pub use symbolica::utils::resources::ResourceLimits;
+use symbolica::utils::resources::{self, ResourceBudget};
 use thiserror::Error;
 use topologies::{Topologies, Topology};
 use version_compare::{Cmp, compare_to};
@@ -266,6 +268,8 @@ static TEMPLATES: phf::Map<&'static str, &'static str> = phf_map! {
 
 #[derive(Error, Debug)]
 pub enum VakintError {
+    #[error("{0}")]
+    ResourceLimit(#[from] resources::ResourceLimitError),
     #[error("invalid input integral found: '{0}'")]
     InvalidIntegralFormat(String),
     #[error("invalid generic expression in supported integral: {0}")]
@@ -2127,6 +2131,10 @@ pub struct VakintSettings {
     /// Optional externally supplied application package for symbolic five-loop RustRed.
     /// No package is downloaded or embedded; lower-loop artifacts are unchanged.
     pub rustred_artifact_path: Option<PathBuf>,
+    /// Cooperative process-RSS and elapsed-time limits shared by one request.
+    /// Absent ceilings impose no restriction. Opaque external calls can only
+    /// be checked at their boundaries; hard deadlines require a supervisor.
+    pub rustred_resources: ResourceLimits,
     /// Operational application/cache allowances; these never enlarge saved entry domains.
     pub rustred_application_options: rustred_app::SavedApplicationOptions,
     /// Per-call numerator lowering allowances for the saved five-loop lane.
@@ -2155,6 +2163,18 @@ pub struct VakintSettings {
 }
 
 impl VakintSettings {
+    pub(crate) fn with_resource_budget<T>(
+        &self,
+        operation: impl FnOnce() -> Result<T, VakintError>,
+    ) -> Result<T, VakintError> {
+        ResourceBudget::new(self.rustred_resources).run(|| {
+            resources::checkpoint()?;
+            let result = operation()?;
+            resources::checkpoint()?;
+            Ok(result)
+        })
+    }
+
     pub fn get_integral_normalization_factor_atom(&self) -> Result<Atom, VakintError> {
         self.integral_normalization_factor.to_atom(self)
     }
@@ -2370,6 +2390,7 @@ impl Default for VakintSettings {
             clean_tmp_dir: env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err(),
             evaluation_order: EvaluationOrder::default(),
             rustred_artifact_path: None,
+            rustred_resources: ResourceLimits::default(),
             rustred_application_options: rustred_app::SavedApplicationOptions::default(),
             rustred_scalar_numerator_limits: Default::default(),
             rustred_product_limits: Default::default(),
@@ -2501,18 +2522,25 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        let numerical = match self.reduce_integral(vakint, settings, 0)? {
-            IntegralEvaluation::RustRed { loop_count, mode } => {
+        settings.with_resource_budget(|| {
+            let numerical = match self.reduce_integral(vakint, settings, 0)? {
+                IntegralEvaluation::RustRed { loop_count, mode } => {
+                    self.numerator = vakint.finalize_rustred(
+                        self.numerator.clone(),
+                        settings,
+                        loop_count,
+                        mode,
+                    )?;
+                    mode == RustRedMasterMode::Numerical
+                }
+                IntegralEvaluation::Complete { numerical } => numerical,
+            };
+            if numerical {
                 self.numerator =
-                    vakint.finalize_rustred(self.numerator.clone(), settings, loop_count, mode)?;
-                mode == RustRedMasterMode::Numerical
+                    vakint.resolve_rustred_numerical(self.numerator.clone(), settings)?;
             }
-            IntegralEvaluation::Complete { numerical } => numerical,
-        };
-        if numerical {
-            self.numerator = vakint.resolve_rustred_numerical(self.numerator.clone(), settings)?;
-        }
-        Ok(())
+            Ok(())
+        })
     }
 
     fn reduce_integral(
@@ -2832,10 +2860,10 @@ impl VakintTerm {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        match settings.tensor_reduction_method {
+        settings.with_resource_budget(|| match settings.tensor_reduction_method {
             TensorReductionMethod::AlphaLoop => self.tensor_reduce_alphaloop(vakint, settings),
             TensorReductionMethod::FeynKit => self.tensor_reduce_feynkit(settings, false),
-        }
+        })
     }
 
     fn tensor_reduce_alphaloop(
@@ -3207,6 +3235,15 @@ impl VakintTerm {
         let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
         let numerator =
             Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
+        // Native admission expects atomic representation payloads. Encode the
+        // original compound dimension and generated dummy indices reversibly,
+        // then restore them before the existing Vakint notation bridge.
+        let cooking = idenso::CookSettings::indices()
+            .with_mode(idenso::CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = cooking.try_cook(numerator.as_view()).map_err(|error| {
+            feynkit_tensor::TensorReductionError::TensorAlgebra(error.to_string())
+        })?;
         let reduced = reducer.reduce(&reducer.admit(numerator)?)?;
         if scalar_only && reduced.max_rank() != 0 {
             return Err(VakintError::InvalidNumerator(format!(
@@ -3215,6 +3252,7 @@ impl VakintTerm {
             )));
         }
         let reduced = reduced.into_expression()?.into_expression();
+        let reduced = cooking.uncook(reduced.as_view());
         let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);
         let reduced =
             Self::spenso_to_vakint_numerator(reduced.as_view(), dimension, &opaque_compact_vectors);
@@ -4220,8 +4258,10 @@ impl VakintExpression {
         topologies: &Topologies,
         short_form: bool,
     ) -> Result<(), VakintError> {
-        self.canonicalize_with(settings, short_form, |input| {
-            topologies.match_topologies_to_user_input(input, settings.allow_unknown_integrals)
+        settings.with_resource_budget(|| {
+            self.canonicalize_with(settings, short_form, |input| {
+                topologies.match_topologies_to_user_input(input, settings.allow_unknown_integrals)
+            })
         })
     }
 
@@ -4232,6 +4272,7 @@ impl VakintExpression {
         mut match_input: impl FnMut(AtomView) -> Result<Option<ReplacementRules>, VakintError>,
     ) -> Result<(), VakintError> {
         for term in self.0.iter_mut() {
+            resources::checkpoint()?;
             if let Some(replacement_rules) = match_input(term.integral.as_view())? {
                 //println!("replacement_rules = {}", replacement_rules,);
                 term.canonicalize(settings, &replacement_rules, short_form)?;
@@ -4249,10 +4290,13 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        for term in self.0.iter_mut() {
-            term.tensor_reduce(vakint, settings)?;
-        }
-        Ok(())
+        settings.with_resource_budget(|| {
+            for term in self.0.iter_mut() {
+                resources::checkpoint()?;
+                term.tensor_reduce(vakint, settings)?;
+            }
+            Ok(())
+        })
     }
 
     pub fn evaluate_integral(
@@ -4260,59 +4304,64 @@ impl VakintExpression {
         vakint: &Vakint,
         settings: &VakintSettings,
     ) -> Result<(), VakintError> {
-        let mut complete = Vec::new();
-        let mut numerical = Atom::Zero;
-        let mut numerical_vectors = std::collections::BTreeSet::new();
-        let mut reductions = BTreeMap::new();
-        for (source_id, term) in self.0.iter_mut().enumerate() {
-            match term.reduce_integral(vakint, settings, source_id)? {
-                IntegralEvaluation::Complete { numerical: true } => {
-                    numerical += &term.numerator;
-                    numerical_vectors.extend(term.vectors.iter().cloned());
-                }
-                IntegralEvaluation::Complete { numerical: false } => complete.push(term.clone()),
-                IntegralEvaluation::RustRed { loop_count, mode } => {
-                    // Preserve the existing loop-count-specific epsilon target,
-                    // but combine every matching contribution before checking
-                    // missing orders, finite precision, or residual masters.
-                    let (raw, vectors) = reductions
-                        .entry((loop_count, mode))
-                        .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
-                    *raw += term.numerator.clone();
-                    vectors.extend(term.vectors.iter().cloned());
+        settings.with_resource_budget(|| {
+            let mut complete = Vec::new();
+            let mut numerical = Atom::Zero;
+            let mut numerical_vectors = std::collections::BTreeSet::new();
+            let mut reductions = BTreeMap::new();
+            for (source_id, term) in self.0.iter_mut().enumerate() {
+                resources::checkpoint()?;
+                match term.reduce_integral(vakint, settings, source_id)? {
+                    IntegralEvaluation::Complete { numerical: true } => {
+                        numerical += &term.numerator;
+                        numerical_vectors.extend(term.vectors.iter().cloned());
+                    }
+                    IntegralEvaluation::Complete { numerical: false } => {
+                        complete.push(term.clone())
+                    }
+                    IntegralEvaluation::RustRed { loop_count, mode } => {
+                        // Preserve the existing loop-count-specific epsilon target,
+                        // but combine every matching contribution before checking
+                        // missing orders, finite precision, or residual masters.
+                        let (raw, vectors) = reductions
+                            .entry((loop_count, mode))
+                            .or_insert_with(|| (Atom::Zero, std::collections::BTreeSet::new()));
+                        *raw += term.numerator.clone();
+                        vectors.extend(term.vectors.iter().cloned());
+                    }
                 }
             }
-        }
-        for ((loop_count, mode), (raw, vectors)) in reductions {
-            let numerator = vakint.finalize_rustred(
-                rustred_evaluation::combine_exact(raw),
-                settings,
-                loop_count,
-                mode,
-            )?;
-            if mode == RustRedMasterMode::Numerical {
-                numerical += numerator;
-                numerical_vectors.extend(vectors);
-            } else if !numerator.is_zero() {
+            for ((loop_count, mode), (raw, vectors)) in reductions {
+                let numerator = vakint.finalize_rustred(
+                    rustred_evaluation::combine_exact(raw),
+                    settings,
+                    loop_count,
+                    mode,
+                )?;
+                if mode == RustRedMasterMode::Numerical {
+                    numerical += numerator;
+                    numerical_vectors.extend(vectors);
+                } else if !numerator.is_zero() {
+                    complete.push(VakintTerm {
+                        integral: Atom::num(1),
+                        numerator,
+                        vectors: vectors.into_iter().collect(),
+                    });
+                }
+            }
+            if !numerical.is_zero() {
                 complete.push(VakintTerm {
-                    integral: Atom::num(1),
-                    numerator,
-                    vectors: vectors.into_iter().collect(),
+                    integral: Atom::one(),
+                    numerator: vakint.resolve_rustred_numerical(
+                        rustred_evaluation::combine_exact(numerical),
+                        settings,
+                    )?,
+                    vectors: numerical_vectors.into_iter().collect(),
                 });
             }
-        }
-        if !numerical.is_zero() {
-            complete.push(VakintTerm {
-                integral: Atom::one(),
-                numerator: vakint.resolve_rustred_numerical(
-                    rustred_evaluation::combine_exact(numerical),
-                    settings,
-                )?,
-                vectors: numerical_vectors.into_iter().collect(),
-            });
-        }
-        self.0 = complete;
-        Ok(())
+            self.0 = complete;
+            Ok(())
+        })
     }
 
     #[allow(dead_code)]
@@ -6895,16 +6944,19 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        self.validate_settings(settings)?;
-        let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
-        vakint_expr.canonicalize_with(settings, false, |input| {
-            self.match_topologies_for_settings(settings, input)
-        })?;
-        for term in &mut vakint_expr.0 {
-            term.tensor_reduce_for_evaluation(self, settings)?;
-        }
-        vakint_expr.evaluate_integral(self, settings)?;
-        Ok(vakint_expr.into())
+        settings.with_resource_budget(|| {
+            self.validate_settings(settings)?;
+            let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
+            vakint_expr.canonicalize_with(settings, false, |input| {
+                self.match_topologies_for_settings(settings, input)
+            })?;
+            for term in &mut vakint_expr.0 {
+                resources::checkpoint()?;
+                term.tensor_reduce_for_evaluation(self, settings)?;
+            }
+            vakint_expr.evaluate_integral(self, settings)?;
+            Ok(vakint_expr.into())
+        })
     }
 
     pub fn to_canonical(
@@ -6913,11 +6965,13 @@ Evaluated (n_loops=1, mu_r=1) :
         input: AtomView,
         short_form: bool,
     ) -> Result<Atom, VakintError> {
-        let mut vakint_expr = VakintExpression::try_from(input)?;
-        vakint_expr.canonicalize_with(settings, short_form, |input| {
-            self.match_topologies_for_settings(settings, input)
-        })?;
-        Ok(vakint_expr.into())
+        settings.with_resource_budget(|| {
+            let mut vakint_expr = VakintExpression::try_from(input)?;
+            vakint_expr.canonicalize_with(settings, short_form, |input| {
+                self.match_topologies_for_settings(settings, input)
+            })?;
+            Ok(vakint_expr.into())
+        })
     }
 
     pub fn tensor_reduce(
@@ -6925,9 +6979,11 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        let mut vakint_expr = VakintExpression::try_from(input)?;
-        vakint_expr.tensor_reduce(self, settings)?;
-        Ok(vakint_expr.into())
+        settings.with_resource_budget(|| {
+            let mut vakint_expr = VakintExpression::try_from(input)?;
+            vakint_expr.tensor_reduce(self, settings)?;
+            Ok(vakint_expr.into())
+        })
     }
 
     pub fn evaluate_integral(
@@ -6935,10 +6991,12 @@ Evaluated (n_loops=1, mu_r=1) :
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<Atom, VakintError> {
-        self.validate_settings(settings)?;
-        let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
-        vakint_expr.evaluate_integral(self, settings)?;
-        Ok(vakint_expr.into())
+        settings.with_resource_budget(|| {
+            self.validate_settings(settings)?;
+            let mut vakint_expr = VakintExpression::prepare_evaluation(input, self, settings)?;
+            vakint_expr.evaluate_integral(self, settings)?;
+            Ok(vakint_expr.into())
+        })
     }
 }
 
@@ -6947,6 +7005,99 @@ mod tests {
     use symbolica::parse_lit;
 
     use super::*;
+
+    #[test]
+    fn resource_errors_expose_the_original_standard_error_source() {
+        use std::error::Error;
+
+        let original = resources::ResourceLimitError::Memory {
+            rss_bytes: 0,
+            additional_bytes: 2,
+            limit_bytes: 1,
+        };
+        let error = VakintError::from(original.clone());
+        assert_eq!(error.to_string(), original.to_string());
+        assert_eq!(
+            error
+                .source()
+                .unwrap()
+                .downcast_ref::<resources::ResourceLimitError>(),
+            Some(&original),
+        );
+        assert_eq!(
+            RustRedEvaluationError::resource_cause(&error),
+            Some(&original)
+        );
+    }
+
+    #[test]
+    fn resource_causes_survive_nested_io_wrappers() {
+        let causes = [
+            resources::ResourceLimitError::Memory {
+                rss_bytes: 8,
+                additional_bytes: 3,
+                limit_bytes: 10,
+            },
+            resources::ResourceLimitError::Elapsed {
+                elapsed: std::time::Duration::from_secs(2),
+                limit: std::time::Duration::from_secs(1),
+            },
+        ];
+        for original in causes {
+            let wrapped = std::io::Error::other(original.clone());
+            assert_eq!(
+                RustRedEvaluationError::resource_cause(&wrapped),
+                Some(&original)
+            );
+            let nested = std::io::Error::other(wrapped);
+            assert_eq!(
+                RustRedEvaluationError::resource_cause(&nested),
+                Some(&original)
+            );
+        }
+        assert!(
+            RustRedEvaluationError::resource_cause(&std::io::Error::other("ordinary IO failure"))
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn resource_budgets_fail_gracefully_and_preserve_engine_reuse() {
+        let engine = Vakint::new().unwrap();
+        let input = vk_parse!("topo(I1L(mass_squared,1))").unwrap();
+        let settings = VakintSettings {
+            rustred_resources: ResourceLimits {
+                max_elapsed: Some(std::time::Duration::ZERO),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+        assert!(matches!(
+            engine.to_canonical(&settings, input.as_view(), true),
+            Err(VakintError::ResourceLimit(
+                resources::ResourceLimitError::Elapsed { .. }
+            ))
+        ));
+        let settings = VakintSettings::default();
+        let outer = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..Default::default()
+            },
+            || Ok(2),
+        );
+        assert!(matches!(
+            outer.run(|| engine.to_canonical(&settings, input.as_view(), true)),
+            Err(VakintError::ResourceLimit(
+                resources::ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(
+            engine
+                .to_canonical(&settings, input.as_view(), true)
+                .is_ok()
+        );
+    }
 
     #[test]
     fn numerator_identification_preserves_authenticated_scalar_masses() {
@@ -7249,6 +7400,53 @@ mod tests {
                 .numerator
                 .contains_symbol(vk_symbol!("input_coefficient_placeholder_1"))
         );
+    }
+
+    #[test]
+    fn compound_lorentz_dimensions_and_generated_dummy_indices_roundtrip() {
+        Vakint::initialize_vakint_symbols();
+        for epsilon_symbol in ["ε", "eta"] {
+            let expected = vk_parse!(format!(
+                "dot(p(1),p(2))*dot(k(1),k(1))/(4-2*{epsilon_symbol})"
+            ))
+            .unwrap();
+            for source in [
+                "p(1,11)*k(1,11)*k(1,22)*p(2,22)",
+                "dot(p(1),k(1))*dot(k(1),p(2))",
+            ] {
+                let input = vk_parse!(source).unwrap();
+                for use_dot_product_notation in [false, true] {
+                    let settings = VakintSettings {
+                        epsilon_symbol: epsilon_symbol.into(),
+                        use_dot_product_notation,
+                        ..Default::default()
+                    };
+                    let mut term = VakintTerm {
+                        numerator: input.clone(),
+                        integral: Atom::one(),
+                        vectors: Vec::new(),
+                    };
+                    term.tensor_reduce_feynkit(&settings, false).unwrap();
+                    let actual = if use_dot_product_notation {
+                        term.numerator
+                    } else {
+                        Vakint::convert_to_dot_notation(term.numerator.as_view())
+                    };
+                    assert!(
+                        (actual - &expected).expand().together().is_zero(),
+                        "epsilon={epsilon_symbol}, dot notation={use_dot_product_notation}, input={input}"
+                    );
+
+                    let mut scalar_only = VakintTerm {
+                        numerator: input.clone(),
+                        integral: Atom::one(),
+                        vectors: Vec::new(),
+                    };
+                    assert!(scalar_only.tensor_reduce_feynkit(&settings, true).is_err());
+                    assert_eq!(scalar_only.numerator, input);
+                }
+            }
+        }
     }
 
     #[test]

@@ -59,6 +59,9 @@ pub(super) fn apply_native_overrides(
     integrals: Option<usize>,
     rules: Option<usize>,
 ) -> PyResult<()> {
+    if terms.is_some() || integrals.is_some() || rules.is_some() {
+        *limits = limits.with_diagnostics();
+    }
     if let Some(bytes) = ram_bytes {
         limits.max_cached_coefficient_bytes = usize::try_from(bytes).map_err(|_| {
             pyo3::exceptions::PyValueError::new_err("RAM allowance does not fit this platform")
@@ -144,6 +147,7 @@ pub(super) fn transfer_options(
         options.max_extracted_bytes = value;
     }
     if let Some(value) = entries {
+        options = options.with_diagnostics();
         options.max_entries = value;
     }
     if let Some(value) = temporary_bytes {
@@ -436,9 +440,13 @@ mod tests {
             ..Default::default()
         };
         apply_native_overrides(&mut limits, None, Some(99), None, None).unwrap();
+        assert!(limits.diagnostics_enabled);
         assert_eq!(limits.max_cached_coefficient_bytes, 42);
         assert_eq!(limits.max_rule_applications, 17);
         assert_eq!(limits.max_cached_coefficient_terms, 99);
+        let mut ordinary = ReductionLimits::default();
+        apply_native_overrides(&mut ordinary, Some(1024), None, None, None).unwrap();
+        assert!(!ordinary.diagnostics_enabled);
         assert!(matches!(
             workload(None, None, None).unwrap(),
             RustRedCacheWorkload::Primer

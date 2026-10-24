@@ -1144,6 +1144,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "corosensei"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6886a0c0f263965933c438626e7179139a62b978a33aa18281cbf0cd5a975f34"
+dependencies = [
+ "autocfg",
+ "cfg-if",
+ "libc",
+ "scopeguard",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2590,7 +2603,7 @@ dependencies = [
 [[package]]
 name = "graphica"
 version = "3.0.1"
-source = "git+https://github.com/alphal00p/symbolica?rev=1205ec30890f32f6d0083e3bf1e55976b8e07bdd#1205ec30890f32f6d0083e3bf1e55976b8e07bdd"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
 dependencies = [
  "ahash 0.8.12",
  "dyn-clone",
@@ -4271,7 +4284,7 @@ dependencies = [
 [[package]]
 name = "numerica"
 version = "3.0.1"
-source = "git+https://github.com/alphal00p/symbolica?rev=1205ec30890f32f6d0083e3bf1e55976b8e07bdd#1205ec30890f32f6d0083e3bf1e55976b8e07bdd"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
 dependencies = [
  "ahash 0.8.12",
  "astro-float",
@@ -5753,11 +5766,12 @@ dependencies = [
 [[package]]
 name = "rustred"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=91b72f8f5d42e12e1a78cff749fc053159da2ef3#91b72f8f5d42e12e1a78cff749fc053159da2ef3"
+source = "git+https://github.com/alphal00p/rustred?rev=42bae6e0a4031203db71a052975ebab0bd66eeb1#42bae6e0a4031203db71a052975ebab0bd66eeb1"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
  "hashbrown 0.17.1",
+ "once_cell",
  "rand 0.9.4",
  "rayon",
  "rustred-order",
@@ -5767,7 +5781,7 @@ dependencies = [
 [[package]]
 name = "rustred-app"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=91b72f8f5d42e12e1a78cff749fc053159da2ef3#91b72f8f5d42e12e1a78cff749fc053159da2ef3"
+source = "git+https://github.com/alphal00p/rustred?rev=42bae6e0a4031203db71a052975ebab0bd66eeb1#42bae6e0a4031203db71a052975ebab0bd66eeb1"
 dependencies = [
  "bincode 2.0.1",
  "blake3",
@@ -5783,7 +5797,7 @@ dependencies = [
 [[package]]
 name = "rustred-order"
 version = "0.1.0"
-source = "git+https://github.com/alphal00p/rustred?rev=91b72f8f5d42e12e1a78cff749fc053159da2ef3#91b72f8f5d42e12e1a78cff749fc053159da2ef3"
+source = "git+https://github.com/alphal00p/rustred?rev=42bae6e0a4031203db71a052975ebab0bd66eeb1#42bae6e0a4031203db71a052975ebab0bd66eeb1"
 
 [[package]]
 name = "rustversion"
@@ -6560,7 +6574,7 @@ dependencies = [
 [[package]]
 name = "symbolica"
 version = "3.0.1"
-source = "git+https://github.com/alphal00p/symbolica?rev=1205ec30890f32f6d0083e3bf1e55976b8e07bdd#1205ec30890f32f6d0083e3bf1e55976b8e07bdd"
+source = "git+https://github.com/symbolica-dev/symbolica?rev=9cd57678d8817ec33c05cacba4925162f1c86b0b#9cd57678d8817ec33c05cacba4925162f1c86b0b"
 dependencies = [
  "ahash 0.8.12",
  "append-only-vec",
@@ -6595,6 +6609,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "wide 1.7.1",
+ "xmlparser",
 ]
 
 [[package]]
@@ -6629,12 +6644,13 @@ dependencies = [
 
 [[package]]
 name = "symjit"
-version = "2.26.0"
+version = "2.28.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3e0ed8cf2dd16f83f5393de7e34de02516bbcb2d7d0e85bb2a5615c665c947b"
+checksum = "8ac321099e6c4ef6d30ce72050469fc422295c41c5418a97f083bcf931cfd0fc"
 dependencies = [
  "ahash 0.8.12",
  "anyhow",
+ "corosensei",
  "hashbrown 0.16.1",
  "hugepage-rs",
  "lazy_static",
@@ -8212,6 +8228,7 @@ dependencies = [
  "idenso",
  "linnet",
  "log",
+ "once_cell",
  "phf 0.13.1",
  "pyo3",
  "pyo3-stub-gen",
@@ -9120,6 +9137,12 @@ dependencies = [
  "libc",
  "rustix 1.1.4",
 ]
+
+[[package]]
+name = "xmlparser"
+version = "0.13.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "66fee0b777b0f5ac1c69bb06d361268faafa61cd4682ae064a171c16c433e9e4"
 
 [[package]]
 name = "xmlwriter"

@@ -4,10 +4,12 @@ mod diagram_integral;
 mod inspection;
 mod numerical;
 mod presentation;
+mod resources;
 
 use std::collections::{BTreeMap, HashMap};
 use std::env;
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use pyo3::types::{PyAnyMethods, PyDict, PyMapping, PyModule, PyModuleMethods, PyType};
 use pyo3::{
@@ -22,8 +24,9 @@ use crate::presentation::Present;
 use crate::symbols::S;
 use crate::{
     AlphaLoopOptions, EvaluationMethod, EvaluationOrder, FMFTOptions, LoopNormalizationFactor,
-    MATADOptions, NumericalEvaluationResult, PySecDecOptions, RustRedEvaluationOptions,
-    TensorReductionMethod, Vakint, VakintError, VakintExpression, VakintSettings, vakint_symbol,
+    MATADOptions, NumericalEvaluationResult, PySecDecOptions, RustRedEvaluationError,
+    RustRedEvaluationOptions, TensorReductionMethod, Vakint, VakintError, VakintExpression,
+    VakintSettings, vakint_symbol,
 };
 use inspection::{
     ConstantSymbolWrapper, MasterSymbolWrapper, NumericalCoefficientWrapper,
@@ -128,6 +131,21 @@ fn rustred_cache_policy(
 pub struct VakintWrapper {
     pub vakint: Vakint,
     pub settings: VakintSettings,
+}
+
+impl VakintWrapper {
+    /// Stage publication separately from the current wrapper's mutable application slot.
+    fn staged_engine(&self) -> PyResult<Vakint> {
+        let loaded = self
+            .vakint
+            .rustred_application
+            .lock()
+            .map_err(|_| vakint_to_python_error(RustRedEvaluationError::CacheLockPoisoned.into()))?
+            .clone();
+        let mut staged = self.vakint.clone();
+        staged.rustred_application = Arc::new(Mutex::new(loaded));
+        Ok(staged)
+    }
 }
 
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
@@ -755,9 +773,15 @@ impl VakintWrapper {
         path: std::path::PathBuf,
         max_loop_count: usize,
     ) -> PyResult<()> {
-        self.vakint
-            .load_external_data(path, max_loop_count)
-            .map_err(vakint_to_python_error)
+        let staged = resources::run(self.settings.rustred_resources, || {
+            let mut staged = self.staged_engine()?;
+            staged
+                .load_external_data(path, max_loop_count)
+                .map_err(vakint_to_python_error)?;
+            Ok(staged)
+        })?;
+        self.vakint = staged;
+        Ok(())
     }
 
     /// Load a local loop pack, or a sealed lower-loop native rules file.
@@ -766,15 +790,23 @@ impl VakintWrapper {
         loop_count: usize,
         path: std::path::PathBuf,
     ) -> PyResult<()> {
-        self.vakint
-            .load_rustred_artifacts(loop_count, path)
-            .map_err(vakint_to_python_error)
+        let staged = resources::run(self.settings.rustred_resources, || {
+            let mut staged = self.staged_engine()?;
+            staged
+                .load_rustred_artifacts(loop_count, path)
+                .map_err(vakint_to_python_error)?;
+            Ok(staged)
+        })?;
+        self.vakint = staged;
+        Ok(())
     }
 
     /// Install all official loop packs through the requested maximum, or load a
     /// supplied checkout directly. Existing validated installations work offline.
+    /// Prepared native caches load by default. Set `load_prepared_caches=False`
+    /// to activate the same validated loop packs without importing their caches.
     #[cfg(all(unix, not(target_arch = "wasm32")))]
-    #[pyo3(signature = (max_loop_count, version="latest", local_artifacts_path=None, refresh=false))]
+    #[pyo3(signature = (max_loop_count, version="latest", local_artifacts_path=None, refresh=false, *, load_prepared_caches=true))]
     pub fn load_official_external_data<'py>(
         &mut self,
         py: Python<'py>,
@@ -782,36 +814,44 @@ impl VakintWrapper {
         version: &str,
         local_artifacts_path: Option<std::path::PathBuf>,
         refresh: bool,
+        load_prepared_caches: bool,
     ) -> PyResult<Bound<'py, PyDict>> {
-        let report = self
-            .vakint
-            .load_official_external_data(
-                max_loop_count,
-                &crate::OfficialExternalDataOptions {
-                    version: version.to_owned(),
-                    local_artifacts_path,
-                    refresh,
-                    ..Default::default()
-                },
-            )
-            .map_err(vakint_to_python_error)?;
-        let result = PyDict::new(py);
-        result.set_item("version", report.version)?;
-        result.set_item("path", report.path)?;
-        let loops = pyo3::types::PyList::empty(py);
-        for item in report.loops {
-            let record = PyDict::new(py);
-            record.set_item("loop_count", item.loop_count)?;
-            record.set_item("path", item.path)?;
-            record.set_item("cache_available", item.cache_available)?;
-            record.set_item("source", item.source)?;
-            loops.append(record)?;
-        }
-        result.set_item("loops", loops)?;
+        let (staged, result) = resources::run(self.settings.rustred_resources, || {
+            let mut staged = self.staged_engine()?;
+            let report = staged
+                .load_official_external_data(
+                    max_loop_count,
+                    &crate::OfficialExternalDataOptions {
+                        version: version.to_owned(),
+                        local_artifacts_path,
+                        refresh,
+                        load_prepared_caches,
+                        ..Default::default()
+                    },
+                )
+                .map_err(vakint_to_python_error)?;
+            let result = PyDict::new(py);
+            result.set_item("version", report.version)?;
+            result.set_item("path", report.path)?;
+            result.set_item("load_prepared_caches", report.load_prepared_caches)?;
+            let loops = pyo3::types::PyList::empty(py);
+            for item in report.loops {
+                let record = PyDict::new(py);
+                record.set_item("loop_count", item.loop_count)?;
+                record.set_item("path", item.path)?;
+                record.set_item("cache_available", item.cache_available)?;
+                record.set_item("cache_loaded", item.cache_loaded)?;
+                record.set_item("source", item.source)?;
+                loops.append(record)?;
+            }
+            result.set_item("loops", loops)?;
+            Ok((staged, result))
+        })?;
+        self.vakint = staged;
         Ok(result)
     }
 
-    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_cache_policy = "evict-lru", rustred_scalar_max_work = None))]
+    #[pyo3(signature = (run_time_decimal_precision = None, evaluation_order = None, tensor_reduction_method = None, epsilon_symbol = None, mu_r_sq_symbol = None, form_exe_path = None, python_exe_path = None, verify_numerator_identification = None, integral_normalization_factor = None, allow_unknown_integrals = None, clean_tmp_dir = None, number_of_terms_in_epsilon_expansion = None, use_dot_product_notation = None, temporary_directory = None, rustred_artifact_path = None, rustred_cache_bytes = None, rustred_cache_terms = None, rustred_product_cache_bytes = None, rustred_product_cache_terms = None, rustred_cache_policy = "evict-lru", rustred_scalar_max_work = None, max_process_rss_bytes = None, max_elapsed_seconds = None))]
     #[allow(clippy::too_many_arguments)]
     #[new]
     /// Create a new Vakint instance, specifying details of the evaluation stack. Note that the same instance can be recycled across multiple evaluations.
@@ -882,24 +922,31 @@ impl VakintWrapper {
     ///     Saved application package for exact symbolic five-loop RustRed reduction.
     ///     Use master_mode="retain" for reduction without coefficient evaluation.
     /// rustred_cache_bytes : Optional[int]
-    ///     Saved-application coefficient-cache byte budget. Setting it selects
-    ///     byte-governed caching unless rustred_cache_terms is also supplied.
+    ///     Saved-application coefficient-cache payload-byte allowance. None
+    ///     imposes no payload-byte ceiling and does not enable count diagnostics.
     /// rustred_cache_terms : Optional[int]
-    ///     Optional separate aggregate coefficient-term cache ceiling.
+    ///     Optional diagnostic aggregate coefficient-term ceiling. Supplying a
+    ///     count ceiling explicitly enables the corresponding native diagnostic profile.
     /// rustred_product_cache_bytes : Optional[int]
     ///     Separate lower-factor cache budget; not an aggregate with the saved
-    ///     application cache. Defaults to the native 1 GiB allowance.
+    ///     application cache. None imposes no payload-byte ceiling.
     /// rustred_product_cache_terms : Optional[int]
-    ///     Explicit lower-factor aggregate term ceiling. A byte override alone
-    ///     selects byte-governed caching for this independent cache.
+    ///     Optional lower-factor aggregate-term diagnostic. None leaves count
+    ///     diagnostics disabled; a byte override alone does not enable them.
     /// rustred_cache_policy : str
     ///     "evict-lru" (default) evicts inactive completed saved-rule results;
     ///     "fail-on-limit" preserves them and reports a cache-limit error.
     ///     A protected working set that cannot fit still errors under LRU.
     /// rustred_scalar_max_work : Optional[int]
-    ///     Exact scalar work allowance per five-loop caller-numerator lowering.
-    ///     None retains the native 16-million default. Does not enlarge entry
-    ///     domains or configure lower-loop/factor programs or process RSS.
+    ///     Optional scalar-work diagnostic per five-loop caller-numerator lowering.
+    ///     None disables count diagnostics. This does not change campaign domains.
+    /// max_process_rss_bytes : Optional[int]
+    ///     Cooperative whole-process resident-memory ceiling for each request.
+    ///     None imposes no RSS ceiling; cache payload budgets remain separate.
+    /// max_elapsed_seconds : Optional[float]
+    ///     Cooperative elapsed-time ceiling per public operation, including data
+    ///     loading and lookup. None disables it. Native kernels are checked at
+    ///     boundaries, so an external supervisor is needed for a hard deadline.
     pub fn new(
         run_time_decimal_precision: Option<u32>,
         evaluation_order: Option<Vec<PyRef<VakintEvaluationMethodWrapper>>>,
@@ -922,129 +969,143 @@ impl VakintWrapper {
         rustred_product_cache_terms: Option<usize>,
         rustred_cache_policy: &str,
         rustred_scalar_max_work: Option<usize>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<VakintWrapper> {
-        let mut rustred_application_options = rustred_app::SavedApplicationOptions {
-            cache_policy: self::rustred_cache_policy(rustred_cache_policy)
-                .map_err(exceptions::PyValueError::new_err)?,
-            ..Default::default()
-        };
-        let mut rustred_scalar_numerator_limits = crate::RustRedScalarNumeratorLimits::default();
-        if let Some(work) = rustred_scalar_max_work {
-            rustred_scalar_numerator_limits
-                .exact_algebra
-                .max_term_operations = work;
-        }
-        if let Some(bytes) = rustred_cache_bytes {
-            rustred_application_options
-                .reduction_limits
-                .max_cached_coefficient_bytes = bytes;
-            rustred_application_options
-                .reduction_limits
-                .max_cached_coefficient_terms = usize::MAX;
-        }
-        if let Some(terms) = rustred_cache_terms {
-            rustred_application_options
-                .reduction_limits
-                .max_cached_coefficient_terms = terms;
-        }
-        let mut rustred_product_limits =
-            rustred::reduction::terminal_normalization::VacuumProductReductionLimits::default();
-        if let Some(bytes) = rustred_product_cache_bytes {
-            rustred_product_limits
-                .reduction
-                .max_cached_coefficient_bytes = bytes;
-            rustred_product_limits
-                .reduction
-                .max_cached_coefficient_terms = usize::MAX;
-        }
-        if let Some(terms) = rustred_product_cache_terms {
-            rustred_product_limits
-                .reduction
-                .max_cached_coefficient_terms = terms;
-        }
-        let norm_factor = if let Some(nf) = integral_normalization_factor {
-            match nf.as_str() {
-                "MSbar" => LoopNormalizationFactor::MSbar,
-                "pySecDec" => LoopNormalizationFactor::pySecDec,
-                "FMFTandMATAD" => LoopNormalizationFactor::FMFTandMATAD,
-                s => LoopNormalizationFactor::Custom(s.into()),
+        let rustred_resources = resources::limits(max_process_rss_bytes, max_elapsed_seconds)?;
+        resources::run(rustred_resources, || {
+            let mut rustred_application_options = rustred_app::SavedApplicationOptions {
+                cache_policy: self::rustred_cache_policy(rustred_cache_policy)
+                    .map_err(exceptions::PyValueError::new_err)?,
+                ..Default::default()
+            };
+            let mut rustred_scalar_numerator_limits =
+                crate::RustRedScalarNumeratorLimits::default();
+            if let Some(work) = rustred_scalar_max_work {
+                rustred_scalar_numerator_limits =
+                    rustred_scalar_numerator_limits.with_diagnostics();
+                rustred_scalar_numerator_limits
+                    .exact_algebra
+                    .max_term_operations = work;
             }
-        } else {
-            LoopNormalizationFactor::MSbar
-        };
-        // let eval_order = if let Some(eo) = evaluation_order {
-        //     let mut eval_stack = vec![];
-        //     for m in eo.iter() {
-        //         let method = Python::with_gil(|py| m.extract::<VakintEvaluationMethodWrapper>(py))?;
-        //         eval_stack.push(method.method);
-        //     }
-        //     EvaluationOrder(eval_stack)
-        // } else {
-        //     EvaluationOrder::all()
-        // };
-        let eval_order = if let Some(eo) = evaluation_order {
-            EvaluationOrder(
-                eo.iter()
-                    .map(|m| m.method.clone())
-                    .collect::<Vec<EvaluationMethod>>(),
-            )
-        } else {
-            EvaluationOrder::all()
-        };
-        let eps_symbol = if let Some(es) = epsilon_symbol {
-            es.to_string()
-        } else {
-            "ε".into()
-        };
-        let mu_r_sq_sym = if let Some(ms) = mu_r_sq_symbol {
-            ms.to_string()
-        } else {
-            "mursq".into()
-        };
-        #[allow(clippy::needless_update)]
-        let settings = VakintSettings {
-            run_time_decimal_precision: run_time_decimal_precision.unwrap_or(17),
-            epsilon_symbol: eps_symbol,
-            mu_r_sq_symbol: mu_r_sq_sym,
-            form_exe_path: form_exe_path.unwrap_or("form".into()),
-            python_exe_path: python_exe_path.unwrap_or("python3".into()),
-            verify_numerator_identification: verify_numerator_identification.unwrap_or(true),
-            integral_normalization_factor: norm_factor,
-            allow_unknown_integrals: allow_unknown_integrals.unwrap_or(true),
-            clean_tmp_dir: clean_tmp_dir.unwrap_or(env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err()),
-            temporary_directory,
-            evaluation_order: eval_order,
-            tensor_reduction_method: tensor_reduction_method
-                .as_deref()
-                .map(str::parse::<TensorReductionMethod>)
-                .transpose()
-                .map_err(vakint_to_python_error)?
-                .unwrap_or_default(),
-            // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
-            // For example when considering a 2-loop problem, then:
-            //   a) for the nested one-loop integrals appearing, the single pole, finite term *and* order-epsilon term will need to be considered.
-            //   b) for the two-loop integrals, the double pole, single pole and finite terms will be needed, so again three terms
-            number_of_terms_in_epsilon_expansion: number_of_terms_in_epsilon_expansion.unwrap_or(4),
-            use_dot_product_notation: use_dot_product_notation.unwrap_or(false),
-            rustred_artifact_path: rustred_artifact_path.map(Into::into),
-            rustred_application_options,
-            rustred_scalar_numerator_limits,
-            rustred_product_limits,
-            ..VakintSettings::default()
-        };
-        let vakint = Vakint::new().map_err(vakint_to_python_error)?;
-        let wrapper = VakintWrapper { vakint, settings };
-        Ok(wrapper)
+            if let Some(bytes) = rustred_cache_bytes {
+                rustred_application_options
+                    .reduction_limits
+                    .max_cached_coefficient_bytes = bytes;
+            }
+            if let Some(terms) = rustred_cache_terms {
+                rustred_application_options.reduction_limits = rustred_application_options
+                    .reduction_limits
+                    .with_diagnostics();
+                rustred_application_options
+                    .reduction_limits
+                    .max_cached_coefficient_terms = terms;
+            }
+            let mut rustred_product_limits =
+                rustred::reduction::terminal_normalization::VacuumProductReductionLimits::default();
+            if let Some(bytes) = rustred_product_cache_bytes {
+                rustred_product_limits
+                    .reduction
+                    .max_cached_coefficient_bytes = bytes;
+            }
+            if let Some(terms) = rustred_product_cache_terms {
+                rustred_product_limits = rustred_product_limits.with_diagnostics();
+                rustred_product_limits
+                    .reduction
+                    .max_cached_coefficient_terms = terms;
+            }
+            let norm_factor = if let Some(nf) = integral_normalization_factor {
+                match nf.as_str() {
+                    "MSbar" => LoopNormalizationFactor::MSbar,
+                    "pySecDec" => LoopNormalizationFactor::pySecDec,
+                    "FMFTandMATAD" => LoopNormalizationFactor::FMFTandMATAD,
+                    s => LoopNormalizationFactor::Custom(s.into()),
+                }
+            } else {
+                LoopNormalizationFactor::MSbar
+            };
+            // let eval_order = if let Some(eo) = evaluation_order {
+            //     let mut eval_stack = vec![];
+            //     for m in eo.iter() {
+            //         let method = Python::with_gil(|py| m.extract::<VakintEvaluationMethodWrapper>(py))?;
+            //         eval_stack.push(method.method);
+            //     }
+            //     EvaluationOrder(eval_stack)
+            // } else {
+            //     EvaluationOrder::all()
+            // };
+            let eval_order = if let Some(eo) = evaluation_order {
+                EvaluationOrder(
+                    eo.iter()
+                        .map(|m| m.method.clone())
+                        .collect::<Vec<EvaluationMethod>>(),
+                )
+            } else {
+                EvaluationOrder::all()
+            };
+            let eps_symbol = if let Some(es) = epsilon_symbol {
+                es.to_string()
+            } else {
+                "ε".into()
+            };
+            let mu_r_sq_sym = if let Some(ms) = mu_r_sq_symbol {
+                ms.to_string()
+            } else {
+                "mursq".into()
+            };
+            #[allow(clippy::needless_update)]
+            let settings = VakintSettings {
+                run_time_decimal_precision: run_time_decimal_precision.unwrap_or(17),
+                epsilon_symbol: eps_symbol,
+                mu_r_sq_symbol: mu_r_sq_sym,
+                form_exe_path: form_exe_path.unwrap_or("form".into()),
+                python_exe_path: python_exe_path.unwrap_or("python3".into()),
+                verify_numerator_identification: verify_numerator_identification.unwrap_or(true),
+                integral_normalization_factor: norm_factor,
+                allow_unknown_integrals: allow_unknown_integrals.unwrap_or(true),
+                clean_tmp_dir: clean_tmp_dir
+                    .unwrap_or(env::var("VAKINT_NO_CLEAN_TMP_DIR").is_err()),
+                temporary_directory,
+                evaluation_order: eval_order,
+                tensor_reduction_method: tensor_reduction_method
+                    .as_deref()
+                    .map(str::parse::<TensorReductionMethod>)
+                    .transpose()
+                    .map_err(vakint_to_python_error)?
+                    .unwrap_or_default(),
+                // This quantity is typically set equal to *one plus the maximum loop count* of the UV regularisation problem considered.
+                // For example when considering a 2-loop problem, then:
+                //   a) for the nested one-loop integrals appearing, the single pole, finite term *and* order-epsilon term will need to be considered.
+                //   b) for the two-loop integrals, the double pole, single pole and finite terms will be needed, so again three terms
+                number_of_terms_in_epsilon_expansion: number_of_terms_in_epsilon_expansion
+                    .unwrap_or(4),
+                use_dot_product_notation: use_dot_product_notation.unwrap_or(false),
+                rustred_artifact_path: rustred_artifact_path.map(Into::into),
+                rustred_application_options,
+                rustred_scalar_numerator_limits,
+                rustred_product_limits,
+                rustred_resources,
+                ..VakintSettings::default()
+            };
+            let vakint = Vakint::new().map_err(vakint_to_python_error)?;
+            let wrapper = VakintWrapper { vakint, settings };
+            Ok(wrapper)
+        })
     }
 
     /// Explicitly load a local five-loop application package once.
     /// Also selects this package in the engine settings.
     pub fn load_rustred_application(&mut self, path: String) -> PyResult<()> {
-        self.vakint = self
-            .vakint
-            .clone()
-            .with_rustred_application(&mut self.settings, path)
-            .map_err(vakint_to_python_error)?;
+        let (staged, settings) = resources::run(self.settings.rustred_resources, || {
+            let staged = self.staged_engine()?;
+            let mut settings = self.settings.clone();
+            let staged = staged
+                .with_rustred_application(&mut settings, path)
+                .map_err(vakint_to_python_error)?;
+            Ok((staged, settings))
+        })?;
+        self.vakint = staged;
+        self.settings = settings;
         Ok(())
     }
 
@@ -1053,36 +1114,40 @@ impl VakintWrapper {
     /// `recomputed_nodes` counts repeated cache misses within a single request;
     /// no unbounded cross-request history is retained.
     pub fn rustred_application_cache_statistics(&self) -> PyResult<HashMap<String, usize>> {
-        let cache = self
-            .vakint
-            .rustred_application_cache_statistics()
-            .map_err(vakint_to_python_error)?;
-        let work = self
-            .vakint
-            .rustred_application_cache_work_statistics()
-            .map_err(vakint_to_python_error)?;
-        Ok([
-            ("cached_integrals", cache.cached_integrals()),
-            ("cached_coefficient_terms", cache.cached_coefficient_terms()),
-            ("cached_coefficient_bytes", cache.cached_coefficient_bytes()),
-            ("rule_applications", cache.rule_applications()),
-            ("cache_hits", cache.cache_hits()),
-            ("evicted_entries", work.evicted_entries),
-            ("evicted_coefficient_terms", work.evicted_coefficient_terms),
-            ("evicted_coefficient_bytes", work.evicted_coefficient_bytes),
-            ("recomputed_nodes", work.recomputed_nodes),
-        ]
-        .into_iter()
-        .map(|(key, value)| (key.to_owned(), value))
-        .collect())
+        resources::run(self.settings.rustred_resources, || {
+            let cache = self
+                .vakint
+                .rustred_application_cache_statistics()
+                .map_err(vakint_to_python_error)?;
+            let work = self
+                .vakint
+                .rustred_application_cache_work_statistics()
+                .map_err(vakint_to_python_error)?;
+            Ok([
+                ("cached_integrals", cache.cached_integrals()),
+                ("cached_coefficient_terms", cache.cached_coefficient_terms()),
+                ("cached_coefficient_bytes", cache.cached_coefficient_bytes()),
+                ("rule_applications", cache.rule_applications()),
+                ("cache_hits", cache.cache_hits()),
+                ("evicted_entries", work.evicted_entries),
+                ("evicted_coefficient_terms", work.evicted_coefficient_terms),
+                ("evicted_coefficient_bytes", work.evicted_coefficient_bytes),
+                ("recomputed_nodes", work.recomputed_nodes),
+            ]
+            .into_iter()
+            .map(|(key, value)| (key.to_owned(), value))
+            .collect())
+        })
     }
 
     /// Clear saved-rule and lower-factor memoization without changing the
     /// admitted scope. Cumulative work/eviction counters are not reset.
     pub fn clear_rustred_application_cache(&self) -> PyResult<()> {
-        self.vakint
-            .clear_rustred_application_cache()
-            .map_err(vakint_to_python_error)
+        resources::run_committing(self.settings.rustred_resources, || {
+            self.vakint
+                .clear_rustred_application_cache()
+                .map_err(vakint_to_python_error)
+        })
     }
 
     /// Explicitly prepare a finite native cache for one through five loops.
@@ -1099,6 +1164,10 @@ impl VakintWrapper {
     /// predicate. Python signals and callback errors stop cooperatively after
     /// the current native operation, checkpoint completed roots, then re-raise
     /// with `cache_report` attached when possible. No hard deadline is promised.
+    /// Count overrides (`cache_terms`, `cache_integrals`, `max_rule_applications`
+    /// and `max_roots`) explicitly enable their native diagnostic profiles;
+    /// omission leaves count stops disabled. `batch_records` selects the flush
+    /// layout, while `extra_dots` and `numerator_rank` select a workload.
     #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, checkpoint_path=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0))]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn prepare_cache(
@@ -1125,44 +1194,47 @@ impl VakintWrapper {
         cancel: Option<Py<PyAny>>,
         progress_interval_seconds: f64,
     ) -> PyResult<Py<PyDict>> {
-        cache::check_loops(n_loops)?;
-        let mut options = crate::RustRedCachePreparationOptions::default();
-        options.storage.ram_bytes = ram_bytes;
-        options.storage.disk_bytes = disk_bytes;
-        options.storage.cache_policy =
-            rustred_cache_policy(cache_policy).map_err(exceptions::PyValueError::new_err)?;
-        options.storage.resume = resume;
-        options.checkpoint_path = checkpoint_path;
-        if let Some(value) = time_limit_seconds {
-            options.storage.time_limit_seconds = value;
-        }
-        if let Some(value) = checkpoint_interval_seconds {
-            options.storage.checkpoint_interval_seconds = value;
-        }
-        if let Some(value) = max_roots {
-            options.storage.max_roots = value;
-        }
-        if let Some(value) = batch_records {
-            options.storage.batch_records = value;
-        }
-        cache::apply_native_overrides(
-            &mut options.native,
-            None,
-            cache_terms,
-            cache_integrals,
-            max_rule_applications,
-        )?;
-        options.workload = cache::workload(extra_dots, numerator_rank, workload)?;
-        cache::prepare(
-            py,
-            self.vakint.clone(),
-            n_loops,
-            output_path.into(),
-            options,
-            progress,
-            cancel,
-            progress_interval_seconds,
-        )
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let mut options = crate::RustRedCachePreparationOptions::default();
+            options.storage.ram_bytes = ram_bytes;
+            options.storage.disk_bytes = disk_bytes;
+            options.storage.cache_policy =
+                rustred_cache_policy(cache_policy).map_err(exceptions::PyValueError::new_err)?;
+            options.storage.resume = resume;
+            options.checkpoint_path = checkpoint_path;
+            if let Some(value) = time_limit_seconds {
+                options.storage.time_limit_seconds = value;
+            }
+            if let Some(value) = checkpoint_interval_seconds {
+                options.storage.checkpoint_interval_seconds = value;
+            }
+            if let Some(value) = max_roots {
+                options.storage = options.storage.with_diagnostics();
+                options.storage.max_roots = value;
+            }
+            if let Some(value) = batch_records {
+                options.storage.batch_records = value;
+            }
+            cache::apply_native_overrides(
+                &mut options.native,
+                None,
+                cache_terms,
+                cache_integrals,
+                max_rule_applications,
+            )?;
+            options.workload = cache::workload(extra_dots, numerator_rank, workload)?;
+            cache::prepare(
+                py,
+                self.vakint.clone(),
+                n_loops,
+                output_path.into(),
+                options,
+                progress,
+                cancel,
+                progress_interval_seconds,
+            )
+        })
     }
 
     /// Attach an exact read-only native cache bundle. Omitted settings preserve
@@ -1183,39 +1255,41 @@ impl VakintWrapper {
         cache_integrals: Option<usize>,
         max_rule_applications: Option<usize>,
     ) -> PyResult<()> {
-        cache::check_loops(n_loops)?;
-        let mut options = crate::RustRedCacheLoadOptions::default();
-        if ram_bytes.is_some()
-            || cache_terms.is_some()
-            || cache_integrals.is_some()
-            || max_rule_applications.is_some()
-        {
-            let mut native = self
-                .vakint
-                .configured_cache_limits(n_loops)
-                .map_err(vakint_to_python_error)?
-                .unwrap_or_default();
-            cache::apply_native_overrides(
-                &mut native,
-                ram_bytes,
-                cache_terms,
-                cache_integrals,
-                max_rule_applications,
-            )?;
-            options.native = Some(native);
-        }
-        options.policy = cache_policy
-            .map(rustred_cache_policy)
-            .transpose()
-            .map_err(exceptions::PyValueError::new_err)?;
-        options.lookup_budget_policy =
-            lookup_budget_policy.map(cache::lookup_policy).transpose()?;
-        if let Some(value) = disk_bytes {
-            options.storage.max_disk_bytes = value;
-        }
-        let engine = self.vakint.clone();
-        py.detach(move || engine.load_cache(n_loops, path, &options))
-            .map_err(vakint_to_python_error)
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let mut options = crate::RustRedCacheLoadOptions::default();
+            if ram_bytes.is_some()
+                || cache_terms.is_some()
+                || cache_integrals.is_some()
+                || max_rule_applications.is_some()
+            {
+                let mut native = self
+                    .vakint
+                    .configured_cache_limits(n_loops)
+                    .map_err(vakint_to_python_error)?
+                    .unwrap_or_default();
+                cache::apply_native_overrides(
+                    &mut native,
+                    ram_bytes,
+                    cache_terms,
+                    cache_integrals,
+                    max_rule_applications,
+                )?;
+                options.native = Some(native);
+            }
+            options.policy = cache_policy
+                .map(rustred_cache_policy)
+                .transpose()
+                .map_err(exceptions::PyValueError::new_err)?;
+            options.lookup_budget_policy =
+                lookup_budget_policy.map(cache::lookup_policy).transpose()?;
+            if let Some(value) = disk_bytes {
+                options.storage.max_disk_bytes = value;
+            }
+            let engine = self.vakint.clone();
+            py.detach(move || engine.load_cache(n_loops, path, &options))
+                .map_err(vakint_to_python_error)
+        })
     }
 
     /// Explicitly save `resident-roots` or a portable `full-snapshot`.
@@ -1232,16 +1306,18 @@ impl VakintWrapper {
         disk_bytes: Option<u64>,
         resume: bool,
     ) -> PyResult<Py<PyDict>> {
-        cache::check_loops(n_loops)?;
-        let mode = cache::save_mode(mode)?;
-        let mut options = crate::RustRedCacheSaveOptions::default();
-        options.disk_bytes = disk_bytes;
-        options.resume = resume;
-        let engine = self.vakint.clone();
-        let report = py
-            .detach(move || engine.save_cache(n_loops, output_path, mode, &options))
-            .map_err(vakint_to_python_error)?;
-        cache::json_report(py, &report.to_document().to_string())
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let mode = cache::save_mode(mode)?;
+            let mut options = crate::RustRedCacheSaveOptions::default();
+            options.disk_bytes = disk_bytes;
+            options.resume = resume;
+            let engine = self.vakint.clone();
+            let report = py
+                .detach(move || engine.save_cache(n_loops, output_path, mode, &options))
+                .map_err(vakint_to_python_error)?;
+            cache::json_report(py, &report.to_document().to_string())
+        })
     }
 
     /// Import a trusted SHA-256 checked USTAR gzip archive into a new native
@@ -1262,21 +1338,23 @@ impl VakintWrapper {
         max_temporary_bytes: Option<u64>,
         disk_bytes: Option<u64>,
     ) -> PyResult<Py<PyDict>> {
-        cache::check_loops(n_loops)?;
-        let options = cache::transfer_options(
-            sha256,
-            max_archive_bytes,
-            max_extracted_bytes,
-            max_entries,
-            max_temporary_bytes,
-            disk_bytes,
-            None,
-        )?;
-        let engine = self.vakint.clone();
-        let report = py
-            .detach(move || engine.import_cache(n_loops, archive_path, output_path, &options))
-            .map_err(vakint_to_python_error)?;
-        cache::transfer_report(py, report)
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let options = cache::transfer_options(
+                sha256,
+                max_archive_bytes,
+                max_extracted_bytes,
+                max_entries,
+                max_temporary_bytes,
+                disk_bytes,
+                None,
+            )?;
+            let engine = self.vakint.clone();
+            let report = py
+                .detach(move || engine.import_cache(n_loops, archive_path, output_path, &options))
+                .map_err(vakint_to_python_error)?;
+            cache::transfer_report(py, report)
+        })
     }
 
     /// Explicit HTTP(S) download with a required trusted checksum. Supply the
@@ -1298,50 +1376,58 @@ impl VakintWrapper {
         disk_bytes: Option<u64>,
         timeout_seconds: Option<f64>,
     ) -> PyResult<Py<PyDict>> {
-        cache::check_loops(n_loops)?;
-        let options = cache::transfer_options(
-            sha256,
-            max_archive_bytes,
-            max_extracted_bytes,
-            max_entries,
-            max_temporary_bytes,
-            disk_bytes,
-            timeout_seconds,
-        )?;
-        let engine = self.vakint.clone();
-        let report = py
-            .detach(move || engine.download_cache(n_loops, &url, output_path, &options))
-            .map_err(vakint_to_python_error)?;
-        cache::transfer_report(py, report)
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let options = cache::transfer_options(
+                sha256,
+                max_archive_bytes,
+                max_extracted_bytes,
+                max_entries,
+                max_temporary_bytes,
+                disk_bytes,
+                timeout_seconds,
+            )?;
+            let engine = self.vakint.clone();
+            let report = py
+                .detach(move || engine.download_cache(n_loops, &url, output_path, &options))
+                .map_err(vakint_to_python_error)?;
+            cache::transfer_report(py, report)
+        })
     }
 
     /// Clear only the attached native RAM cache; preserve its read-only files
     /// and cumulative counters. No program is loaded for an empty attachment.
     pub fn clear_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<()> {
-        cache::check_loops(n_loops)?;
-        let engine = self.vakint.clone();
-        py.detach(move || engine.clear_cache(n_loops))
-            .map_err(vakint_to_python_error)
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let engine = self.vakint.clone();
+            py.detach(move || engine.clear_cache(n_loops))
+                .map_err(vakint_to_python_error)
+        })
     }
 
     /// Detach persistent backing and clear resident reduction records.
     /// The loaded reduction campaign remains available for uncached evaluation.
     pub fn detach_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<()> {
-        cache::check_loops(n_loops)?;
-        let engine = self.vakint.clone();
-        py.detach(move || engine.detach_cache(n_loops))
-            .map_err(vakint_to_python_error)
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let engine = self.vakint.clone();
+            py.detach(move || engine.detach_cache(n_loops))
+                .map_err(vakint_to_python_error)
+        })
     }
 
     /// Return aggregate and exact-namespace cache telemetry. Coefficient payload
     /// and I/O buffers are separate; neither is a measurement of process RSS.
     pub fn cache_statistics(&self, py: Python<'_>, n_loops: usize) -> PyResult<Py<PyDict>> {
-        cache::check_loops(n_loops)?;
-        let engine = self.vakint.clone();
-        let stats = py
-            .detach(move || engine.cache_statistics(n_loops))
-            .map_err(vakint_to_python_error)?;
-        cache::statistics(py, &stats)
+        resources::run(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let engine = self.vakint.clone();
+            let stats = py
+                .detach(move || engine.cache_statistics(n_loops))
+                .map_err(vakint_to_python_error)?;
+            cache::statistics(py, &stats)
+        })
     }
 
     /// Apply the selected five-loop package and retain its symbolic conditions.
@@ -1360,23 +1446,25 @@ impl VakintWrapper {
         Vec<PythonExpression>,
         Vec<(PythonExpression, String)>,
     )> {
-        let result = self
-            .vakint
-            .evaluate_rustred_symbolic(&self.settings, integral_expression.expr.as_view())
-            .map_err(vakint_to_python_error)?;
-        Ok((
-            result.value.into(),
-            result
-                .nonzero_conditions
-                .into_iter()
-                .map(Into::into)
-                .collect(),
-            result
-                .families
-                .into_iter()
-                .map(|(label, fingerprint)| (label.into(), fingerprint))
-                .collect(),
-        ))
+        resources::run(self.settings.rustred_resources, || {
+            let result = self
+                .vakint
+                .evaluate_rustred_symbolic(&self.settings, integral_expression.expr.as_view())
+                .map_err(vakint_to_python_error)?;
+            Ok((
+                result.value.into(),
+                result
+                    .nonzero_conditions
+                    .into_iter()
+                    .map(Into::into)
+                    .collect(),
+                result
+                    .families
+                    .into_iter()
+                    .map(|(label, fingerprint)| (label.into(), fingerprint))
+                    .collect(),
+            ))
+        })
     }
 
     /// Inspect a registered RustRed constant in the active data snapshot.
@@ -1388,10 +1476,12 @@ impl VakintWrapper {
         symbol: &ConstantSymbolWrapper,
         prec: u32,
     ) -> PyResult<VakintConstantWrapper> {
-        self.vakint
-            .get_constant(&symbol.value, prec)
-            .map(Into::into)
-            .map_err(vakint_to_python_error)
+        resources::run(self.settings.rustred_resources, || {
+            self.vakint
+                .get_constant(&symbol.value, prec)
+                .map(Into::into)
+                .map_err(vakint_to_python_error)
+        })
     }
 
     /// Inspect every available Laurent coefficient and the authenticated master graph.
@@ -1403,26 +1493,32 @@ impl VakintWrapper {
         symbol: &MasterSymbolWrapper,
         prec: u32,
     ) -> PyResult<VakintMasterWrapper> {
-        self.vakint
-            .get_master(&symbol.value, prec)
-            .map(Into::into)
-            .map_err(vakint_to_python_error)
+        resources::run(self.settings.rustred_resources, || {
+            self.vakint
+                .get_master(&symbol.value, prec)
+                .map(Into::into)
+                .map_err(vakint_to_python_error)
+        })
     }
 
     /// Discover all registered constants in the loaded or vendored RustRed data.
     pub fn constant_symbols(&self) -> PyResult<Vec<ConstantSymbolWrapper>> {
-        self.vakint
-            .constant_symbols()
-            .map(|symbols| symbols.into_iter().map(Into::into).collect())
-            .map_err(vakint_to_python_error)
+        resources::run(self.settings.rustred_resources, || {
+            self.vakint
+                .constant_symbols()
+                .map(|symbols| symbols.into_iter().map(Into::into).collect())
+                .map_err(vakint_to_python_error)
+        })
     }
 
     /// Discover qualified master identities, including declared uncomputed terminals.
     pub fn master_symbols(&self) -> PyResult<Vec<MasterSymbolWrapper>> {
-        self.vakint
-            .master_symbols()
-            .map(|symbols| symbols.into_iter().map(Into::into).collect())
-            .map_err(vakint_to_python_error)
+        resources::run(self.settings.rustred_resources, || {
+            self.vakint
+                .master_symbols()
+                .map(|symbols| symbols.into_iter().map(Into::into).collect())
+                .map_err(vakint_to_python_error)
+        })
     }
 
     #[pyo3(signature = (expr))]
@@ -1449,13 +1545,15 @@ impl VakintWrapper {
         &self,
         expr: PythonExpression,
     ) -> PyResult<NumericalEvaluationResultWrapper> {
-        let value = NumericalEvaluationResult::from_atom(
-            expr.expr.as_view(),
-            vakint_symbol!(self.settings.epsilon_symbol.clone()),
-            &self.settings,
-        )
-        .map_err(vakint_to_python_error)?;
-        Ok(NumericalEvaluationResultWrapper { value })
+        resources::run(self.settings.rustred_resources, || {
+            let value = NumericalEvaluationResult::from_atom(
+                expr.expr.as_view(),
+                vakint_symbol!(self.settings.epsilon_symbol.clone()),
+                &self.settings,
+            )
+            .map_err(vakint_to_python_error)?;
+            Ok(NumericalEvaluationResultWrapper { value })
+        })
     }
 
     #[pyo3(signature = (evaluated_integral, params, externals = None))]
@@ -1502,19 +1600,21 @@ impl VakintWrapper {
         NumericalEvaluationResultWrapper,
         Option<NumericalEvaluationResultWrapper>,
     )> {
-        let (numerical_result, numerical_error) = numerical::evaluate(
-            &self.vakint,
-            &self.settings,
-            &evaluated_integral.expr,
-            params,
-            externals,
-        )?;
-        Ok((
-            NumericalEvaluationResultWrapper {
-                value: numerical_result,
-            },
-            numerical_error.map(|value| NumericalEvaluationResultWrapper { value }),
-        ))
+        resources::run(self.settings.rustred_resources, || {
+            let (numerical_result, numerical_error) = numerical::evaluate(
+                &self.vakint,
+                &self.settings,
+                &evaluated_integral.expr,
+                params,
+                externals,
+            )?;
+            Ok((
+                NumericalEvaluationResultWrapper {
+                    value: numerical_result,
+                },
+                numerical_error.map(|value| NumericalEvaluationResultWrapper { value }),
+            ))
+        })
     }
 
     #[pyo3(signature = (result))]
@@ -1536,12 +1636,14 @@ impl VakintWrapper {
         &self,
         result: PyRef<NumericalEvaluationResultWrapper>,
     ) -> PyResult<PythonExpression> {
-        let value = result
-            .value
-            .to_atom(vakint_symbol!(self.settings.epsilon_symbol.clone()))
-            .map_err(vakint_to_python_error)?;
+        resources::run(self.settings.rustred_resources, || {
+            let value = result
+                .value
+                .to_atom(vakint_symbol!(self.settings.epsilon_symbol.clone()))
+                .map_err(vakint_to_python_error)?;
 
-        Ok(value.into())
+            Ok(value.into())
+        })
     }
 
     #[pyo3(signature = (integral_expression, short_form = None))]
@@ -1573,15 +1675,17 @@ impl VakintWrapper {
         integral_expression: PythonExpression,
         short_form: Option<bool>,
     ) -> PyResult<PythonExpression> {
-        let result = self
-            .vakint
-            .to_canonical(
-                &self.settings,
-                integral_expression.expr.as_view(),
-                short_form.unwrap_or(false),
-            )
-            .map_err(vakint_to_python_error)?;
-        Ok(result.into())
+        resources::run(self.settings.rustred_resources, || {
+            let result = self
+                .vakint
+                .to_canonical(
+                    &self.settings,
+                    integral_expression.expr.as_view(),
+                    short_form.unwrap_or(false),
+                )
+                .map_err(vakint_to_python_error)?;
+            Ok(result.into())
+        })
     }
 
     #[pyo3(signature = (integral_expression))]
@@ -1610,11 +1714,13 @@ impl VakintWrapper {
         &self,
         integral_expression: PythonExpression,
     ) -> PyResult<PythonExpression> {
-        let result = self
-            .vakint
-            .tensor_reduce(&self.settings, integral_expression.expr.as_view())
-            .map_err(vakint_to_python_error)?;
-        Ok(result.into())
+        resources::run(self.settings.rustred_resources, || {
+            let result = self
+                .vakint
+                .tensor_reduce(&self.settings, integral_expression.expr.as_view())
+                .map_err(vakint_to_python_error)?;
+            Ok(result.into())
+        })
     }
 
     #[pyo3(signature = (integral_expression))]
@@ -1649,11 +1755,13 @@ impl VakintWrapper {
         &self,
         integral_expression: PythonExpression,
     ) -> PyResult<PythonExpression> {
-        let result = self
-            .vakint
-            .evaluate_integral(&self.settings, integral_expression.expr.as_view())
-            .map_err(vakint_to_python_error)?;
-        Ok(result.into())
+        resources::run(self.settings.rustred_resources, || {
+            let result = self
+                .vakint
+                .evaluate_integral(&self.settings, integral_expression.expr.as_view())
+                .map_err(vakint_to_python_error)?;
+            Ok(result.into())
+        })
     }
 
     #[pyo3(signature = (integral_expression))]
@@ -1685,11 +1793,13 @@ impl VakintWrapper {
     /// integral_expression : Expression
     ///   A Symbolica expression representing a vakint integral.
     pub fn evaluate(&self, integral_expression: PythonExpression) -> PyResult<PythonExpression> {
-        let result = self
-            .vakint
-            .evaluate(&self.settings, integral_expression.expr.as_view())
-            .map_err(vakint_to_python_error)?;
-        Ok(result.into())
+        resources::run(self.settings.rustred_resources, || {
+            let result = self
+                .vakint
+                .evaluate(&self.settings, integral_expression.expr.as_view())
+                .map_err(vakint_to_python_error)?;
+            Ok(result.into())
+        })
     }
 }
 

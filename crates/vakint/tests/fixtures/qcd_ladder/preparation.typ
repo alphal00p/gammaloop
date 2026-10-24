@@ -75,9 +75,9 @@ angular projector, or polarization average.
 It is an additional diagnostic of the bare graph, rather than the full soft
 mass term of the recursively subtracted counterterm.
 
-The collector records native preparation stages, data loading, geometric routing,
-weighted scalar lowering, rule application, terminal substitution, and total
-elapsed time. Its input and result hashes, executable hash, source revision,
+The collector records native preparation stages, data loading and cache import,
+geometric routing, weighted scalar lowering, the combined native application,
+subsequent terminal geometry and lower-loop factors, and total elapsed time. Its input and result hashes, executable hash, source revision,
 data identity, exact conditions, and cache counters are written alongside the
 expressions in #raw("benchmark.json"). #raw("--cache PATH") explicitly attaches a
 prepared five-loop cache; #raw("--warm") performs a second evaluation and requires
@@ -85,15 +85,20 @@ exact result, guard, and family parity. Repeated uncached/cached measurements us
 separate fresh processes. Preparation is rerun for each complete measurement.
 Uncached runs explicitly detach any backing attached by the data loader;
 cached runs clear resident results while retaining the selected backing.
-The receipt separates native owner preparation during loading and reduction,
-and records persistent root and intermediate hits. An explicit
-#raw("--scalar-work-limit N") changes only the finite scalar arithmetic budget;
-the receipt records the chosen limits, so a raised-budget result is never
-reported as a default-limit success.
-The native angular reducer has an explicit one-million-term output allowance.
-A preserved fresh run of the indexed adapter reached the native default
-100,000-term limit at the second angular group; that operational failure
-does not establish anything about IBP coverage or surviving terminals.
+The receipt measures deferred owner preparation from actual cumulative counters
+at the data-loading, cache-setup, and reduction boundaries, and records persistent
+root and intermediate hits. The combined native application includes entry
+transport, lazy owner preparation, IBP application, exact summation, and native
+terminal substitution. The current native API does not expose disjoint IBP and
+terminal-substitution durations; these fields remain null, with no estimate by
+subtracting overlapping wall times. Execution work is governed by time and RAM
+availability, rather than arbitrary term, operation, routing-call, or rule counts.
+The quadratic auxiliary-rank check is a scientific invariant and remains in place.
+Historical sealed runs retain their original work ceilings and failure receipts:
+an earlier indexed adapter reached its then-default 100,000-term allowance,
+and later validation used an explicit one-million-term allowance. Those receipts
+remain provenance; neither an execution ceiling nor its failure establishes IBP
+coverage or surviving terminals. The scalar-work override interface is removed.
 
 The slow test requires the explicit #raw("VAKINT_SAVED_APPLICATION") and
 #raw("VAKINT_QCD_LADDER_EVIDENCE") paths. Its preparation census distinguishes a
@@ -110,11 +115,11 @@ retains every exact mass factor and globally combines roots before classifying
 coverage. Its JSON clearly labels diagnostic replay and does not claim fresh
 preparation or successful IBP reduction. The native saved predicates, rather than
 rectangular rank/degree maxima, remain the admission authority.
-The census can set #raw("VAKINT_QCD_CENSUS_MAX_TERM_OPERATIONS") to a finite work
-ceiling. Completed checkpoints are addressed by the exact source identity,
+Completed checkpoints are addressed by the exact source identity,
 bound to the input and application hashes and family fingerprint, and checked
-again against the active admission predicates. Imported checkpoints retain
-their original budget and policy receipt. Their local contribution ordinals
+again against the active admission predicates. Imported historical checkpoints
+retain their original execution-policy receipt; they do not impose a new work
+ceiling or change the current time-and-RAM policy. Their local contribution ordinals
 are presentation metadata and are reassigned for the current enumeration.
 The default census requires all 21 quadratic groups and checks engineering
 mass-dimension balance #raw("D_key-j=10"). For the additional diagnostic, explicitly selecting
@@ -126,12 +131,11 @@ Only the compact source fixture and reproducible code belong in version control.
 Large dressed/projected numerators and diagnostic DOT output remain generated
 workspace evidence, never a precomputed substitute for the slow test.
 
-The separately ignored prepared-input diagnostic can set
-#raw("VAKINT_QCD_DIAGNOSTIC_MAX_WORK") to an explicit operational work budget;
-without it, the existing default of sixteen million charged work units remains.
-The diagnostic records that policy and still checks all original visible input
-poles, mass homogeneity, and the actual saved entry union without applying IBPs.
-A raised-budget replay is not a default-limit success or fresh-preparation test.
+The separately ignored prepared-input diagnostic records the native execution
+policy and still checks all original visible input poles, mass homogeneity, and
+the actual saved entry union without applying IBPs. Historical budget failures
+remain sealed evidence, rather than physical-coverage failures or successful
+fresh-preparation tests. No operation-count environment override remains.
 Contribution ordinals are local to each run: compare the recorded family, key,
 and exact numerator rather than assuming that equal ordinals identify equal
 inputs. Its per-contribution histogram is also not a globally coalesced sum

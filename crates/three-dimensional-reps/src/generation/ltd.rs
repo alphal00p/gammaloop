@@ -24,6 +24,7 @@ use crate::{
 use itertools::Itertools;
 use linnet::half_edge::involution::{EdgeIndex, EdgeVec};
 use std::collections::{BTreeMap, HashMap, hash_map::Entry};
+use symbolica::utils::resources;
 
 struct Channel {
     members: Vec<usize>,
@@ -54,6 +55,7 @@ impl<'a> LtdBuilder<'a> {
         parsed: &'a ParsedGraph,
         options: &'a Generate3DExpressionOptions,
     ) -> Result<Self> {
+        resources::checkpoint()?;
         let repeated = repeated_groups(parsed);
         let bounds = if repeated.is_empty() {
             // Ordinary residues evaluate the complete numerator on their pole
@@ -106,6 +108,7 @@ impl<'a> LtdBuilder<'a> {
     }
 
     pub(super) fn build(mut self) -> Result<GeneratedThreeDExpression> {
+        resources::checkpoint()?;
         let loop_count = self.parsed.loop_names.len();
         let signatures = self
             .channels
@@ -129,15 +132,18 @@ impl<'a> LtdBuilder<'a> {
             }
             energy_residues(&signatures, &vec![ContourClosure::Below; loop_count])?
         };
+        resources::checkpoint()?;
         if residues.is_empty() {
             return Err(GenerationError::SingularBasis);
         }
         for residue in residues {
+            resources::checkpoint()?;
             self.add_residue(&residue)?;
         }
         let mut expression = self.assembly.expression.fuse_compatible_variants();
         super::assign_numerator_map_labels(&mut expression.orientations);
         let denominator_edges = self.parsed.denominator_internal_edge_ids();
+        resources::checkpoint()?;
         Ok(GeneratedThreeDExpression {
             representation: RepresentationMode::Ltd,
             expression,
@@ -158,6 +164,7 @@ impl<'a> LtdBuilder<'a> {
     }
 
     fn add_residue(&mut self, residue: &EnergyResidue) -> Result<()> {
+        resources::checkpoint()?;
         let basis = residue
             .basis
             .iter()
@@ -191,6 +198,7 @@ impl<'a> LtdBuilder<'a> {
                 })
                 .collect::<Vec<_>>();
             for (axis, edge) in basis.iter().enumerate() {
+                resources::checkpoint()?;
                 let mut unit = vec![LinearEnergyExpr::zero(); self.signatures.len()];
                 unit[*edge].constant = Rational::one();
                 let direction = solve_loop_energy_from_target_edge_exprs(
@@ -228,6 +236,7 @@ impl<'a> LtdBuilder<'a> {
         }
         let mut factors = Vec::new();
         for (channel_index, channel) in self.channels.iter().enumerate() {
+            resources::checkpoint()?;
             let representative = channel.representative();
             if let Some(axis) = residue
                 .basis
@@ -265,6 +274,7 @@ impl<'a> LtdBuilder<'a> {
             .map(|order| 0..=*order)
             .multi_cartesian_product()
         {
+            resources::checkpoint()?;
             if beta
                 .iter()
                 .zip(&degrees)
@@ -279,13 +289,16 @@ impl<'a> LtdBuilder<'a> {
                 .collect::<Vec<_>>();
             // binomial(alpha,beta)/alpha! = 1/(beta! gamma!). The
             // denominator expansion below supplies its own gamma!.
-            let coefficient = beta
-                .iter()
-                .chain(&gamma)
-                .fold(contour.clone(), |value, order| {
-                    (1..=*order).fold(value, |value, factor| value / Rational::from(factor))
-                });
-            let denominator_terms = DenominatorFactor::differentiate_product(&factors, &gamma);
+            let coefficient = beta.iter().chain(&gamma).try_fold(
+                contour.clone(),
+                |value, order| -> Result<_> {
+                    (1..=*order).try_fold(value, |value, factor| {
+                        resources::checkpoint()?;
+                        Ok(value / Rational::from(factor))
+                    })
+                },
+            )?;
+            let denominator_terms = DenominatorFactor::differentiate_product(&factors, &gamma)?;
             let mut axes = Vec::new();
             for (axis, order) in beta
                 .iter()
@@ -293,6 +306,7 @@ impl<'a> LtdBuilder<'a> {
                 .enumerate()
                 .filter(|(_, order)| *order > 0)
             {
+                resources::checkpoint()?;
                 let degree = degrees[axis];
                 let stencil = match self.stencils.entry((degree, order)) {
                     Entry::Occupied(entry) => entry.into_mut(),
@@ -311,6 +325,7 @@ impl<'a> LtdBuilder<'a> {
                 .map(|(_, _, samples)| samples)
                 .multi_cartesian_product()
             {
+                resources::checkpoint()?;
                 let mut sample_targets = targets.clone();
                 let mut sample_coefficient = coefficient.clone();
                 let mut extra_half_edges = Vec::new();
@@ -337,6 +352,7 @@ impl<'a> LtdBuilder<'a> {
                 let mut edge_map = edge_q0_from_loop_exprs(&self.signatures, &loop_map);
                 apply_initial_state_cut_edge_energy_exprs(self.parsed, &mut edge_map);
                 for term in &denominator_terms {
+                    resources::checkpoint()?;
                     let mut half_edges = term.half_edges.clone();
                     half_edges.extend(extra_half_edges.iter().copied());
                     self.assembly.push_variant_for_maps(
@@ -366,8 +382,10 @@ impl<'a> LtdBuilder<'a> {
     }
 
     fn derivative_stencil(degree: usize, order: usize) -> Result<Vec<(i64, Rational)>> {
+        resources::checkpoint()?;
         let nodes = (0..=degree)
             .map(|index| {
+                resources::checkpoint()?;
                 let magnitude = i64::try_from(index.div_ceil(2))
                     .map_err(|_| GenerationError::CoefficientOutOfRange)?;
                 Ok(if index % 2 == 0 {
@@ -379,24 +397,29 @@ impl<'a> LtdBuilder<'a> {
             .collect::<Result<Vec<_>>>()?;
         let matrix = (0..=degree)
             .map(|power| {
-                nodes
+                resources::checkpoint()?;
+                Ok(nodes
                     .iter()
                     .map(|node| Rational::from(*node).pow_usize(power))
-                    .collect()
+                    .collect())
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
         let rhs = (0..=degree)
             .map(|power| {
+                resources::checkpoint()?;
                 if power == order {
-                    (1..=order).fold(Rational::one(), |value, factor| {
-                        value * Rational::from(factor)
+                    (1..=order).try_fold(Rational::one(), |value, factor| {
+                        resources::checkpoint()?;
+                        Ok(value * Rational::from(factor))
                     })
                 } else {
-                    Rational::zero()
+                    Ok(Rational::zero())
                 }
             })
-            .collect();
+            .collect::<Result<Vec<_>>>()?;
+        resources::checkpoint()?;
         let weights = solve_rational_system(matrix, rhs).ok_or(GenerationError::SingularBasis)?;
+        resources::checkpoint()?;
         Ok(nodes
             .into_iter()
             .zip(weights)
@@ -427,10 +450,16 @@ struct DenominatorTerm {
 }
 
 impl DenominatorFactor {
-    fn differentiate_product(factors: &[Self], gamma: &[usize]) -> Vec<DenominatorTerm> {
-        let factorial = gamma.iter().fold(Rational::one(), |value, order| {
-            (1..=*order).fold(value, |value, factor| value * Rational::from(factor))
-        });
+    fn differentiate_product(factors: &[Self], gamma: &[usize]) -> Result<Vec<DenominatorTerm>> {
+        resources::checkpoint()?;
+        let factorial = gamma
+            .iter()
+            .try_fold(Rational::one(), |value, order| -> Result<_> {
+                (1..=*order).try_fold(value, |value, factor| {
+                    resources::checkpoint()?;
+                    Ok(value * Rational::from(factor))
+                })
+            })?;
         let mut terms = vec![(
             gamma.to_vec(),
             DenominatorTerm {
@@ -441,62 +470,64 @@ impl DenominatorFactor {
             },
         )];
         for factor in factors {
-            terms = terms
-                .into_iter()
-                .flat_map(|(remaining, term)| {
-                    remaining
+            resources::checkpoint()?;
+            let mut next_terms = Vec::new();
+            for (remaining, term) in terms {
+                resources::checkpoint()?;
+                for delta in remaining
+                    .iter()
+                    .zip(&factor.derivatives)
+                    .map(|(order, derivative)| 0..=if derivative.is_zero() { 0 } else { *order })
+                    .multi_cartesian_product()
+                {
+                    resources::checkpoint()?;
+                    let order = delta.iter().sum::<usize>();
+                    let mut derived = term.clone();
+                    for index in 0..order {
+                        resources::checkpoint()?;
+                        derived.coefficient *= -Rational::from(factor.power + index);
+                    }
+                    for (order, derivative) in delta.iter().zip(&factor.derivatives) {
+                        derived.coefficient *= derivative.pow_usize(*order);
+                        for divisor in 1..=*order {
+                            resources::checkpoint()?;
+                            derived.coefficient /= Rational::from(divisor);
+                        }
+                    }
+                    let power = factor.power + order;
+                    derived
+                        .edges
+                        .extend(factor.edges.iter().copied().map(EdgeIndex));
+                    match factor.surface {
+                        FactorSurface::Cut(edge) => derived
+                            .half_edges
+                            .extend(std::iter::repeat_n(EdgeIndex(edge), power)),
+                        FactorSurface::Linear(surface) => {
+                            derived.chain.extend(std::iter::repeat_n(surface, power))
+                        }
+                    }
+                    let remaining = remaining
                         .iter()
-                        .zip(&factor.derivatives)
-                        .map(|(order, derivative)| {
-                            0..=if derivative.is_zero() { 0 } else { *order }
-                        })
-                        .multi_cartesian_product()
-                        .map(move |delta| {
-                            let order = delta.iter().sum::<usize>();
-                            let mut derived = term.clone();
-                            for index in 0..order {
-                                derived.coefficient *= -Rational::from(factor.power + index);
-                            }
-                            for (order, derivative) in delta.iter().zip(&factor.derivatives) {
-                                derived.coefficient *= derivative.pow_usize(*order);
-                                for divisor in 1..=*order {
-                                    derived.coefficient /= Rational::from(divisor);
-                                }
-                            }
-                            let power = factor.power + order;
-                            derived
-                                .edges
-                                .extend(factor.edges.iter().copied().map(EdgeIndex));
-                            match factor.surface {
-                                FactorSurface::Cut(edge) => derived
-                                    .half_edges
-                                    .extend(std::iter::repeat_n(EdgeIndex(edge), power)),
-                                FactorSurface::Linear(surface) => {
-                                    derived.chain.extend(std::iter::repeat_n(surface, power))
-                                }
-                            }
-                            let remaining = remaining
-                                .iter()
-                                .zip(delta)
-                                .map(|(left, right)| left - right)
-                                .collect::<Vec<_>>();
-                            (remaining, derived)
-                        })
-                        .collect::<Vec<_>>()
-                })
-                .collect();
-        }
-        terms
-            .into_iter()
-            .filter_map(|(remaining, mut term)| {
-                if remaining.iter().any(|order| *order != 0) {
-                    return None;
+                        .zip(delta)
+                        .map(|(left, right)| left - right)
+                        .collect::<Vec<_>>();
+                    next_terms.push((remaining, derived));
                 }
-                term.edges.sort_unstable();
-                term.edges.dedup();
-                Some(term)
-            })
-            .collect()
+            }
+            terms = next_terms;
+        }
+        let mut result = Vec::new();
+        for (remaining, mut term) in terms {
+            resources::checkpoint()?;
+            if remaining.iter().any(|order| *order != 0) {
+                continue;
+            }
+            term.edges.sort_unstable();
+            term.edges.dedup();
+            result.push(term);
+        }
+        resources::checkpoint()?;
+        Ok(result)
     }
 }
 
@@ -509,6 +540,45 @@ mod tests {
         generation::generate_3d_expression,
         graph_io::{ParsedGraphInternalEdge, test_graphs},
     };
+
+    #[test]
+    fn denominator_product_keeps_exact_result_and_polls_resources() {
+        let factors = [DenominatorFactor {
+            surface: FactorSurface::Cut(0),
+            edges: vec![0],
+            power: 1,
+            derivatives: vec![Rational::one()],
+        }];
+        let result = DenominatorFactor::differentiate_product(&factors, &[2]).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].coefficient, Rational::from(2));
+        assert_eq!(result[0].half_edges, vec![EdgeIndex(0); 3]);
+
+        let checks = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let monitor_checks = checks.clone();
+        let budget = symbolica::utils::resources::ResourceBudget::with_memory_monitor(
+            symbolica::utils::resources::ResourceLimits {
+                max_process_rss_bytes: Some(10),
+                ..Default::default()
+            },
+            move || {
+                Ok(
+                    if monitor_checks.fetch_add(1, std::sync::atomic::Ordering::Relaxed) == 0 {
+                        0
+                    } else {
+                        11
+                    },
+                )
+            },
+        );
+        assert!(matches!(
+            budget.run(|| DenominatorFactor::differentiate_product(&factors, &[2])),
+            Err(GenerationError::Resource(
+                symbolica::utils::resources::ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(checks.load(std::sync::atomic::Ordering::Relaxed) >= 2);
+    }
 
     fn repeated_cycle(power: usize, signs: &[i32]) -> ParsedGraph {
         ParsedGraph {

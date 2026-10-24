@@ -18,12 +18,23 @@ use rustred_app::CachePreparationStatus;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use symbolica::utils::resources::{ResourceBudget, ResourceLimits, checkpoint};
 use vakint::{RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheWorkload, Vakint};
 
 const MIB: u64 = 1024 * 1024;
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Shared proof validation and observation serve measure_cache; builder uses identity and loading"
+    )
+)]
+#[path = "build_cache/owner_proof.rs"]
+mod owner_proof;
 #[path = "build_cache/workload.rs"]
 mod workload;
+use owner_proof::OwnerProof;
 use workload::Workload;
 
 struct Options {
@@ -35,7 +46,9 @@ struct Options {
     phase: String,
     prepare_seconds: u64,
     max_seconds: u64,
-    ram_mib: u64,
+    retained_coefficient_mib: Option<u64>,
+    max_process_rss_mib: Option<u64>,
+    max_elapsed_seconds: Option<u64>,
     worker: bool,
     worker_budget: Option<Attempt>,
 }
@@ -119,19 +132,26 @@ impl Options {
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
         Ok(json!({
-            "schema": "vakint.five-loop-cache-build-identity.v2",
+            "schema": "vakint.five-loop-cache-build-identity.v3",
             "workload_sha256": workload_hash,
             "source_census": self.source_census.canonicalize()?,
             "source_census_sha256": workload.source_census_sha256,
             "data_manifest_sha256": workload.data_manifest_sha256,
             "output": self.output, "phase": self.phase,
             "prepare_seconds": self.prepare_seconds, "max_seconds": self.max_seconds,
-            "ram_mib": self.ram_mib,
+            "retained_coefficient_mib": self.retained_coefficient_mib,
+            "resources": {
+                "max_process_rss_mib": self.max_process_rss_mib,
+                "max_elapsed_seconds": self.max_elapsed_seconds,
+                "hard_cumulative_seconds": self.max_seconds,
+            },
+            "owner_proof": OwnerProof::pinned_identity(workload, &self.workload, &self.artifacts)?,
             "build": {
                 "executable_sha256": digest(&std::env::current_exe()?)?,
                 "driver_sha256": format!("{:x}", Sha256::digest(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/examples/build_cache.rs")))),
                 "cargo_lock_sha256": format!("{:x}", Sha256::digest(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../Cargo.lock")))),
                 "workload_schema_sha256": format!("{:x}", Sha256::digest(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/examples/build_cache/workload.rs")))),
+                "owner_proof_validator_sha256": format!("{:x}", Sha256::digest(include_bytes!(concat!(env!("CARGO_MANIFEST_DIR"), "/examples/build_cache/owner_proof.rs")))),
                 "rustc": compiler, "profile": profile, "git_revision": built_revision,
                 "debug_assertions": cfg!(debug_assertions),
                 "target_arch": std::env::consts::ARCH, "target_os": std::env::consts::OS,
@@ -161,7 +181,9 @@ impl Options {
         let mut phase = "pilot".to_owned();
         let mut prepare_seconds = 840;
         let mut max_seconds = 900;
-        let mut ram_mib: u64 = 2048;
+        let mut retained_coefficient_mib: Option<u64> = None;
+        let mut max_process_rss_mib: Option<u64> = None;
+        let mut max_elapsed_seconds: Option<u64> = None;
         let mut worker = false;
         let mut worker_budget = None;
         let mut args = std::env::args().skip(1);
@@ -172,7 +194,9 @@ impl Options {
                     --phase pilot|final       Label the measured run (default: pilot)\n\
                     --prepare-seconds N       Cooperative native preparation budget (default: 840)\n\
                     --max-seconds N           Hard process deadline, including finalization (default: 900)\n\
-                    --ram-mib N               Native retained coefficient allowance (default: 2048)\n\
+                    --retained-coefficient-mib N Native coefficient capacity (default: unbounded; alias: --ram-mib)\n\
+                    --max-process-rss-mib N   Whole worker RSS budget (default: unbounded)\n\
+                    --max-elapsed-seconds N   Tighter cumulative worker time budget (default: hard deadline)\n\
                     Final production uses --phase final --prepare-seconds 32400 --max-seconds 36000.\n\
                     Freeze training/tuning/held-out inputs first. This command does not select roots.\n\
                     Run in an optimized build with fixed affinity; all work and receipts stay in --work-dir.\n\
@@ -197,15 +221,28 @@ impl Options {
                 "--phase" => phase = value,
                 "--prepare-seconds" => prepare_seconds = value.parse()?,
                 "--max-seconds" => max_seconds = value.parse()?,
-                "--ram-mib" => ram_mib = value.parse()?,
+                "--retained-coefficient-mib" | "--ram-mib" => {
+                    retained_coefficient_mib = Some(value.parse()?);
+                }
+                "--max-process-rss-mib" => max_process_rss_mib = Some(value.parse()?),
+                "--max-elapsed-seconds" => max_elapsed_seconds = Some(value.parse()?),
                 "--worker-budget" => worker_budget = Some(serde_json::from_str(&value)?),
                 _ => bail!("unknown argument {arg}"),
             }
         }
         Self::validate_budget(&phase, prepare_seconds, max_seconds)?;
+        for mib in [retained_coefficient_mib, max_process_rss_mib]
+            .into_iter()
+            .flatten()
+        {
+            ensure!(
+                mib > 0 && mib.checked_mul(MIB).is_some(),
+                "invalid memory allowance"
+            );
+        }
         ensure!(
-            ram_mib > 0 && ram_mib.checked_mul(MIB).is_some(),
-            "invalid RAM allowance"
+            max_elapsed_seconds != Some(0),
+            "elapsed allowance must be positive"
         );
         Ok(Some(Self {
             artifacts: artifacts.ok_or_else(|| eyre::eyre!("--artifacts is required"))?,
@@ -217,7 +254,9 @@ impl Options {
             phase,
             prepare_seconds,
             max_seconds,
-            ram_mib,
+            retained_coefficient_mib,
+            max_process_rss_mib,
+            max_elapsed_seconds,
             worker,
             worker_budget,
         }))
@@ -286,6 +325,27 @@ impl Attempt {
             "loading exhausted the remaining cumulative preparation allowance"
         );
         Ok(remaining as u64)
+    }
+
+    fn resource_allowance(
+        &self,
+        now: f64,
+        worker_elapsed: Duration,
+        max_elapsed_seconds: Option<u64>,
+    ) -> Result<Duration> {
+        let allowed = max_elapsed_seconds
+            .map(|limit| limit as f64 - self.previous_elapsed_seconds)
+            .unwrap_or(self.hard_seconds)
+            .min(self.hard_seconds);
+        let elapsed = (now - self.started_unix_seconds)
+            .max(worker_elapsed.as_secs_f64())
+            .max(0.0);
+        let remaining = allowed - elapsed;
+        ensure!(
+            remaining > 0.0,
+            "the cumulative worker resource time budget is exhausted"
+        );
+        Ok(Duration::try_from_secs_f64(remaining)?)
     }
 
     fn arm_watchdog(&self) -> Result<()> {
@@ -363,8 +423,20 @@ fn build_cache(
         identity == options.identity(workload_hash, workload)?,
         "workload, census, source or execution settings changed after supervisor preflight"
     );
+    checkpoint()?;
     let mut engine = Vakint::new()?;
     engine.load_external_data(&options.artifacts, 5)?;
+    let binding = engine
+        .cache_statistics(5)?
+        .saved_application
+        .ok_or_else(|| eyre::eyre!("missing loaded application binding"))?
+        .to_document()["binding"]
+        .clone();
+    let proof = OwnerProof::load(workload, &options.workload, &options.artifacts, &binding)?;
+    ensure!(
+        options.phase != "final" || proof.is_some(),
+        "final preparation requires validated owner proof"
+    );
     let loading_seconds = started.elapsed().as_secs_f64();
     let mut preparation = RustRedCachePreparationOptions {
         checkpoint_path: Some(options.work_dir.join("checkpoints")),
@@ -372,8 +444,10 @@ fn build_cache(
     };
     preparation.storage.time_limit_seconds =
         attempt.preparation_allowance(unix_seconds()?, started.elapsed())?;
-    preparation.storage.ram_bytes = Some(options.ram_mib * MIB);
-    preparation.storage.disk_bytes = Some(50 * MIB);
+    preparation.storage.ram_bytes = options.retained_coefficient_mib.map(|mib| mib * MIB);
+    // The final gzip target is checked below; scratch checkpoints are not
+    // constrained by the final representation size.
+    preparation.storage.disk_bytes = None;
     preparation.storage.max_roots = workload.training.len();
     preparation.workload = RustRedCacheWorkload::Explicit(
         workload
@@ -435,6 +509,8 @@ fn build_cache(
         "selected_training_roots": workload.training.len(), "frozen_held_out_inputs": workload.held_out.len(),
         "source_census": options.source_census, "attempt": attempt,
         "publishable": false,
+        "owner_proof":proof.as_ref().map(OwnerProof::identity),
+        "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
     });
     if complete {
         let bytes = fs::metadata(&options.output)?.len();
@@ -470,6 +546,31 @@ fn main() -> Result<()> {
             .ok_or_else(|| eyre::eyre!("worker requires supervisor budget"))?;
         attempt.validate(options.prepare_seconds, options.max_seconds)?;
         attempt.arm_watchdog()?;
+        let limits = ResourceLimits {
+            max_process_rss_bytes: options.max_process_rss_mib.map(|mib| mib * MIB),
+            max_elapsed: Some(attempt.resource_allowance(
+                unix_seconds()?,
+                worker_started.elapsed(),
+                options.max_elapsed_seconds,
+            )?),
+        };
+        // One inherited scope spans loading, native preparation and compaction.
+        // Native publication checks its budget before commit; no blanket
+        // post-return check can turn its committed report into a ResourceError.
+        return ResourceBudget::new(limits).run(|| {
+            checkpoint()?;
+            run(options, worker_started)
+        });
+    }
+    run(options, worker_started)
+}
+
+fn run(options: Options, worker_started: Instant) -> Result<()> {
+    if options.worker {
+        let attempt = options
+            .worker_budget
+            .as_ref()
+            .ok_or_else(|| eyre::eyre!("worker requires supervisor budget"))?;
         let active: Value =
             serde_json::from_slice(&fs::read(options.work_dir.join("supervisor.json"))?)?;
         ensure!(
@@ -490,6 +591,7 @@ fn main() -> Result<()> {
     } else {
         workload.validate()?;
     }
+    checkpoint()?;
     ensure!(
         digest(&options.artifacts.join("manifest.json"))? == workload.data_manifest_sha256,
         "external data manifest differs from the frozen workload"
@@ -679,6 +781,33 @@ mod tests {
         assert!(
             resumed
                 .preparation_allowance(26200.0, Duration::ZERO)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn one_outer_resource_clock_charges_previous_attempts_and_loading() {
+        let attempt = Attempt::new(100.0, 1000.0, 840, 900).unwrap();
+        assert_eq!(
+            attempt
+                .resource_allowance(1010.0, Duration::from_secs(5), None)
+                .unwrap(),
+            Duration::from_secs(790),
+        );
+        assert_eq!(
+            attempt
+                .resource_allowance(900.0, Duration::from_secs(10), Some(600))
+                .unwrap(),
+            Duration::from_secs(490),
+        );
+        assert!(
+            attempt
+                .resource_allowance(1500.0, Duration::ZERO, Some(600))
+                .is_err()
+        );
+        assert!(
+            attempt
+                .resource_allowance(1000.0, Duration::ZERO, Some(100))
                 .is_err()
         );
     }

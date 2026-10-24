@@ -45,10 +45,6 @@ use symbolica::{
 
 pub type Result<T> = std::result::Result<T, Box<dyn Error>>;
 
-// An earlier fully indexed adapter exceeded the native 100,000-term default.
-// Keep this finite allowance explicit; it changes only the work ceiling.
-pub const ANGULAR_OUTPUT_TERM_LIMIT: usize = 1_000_000;
-
 #[derive(Clone, Copy, Debug, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Projection {

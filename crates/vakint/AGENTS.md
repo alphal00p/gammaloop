@@ -16,7 +16,8 @@ taskset -c CPU cargo run --locked --release -p vakint --example benchmark_reduct
   --features feynkit-ingress,experimental-rustred,weighted-lowering-diagnostics,symbolica_community_module -- \
   --form /path/to/form \
   --work-dir /path/to/workspace/vakint-benchmark \
-  --output crates/vakint/docs/benchmark/data/results.json --select-current
+  --output crates/vakint/docs/benchmark/data/results.json \
+  --build-profile release --select-current
 typst compile crates/vakint/docs/benchmark/benchmark.typ \
   crates/vakint/docs/benchmark/benchmark.pdf
 ```
@@ -33,6 +34,11 @@ ingress records, raw samples and protocol metadata remain unchanged. `--select-c
 selects the new run for the report. Omit it to record a run while retaining the
 existing selection. An initially empty output selects its first run. The selected
 identifier is recorded explicitly as `selected_reduction_run` in the JSON.
+Declare the actual Cargo profile with `--build-profile`; this label is not
+compiler introspection. Final speed comparisons require the documented `--release`
+build without profile overrides. Diagnostic `ci-optim` runs must declare that
+profile and retain their distinct provenance. Optimization/LTO settings are never
+inferred from the absence of debug assertions.
 
 Preserve the exact-agreement and cache-hit checks, report the measured source,
 compiler, FORM and data versions, and keep setup outside the reduction timer.

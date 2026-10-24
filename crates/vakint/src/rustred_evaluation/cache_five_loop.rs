@@ -34,7 +34,7 @@ use sha2::{Digest, Sha256};
 
 use super::{
     RustRedCacheLoadOptions, RustRedCachePreparationOptions, RustRedCacheStatistics,
-    RustRedCacheWorkload, operation,
+    RustRedCacheWorkload, operation, resource_checkpoint,
 };
 use crate::rustred_evaluation::{data::RustRedData, five_loop::SavedApplication};
 use crate::{Vakint, VakintError, VakintSettings};
@@ -43,7 +43,12 @@ fn failure(error: impl std::fmt::Display) -> VakintError {
     operation(AppError::new(AppErrorKind::Input, error.to_string())).into()
 }
 
-fn backing_error(error: impl std::fmt::Display) -> GuardedCacheBackingError {
+fn backing_error(error: impl std::error::Error + 'static) -> GuardedCacheBackingError {
+    if let Some(resource) =
+        crate::rustred_evaluation::RustRedEvaluationError::resource_cause(&error)
+    {
+        return GuardedCacheBackingError::resource(resource.clone());
+    }
     GuardedCacheBackingError {
         kind: GuardedCacheBackingErrorKind::Io,
         message: error.to_string(),
@@ -226,7 +231,8 @@ impl SavedApplication {
         let Some(cache) = attached.as_mut() else {
             return prepared
                 .reduce_routed_linear_combination(terms)
-                .map_err(failure);
+                .map_err(operation)
+                .map_err(Into::into);
         };
         let binding = cache.file.binding().clone();
         let result = prepared
@@ -236,7 +242,7 @@ impl SavedApplication {
                 Some(&mut cache.file),
                 None,
             )
-            .map_err(failure)?;
+            .map_err(operation)?;
         cache.add_work(result.statistics().persistent_cache);
         Ok(result)
     }
@@ -304,6 +310,8 @@ impl Vakint {
         // No old attachment or resident result is discarded until the complete
         // framing, binding and index have been checked successfully.
         let mut attached = application.cache.lock().map_err(failure)?;
+        // All fallible resource work precedes the replacement commit.
+        resource_checkpoint()?;
         prepared.clear_cache().map_err(operation)?;
         *attached = Some(SavedFiveLoopCache {
             file,
@@ -340,6 +348,7 @@ impl Vakint {
         mode: super::RustRedCacheSaveMode,
         options: &super::RustRedCacheSaveOptions,
     ) -> Result<super::RustRedCacheSaveReport, VakintError> {
+        resource_checkpoint()?;
         if options.resume {
             return Err(failure(
                 "a single-file five-loop snapshot cannot be appended; use a new output path, or resume prepare_cache through its checkpoint directory",
@@ -365,7 +374,13 @@ impl Vakint {
                 prepared
                     .validate_completed_cache_record(&sink.binding, &record)
                     .map_err(operation)?;
-                sink.store_completed(&record, context).map_err(failure)?;
+                sink.store_completed(&record, context).map_err(|error| {
+                    if let GuardedCacheBackingErrorKind::Resource(resource) = &error.kind {
+                        operation(AppError::resource(resource.clone())).into()
+                    } else {
+                        failure(error)
+                    }
+                })?;
             }
         }
         sink.exported_terms = 0;
@@ -407,6 +422,7 @@ impl Vakint {
         observer: impl FnMut(&CachePreparationReport) -> Result<(), AppError>,
     ) -> Result<CachePreparationReport, VakintError> {
         let started = Instant::now();
+        resource_checkpoint()?;
         if !matches!(options.workload, RustRedCacheWorkload::Explicit(_)) {
             return Err(failure(
                 "five-loop cache preparation requires an explicit selected workload; exhaustive primers are not supported",
@@ -455,7 +471,11 @@ impl Vakint {
             backing: None,
             coverage: Vec::new(),
         };
-        let workload = options.workload.plan(&backend, &[], resolved.max_roots)?;
+        let workload = options.workload.plan(
+            &backend,
+            &[],
+            resolved.diagnostics_enabled.then_some(resolved.max_roots),
+        )?;
         backend.coverage = workload.targets().iter().map(|root| {
             Ok(json!({
                 "namespace": root.namespace(), "powers": root.integral().powers(),
@@ -505,7 +525,13 @@ impl Vakint {
                 .visit_completed_records(backend.context(0).map_err(operation)?, |record| {
                     backend.validate_completed_record(0, &record)?;
                     sink.store_completed(&record, backend.context(0)?)
-                        .map_err(|error| AppError::new(AppErrorKind::Limit, error.to_string()))
+                        .map_err(|error| {
+                            if let GuardedCacheBackingErrorKind::Resource(resource) = &error.kind {
+                                AppError::resource(resource.clone())
+                            } else {
+                                AppError::new(AppErrorKind::Limit, error.to_string())
+                            }
+                        })
                 })
                 .map_err(operation)?;
             let records = sink.records.into_values().collect::<Vec<_>>();
@@ -523,11 +549,10 @@ impl Vakint {
             }
             // Write only a fully encoded, validated file. The explicit output is
             // installed atomically; interruption leaves reusable checkpoints.
-            write_atomic(output, &bytes)?;
-            report.elapsed = started.elapsed();
+            let decoded_sha256 = decoded_sha256(&bytes)?;
             report.options["single_file"] = json!({
                 "format": "rustred.saved-application-cache-file.v1",
-                "identity": identity, "decoded_sha256": decoded_sha256(&bytes)?,
+                "identity": identity, "decoded_sha256": decoded_sha256,
                 "binding": {
                     "artifact_digest": backend.binding[0].artifact_digest,
                     "family_fingerprint": backend.binding[0].family_fingerprint,
@@ -536,6 +561,7 @@ impl Vakint {
                 },
                 "records": records.len(), "path": output, "checkpoint_path": checkpoint,
             });
+            write_atomic(output, &bytes)?;
             report.elapsed = started.elapsed();
         }
         Ok(report)
@@ -569,6 +595,7 @@ fn decoded_sha256(encoded: &[u8]) -> Result<String, VakintError> {
     let mut digest = Sha256::new();
     let mut block = [0; 65536];
     loop {
+        resource_checkpoint()?;
         let read = decoder.read(&mut block).map_err(failure)?;
         if read == 0 {
             break;
@@ -579,6 +606,7 @@ fn decoded_sha256(encoded: &[u8]) -> Result<String, VakintError> {
 }
 
 fn write_atomic(output: &Path, bytes: &[u8]) -> Result<(), VakintError> {
+    resource_checkpoint()?;
     let parent = output
         .parent()
         .filter(|path| !path.as_os_str().is_empty())
@@ -597,6 +625,7 @@ fn write_atomic(output: &Path, bytes: &[u8]) -> Result<(), VakintError> {
     let result = (|| {
         file.write_all(bytes).map_err(failure)?;
         file.sync_all().map_err(failure)?;
+        resource_checkpoint()?;
         // A same-directory hard link publishes atomically without replacing an
         // existing completed cache, even if another writer raced this one.
         fs::hard_link(&temporary, output).map_err(failure)
@@ -671,7 +700,7 @@ impl GuardedIntermediateCapture for RootCapture<'_> {
         context: &CoefficientContext,
     ) -> Result<(), GuardedCacheBackingError> {
         if record.key == self.key {
-            self.root = Some(record.clone());
+            self.root = Some(record.try_clone_with_resources().map_err(backing_error)?);
             Ok(())
         } else {
             self.inner.store_completed(record, context)
@@ -838,13 +867,19 @@ impl GuardedCacheBacking for Snapshot {
         key: &ApplicationCacheKey,
         _: &CoefficientContext,
     ) -> Result<Option<ApplicationCacheRecord>, GuardedCacheBackingError> {
-        Ok(self.records.get(key).cloned())
+        symbolica::utils::resources::checkpoint().map_err(GuardedCacheBackingError::resource)?;
+        self.records
+            .get(key)
+            .map(ApplicationCacheRecord::try_clone_with_resources)
+            .transpose()
+            .map_err(backing_error)
     }
     fn store_completed(
         &mut self,
         record: &ApplicationCacheRecord,
         _: &CoefficientContext,
     ) -> Result<(), GuardedCacheBackingError> {
+        symbolica::utils::resources::checkpoint().map_err(GuardedCacheBackingError::resource)?;
         let (terms, bytes) = record.coefficient_census().map_err(backing_error)?;
         let (previous_terms, previous_bytes) = self
             .records
@@ -870,8 +905,10 @@ impl GuardedCacheBacking for Snapshot {
         } else {
             0
         });
-        if self.records.len().saturating_add(usize::from(new_key)) > self.limits.chunk.max_records
-            || next_terms > self.limits.chunk.max_decoded_coefficient_terms
+        if (self.limits.chunk.diagnostics_enabled
+            && (self.records.len().saturating_add(usize::from(new_key))
+                > self.limits.chunk.max_records
+                || next_terms > self.limits.chunk.max_decoded_coefficient_terms))
             || next_bytes > self.limits.chunk.max_decoded_coefficient_bytes
             || next_index > self.limits.chunk.max_index_owned_bytes
         {
@@ -886,7 +923,9 @@ impl GuardedCacheBacking for Snapshot {
         self.index_bytes = next_index;
         self.exported_terms = self.exported_terms.saturating_add(terms);
         self.exported_bytes = self.exported_bytes.saturating_add(bytes);
-        self.records.insert(record.key.clone(), record.clone());
+        let owned = record.try_clone_with_resources().map_err(backing_error)?;
+        self.records.insert(owned.key.clone(), owned);
+        symbolica::utils::resources::checkpoint().map_err(GuardedCacheBackingError::resource)?;
         Ok(())
     }
 }
@@ -913,6 +952,53 @@ mod tests {
         bounded = storage;
         bounded.chunk.max_decoded_coefficient_bytes = 0;
         assert!(file_limits(bounded).is_err());
+    }
+
+    #[test]
+    fn atomic_publication_refuses_resources_before_installing_the_cache() {
+        use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
+
+        let scratch = tempfile::tempdir().unwrap();
+        let output = scratch.path().join("cache.rrcache.gz");
+        let directory = scratch.path().to_owned();
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..Default::default()
+            },
+            move || {
+                let staged = fs::read_dir(&directory)
+                    .map_err(|error| error.to_string())?
+                    .try_fold(false, |found, entry| {
+                        Ok::<_, std::io::Error>(
+                            found
+                                || entry?
+                                    .file_name()
+                                    .to_string_lossy()
+                                    .starts_with(".vakint-cache-"),
+                        )
+                    })
+                    .map_err(|error| error.to_string())?;
+                Ok(if staged { 2 } else { 0 })
+            },
+        );
+        let error = budget
+            .run(|| write_atomic(&output, b"complete"))
+            .unwrap_err();
+        let mut source: Option<&(dyn std::error::Error + 'static)> = Some(&error);
+        let mut resource = None;
+        while let Some(error) = source {
+            if let Some(error) = error.downcast_ref::<ResourceLimitError>() {
+                resource = Some(error);
+                break;
+            }
+            source = error.source();
+        }
+        assert!(matches!(resource, Some(ResourceLimitError::Memory { .. })));
+        assert!(!output.exists());
+        assert_eq!(fs::read_dir(scratch.path()).unwrap().count(), 0);
+        write_atomic(&output, b"complete").unwrap();
+        assert_eq!(fs::read(&output).unwrap(), b"complete");
     }
 
     #[test]
@@ -988,6 +1074,40 @@ mod tests {
         assert!(statistics.attached);
         assert!(saved.persistent.requested_root_hits > 0);
         assert_eq!(cached.statistics().work.rule_applications(), 0);
+
+        // Entry checks pass; the monitor refuses only after the owning commit
+        // has acquired Prepared and Cache. Neither clear nor detach may mutate.
+        for detach in [false, true] {
+            let snapshot = application.clone();
+            let budget = symbolica::utils::resources::ResourceBudget::with_memory_monitor(
+                symbolica::utils::resources::ResourceLimits {
+                    max_process_rss_bytes: Some(1),
+                    ..Default::default()
+                },
+                move || {
+                    let committing =
+                        snapshot.prepared.try_lock().is_err() && snapshot.cache.try_lock().is_err();
+                    Ok(if committing { 2 } else { 0 })
+                },
+            );
+            assert!(
+                budget
+                    .run(|| if detach {
+                        engine.detach_cache(5)
+                    } else {
+                        engine.clear_cache(5)
+                    })
+                    .is_err()
+            );
+            assert_eq!(
+                engine
+                    .cache_statistics(5)
+                    .unwrap()
+                    .saved_application
+                    .unwrap(),
+                saved
+            );
+        }
 
         let bad = scratch.path().join("corrupt.rrcache.gz");
         let mut bytes = fs::read(&output).unwrap();

@@ -152,6 +152,8 @@ fn preserving_uncertified_lower_inputs_still_enforces_scalar_work_limits() {
     let engine = Vakint::new().unwrap();
     let mut settings = settings(RustRedMasterMode::Retain);
     settings.rustred_scalar_numerator_limits.max_input_nodes = 0;
+    settings.rustred_scalar_numerator_limits =
+        settings.rustred_scalar_numerator_limits.with_diagnostics();
     let matched = MatchedScalarFamily {
         family: super::super::artifact::ArtifactFamily::UnitMassVacuumK3,
         powers: vec![i64::MAX, 1, 1],

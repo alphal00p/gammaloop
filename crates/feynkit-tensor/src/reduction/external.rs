@@ -8,6 +8,9 @@ use super::{
 };
 use idenso::tensor::SymbolicTensor;
 use std::collections::HashMap;
+use std::mem;
+use symbolica::utils::resources;
+use symbolica::utils::resources::ResourceBudget;
 use symbolica::{
     atom::{Atom, AtomCore},
     symbol,
@@ -19,16 +22,19 @@ pub(super) struct ExternalProjector {
 }
 
 impl ExternalProjector {
-    fn parallel_pair(&self, left: &Outside, right: &Outside) -> Atom {
+    fn parallel_pair(&self, left: &Outside, right: &Outside) -> Result<Atom, TensorReductionError> {
         let mut result = Atom::Zero;
         for (i, p) in self.basis.iter().enumerate() {
             for (j, q) in self.basis.iter().enumerate() {
+                resources::checkpoint()?;
                 result += outside_pair(left, &Outside::Vector(p.clone()))
                     * &self.inverse[i * self.basis.len() + j]
                     * outside_pair(&Outside::Vector(q.clone()), right);
             }
         }
-        result.together()
+        let result = result.together();
+        resources::checkpoint()?;
+        Ok(result)
     }
 }
 
@@ -36,6 +42,7 @@ impl TensorReducer {
     pub(super) fn external_projector(
         &self,
     ) -> Result<Option<ExternalProjector>, TensorReductionError> {
+        resources::checkpoint()?;
         if self.external_vectors.is_empty() {
             return Ok(None);
         }
@@ -49,6 +56,7 @@ impl TensorReducer {
         }
         let probe_index = symbol!("FeynKit::ExternalBasisProbeIndex").to_atom();
         for vector in &basis {
+            resources::checkpoint()?;
             let indexed = indexed_vector(vector, &probe_index);
             let valid = self
                 .indexed_vector(indexed.as_view())?
@@ -60,18 +68,20 @@ impl TensorReducer {
         let variables = (0..basis.len())
             .map(|i| symbol!(&format!("FeynKit::GramCoefficient{i}")).to_atom())
             .collect::<Vec<_>>();
-        let equations = basis
-            .iter()
-            .map(|p| {
-                basis
-                    .iter()
-                    .zip(&variables)
-                    .map(|(q, x)| dot(p, q) * x)
-                    .sum::<Atom>()
-            })
-            .collect::<Vec<_>>();
+        let mut equations = Vec::with_capacity(basis.len());
+        for p in &basis {
+            let mut equation = Atom::Zero;
+            for (q, x) in basis.iter().zip(&variables) {
+                resources::checkpoint()?;
+                equation += dot(p, q) * x;
+            }
+            resources::checkpoint()?;
+            equations.push(equation);
+        }
+        resources::checkpoint()?;
         let (matrix, _) = Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
             .map_err(|error| TensorReductionError::ExternalGram(error.to_string()))?;
+        resources::checkpoint()?;
         let inverse = matrix
             .inv()
             .map_err(|error| TensorReductionError::ExternalGram(error.to_string()))?
@@ -79,6 +89,7 @@ impl TensorReducer {
             .into_iter()
             .map(|value| value.to_expression())
             .collect();
+        resources::checkpoint()?;
         Ok(Some(ExternalProjector { basis, inverse }))
     }
 
@@ -87,6 +98,7 @@ impl TensorReducer {
         monomial: TensorMonomial,
         projector: &ExternalProjector,
     ) -> Result<Vec<TensorReductionTerm>, TensorReductionError> {
+        resources::checkpoint()?;
         if monomial.integrated.is_empty() {
             return self.reduce_monomial(monomial);
         }
@@ -102,22 +114,30 @@ impl TensorReducer {
         ] {
             for (i, left) in vectors.iter().enumerate() {
                 for right in &vectors[i..] {
+                    resources::checkpoint()?;
                     let pair = outside_pair(left, right);
-                    let transverse = (&pair - projector.parallel_pair(left, right)).together();
+                    let transverse = (&pair - projector.parallel_pair(left, right)?).together();
+                    resources::checkpoint()?;
                     transverse_pairs.insert(pair, transverse);
                 }
             }
         }
-        // Keep longitudinal factors unexpanded. The same configured budget
-        // limits intermediate assignments and the final projector terms.
+        // Keep longitudinal factors unexpanded. An opt-in term diagnostic
+        // applies to intermediate assignments and final projector terms.
         let transverse_dimension = &self.dimension - Atom::num(projector.basis.len());
         let mut assignments = vec![(Atom::one(), Vec::new(), Vec::new())];
         for (integrated, outside) in monomial.integrated.iter().zip(&monomial.outside) {
-            let parallel = projector.parallel_pair(&Outside::Vector(integrated.clone()), outside);
+            resources::checkpoint()?;
+            let parallel =
+                projector.parallel_pair(&Outside::Vector(integrated.clone()), outside)?;
             let transverse_is_zero = transverse_dimension.is_zero()
                 || matches!(outside, Outside::Vector(vector) if self.external_vectors.contains(vector));
             let mut next = Vec::new();
             for (factor, integrated_terms, outside_terms) in assignments {
+                resources::checkpoint()?;
+                resources::check_allocation(
+                    (2 * mem::size_of::<(Atom, Vec<Atom>, Vec<Outside>)>()) as u64,
+                )?;
                 if !parallel.is_zero() {
                     next.push((
                         &factor * &parallel,
@@ -132,10 +152,12 @@ impl TensorReducer {
                     outside_terms.push(outside.clone());
                     next.push((factor, integrated_terms, outside_terms));
                 }
-                if next.len() > self.output_term_limit {
+                if let Some(limit) = self.output_term_limit
+                    && next.len() > limit
+                {
                     return Err(TensorReductionError::OutputLimit {
                         terms: next.len(),
-                        limit: self.output_term_limit,
+                        limit,
                     });
                 }
             }
@@ -145,6 +167,7 @@ impl TensorReducer {
         transverse_reducer.dimension = transverse_dimension;
         let mut result = Vec::new();
         for (parallel, integrated, outside) in assignments {
+            resources::checkpoint()?;
             if integrated.len() % 2 == 1 {
                 continue;
             }
@@ -154,6 +177,7 @@ impl TensorReducer {
                 outside,
             })?;
             for term in terms {
+                resources::checkpoint()?;
                 let transverse = term.tensor.expression().replace_map(|view, _, output| {
                     if let Some(value) = transverse_pairs.get(&view.to_owned()) {
                         **output = value.clone();
@@ -170,16 +194,20 @@ impl TensorReducer {
                         // so vacuum contraction-orbit metadata does not apply.
                         integrated_orbit: None,
                         projector_orbit: None,
+                        budget: ResourceBudget::capture_current(),
                     });
                 }
-                if result.len() > self.output_term_limit {
+                if let Some(limit) = self.output_term_limit
+                    && result.len() > limit
+                {
                     return Err(TensorReductionError::OutputLimit {
                         terms: result.len(),
-                        limit: self.output_term_limit,
+                        limit,
                     });
                 }
             }
         }
+        resources::checkpoint()?;
         Ok(result)
     }
 }

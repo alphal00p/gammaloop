@@ -15,6 +15,7 @@ mod ltd;
 mod model;
 mod progress;
 mod render_settings;
+mod resources;
 mod sector_decomposition;
 mod tensor;
 #[cfg(feature = "ufo")]

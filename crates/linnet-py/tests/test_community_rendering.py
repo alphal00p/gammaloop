@@ -1,10 +1,10 @@
 """All Community graph owners honor the same advanced rendering settings."""
 
 import json
-from pathlib import Path
-from tempfile import TemporaryDirectory
 import unittest
 import xml.etree.ElementTree as ET
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from symbolica import E
 from symbolica.community import graph, hepkit, tensor
@@ -108,6 +108,29 @@ class CommunityRenderingTests(unittest.TestCase):
                     for child in results[-1][0].diagrams
                 )
             )
+
+    def test_literal_captions_and_canonical_numerator_metadata(self):
+        diagrams = (
+            hepkit.Model.phi3()
+            .process(["phi", "phi"], ["phi", "phi"])
+            .generate_diagrams(loops=0, progress=None)
+            .diagrams
+        )
+        self.assertIn(
+            "UFO::{}::SCALAR_COUPLING", json.loads(diagrams[0].to_json())["numerator"]
+        )
+        caption = 'Numerator: "quoted" {braces} \\backslash α'
+        for owner, pages in ((diagrams[0], 1), (hepkit.Amplitude(diagrams[:2]), 2)):
+            with self.subTest(owner=type(owner).__name__):
+                # The native numerator caption must remain literal even when
+                # canonical symbol metadata contains Typst syntax delimiters.
+                self.assertEqual(len(owner.render().to_svg_pages()), pages)
+        # Explicit caption overrides belong to the generic graph renderer;
+        # physics owners retain their native numerator annotation.
+        settings = graph.RenderSettings(title=graph.TextLabel(caption))
+        rendered = diagrams[0].to_graph().render(config=settings)
+        self.assertEqual(len(rendered.to_svg_pages()), 1)
+        self.assertTrue(ET.fromstring(rendered.to_svg()).tag.endswith("svg"))
 
     def test_advanced_momentum_arrows_and_live_selector_views(self):
         diagram = (

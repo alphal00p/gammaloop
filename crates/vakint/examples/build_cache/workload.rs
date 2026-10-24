@@ -1,8 +1,15 @@
 //! Frozen common-family workload shared by preparation and measurement.
-use std::collections::BTreeSet;
+use std::{collections::BTreeSet, path::PathBuf};
 
 use eyre::{Result, ensure};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+#[derive(Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct OwnerProofReference {
+    pub(super) path: PathBuf,
+    pub(super) sha256: String,
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -32,11 +39,17 @@ pub(super) struct Workload {
     pub(super) training: Vec<Root>,
     pub(super) tuning: Vec<Root>,
     pub(super) held_out: Vec<Root>,
+    #[serde(default)]
+    pub(super) owner_proof: Option<OwnerProofReference>,
 }
 
 impl Workload {
     pub(super) fn validate_final_selection(&self) -> Result<()> {
         self.validate()?;
+        ensure!(
+            self.owner_proof.is_some(),
+            "final selection requires a pinned completed owner proof"
+        );
         ensure!(
             self.tuning
                 .iter()
@@ -56,6 +69,14 @@ impl Workload {
             ensure!(
                 hash.len() == 64 && hash.bytes().all(|b| b.is_ascii_hexdigit()),
                 "invalid workload SHA256"
+            );
+        }
+        if let Some(proof) = &self.owner_proof {
+            ensure!(
+                !proof.path.as_os_str().is_empty()
+                    && proof.sha256.len() == 64
+                    && proof.sha256.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                "invalid owner-proof reference"
             );
         }
         ensure!(!self.training.is_empty(), "empty training workload");
@@ -158,10 +179,10 @@ impl Workload {
 }
 
 #[cfg(test)]
-mod tests {
+pub(super) mod tests {
     use super::*;
 
-    fn selected() -> Workload {
+    pub(crate) fn selected() -> Workload {
         let root = |id: String, power: i64| Root {
             id,
             powers: [vec![power], vec![1; 14]].concat(),
@@ -179,6 +200,10 @@ mod tests {
             held_out: (0..12)
                 .map(|i| root(format!("held-out-{i}"), i + 3))
                 .collect(),
+            owner_proof: Some(OwnerProofReference {
+                path: "owner-proof.json".into(),
+                sha256: "c".repeat(64),
+            }),
         }
     }
 
@@ -187,6 +212,10 @@ mod tests {
         let mut workload = selected();
         workload.validate_final_selection().unwrap();
         workload.held_out[0].lowered_roots.clear();
+        workload.validate().unwrap();
+        assert!(workload.validate_final_selection().is_err());
+        workload = selected();
+        workload.owner_proof = None;
         workload.validate().unwrap();
         assert!(workload.validate_final_selection().is_err());
         workload = selected();

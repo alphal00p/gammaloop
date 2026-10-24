@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use itertools::Itertools;
 use spenso::structure::representation::{Minkowski, RepName};
 use symbolica::atom::{Atom, AtomCore};
+use symbolica::utils::resources::{self, ResourceBudget, ResourceLimits};
 
 use super::{IntegralFamily, IntegralFamilyError};
 
@@ -142,106 +143,115 @@ impl IntegralFamily {
         target: &Self,
         loop_images: &[Atom],
     ) -> Result<Option<IntegralMapping>, IntegralFamilyError> {
-        self.compatible_kinematics(target)?;
-        if loop_images.len() != self.loop_momenta.len() {
-            return Err(IntegralFamilyError::InvalidMapping(
-                "supply one image per source loop momentum".into(),
-            ));
-        }
-        let rep = Minkowski {}.new_rep(self.kinematics.dimension());
-        let target_momenta = target
-            .loop_momenta
-            .iter()
-            .chain(&target.external_momenta)
-            .collect::<Vec<_>>();
-        for image in loop_images {
-            // Reuse the shared exact decomposition, including Gaussian
-            // coefficients, before the real-contour admission check.
-            let terms = target.kinematics.linear_terms(image)?;
-            if terms.iter().any(|(momentum, _)| {
-                !target_momenta
+        resources::checkpoint()?;
+        let mapping = (|| {
+            self.compatible_kinematics(target)?;
+            if loop_images.len() != self.loop_momenta.len() {
+                return Err(IntegralFamilyError::InvalidMapping(
+                    "supply one image per source loop momentum".into(),
+                ));
+            }
+            let rep = Minkowski {}.new_rep(self.kinematics.dimension());
+            let target_momenta = target
+                .loop_momenta
+                .iter()
+                .chain(&target.external_momenta)
+                .collect::<Vec<_>>();
+            for image in loop_images {
+                resources::checkpoint()?;
+                // Reuse the shared exact decomposition, including Gaussian
+                // coefficients, before the real-contour admission check.
+                let terms = target.kinematics.linear_terms(image)?;
+                if terms.iter().any(|(momentum, _)| {
+                    !target_momenta
+                        .iter()
+                        .any(|p| p.as_view() == momentum.as_view())
+                }) {
+                    return Err(IntegralFamilyError::InvalidMapping(
+                        "images must be linear combinations of target loop and external momenta"
+                            .into(),
+                    ));
+                }
+                if terms
                     .iter()
-                    .any(|p| p.as_view() == momentum.as_view())
-            }) {
-                return Err(IntegralFamilyError::InvalidMapping(
-                    "images must be linear combinations of target loop and external momenta".into(),
-                ));
+                    .any(|(_, coefficient)| !coefficient.is_real().is_true())
+                {
+                    return Ok(None);
+                }
+                if target
+                    .loop_momenta
+                    .iter()
+                    .any(|p| image.contains(rep.vector(p.as_view(), []).as_view()))
+                {
+                    return Err(IntegralFamilyError::InvalidMapping(
+                        "loop-dependent coefficients are not affine momentum shifts".into(),
+                    ));
+                }
             }
-            if terms
-                .iter()
-                .any(|(_, coefficient)| !coefficient.is_real().is_true())
-            {
+            let (jacobian, _) = Self::affine_system(loop_images, &target.loop_momenta)
+                .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
+            let determinant = jacobian
+                .det()
+                .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?
+                .to_expression()
+                .together();
+            if determinant != Atom::one() && determinant != Atom::num(-1) {
                 return Ok(None);
             }
-            if target
-                .loop_momenta
-                .iter()
-                .any(|p| image.contains(rep.vector(p.as_view(), []).as_view()))
-            {
-                return Err(IntegralFamilyError::InvalidMapping(
-                    "loop-dependent coefficients are not affine momentum shifts".into(),
-                ));
+            let mut rules = BTreeMap::new();
+            for (i, momentum) in self.loop_momenta.iter().enumerate() {
+                for (j, other) in self.loop_momenta.iter().enumerate().skip(i) {
+                    rules.insert(
+                        rep.inner_product(momentum, other),
+                        target
+                            .kinematics
+                            .scalar_product(&loop_images[i], &loop_images[j])?,
+                    );
+                }
+                for other in &self.external_momenta {
+                    rules.insert(
+                        rep.inner_product(momentum, other),
+                        target.kinematics.scalar_product(&loop_images[i], other)?,
+                    );
+                }
             }
-        }
-        let (jacobian, _) = Self::affine_system(loop_images, &target.loop_momenta)
-            .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
-        let determinant = jacobian
-            .det()
-            .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?
-            .to_expression()
-            .together();
-        if determinant != Atom::one() && determinant != Atom::num(-1) {
-            return Ok(None);
-        }
-        let mut rules = BTreeMap::new();
-        for (i, momentum) in self.loop_momenta.iter().enumerate() {
-            for (j, other) in self.loop_momenta.iter().enumerate().skip(i) {
-                rules.insert(
-                    rep.inner_product(momentum, other),
-                    target
-                        .kinematics
-                        .scalar_product(&loop_images[i], &loop_images[j])?,
-                );
+            for (i, p) in self.external_momenta.iter().enumerate() {
+                for q in &self.external_momenta[i..] {
+                    rules.insert(
+                        rep.inner_product(p, q),
+                        target.kinematics.scalar_product(p, q)?,
+                    );
+                }
             }
-            for other in &self.external_momenta {
-                rules.insert(
-                    rep.inner_product(momentum, other),
-                    target.kinematics.scalar_product(&loop_images[i], other)?,
-                );
-            }
-        }
-        for (i, p) in self.external_momenta.iter().enumerate() {
-            for q in &self.external_momenta[i..] {
-                rules.insert(
-                    rep.inner_product(p, q),
-                    target.kinematics.scalar_product(p, q)?,
-                );
-            }
-        }
-        let mut mapping = IntegralMapping {
-            momentum_rules: self
-                .loop_momenta
-                .iter()
-                .cloned()
-                .zip(loop_images.iter().cloned())
-                .collect(),
-            scalar_product_rules: rules,
-            propagators: PropagatorMapping {
-                denominator_map: Vec::new(),
-                target_denominator_count: target.denominators.len(),
-            },
-        };
-        for denominator in &self.denominators {
-            let transformed = mapping.apply(denominator);
-            let Some(index) = target.denominators.iter().enumerate().find_map(|(i, d)| {
-                (!mapping.denominator_map().contains(&i) && (&transformed - d).together().is_zero())
-                    .then_some(i)
-            }) else {
-                return Ok(None);
+            let mut mapping = IntegralMapping {
+                momentum_rules: self
+                    .loop_momenta
+                    .iter()
+                    .cloned()
+                    .zip(loop_images.iter().cloned())
+                    .collect(),
+                scalar_product_rules: rules,
+                propagators: PropagatorMapping {
+                    denominator_map: Vec::new(),
+                    target_denominator_count: target.denominators.len(),
+                },
             };
-            mapping.propagators.denominator_map.push(index);
-        }
-        Ok(Some(mapping))
+            for denominator in &self.denominators {
+                resources::checkpoint()?;
+                let transformed = mapping.apply(denominator);
+                let Some(index) = target.denominators.iter().enumerate().find_map(|(i, d)| {
+                    (!mapping.denominator_map().contains(&i)
+                        && (&transformed - d).together().is_zero())
+                    .then_some(i)
+                }) else {
+                    return Ok(None);
+                };
+                mapping.propagators.denominator_map.push(index);
+            }
+            Ok(Some(mapping))
+        })()?;
+        resources::checkpoint()?;
+        Ok(mapping)
     }
 
     /// Search exact affine loop shifts using independent quadratic propagators.
@@ -251,99 +261,124 @@ impl IntegralFamily {
     /// [`Self::mapping_to`]. Eikonal and auxiliary propagators participate in
     /// verification but cannot supply the quadratic search basis. This is not a
     /// parametric-polynomial equivalence test for identities without a loop shift.
+    /// `max_candidates` is an opt-in diagnostic count bound; `None` is unlimited.
+    /// `resources` shares cooperative process-RSS and elapsed-time checks with
+    /// enclosing operations. Resource or diagnostic exhaustion is an error, not
+    /// evidence that the families are inequivalent.
     pub fn find_mapping(
         &self,
         target: &Self,
-        max_candidates: usize,
+        max_candidates: Option<usize>,
+        resources: ResourceLimits,
     ) -> Result<Option<IntegralMapping>, IntegralFamilyError> {
-        self.compatible_kinematics(target)?;
-        if self.denominators.len() > target.denominators.len() {
-            return Ok(None);
-        }
-        let source_quadratics = self.quadratic_momenta()?;
-        let target_quadratics = target.quadratic_momenta()?;
-        let mut basis = Vec::new();
-        for quadratic in &source_quadratics {
-            basis.push(quadratic);
-            let momenta = basis.iter().map(|q| &q.momentum).collect::<Vec<_>>();
-            let (matrix, _) = Self::affine_system(&momenta, &self.loop_momenta)
+        ResourceBudget::new(resources).run(|| {
+            resources::checkpoint()?;
+            self.compatible_kinematics(target)?;
+            if self.denominators.len() > target.denominators.len() {
+                resources::checkpoint()?;
+                return Ok(None);
+            }
+            let source_quadratics = self.quadratic_momenta()?;
+            let target_quadratics = target.quadratic_momenta()?;
+            let mut basis = Vec::new();
+            for quadratic in &source_quadratics {
+                resources::checkpoint()?;
+                basis.push(quadratic);
+                let momenta = basis.iter().map(|q| &q.momentum).collect::<Vec<_>>();
+                let (matrix, _) = Self::affine_system(&momenta, &self.loop_momenta)
+                    .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
+                if matrix.rank() < basis.len() {
+                    basis.pop();
+                }
+                if basis.len() == self.loop_momenta.len() {
+                    break;
+                }
+            }
+            if basis.len() != self.loop_momenta.len() {
+                return Err(IntegralFamilyError::NoQuadraticBasis);
+            }
+            let source_momenta = basis.iter().map(|q| &q.momentum).collect::<Vec<_>>();
+            let (matrix, rhs) = Self::affine_system(&source_momenta, &self.loop_momenta)
                 .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
-            if matrix.rank() < basis.len() {
-                basis.pop();
-            }
-            if basis.len() == self.loop_momenta.len() {
-                break;
-            }
-        }
-        if basis.len() != self.loop_momenta.len() {
-            return Err(IntegralFamilyError::NoQuadraticBasis);
-        }
-        let source_momenta = basis.iter().map(|q| &q.momentum).collect::<Vec<_>>();
-        let (matrix, rhs) = Self::affine_system(&source_momenta, &self.loop_momenta)
-            .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?;
-        let inverse = matrix
-            .inv()
-            .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?
-            .into_vec()
-            .into_iter()
-            .map(|v| v.to_expression())
-            .collect::<Vec<_>>();
-        let offsets = rhs
-            .into_vec()
-            .into_iter()
-            .map(|v| v.to_expression())
-            .collect::<Vec<_>>();
-        let options = basis
-            .iter()
-            .map(|source| {
-                target_quadratics
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, q)| (&source.remainder - &q.remainder).together().is_zero())
-                    .flat_map(|(i, q)| {
-                        let ratio = (&q.scale / &source.scale).pow(Atom::num(1) / 2);
-                        let image = ratio * &q.momentum;
-                        [(i, image.clone()), (i, -image)]
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect::<Vec<_>>();
-        for (attempt, choice) in options.iter().multi_cartesian_product().enumerate() {
-            if attempt >= max_candidates {
-                return Err(IntegralFamilyError::MappingSearchLimit(max_candidates));
-            }
-            if choice
-                .iter()
-                .map(|(i, _)| *i)
-                .collect::<BTreeSet<_>>()
-                .len()
-                != choice.len()
-            {
-                continue;
-            }
-            let images = (0..basis.len())
-                .map(|i| {
-                    choice
-                        .iter()
-                        .enumerate()
-                        .map(|(j, (_, momentum))| {
-                            &inverse[i * basis.len() + j] * (momentum + &offsets[j])
-                        })
-                        .sum::<Atom>()
-                        .expand()
-                })
+            let inverse = matrix
+                .inv()
+                .map_err(|e| IntegralFamilyError::InvalidMapping(e.to_string()))?
+                .into_vec()
+                .into_iter()
+                .map(|v| v.to_expression())
                 .collect::<Vec<_>>();
-            if let Some(mapping) = self.mapping_to(target, &images)? {
-                return Ok(Some(mapping));
+            let offsets = rhs
+                .into_vec()
+                .into_iter()
+                .map(|v| v.to_expression())
+                .collect::<Vec<_>>();
+            let mut options = Vec::with_capacity(basis.len());
+            for source in &basis {
+                resources::checkpoint()?;
+                let mut candidates = Vec::new();
+                for (index, quadratic) in target_quadratics.iter().enumerate() {
+                    resources::checkpoint()?;
+                    if (&source.remainder - &quadratic.remainder)
+                        .together()
+                        .is_zero()
+                    {
+                        let ratio = (&quadratic.scale / &source.scale).pow(Atom::num(1) / 2);
+                        let image = ratio * &quadratic.momentum;
+                        candidates.push((index, image.clone()));
+                        candidates.push((index, -image));
+                    }
+                }
+                options.push(candidates);
             }
-        }
-        Ok(None)
+            let mut attempted = 0usize;
+            for choice in options.iter().multi_cartesian_product() {
+                resources::checkpoint()?;
+                if let Some(limit) = max_candidates {
+                    if attempted >= limit {
+                        return Err(IntegralFamilyError::MappingSearchLimit(limit));
+                    }
+                    attempted += 1;
+                }
+                if choice
+                    .iter()
+                    .map(|(i, _)| *i)
+                    .collect::<BTreeSet<_>>()
+                    .len()
+                    != choice.len()
+                {
+                    continue;
+                }
+                let images = (0..basis.len())
+                    .map(|i| {
+                        choice
+                            .iter()
+                            .enumerate()
+                            .map(|(j, (_, momentum))| {
+                                &inverse[i * basis.len() + j] * (momentum + &offsets[j])
+                            })
+                            .sum::<Atom>()
+                            .expand()
+                    })
+                    .collect::<Vec<_>>();
+                if let Some(mapping) = self.mapping_to(target, &images)? {
+                    resources::checkpoint()?;
+                    return Ok(Some(mapping));
+                }
+            }
+            resources::checkpoint()?;
+            Ok(None)
+        })
     }
 
     fn quadratic_momenta(&self) -> Result<Vec<QuadraticMomentum>, IntegralFamilyError> {
-        (0..self.denominators.len())
-            .filter_map(|index| self.quadratic_denominator(index).transpose())
-            .collect()
+        let mut momenta = Vec::new();
+        for index in 0..self.denominators.len() {
+            resources::checkpoint()?;
+            if let Some(momentum) = self.quadratic_denominator(index)? {
+                momenta.push(momentum);
+            }
+        }
+        Ok(momenta)
     }
 
     /// Decompose one ordered inverse denominator as a squared momentum plus a remainder.
@@ -397,7 +432,152 @@ impl IntegralFamily {
 mod tests {
     use super::*;
     use feynkit_kinematics::Kinematics;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::time::Duration;
     use symbolica::parse;
+    use symbolica::utils::resources::ResourceLimitError;
+
+    #[test]
+    fn mapping_no_match_checks_resources_after_kinematic_work() {
+        let [k, l, p] = [
+            "mapping_late_none::k",
+            "mapping_late_none::l",
+            "mapping_late_none::p",
+        ]
+        .map(|name| symbolica::symbol!(name).to_atom());
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), l.clone(), p.clone()])
+            .unwrap()
+            .with_mass_squared(&p, parse!("mapping_late_none::s"))
+            .unwrap();
+        let source = IntegralFamily::new(
+            vec![k.clone()],
+            vec![p.clone()],
+            vec![
+                kin.scalar_product(&k, &k).unwrap() - 1,
+                kin.scalar_product(&(&k + &p), &(&k + &p)).unwrap() - 1,
+            ],
+            &kin,
+        )
+        .unwrap();
+        let target = IntegralFamily::new(
+            vec![l.clone()],
+            vec![p],
+            vec![kin.scalar_product(&l, &l).unwrap() - 1],
+            &kin,
+        )
+        .unwrap();
+        let calls = AtomicUsize::new(0);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..ResourceLimits::default()
+            },
+            move || {
+                Ok(if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    0
+                } else {
+                    2
+                })
+            },
+        );
+        assert!(matches!(
+            budget.run(|| source.find_mapping(&target, None, ResourceLimits::default())),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(
+            source
+                .find_mapping(&target, None, ResourceLimits::default())
+                .unwrap()
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn explicit_mapping_checks_all_successful_exits_and_preserves_domain_errors() {
+        let [k, l] = ["mapping_late_result::k", "mapping_late_result::l"]
+            .map(|name| symbolica::symbol!(name).to_atom());
+        let kin = Kinematics::new()
+            .with_momenta([k.clone(), l.clone()])
+            .unwrap();
+        let source = IntegralFamily::new(
+            vec![k.clone()],
+            vec![],
+            vec![kin.scalar_product(&k, &k).unwrap() - 1],
+            &kin,
+        )
+        .unwrap();
+        let target = IntegralFamily::new(
+            vec![l.clone()],
+            vec![],
+            vec![kin.scalar_product(&l, &l).unwrap() - 1],
+            &kin,
+        )
+        .unwrap();
+        let shifted_mass = IntegralFamily::new(
+            vec![l.clone()],
+            vec![],
+            vec![kin.scalar_product(&l, &l).unwrap() - 2],
+            &kin,
+        )
+        .unwrap();
+        // The last monitor call follows respectively linear decomposition,
+        // determinant algebra, a failed denominator comparison, and a match.
+        for (candidate, image, postcheck, matches) in [
+            (&target, parse!("𝑖") * &l, 3, false),
+            (&target, Atom::num(2) * &l, 3, false),
+            (&shifted_mass, l.clone(), 4, false),
+            (&target, l.clone(), 4, true),
+        ] {
+            let calls = AtomicUsize::new(0);
+            let budget = ResourceBudget::with_memory_monitor(
+                ResourceLimits {
+                    max_process_rss_bytes: Some(1),
+                    ..ResourceLimits::default()
+                },
+                move || {
+                    Ok(if calls.fetch_add(1, Ordering::Relaxed) + 1 >= postcheck {
+                        2
+                    } else {
+                        0
+                    })
+                },
+            );
+            assert!(matches!(
+                budget.run(|| source.mapping_to(candidate, std::slice::from_ref(&image))),
+                Err(IntegralFamilyError::Resource(
+                    ResourceLimitError::Memory { .. }
+                ))
+            ));
+            assert_eq!(
+                source.mapping_to(candidate, &[image]).unwrap().is_some(),
+                matches
+            );
+        }
+        let calls = Arc::new(AtomicUsize::new(0));
+        let monitor = Arc::clone(&calls);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..ResourceLimits::default()
+            },
+            move || {
+                Ok(if monitor.fetch_add(1, Ordering::Relaxed) == 0 {
+                    0
+                } else {
+                    2
+                })
+            },
+        );
+        assert!(matches!(
+            budget.run(|| source.mapping_to(&target, &[])),
+            Err(IntegralFamilyError::InvalidMapping(_))
+        ));
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+    }
 
     #[test]
     fn quadratic_denominators_retain_order_shifts_and_normalization() {
@@ -476,7 +656,12 @@ mod tests {
         )
         .unwrap();
         assert!(family.mapping_to(&family, &[k, q]).unwrap().is_some());
-        assert!(family.find_mapping(&family, 100).unwrap().is_some());
+        assert!(
+            family
+                .find_mapping(&family, None, ResourceLimits::default())
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -517,7 +702,10 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        let mapping = source.find_mapping(&target, 100).unwrap().unwrap();
+        let mapping = source
+            .find_mapping(&target, None, ResourceLimits::default())
+            .unwrap()
+            .unwrap();
         for (i, j) in mapping.denominator_map().iter().enumerate() {
             assert!(
                 (mapping.apply(&source.denominators[i]) - &target.denominators[*j])
@@ -575,7 +763,10 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(explicit.denominator_map(), &[0, 5, 4, 7, 6, 2, 1, 3, 8]);
-        let found = source.find_mapping(&target, 10_000).unwrap().unwrap();
+        let found = source
+            .find_mapping(&target, None, ResourceLimits::default())
+            .unwrap()
+            .unwrap();
         for (i, j) in found.denominator_map().iter().enumerate() {
             assert!(
                 (found.apply(&source.denominators[i]) - &target.denominators[*j])
@@ -612,7 +803,10 @@ mod tests {
             &kin,
         )
         .unwrap();
-        let mapping = source.find_mapping(&target, 100).unwrap().unwrap();
+        let mapping = source
+            .find_mapping(&target, None, ResourceLimits::default())
+            .unwrap()
+            .unwrap();
         assert_eq!(mapping.denominator_map(), &[1, 0]);
         assert_eq!(mapping.map_powers(&[2, -1]).unwrap(), vec![-1, 2]);
         assert!(mapping.map_powers(&[1]).is_err());
@@ -635,9 +829,41 @@ mod tests {
                 .is_none()
         );
         assert!(matches!(
-            source.find_mapping(&target, 0),
+            source.find_mapping(&target, Some(0), ResourceLimits::default()),
             Err(IntegralFamilyError::MappingSearchLimit(0))
         ));
+        let memory = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..ResourceLimits::default()
+            },
+            || Ok(2),
+        );
+        assert!(matches!(
+            memory.run(|| source.find_mapping(&target, None, ResourceLimits::default())),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(matches!(
+            source.find_mapping(
+                &target,
+                None,
+                ResourceLimits {
+                    max_elapsed: Some(Duration::ZERO),
+                    ..ResourceLimits::default()
+                },
+            ),
+            Err(IntegralFamilyError::Resource(
+                ResourceLimitError::Elapsed { .. } | ResourceLimitError::MonitorUnavailable { .. }
+            ))
+        ));
+        assert!(
+            source
+                .find_mapping(&target, None, ResourceLimits::default())
+                .unwrap()
+                .is_some()
+        );
     }
 
     #[test]
@@ -673,7 +899,10 @@ mod tests {
             &kin,
         )
         .unwrap();
-        let mapping = source.find_mapping(&target, 1000).unwrap().unwrap();
+        let mapping = source
+            .find_mapping(&target, None, ResourceLimits::default())
+            .unwrap()
+            .unwrap();
         assert_eq!(mapping.denominator_map(), &[1, 2, 0]);
         assert_eq!(mapping.map_powers(&[1, 2, 3]).unwrap(), vec![3, 1, 2, 0]);
         let images = [&l + &r + &p, &r + &p];
@@ -684,7 +913,12 @@ mod tests {
                 .expand()
                 .is_zero()
         );
-        assert!(target.find_mapping(&source, 100).unwrap().is_none());
+        assert!(
+            target
+                .find_mapping(&source, None, ResourceLimits::default())
+                .unwrap()
+                .is_none()
+        );
     }
 
     #[test]
@@ -763,7 +997,10 @@ mod tests {
                 .unwrap()
                 .is_some()
         );
-        let found = source.find_mapping(&target, 100).unwrap().unwrap();
+        let found = source
+            .find_mapping(&target, None, ResourceLimits::default())
+            .unwrap()
+            .unwrap();
         assert!(
             (found.apply(&source.denominators()[0]) - &target.denominators()[0])
                 .together()
@@ -800,7 +1037,7 @@ mod tests {
         .unwrap();
         assert!(source.mapping_to(&target, &[&l + &p]).unwrap().is_some());
         assert!(matches!(
-            source.find_mapping(&target, 100),
+            source.find_mapping(&target, None, ResourceLimits::default()),
             Err(IntegralFamilyError::NoQuadraticBasis)
         ));
         let square = |v: &Atom| kin.scalar_product(v, v).unwrap();

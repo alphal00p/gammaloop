@@ -287,10 +287,10 @@ impl MomentumInput {
             .collect::<Vec<_>>();
         let attempts = 1usize
             .checked_shl(loops.len().try_into().map_err(invalid)?)
-            .filter(|attempts| *attempts <= 1_000_000)
-            .ok_or_else(|| invalid("momentum-map orientation budget exceeded"))?;
+            .ok_or_else(|| invalid("momentum-map orientation count overflow"))?;
         let mut verified = None;
         for signs in 0..attempts {
+            symbolica::utils::resources::checkpoint()?;
             let system = sources
                 .iter()
                 .zip(&images)

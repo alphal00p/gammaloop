@@ -106,7 +106,14 @@ Median seconds over #data.protocol.repetitions fresh processes per backend and c
 #v(0.6em)
 #block(stroke: 0.6pt + luma(200), inset: 10pt, radius: 4pt, width: 100%)[
   #set text(9.5pt)
-  *Method and correctness.* Release build: optimization level 3, fat LTO;
+  *Method and correctness.*
+  #if data.protocol.at("configured_profile", default: none) != none [
+    Release build: optimization level #data.protocol.configured_profile.opt_level,
+    #data.protocol.configured_profile.lto LTO;
+  ] else [
+    Build profile: #data.protocol.build_profile (caller-declared);
+    optimization/LTO settings are not inferred.
+  ]
   #(data.protocol.rustc.split(" (").first() + "; " +
     data.protocol.form_version.split("\n").first().split(" (").first() + ".")
   Both retain masters in FMFT/MATAD normalization, with identical symbolic mass.

@@ -19,7 +19,10 @@ Cache preparation, attachment and snapshots bind to the engine's active program
 snapshot. Replacing external data invalidates incompatible cache sessions.
 Partial reductions never become complete cache records. The finite primer and
 its intermediate-capture limits are independent of IBP certification coverage.
-The timing receipts below document the revisions on which they were measured.
+Count and work ceilings are optional diagnostics, disabled by default. Explicit
+RAM and elapsed-time budgets remain operational constraints, independent of
+mathematical admission and output-file bounds. The timing receipts below document
+the revisions on which they were measured.
 
 == Five-loop saved-application caches
 
@@ -102,6 +105,10 @@ inputs. It rejects overlap with the held-out set and verifies the recorded data
 manifest and source-census file. Tuning and held-out entries include their public
 input expressions, complete lowered-key sets and independently authenticated
 owner-key sets. Training cannot contain any of those protected owner roots.
+Final selection also requires an `owner_proof` reference with the proof file's
+`path` and `sha256`. At least twelve held-out cases must have distinct, nonempty
+actual owner-root sets; graph aliases with identical sets count once. Shared
+roots between different sets are reported as correlations.
 Its supervisor enforces a cumulative wall-clock deadline, including finalization
 and resumed attempts, while native checkpoints preserve completed work.
 Interrupted attempts remain charged, concurrent supervisors are refused, and a
@@ -121,11 +128,36 @@ cargo run --locked --release -p vakint --example build_cache -- \
   --phase final --prepare-seconds 32400 --max-seconds 36000
 ```
 
-Compile the production driver with `VAKINT_CACHE_BUILD_RUSTC`,
-`VAKINT_CACHE_BUILD_PROFILE` and `VAKINT_CACHE_BUILD_GIT_REVISION` set to the
-actual compiler, profile and source identity. These compile-time values accompany
+Compile the preparation, measurement and
+#link("examples/authenticate_owner_roots.rs")[owner-mapping drivers] with
+`VAKINT_CACHE_BUILD_RUSTC`, `VAKINT_CACHE_BUILD_PROFILE`,
+`VAKINT_CACHE_BUILD_GIT_REVISION`, `VAKINT_CACHE_BUILD_RUSTRED_REVISION`,
+`VAKINT_CACHE_BUILD_SYMBOLICA_REVISION`,
+`VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256` and
+`VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256` set to the actual compiler,
+profile, published revisions and frozen source snapshots. These values accompany
 the executable, embedded driver/schema/lockfile hashes and runtime settings;
 resuming with another executable or operational identity is rejected.
+An unstamped build can compile, but cannot map or consume a final owner proof.
+
+After complete successful uncached public evaluations, run
+`authenticate_owner_roots INPUT.json OUTPUT.json` with the mapping index and a
+cohort receipt binding the immutable driver hashes, data, program and source
+identities. The mapper uses native owner transport for every observed key.
+Consumers verify the same compiled cohort and rehash the frozen identities,
+source workloads, measurement receipts, values and guards on resume. Binary
+hashes remain required provenance; archived executables are optional. A successful
+public evaluation with retained formal terminals is not evidence of declared-master
+closure. Cache preparation separately requires strict completion of every selected
+target before its records can be distributed.
+
+`--max-process-rss-mib N` optionally limits the worker's process RSS. One inherited
+resource scope covers loading, preparation and compaction. It uses the remaining
+cumulative hard deadline, or the tighter optional `--max-elapsed-seconds N` budget;
+resumption charges previous attempts and current loading against both.
+`--retained-coefficient-mib N` (also accepted as `--ram-mib N`) separately sets the
+native retained coefficient capacity. Both memory settings default to unbounded.
+The final gzip target does not constrain checkpoint scratch disk usage.
 
 The driver records native progress, strict preparation policy, intermediate
 capture diagnostics, input and output hashes, compressed and decoded identities,
@@ -136,11 +168,25 @@ repeats, requested-root hits and intermediate-only benefits must be reported
 separately in performance comparisons.
 
 The #link("examples/measure_cache.rs")[suite measurement driver] runs each
-case, repetition and cache variant in a fresh process. Matching, tensor work,
-scalar lowering, deferred owner setup, saved-rule application and lower-factor
-work are reported separately. The reported IBP interval excludes deferred owner
-setup; data and cache loading are also separate. Final comparisons use three
-samples, median/range and exact canonical output and guard-set parity:
+case, repetition and cache variant in a fresh process. Both variants load the
+same authenticated local checkout with `load_prepared_caches: false`, so no
+prepared cache is decoded or imported during data loading. The baseline has no
+persistent backing at any loop count; the cached variant explicitly attaches only
+the selected five-loop file. Per-loop attachment checks and the loading report
+record this distinction. Use a frozen data snapshot and the explicit cache-file
+hash for comparisons; automatic attachment from a later release manifest is a
+separate compatibility check.
+
+Matching, tensor work, scalar lowering, saved-rule application and lower-factor
+work are reported separately. Common five-loop metadata and terminal-product
+setup are included in data loading. Owner formulas remain deferred: the cache
+may avoid preparing them. Each variant reports its actual owner-preparation
+delta, saved-rule time including that delta, and raw IBP time excluding it;
+neither variant is described as prewarmed. Gzip cache import is timed separately.
+The end-to-end interval uses the existing supervisor's worker-spawn-through-exit
+wall time, including startup, loading, evaluation and output serialization.
+Final comparisons use three samples, median/range and exact canonical output and
+guard-set parity:
 
 ```sh
 measure_cache --artifacts /path/to/vakint-external-data \
@@ -410,13 +456,14 @@ bindings must match before publication. Transport accepts the native index
 versions understood by the pinned RustRed dependency; it does not change record
 payloads. The named historical archives above contain schema-02 indexes.
 
-The Rust methods take `RustRedCacheTransferOptions::new([u8; 32])`. Defaults allow
-16 billion archive bytes, 16 billion extracted file bytes, 100,000 entries and
-48 billion concurrent temporary bytes. Python exposes `max_archive_bytes`,
-`max_extracted_bytes`, `max_entries`, `max_temporary_bytes` and `disk_bytes`
-overrides. Bounds count logical bytes, not filesystem allocated blocks or
-metadata, process RSS or reduction RAM. Tar headers and padding have a separate
-derived decompression cap. HTTP requests ask for identity encoding; the archive
+The Rust methods take `RustRedCacheTransferOptions::new([u8; 32])`. Transport and
+scratch byte allowances default to unbounded. The 100,000-entry template applies
+only with explicit `with_diagnostics()`; Python enables it when `max_entries` is
+supplied. Python also exposes `max_archive_bytes`, `max_extracted_bytes`,
+`max_temporary_bytes` and `disk_bytes` overrides. Those bounds count logical bytes,
+not filesystem allocated blocks or metadata, process RSS or reduction RAM.
+The count-derived tar envelope is likewise diagnostic only; path, framing,
+checksum and native binding checks always apply. HTTP requests ask for identity encoding; the archive
 checksum and byte count apply after any HTTP content decoding by the transport.
 
 The implementation streams checksum verification before extraction. RustRed then
@@ -598,19 +645,19 @@ distinct. A partial report does not certify a completed workload.
 `options.storage.batch_records` is a preparation layout target, defaulting to
 64 staged completed records across namespaces, including captured intermediates.
 Python exposes the same optional
-`batch_records` keyword. Positive values no larger than the independent native
-chunk record limit are accepted; zero or an oversized target is rejected before
-filesystem creation. Earlier byte/term or checkpoint limits may still flush a
-smaller batch. This target changes neither the selected roots nor their native
+`batch_records` keyword. Any positive target is accepted; an explicitly enabled
+chunk-count diagnostic can impose a smaller limit. Byte or checkpoint constraints
+may still flush a smaller batch. This target changes neither the selected roots nor their native
 admission, exact reduction, guards, or RAM/work allowances.
 
-The reader's default hard limit remains 4096 records per chunk. Existing larger
-chunks are therefore still loadable when the preparation target is reduced to 64.
+The reader's 4096-record template is inactive during ordinary decoding; an
+explicit diagnostic policy enables it. Changing the preparation target to 64
+therefore does not reject existing larger chunks.
 Preparation resume additionally requires the current intermediate-capture profile.
 Changing that target does not change a workload's identity,
 rewrite completed chunks, or imply that an already loaded pack is repartitioned.
 The batch-size choice does not change the on-disk schema. This separates a read-through cost choice from
-the decoder's safety ceiling; it is not a new cache algorithm. The layout
+the decoder's optional count diagnostic; it is not a new cache algorithm. The layout
 implementation was tested at RustRed `d44e3beea9de1370a9cdd6fff08cbfbb486c1c4e`.
 Its 53 native application tests passed, including exact record/ordered-guard/work
 parity across batch sizes and reuse of a larger existing chunk.
@@ -815,18 +862,18 @@ mathematical identities: native generated-cache provenance remains required.
 == Operational allowances
 
 LRU is the default; aged LFU and fail-on-limit are explicit alternatives. The
-ordinary evaluation defaults are unchanged. Preparation's decimal disk targets
-are one billion bytes separately for one, two and three loops, and sixteen
-billion bytes for the aggregate four-family bundle. These are maxima,
-not minimum data quantities to manufacture. Its default RAM allowance is the
-lesser of the disk target and thirty-two billion bytes. Byte counts use checked
-portable integer conversions. An existing attachment keeps its active native
-RAM limit unless load options explicitly override it.
+ordinary evaluation has no implicit work-count ceilings. Preparation's retained
+coefficient and scratch disk allowances default to unbounded; callers can set
+explicit byte capacities. Byte counts use checked portable integer conversions.
+An existing attachment keeps its active native cache capacity unless load options
+explicitly override it.
 
-RAM coefficient payload, bounded index/chunk/decode buffers and process RSS are
-different quantities. Reports include the selected storage and native work
-policies; increasing storage does not silently raise unrelated polynomial,
-coalescing or rule-application limits. A genuine active-working-set refusal is
+Retained coefficient payload, index/chunk/decode buffers and process RSS are
+different quantities. Shared `ResourceBudget::run` scopes impose optional process
+RSS and elapsed limits throughout native calls and dispatched workers, using one
+inherited clock. Optional count diagnostics require `diagnostics_enabled` or
+`with_diagnostics()` on their owning policy; increasing storage does not change
+those policies. A genuine active-working-set refusal is
 not converted into a cache miss or an out-of-scope result.
 
 The default preparation time allowance is 36,000 seconds and is cooperative:

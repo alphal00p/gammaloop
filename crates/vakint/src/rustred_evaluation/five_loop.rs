@@ -18,8 +18,9 @@ use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
 use rustred::reduction::terminal_normalization::{
-    VacuumFactor, VacuumProductCacheStatistics, VacuumProductChartLimits, VacuumProductReducer,
-    VacuumProductReductionLimits,
+    VacuumFactor, VacuumProductCacheStatistics, VacuumProductChartLimits, VacuumProductProjection,
+    VacuumProductReducer, VacuumProductReductionLimits, VacuumTensorProjection,
+    VacuumTensorProjectionInput, VerifiedVacuumProductChart,
 };
 use rustred::scalar_numerator::{FamilyScalarNumeratorService, ScalarNumeratorLimits};
 use rustred_app::{
@@ -127,6 +128,37 @@ fn failure(error: impl fmt::Display) -> RustRedEvaluationError {
     RustRedEvaluationError::Reduction {
         detail: error.to_string(),
     }
+}
+
+fn native_failure(error: impl std::error::Error + 'static) -> RustRedEvaluationError {
+    if let Some(resource) = RustRedEvaluationError::resource_cause(&error) {
+        RustRedEvaluationError::ResourceLimit(resource.clone())
+    } else {
+        failure(error)
+    }
+}
+
+fn project_chart(
+    chart: &VerifiedVacuumProductChart,
+    dot_head: Symbol,
+    loop_momenta: Vec<Atom>,
+    limits: ScalarNumeratorLimits,
+    mut projector: impl FnMut(
+        &VacuumTensorProjectionInput,
+    ) -> Result<VacuumTensorProjection, RustRedEvaluationError>,
+) -> Result<VacuumProductProjection, RustRedEvaluationError> {
+    let mut callback_resource = None;
+    let projected = chart.project(dot_head, loop_momenta, limits, |input| {
+        let result = projector(input);
+        if let Err(error) = &result {
+            callback_resource = RustRedEvaluationError::resource_cause(error).cloned();
+        }
+        result
+    });
+    if let Some(resource) = callback_resource {
+        return Err(RustRedEvaluationError::ResourceLimit(resource));
+    }
+    projected.map_err(native_failure)
 }
 
 fn select(topology: &Topology) -> Result<&'static ParentDescriptor, RustRedEvaluationError> {
@@ -283,7 +315,7 @@ impl Vakint {
             (1..=5).map(|axis| S.k.call(axis)).collect(),
             settings.rustred_scalar_numerator_limits,
         )
-        .map_err(failure)?;
+        .map_err(native_failure)?;
         #[cfg(all(
             test,
             feature = "weighted-lowering-diagnostics",
@@ -292,12 +324,12 @@ impl Vakint {
         let diagnostic_before = weighted_diagnostic::before_lowering()?;
         let lowered = scalar
             .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
-            .map_err(failure)?;
+            .map_err(native_failure)?;
         let mut key = Vec::with_capacity(lowered.terms().len());
         for term in lowered.terms() {
             if !prepared
                 .routed_entry_is_admitted(term.integral())
-                .map_err(failure)?
+                .map_err(native_failure)?
             {
                 log::debug!(target: "vakint::five_loop_match", "phase=candidate_rejected lowered_count={} rejected_key={:?} lowered_keys_prefix={:?}", lowered.terms().len(), term.integral().powers(), lowered.terms().iter().take(4).map(|term| term.integral().powers()).collect::<Vec<_>>());
                 #[cfg(all(
@@ -388,7 +420,7 @@ impl Vakint {
             let started = std::time::Instant::now();
             let cache_digest = super::cache::saved_application_digest(&data, &path)?;
             log::debug!(target: "vakint::saved_application", "phase=native_load_begin");
-            let prepared = load_saved_application::<15>(&path, options).map_err(failure)?;
+            let prepared = load_saved_application::<15>(&path, options).map_err(native_failure)?;
             if super::cache::saved_application_digest(&data, &path)? != cache_digest {
                 return Err(failure(
                     "saved application changed while its native payload was loading",
@@ -491,7 +523,7 @@ impl Vakint {
 
     /// Clear the explicitly loaded package's cache without changing its entry scope.
     pub fn clear_rustred_application_cache(&self) -> Result<(), VakintError> {
-        self.loaded_application()?.clear_resident_cache()
+        self.loaded_application()?.clear_cache_state(false)
     }
 
     /// Observe the optional frontend witness memo, not the IBP coefficient cache.
@@ -576,69 +608,78 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
-        self.validate_settings(settings)?;
-        let application = self.saved_application(settings)?;
-        let mut expression = VakintExpression::try_from(input)?;
-        log::debug!(target: "vakint::five_loop_match", "phase=symbolic_input input={input}");
-        let canonical_started = std::time::Instant::now();
-        expression.canonicalize(settings, &self.topologies, false)?;
-        log::debug!(target: "vakint::saved_application", "phase=frontend_canonicalization elapsed_seconds={:.6}", canonical_started.elapsed().as_secs_f64());
-        log::debug!(target: "vakint::five_loop_match", "phase=symbolic_canonical input={expression}");
-        // This is an internal scalar handoff, not the public tensor-output
-        // presentation boundary. Reopening scalar powers here can manufacture
-        // a rank22 indexed expression before a rank0 scalar application.
-        let mut tensor_settings = settings.clone();
-        tensor_settings.use_dot_product_notation = true;
-        let tensor_started = std::time::Instant::now();
-        expression.tensor_reduce(self, &tensor_settings)?;
-        log::debug!(target: "vakint::saved_application", "phase=frontend_tensor_prepass elapsed_seconds={:.6}", tensor_started.elapsed().as_secs_f64());
-        log::debug!(target: "vakint::five_loop_match", "phase=symbolic_tensor_reduced input={expression}");
-        let mut value = Atom::Zero;
-        let mut conditions = BTreeSet::new();
-        let mut families = BTreeMap::new();
-        for mut term in VakintExpression::split_integrals(Atom::from(expression).as_view())? {
-            let matching_started = std::time::Instant::now();
-            let mut matched = self
-                .match_rustred_input(settings, term.integral.as_view(), term.numerator.as_view())?
-                .ok_or_else(|| failure("input has no registered topology match"))?;
-            log::debug!(target: "vakint::saved_application", "phase=frontend_admitted_witness_search elapsed_seconds={:.6}", matching_started.elapsed().as_secs_f64());
-            matched.apply_replacement_rules()?;
-            term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
-            log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
-            let result =
-                application.evaluate_detailed(settings, term.numerator.as_view(), &matched)?;
-            value += result.value;
-            conditions.extend(result.nonzero_conditions);
-            families.extend(result.families);
-        }
-        let value = self.finalize_rustred(
-            super::combine_exact(value),
-            settings,
-            5,
-            super::RustRedMasterMode::Retain,
-        )?;
-        Ok(RustRedSymbolicEvaluation {
-            value,
-            nonzero_conditions: conditions.into_iter().collect(),
-            families,
+        settings.with_resource_budget(|| {
+            self.validate_settings(settings)?;
+            let application = self.saved_application(settings)?;
+            let mut expression = VakintExpression::try_from(input)?;
+            log::debug!(target: "vakint::five_loop_match", "phase=symbolic_input input={input}");
+            let canonical_started = std::time::Instant::now();
+            expression.canonicalize(settings, &self.topologies, false)?;
+            log::debug!(target: "vakint::saved_application", "phase=frontend_canonicalization elapsed_seconds={:.6}", canonical_started.elapsed().as_secs_f64());
+            log::debug!(target: "vakint::five_loop_match", "phase=symbolic_canonical input={expression}");
+            // This is an internal scalar handoff, not the public tensor-output
+            // presentation boundary. Reopening scalar powers here can manufacture
+            // a rank22 indexed expression before a rank0 scalar application.
+            let mut tensor_settings = settings.clone();
+            tensor_settings.use_dot_product_notation = true;
+            let tensor_started = std::time::Instant::now();
+            expression.tensor_reduce(self, &tensor_settings)?;
+            log::debug!(target: "vakint::saved_application", "phase=frontend_tensor_prepass elapsed_seconds={:.6}", tensor_started.elapsed().as_secs_f64());
+            log::debug!(target: "vakint::five_loop_match", "phase=symbolic_tensor_reduced input={expression}");
+            let mut value = Atom::Zero;
+            let mut conditions = BTreeSet::new();
+            let mut families = BTreeMap::new();
+            for mut term in VakintExpression::split_integrals(Atom::from(expression).as_view())? {
+                symbolica::utils::resources::checkpoint()?;
+                let matching_started = std::time::Instant::now();
+                let mut matched = self
+                    .match_rustred_input(settings, term.integral.as_view(), term.numerator.as_view())?
+                    .ok_or_else(|| failure("input has no registered topology match"))?;
+                log::debug!(target: "vakint::saved_application", "phase=frontend_admitted_witness_search elapsed_seconds={:.6}", matching_started.elapsed().as_secs_f64());
+                matched.apply_replacement_rules()?;
+                term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
+                log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
+                let result =
+                    application.evaluate_detailed(settings, term.numerator.as_view(), &matched)?;
+                value += result.value;
+                conditions.extend(result.nonzero_conditions);
+                families.extend(result.families);
+            }
+            let value = self.finalize_rustred(
+                super::combine_exact(value),
+                settings,
+                5,
+                super::RustRedMasterMode::Retain,
+            )?;
+            Ok(RustRedSymbolicEvaluation {
+                value,
+                nonzero_conditions: conditions.into_iter().collect(),
+                families,
+            })
         })
     }
 }
 
 impl SavedApplication {
-    pub(in crate::rustred_evaluation) fn clear_resident_cache(&self) -> Result<(), VakintError> {
-        self.prepared
-            .lock()
-            .map_err(failure)?
-            .clear_cache()
-            .map_err(failure)?;
-        self.product_reducer
-            .lock()
-            .map_err(failure)?
-            .clear_cache()
-            .map_err(failure)?;
-        if let Ok(mut cache) = self.witnesses.lock() {
-            cache.clear();
+    pub(in crate::rustred_evaluation) fn clear_cache_state(
+        &self,
+        detach_backing: bool,
+    ) -> Result<(), VakintError> {
+        // Evaluation, attachment and statistics all acquire Prepared before Cache.
+        // Wait for every owner before checking the resource budget, so a refusal
+        // cannot leave only some resident caches cleared or the backing detached.
+        let mut prepared = self.prepared.lock().map_err(failure)?;
+        let mut attached = self.cache.lock().map_err(failure)?;
+        let mut products = self.product_reducer.lock().map_err(failure)?;
+        let mut witnesses = self.witnesses.lock().map_err(failure)?;
+        super::cache::resource_checkpoint()?;
+        // These native clears release retained entries without allocation or
+        // resource polls. The commit therefore cannot introduce a ResourceError.
+        prepared.clear_cache().map_err(super::cache::operation)?;
+        products.clear_cache().map_err(native_failure)?;
+        witnesses.clear();
+        if detach_backing {
+            *attached = None;
         }
         Ok(())
     }
@@ -653,7 +694,7 @@ impl SavedApplication {
         // Compile the same complete common basis through RustRed's existing
         // input boundary. No denominator inversion is implemented in Vakint.
         let expected = Compiler::new(Limits::default())
-            .map_err(failure)?
+            .map_err(native_failure)?
             .compile_text(TextProject {
                 name: Some(prepared.family().name().to_owned()),
                 parameters: None,
@@ -682,9 +723,9 @@ impl SavedApplication {
                 external_gram: Vec::new(),
                 numerator: None,
             })
-            .map_err(failure)?
+            .map_err(native_failure)?
             .into_lowered(LoweringLimits::default())
-            .map_err(failure)?
+            .map_err(native_failure)?
             .into_family();
         if prepared.family().fingerprint() != expected.fingerprint() {
             return Err(failure(
@@ -694,13 +735,13 @@ impl SavedApplication {
         log::debug!(target: "vakint::saved_application", "phase=family_verified elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
         let products = prepared
             .prepare_terminal_products(product_limits.products)
-            .map_err(failure)?;
+            .map_err(native_failure)?;
         let product_charts = prepared
             .prepare_terminal_product_charts(VacuumProductChartLimits {
                 products: product_limits.products,
                 ..Default::default()
             })
-            .map_err(failure)?;
+            .map_err(native_failure)?;
         log::debug!(target: "vakint::saved_application", "phase=products_prepared elapsed_seconds={:.6}", started.elapsed().as_secs_f64());
         let anchor = prepared
             .output_family_shared(prepared.family().fingerprint())
@@ -711,7 +752,7 @@ impl SavedApplication {
             anchor,
             product_limits,
         )
-        .map_err(failure)?;
+        .map_err(native_failure)?;
         Ok(Self {
             fingerprint: prepared.family().fingerprint().to_owned(),
             data_version,
@@ -802,10 +843,10 @@ impl SavedApplication {
             (1..=loop_count).map(|axis| S.k.call(axis)).collect(),
             settings.rustred_scalar_numerator_limits,
         )
-        .map_err(failure)?;
+        .map_err(native_failure)?;
         let lowering = scalar
             .lower_weighted(&input.numerator, &input.target, &input.mass_squared)
-            .map_err(failure)?;
+            .map_err(native_failure)?;
         log::debug!(target: "vakint::saved_application", "phase=parent_transport_and_scalar_lowering elapsed_seconds={:.6}", lowering_started.elapsed().as_secs_f64());
         log::debug!(target: "vakint::saved_application",
             "phase=scalar_lowered target={:?} lowered_count={} lowered_keys_prefix={:?}",
@@ -817,7 +858,7 @@ impl SavedApplication {
         for term in lowering.terms() {
             if !application
                 .routed_entry_is_admitted(term.integral())
-                .map_err(failure)?
+                .map_err(native_failure)?
             {
                 uncovered.insert(term.integral().clone());
             }
@@ -841,7 +882,12 @@ impl SavedApplication {
                 anchor,
                 settings
                     .rustred_scalar_numerator_limits
-                    .max_scalar_product_degree,
+                    .diagnostics_enabled
+                    .then_some(
+                        settings
+                            .rustred_scalar_numerator_limits
+                            .max_scalar_product_degree,
+                    ),
             );
             batches
                 .entry(channel)
@@ -909,27 +955,26 @@ impl SavedApplication {
                                     .reduction_limits
                                     .exact_algebra,
                             )
-                            .map_err(failure)?;
+                            .map_err(native_failure)?;
                         products.push((factors, coefficient));
                     }
                     None => {
                         if let Some(chart) = application.terminal_product_chart(terminal) {
-                            let projection = chart
-                                .project(
-                                    S.dot,
-                                    (1..=chart.combined_family().loop_count())
-                                        .map(|axis| S.k.call(axis))
-                                        .collect(),
-                                    ScalarNumeratorLimits {
-                                        exact_algebra: settings
-                                            .rustred_product_limits
-                                            .reduction
-                                            .exact_algebra,
-                                        ..Default::default()
-                                    },
-                                    factor_projection::project,
-                                )
-                                .map_err(failure)?;
+                            let projection = project_chart(
+                                chart,
+                                S.dot,
+                                (1..=chart.combined_family().loop_count())
+                                    .map(|axis| S.k.call(axis))
+                                    .collect(),
+                                ScalarNumeratorLimits {
+                                    exact_algebra: settings
+                                        .rustred_product_limits
+                                        .reduction
+                                        .exact_algebra,
+                                    ..Default::default()
+                                },
+                                factor_projection::project,
+                            )?;
                             product_conditions.extend(projection.nonzero_conditions);
                             for (factors, projected_coefficient) in projection.terms {
                                 let coefficient = application
@@ -940,7 +985,7 @@ impl SavedApplication {
                                         &projected_coefficient,
                                         settings.rustred_product_limits.reduction.exact_algebra,
                                     )
-                                    .map_err(failure)?;
+                                    .map_err(native_failure)?;
                                 products.push((factors, coefficient));
                             }
                             continue;
@@ -984,7 +1029,7 @@ impl SavedApplication {
                     value += original * spectator * input.mass_squared.clone().pow(mass_power);
                     continue;
                 }
-                Err(error) => return Err(failure(error).into()),
+                Err(error) => return Err(native_failure(error).into()),
             };
             log::debug!(target: "vakint::saved_application", "phase=terminal_geometry_and_lower_factors elapsed_seconds={:.6}", products_started.elapsed().as_secs_f64());
             for condition in normalized.nonzero_conditions() {
@@ -1067,6 +1112,74 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn chart_projector_resource_refusal_preserves_the_original_cause() {
+        use rustred::algebra::CoefficientContext;
+        use rustred::family::{AffineDenominator, IntegralFamily};
+        use rustred::reduction::terminal_normalization::VacuumProductChartPlan;
+        use symbolica::utils::resources::ResourceLimitError;
+
+        let context = CoefficientContext::try_new(["d"]).unwrap();
+        let family = IntegralFamily::new(
+            "projector-resource-test",
+            vec!["k1".into(), "k2".into()],
+            vec![],
+            context.clone(),
+            context.parameter("d").unwrap(),
+            [(-1, [1, 0, 0]), (-1, [0, 0, 1]), (0, [0, 1, 0])]
+                .into_iter()
+                .map(|(constant, row)| {
+                    AffineDenominator::new(
+                        context.integer(constant),
+                        row.into_iter().map(|n| context.integer(n)).collect(),
+                    )
+                })
+                .collect(),
+            vec![],
+            vec![context.zero(); 3],
+        )
+        .unwrap();
+        let target = IntegralKey::try_new([1, 1, -1]).unwrap();
+        let plan = VacuumProductChartPlan::prepare(
+            &family,
+            &BTreeSet::from([target.clone()]),
+            Default::default(),
+        )
+        .unwrap();
+        let chart = &plan.charts()[&target];
+        let cause = ResourceLimitError::Memory {
+            rss_bytes: 0,
+            additional_bytes: 2,
+            limit_bytes: 1,
+        };
+        let result = project_chart(
+            chart,
+            S.dot,
+            vec![S.k.call(1), S.k.call(2)],
+            Default::default(),
+            |_| Err(RustRedEvaluationError::ResourceLimit(cause.clone())),
+        );
+        assert!(
+            matches!(result, Err(RustRedEvaluationError::ResourceLimit(error)) if error == cause)
+        );
+
+        let healthy = project_chart(
+            chart,
+            S.dot,
+            vec![S.k.call(1), S.k.call(2)],
+            Default::default(),
+            |_| {
+                Ok(VacuumTensorProjection {
+                    numerator: Atom::Zero,
+                    nonzero_conditions: vec![context.parameter("d").unwrap().to_expression()],
+                })
+            },
+        )
+        .unwrap();
+        assert!(healthy.terms.is_empty());
+        assert!(healthy.nonzero_conditions.contains(family.dimension()));
     }
 
     #[test]
@@ -1246,6 +1359,8 @@ mod tests {
         // policy, in either witness selection or the final weighted handoff.
         let mut strict = settings.clone();
         strict.rustred_scalar_numerator_limits.max_input_nodes = 0;
+        strict.rustred_scalar_numerator_limits =
+            strict.rustred_scalar_numerator_limits.with_diagnostics();
         assert!(Arc::ptr_eq(
             &application,
             &vakint.saved_application(&strict).unwrap()
@@ -1376,19 +1491,19 @@ mod tests {
             let mut crosses = false;
             let projection = if let Some(chart) = prepared.terminal_product_chart(terminal) {
                 projected_count += 1;
-                chart
-                    .project(
-                        S.dot,
-                        (1..=chart.combined_family().loop_count())
-                            .map(|axis| S.k.call(axis))
-                            .collect(),
-                        Default::default(),
-                        |input| {
-                            crosses = true;
-                            factor_projection::project(input)
-                        },
-                    )
-                    .unwrap()
+                project_chart(
+                    chart,
+                    S.dot,
+                    (1..=chart.combined_family().loop_count())
+                        .map(|axis| S.k.call(axis))
+                        .collect(),
+                    Default::default(),
+                    |input| {
+                        crosses = true;
+                        factor_projection::project(input)
+                    },
+                )
+                .unwrap()
             } else if let Some(product) = prepared.terminal_product(terminal) {
                 positive_count += 1;
                 positive_supports.insert(

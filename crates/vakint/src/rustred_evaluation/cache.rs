@@ -119,8 +119,14 @@ pub(crate) struct LoadedLowerCaches {
     candidate: Option<CandidateCachePreparationBackend<10>>,
 }
 
-fn operation(error: rustred_app::AppError) -> RustRedEvaluationError {
+pub(super) fn operation(error: rustred_app::AppError) -> RustRedEvaluationError {
     RustRedEvaluationError::CacheOperation { source: error }
+}
+
+pub(super) fn resource_checkpoint() -> Result<(), RustRedEvaluationError> {
+    symbolica::utils::resources::checkpoint()
+        .map_err(rustred_app::AppError::resource)
+        .map_err(operation)
 }
 fn program(
     engine: &Vakint,
@@ -137,11 +143,11 @@ impl RustRedCacheWorkload {
         &self,
         backend: &impl CachePreparationBackend,
         parents: &[(usize, Vec<bool>)],
-        max_roots: usize,
+        max_roots: Option<usize>,
     ) -> Result<CachePreparationWorkload, RustRedEvaluationError> {
         let bindings = backend.bindings().to_vec();
         if let Self::Explicit(roots) = self {
-            return CachePreparationWorkload::explicit(
+            return CachePreparationWorkload::explicit_with_diagnostic_limit(
                 bindings,
                 roots
                     .iter()
@@ -162,8 +168,10 @@ impl RustRedCacheWorkload {
             Self::Finite(budget) => CachePreparationPrimerBudget::Absolute(*budget),
             Self::Explicit(_) => unreachable!(),
         };
-        CachePreparationWorkload::parent_pinches(bindings, parents, budget, max_roots)
-            .map_err(operation)
+        CachePreparationWorkload::parent_pinches_with_diagnostic_limit(
+            bindings, parents, budget, max_roots,
+        )
+        .map_err(operation)
     }
 }
 
@@ -210,6 +218,7 @@ impl Vakint {
         cancellation: &AtomicBool,
         observer: impl FnMut(&CachePreparationReport) -> Result<(), rustred_app::AppError>,
     ) -> Result<CachePreparationReport, VakintError> {
+        resource_checkpoint()?;
         if loop_count == 5 {
             return self.prepare_five_loop_cache(output.as_ref(), options, cancellation, observer);
         }
@@ -233,7 +242,7 @@ impl Vakint {
             let workload = options.workload.plan(
                 &backend,
                 &super::four_loop::cache::parent_masks(self)?,
-                resolved.max_roots,
+                resolved.diagnostics_enabled.then_some(resolved.max_roots),
             )?;
             return prepare_application_cache(
                 &workload,
@@ -257,9 +266,11 @@ impl Vakint {
             .enumerate()
             .map(|(n, b)| (n, vec![true; b.physical_arity]))
             .collect::<Vec<_>>();
-        let workload = options
-            .workload
-            .plan(&backend, &parents, resolved.max_roots)?;
+        let workload = options.workload.plan(
+            &backend,
+            &parents,
+            resolved.diagnostics_enabled.then_some(resolved.max_roots),
+        )?;
         prepare_application_cache(
             &workload,
             &resolved,
@@ -281,6 +292,7 @@ impl Vakint {
         path: impl AsRef<Path>,
         options: &RustRedCacheLoadOptions,
     ) -> Result<(), VakintError> {
+        resource_checkpoint()?;
         if loop_count == 5 {
             return self.load_five_loop_cache(path.as_ref(), options);
         }
@@ -318,6 +330,7 @@ impl Vakint {
             loaded
                 .attach_bundle(path.as_ref(), options.storage)
                 .map_err(operation)?;
+            resource_checkpoint()?;
             caches.candidate = Some(loaded);
             return Ok(());
         }
@@ -350,6 +363,7 @@ impl Vakint {
         loaded
             .attach_bundle(path.as_ref(), options.storage)
             .map_err(operation)?;
+        resource_checkpoint()?;
         if let Some(index) = existing {
             caches.closed[index].1 = loaded;
         } else {
@@ -425,6 +439,7 @@ impl Vakint {
     /// Clear only attached RAM payloads; preserve the read-only backing and
     /// cumulative work counters. No files are removed.
     pub fn clear_cache(&self, loop_count: usize) -> Result<(), VakintError> {
+        resource_checkpoint()?;
         if loop_count == 5 {
             return self.clear_rustred_application_cache();
         }
@@ -434,6 +449,7 @@ impl Vakint {
                 .lock()
                 .map_err(|_| RustRedEvaluationError::CacheLockPoisoned)?;
             if let Some(backend) = caches.candidate.as_mut() {
+                resource_checkpoint()?;
                 backend.clear_ram().map_err(operation)?;
             }
             return Ok(());
@@ -449,6 +465,7 @@ impl Vakint {
             .iter_mut()
             .find(|(candidate, _)| *candidate == family)
         {
+            resource_checkpoint()?;
             cache.clear_ram().map_err(operation)?;
         }
         Ok(())
@@ -457,20 +474,15 @@ impl Vakint {
     /// Remove an attached backing and its resident reduction cache. Immutable
     /// application data remain loaded; no files are modified or removed.
     pub fn detach_cache(&self, loop_count: usize) -> Result<(), VakintError> {
+        resource_checkpoint()?;
         if loop_count == 5 {
-            let application = self.loaded_application()?;
-            application.clear_resident_cache()?;
-            let mut attached = application
-                .cache
-                .lock()
-                .map_err(|_| RustRedEvaluationError::CacheLockPoisoned)?;
-            *attached = None;
-            return Ok(());
+            return self.loaded_application()?.clear_cache_state(true);
         }
         let mut caches = self
             .rustred_lower_caches
             .lock()
             .map_err(|_| RustRedEvaluationError::CacheLockPoisoned)?;
+        resource_checkpoint()?;
         if loop_count == 4 {
             caches.candidate = None;
         } else {

@@ -415,7 +415,7 @@ pub fn fixtures(_initialized_vakint: &Vakint) -> Result<Vec<CancellationFixture>
         )?;
         let pinched_family = substitute_mass(&pinched_physical, &mass, mass_value)?;
         let pinched_map = base_family
-            .find_mapping(&pinched_family, 1_000_000)?
+            .find_mapping(&pinched_family, None, Default::default())?
             .ok_or("separately pinched DOT lacks an exact unit-measure base map")?;
         let mut pinched_powers = vec![Integer::from(0); 5];
         for (source, &target) in pinched_map.denominator_map().iter().enumerate() {

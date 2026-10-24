@@ -27,6 +27,9 @@ pub struct OfficialExternalDataOptions {
     /// None resolves the current working directory when the loader is called.
     pub local_artifacts_path: Option<PathBuf>,
     pub refresh: bool,
+    /// Attach advertised native prepared caches. Disabling this still validates
+    /// every package checksum, but never decodes or imports its cache backing.
+    pub load_prepared_caches: bool,
     pub timeout: Duration,
     pub max_archive_bytes: u64,
     pub max_extracted_bytes: u64,
@@ -39,6 +42,7 @@ impl Default for OfficialExternalDataOptions {
             version: "latest".into(),
             local_artifacts_path: None,
             refresh: false,
+            load_prepared_caches: true,
             timeout: Duration::from_secs(3600),
             max_archive_bytes: 2 * 1024 * 1024 * 1024,
             max_extracted_bytes: 8 * 1024 * 1024 * 1024,
@@ -52,6 +56,8 @@ pub struct ExternalDataLoopReport {
     pub loop_count: usize,
     pub path: PathBuf,
     pub cache_available: bool,
+    /// Whether this activation imported the available prepared cache.
+    pub cache_loaded: bool,
     /// "local", "reused", or "downloaded".
     pub source: String,
 }
@@ -61,6 +67,7 @@ pub struct ExternalDataLoadReport {
     pub version: String,
     pub path: PathBuf,
     pub loops: Vec<ExternalDataLoopReport>,
+    pub load_prepared_caches: bool,
 }
 
 fn version_component(version: &str) -> Result<(), RustRedEvaluationError> {
@@ -157,8 +164,15 @@ impl Vakint {
             .map_err(data::failure)?;
         if local_dataset(&base)? {
             let loaded = RustRedData::from_directory(&base, &options.version, max_loop_count)?;
-            let report = report(&loaded, base, max_loop_count, &BTreeSet::new(), true);
-            self.activate_external_data(loaded)?;
+            let report = report(
+                &loaded,
+                base,
+                max_loop_count,
+                &BTreeSet::new(),
+                true,
+                options.load_prepared_caches,
+            );
+            self.activate_external_data(loaded, options.load_prepared_caches)?;
             return Ok(report);
         }
         let cache = base.join(".vakint-external-data");
@@ -262,9 +276,16 @@ impl Vakint {
             downloaded.insert(count);
         }
         let loaded = RustRedData::from_directory(&destination, &manifest.version, max_loop_count)?;
-        let report = report(&loaded, destination, max_loop_count, &downloaded, false);
+        let report = report(
+            &loaded,
+            destination,
+            max_loop_count,
+            &downloaded,
+            false,
+            options.load_prepared_caches,
+        );
         let mut staged = self.clone();
-        staged.activate_external_data(loaded)?;
+        staged.activate_external_data(loaded, options.load_prepared_caches)?;
         if options.version == "latest" {
             atomic_write(&latest, manifest.version.as_bytes())?;
         }
@@ -279,14 +300,17 @@ fn report(
     maximum: usize,
     downloaded: &BTreeSet<usize>,
     local: bool,
+    load_prepared_caches: bool,
 ) -> ExternalDataLoadReport {
     ExternalDataLoadReport {
         version: data.version.clone(),
+        load_prepared_caches,
         loops: (1..=maximum)
             .map(|n| ExternalDataLoopReport {
                 loop_count: n,
                 path: path.join(format!("{n}L")),
                 cache_available: data.loops[&n].manifest.cache.available,
+                cache_loaded: load_prepared_caches && data.loops[&n].manifest.cache.available,
                 source: if local {
                     "local"
                 } else if downloaded.contains(&n) {

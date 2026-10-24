@@ -33,7 +33,18 @@ The loop argument is always a maximum: four loads 1L, 2L, 3L and 4L. All packs
 come from one immutable release. The default path is the current working
 directory, with managed installations below `.vakint-external-data/<version>`.
 The report identifies the version, per-loop paths, available caches, and whether
-each pack was local, reused, or downloaded.
+each pack was local, reused, or downloaded. Prepared caches are loaded by default:
+`OfficialExternalDataOptions.load_prepared_caches` is `true`, and the Python
+keyword `load_prepared_caches` defaults to `True`. Set the Rust option to `false`
+or pass `load_prepared_caches=False` in Python to load the same authenticated data
+without native cache decoding or import. Checksums still cover every listed
+file, including optional cache bytes; this is an activation policy, not a change
+to the dataset. Use this option with `local_artifacts_path` for a local checkout.
+
+`cache_available` reports the manifest declaration. Per-loop `cache_loaded`
+reports actual automatic attachment, and the top-level `load_prepared_caches`
+field records the requested policy. Availability may therefore be true while
+loading is false. Explicit cache load methods remain available after data loading.
 
 If the supplied directory contains the repository manifest, Vakint validates and
 loads it directly. It never downloads into or modifies this checkout. `latest`
@@ -47,8 +58,8 @@ empty loop-named directories alone do not identify an external-data checkout.
 Managed installations reuse validated files without downloading or extracting
 again. `refresh=True` checks the `data-latest` release alias; pinned versions remain
 immutable. A failed refresh reports an error and leaves the active engine intact.
-Checksums, relative paths, schemas and native program/cache bindings are checked
-before activation. Loading a new snapshot replaces the prior external selection;
+Checksums, relative paths and schemas are checked before activation. Native
+program/cache bindings are checked when their native payloads are activated. Loading a new snapshot replaces the prior external selection;
 old clones keep their existing immutable data and cache sessions.
 
 `load_external_data(path, maximum)` loads an existing checkout directly. The

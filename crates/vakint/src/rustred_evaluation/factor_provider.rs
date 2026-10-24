@@ -14,6 +14,7 @@ use rustred::reduction::{Reducer, ReductionLimits, ReductionStatistics};
 use rustred::sector::{Mask, symmetry};
 use symbolica::atom::{Atom, AtomCore};
 use symbolica::prelude::{Q, Z};
+use symbolica::utils::resources::{self, ResourceLimitError, ResourceLimits};
 
 use super::{artifact::shipped_family_for_loop_count, data::RustRedData};
 use crate::symbols::S;
@@ -35,11 +36,16 @@ impl ShippedFactorProvider {
     }
 }
 
-fn error(value: impl std::fmt::Display) -> String {
-    value.to_string()
+fn error(value: impl std::error::Error + 'static) -> FactorProviderError {
+    if let Some(resource) = FactorProviderError::find_resource(&value) {
+        FactorProviderError::Resource(resource)
+    } else {
+        FactorProviderError::Invalid(value.to_string())
+    }
 }
 
-fn share_family(family: &IntegralFamily) -> Result<Arc<IntegralFamily>, String> {
+fn share_family(family: &IntegralFamily) -> Result<Arc<IntegralFamily>, FactorProviderError> {
+    resources::checkpoint()?;
     let shared = IntegralFamily::new_with_limits(
         family.name(),
         family.loop_momenta().to_vec(),
@@ -58,7 +64,7 @@ fn share_family(family: &IntegralFamily) -> Result<Arc<IntegralFamily>, String> 
     Ok(Arc::new(shared))
 }
 
-fn kinematics(loops: usize) -> Result<(Vec<Atom>, Kinematics), String> {
+fn kinematics(loops: usize) -> Result<(Vec<Atom>, Kinematics), FactorProviderError> {
     let momenta = (1..=loops).map(|axis| S.k.call(axis)).collect::<Vec<_>>();
     let kinematics = Kinematics::new()
         .with_momenta(momenta.iter().cloned())
@@ -67,7 +73,11 @@ fn kinematics(loops: usize) -> Result<(Vec<Atom>, Kinematics), String> {
 }
 
 /// Translate typed affine scalar-product rows, never coefficient text.
-fn momentum_family(family: &IntegralFamily, slots: &[usize]) -> Result<MomentumFamily, String> {
+fn momentum_family(
+    family: &IntegralFamily,
+    slots: &[usize],
+) -> Result<MomentumFamily, FactorProviderError> {
+    resources::checkpoint()?;
     if family.external_count() != 0 {
         return Err("lower factor is not a vacuum family".into());
     }
@@ -81,7 +91,7 @@ fn momentum_family(family: &IntegralFamily, slots: &[usize]) -> Result<MomentumF
                 .map_err(error),
             _ => Err("lower vacuum factor has external scalar-product coordinates".into()),
         })
-        .collect::<Result<Vec<_>, String>>()?;
+        .collect::<Result<Vec<_>, FactorProviderError>>()?;
     let denominators = slots
         .iter()
         .map(|slot| {
@@ -98,7 +108,8 @@ fn momentum_family(family: &IntegralFamily, slots: &[usize]) -> Result<MomentumF
     MomentumFamily::new(momenta, Vec::new(), denominators, &kinematics).map_err(error)
 }
 
-fn physical_family(momenta: &[Atom], loops: usize) -> Result<MomentumFamily, String> {
+fn physical_family(momenta: &[Atom], loops: usize) -> Result<MomentumFamily, FactorProviderError> {
+    resources::checkpoint()?;
     let (basis, kinematics) = kinematics(loops)?;
     let denominators = momenta
         .iter()
@@ -118,10 +129,15 @@ fn mapped_key(
     source_slots: &[usize],
     integral: &IntegralKey,
     arity: usize,
-) -> Result<Option<(IntegralKey, IntegralMapping)>, String> {
-    // FeynKit's existing bounded search accepts only an exact denominator map
+) -> Result<Option<(IntegralKey, IntegralMapping)>, FactorProviderError> {
+    // FeynKit's native search accepts only an exact denominator map
     // with real linear loop images and determinant +/-1. No U-only equality.
-    let Some(mapping) = source.find_mapping(target, 1_000_000).map_err(error)? else {
+    // Its diagnostic count limit is absent; the surrounding request retains
+    // its original RAM/time budget across this nested native operation.
+    let Some(mapping) = source
+        .find_mapping(target, None, ResourceLimits::default())
+        .map_err(error)?
+    else {
         return Ok(None);
     };
     let mut powers = vec![0; arity];
@@ -143,7 +159,7 @@ fn signed_transport(
     mapped_key: &IntegralKey,
     mapping: &IntegralMapping,
     limits: ReductionLimits,
-) -> Result<symmetry::integral_transport::Prepared, String> {
+) -> Result<symmetry::integral_transport::Prepared, FactorProviderError> {
     let loops = source.loop_count();
     let context = destination.coefficient_context();
     let momenta = (1..=loops).map(|axis| S.k.call(axis)).collect::<Vec<_>>();
@@ -215,13 +231,34 @@ fn result(
 pub(super) enum FactorProviderError {
     Invalid(String),
     Native(VacuumProductReductionError),
+    Resource(ResourceLimitError),
+}
+impl FactorProviderError {
+    fn find_resource(error: &(dyn std::error::Error + 'static)) -> Option<ResourceLimitError> {
+        super::RustRedEvaluationError::resource_cause(error).cloned()
+    }
 }
 impl std::fmt::Display for FactorProviderError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Invalid(error) => f.write_str(error),
             Self::Native(error) => error.fmt(f),
+            Self::Resource(error) => error.fmt(f),
         }
+    }
+}
+impl std::error::Error for FactorProviderError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Invalid(_) => None,
+            Self::Native(error) => Some(error),
+            Self::Resource(error) => Some(error),
+        }
+    }
+}
+impl From<ResourceLimitError> for FactorProviderError {
+    fn from(error: ResourceLimitError) -> Self {
+        Self::Resource(error)
     }
 }
 impl From<String> for FactorProviderError {
@@ -242,6 +279,9 @@ impl From<VacuumProductReductionError> for FactorProviderError {
 
 impl VacuumFactorProvider for ShippedFactorProvider {
     type Error = FactorProviderError;
+    fn resource_limit_error(error: &Self::Error) -> Option<ResourceLimitError> {
+        FactorProviderError::find_resource(error)
+    }
     fn error_is_missing_coverage(error: &Self::Error) -> bool {
         matches!(
             error,
@@ -311,7 +351,7 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                         },
                     ));
                 }
-                Err(error) => return Err(FactorProviderError::Invalid(error.to_string())),
+                Err(refusal) => return Err(error(refusal)),
             }
             if has_numerator {
                 let transport = signed_transport(
@@ -323,6 +363,7 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                     limits,
                 )?;
                 let mut outside_endpoint = None;
+                let mut callback_resource = None;
                 let reduction = reduce_transported_vacuum_factor(
                     &transport,
                     target,
@@ -332,9 +373,11 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                     |key, remaining| {
                         // Numerator transport can leave the certified entry
                         // domain even when its positive denominator map fits.
-                        // Record only native scope refusals; the generic factor
-                        // callback deliberately erases other error types.
+                        // The generic native callback has a Display boundary.
+                        // Retain its typed operational cause before it becomes
+                        // a diagnostic string, independently of entry coverage.
                         if let Err(refusal) = snapshot.program().validate_entry(key) {
+                            callback_resource = FactorProviderError::find_resource(&refusal);
                             if matches!(
                                 refusal,
                                 rustred::reduction::ReductionError::OutsideCertifiedRootDomain { .. }
@@ -342,12 +385,20 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                             ) {
                                 outside_endpoint = Some(key.clone());
                             }
-                            return Err(refusal.to_string());
+                            return Err(error(refusal));
                         }
                         let (reduced, conditions, work) =
-                            Reducer::reduce_artifact_unit_mass_guarded(artifact, key, remaining)
-                                .map_err(error)?;
-                        Ok::<_, String>(result(
+                            match Reducer::reduce_artifact_unit_mass_guarded(
+                                artifact, key, remaining,
+                            ) {
+                                Ok(reduced) => reduced,
+                                Err(refusal) => {
+                                    callback_resource =
+                                        FactorProviderError::find_resource(&refusal);
+                                    return Err(error(refusal));
+                                }
+                            };
+                        Ok::<_, FactorProviderError>(result(
                             Arc::clone(&shared),
                             reduced.terms(),
                             conditions,
@@ -355,6 +406,9 @@ impl VacuumFactorProvider for ShippedFactorProvider {
                         ))
                     },
                 );
+                if let Some(resource) = callback_resource {
+                    return Err(FactorProviderError::Resource(resource));
+                }
                 return match (reduction, outside_endpoint) {
                     (Err(VacuumProductReductionError::Provider { .. }), Some(target)) => {
                         Err(FactorProviderError::Native(
@@ -430,6 +484,58 @@ mod tests {
     use super::*;
 
     #[test]
+    fn lower_provider_resource_errors_are_not_coverage_and_allow_healthy_reuse() {
+        use symbolica::utils::resources::ResourceBudget;
+
+        crate::Vakint::initialize_vakint_symbols();
+        let artifact = shipped_family_for_loop_count(1)
+            .unwrap()
+            .artifact()
+            .unwrap();
+        let family = share_family(artifact.family()).unwrap();
+        let target = IntegralKey::try_new([3]).unwrap();
+        let mut provider = ShippedFactorProvider::default();
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..Default::default()
+            },
+            || Ok(2),
+        );
+        let refusal = budget
+            .run(|| provider.reduce(Arc::clone(&family), &target, Default::default()))
+            .unwrap_err();
+        assert!(matches!(
+            ShippedFactorProvider::resource_limit_error(&refusal),
+            Some(ResourceLimitError::Memory {
+                rss_bytes: 2,
+                limit_bytes: 1,
+                ..
+            })
+        ));
+        assert!(!ShippedFactorProvider::error_is_missing_coverage(&refusal));
+        // Inspect the original error after leaving the constrained scope; a
+        // fresh global poll would succeed here and lose the actual cause.
+        assert!(resources::checkpoint().is_ok());
+        assert!(FactorProviderError::find_resource(&refusal).is_some());
+        let recovered = provider
+            .reduce(family, &target, Default::default())
+            .unwrap();
+        let direct =
+            Reducer::reduce_artifact_unit_mass_guarded(artifact, &target, Default::default())
+                .unwrap();
+        assert_eq!(
+            recovered
+                .terms
+                .iter()
+                .map(|term| (term.integral.clone(), term.coefficient.clone()))
+                .collect::<BTreeMap<_, _>>(),
+            *direct.0.terms(),
+        );
+        assert_eq!(recovered.nonzero_conditions, direct.1);
+    }
+
+    #[test]
     fn lower_native_provider_preserves_exact_terms_and_guards() {
         crate::Vakint::initialize_vakint_symbols();
         let mut provider = ShippedFactorProvider::default();
@@ -488,6 +594,7 @@ mod tests {
                         max_rule_applications: 0,
                         ..Default::default()
                     }
+                    .with_diagnostics()
                 )
                 .is_err()
         );

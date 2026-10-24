@@ -1,11 +1,12 @@
 use feynkit_graph::{IntegralFamily, IntegralMapping, PropagatorMapping};
 use pyo3::prelude::*;
 use symbolica::api::python::PythonExpression;
+use symbolica::utils::resources::ResourceLimits;
 
 #[cfg(feature = "python_stubgen")]
 use pyo3_stub_gen::derive::{gen_stub_pyclass, gen_stub_pymethods};
 
-use crate::{error, graph::PyFeynmanDiagram, kinematics::PyKinematics};
+use crate::{error, graph::PyFeynmanDiagram, kinematics::PyKinematics, resources};
 
 /// An ordered set of inverse propagators sharing loop momenta and external kinematics.
 ///
@@ -467,26 +468,38 @@ impl PyIntegralFamily {
     /// ----------
     /// powers : list[int]
     ///     Signed powers in family order; negative powers are numerator factors.
-    /// max_states : int
-    ///     Maximum number of intermediate exponent vectors; defaults to 100000.
+    /// max_states : int or None, optional
+    ///     Opt-in diagnostic bound on intermediate exponent vectors; None is unlimited.
+    /// max_process_rss_bytes : int or None, optional
+    ///     Cooperative process-wide RSS ceiling in bytes; None imposes no ceiling.
+    /// max_elapsed_seconds : float or None, optional
+    ///     Cooperative deadline for this request; None imposes no deadline.
     ///
     /// Returns
     /// -------
     /// list[tuple[Expression, list[int]]]
     ///     Coefficients and powers whose positive-power denominators are independent.
-    #[pyo3(signature = (powers, *, max_states=100_000))]
+    #[pyo3(signature = (powers, *, max_states=None, max_process_rss_bytes=None, max_elapsed_seconds=None))]
     fn partial_fraction(
         &self,
         powers: Vec<i32>,
-        max_states: usize,
+        max_states: Option<usize>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Vec<(PythonExpression, Vec<i32>)>> {
-        Ok(self
-            .inner
-            .partial_fraction(&powers, max_states)
-            .map_err(error::integral_family)?
-            .into_iter()
-            .map(|(coefficient, powers)| (coefficient.into(), powers))
-            .collect())
+        resources::run(
+            resources::limits(max_process_rss_bytes, max_elapsed_seconds)?,
+            |error| error::integral_family(error.into()),
+            || {
+                Ok(self
+                    .inner
+                    .partial_fraction(&powers, max_states, ResourceLimits::default())
+                    .map_err(error::integral_family)?
+                    .into_iter()
+                    .map(|(coefficient, powers)| (coefficient.into(), powers))
+                    .collect())
+            },
+        )
     }
 
     /// Verify explicit source-loop images in another family's coordinates.
@@ -546,23 +559,35 @@ impl PyIntegralFamily {
     /// ----------
     /// target : IntegralFamily
     ///     Target family with the same external kinematics and loop count.
-    /// max_candidates : int
-    ///     Candidate budget; exhaustion raises IntegralFamilyError.
+    /// max_candidates : int or None, optional
+    ///     Opt-in diagnostic candidate bound; None is unlimited.
+    /// max_process_rss_bytes : int or None, optional
+    ///     Cooperative process-wide RSS ceiling in bytes; None imposes no ceiling.
+    /// max_elapsed_seconds : float or None, optional
+    ///     Cooperative deadline for this request; None imposes no deadline.
     ///
     /// Returns
     /// -------
     /// IntegralMapping | None
     ///     Verified mapping, or None if no supported candidate matches.
-    #[pyo3(signature = (target, *, max_candidates=100_000))]
+    #[pyo3(signature = (target, *, max_candidates=None, max_process_rss_bytes=None, max_elapsed_seconds=None))]
     fn find_mapping(
         &self,
         target: &PyIntegralFamily,
-        max_candidates: usize,
+        max_candidates: Option<usize>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Option<PyIntegralMapping>> {
-        self.inner
-            .find_mapping(&target.inner, max_candidates)
-            .map(|mapping| mapping.map(|inner| PyIntegralMapping { inner }))
-            .map_err(error::integral_family)
+        resources::run(
+            resources::limits(max_process_rss_bytes, max_elapsed_seconds)?,
+            |error| error::integral_family(error.into()),
+            || {
+                self.inner
+                    .find_mapping(&target.inner, max_candidates, ResourceLimits::default())
+                    .map(|mapping| mapping.map(|inner| PyIntegralMapping { inner }))
+                    .map_err(error::integral_family)
+            },
+        )
     }
 
     /// Group families and return verified maps to their representatives.
@@ -575,7 +600,8 @@ impl PyIntegralFamily {
     /// A parametric equivalence without a verified loop map remains separate.
     ///
     /// Families need compatible external kinematics and nonsingular quadratic
-    /// forms. Unsupported shift searches and exhausted budgets raise errors.
+    /// forms. Unsupported shift searches and exhausted explicit diagnostic or
+    /// resource budgets raise errors.
     /// Different propagator counts stay separate. Select sectors and remove
     /// certified scaleless integrals before grouping; complete bases afterwards.
     /// This does not exchange external momenta or infer integration prescriptions.
@@ -592,28 +618,40 @@ impl PyIntegralFamily {
     /// ----------
     /// families : list[IntegralFamily]
     ///     Ordered families; earlier entries are preferred as representatives.
-    /// max_candidates : int
-    ///     Affine-shift candidate budget per pair; exhaustion raises an error.
+    /// max_candidates : int or None, optional
+    ///     Opt-in diagnostic affine-shift candidate bound per pair; None is unlimited.
+    /// max_process_rss_bytes : int or None, optional
+    ///     Cooperative process-wide RSS ceiling in bytes for the entire collection.
+    /// max_elapsed_seconds : float or None, optional
+    ///     One cooperative deadline shared by every pair in this request.
     ///
     /// Returns
     /// -------
     /// list[tuple[int, IntegralMapping]]
     ///     Target index and verified map for each input, including representatives.
     #[staticmethod]
-    #[pyo3(signature = (families, *, max_candidates=100_000))]
+    #[pyo3(signature = (families, *, max_candidates=None, max_process_rss_bytes=None, max_elapsed_seconds=None))]
     fn find_mappings(
         families: Vec<PyIntegralFamily>,
-        max_candidates: usize,
+        max_candidates: Option<usize>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Vec<(usize, PyIntegralMapping)>> {
-        let families = families.into_iter().map(|f| f.inner).collect::<Vec<_>>();
-        IntegralFamily::find_mappings(&families, max_candidates)
-            .map(|mappings| {
-                mappings
-                    .into_iter()
-                    .map(|(target, inner)| (target, PyIntegralMapping { inner }))
-                    .collect()
-            })
-            .map_err(error::integral_family)
+        resources::run(
+            resources::limits(max_process_rss_bytes, max_elapsed_seconds)?,
+            |error| error::integral_family(error.into()),
+            || {
+                let families = families.into_iter().map(|f| f.inner).collect::<Vec<_>>();
+                IntegralFamily::find_mappings(&families, max_candidates, ResourceLimits::default())
+                    .map(|mappings| {
+                        mappings
+                            .into_iter()
+                            .map(|(target, inner)| (target, PyIntegralMapping { inner }))
+                            .collect()
+                    })
+                    .map_err(error::integral_family)
+            },
+        )
     }
 
     /// Select the positive-power propagators of an integral's sector.

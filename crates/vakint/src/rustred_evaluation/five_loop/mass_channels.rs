@@ -10,12 +10,14 @@ impl SavedApplication {
         mass_squared: &Atom,
         exponent: i64,
         anchor: i64,
-        max_degree: usize,
+        diagnostic_max_degree: Option<usize>,
     ) -> (Atom, i64) {
         let Some(shift) = exponent.checked_sub(anchor) else {
             return (spectator.clone(), exponent);
         };
-        if !usize::try_from(shift.unsigned_abs()).is_ok_and(|shift| shift <= max_degree) {
+        if diagnostic_max_degree.is_some_and(|max_degree| {
+            !usize::try_from(shift.unsigned_abs()).is_ok_and(|shift| shift <= max_degree)
+        }) {
             return (spectator.clone(), exponent);
         }
         let mut exact = true;
@@ -36,7 +38,8 @@ impl SavedApplication {
         }
         // Use one existing key's exponent as origin: raising a numeric mass to
         // -sum(a) could create an enormous rational for large dotted inputs.
-        // Differences between lowered keys are bounded by the numerator degree.
+        // An optional diagnostic can bound this difference; ordinary grouping
+        // relies on exact integer scaling and the shared RAM/time budget.
         // Atom normalization combines powers without expanding compound masses;
         // (m²)^(Ld/2+anchor) stays outside the unchanged d-only native coefficients.
         (spectator * mass_squared.clone().pow(shift), anchor)
@@ -53,7 +56,8 @@ mod tests {
         let mut channels = BTreeMap::<(Atom, i64), Atom>::new();
         let anchor = -rows[0].0;
         for (degree, spectator, value) in rows {
-            let channel = SavedApplication::mass_channel(spectator, mass, -*degree, anchor, 512);
+            let channel =
+                SavedApplication::mass_channel(spectator, mass, -*degree, anchor, Some(512));
             *channels.entry(channel).or_insert(Atom::Zero) += value;
         }
         let n = channels.len();
@@ -131,16 +135,23 @@ mod tests {
     #[test]
     fn compound_powers_stay_compact_and_staged_sources_are_not_evaluated() {
         let mass = parse!("x^2+y^2");
-        let channel = SavedApplication::mass_channel(&mass.clone().pow(500), &mass, -510, 0, 512);
+        let channel =
+            SavedApplication::mass_channel(&mass.clone().pow(500), &mass, -510, 0, Some(512));
         assert_eq!(channel, (mass.pow(-10), 0));
         let source = parse!("source_float(17)");
         let mass = parse!("mu");
         assert_eq!(
-            SavedApplication::mass_channel(&(&source * mass.clone().pow(2)), &mass, -12, -10, 2),
+            SavedApplication::mass_channel(
+                &(&source * mass.clone().pow(2)),
+                &mass,
+                -12,
+                -10,
+                Some(2)
+            ),
             (source.clone(), -10)
         );
         // No huge rational is materialized for a large absolute index; unsafe
-        // differences and shifts beyond the existing lowering grant stay put.
+        // differences and shifts beyond an explicit diagnostic grant stay put.
         let numeric_mass = parse!("7/3");
         for (exponent, anchor, limit) in [
             (i64::MIN, i64::MIN, 6),
@@ -149,10 +160,36 @@ mod tests {
             (-12, -10, 1),
         ] {
             assert_eq!(
-                SavedApplication::mass_channel(&source, &numeric_mass, exponent, anchor, limit),
+                SavedApplication::mass_channel(
+                    &source,
+                    &numeric_mass,
+                    exponent,
+                    anchor,
+                    Some(limit)
+                ),
                 (source.clone(), exponent)
             );
         }
+    }
+
+    #[test]
+    fn ordinary_symbolic_mass_channels_ignore_dormant_degree_thresholds() {
+        let source = parse!("source_float(17)");
+        let mass = parse!("mu");
+        let exponent = -1_000_000_000_000_i64;
+        let expected = (&source * mass.clone().pow(exponent), 0);
+        assert_eq!(
+            SavedApplication::mass_channel(&source, &mass, exponent, 0, None),
+            expected
+        );
+        assert_eq!(
+            SavedApplication::mass_channel(&source, &mass, exponent, 0, Some(6)),
+            (source.clone(), exponent)
+        );
+        assert_eq!(
+            SavedApplication::mass_channel(&source, &mass, i64::MIN, i64::MAX, None),
+            (source, i64::MIN)
+        );
     }
 
     #[test]
@@ -168,10 +205,18 @@ mod tests {
             ),
         ] {
             let original = (spectator.clone(), -12);
-            assert_eq!(
-                SavedApplication::mass_channel(&spectator, &mass, -12, -10, 6),
-                original
-            );
+            for diagnostic_max_degree in [None, Some(6)] {
+                assert_eq!(
+                    SavedApplication::mass_channel(
+                        &spectator,
+                        &mass,
+                        -12,
+                        -10,
+                        diagnostic_max_degree
+                    ),
+                    original
+                );
+            }
         }
     }
 }

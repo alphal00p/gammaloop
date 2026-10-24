@@ -6,10 +6,11 @@ mod tests;
 use super::*;
 use std::collections::BTreeSet;
 
-/// Explicit bounds for optional scope-aware native witness selection. Ordinary
-/// topology matching keeps its existing first-match path and does not use this.
+/// Optional work-count diagnostics for scope-aware native witness selection.
+/// Ordinary requests use the shared RAM/time budget instead of these counts.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MomentumMatchLimits {
+    pub diagnostics_enabled: bool,
     pub max_graph_automorphisms: usize,
     pub max_orientation_candidates: usize,
     pub max_verified_witnesses: usize,
@@ -17,15 +18,30 @@ pub struct MomentumMatchLimits {
 impl Default for MomentumMatchLimits {
     fn default() -> Self {
         Self {
+            diagnostics_enabled: false,
             max_graph_automorphisms: 100_000,
             max_orientation_candidates: 1_000_000,
             max_verified_witnesses: 100_000,
         }
     }
 }
-fn charge(count: &mut usize, limit: usize, resource: &'static str) -> Result<(), VakintError> {
-    let requested = count.checked_add(1).unwrap_or(usize::MAX);
-    if requested > limit {
+impl MomentumMatchLimits {
+    pub fn with_diagnostics(mut self) -> Self {
+        self.diagnostics_enabled = true;
+        self
+    }
+}
+
+fn charge(
+    count: &mut usize,
+    limit: Option<usize>,
+    resource: &'static str,
+) -> Result<(), VakintError> {
+    symbolica::utils::resources::checkpoint()?;
+    let requested = count.saturating_add(1);
+    if let Some(limit) = limit
+        && requested > limit
+    {
         return Err(VakintError::MomentumMatchResourceLimit {
             resource,
             requested,
@@ -128,7 +144,9 @@ impl MomentumInput {
                 for signs in 0..orientations {
                     charge(
                         &mut tried,
-                        limits.max_orientation_candidates,
+                        limits
+                            .diagnostics_enabled
+                            .then_some(limits.max_orientation_candidates),
                         "momentum orientation candidates",
                     )?;
                     let system = sources
@@ -154,7 +172,9 @@ impl MomentumInput {
                     };
                     charge(
                         &mut verified,
-                        limits.max_verified_witnesses,
+                        limits
+                            .diagnostics_enabled
+                            .then_some(limits.max_verified_witnesses),
                         "verified momentum witnesses",
                     )?;
                     let candidate = self.replacement(topology, &physical, &mapping);
@@ -183,7 +203,9 @@ impl MomentumInput {
             if let Some(first) = self.incidence_permutation(&integral.graph) {
                 charge(
                     &mut graph_maps,
-                    limits.max_graph_automorphisms,
+                    limits
+                        .diagnostics_enabled
+                        .then_some(limits.max_graph_automorphisms),
                     "native edge automorphism witnesses",
                 )?;
                 evaluate(&first)?;
@@ -191,7 +213,9 @@ impl MomentumInput {
             edge_orbits::visit(
                 &source_graph,
                 &target_graph,
-                limits.max_graph_automorphisms,
+                limits
+                    .diagnostics_enabled
+                    .then_some(limits.max_graph_automorphisms),
                 &mut graph_maps,
                 &mut evaluate,
             )?;

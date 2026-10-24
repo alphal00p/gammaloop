@@ -25,7 +25,9 @@ feynkit-model = { git = "https://github.com/alphal00p/gammaloop", branch = "feyn
 feynkit-py = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", optional = true }
 feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit" }
 flate2 = "1.1.9"
+idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 log = "0.4.29"
+once_cell.workspace = true
 regex = "1.12.2"
 rug = "1.28.0"
 serde = { workspace = true, features = ["derive"] }
@@ -56,7 +58,6 @@ features = ["integer-gmp", "float-mpfr", "tracing_max_level_info"]
 
 [dev-dependencies]
 linnet = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit" }
-idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit" }
 test-log = "0.2.19"
 

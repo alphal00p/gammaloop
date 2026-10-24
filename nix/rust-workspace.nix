@@ -721,6 +721,7 @@
       root = workspaceRoot;
       fileset = lib.fileset.unions (
         workspaceDependencyManifestFiles
+        ++ [localCargoPatchSources]
         ++ (workspacePackageBuildScriptsForSourcePackages sourcePackages)
         ++ map (package: packageSources.${package}.production) sourcePackages
         ++ lib.concatMap (package: packageSources.${package}.targets) packageSourcePackages
@@ -2719,7 +2720,7 @@
     type = "github";
     owner = "alphal00p";
     repo = "vakint-external-data";
-    rev = "83cd193f9cfabebbe092c2452dc09a0961b9e1a2";
+    rev = "d40afb5a7e6b0e12eba867a4009f66b6d1dccacc";
   };
 
   nextestCheckFor = target:

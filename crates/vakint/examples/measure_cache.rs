@@ -1,4 +1,6 @@
 //! Fresh-process public-evaluator measurements of a frozen cache suite.
+#[path = "build_cache/owner_proof.rs"]
+mod owner_proof;
 #[path = "build_cache/workload.rs"]
 mod workload;
 
@@ -13,12 +15,13 @@ use std::{
 };
 
 use eyre::{Context, Result, bail, ensure};
+use owner_proof::OwnerProof;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use symbolica::atom::AtomCore;
 use vakint::{
-    EvaluationMethod, EvaluationOrder, RustRedEvaluationOptions, RustRedMasterMode, Vakint,
-    VakintSettings,
+    EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
+    RustRedMasterMode, Vakint, VakintSettings,
 };
 use workload::{Root, Workload};
 
@@ -54,6 +57,8 @@ impl Stages {
         lowered: &[Vec<i64>],
         protected: &[Vec<i64>],
         provisional: bool,
+        proof: Option<&OwnerProof>,
+        case_id: &str,
     ) -> Result<bool> {
         ensure!(
             self.input_roots_error.is_none(),
@@ -72,7 +77,16 @@ impl Stages {
             self.input_roots == lowered,
             "public input lowered input roots differ from frozen lowered_roots"
         );
-        Ok(true)
+        if let Some(proof) = proof {
+            proof.observe(case_id, &self.input_roots, protected)?;
+            Ok(true)
+        } else {
+            ensure!(
+                provisional,
+                "native owner authentication requires a validated pinned proof"
+            );
+            Ok(false)
+        }
     }
 }
 
@@ -150,6 +164,7 @@ struct Options {
     sample: Option<usize>,
     worker_deadline: Option<f64>,
     provisional: bool,
+    only_case: Option<String>,
 }
 
 impl Options {
@@ -206,6 +221,7 @@ impl Options {
         let mut sample = None;
         let mut worker_deadline = None;
         let mut provisional = false;
+        let mut only_case = None;
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             if matches!(arg.as_str(), "--help" | "-h") {
@@ -213,6 +229,7 @@ impl Options {
                     "measure_cache --artifacts PATH --workload JSON --source-census FILE --work-dir PATH\n\
                      [--cache FILE.gz] [--suite tuning|held-out] [--repetitions N] [--max-case-seconds N]\n\
                      [--provisional] permits legacy functional pilots without native key authentication.\n\
+                     [--only-case ID] selects one frozen case and requires --provisional.\n\
                      Every case/sample/variant runs in a fresh process. Default: three samples, 300s each.\n\
                      Omit --cache for an uncached baseline; final cache comparisons require three samples.\n\
                      Run with fixed affinity in a serialized measurement window."
@@ -240,6 +257,7 @@ impl Options {
                 "--repetitions" => repetitions = value.parse()?,
                 "--max-case-seconds" => max_case_seconds = value.parse()?,
                 "--case-id" => case_id = Some(value),
+                "--only-case" => only_case = Some(value),
                 "--variant" => variant = value,
                 "--sample" => sample = Some(value.parse()?),
                 "--worker-deadline" => worker_deadline = Some(value.parse()?),
@@ -262,6 +280,10 @@ impl Options {
             variant != "cached" || cache.is_some(),
             "cached worker needs --cache"
         );
+        ensure!(
+            only_case.is_none() || provisional,
+            "--only-case requires --provisional; final comparisons use the complete frozen suite"
+        );
         Ok(Some(Self {
             artifacts: artifacts.ok_or_else(|| eyre::eyre!("--artifacts is required"))?,
             workload: workload.ok_or_else(|| eyre::eyre!("--workload is required"))?,
@@ -278,24 +300,30 @@ impl Options {
             sample,
             worker_deadline,
             provisional,
+            only_case,
         }))
     }
 
     fn identity(&self) -> Result<Value> {
+        let workload: Workload = serde_json::from_slice(&fs::read(&self.workload)?)?;
         Ok(json!({
             "workload_sha256":digest(&self.workload)?,
+            "load_prepared_caches":false,
+            "cached_variant_persistent_loops":[5],
             "source_census_sha256":digest(&self.source_census)?,
             "data_manifest_sha256":digest(&self.artifacts.join("manifest.json"))?,
             "cache_sha256":self.cache.as_ref().map(|path|digest(path)).transpose()?,
             "executable_sha256":digest(&std::env::current_exe()?)?,
             "compiled_driver_sha256":format!("{:x}",Sha256::digest(include_bytes!("measure_cache.rs"))),
             "compiled_workload_schema_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/workload.rs"))),
+            "compiled_owner_proof_sha256":format!("{:x}",Sha256::digest(include_bytes!("build_cache/owner_proof.rs"))),
+            "owner_proof":OwnerProof::pinned_identity(&workload,&self.workload,&self.artifacts)?,
             "compiled_cargo_lock_sha256":format!("{:x}",Sha256::digest(include_bytes!("../../../Cargo.lock"))),
             "build_rustc":option_env!("VAKINT_CACHE_BUILD_RUSTC"),
             "build_profile":option_env!("VAKINT_CACHE_BUILD_PROFILE"),
             "build_git_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
             "suite":self.suite,"repetitions":self.repetitions,"max_case_seconds":self.max_case_seconds,
-            "provisional":self.provisional,
+            "provisional":self.provisional,"only_case":self.only_case,
             "cpu_affinity":fs::read_to_string("/proc/self/status").ok().and_then(|status|status.lines().find_map(|line|line.strip_prefix("Cpus_allowed_list:").map(str::trim).map(str::to_owned))),
             "rayon_num_threads":std::env::var("RAYON_NUM_THREADS").ok(),
         }))
@@ -328,6 +356,18 @@ fn write_bytes(path: &Path, bytes: &[u8]) -> Result<()> {
     fs::rename(temporary, path)?;
     File::open(path.parent().unwrap_or(Path::new(".")))?.sync_all()?;
     Ok(())
+}
+
+fn filter_roots<'a>(roots: &'a [Root], only_case: Option<&str>) -> Result<Vec<&'a Root>> {
+    let selected = roots
+        .iter()
+        .filter(|root| only_case.is_none_or(|id| root.id == id))
+        .collect::<Vec<_>>();
+    ensure!(
+        !selected.is_empty(),
+        "--only-case is absent from the frozen selected suite"
+    );
+    Ok(selected)
 }
 
 fn validate_receipt(
@@ -370,7 +410,13 @@ fn complete_samples(receipts: &[&Value], variants: &[&str], repetitions: usize) 
         })
 }
 
-fn measure(options: &Options, root: &Root, identity: &Value) -> Result<()> {
+fn persistent_cache_attachments(engine: &Vakint) -> Result<BTreeMap<usize, bool>> {
+    (1..=5)
+        .map(|loops| Ok((loops, engine.cache_statistics(loops)?.attached)))
+        .collect()
+}
+
+fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload) -> Result<()> {
     log::set_logger(&LOGGER).map_err(|error| eyre::eyre!(error.to_string()))?;
     log::set_max_level(log::LevelFilter::Debug);
     let input = vakint::vakint_parse!(
@@ -391,8 +437,19 @@ fn measure(options: &Options, root: &Root, identity: &Value) -> Result<()> {
     };
     let started = Instant::now();
     let mut engine = Vakint::new()?;
-    engine.load_external_data(&options.artifacts, 5)?;
-    engine.detach_cache(5)?;
+    let data_report = engine.load_official_external_data(
+        5,
+        &OfficialExternalDataOptions {
+            local_artifacts_path: Some(options.artifacts.clone()),
+            load_prepared_caches: false,
+            ..Default::default()
+        },
+    )?;
+    let caches_before = persistent_cache_attachments(&engine)?;
+    ensure!(
+        caches_before.values().all(|attached| !attached),
+        "baseline must never import a persistent cache"
+    );
     let data_loading_seconds = started.elapsed().as_secs_f64();
     let cache_started = Instant::now();
     if options.variant == "cached" {
@@ -400,6 +457,26 @@ fn measure(options: &Options, root: &Root, identity: &Value) -> Result<()> {
         engine.clear_cache(5)?;
     }
     let cache_loading_seconds = cache_started.elapsed().as_secs_f64();
+    let caches_during_evaluation = persistent_cache_attachments(&engine)?;
+    ensure!(
+        caches_during_evaluation
+            .iter()
+            .all(|(&loops, &attached)| attached == (options.variant == "cached" && loops == 5)),
+        "measurement must use no persistent backing or only the manual five-loop file"
+    );
+    let proof_started = Instant::now();
+    let binding = engine
+        .cache_statistics(5)?
+        .saved_application
+        .ok_or_else(|| eyre::eyre!("missing loaded application binding"))?
+        .to_document()["binding"]
+        .clone();
+    let proof = OwnerProof::load(workload, &options.workload, &options.artifacts, &binding)?;
+    ensure!(
+        options.provisional || proof.is_some(),
+        "final measurement requires validated owner proof"
+    );
+    let owner_proof_seconds = proof_started.elapsed().as_secs_f64();
     let owners_before = engine.rustred_application_owner_preparation_statistics()?;
     *LOGGER
         .0
@@ -432,9 +509,16 @@ fn measure(options: &Options, root: &Root, identity: &Value) -> Result<()> {
         "frozen_lowered_roots":root.lowered_roots,"frozen_protected_roots":root.protected_roots,
         "actual_lowered_roots":stages.input_roots,
         "provisional":options.provisional,
+        "owner_proof":proof.as_ref().map(OwnerProof::identity),"owner_proof_validation_seconds":owner_proof_seconds,
+        "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
         "fresh_process":true,"data_loading_seconds":data_loading_seconds,"cache_loading_seconds":cache_loading_seconds,
+        "external_data":data_report,"persistent_cache_attachments_before":caches_before,
+        "persistent_cache_attachments_during_evaluation":caches_during_evaluation,
+        "persistent_cache_policy":if options.variant=="cached" {"manual-five-loop-only"} else {"none"},
         "evaluation_seconds":evaluation_seconds,"saved_application_including_owner_seconds":saved_seconds,
         "owner_preparation_seconds":owner_seconds,"ibp_excluding_owner_seconds":(saved_seconds-owner_seconds).max(0.0),
+        "owner_preparation_policy":"deferred on demand; actual stat delta, no common prewarm",
+        "end_to_end_scope":"supervisor worker spawn through exit, including loading, evaluation and output serialization",
         "owner_preparation_during_load_seconds":owners_before.preparation_time.as_secs_f64(),
         "stages":stages.seconds,"lowering_receipts":stages.lowered,"warnings":stages.warnings,"cache_statistics":statistics,
     });
@@ -442,6 +526,8 @@ fn measure(options: &Options, root: &Root, identity: &Value) -> Result<()> {
         &root.lowered_roots,
         &root.protected_roots,
         options.provisional,
+        proof.as_ref(),
+        &root.id,
     );
     receipt["native_keys_authenticated"] = authentication
         .as_ref()
@@ -526,11 +612,12 @@ fn main() -> Result<()> {
         digest(&options.source_census)? == workload.source_census_sha256,
         "census differs from frozen workload"
     );
-    let roots = if options.suite == "tuning" {
+    let all_roots = if options.suite == "tuning" {
         &workload.tuning
     } else {
         &workload.held_out
     };
+    let roots = filter_roots(all_roots, options.only_case.as_deref())?;
     ensure!(
         options.provisional
             || roots
@@ -561,6 +648,7 @@ fn main() -> Result<()> {
                 .find(|root| &root.id == id)
                 .ok_or_else(|| eyre::eyre!("case is outside frozen suite"))?,
             &identity,
+            &workload,
         );
     }
     fs::create_dir_all(&options.work_dir)?;
@@ -682,22 +770,13 @@ fn main() -> Result<()> {
                             receipt["error"] = receipt["supervisor_error"].clone();
                         }
                     }
+                    receipt["end_to_end_seconds"] = supervision["elapsed_seconds"].clone();
                     receipt["supervision"] = supervision;
                     write_json(&receipt_path, &receipt)?;
                 }
                 let receipt: Value = serde_json::from_slice(&fs::read(&receipt_path)?)?;
+                owner_proof::validate_completed_outputs(&receipt, &directory, root)?;
                 validate_receipt(&receipt, &identity, &root.id, variant, sample)?;
-                if receipt["success"] == true {
-                    ensure!(
-                        receipt["supervision"]["success"] == true,
-                        "successful receipt lacks successful supervision"
-                    );
-                    ensure!(
-                        receipt["value_sha256"] == digest(&directory.join("value.symbolica"))?
-                            && receipt["guards_sha256"] == digest(&directory.join("guards.json"))?,
-                        "saved measurement value or guards differ from their receipt"
-                    );
-                }
                 measurements.push(receipt);
             }
         }
@@ -848,17 +927,25 @@ mod tests {
     }
 
     #[test]
-    fn public_input_requires_the_complete_frozen_lowered_union() {
-        let first = vec![1; 15];
-        let mut second = first.clone();
-        second[0] = 2;
+    fn public_input_requires_the_complete_frozen_lowered_union_and_owner_proof() {
+        let workload = workload::tests::selected();
+        let root = &workload.held_out[0];
+        let first = root.lowered_roots[0].clone();
+        let second = workload.held_out[1].lowered_roots[0].clone();
+        let proof = owner_proof::tests::fixture();
         let mut stages = Stages::default();
         assert!(
             stages
-                .authenticate(&[first.clone()], &[first.clone()], false)
+                .authenticate(
+                    &[first.clone()],
+                    &[first.clone()],
+                    false,
+                    Some(&proof),
+                    &root.id
+                )
                 .is_err()
         );
-        assert!(!stages.authenticate(&[], &[], true).unwrap());
+        assert!(!stages.authenticate(&[], &[], true, None, &root.id).unwrap());
         stages
             .capture_input_roots(
                 &json!({"phase":"input_roots","roots":[first.clone()]}).to_string(),
@@ -866,22 +953,22 @@ mod tests {
             .unwrap();
         assert!(
             stages
-                .authenticate(&[second.clone()], &[first.clone()], false)
+                .authenticate(&[second], &[first.clone()], false, Some(&proof), &root.id)
                 .is_err()
         );
         assert!(
             stages
-                .authenticate(&[second.clone()], &[first.clone()], true)
+                .authenticate(&[first.clone()], &[first.clone()], false, None, &root.id)
                 .is_err()
         );
-        stages
-            .capture_input_roots(
-                &json!({"phase":"input_roots","roots":[second.clone(), first.clone()]}).to_string(),
-            )
-            .unwrap();
+        assert!(
+            !stages
+                .authenticate(&[first.clone()], &[first.clone()], true, None, &root.id)
+                .unwrap()
+        );
         assert!(
             stages
-                .authenticate(&[first.clone(), second], &[first], false)
+                .authenticate(&[first.clone()], &[first], false, Some(&proof), &root.id)
                 .unwrap()
         );
     }

@@ -461,7 +461,9 @@ impl FeynmanDiagram {
         if characters.next().is_some() {
             preview.push('…');
         }
-        Some(format!("Numerator: {preview}"))
+        // Canonical symbol metadata contains delimiters; the preview is literal text.
+        let caption = format!("Numerator: {preview}");
+        Some(format!("#{}", crate::display::typst_string(&caption)))
     }
 
     /// The faded, dotted stroke of everything outside a highlighted region.

@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 use symbolica::domains::integer::Integer;
+use symbolica::utils::resources::{self, ResourceLimitError};
 
 use crate::{
     GenerationError, LinearEnergyExpr, MediumMode, ParsedGraph, ThermalDistributionFactor,
@@ -174,9 +175,11 @@ impl CffGenerationGraph {
         visited.len() == others.len()
     }
 
-    fn admissible_vertex(&self, parsed: &ParsedGraph) -> Option<&CffVertex> {
+    fn admissible_vertex(&self, parsed: &ParsedGraph) -> Result<Option<&CffVertex>> {
+        resources::checkpoint()?;
         // First, try to find a source or sink with connected complement.
-        self.vertices
+        let selected = self
+            .vertices
             .iter()
             .find(|vertex| {
                 matches!(vertex.vertex_type(), VertexType::Source | VertexType::Sink)
@@ -222,38 +225,44 @@ impl CffGenerationGraph {
                             && external_vertices.contains(&vertex.nodes)))
                         && self.has_connected_complement(&vertex.nodes)
                 })
-            })
-            .or_else(|| {
-                // A detachable cyclic chain with unequal poles is a divided
-                // difference. Contract a mass transition away from its attachment;
-                // common-pole child cycles then use derivative reduction.
-                // This pole-dependent operation is confined to certified chains.
-                self.vertices.iter().find_map(|start| {
-                    let cycle = self.detachable_cycle(&start.nodes, &|cycle| {
-                        let (first, _) = parsed.internal_edges[cycle[0]].canonical_pole();
-                        cycle.iter().all(|&edge_id| {
-                            parsed.internal_edges[edge_id].canonical_pole().0.signature
-                                == first.signature
-                        })
-                    })?;
-                    self.vertices.iter().find(|vertex| {
-                        match (vertex.incoming.as_slice(), vertex.outgoing.as_slice()) {
-                            ([incoming], [outgoing])
-                                if incoming.edge_type == EdgeType::Virtual
-                                    && outgoing.edge_type == EdgeType::Virtual
-                                    && cycle.contains(&incoming.edge_id)
-                                    && cycle.contains(&outgoing.edge_id) =>
-                            {
-                                // Distinct symbolic mass keys must represent distinct
-                                // masses when evaluating this divided difference.
-                                parsed.internal_edges[incoming.edge_id].mass_key
-                                    != parsed.internal_edges[outgoing.edge_id].mass_key
-                            }
-                            _ => false,
-                        }
-                    })
+            });
+        if selected.is_some() {
+            return Ok(selected);
+        }
+        // A detachable cyclic chain with unequal poles is a divided
+        // difference. Contract a mass transition away from its attachment;
+        // common-pole child cycles then use derivative reduction.
+        // This pole-dependent operation is confined to certified chains.
+        for start in &self.vertices {
+            let Some(cycle) = self.detachable_cycle(&start.nodes, &|cycle| {
+                let (first, _) = parsed.internal_edges[cycle[0]].canonical_pole();
+                cycle.iter().all(|&edge_id| {
+                    parsed.internal_edges[edge_id].canonical_pole().0.signature == first.signature
                 })
-            })
+            })?
+            else {
+                continue;
+            };
+            if let Some(vertex) = self.vertices.iter().find(|vertex| {
+                match (vertex.incoming.as_slice(), vertex.outgoing.as_slice()) {
+                    ([incoming], [outgoing])
+                        if incoming.edge_type == EdgeType::Virtual
+                            && outgoing.edge_type == EdgeType::Virtual
+                            && cycle.contains(&incoming.edge_id)
+                            && cycle.contains(&outgoing.edge_id) =>
+                    {
+                        // Distinct symbolic mass keys must represent distinct
+                        // masses when evaluating this divided difference.
+                        parsed.internal_edges[incoming.edge_id].mass_key
+                            != parsed.internal_edges[outgoing.edge_id].mass_key
+                    }
+                    _ => false,
+                }
+            }) {
+                return Ok(Some(vertex));
+            }
+        }
+        Ok(None)
     }
 
     fn contract_vertices(
@@ -317,10 +326,11 @@ impl CffGenerationGraph {
         medium_mode: MediumMode,
         edge_signs: &[i32],
         preferred_tadpole_poles: &BTreeMap<usize, i32>,
-    ) -> (Vec<ThermalDistributionFactor>, Rational) {
+    ) -> Result<(Vec<ThermalDistributionFactor>, Rational)> {
         let mut factors = Vec::new();
         let mut prefactor = Rational::one();
         loop {
+            resources::checkpoint()?;
             let self_edges = self
                 .vertices
                 .iter()
@@ -353,17 +363,21 @@ impl CffGenerationGraph {
                 }
             }
             self.remove_virtual_edges(&removed);
-            if medium_mode != MediumMode::Vacuum
-                && self.has_directed_cycle()
-                && let Some(cycle) = self.vertices.iter().find_map(|vertex| {
-                    self.detachable_cycle(&vertex.nodes, &|cycle| {
+            let mut selected_cycle = None;
+            if medium_mode != MediumMode::Vacuum && self.has_directed_cycle() {
+                for vertex in &self.vertices {
+                    if let Some(cycle) = self.detachable_cycle(&vertex.nodes, &|cycle| {
                         let (first, _) = parsed.internal_edges[cycle[0]].canonical_pole();
                         cycle.iter().all(|&edge_id| {
                             parsed.internal_edges[edge_id].canonical_pole().0 == first
                         })
-                    })
-                })
-            {
+                    })? {
+                        selected_cycle = Some(cycle);
+                        break;
+                    }
+                }
+            }
+            if let Some(cycle) = selected_cycle {
                 // An m-edge cyclic chain with a common pole contributes
                 // (-1)^(m-1)/(m-1)! times the ordinary (m-1)th energy derivative.
                 // Unequal poles stay in the recursion as divided differences;
@@ -388,7 +402,7 @@ impl CffGenerationGraph {
                 break;
             }
         }
-        (factors, prefactor)
+        Ok((factors, prefactor))
     }
 
     fn remove_virtual_edges(&mut self, edges: &BTreeSet<usize>) {
@@ -408,7 +422,7 @@ impl CffGenerationGraph {
         &self,
         start: &BTreeSet<usize>,
         accept: &impl Fn(&[usize]) -> bool,
-    ) -> Option<Vec<usize>> {
+    ) -> Result<Option<Vec<usize>>> {
         fn dfs(
             graph: &CffGenerationGraph,
             accept: &impl Fn(&[usize]) -> bool,
@@ -416,13 +430,15 @@ impl CffGenerationGraph {
             current: &BTreeSet<usize>,
             visited: &mut Vec<BTreeSet<usize>>,
             path: &mut Vec<usize>,
-        ) -> Option<Vec<usize>> {
+        ) -> Result<Option<Vec<usize>>> {
+            resources::checkpoint()?;
             for edge in graph
                 .vertex(current)
                 .outgoing
                 .iter()
                 .filter(|edge| edge.edge_type == EdgeType::Virtual)
             {
+                resources::checkpoint()?;
                 let Some(next) = graph
                     .vertices
                     .iter()
@@ -447,19 +463,19 @@ impl CffGenerationGraph {
                         })
                         .count();
                     if attachments <= 1 && accept(&cycle) {
-                        return Some(cycle);
+                        return Ok(Some(cycle));
                     }
                 } else if !visited.contains(&next.nodes) {
                     visited.push(next.nodes.clone());
                     path.push(edge.edge_id);
-                    if let Some(cycle) = dfs(graph, accept, start, &next.nodes, visited, path) {
-                        return Some(cycle);
+                    if let Some(cycle) = dfs(graph, accept, start, &next.nodes, visited, path)? {
+                        return Ok(Some(cycle));
                     }
                     path.pop();
                     visited.pop();
                 }
             }
-            None
+            Ok(None)
         }
 
         dfs(
@@ -506,6 +522,7 @@ pub(crate) fn enumerate_cff_surface_chains(
     medium_mode: MediumMode,
     preferred_tadpole_poles: &BTreeMap<usize, i32>,
 ) -> Result<Vec<CffSurfaceChain>> {
+    resources::checkpoint()?;
     let mut graph = build_base_graph_from_parsed(parsed);
     for (edge_id, sign) in edge_signs.iter().enumerate() {
         if *sign < 0 {
@@ -589,10 +606,14 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
 impl CffGenerationGraph {
     /// Generate causal denominator chains, mapping each selected cut in the
     /// caller's energy convention. Cyclic orientations have no branches.
-    pub fn try_surface_chains<S: Clone, E>(
+    ///
+    /// Errors from active resource budgets and the supplied surface callback
+    /// stop enumeration without returning a partial chain catalogue.
+    pub fn try_surface_chains<S: Clone, E: From<ResourceLimitError>>(
         &self,
         surface: &mut impl FnMut(&CffVertex) -> std::result::Result<S, E>,
     ) -> std::result::Result<Vec<Vec<S>>, E> {
+        resources::checkpoint()?;
         if self.has_directed_cycle() {
             return Ok(Vec::new());
         }
@@ -606,13 +627,16 @@ impl CffGenerationGraph {
             return Ok(Vec::new());
         };
         let selected = surface(vertex)?;
+        resources::checkpoint()?;
         if self.vertices.len() == 2 {
             return Ok(vec![vec![selected]]);
         }
         let mut branches = Vec::new();
         for neighbour in self.undirected_neighbours(&vertex.nodes) {
+            resources::checkpoint()?;
             let child = self.contract_vertices(&vertex.nodes, &neighbour.nodes);
             for chain in child.try_surface_chains(surface)? {
+                resources::checkpoint()?;
                 let mut branch = vec![selected.clone()];
                 branch.extend(chain);
                 branches.push(branch);
@@ -621,6 +645,7 @@ impl CffGenerationGraph {
         if branches.is_empty() {
             branches.push(vec![selected]);
         }
+        resources::checkpoint()?;
         Ok(branches)
     }
 }
@@ -633,13 +658,14 @@ fn enumerate_cff_branches(
     preferred_tadpole_poles: &BTreeMap<usize, i32>,
     branch_acc: &mut Vec<CffSurfaceChain>,
 ) -> Result<()> {
+    resources::checkpoint()?;
     let thermal = medium_mode != MediumMode::Vacuum;
     let (distributions, reduction_prefactor) = graph.strip_tadpoles_and_cyclic_chains(
         parsed,
         medium_mode,
         edge_signs,
         preferred_tadpole_poles,
-    );
+    )?;
     if reduction_prefactor.is_zero() {
         return Ok(());
     }
@@ -658,7 +684,7 @@ fn enumerate_cff_branches(
     }
     let vertex =
         graph
-            .admissible_vertex(parsed)
+            .admissible_vertex(parsed)?
             .ok_or_else(|| GenerationError::NoAdmissibleCffVertex {
                 medium_mode,
                 edge_signs: edge_signs.to_vec(),
@@ -671,6 +697,7 @@ fn enumerate_cff_branches(
     let (surface, surface_sign) = cff_surface_for_vertex(parsed, vertex);
 
     for neighbour in graph.undirected_neighbours(&vertex.nodes) {
+        resources::checkpoint()?;
         let child = graph.contract_vertices(&vertex.nodes, &neighbour.nodes);
         if !thermal && child.has_directed_cycle() {
             continue;
@@ -707,6 +734,7 @@ fn enumerate_cff_branches(
             &mut sub,
         )?;
         for mut chain in sub {
+            resources::checkpoint()?;
             chain.surfaces.insert(0, surface.clone());
             chain.thermal_weight = branch_weight.product(&chain.thermal_weight);
             chain.prefactor *= &prefactor;
@@ -775,11 +803,55 @@ fn boundary_external_shift_from_internal_labels(
 
 #[cfg(test)]
 mod tests {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
     use super::*;
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
     use symbolica::{
         atom::{Atom, AtomCore},
         parse,
     };
+
+    #[test]
+    fn surface_chains_preserve_callback_and_resource_errors() {
+        let parsed = crate::graph_io::test_graphs::box_graph();
+        let mut graph = build_base_graph_from_parsed(&parsed);
+        graph.reverse_virtual_edge(3);
+        let rss = Arc::new(AtomicU64::new(0));
+        let monitored_rss = Arc::clone(&rss);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(10),
+                ..ResourceLimits::default()
+            },
+            move || Ok(monitored_rss.load(Ordering::Relaxed)),
+        );
+
+        let result = budget.run(|| {
+            graph.try_surface_chains(&mut |_| {
+                rss.store(11, Ordering::Relaxed);
+                Ok::<(), GenerationError>(())
+            })
+        });
+        assert!(matches!(
+            result,
+            Err(GenerationError::Resource(ResourceLimitError::Memory {
+                rss_bytes: 11,
+                limit_bytes: 10,
+                ..
+            }))
+        ));
+
+        rss.store(0, Ordering::Relaxed);
+        let result = budget.run(|| {
+            graph.try_surface_chains(&mut |_| {
+                rss.store(11, Ordering::Relaxed);
+                Err::<(), _>(GenerationError::SingularBasis)
+            })
+        });
+        assert!(matches!(result, Err(GenerationError::SingularBasis)));
+    }
 
     #[test]
     fn tadpole_pruning_averages_both_poles_in_every_medium() {
@@ -1123,7 +1195,7 @@ mod tests {
             for (start, expected) in expected_cycles {
                 let start = BTreeSet::from([start]);
                 assert_eq!(
-                    graph.detachable_cycle(&start, &|_| true),
+                    graph.detachable_cycle(&start, &|_| true).unwrap(),
                     expected,
                     "{name}",
                 );
@@ -1207,6 +1279,7 @@ mod tests {
                         &[],
                         &BTreeMap::new()
                     )
+                    .unwrap()
                     .0,
                 expected_factors
                     .into_iter()
@@ -1259,6 +1332,7 @@ mod tests {
                         &[],
                         &BTreeMap::new()
                     )
+                    .unwrap()
                     .0
                     .is_empty(),
                 "{name}"
@@ -1307,6 +1381,7 @@ mod tests {
                     &[],
                     &BTreeMap::new()
                 )
+                .unwrap()
                 .0,
             vec![ThermalDistributionFactor {
                 edge_id: EdgeIndex(0),
@@ -1554,12 +1629,14 @@ mod tests {
                 edge.signature.external_signature[0] = shift;
             }
             let mut graph = build_base_graph_from_parsed(&parsed);
-            let (distributions, prefactor) = graph.strip_tadpoles_and_cyclic_chains(
-                &parsed,
-                MediumMode::ThermodynamicEquilibrium,
-                &[],
-                &BTreeMap::new(),
-            );
+            let (distributions, prefactor) = graph
+                .strip_tadpoles_and_cyclic_chains(
+                    &parsed,
+                    MediumMode::ThermodynamicEquilibrium,
+                    &[],
+                    &BTreeMap::new(),
+                )
+                .unwrap();
             assert_eq!(
                 distributions,
                 expected_edges
@@ -1657,6 +1734,7 @@ mod tests {
                     &[],
                     &BTreeMap::new()
                 )
+                .unwrap()
                 .0
                 .is_empty()
         );

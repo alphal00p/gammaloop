@@ -57,6 +57,8 @@ use crate::{
 
 #[cfg(feature = "linnet-python")]
 use crate::graph_interop::LinnetCache;
+use crate::resources;
+use symbolica::utils::resources::ResourceBudget;
 
 pub(crate) fn parse_symbolic_annotation(value: &str) -> Result<PythonExpression, String> {
     Atom::parse_with_default_namespace(wrap_input!(value), ParseSettings::default())
@@ -1785,7 +1787,7 @@ submit! {
 
         class PyFeynmanDiagram:
             @typing.overload
-            def integrate_energy(self, *, method: typing.Literal["cff"], max_orientations: typing.Optional[int] = None, fixed_orientations: typing.Optional[typing.Mapping[int, bool]] = None, contracted_edges: typing.Optional[typing.Sequence[int]] = None, initial_state_edges: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None) -> pyo3_stub_gen.RustType["PyCffRepresentation"]:
+            def integrate_energy(self, *, method: typing.Literal["cff"], max_orientations: typing.Optional[int] = None, fixed_orientations: typing.Optional[typing.Mapping[int, bool]] = None, contracted_edges: typing.Optional[typing.Sequence[int]] = None, initial_state_edges: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None, max_process_rss_bytes: typing.Optional[int] = None, max_elapsed_seconds: typing.Optional[float] = None) -> pyo3_stub_gen.RustType["PyCffRepresentation"]:
                 r"""
                 Integrate propagators and an optional CFF numerator over loop energies.
 
@@ -1812,7 +1814,11 @@ submit! {
                     Required representation choice. Literal arguments retain the concrete
                     return type in editors and type checkers.
                 max_orientations : int or None, optional
-                    CFF-only limit on candidate orientations. None imposes no limit.
+                    Opt-in CFF orientation-count diagnostic. None disables it.
+                max_process_rss_bytes : int or None, optional
+                    Cooperative whole-process resident-memory ceiling. None disables it.
+                max_elapsed_seconds : float or None, optional
+                    Cooperative elapsed-time ceiling. None disables it; native kernels are checked before and after, not interrupted.
                 fixed_orientations : mapping[int, bool] or None, optional
                     CFF-only constraints by physical edge ID: False keeps the stored
                     direction; True reverses it. None leaves orientations unconstrained.
@@ -1843,7 +1849,7 @@ submit! {
                 """
 
             @typing.overload
-            def integrate_energy(self, *, method: typing.Literal["ltd"]) -> pyo3_stub_gen.RustType["PyLtdRepresentation"]:
+            def integrate_energy(self, *, method: typing.Literal["ltd"], max_process_rss_bytes: typing.Optional[int] = None, max_elapsed_seconds: typing.Optional[float] = None) -> pyo3_stub_gen.RustType["PyLtdRepresentation"]:
                 r"""
                 Integrate propagators and an optional CFF numerator over loop energies.
 
@@ -1870,7 +1876,11 @@ submit! {
                     Required representation choice. Literal arguments retain the concrete
                     return type in editors and type checkers.
                 max_orientations : int or None, optional
-                    CFF-only limit on candidate orientations. None imposes no limit.
+                    Opt-in CFF orientation-count diagnostic. None disables it.
+                max_process_rss_bytes : int or None, optional
+                    Cooperative whole-process resident-memory ceiling. None disables it.
+                max_elapsed_seconds : float or None, optional
+                    Cooperative elapsed-time ceiling. None disables it; native kernels are checked before and after, not interrupted.
                 fixed_orientations : mapping[int, bool] or None, optional
                     CFF-only constraints by physical edge ID: False keeps the stored
                     direction; True reverses it. None leaves orientations unconstrained.
@@ -4325,7 +4335,12 @@ impl PyFeynmanDiagram {
     ///     Required representation choice. Literal arguments retain the concrete
     ///     return type in editors and type checkers.
     /// max_orientations : int or None, optional
-    ///     CFF-only limit on candidate orientations. None imposes no limit.
+    ///     Opt-in CFF orientation-count diagnostic. None disables it.
+    /// max_process_rss_bytes : int or None, optional
+    ///     Cooperative whole-process resident-memory ceiling. None disables it.
+    /// max_elapsed_seconds : float or None, optional
+    ///     Cooperative elapsed-time ceiling for this request. None disables it.
+    ///     Checks surround native kernels; they do not interrupt one kernel call.
     /// fixed_orientations : mapping[int, bool] or None, optional
     ///     CFF-only constraints by physical edge ID: False keeps the stored
     ///     direction; True reverses it. None leaves orientations unconstrained.
@@ -4354,7 +4369,7 @@ impl PyFeynmanDiagram {
     /// ValueError
     ///     The method is unknown, or CFF-only options are supplied for LTD.
     #[gen_stub(skip)]
-    #[pyo3(signature = (*, method, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None, numerator=None))]
+    #[pyo3(signature = (*, method, max_orientations=None, fixed_orientations=None, contracted_edges=None, initial_state_edges=None, numerator=None, max_process_rss_bytes=None, max_elapsed_seconds=None))]
     #[allow(clippy::too_many_arguments)] // Python options remain explicit keyword-only arguments.
     fn integrate_energy(
         &self,
@@ -4365,8 +4380,13 @@ impl PyFeynmanDiagram {
         contracted_edges: Option<Vec<usize>>,
         initial_state_edges: Option<Vec<usize>>,
         numerator: Option<ConvertibleToExpression>,
+        max_process_rss_bytes: Option<u64>,
+        max_elapsed_seconds: Option<f64>,
     ) -> PyResult<Py<PyAny>> {
-        match method {
+        let limits = resources::limits(max_process_rss_bytes, max_elapsed_seconds)?;
+        ResourceBudget::new(limits).run(|| {
+        resources::checkpoint()?;
+        let result = match method {
             "cff" => Py::new(
                 py,
                 PyCffRepresentation::from_diagram(
@@ -4394,7 +4414,10 @@ impl PyFeynmanDiagram {
                 Py::new(py, PyLtdRepresentation::from_diagram(py, self)?).map(Py::into_any)
             }
             _ => Err(PyValueError::new_err("method must be 'cff' or 'ltd'")),
-        }
+        }?;
+        resources::checkpoint()?;
+        Ok(result)
+        })
     }
 
     /// Serialize the complete diagram to JSON text.

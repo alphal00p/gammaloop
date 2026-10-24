@@ -123,7 +123,7 @@ fn alternative_witness_limits_and_acceptance_errors_are_typed_and_propagated() {
         assert!(matches!(
             source.match_topologies_with_acceptance(
                 [topology],
-                limits,
+                limits.with_diagnostics(),
                 |_| -> Result<Option<()>, VakintError> { panic!("exhaustion precedes acceptance") }
             ),
             Err(VakintError::MomentumMatchResourceLimit { .. })
@@ -155,7 +155,7 @@ fn native_edge_marking_includes_parallel_and_self_loop_permutations() {
         let marked = edge_orbits::EdgeGraph::new(&graph).unwrap();
         let mut maps = BTreeSet::new();
         let mut count = 0;
-        edge_orbits::visit(&marked, &marked, 6, &mut count, |map| {
+        edge_orbits::visit(&marked, &marked, Some(6), &mut count, |map| {
             maps.insert(map.to_vec());
             Ok(())
         })
@@ -163,8 +163,47 @@ fn native_edge_marking_includes_parallel_and_self_loop_permutations() {
         assert_eq!(maps.len(), 6);
         assert_eq!(count, 6);
         assert!(matches!(
-            edge_orbits::visit(&marked, &marked, 5, &mut 0, |_| Ok(())),
+            edge_orbits::visit(&marked, &marked, Some(5), &mut 0, |_| Ok(())),
             Err(VakintError::MomentumMatchResourceLimit { .. })
         ));
     }
+}
+
+#[test]
+fn ordinary_witness_search_ignores_diagnostic_counts_and_preserves_outer_resources() {
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
+
+    let vakint = Vakint::new().unwrap();
+    let topology = root(&vakint);
+    let expression = base();
+    let source = MomentumInput::from_expression(expression.as_view(), 2)
+        .unwrap()
+        .unwrap();
+    let limits = MomentumMatchLimits {
+        max_graph_automorphisms: 0,
+        max_orientation_candidates: 0,
+        max_verified_witnesses: 0,
+        ..Default::default()
+    };
+    assert!(
+        source
+            .match_topologies_with_acceptance([topology], limits, |_| Ok(Some(())))
+            .unwrap()
+            .is_some()
+    );
+    let budget = ResourceBudget::with_memory_monitor(
+        ResourceLimits {
+            max_process_rss_bytes: Some(1),
+            ..Default::default()
+        },
+        || Ok(2),
+    );
+    assert!(matches!(
+        budget.run(|| {
+            source.match_topologies_with_acceptance([topology], limits, |_| Ok(Some(())))
+        }),
+        Err(VakintError::ResourceLimit(
+            ResourceLimitError::Memory { .. }
+        ))
+    ));
 }

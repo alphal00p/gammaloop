@@ -359,20 +359,8 @@ fn inspect_weighted_ladder_resource_failure() -> Result<()> {
 #[ignore = "manual prepared-input validation only; full slow acceptance always rebuilds the QCD numerator"]
 fn prepared_ladder_weighted_preflight_without_ibps() -> Result<()> {
     use crate::{EvaluationMethod, EvaluationOrder, RustRedEvaluationOptions};
-    let mut scalar_limits = ScalarNumeratorLimits::default();
-    let manual_work_override = match std::env::var("VAKINT_QCD_DIAGNOSTIC_MAX_WORK") {
-        Ok(value) => Some(value),
-        Err(std::env::VarError::NotPresent) => None,
-        Err(error) => return Err(error.into()),
-    };
-    if let Some(value) = &manual_work_override {
-        scalar_limits.exact_algebra.max_term_operations = value.parse()?;
-    }
-    println!(
-        "prepared_input_diagnostic scalar_max_term_operations={} manual_work_override={}",
-        scalar_limits.exact_algebra.max_term_operations,
-        manual_work_override.is_some()
-    );
+    let scalar_limits = ScalarNumeratorLimits::default();
+    println!("prepared_input_diagnostic scalar_limits={scalar_limits:?}");
     let source = std::env::var_os("VAKINT_QCD_PREPARED_INPUT")
         .ok_or("set the saved prepared input for diagnostic replay only")?;
     let evidence = PathBuf::from(
@@ -410,9 +398,7 @@ fn prepared_ladder_weighted_preflight_without_ibps() -> Result<()> {
         "# Diagnostic replay only; no fresh numerator preparation, no IBPs.\n# Geometric witnesses only: refusals do not rule out another exact presentation.\n",
     );
     report.push_str(&format!(
-        "# scalar_max_term_operations={} manual_work_override={}\n# Contribution ordinals are run-local; compare exact recorded targets/numerators.\n",
-        scalar_limits.exact_algebra.max_term_operations,
-        manual_work_override.is_some()
+        "# scalar_limits={scalar_limits:?}\n# Contribution ordinals are run-local; compare exact recorded targets/numerators.\n"
     ));
     let mut count = 0usize;
     let mut admitted = 0usize;
@@ -577,18 +563,6 @@ fn prepared_ladder_selected_campaign_census_without_ibps() -> Result<()> {
     };
     settings.rustred_application_options.unresolved_policy =
         rustred::solver::UnresolvedPolicy::Preserve;
-    // Completed exact lowerings remain valid under a larger work budget.
-    // Imported receipts retain their original limits; this diagnostic override
-    // never changes the input, family, predicates, or reduction rules.
-    if let Some(value) = std::env::var_os("VAKINT_QCD_CENSUS_MAX_TERM_OPERATIONS") {
-        settings
-            .rustred_scalar_numerator_limits
-            .exact_algebra
-            .max_term_operations = value
-            .to_str()
-            .ok_or("non-UTF8 census work budget")?
-            .parse()?;
-    }
     eprintln!("qcd_campaign_census phase=engine_construction_begin");
     let mut engine = Vakint::new()?;
     eprintln!("qcd_campaign_census phase=data_loading_begin");

@@ -8,6 +8,7 @@ import enum
 import os
 import pathlib
 import symbolica
+import symbolica.community.graph
 import symbolica.community.hepkit.sector_decomposition
 import symbolica.community.tensor
 import symbolica.core
@@ -2773,6 +2774,18 @@ class FeynmanDiagram:
     >>> assert family.is_complete
     """
     @property
+    def linnet_selection(self) -> symbolica.community.graph.Subgraph:
+        r"""
+        Return the canonical Linnet selection representing this physics region.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> region = diagram.subgraph(diagram.linnet_selection)
+        >>> assert region.n_half_edges == len(diagram.half_edges)
+        """
+    @property
     def name(self) -> builtins.str:
         r"""
         Return the deterministic name assigned during diagram generation.
@@ -2940,7 +2953,7 @@ class FeynmanDiagram:
         >>> external_particles = [edge.particle_name for edge in diagram.external_edges]
         """
     @overload
-    def integrate_energy(self, *, method: typing.Literal["cff"], max_orientations: typing.Optional[int] = None, fixed_orientations: typing.Optional[typing.Mapping[int, bool]] = None, contracted_edges: typing.Optional[typing.Sequence[int]] = None, initial_state_edges: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None) -> CffRepresentation:
+    def integrate_energy(self, *, method: typing.Literal["cff"], max_orientations: typing.Optional[int] = None, fixed_orientations: typing.Optional[typing.Mapping[int, bool]] = None, contracted_edges: typing.Optional[typing.Sequence[int]] = None, initial_state_edges: typing.Optional[typing.Sequence[int]] = None, numerator: typing.Optional[symbolica.Expression] = None, max_process_rss_bytes: typing.Optional[int] = None, max_elapsed_seconds: typing.Optional[float] = None) -> CffRepresentation:
         r"""
         Integrate propagators and an optional CFF numerator over loop energies.
 
@@ -2967,7 +2980,11 @@ class FeynmanDiagram:
             Required representation choice. Literal arguments retain the concrete
             return type in editors and type checkers.
         max_orientations : int or None, optional
-            CFF-only limit on candidate orientations. None imposes no limit.
+            Opt-in CFF orientation-count diagnostic. None disables it.
+        max_process_rss_bytes : int or None, optional
+            Cooperative whole-process resident-memory ceiling. None disables it.
+        max_elapsed_seconds : float or None, optional
+            Cooperative elapsed-time ceiling. None disables it; native kernels are checked before and after, not interrupted.
         fixed_orientations : mapping[int, bool] or None, optional
             CFF-only constraints by physical edge ID: False keeps the stored
             direction; True reverses it. None leaves orientations unconstrained.
@@ -2997,7 +3014,7 @@ class FeynmanDiagram:
             The method is unknown, or CFF-only options are supplied for LTD.
         """
     @overload
-    def integrate_energy(self, *, method: typing.Literal["ltd"]) -> LtdRepresentation:
+    def integrate_energy(self, *, method: typing.Literal["ltd"], max_process_rss_bytes: typing.Optional[int] = None, max_elapsed_seconds: typing.Optional[float] = None) -> LtdRepresentation:
         r"""
         Integrate propagators and an optional CFF numerator over loop energies.
 
@@ -3024,7 +3041,11 @@ class FeynmanDiagram:
             Required representation choice. Literal arguments retain the concrete
             return type in editors and type checkers.
         max_orientations : int or None, optional
-            CFF-only limit on candidate orientations. None imposes no limit.
+            Opt-in CFF orientation-count diagnostic. None disables it.
+        max_process_rss_bytes : int or None, optional
+            Cooperative whole-process resident-memory ceiling. None disables it.
+        max_elapsed_seconds : float or None, optional
+            Cooperative elapsed-time ceiling. None disables it; native kernels are checked before and after, not interrupted.
         fixed_orientations : mapping[int, bool] or None, optional
             CFF-only constraints by physical edge ID: False keeps the stored
             direction; True reverses it. None leaves orientations unconstrained.
@@ -3052,6 +3073,21 @@ class FeynmanDiagram:
         ------
         ValueError
             The method is unknown, or CFF-only options are supplied for LTD.
+        """
+    def to_graph(self) -> symbolica.community.graph.Graph:
+        r"""
+        Return the canonical installed Linnet graph with physics objects as payloads.
+
+        Node, edge, and half-edge identities are mapped explicitly. Structural
+        edits affect this analysis graph only; the next export starts a fresh
+        graph, and selections from the modified topology cannot be used here.
+
+        Examples
+        --------
+        Using the setup in the ``FeynmanDiagram`` class example:
+
+        >>> graph = diagram.to_graph()
+        >>> gluons = graph.filter(edge=lambda edge: edge.data.particle_name == "g")
         """
     def subgraph(self, selection: Subgraph | None = None, *, nodes: typing.Optional[typing.Sequence[builtins.int]] = None, edges: typing.Optional[typing.Sequence[builtins.int]] = None, half_edges: typing.Optional[typing.Sequence[builtins.int]] = None) -> Subgraph:
         r"""
@@ -5297,7 +5333,7 @@ class IntegralFamily:
             Preferred auxiliary inverse propagators in this family's momentum
             coordinates. Defaults to using only bare scalar products.
         """
-    def partial_fraction(self, powers: typing.Sequence[builtins.int], *, max_states: builtins.int = 100000) -> builtins.list[tuple[Expression, builtins.list[builtins.int]]]:
+    def partial_fraction(self, powers: typing.Sequence[builtins.int], *, max_states: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> builtins.list[tuple[Expression, builtins.list[builtins.int]]]:
         r"""
         Partial-fraction dependent propagators while preserving family order.
 
@@ -5320,8 +5356,12 @@ class IntegralFamily:
         ----------
         powers : list[int]
             Signed powers in family order; negative powers are numerator factors.
-        max_states : int
-            Maximum number of intermediate exponent vectors; defaults to 100000.
+        max_states : int or None, optional
+            Opt-in diagnostic bound on intermediate exponent vectors; None is unlimited.
+        max_process_rss_bytes : int or None, optional
+            Cooperative process-wide RSS ceiling in bytes; None imposes no ceiling.
+        max_elapsed_seconds : float or None, optional
+            Cooperative deadline for this request; None imposes no deadline.
 
         Returns
         -------
@@ -5356,7 +5396,7 @@ class IntegralFamily:
         IntegralMapping | None
             Verified mapping, or None when the images fail the equivalence checks.
         """
-    def find_mapping(self, target: IntegralFamily, *, max_candidates: builtins.int = 100000) -> typing.Optional[IntegralMapping]:
+    def find_mapping(self, target: IntegralFamily, *, max_candidates: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> typing.Optional[IntegralMapping]:
         r"""
         Find a verified affine loop-momentum shift into the target family.
 
@@ -5378,8 +5418,12 @@ class IntegralFamily:
         ----------
         target : IntegralFamily
             Target family with the same external kinematics and loop count.
-        max_candidates : int
-            Candidate budget; exhaustion raises IntegralFamilyError.
+        max_candidates : int or None, optional
+            Opt-in diagnostic candidate bound; None is unlimited.
+        max_process_rss_bytes : int or None, optional
+            Cooperative process-wide RSS ceiling in bytes; None imposes no ceiling.
+        max_elapsed_seconds : float or None, optional
+            Cooperative deadline for this request; None imposes no deadline.
 
         Returns
         -------
@@ -5387,7 +5431,7 @@ class IntegralFamily:
             Verified mapping, or None if no supported candidate matches.
         """
     @staticmethod
-    def find_mappings(families: typing.Sequence[IntegralFamily], *, max_candidates: builtins.int = 100000) -> builtins.list[tuple[builtins.int, IntegralMapping]]:
+    def find_mappings(families: typing.Sequence[IntegralFamily], *, max_candidates: typing.Optional[builtins.int] = None, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> builtins.list[tuple[builtins.int, IntegralMapping]]:
         r"""
         Group families and return verified maps to their representatives.
 
@@ -5399,7 +5443,8 @@ class IntegralFamily:
         A parametric equivalence without a verified loop map remains separate.
 
         Families need compatible external kinematics and nonsingular quadratic
-        forms. Unsupported shift searches and exhausted budgets raise errors.
+        forms. Unsupported shift searches and exhausted explicit diagnostic or
+        resource budgets raise errors.
         Different propagator counts stay separate. Select sectors and remove
         certified scaleless integrals before grouping; complete bases afterwards.
         This does not exchange external momenta or infer integration prescriptions.
@@ -5416,8 +5461,12 @@ class IntegralFamily:
         ----------
         families : list[IntegralFamily]
             Ordered families; earlier entries are preferred as representatives.
-        max_candidates : int
-            Affine-shift candidate budget per pair; exhaustion raises an error.
+        max_candidates : int or None, optional
+            Opt-in diagnostic affine-shift candidate bound per pair; None is unlimited.
+        max_process_rss_bytes : int or None, optional
+            Cooperative process-wide RSS ceiling in bytes for the entire collection.
+        max_elapsed_seconds : float or None, optional
+            One cooperative deadline shared by every pair in this request.
 
         Returns
         -------
@@ -10767,7 +10816,7 @@ class TensorReducer:
 
         >>> assert reducer.dimension == D
         """
-    def __new__(cls, dimension: Expression, *, integrated: typing.Sequence[symbolica.community.tensor.TensorName | symbolica.Expression | symbolica.community.tensor.TensorExpression] = (), external: typing.Sequence[symbolica.Expression | symbolica.community.tensor.TensorExpression] = ()) -> TensorReducer:
+    def __new__(cls, dimension: Expression, *, integrated: typing.Sequence[symbolica.community.tensor.TensorName | symbolica.Expression | symbolica.community.tensor.TensorExpression] = (), external: typing.Sequence[symbolica.Expression | symbolica.community.tensor.TensorExpression] = (), max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> TensorReducer:
         r"""
         Configure the integrated momenta and independent external basis.
 
@@ -10791,9 +10840,14 @@ class TensorReducer:
             Whole vector heads or exact compact vectors to integrate.
         external : sequence of Expression or TensorExpression, optional
             Independent compact vectors in the denominator's external basis.
+        max_process_rss_bytes : int or None, optional
+            Process RSS allowance in bytes. None leaves memory unrestricted.
+        max_elapsed_seconds : float or None, optional
+            Cooperative elapsed-time allowance, including expression materialization.
+            None leaves time unrestricted. Count diagnostics are off by default.
         """
     @staticmethod
-    def feynkit(dimension: Expression) -> TensorReducer:
+    def feynkit(dimension: Expression, *, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> TensorReducer:
         r"""
         Construct a reducer that selects every ``gammalooprs::Q`` tensor.
 
@@ -10821,12 +10875,36 @@ class TensorReducer:
         dimension : Expression
             Lorentz-space dimension used by every ``spenso::mink`` slot. It
             must match the dimension carried by the input expression.
+        max_process_rss_bytes : int or None, optional
+            Process RSS allowance in bytes; disabled by default.
+        max_elapsed_seconds : float or None, optional
+            Cooperative elapsed-time allowance; disabled by default.
+        """
+    def with_resources(self, *, max_process_rss_bytes: typing.Optional[builtins.int] = None, max_elapsed_seconds: typing.Optional[builtins.float] = None) -> TensorReducer:
+        r"""
+        Return a reducer with process-memory and elapsed-time controls.
+
+        These controls are disabled by default. Nested operations preserve any
+        stricter resource scope configured by their caller.
+
+        Examples
+        --------
+        Using the setup in the ``TensorReducer`` class example:
+
+        >>> reducer = reducer.with_resources(max_elapsed_seconds=30.0)
+
+        Parameters
+        ----------
+        max_process_rss_bytes : int or None, optional
+            Whole-process RSS allowance in bytes.
+        max_elapsed_seconds : float or None, optional
+            Cooperative elapsed-time allowance for a reduction and materialization.
         """
     def with_pairing_limit(self, limit: builtins.int) -> TensorReducer:
         r"""
-        Set the labeled-pairing budget for unsymmetrized or free-index output.
+        Opt into a labeled-pairing diagnostic for free-index output.
 
-        Symmetric contraction-orbit paths do not consume this budget.
+        Disabled by default. Symmetric contraction-orbit paths do not consume it.
 
         Examples
         --------
@@ -10841,7 +10919,8 @@ class TensorReducer:
         """
     def with_pairing_product_limit(self, limit: builtins.int) -> TensorReducer:
         r"""
-        Set the relative-pairing budget for residual free-index output.
+        Opt into a relative-pairing diagnostic for residual free-index output.
+        Disabled by default.
 
         Examples
         --------
@@ -10856,7 +10935,8 @@ class TensorReducer:
         """
     def with_output_term_limit(self, limit: builtins.int) -> TensorReducer:
         r"""
-        Set the maximum number of distinct invariant output terms.
+        Opt into a diagnostic maximum of distinct invariant output terms.
+        Disabled by default.
 
         Examples
         --------

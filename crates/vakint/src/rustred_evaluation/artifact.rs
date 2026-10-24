@@ -203,7 +203,12 @@ impl ArtifactFamily {
         self,
         bytes: &[u8],
     ) -> Result<ArtifactSnapshot, RustRedEvaluationError> {
-        let artifact = decode_current_artifact(bytes).map_err(super::data::failure)?;
+        let artifact = decode_current_artifact(bytes).map_err(|error| {
+            match RustRedEvaluationError::resource_cause(&error) {
+                Some(resource) => RustRedEvaluationError::ResourceLimit(resource.clone()),
+                None => super::data::failure(error),
+            }
+        })?;
         let expected = match self {
             Self::UnitMassVacuumK1 => K1_FAMILY_FINGERPRINT,
             Self::UnitMassVacuumK3 => K3_FAMILY_FINGERPRINT,

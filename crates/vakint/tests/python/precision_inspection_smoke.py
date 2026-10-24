@@ -6,19 +6,45 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from symbolica import ComplexFloat, E, Float
-from symbolica.community.hepkit import FeynmanDiagram
-from symbolica.community.hepkit.vakint import (
-    ConstantSymbol,
-    MasterSymbol,
-    Vakint,
-)
+if os.environ.get("VAKINT_TEST_HOST") == "standalone":
+    from vakint_hepkit_standalone import (
+        ComplexFloat,
+        ConstantSymbol,
+        E,
+        FeynmanDiagram,
+        Float,
+        MasterSymbol,
+        Vakint,
+    )
+else:
+    from symbolica import ComplexFloat, E, Float
+    from symbolica.community.hepkit import FeynmanDiagram
+    from symbolica.community.hepkit.vakint import ConstantSymbol, MasterSymbol, Vakint
 
 
 class PrecisionInspectionSmoke(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.engine = Vakint(evaluation_order=[], run_time_decimal_precision=32)
+
+    def test_resource_settings_are_explicit_and_disabled_by_default(self):
+        for seconds in (float("nan"), float("inf"), -1.0):
+            with (
+                self.subTest(seconds=seconds),
+                self.assertRaisesRegex(ValueError, "finite and nonnegative"),
+            ):
+                Vakint(evaluation_order=[], max_elapsed_seconds=seconds)
+        with self.assertRaisesRegex(ValueError, "elapsed time"):
+            Vakint(evaluation_order=[], max_elapsed_seconds=0)
+        with self.assertRaisesRegex(ValueError, "process RSS"):
+            Vakint(evaluation_order=[], max_process_rss_bytes=1)
+        ordinary = Vakint(
+            evaluation_order=[],
+            max_process_rss_bytes=None,
+            max_elapsed_seconds=None,
+        )
+        record = ordinary.get_constant(ConstantSymbol("z3"), prec=32)
+        self.assertGreaterEqual(record.precision.real.significant_digits, 32)
 
     def test_constant_record_preserves_native_precision_and_is_read_only(self):
         constant = self.engine.get_constant(ConstantSymbol("z3"), prec=32)

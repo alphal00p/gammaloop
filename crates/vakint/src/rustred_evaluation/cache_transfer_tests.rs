@@ -192,7 +192,10 @@ fn transport_extraction_entry_and_combined_staging_limits_are_independent() {
         match kind {
             0 => options.max_archive_bytes = fs::metadata(&fixture.archive).unwrap().len() - 1,
             1 => options.max_extracted_bytes = 0,
-            2 => options.max_entries = 0,
+            2 => {
+                options.diagnostics_enabled = true;
+                options.max_entries = 0;
+            }
             _ => options.max_temporary_bytes = fs::metadata(&fixture.archive).unwrap().len(),
         }
         fixture.assert_clean_failure(&options);
@@ -217,6 +220,20 @@ fn transport_extraction_entry_and_combined_staging_limits_are_independent() {
 }
 
 #[test]
+fn entry_count_template_is_inactive_until_diagnostics_are_enabled() {
+    let fixture = Fixture::new();
+    let mut options = fixture.options.clone();
+    assert!(!options.diagnostics_enabled);
+    options.max_entries = 0;
+    let report = fixture
+        .engine
+        .import_cache(1, &fixture.archive, fixture.output(), &options)
+        .unwrap();
+    assert!(report.entries > 0);
+    fixture.assert_no_staging();
+}
+
+#[test]
 fn exact_entry_and_payload_limits_allow_standard_ustar_record_padding() {
     let fixture = Fixture::new();
     let mut tar = tar::Builder::new(Vec::new());
@@ -237,6 +254,7 @@ fn exact_entry_and_payload_limits_allow_standard_ustar_record_padding() {
     let bytes = gzip.finish().unwrap();
     let mut options = fixture.options.clone();
     options.expected_sha256 = Sha256::digest(&bytes).into();
+    options.diagnostics_enabled = true;
     options.max_entries = sizes.len();
     options.max_extracted_bytes = sizes.iter().sum();
     let output = fixture.output();
@@ -326,6 +344,7 @@ fn traversal_links_sparse_extensions_duplicates_and_padding_bombs_are_rejected()
     let bytes = hostile_archive(&[], 100_000);
     let mut options = fixture.options.clone();
     options.expected_sha256 = Sha256::digest(&bytes).into();
+    options.diagnostics_enabled = true;
     options.max_entries = 1;
     options.max_extracted_bytes = 1;
     let output = fixture.output();

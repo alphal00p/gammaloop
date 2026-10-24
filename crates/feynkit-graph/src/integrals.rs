@@ -15,6 +15,7 @@ use symbolica::domains::{
 };
 use symbolica::poly::{PolyVariable, polynomial::MultivariatePolynomial};
 use symbolica::tensors::matrix::Matrix;
+use symbolica::utils::resources::ResourceLimitError;
 use thiserror::Error;
 
 mod diagram;
@@ -31,6 +32,8 @@ type ExactPolynomial = MultivariatePolynomial<FamilyField, u16>;
 
 #[derive(Clone, Debug, Error)]
 pub enum IntegralFamilyError {
+    #[error("{0}")]
+    Resource(#[from] ResourceLimitError),
     #[error("an integral family needs at least one loop momentum")]
     NoLoops,
     #[error("loop and external momentum names must be distinct: {0}")]

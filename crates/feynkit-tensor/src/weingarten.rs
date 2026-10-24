@@ -8,15 +8,15 @@
 //! recurrence is Lemma 4.3 of Collins and Matsumoto,
 //! [arXiv:1701.04493](https://arxiv.org/abs/1701.04493).
 
-use std::{
-    collections::BTreeMap,
-    sync::{Mutex, OnceLock},
-};
+use std::collections::BTreeMap;
+use std::iter;
+use std::mem;
+use std::sync::{Mutex, OnceLock};
 
-use symbolica::{
-    atom::{Atom, AtomCore},
-    symbol,
-};
+use symbolica::atom::{Atom, AtomCore};
+use symbolica::solve::SolveError;
+use symbolica::symbol;
+use symbolica::utils::resources::{self, ResourceLimitError};
 use thiserror::Error;
 
 /// The coset type of two perfect matchings.
@@ -41,14 +41,15 @@ use thiserror::Error;
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct CosetType {
     parts: Box<[usize]>,
+    class_size: u128,
 }
 
 impl CosetType {
     /// Construct a coset type from positive partition parts.
     ///
     /// The parts are canonicalized into non-increasing order.  The empty
-    /// partition is the unique rank-zero coset type.  Coset types above the
-    /// validated rank-20 target are rejected.
+    /// partition is the unique rank-zero coset type. Rank and class cardinality
+    /// must fit `usize` and `u128`, respectively; active resource limits apply.
     ///
     /// # Examples
     ///
@@ -60,24 +61,28 @@ impl CosetType {
     /// # Ok::<(), feynkit_tensor::WeingartenError>(())
     /// ```
     pub fn new(parts: impl IntoIterator<Item = usize>) -> Result<Self, WeingartenError> {
-        let mut parts = parts.into_iter().collect::<Vec<_>>();
-        if parts.contains(&0) {
-            return Err(WeingartenError::ZeroPartitionPart);
+        resources::checkpoint()?;
+        let mut partition = Vec::new();
+        let mut pair_count = 0_usize;
+        for part in parts {
+            resources::checkpoint()?;
+            if part == 0 {
+                return Err(WeingartenError::ZeroPartitionPart);
+            }
+            pair_count = pair_count
+                .checked_add(part)
+                .ok_or(WeingartenError::RankOverflow)?;
+            partition.push(part);
         }
-        let pair_count = parts.iter().try_fold(0_usize, |total, part| {
-            total
-                .checked_add(*part)
-                .ok_or(WeingartenError::RankOverflow)
-        })?;
-        if pair_count > OrthogonalWeingarten::MAX_RANK / 2 {
-            return Err(WeingartenError::UnsupportedRank {
-                rank: pair_count.saturating_mul(2),
-                maximum: OrthogonalWeingarten::MAX_RANK,
-            });
-        }
-        parts.sort_unstable_by(|left, right| right.cmp(left));
+        pair_count
+            .checked_mul(2)
+            .ok_or(WeingartenError::RankOverflow)?;
+        partition.sort_unstable_by(|left, right| right.cmp(left));
+        let class_size = checked_class_size(&partition, pair_count)?;
+        resources::checkpoint()?;
         Ok(Self {
-            parts: parts.into_boxed_slice(),
+            parts: partition.into_boxed_slice(),
+            class_size,
         })
     }
 
@@ -98,6 +103,7 @@ impl CosetType {
     /// # Ok::<(), feynkit_tensor::WeingartenError>(())
     /// ```
     pub fn between_matchings(left: &[usize], right: &[usize]) -> Result<Self, WeingartenError> {
+        resources::checkpoint()?;
         validate_matching(left)?;
         validate_matching(right)?;
         if left.len() != right.len() {
@@ -107,15 +113,20 @@ impl CosetType {
             });
         }
 
+        resources::check_allocation(
+            u64::try_from(left.len()).map_err(|_| WeingartenError::RankOverflow)?,
+        )?;
         let mut seen = vec![false; left.len()];
         let mut parts = Vec::new();
         for start in 0..left.len() {
+            resources::checkpoint()?;
             if seen[start] {
                 continue;
             }
             let mut stack = vec![start];
             let mut vertices = 0;
             while let Some(vertex) = stack.pop() {
+                resources::checkpoint()?;
                 if seen[vertex] {
                     continue;
                 }
@@ -156,32 +167,16 @@ impl CosetType {
     /// # Ok::<(), feynkit_tensor::WeingartenError>(())
     /// ```
     pub fn class_size(&self) -> u128 {
-        let pair_count = self.pair_count();
-        let mut numerator = 1_u128 << (pair_count - self.parts.len());
-        numerator *= factorial(pair_count);
-
-        let mut denominator = 1_u128;
-        let mut offset = 0;
-        while offset < self.parts.len() {
-            let part = self.parts[offset];
-            let multiplicity = self.parts[offset..]
-                .iter()
-                .take_while(|candidate| **candidate == part)
-                .count();
-            denominator *= (part as u128).pow(multiplicity as u32);
-            denominator *= factorial(multiplicity);
-            offset += multiplicity;
-        }
-        numerator / denominator
+        self.class_size
     }
 
-    fn without_one(&self) -> Option<Self> {
-        let one = self.parts.iter().rposition(|part| *part == 1)?;
+    fn without_one(&self) -> Result<Option<Self>, WeingartenError> {
+        let Some(one) = self.parts.iter().rposition(|part| *part == 1) else {
+            return Ok(None);
+        };
         let mut parts = self.parts.to_vec();
         parts.remove(one);
-        Some(Self {
-            parts: parts.into_boxed_slice(),
-        })
+        Self::new(parts).map(Some)
     }
 }
 
@@ -213,14 +208,15 @@ pub struct OrthogonalWeingarten {
 }
 
 impl OrthogonalWeingarten {
-    /// Largest tensor rank supported by the native coefficient engine.
+    /// Historical reference rank covered by the direct coefficient fixtures.
+    /// Constructors are governed by resource and representation checks.
     pub const MAX_RANK: usize = 20;
 
     /// Generate all coefficients for `pair_count` metric pairs.
     ///
     /// `dimension` may itself be symbolic, such as `4 - 2*eps`.  A rank-zero
-    /// table contains the empty coset type with coefficient one.  At most ten
-    /// pairs (rank 20) are accepted. Keep mixed high-rank projectors symbolic:
+    /// table contains the empty coset type with coefficient one. Keep mixed
+    /// high-rank projectors symbolic:
     /// at fixed positive integer dimension `d < pair_count`, the labeled
     /// metric basis is redundant and this constructor returns
     /// [`WeingartenError::SingularDimension`]. The all-equal isotropic formula
@@ -237,12 +233,10 @@ impl OrthogonalWeingarten {
     /// # Ok::<(), feynkit_tensor::WeingartenError>(())
     /// ```
     pub fn new(pair_count: usize, dimension: Atom) -> Result<Self, WeingartenError> {
-        if pair_count > Self::MAX_RANK / 2 {
-            return Err(WeingartenError::UnsupportedRank {
-                rank: pair_count.saturating_mul(2),
-                maximum: Self::MAX_RANK,
-            });
-        }
+        resources::checkpoint()?;
+        pair_count
+            .checked_mul(2)
+            .ok_or(WeingartenError::RankOverflow)?;
         Self::validate_inverse_dimension(pair_count, &dimension)?;
         let canonical_dimension = canonical_dimension();
         let canonical_coefficients = canonical_coefficients(pair_count, &canonical_dimension)?;
@@ -253,14 +247,17 @@ impl OrthogonalWeingarten {
             canonical_coefficients
                 .into_iter()
                 .map(|(coset_type, coefficient)| {
+                    resources::checkpoint()?;
                     let coefficient = coefficient
                         .replace(canonical_dimension.to_pattern())
                         .with(dimension.clone());
-                    (coset_type, coefficient)
+                    resources::checkpoint()?;
+                    Ok((coset_type, coefficient))
                 })
-                .collect()
+                .collect::<Result<_, WeingartenError>>()?
         };
 
+        resources::checkpoint()?;
         Ok(Self {
             pair_count,
             dimension,
@@ -347,28 +344,44 @@ impl OrthogonalWeingarten {
     /// use symbolica::parse;
     ///
     /// let coefficient =
-    ///     OrthogonalWeingarten::isotropic_pairing_coefficient(10, parse!("D"));
+    ///     OrthogonalWeingarten::isotropic_pairing_coefficient(10, parse!("D"))?;
     /// assert!(coefficient.to_string().contains("D"));
+    /// # Ok::<(), feynkit_tensor::WeingartenError>(())
     /// ```
-    pub fn isotropic_pairing_coefficient(pair_count: usize, dimension: Atom) -> Atom {
-        let denominator = (0..pair_count).fold(Atom::num(1), |denominator, offset| {
-            denominator * (dimension.clone() + Atom::num(2 * offset as i64))
-        });
-        Atom::num(1) / denominator
+    pub fn isotropic_pairing_coefficient(
+        pair_count: usize,
+        dimension: Atom,
+    ) -> Result<Atom, WeingartenError> {
+        resources::checkpoint()?;
+        let denominator = (0..pair_count).try_fold(Atom::one(), |denominator, offset| {
+            resources::checkpoint()?;
+            let product = denominator * (dimension.clone() + Atom::num(2) * Atom::num(offset));
+            resources::checkpoint()?;
+            Ok::<_, WeingartenError>(product)
+        })?;
+        resources::checkpoint()?;
+        let coefficient = Atom::one() / denominator;
+        resources::checkpoint()?;
+        Ok(coefficient)
     }
 
     pub(crate) fn validate_inverse_dimension(
         pair_count: usize,
         dimension: &Atom,
     ) -> Result<(), WeingartenError> {
+        resources::checkpoint()?;
+        let rank = pair_count
+            .checked_mul(2)
+            .ok_or(WeingartenError::RankOverflow)?;
         if pair_count == 0 {
             return Ok(());
         }
         if let Ok(fixed_dimension) = i64::try_from(dimension.as_view())
-            && (fixed_dimension <= 0 || fixed_dimension < pair_count as i64)
+            && (fixed_dimension <= 0
+                || usize::try_from(fixed_dimension).is_ok_and(|value| value < pair_count))
         {
             return Err(WeingartenError::SingularDimension {
-                rank: 2 * pair_count,
+                rank,
                 dimension: dimension.clone(),
             });
         }
@@ -380,24 +393,34 @@ fn canonical_coefficients(
     pair_count: usize,
     dimension: &Atom,
 ) -> Result<BTreeMap<CosetType, Atom>, WeingartenError> {
+    resources::checkpoint()?;
     static TABLES: OnceLock<Mutex<Vec<BTreeMap<CosetType, Atom>>>> = OnceLock::new();
     let tables = TABLES.get_or_init(|| {
         Mutex::new(vec![BTreeMap::from([(
             CosetType {
                 parts: Box::new([]),
+                class_size: 1,
             },
             Atom::num(1),
         )])])
     });
-    let mut tables = tables
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut tables = tables.lock().map_err(|_| WeingartenError::CachePoisoned)?;
+    resources::checkpoint()?;
     while tables.len() <= pair_count {
+        resources::checkpoint()?;
         let current_pairs = tables.len();
-        let next = solve_level(current_pairs, dimension, tables.last().unwrap())?;
+        let next = solve_level(
+            current_pairs,
+            dimension,
+            tables
+                .last()
+                .expect("the rank-zero table initializes the cache"),
+        )?;
         tables.push(next);
     }
-    Ok(tables[pair_count].clone())
+    let result = tables[pair_count].clone();
+    resources::checkpoint()?;
+    Ok(result)
 }
 
 /// Failures in coset-type validation or coefficient generation.
@@ -415,15 +438,24 @@ fn canonical_coefficients(
 /// ```
 #[derive(Debug, Error)]
 pub enum WeingartenError {
+    /// An active request exceeded its resource allowance.
+    #[error("{0}")]
+    Resource(#[from] ResourceLimitError),
     /// Tensor projectors only exist at even rank.
     #[error("tensor rank {0} is odd; vacuum tensor reduction requires an even rank")]
     OddRank(usize),
-    /// The exact engine is bounded to the validated high-rank target.
+    /// A bounded native representation cannot express the requested rank.
     #[error("tensor rank {rank} exceeds the supported maximum {maximum}")]
     UnsupportedRank { rank: usize, maximum: usize },
     /// Summing user-provided partition parts overflowed the platform integer.
     #[error("coset-type tensor rank is too large to represent")]
     RankOverflow,
+    /// The exact coset-class cardinality cannot be represented by `u128`.
+    #[error("coset-class size exceeds the u128 representation")]
+    ClassSizeOverflow,
+    /// A prior coefficient-generation panic poisoned the shared table cache.
+    #[error("orthogonal-Weingarten coefficient cache is poisoned")]
+    CachePoisoned,
     /// Integer partitions cannot contain zero.
     #[error("coset-type partition parts must be positive")]
     ZeroPartitionPart,
@@ -450,7 +482,7 @@ pub enum WeingartenError {
     Solve {
         rank: usize,
         #[source]
-        source: symbolica::solve::SolveError,
+        source: SolveError,
     },
 }
 
@@ -459,86 +491,102 @@ fn solve_level(
     dimension: &Atom,
     lower: &BTreeMap<CosetType, Atom>,
 ) -> Result<BTreeMap<CosetType, Atom>, WeingartenError> {
-    let coset_types = partitions(pair_count);
+    resources::checkpoint()?;
+    let rank = pair_count
+        .checked_mul(2)
+        .ok_or(WeingartenError::RankOverflow)?;
+    let coset_types = partitions(pair_count)?;
+    let matrix_bytes = coset_types
+        .len()
+        .checked_mul(coset_types.len())
+        .and_then(|cells| cells.checked_mul(mem::size_of::<Atom>()))
+        .and_then(|bytes| u64::try_from(bytes).ok())
+        .ok_or(WeingartenError::RankOverflow)?;
+    resources::check_allocation(matrix_bytes)?;
     let variables = (0..coset_types.len())
         .map(|index| {
-            Atom::var(symbol!(&format!(
+            resources::checkpoint()?;
+            Ok(Atom::var(symbol!(&format!(
                 "FeynKit::OrthogonalWeingarten{pair_count}_{index}"
-            )))
+            ))))
         })
-        .collect::<Vec<_>>();
+        .collect::<Result<Vec<_>, WeingartenError>>()?;
     let positions = coset_types
         .iter()
         .enumerate()
         .map(|(index, coset_type)| (coset_type.clone(), index))
         .collect::<BTreeMap<_, _>>();
+    let reference = reference_matching(pair_count);
+    let mut equations = Vec::with_capacity(coset_types.len());
+    for (row, coset_type) in coset_types.iter().enumerate() {
+        resources::checkpoint()?;
+        let matching = representative(coset_type);
+        let mut equation = dimension * &variables[row];
+        let pivot = rank - 2;
+        for vertex in 0..pivot {
+            resources::checkpoint()?;
+            let moved = relabel_transposition(&matching, vertex, pivot);
+            let target = CosetType::between_matchings(&reference, &moved)?;
+            equation += &variables[positions[&target]];
+            resources::checkpoint()?;
+        }
+        if let Some(lower_type) = coset_type.without_one()? {
+            equation -= &lower[&lower_type];
+        }
+        equations.push(equation);
+    }
 
-    let equations = coset_types
-        .iter()
-        .enumerate()
-        .map(|(row, coset_type)| {
-            let matching = representative(coset_type);
-            let mut equation = dimension * &variables[row];
-            let pivot = 2 * pair_count - 2;
-            for vertex in 0..pivot {
-                let moved = relabel_transposition(&matching, vertex, pivot);
-                let target = CosetType::between_matchings(&reference_matching(pair_count), &moved)
-                    .expect("a relabelled perfect matching remains valid");
-                equation += &variables[positions[&target]];
-            }
-            if let Some(lower_type) = coset_type.without_one() {
-                equation -= &lower[&lower_type];
-            }
-            equation
-        })
-        .collect::<Vec<_>>();
-
-    let solutions = Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
-        .and_then(|(matrix, rhs)| {
-            matrix
-                .solve(&rhs)
-                .map_err(|error| symbolica::solve::SolveError::Other(error.to_string()))
-        })
-        .map(|solution| {
-            solution
-                .into_vec()
-                .into_iter()
-                .map(|value| value.to_expression())
-                .collect::<Vec<_>>()
-        })
-        .map_err(|source| WeingartenError::Solve {
-            rank: 2 * pair_count,
-            source,
-        })?;
-
-    Ok(coset_types
+    resources::checkpoint()?;
+    let (matrix, rhs) = Atom::system_to_matrix::<u16, _, _>(&equations, &variables)
+        .map_err(|source| WeingartenError::Solve { rank, source })?;
+    resources::checkpoint()?;
+    let solution = matrix.solve(&rhs).map_err(|error| WeingartenError::Solve {
+        rank,
+        source: SolveError::Other(error.to_string()),
+    })?;
+    resources::checkpoint()?;
+    let solutions = solution
+        .into_vec()
         .into_iter()
-        .zip(solutions.into_iter().map(|solution| solution.cancel()))
-        .collect())
+        .map(|value| {
+            resources::checkpoint()?;
+            let expression = value.to_expression().cancel();
+            resources::checkpoint()?;
+            Ok(expression)
+        })
+        .collect::<Result<Vec<_>, WeingartenError>>()?;
+
+    Ok(coset_types.into_iter().zip(solutions).collect())
 }
 
 fn canonical_dimension() -> Atom {
     Atom::var(symbol!("FeynKit::Dimension"))
 }
 
-fn partitions(total: usize) -> Vec<CosetType> {
-    fn append(total: usize, maximum: usize, current: &mut Vec<usize>, output: &mut Vec<CosetType>) {
+fn partitions(total: usize) -> Result<Vec<CosetType>, WeingartenError> {
+    fn append(
+        total: usize,
+        maximum: usize,
+        current: &mut Vec<usize>,
+        output: &mut Vec<CosetType>,
+    ) -> Result<(), WeingartenError> {
+        resources::checkpoint()?;
         if total == 0 {
-            output.push(CosetType {
-                parts: current.clone().into_boxed_slice(),
-            });
-            return;
+            output.push(CosetType::new(current.iter().copied())?);
+            return Ok(());
         }
         for next in (1..=total.min(maximum)).rev() {
+            resources::checkpoint()?;
             current.push(next);
-            append(total - next, next, current, output);
+            append(total - next, next, current, output)?;
             current.pop();
         }
+        Ok(())
     }
 
     let mut output = Vec::new();
-    append(total, total, &mut Vec::new(), &mut output);
-    output
+    append(total, total, &mut Vec::new(), &mut output)?;
+    Ok(output)
 }
 
 fn reference_matching(pair_count: usize) -> Vec<usize> {
@@ -579,6 +627,7 @@ fn relabel_transposition(matching: &[usize], left: usize, right: usize) -> Vec<u
 
 fn validate_matching(matching: &[usize]) -> Result<(), WeingartenError> {
     for (vertex, partner) in matching.iter().copied().enumerate() {
+        resources::checkpoint()?;
         if partner >= matching.len() || partner == vertex || matching[partner] != vertex {
             return Err(WeingartenError::InvalidMatching { vertex, partner });
         }
@@ -586,29 +635,80 @@ fn validate_matching(matching: &[usize]) -> Result<(), WeingartenError> {
     Ok(())
 }
 
-fn factorial(value: usize) -> u128 {
-    (2..=value).map(|factor| factor as u128).product()
+fn checked_class_size(parts: &[usize], pair_count: usize) -> Result<u128, WeingartenError> {
+    // The permutation conjugacy class k! / z_lambda is a positive integer.
+    // Its power-of-two multiplier must therefore fit before cancellation.
+    let excess = pair_count - parts.len();
+    let exponent = u32::try_from(excess).map_err(|_| WeingartenError::ClassSizeOverflow)?;
+    let mut class_size = 1_u128
+        .checked_shl(exponent)
+        .ok_or(WeingartenError::ClassSizeOverflow)?;
+    let singles = parts.iter().rev().take_while(|part| **part == 1).count();
+    // Cancel m_1! first. The remaining numerator has at most 2 * excess
+    // factors, even for a large partition made almost entirely of ones.
+    let mut factors = (singles..pair_count)
+        .map(|factor| factor as u128 + 1)
+        .collect::<Vec<_>>();
+    let mut offset = 0;
+    while offset < parts.len() && parts[offset] != 1 {
+        resources::checkpoint()?;
+        let part = parts[offset];
+        let multiplicity = parts[offset..]
+            .iter()
+            .take_while(|candidate| **candidate == part)
+            .count();
+        let denominators = iter::repeat_n(part as u128, multiplicity)
+            .chain((2..=multiplicity).map(|factor| factor as u128));
+        for mut divisor in denominators {
+            resources::checkpoint()?;
+            for factor in &mut factors {
+                resources::checkpoint()?;
+                let (mut left, mut right) = (*factor, divisor);
+                while right != 0 {
+                    let remainder = left % right;
+                    left = right;
+                    right = remainder;
+                }
+                *factor /= left;
+                divisor /= left;
+                if divisor == 1 {
+                    break;
+                }
+            }
+            if divisor != 1 {
+                return Err(WeingartenError::ClassSizeOverflow);
+            }
+        }
+        offset += multiplicity;
+    }
+    for factor in factors {
+        resources::checkpoint()?;
+        class_size = class_size
+            .checked_mul(factor)
+            .ok_or(WeingartenError::ClassSizeOverflow)?;
+    }
+    Ok(class_size)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
-    use symbolica::{
-        atom::{Atom, AtomCore},
-        parse,
-    };
+    use symbolica::atom::{Atom, AtomCore};
+    use symbolica::parse;
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
 
     use super::{CosetType, OrthogonalWeingarten, partitions, reference_matching, representative};
 
     #[test]
     fn partition_system_sizes_reach_only_42_at_rank_twenty() {
         let counts = (0..=10)
-            .map(|pair_count| partitions(pair_count).len())
+            .map(|pair_count| partitions(pair_count).unwrap().len())
             .collect::<Vec<_>>();
         assert_eq!(counts, [1, 1, 2, 3, 5, 7, 11, 15, 22, 30, 42]);
         assert_eq!(
             partitions(10)
+                .unwrap()
                 .iter()
                 .map(CosetType::class_size)
                 .sum::<u128>(),
@@ -620,7 +720,7 @@ mod tests {
     fn representatives_have_the_requested_coset_type() {
         for pair_count in 0..=10 {
             let reference = reference_matching(pair_count);
-            for coset_type in partitions(pair_count) {
+            for coset_type in partitions(pair_count).unwrap() {
                 assert_eq!(
                     CosetType::between_matchings(&reference, &representative(&coset_type)).unwrap(),
                     coset_type
@@ -642,19 +742,47 @@ mod tests {
     }
 
     #[test]
-    fn ranks_above_twenty_are_rejected_before_combinatorics() {
+    fn larger_coset_types_preserve_exact_class_size_representation() {
+        assert_eq!(CosetType::new([11]).unwrap().class_size(), 3_715_891_200);
+        let mut almost_singletons = vec![2];
+        almost_singletons.extend([1; 33]);
+        assert_eq!(
+            CosetType::new(almost_singletons).unwrap().class_size(),
+            1190
+        );
+        assert_eq!(CosetType::new([1; 128]).unwrap().class_size(), 1);
+        assert!(CosetType::new([29]).is_ok());
         assert!(matches!(
-            OrthogonalWeingarten::new(11, parse!("D")),
-            Err(super::WeingartenError::UnsupportedRank {
-                rank: 22,
-                maximum: 20
-            })
+            CosetType::new([30]),
+            Err(super::WeingartenError::ClassSizeOverflow)
         ));
+    }
+
+    #[test]
+    fn unrepresentable_ranks_are_rejected_before_combinatorics() {
         assert!(matches!(
             CosetType::new([usize::MAX, 1]),
             Err(super::WeingartenError::RankOverflow)
         ));
-        assert!(CosetType::new([11]).is_err());
+        assert!(matches!(
+            CosetType::new([usize::MAX]),
+            Err(super::WeingartenError::RankOverflow)
+        ));
+        assert!(matches!(
+            OrthogonalWeingarten::new(usize::MAX, parse!("D")),
+            Err(super::WeingartenError::RankOverflow)
+        ));
+    }
+
+    #[test]
+    fn isotropic_formula_propagates_the_active_resource_budget() {
+        let budget = ResourceBudget::new(ResourceLimits {
+            max_elapsed: Some(Duration::ZERO),
+            ..ResourceLimits::default()
+        });
+        let result =
+            budget.run(|| OrthogonalWeingarten::isotropic_pairing_coefficient(11, parse!("D")));
+        assert!(matches!(result, Err(super::WeingartenError::Resource(_))));
     }
 
     #[test]
@@ -692,7 +820,8 @@ mod tests {
 
         // The totally symmetric projector has a closed isotropic form and
         // does not invert the redundant labeled-pairing basis.
-        let isotropic = OrthogonalWeingarten::isotropic_pairing_coefficient(10, Atom::num(4));
+        let isotropic =
+            OrthogonalWeingarten::isotropic_pairing_coefficient(10, Atom::num(4)).unwrap();
         assert!(!isotropic.is_zero());
     }
 
@@ -707,7 +836,8 @@ mod tests {
                     sum + Atom::num(kind.class_size()) * value
                 });
             let expected =
-                OrthogonalWeingarten::isotropic_pairing_coefficient(pair_count, dimension.clone());
+                OrthogonalWeingarten::isotropic_pairing_coefficient(pair_count, dimension.clone())
+                    .unwrap();
             assert!((summed - expected).together().is_zero());
         }
     }
@@ -755,7 +885,8 @@ mod tests {
             .fold(Atom::num(0), |sum, (kind, coefficient)| {
                 sum + Atom::num(kind.class_size()) * coefficient
             });
-        let isotropic_closed = OrthogonalWeingarten::isotropic_pairing_coefficient(10, parse!("D"));
+        let isotropic_closed =
+            OrthogonalWeingarten::isotropic_pairing_coefficient(10, parse!("D")).unwrap();
         assert!((isotropic_sum - isotropic_closed).together().is_zero());
         eprintln!("rank-20 orthogonal-Weingarten table: {elapsed:?}");
     }

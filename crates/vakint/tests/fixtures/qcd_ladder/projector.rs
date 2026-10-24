@@ -3,10 +3,8 @@
 
 use super::*;
 use feynkit_tensor::TensorReducer;
-use idenso::shorthands::UndoShorthands;
 use rustred::algebra::Coefficient;
 use spenso::structure::representation::{BaseRepName, Minkowski};
-use spenso::structure::{abstract_index::AbstractIndex, slot::DummyAind};
 use symbolica::{
     atom::Symbol,
     prelude::{Q, Z},
@@ -36,43 +34,16 @@ pub(super) fn scalar(expression: Atom) -> Result<Atom> {
     Ok(expression)
 }
 
-/// Materialize each scalar-product copy with an independent contracted index.
-/// A network power of an already contracted scalar retains that scalar's dummy
-/// scope; the indexed reducer instead needs explicit copies of that scope.
-fn indexed_dot_polynomial(expression: AtomView<'_>) -> Result<Atom> {
-    match expression {
-        AtomView::Add(sum) => sum.iter().try_fold(Atom::Zero, |sum, term| {
-            Ok(sum + indexed_dot_polynomial(term)?)
-        }),
-        AtomView::Mul(product) => product.iter().try_fold(Atom::one(), |product, factor| {
-            Ok(product * indexed_dot_polynomial(factor)?)
-        }),
-        AtomView::Pow(power) if power.get_base().contains_symbol(SPENSO_TAG.dot) => {
-            let count = usize::try_from(i64::try_from(power.get_exp())?)?;
-            (0..count).try_fold(Atom::one(), |product, _| {
-                Ok(product * indexed_dot_polynomial(power.get_base())?)
-            })
-        }
-        AtomView::Fun(function) if function.get_symbol() == SPENSO_TAG.dot => Ok(expression
-            .to_owned()
-            .undo_dots::<AbstractIndex>()?
-            .canonize::<AbstractIndex>(|_| AbstractIndex::new_dummy())?),
-        _ => Ok(expression.to_owned()),
-    }
-}
-
 fn angular(expression: &Atom, q: Symbol, d: &Atom, guards: &mut BTreeSet<Atom>) -> Result<Atom> {
     if expression.is_zero() {
         return Ok(Atom::Zero);
     }
     let rep = Minkowski::selfless_symbol().call(d);
-    // Retain the validated indexed boundary while the compact native path is
-    // checked independently against these controls and the complete source.
-    let indexed = indexed_dot_polynomial(expression.as_view())?;
+    // Native reduction opens only q-dependent contractions. Closed loop-only
+    // dots remain scalar spectators, including factored products and powers.
     let reduction = TensorReducer::new(d.clone())
-        .with_output_term_limit(ANGULAR_OUTPUT_TERM_LIMIT)
         .with_integrated_vector(q.call(rep))?
-        .reduce(&SymbolicTensor::infer(indexed)?)?;
+        .reduce(&SymbolicTensor::infer(expression.clone())?)?;
     if reduction.max_rank() > 4 {
         return Err("the quadratic transverse projector exceeded auxiliary q rank four".into());
     }

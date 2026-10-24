@@ -66,6 +66,7 @@ struct Options {
     backend: Backend,
     repetition: usize,
     select_current: bool,
+    build_profile: Option<String>,
 }
 
 impl Options {
@@ -81,6 +82,7 @@ impl Options {
             backend: Backend::Fmft,
             repetition: 0,
             select_current: false,
+            build_profile: None,
         };
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
@@ -94,6 +96,7 @@ impl Options {
                      --repetitions N     Fresh processes per case/backend (default: 3)\n\
                      --work-dir PATH     Scratch/log directory (default: cwd/workspace/benchmark)\n\
                      --select-current    Select this new run for the report; preserve all previous runs\n\
+                     --build-profile NAME Required caller-declared profile: release or ci-optim\n\
                      Use an optimized Cargo profile; optionally pin the entire command to one CPU."
                 );
                 return Ok(None);
@@ -112,6 +115,13 @@ impl Options {
                 "--form" => result.form = value.into(),
                 "--repetitions" => result.repetitions = value.parse()?,
                 "--work-dir" => result.work_dir = value.into(),
+                "--build-profile" => {
+                    ensure!(
+                        matches!(value.as_str(), "release" | "ci-optim"),
+                        "build profile must be release or ci-optim"
+                    );
+                    result.build_profile = Some(value);
+                }
                 "--child" => result.child = Some(value.parse()?),
                 "--repetition" => result.repetition = value.parse()?,
                 "--mode" => {
@@ -125,6 +135,10 @@ impl Options {
             }
         }
         ensure!(result.repetitions > 0, "repetitions must be positive");
+        ensure!(
+            result.child.is_some() || result.build_profile.is_some(),
+            "declare the actual Cargo profile with --build-profile release or --build-profile ci-optim"
+        );
         Ok(Some(result))
     }
 
@@ -205,10 +219,12 @@ impl Options {
     }
 
     fn run(&self, cases: &[Case]) -> Result<()> {
-        ensure!(
-            !cfg!(debug_assertions),
-            "use an optimized build: cargo run --release -p vakint --example benchmark_reduction"
-        );
+        if self.build_profile.as_deref() == Some("release") {
+            ensure!(
+                !cfg!(debug_assertions),
+                "release profile declaration conflicts with enabled debug assertions"
+            );
+        }
         let started = Instant::now();
         fs::create_dir_all(&self.work_dir)?;
         let scratch = tempfile::Builder::new()
@@ -513,8 +529,10 @@ impl Provenance {
         Ok(json!({
             "source_commit": Self::command("git", &["-C", crate_path, "rev-parse", "HEAD"])?,
             "source_dirty": !Self::command("git", &["-C", crate_path, "status", "--porcelain"])?.is_empty(),
-            "build_profile": "release (default documented invocation)",
-            "configured_profile": {"opt_level": 3, "lto": "fat"},
+            "build_profile": options.build_profile,
+            "build_profile_source": "Caller-declared via --build-profile; optimization and LTO settings are not introspected",
+            "invocation": std::env::args().collect::<Vec<_>>(),
+            "release_protocol": "Final speed comparisons require the documented cargo run --locked --release invocation without profile overrides",
             "debug_assertions": cfg!(debug_assertions),
             "binary_sha256": Self::sha256(executable)?,
             "bench_source_sha256": format!("{:x}", Sha256::digest(include_bytes!("benchmark_reduction.rs"))),
@@ -578,8 +596,9 @@ impl Json {
             ensure!(
                 root.get("reduction_runs")
                     .and_then(Value::as_object)
-                    .is_some_and(|runs| runs.contains_key(selected)),
-                "selected reduction run is missing"
+                    .and_then(|runs| runs.get(selected))
+                    .is_some_and(|run| run["validation_passed"] == true),
+                "selected reduction run is missing or unvalidated"
             );
         }
         let has_historical_run = root.get("validation_passed") == Some(&json!(true));
@@ -675,6 +694,18 @@ mod tests {
         fs::write(&fresh, b"{invalid")?;
         assert!(Json::append_run(&fresh, &run, false).is_err());
         assert_eq!(fs::read(&fresh)?, b"{invalid");
+        for selected in [Value::Null, json!({"validation_passed": false})] {
+            Json::write(
+                &fresh,
+                &json!({
+                    "selected_reduction_run": "bad",
+                    "reduction_runs": {"bad": selected},
+                }),
+            )?;
+            let before = fs::read(&fresh)?;
+            assert!(Json::append_run(&fresh, &run, false).is_err());
+            assert_eq!(fs::read(&fresh)?, before);
+        }
         Ok(())
     }
 }

@@ -51,6 +51,7 @@ ndarray = "0.17.2"
 notify = "8.2.0"
 numerica = { version = "3.0.1", default-features = false }
 nu-ansi-term = "0.50.3"
+once_cell = "1.21.4"
 numpy = "0.28"
 pyo3 = "0.28"
 pyo3-build-config = "0.28"
@@ -61,8 +62,8 @@ rand = "0.9.4"
 ratatui = "0.30.0"
 rayon = "1.5"
 regex = "1.12.3"
-rustred = { git = "https://github.com/alphal00p/rustred", rev = "91b72f8f5d42e12e1a78cff749fc053159da2ef3", default-features = false }
-rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "91b72f8f5d42e12e1a78cff749fc053159da2ef3", default-features = false }
+rustred = { git = "https://github.com/alphal00p/rustred", rev = "42bae6e0a4031203db71a052975ebab0bd66eeb1", default-features = false }
+rustred-app = { git = "https://github.com/alphal00p/rustred", rev = "42bae6e0a4031203db71a052975ebab0bd66eeb1", default-features = false }
 schemars = "1.2.1"
 serde = "1.0.228"
 self_cell = "1.2.2"
@@ -96,9 +97,9 @@ which = "8.0.0"
 typst-library = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733" }
 typst-svg = { git = "https://github.com/alphal00p/gammaloop", rev = "024f96d67b984195e281e7b8e90a3f752df94733" }
 symbolica-typst-plugin = { git = "https://github.com/symbolica-dev/symbolica-typst-plugin", rev = "57b7455b37c30f4f87353c0073e49f5225e937ab" }
-graphica = { git = "https://github.com/alphal00p/symbolica", rev = "1205ec30890f32f6d0083e3bf1e55976b8e07bdd" }
-numerica = { git = "https://github.com/alphal00p/symbolica", rev = "1205ec30890f32f6d0083e3bf1e55976b8e07bdd" }
-symbolica = { git = "https://github.com/alphal00p/symbolica", rev = "1205ec30890f32f6d0083e3bf1e55976b8e07bdd" }
+graphica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
+numerica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
+symbolica = { git = "https://github.com/symbolica-dev/symbolica", rev = "9cd57678d8817ec33c05cacba4925162f1c86b0b" }
 
 # Share the maintained FeynKit owner with local GammaLoop consumers.
 [patch."https://github.com/alphal00p/gammaloop"]

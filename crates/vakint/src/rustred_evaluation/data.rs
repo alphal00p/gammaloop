@@ -4,11 +4,13 @@ use std::{
     collections::BTreeMap,
     fs,
     path::{Component, Path, PathBuf},
-    sync::{Arc, LazyLock},
+    sync::Arc,
 };
 
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use symbolica::utils::resources;
 
 use super::{
     RustRedEvaluationError,
@@ -134,6 +136,7 @@ pub(super) fn validate_loop_directory(
 
 impl Source {
     fn read(&self, path: &str) -> Result<Vec<u8>, RustRedEvaluationError> {
+        resources::checkpoint()?;
         let relative = relative_path(path)?;
         match self {
             Self::Override {
@@ -142,16 +145,20 @@ impl Source {
                 bytes,
             } => {
                 if path == overridden {
+                    resources::check_allocation(bytes.len().try_into().map_err(failure)?)?;
                     Ok(bytes.to_vec())
                 } else {
                     original.read(path)
                 }
             }
-            Self::Vendored => vendored::FILES
-                .iter()
-                .find(|(name, _)| *name == path)
-                .map(|(_, bytes)| bytes.to_vec())
-                .ok_or_else(|| failure(format!("missing vendored data file {path}"))),
+            Self::Vendored => {
+                let (_, bytes) = vendored::FILES
+                    .iter()
+                    .find(|(name, _)| *name == path)
+                    .ok_or_else(|| failure(format!("missing vendored data file {path}")))?;
+                resources::check_allocation(bytes.len().try_into().map_err(failure)?)?;
+                Ok(bytes.to_vec())
+            }
             Self::Directory(root) => {
                 // Symlinks would allow a developer checkout to escape the same
                 // file boundary that the release extractor enforces.
@@ -169,6 +176,7 @@ impl Source {
                         )));
                     }
                 }
+                resources::check_allocation(fs::metadata(&current).map_err(failure)?.len())?;
                 fs::read(current).map_err(failure)
             }
         }
@@ -200,6 +208,7 @@ impl LoopData {
         }
         let data = Self { manifest, source };
         for path in data.manifest.files.keys() {
+            resources::checkpoint()?;
             data.read(path)?;
         }
         let coverage: serde_json::Value =
@@ -220,6 +229,7 @@ impl LoopData {
                 self.manifest.loop_count
             ))
         })?;
+        resources::check_allocation(digest.bytes)?;
         let bytes = self
             .source
             .read(&format!("{}L/{path}", self.manifest.loop_count))?;
@@ -284,6 +294,7 @@ impl RustRedData {
         manifest: ReleaseManifest,
         max_loop_count: usize,
     ) -> Result<Arc<Self>, RustRedEvaluationError> {
+        resources::checkpoint()?;
         if manifest.schema != RELEASE_SCHEMA || !(1..=5).contains(&max_loop_count) {
             return Err(failure(
                 "unsupported external-data schema or loop count (expected 1 through 5)",
@@ -328,13 +339,15 @@ impl RustRedData {
             &loops,
             &manifest.version,
         )?);
-        Ok(Arc::new(Self {
+        let data = Arc::new(Self {
             version: manifest.version,
             loops,
             lower,
             four_loop,
             masters,
-        }))
+        });
+        resources::checkpoint()?;
+        Ok(data)
     }
 
     pub(super) fn from_directory(
@@ -355,14 +368,24 @@ impl RustRedData {
     }
 
     pub(super) fn vendored() -> Result<Arc<Self>, RustRedEvaluationError> {
-        static DATA: LazyLock<Result<Arc<RustRedData>, String>> = LazyLock::new(|| {
+        static DATA: OnceCell<Arc<RustRedData>> = OnceCell::new();
+        Self::initialize_vendored(&DATA)
+    }
+
+    fn initialize_vendored(
+        cell: &OnceCell<Arc<Self>>,
+    ) -> Result<Arc<Self>, RustRedEvaluationError> {
+        // A constrained first caller must not poison offline construction for
+        // every later engine. Only a fully validated snapshot is shared.
+        resources::checkpoint()?;
+        let data = cell.get_or_try_init(|| {
             let source = Source::Vendored;
             let manifest =
-                serde_json::from_slice(&source.read("manifest.json").map_err(|e| e.to_string())?)
-                    .map_err(|e| e.to_string())?;
-            RustRedData::load(source, manifest, 3).map_err(|e| e.to_string())
-        });
-        DATA.as_ref().cloned().map_err(failure)
+                serde_json::from_slice(&source.read("manifest.json")?).map_err(failure)?;
+            Self::load(source, manifest, 3)
+        })?;
+        resources::checkpoint()?;
+        Ok(Arc::clone(data))
     }
 
     pub(super) fn artifact(
@@ -413,7 +436,7 @@ impl Vakint {
         max_loop_count: usize,
     ) -> Result<(), VakintError> {
         let data = RustRedData::from_directory(path.as_ref(), "latest", max_loop_count)?;
-        self.activate_external_data(data)
+        self.activate_external_data(data, true)
     }
 
     /// Load native IBPs from a local pack or a sealed 1L–3L rules file. A bare
@@ -465,19 +488,20 @@ impl Vakint {
         data.loops.insert(loop_count, Arc::new(pack));
         data.lower.insert(loop_count, snapshot);
         data.version = format!("local-{}", &digest[..16]);
-        self.activate_external_data(Arc::new(data))
+        self.activate_external_data(Arc::new(data), true)
     }
 
     pub(super) fn activate_external_data(
         &mut self,
         data: Arc<RustRedData>,
+        load_prepared_caches: bool,
     ) -> Result<(), VakintError> {
         let mut staged = self.clone();
         staged.rustred_data = Some(Arc::clone(&data));
         staged.rustred_lower_caches = Arc::default();
         staged.rustred_application = Arc::default();
         for (&count, pack) in &data.loops {
-            if pack.manifest.cache.available {
+            if load_prepared_caches && pack.manifest.cache.available {
                 let relative = pack
                     .manifest
                     .cache
@@ -505,6 +529,7 @@ impl Vakint {
         if data.loops.contains_key(&5) {
             staged.saved_application(&crate::VakintSettings::default())?;
         }
+        resources::checkpoint()?;
         *self = staged;
         Ok(())
     }
@@ -514,6 +539,53 @@ impl Vakint {
 mod tests {
     use super::*;
     use crate::{RustRedMasterMode, VakintSettings, vakint_parse};
+
+    #[test]
+    fn failed_vendored_initialization_remains_retryable_and_warm_hits_check_resources() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        use resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
+
+        let cell = OnceCell::new();
+        let calls = AtomicUsize::new(0);
+        let budget = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(1),
+                ..Default::default()
+            },
+            move || {
+                Ok(if calls.fetch_add(1, Ordering::Relaxed) == 0 {
+                    0
+                } else {
+                    2
+                })
+            },
+        );
+        assert!(matches!(
+            budget.run(|| RustRedData::initialize_vendored(&cell)),
+            Err(RustRedEvaluationError::ResourceLimit(
+                ResourceLimitError::Memory { .. }
+            ))
+        ));
+        assert!(cell.get().is_none());
+
+        let first = RustRedData::initialize_vendored(&cell).unwrap();
+        let second = RustRedData::initialize_vendored(&cell).unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(first.loops.keys().copied().collect::<Vec<_>>(), [1, 2, 3]);
+
+        let expired = ResourceBudget::new(ResourceLimits {
+            max_elapsed: Some(std::time::Duration::ZERO),
+            ..Default::default()
+        });
+        assert!(matches!(
+            expired.run(|| RustRedData::initialize_vendored(&cell)),
+            Err(RustRedEvaluationError::ResourceLimit(
+                ResourceLimitError::Elapsed { .. }
+            ))
+        ));
+        assert!(Arc::ptr_eq(cell.get().unwrap(), &first));
+    }
 
     #[test]
     fn finite_constant_payloads_are_validated_and_participate_in_snapshot_identity() {

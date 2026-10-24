@@ -8,6 +8,8 @@ use linnet::half_edge::{
     subgraph::SubGraphLike,
 };
 use serde::{Deserialize, Serialize};
+use symbolica::utils::resources;
+use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
 
 use crate::{
     CffEdge, CffError, CffExpression, CffGraph, EdgeFlow, EdgeId, EdgeKind, EdgeOrientation,
@@ -23,25 +25,18 @@ pub struct ShiftRewrite {
 }
 
 /// Explicit controls for topology-only CFF generation.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(
+    Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, bincode::Encode, bincode::Decode,
+)]
 pub struct CffOptions {
     fixed_orientations: BTreeMap<EdgeId, EdgeOrientation>,
     contracted_edges: BTreeSet<EdgeId>,
     initial_state_edges: BTreeSet<EdgeId>,
     shift_rewrite: Option<ShiftRewrite>,
-    max_orientations: usize,
-}
-
-impl Default for CffOptions {
-    fn default() -> Self {
-        Self {
-            fixed_orientations: BTreeMap::new(),
-            contracted_edges: BTreeSet::new(),
-            initial_state_edges: BTreeSet::new(),
-            shift_rewrite: None,
-            max_orientations: usize::MAX,
-        }
-    }
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    max_orientations: Option<usize>,
+    #[serde(default)]
+    resources: ResourceLimits,
 }
 
 impl CffOptions {
@@ -66,8 +61,25 @@ impl CffOptions {
         self
     }
 
+    /// Enable an orientation-count diagnostic. Normal generation has no count ceiling.
     pub fn with_max_orientations(mut self, maximum: usize) -> Self {
-        self.max_orientations = maximum;
+        self.max_orientations = Some(maximum);
+        self
+    }
+
+    /// Configure cooperative process-RSS and elapsed-time limits for generation.
+    ///
+    /// The default leaves both limits disabled. An enclosing resource budget is
+    /// still enforced, including across native surface construction.
+    ///
+    /// ```
+    /// use feynkit_cff::CffOptions;
+    /// use symbolica::utils::resources::ResourceLimits;
+    /// let options = CffOptions::default().with_resource_limits(ResourceLimits::default());
+    /// assert_eq!(options.max_orientations(), None);
+    /// ```
+    pub fn with_resource_limits(mut self, resources: ResourceLimits) -> Self {
+        self.resources = resources;
         self
     }
 
@@ -87,7 +99,7 @@ impl CffOptions {
         self.shift_rewrite.as_ref()
     }
 
-    pub const fn max_orientations(&self) -> usize {
+    pub const fn max_orientations(&self) -> Option<usize> {
         self.max_orientations
     }
 }
@@ -193,38 +205,42 @@ impl FeynmanDiagramCffExt for FeynmanDiagram {
         subgraph: &S,
         options: CffOptions,
     ) -> Result<CffResult, CffError> {
-        let roles = self
-            .underlying()
-            .iter_edges()
-            .map(|(pair, edge, data)| {
-                let role = if data.data.is_dummy {
-                    HedgeEdgeRole::Omitted
-                } else if pair.is_unpaired() {
-                    HedgeEdgeRole::UnorientedExternal
-                } else if data.data.external.is_some() {
-                    HedgeEdgeRole::InitialState
-                } else {
-                    HedgeEdgeRole::Standard
-                };
-                (edge, role)
-            })
-            .collect::<BTreeMap<_, _>>();
-        if let Some(edge) = options
-            .contracted_edges()
-            .iter()
-            .find(|edge| roles.get(edge) == Some(&HedgeEdgeRole::InitialState))
-        {
-            return Err(CffError::Invariant(format!(
-                "initial-state edge {edge} cannot be contracted during CFF generation"
-            )));
-        }
-        self.underlying().build_cff_from_subgraph_with_edge_roles(
-            subgraph,
-            options,
-            &[],
-            |edge| roles[&edge],
-            &mut SurfaceCache::default(),
-        )
+        let budget = ResourceBudget::new(options.resources);
+        budget.run(|| {
+            resources::checkpoint()?;
+            let roles = self
+                .underlying()
+                .iter_edges()
+                .map(|(pair, edge, data)| {
+                    let role = if data.data.is_dummy {
+                        HedgeEdgeRole::Omitted
+                    } else if pair.is_unpaired() {
+                        HedgeEdgeRole::UnorientedExternal
+                    } else if data.data.external.is_some() {
+                        HedgeEdgeRole::InitialState
+                    } else {
+                        HedgeEdgeRole::Standard
+                    };
+                    (edge, role)
+                })
+                .collect::<BTreeMap<_, _>>();
+            if let Some(edge) = options
+                .contracted_edges()
+                .iter()
+                .find(|edge| roles.get(edge) == Some(&HedgeEdgeRole::InitialState))
+            {
+                return Err(CffError::Invariant(format!(
+                    "initial-state edge {edge} cannot be contracted during CFF generation"
+                )));
+            }
+            self.underlying().build_cff_from_subgraph_with_edge_roles(
+                subgraph,
+                options,
+                &[],
+                |edge| roles[&edge],
+                &mut SurfaceCache::default(),
+            )
+        })
     }
 }
 
@@ -310,51 +326,60 @@ where
         S: SubGraphLike,
         F: FnMut(EdgeId) -> HedgeEdgeRole,
     {
-        let input = HedgeSubgraphCffInput::new(self, subgraph, reversed_dangling, edge_role)?;
-        let contracted_edges = options.contracted_edges().clone();
-        let generation = CffGenerator::new(options).generate_into(&input.graph, cache)?;
-        let mut expression = generation.expression;
+        let budget = ResourceBudget::new(options.resources);
+        budget.run(|| {
+            resources::checkpoint()?;
+            let input = HedgeSubgraphCffInput::new(self, subgraph, reversed_dangling, edge_role)?;
+            resources::checkpoint()?;
+            let contracted_edges = options.contracted_edges().clone();
+            let generation = CffGenerator::new(options).generate_into(&input.graph, cache)?;
+            let mut expression = generation.expression;
 
-        for orientation in expression.orientations_mut() {
-            for edge in &input.internal_edges {
-                if contracted_edges.contains(edge) {
-                    continue;
-                }
-                match orientation.data.orientation.get(*edge) {
-                    Some(EdgeOrientation::Default | EdgeOrientation::Reversed) => {}
-                    Some(EdgeOrientation::Undirected) | None => {
-                        return Err(CffError::Invariant(format!(
-                            "generated orientation does not direct represented edge {edge}"
-                        )));
+            for orientation in expression.orientations_mut() {
+                resources::checkpoint()?;
+                for edge in &input.internal_edges {
+                    if contracted_edges.contains(edge) {
+                        continue;
+                    }
+                    match orientation.data.orientation.get(*edge) {
+                        Some(EdgeOrientation::Default | EdgeOrientation::Reversed) => {}
+                        Some(EdgeOrientation::Undirected) | None => {
+                            return Err(CffError::Invariant(format!(
+                                "generated orientation does not direct represented edge {edge}"
+                            )));
+                        }
                     }
                 }
+
+                orientation.data.orientation = self.new_edgevec(|_, edge, _| {
+                    if !input.represented_edges.contains(&edge) {
+                        return Orientation::Undirected;
+                    }
+                    if contracted_edges.contains(&edge)
+                        || input.unoriented_external_edges.contains(&edge)
+                    {
+                        return Orientation::Undirected;
+                    }
+                    if input.reversed_boundary_edges.contains(&edge) {
+                        return Orientation::Reversed;
+                    }
+                    match orientation.data.orientation.get(edge) {
+                        Some(EdgeOrientation::Reversed) if input.internal_edges.contains(&edge) => {
+                            Orientation::Reversed
+                        }
+                        _ => Orientation::Default,
+                    }
+                });
             }
 
-            orientation.data.orientation = self.new_edgevec(|_, edge, _| {
-                if !input.represented_edges.contains(&edge) {
-                    return Orientation::Undirected;
-                }
-                if contracted_edges.contains(&edge)
-                    || input.unoriented_external_edges.contains(&edge)
-                {
-                    return Orientation::Undirected;
-                }
-                if input.reversed_boundary_edges.contains(&edge) {
-                    return Orientation::Reversed;
-                }
-                match orientation.data.orientation.get(edge) {
-                    Some(EdgeOrientation::Reversed) if input.internal_edges.contains(&edge) => {
-                        Orientation::Reversed
-                    }
-                    _ => Orientation::Default,
-                }
-            });
-        }
-
-        Ok(CffResult {
-            expression,
-            surfaces: cache.clone(),
-            report: generation.report,
+            resources::checkpoint()?;
+            let result = CffResult {
+                expression,
+                surfaces: cache.clone(),
+                report: generation.report,
+            };
+            resources::checkpoint()?;
+            Ok(result)
         })
     }
 }
@@ -545,6 +570,16 @@ impl CffGenerator {
         graph: &CffGraph,
         cache: &mut SurfaceCache,
     ) -> Result<CffGeneration, CffError> {
+        let budget = ResourceBudget::new(self.options.resources);
+        budget.run(|| self.generate_scoped_into(graph, cache))
+    }
+
+    fn generate_scoped_into(
+        &self,
+        graph: &CffGraph,
+        cache: &mut SurfaceCache,
+    ) -> Result<CffGeneration, CffError> {
+        resources::checkpoint()?;
         self.validate_options(graph)?;
         let initial_surface_count = cache.len();
 
@@ -572,15 +607,18 @@ impl CffGenerator {
         let candidate_count = 1_usize
             .checked_shl(free_edge_count)
             .ok_or(CffError::OrientationCountOverflow)?;
-        if candidate_count > self.options.max_orientations {
+        if let Some(maximum) = self.options.max_orientations
+            && candidate_count > maximum
+        {
             return Err(CffError::TooManyOrientations {
                 candidate_count,
-                maximum: self.options.max_orientations,
+                maximum,
             });
         }
 
         let mut orientations = Vec::new();
         for identifier in 0..candidate_count {
+            resources::checkpoint()?;
             let mut orientation = seed_orientation.clone();
             for (edge, fixed) in &self.options.fixed_orientations {
                 orientation[*edge] = *fixed;
@@ -602,6 +640,7 @@ impl CffGenerator {
 
             let id = OrientationId(orientations.len());
             let expression = self.generate_tree(oriented_graph, cache, identifier)?;
+            resources::checkpoint()?;
             orientations.push(OrientationExpression {
                 id,
                 data: OrientationData { orientation },
@@ -616,6 +655,7 @@ impl CffGenerator {
             unfolded_terms: expression.unfolded_term_count(),
             interned_surfaces: cache.len() - initial_surface_count,
         };
+        resources::checkpoint()?;
         Ok(CffGeneration { expression, report })
     }
 
@@ -669,6 +709,7 @@ impl CffGenerator {
         let chains = graph
             .shared_topology()
             .try_surface_chains(&mut |vertex: &CffVertex| {
+                resources::checkpoint()?;
                 let convert = |edge: &three_dimensional_reps::cff_recursion::EdgeRef| WorkingEdge {
                     id: EdgeId::new(edge.edge_id),
                     kind: match edge.edge_type {
@@ -687,12 +728,14 @@ impl CffGenerator {
                 self.prepare_surface(graph.surface_for(&vertex)?)
                     .map(|surface| cache.intern(surface))
             })?;
+        resources::checkpoint()?;
         let Some(first) = chains.first() else {
             return Err(CffError::NoSourceOrSink { orientation });
         };
         let root = first.first().copied().unwrap_or(SurfaceId::Unit);
         let mut tree = ExpressionTree::from_root(root);
         for chain in chains {
+            resources::checkpoint()?;
             let mut parent = crate::NodeId::ROOT;
             for surface in chain.into_iter().skip(1) {
                 parent = tree
@@ -1172,6 +1215,9 @@ fn move_initial_state_energies(
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+    use std::time::Duration;
+    use symbolica::utils::resources::ResourceLimitError;
 
     use super::*;
     use crate::{CffEdge, VertexId};
@@ -1377,6 +1423,42 @@ mod tests {
                 candidate_count: 4,
                 maximum: 3,
             }
+        );
+    }
+
+    #[test]
+    fn resource_limits_apply_without_default_orientation_diagnostics() {
+        assert_eq!(CffOptions::default().max_orientations(), None);
+        let graph = bubble();
+        #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+        {
+            let options = CffOptions::default().with_resource_limits(ResourceLimits {
+                max_elapsed: Some(Duration::ZERO),
+                ..ResourceLimits::default()
+            });
+            assert!(matches!(
+                CffGenerator::new(options).generate(&graph),
+                Err(CffError::Resource(ResourceLimitError::Elapsed { .. }))
+            ));
+        }
+        let outer = ResourceBudget::with_memory_monitor(
+            ResourceLimits {
+                max_process_rss_bytes: Some(10),
+                ..ResourceLimits::default()
+            },
+            || Ok(11),
+        );
+        assert!(matches!(
+            outer.run(|| CffGenerator::default().generate(&graph)),
+            Err(CffError::Resource(ResourceLimitError::Memory { .. }))
+        ));
+        assert_eq!(
+            CffGenerator::default()
+                .generate(&graph)
+                .unwrap()
+                .report
+                .candidate_orientations,
+            4
         );
     }
 

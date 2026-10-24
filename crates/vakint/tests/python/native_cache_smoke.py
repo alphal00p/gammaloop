@@ -16,8 +16,11 @@ import threading
 import unittest
 from pathlib import Path
 
-from symbolica import E
-from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
+if os.environ.get("VAKINT_TEST_HOST") == "standalone":
+    from vakint_hepkit_standalone import E, Vakint, VakintEvaluationMethod
+else:
+    from symbolica import E
+    from symbolica.community.hepkit.vakint import Vakint, VakintEvaluationMethod
 
 ROOTS = [(0, [power]) for power in range(5)]
 
@@ -177,6 +180,17 @@ class NativeCacheSmoke(unittest.TestCase):
         obj = engine()
         prepared = self.scratch / "detach"
         self.assertEqual(self.prepare(obj, prepared)["status"], "complete")
+
+        def pack_digest():
+            return {
+                str(path.relative_to(prepared)): hashlib.sha256(
+                    path.read_bytes()
+                ).hexdigest()
+                for path in prepared.rglob("*")
+                if path.is_file()
+            }
+
+        original_pack = pack_digest()
         obj.load_cache(1, str(prepared))
         cached = obj.evaluate_integral(integral(4))
         self.assertTrue(obj.cache_statistics(1)["attached"])
@@ -184,13 +198,29 @@ class NativeCacheSmoke(unittest.TestCase):
         obj.detach_cache(1)
         detached = obj.cache_statistics(1)
         self.assertFalse(detached["attached"])
+        self.assertIsNone(detached["disk"])
+        self.assertEqual(detached["namespaces"], [])
         self.assertEqual(detached["native"]["cached_integrals"], 0)
+        self.assertEqual(detached["native"]["cached_coefficient_terms"], 0)
+        self.assertEqual(detached["native"]["cached_coefficient_bytes"], 0)
         self.assertTrue(prepared.is_dir())
+        self.assertEqual(pack_digest(), original_pack)
         self.same(cached, obj.evaluate_integral(integral(4)))
-        self.assertGreater(obj.cache_statistics(1)["native"]["rule_applications"], 0)
+        # Detach removes the observed backing backend. Ordinary uncached work
+        # uses a request-local reducer outside these attached-backend counters.
+        after = obj.cache_statistics(1)
+        self.assertFalse(after["attached"])
+        self.assertIsNone(after["disk"])
+        self.assertEqual(after["namespaces"], [])
+        self.assertEqual(after["native"]["cached_integrals"], 0)
+        self.assertEqual(after["native"]["cached_coefficient_terms"], 0)
+        self.assertEqual(after["native"]["cached_coefficient_bytes"], 0)
+        self.assertEqual(after["native"]["backing_hits"], 0)
+        self.assertEqual(pack_digest(), original_pack)
         obj.load_cache(1, str(prepared))
         self.same(cached, obj.evaluate_integral(integral(4)))
         self.assertEqual(obj.cache_statistics(1)["native"]["backing_hits"], 1)
+        self.assertEqual(pack_digest(), original_pack)
 
     def test_callback_exception_keeps_original_and_durable_prefix(self):
         obj = engine()
@@ -278,24 +308,28 @@ class NativeCacheSmoke(unittest.TestCase):
             obj.evaluate_integral(integral(5))
 
     def test_explicit_batch_target_changes_layout_not_reduction(self):
-        obj = engine()
-        output = self.scratch / "small-batches"
-        report = self.prepare(obj, output, batch_records=2)
-        self.assertEqual(report["status"], "complete")
-        self.assertEqual(report["completed_roots"], 5)
-        self.assertEqual(report["options"]["batch_records"], 2)
-        obj.load_cache(1, str(output))
-        disk = obj.cache_statistics(1)["disk"]
-        self.assertEqual(disk["records"], 5)
-        self.assertEqual(disk["chunks"], 3)
-        self.assertEqual(disk["chunks_read"], 0)
-        reference = engine()
-        for power in (1, 2, 4):
-            self.same(
-                obj.evaluate_integral(integral(power)),
-                reference.evaluate_integral(integral(power)),
-            )
-        self.assertEqual(obj.cache_statistics(1)["native"]["rule_applications"], 0)
+        for batch_records, expected_chunks in ((2, 3), (4097, 1)):
+            with self.subTest(batch_records=batch_records):
+                obj = engine()
+                output = self.scratch / f"batches-{batch_records}"
+                report = self.prepare(obj, output, batch_records=batch_records)
+                self.assertEqual(report["status"], "complete")
+                self.assertEqual(report["completed_roots"], 5)
+                self.assertEqual(report["options"]["batch_records"], batch_records)
+                obj.load_cache(1, str(output))
+                disk = obj.cache_statistics(1)["disk"]
+                self.assertEqual(disk["records"], 5)
+                self.assertEqual(disk["chunks"], expected_chunks)
+                self.assertEqual(disk["chunks_read"], 0)
+                reference = engine()
+                for power in (1, 2, 4):
+                    self.same(
+                        obj.evaluate_integral(integral(power)),
+                        reference.evaluate_integral(integral(power)),
+                    )
+                self.assertEqual(
+                    obj.cache_statistics(1)["native"]["rule_applications"], 0
+                )
 
     def test_large_existing_chunk_loads_and_resumes_with_smaller_batch_target(self):
         output = self.scratch / "old-large-chunk"
@@ -405,7 +439,6 @@ class NativeCacheSmoke(unittest.TestCase):
             {"progress": object()},
             {"progress_interval_seconds": float("nan")},
             {"batch_records": 0},
-            {"batch_records": 4097},
         ):
             with self.assertRaises((TypeError, ValueError)):
                 obj.prepare_cache(1, str(path), **options)
