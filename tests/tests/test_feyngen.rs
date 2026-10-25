@@ -1,8 +1,11 @@
 use color_eyre::{Result, eyre::eyre};
-use std::fs;
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fs,
+};
 
 use gammaloop_api::state::SyncSettings;
-use gammalooprs::graph::global::evaluate_overall_factor;
+use gammalooprs::graph::{edge::PossibleParticle, global::evaluate_overall_factor};
 use gammalooprs::processes::{
     CycleSignature, GraphGroupSelectionSpec, GraphSelectionSignatureInventory, ProcessCollection,
     RaisedCutSignatureInventory, RaisedPropagatorScope, RaisedPropagatorSignature,
@@ -1120,7 +1123,31 @@ fn cp_fix_from_symbolica()->Result<()>{
     // Choose the model to consider
     cli.run_command("import model sm-default.json")?;
 
-    assert_snapshot!(feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?,@"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1+Nc^2)*9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");//good
+    let summary = feyngen_str(&mut cli, "xs", "a > d d~ [{{2}}] --symmetrize-left-right-states true --symmetric-left-right-polarizations true --numerator-grouping group_identical_graphs_up_to_scalar_rescaling --filter-zero-flow-edges false --fully-numerical-substitution-when-comparing-numerators false --compare-canonized-numerator true",false)?;
+    let (count, raw_factors) = count_graphs_in_processes(&cli);
+    assert_eq!(count, 10);
+    let total = evaluate_overall_factor(raw_factors.as_view());
+    let symbols = total.get_all_symbols(false);
+    let parameter = |name: &str| {
+        let matches = symbols
+            .iter()
+            .filter(|symbol| symbol.get_stripped_name() == name)
+            .collect::<Vec<_>>();
+        assert_eq!(matches.len(), 1, "expected one qualified parameter {name}");
+        Atom::var(*matches[0])
+    };
+    let nc = parameter("Nc");
+    let g = parameter("G");
+    let ee = parameter("ee");
+    // Preserve the original exact physics oracle independently of factor signs
+    // chosen by the canonical display. The original ratios require Nc, ee != 0.
+    let factor = Atom::num(27) / Atom::num(2) * g.pow(2) * ee.pow(-2);
+    let reference = Atom::num(-12) - &factor * &nc + factor * nc.pow(-1);
+    assert!(
+        (total - reference).expand().is_zero(),
+        "the original expanded CP grouping factor must be preserved"
+    );
+    assert_snapshot!(summary, @"10 | -7+Group(10,1,-1)+Group(2,1,-1)+Group(3,1,-1)+Group(4,1,-1)+Group(5,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(6,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(7,(-1*Nc^2+1)*-9/2*G^2*Nc^(-1)*ee^(-2),-1)+Group(9,1,-1) = -12+-27/2*G^2*Nc*ee^(-2)+27/2*G^2*Nc^(-1)*ee^(-2)");
     Ok(())
 }
 
@@ -1140,14 +1167,126 @@ fn test_generate_sm_full_a_ddx() -> Result<()> {
 }
 
 #[test]
-#[rustfmt::skip]
 fn test_vacuum_amplitude_kaapo() -> Result<()> {
-    let mut cli = get_test_cli(None, get_tests_workspace_path().join("feyn_gen_generation_test"), Some("feyngen".to_string()),true)?;
+    // Count closed chains from incidence, independently of the generator's
+    // Grassmann-sign counter. A self-loop supplies both incidences at its vertex.
+    let closed_loops = |edges: &[(usize, usize)]| {
+        let mut adjacent = BTreeMap::<usize, Vec<usize>>::new();
+        for &(left, right) in edges {
+            adjacent.entry(left).or_default().push(right);
+            adjacent.entry(right).or_default().push(left);
+        }
+        assert!(adjacent.values().all(|neighbors| neighbors.len() == 2));
+        let mut unseen: BTreeSet<_> = adjacent.keys().copied().collect();
+        let mut count = 0;
+        while let Some(start) = unseen.pop_first() {
+            count += 1;
+            let mut pending = vec![start];
+            while let Some(vertex) = pending.pop() {
+                for next in &adjacent[&vertex] {
+                    if unseen.remove(next) {
+                        pending.push(*next);
+                    }
+                }
+            }
+        }
+        count
+    };
+
+    let mut cli = get_test_cli(
+        None,
+        get_tests_workspace_path().join("feyn_gen_generation_test"),
+        Some("feyngen".to_string()),
+        true,
+    )?;
     cli.run_command("import model sm-default.json")?;
 
-    // 4-loop vaccuum contribution to the neutron start equation of state
-    assert_snapshot!(feyngen_str(&mut cli, "amp", "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",false)?,@"52 | -44/3 = -44/3");
-
+    // Preserve the original quark-loop domain; ghost-only graphs stay excluded.
+    let description = feyngen_str(
+        &mut cli,
+        "amp",
+        "{} > {} | g d d~ ghG ghG~ [{4}] --numerator-grouping only_detect_zeroes --number-of-factorized-loop-subtopologies 1 1000 --number-of-fermion-loops 1 1000 --filter-snails false --filter-selfenergies false --filter-tadpoles false --max-n-bridges 0",
+        false,
+    )?;
+    let ProcessCollection::Amplitudes(amplitudes) = &cli.state.process_list.processes[0].collection
+    else {
+        return Err(eyre!("expected a vacuum amplitude inventory"));
+    };
+    let graphs = &amplitudes.values().next().unwrap().graphs;
+    assert_eq!(graphs.len(), 52);
+    let mut historical_sum = Atom::Zero;
+    let mut histogram = BTreeMap::<(usize, usize), (usize, Atom)>::new();
+    for amplitude_graph in graphs {
+        let graph = &amplitude_graph.graph;
+        let mut quark_edges = Vec::new();
+        let mut ghost_edges = Vec::new();
+        for (pair, _, edge) in graph.underlying.iter_edges() {
+            let particle = match &edge.data.particle {
+                PossibleParticle::Particle(particle)
+                | PossibleParticle::MassOverriddenParticle { particle, .. } => {
+                    cli.state.model.particle_by_id(*particle)?
+                }
+                PossibleParticle::JustMass { .. } => {
+                    panic!("generated QCD edges must retain particle identities")
+                }
+            };
+            if !particle.is_fermion() && !particle.is_ghost() {
+                continue;
+            }
+            assert!(pair.is_paired());
+            let hedge = pair.any_hedge();
+            let ends = (
+                graph.underlying.node_id(hedge).0,
+                graph.underlying.node_id(graph.underlying.inv(hedge)).0,
+            );
+            if particle.is_ghost() {
+                ghost_edges.push(ends);
+            } else {
+                quark_edges.push(ends);
+            }
+        }
+        let quark_loops = closed_loops(&quark_edges);
+        let ghost_loops = closed_loops(&ghost_edges);
+        assert!(quark_loops >= 1);
+        let weight = evaluate_overall_factor(graph.overall_factor.as_view());
+        let without_loop_sign = graph
+            .overall_factor
+            .replace(
+                function!(
+                    symbol!("feynkit_generator_factor::InternalFermionLoopSign"),
+                    Atom::var(symbol!("x_"))
+                )
+                .to_pattern(),
+            )
+            .with(Atom::one().to_pattern());
+        assert_eq!(
+            weight,
+            evaluate_overall_factor(without_loop_sign.as_view())
+                * Atom::num(-1).pow((quark_loops + ghost_loops) as i64),
+            "closed quark and ghost chains both contribute their Grassmann signs",
+        );
+        let bucket = histogram
+            .entry((quark_loops, ghost_loops))
+            .or_insert((0, Atom::Zero));
+        bucket.0 += 1;
+        bucket.1 += &weight;
+        // Preserve the original aggregate oracle by undoing only the restored
+        // closed-ghost-loop signs, without changing the selected graph domain.
+        historical_sum += weight * Atom::num(-1).pow(ghost_loops as i64);
+    }
+    assert_eq!(historical_sum, Atom::num((-44, 3)));
+    assert_eq!(
+        histogram,
+        BTreeMap::from([
+            ((1, 0), (28, Atom::num((-259, 24)))),
+            ((1, 1), (12, Atom::num((89, 12)))),
+            ((1, 2), (1, Atom::num((-1, 2)))),
+            ((2, 0), (9, Atom::num((89, 24)))),
+            ((2, 1), (1, Atom::num((-1, 2)))),
+            ((3, 0), (1, Atom::num((-1, 6)))),
+        ])
+    );
+    assert_snapshot!(description, @"52 | -5/6 = -5/6");
     Ok(())
 }
 
