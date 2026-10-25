@@ -382,8 +382,14 @@ impl Vakint {
         path: impl AsRef<Path>,
     ) -> Result<Self, VakintError> {
         let mut configured = settings.clone();
-        configured.rustred_artifact_path = Some(path.as_ref().canonicalize().map_err(failure)?);
-        if let Some(root) = super::data::RustRedData::release_root(path.as_ref())? {
+        let path = path.as_ref();
+        configured.rustred_artifact_path = Some(path.canonicalize().map_err(failure)?);
+        let data = self.rustred_data()?;
+        let root = super::data::RustRedData::release_root(path)?
+            .or_else(|| data.directory_root_for_ibps(5, path));
+        if let Some(root) = root
+            && !data.matches_directory(&root, 5)?
+        {
             self.load_external_data(root, 5)?;
         }
         self.saved_application(&configured)?;

@@ -95,6 +95,7 @@ enum Source {
 pub(crate) struct LoopData {
     pub manifest: LoopManifest,
     source: Source,
+    manifest_sha256: String,
 }
 
 pub(super) fn failure(detail: impl std::fmt::Display) -> RustRedEvaluationError {
@@ -206,7 +207,11 @@ impl LoopData {
                 "unsupported master-data normalization or dimension",
             ));
         }
-        let data = Self { manifest, source };
+        let data = Self {
+            manifest,
+            source,
+            manifest_sha256: pack.manifest_sha256.clone(),
+        };
         for path in data.manifest.files.keys() {
             resources::checkpoint()?;
             data.read(path)?;
@@ -289,11 +294,11 @@ impl RustRedData {
         Ok(None)
     }
 
-    fn load(
-        source: Source,
-        manifest: ReleaseManifest,
+    fn load_loops(
+        source: &Source,
+        manifest: &ReleaseManifest,
         max_loop_count: usize,
-    ) -> Result<Arc<Self>, RustRedEvaluationError> {
+    ) -> Result<BTreeMap<usize, Arc<LoopData>>, RustRedEvaluationError> {
         resources::checkpoint()?;
         if manifest.schema != RELEASE_SCHEMA || !(1..=5).contains(&max_loop_count) {
             return Err(failure(
@@ -323,6 +328,15 @@ impl RustRedData {
                 loops.entry(count).or_insert_with(|| Arc::clone(data));
             }
         }
+        Ok(loops)
+    }
+
+    fn load(
+        source: Source,
+        manifest: ReleaseManifest,
+        max_loop_count: usize,
+    ) -> Result<Arc<Self>, RustRedEvaluationError> {
+        let loops = Self::load_loops(&source, &manifest, max_loop_count)?;
         let mut lower = BTreeMap::new();
         for (&count, data) in loops.range(..=3) {
             let family = super::artifact::shipped_family_for_loop_count(count).unwrap();
@@ -365,6 +379,62 @@ impl RustRedData {
             )));
         }
         Self::load(source, manifest, max_loop_count)
+    }
+
+    /// Recognize only the already authenticated pack's exact IBP path.
+    pub(super) fn directory_root_for_ibps(
+        &self,
+        loop_count: usize,
+        path: &Path,
+    ) -> Option<PathBuf> {
+        let pack = self.loops.get(&loop_count)?;
+        let Source::Directory(root) = &pack.source else {
+            return None;
+        };
+        let expected = root.join(format!("{loop_count}L/ibps"));
+        if path == expected {
+            return Some(root.clone());
+        }
+        // Resolve parent aliases without following a replaced terminal symlink.
+        // The ordinary pack validator must reject that symlink, not classify
+        // its target as an unrelated bare application.
+        let parent = path
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty());
+        let candidate = parent
+            .unwrap_or_else(|| Path::new("."))
+            .canonicalize()
+            .ok()?
+            .join(path.file_name()?);
+        (candidate == expected).then(|| root.clone())
+    }
+
+    /// Authenticate a mutable checkout before preserving this snapshot's native owners.
+    pub(super) fn matches_directory(
+        &self,
+        path: &Path,
+        max_loop_count: usize,
+    ) -> Result<bool, RustRedEvaluationError> {
+        let root = path.canonicalize().map_err(failure)?;
+        if self.loops.len() != max_loop_count
+            || self.loops.values().any(
+                |pack| !matches!(&pack.source, Source::Directory(directory) if directory == &root),
+            )
+        {
+            return Ok(false);
+        }
+        let source = Source::Directory(root);
+        let manifest: ReleaseManifest =
+            serde_json::from_slice(&source.read("manifest.json")?).map_err(failure)?;
+        // This is the same complete schema/checksum/coverage validation used by
+        // ordinary loading. It deliberately precedes an identity reuse decision.
+        let loops = Self::load_loops(&source, &manifest, max_loop_count)?;
+        Ok(self.version == manifest.version
+            && loops.iter().all(|(count, pack)| {
+                self.loops
+                    .get(count)
+                    .is_some_and(|current| current.manifest_sha256 == pack.manifest_sha256)
+            }))
     }
 
     pub(super) fn vendored() -> Result<Arc<Self>, RustRedEvaluationError> {
@@ -540,6 +610,152 @@ mod tests {
     use super::*;
     use crate::{RustRedMasterMode, VakintSettings, vakint_parse};
     use std::collections::BTreeSet;
+
+    fn vendored_directory() -> tempfile::TempDir {
+        let directory = tempfile::tempdir().unwrap();
+        for (relative, bytes) in vendored::FILES {
+            let path = directory.path().join(relative);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, bytes).unwrap();
+        }
+        directory
+    }
+
+    #[test]
+    fn known_directory_ibps_path_still_requires_valid_root_manifest() {
+        let directory = vendored_directory();
+        let data = RustRedData::from_directory(directory.path(), "latest", 3).unwrap();
+        let ibps = directory.path().join("3L/ibps").canonicalize().unwrap();
+        let root = data.directory_root_for_ibps(3, &ibps).unwrap();
+        #[cfg(unix)]
+        let root_manifest = fs::read(root.join("manifest.json")).unwrap();
+        assert_eq!(root, directory.path().canonicalize().unwrap());
+        assert!(
+            data.directory_root_for_ibps(3, &directory.path().join("1L/masters"))
+                .is_none()
+        );
+        assert!(
+            RustRedData::vendored()
+                .unwrap()
+                .directory_root_for_ibps(3, &ibps)
+                .is_none()
+        );
+        fs::remove_file(root.join("manifest.json")).unwrap();
+        assert_eq!(data.directory_root_for_ibps(3, &ibps), Some(root.clone()));
+        assert!(data.matches_directory(&root, 3).is_err());
+        #[cfg(unix)]
+        {
+            fs::write(root.join("manifest.json"), &root_manifest).unwrap();
+            let outside = tempfile::tempdir().unwrap();
+            fs::rename(&ibps, directory.path().join("3L/original-ibps")).unwrap();
+            std::os::unix::fs::symlink(outside.path(), &ibps).unwrap();
+            assert_eq!(
+                RustRedData::release_root(&ibps).unwrap(),
+                Some(root.clone())
+            );
+            assert_eq!(data.directory_root_for_ibps(3, &ibps), Some(root.clone()));
+            let parent_alias = directory.path().join("three-loop-alias");
+            std::os::unix::fs::symlink(ibps.parent().unwrap(), &parent_alias).unwrap();
+            let relative_terminal = parent_alias.join("ibps");
+            assert_eq!(
+                data.directory_root_for_ibps(3, &relative_terminal),
+                Some(root.clone())
+            );
+            assert!(
+                data.directory_root_for_ibps(3, &ibps.canonicalize().unwrap())
+                    .is_none()
+            );
+            assert!(
+                data.matches_directory(&root, 3)
+                    .unwrap_err()
+                    .to_string()
+                    .contains("symlink")
+            );
+            fs::remove_file(root.join("manifest.json")).unwrap();
+            assert!(RustRedData::release_root(&ibps).unwrap().is_none());
+            assert_eq!(data.directory_root_for_ibps(3, &ibps), Some(root.clone()));
+            assert!(data.matches_directory(&root, 3).is_err());
+        }
+        fs::write(root.join("manifest.json"), b"{broken-json").unwrap();
+        assert_eq!(data.directory_root_for_ibps(3, &ibps), Some(root.clone()));
+        assert!(data.matches_directory(&root, 3).is_err());
+    }
+
+    #[test]
+    fn directory_reuse_checks_content_identity_and_rejects_corruption() {
+        let directory = vendored_directory();
+        let data = RustRedData::from_directory(directory.path(), "latest", 3).unwrap();
+        let mut engine = Vakint::new().unwrap();
+        engine.rustred_data = Some(Arc::clone(&data));
+        let caches = Arc::clone(&engine.rustred_lower_caches);
+        let application = Arc::clone(&engine.rustred_application);
+        assert!(data.matches_directory(directory.path(), 3).unwrap());
+        assert!(
+            !RustRedData::vendored()
+                .unwrap()
+                .matches_directory(directory.path(), 3)
+                .unwrap()
+        );
+        let different_directory = tempfile::tempdir().unwrap();
+        assert!(
+            !data
+                .matches_directory(different_directory.path(), 3)
+                .unwrap()
+        );
+
+        let coverage_path = directory
+            .path()
+            .join("1L")
+            .join(&data.loops[&1].manifest.coverage);
+        let coverage = fs::read(&coverage_path).unwrap();
+        fs::write(&coverage_path, b"corrupt payload").unwrap();
+        assert!(data.matches_directory(directory.path(), 3).is_err());
+        assert!(engine.load_external_data(directory.path(), 3).is_err());
+        assert!(Arc::ptr_eq(&data, &engine.rustred_data().unwrap()));
+        assert!(Arc::ptr_eq(&caches, &engine.rustred_lower_caches));
+        assert!(Arc::ptr_eq(&application, &engine.rustred_application));
+        fs::write(&coverage_path, &coverage).unwrap();
+        assert!(data.matches_directory(directory.path(), 3).unwrap());
+        #[cfg(unix)]
+        {
+            let outside = tempfile::tempdir().unwrap();
+            let outside_path = outside.path().join("coverage.json");
+            fs::write(&outside_path, &coverage).unwrap();
+            fs::remove_file(&coverage_path).unwrap();
+            std::os::unix::fs::symlink(&outside_path, &coverage_path).unwrap();
+            assert!(data.matches_directory(directory.path(), 3).is_err());
+            fs::remove_file(&coverage_path).unwrap();
+            fs::write(&coverage_path, &coverage).unwrap();
+        }
+
+        let manifest_path = directory.path().join("1L/manifest.json");
+        let mut manifest = fs::read(&manifest_path).unwrap();
+        manifest.push(b'\n');
+        fs::write(&manifest_path, &manifest).unwrap();
+        let release_path = directory.path().join("manifest.json");
+        let mut release: ReleaseManifest =
+            serde_json::from_slice(&fs::read(&release_path).unwrap()).unwrap();
+        release
+            .loop_packs
+            .iter_mut()
+            .find(|pack| pack.loop_count == 1)
+            .unwrap()
+            .manifest_sha256 = format!("{:x}", Sha256::digest(&manifest));
+        fs::write(&release_path, serde_json::to_vec(&release).unwrap()).unwrap();
+        // A valid new raw manifest is a different snapshot even when its parsed
+        // mathematical payload happens to be unchanged.
+        assert!(!data.matches_directory(directory.path(), 3).unwrap());
+
+        let mut overridden = (*data).clone();
+        let mut pack = (*overridden.loops[&1]).clone();
+        pack.source = Source::Override {
+            original: Arc::new(pack.source),
+            path: format!("1L/{}", pack.manifest.coverage),
+            bytes: coverage.into(),
+        };
+        overridden.loops.insert(1, Arc::new(pack));
+        assert!(!overridden.matches_directory(directory.path(), 3).unwrap());
+    }
 
     #[test]
     fn failed_vendored_initialization_remains_retryable_and_warm_hits_check_resources() {

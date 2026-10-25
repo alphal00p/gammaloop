@@ -96,16 +96,41 @@ fn bundled_five_loop_application_loads_from_its_portable_directory() {
     assert_eq!(document["metadata"]["source_generation"], 119);
     let mut settings = VakintSettings::default();
     assert!(settings.rustred_artifact_path.is_none());
+    let started = std::time::Instant::now();
     let engine = super::cache_tests::external_engine()
         .with_rustred_application(&mut settings, &directory)
         .unwrap();
+    eprintln!(
+        "portable application first attachment: {:.6}s",
+        started.elapsed().as_secs_f64()
+    );
     assert_eq!(
         settings.rustred_artifact_path,
         Some(directory.canonicalize().unwrap())
     );
-    // Repeated explicit attachment reuses the existing authenticated application.
-    let _ = engine
+    // Repeated explicit attachment reuses the existing authenticated owners.
+    let data = engine.rustred_data().unwrap();
+    let application = engine.saved_application(&settings).unwrap();
+    let caches = std::sync::Arc::clone(&engine.rustred_lower_caches);
+    let started = std::time::Instant::now();
+    let engine = engine
         .with_rustred_application(&mut settings, &directory)
         .unwrap();
+    eprintln!(
+        "portable application repeated attachment: {:.6}s",
+        started.elapsed().as_secs_f64()
+    );
+    assert!(std::sync::Arc::ptr_eq(
+        &data,
+        &engine.rustred_data().unwrap()
+    ));
+    assert!(std::sync::Arc::ptr_eq(
+        &application,
+        &engine.saved_application(&settings).unwrap()
+    ));
+    assert!(std::sync::Arc::ptr_eq(
+        &caches,
+        &engine.rustred_lower_caches
+    ));
     assert!(VakintSettings::default().rustred_artifact_path.is_none());
 }
