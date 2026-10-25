@@ -500,6 +500,7 @@
       "crates/idenso/tests/fixtures/d11_contracted_temporal_chain.sym"
     ];
     "linnet-py" = ["crates/linnet-py/tests/test_svg_interaction.py"];
+    spynso3 = ["crates/spynso3/tests/evaluator_horner.py"];
     linnet = ["crates/linnet/src/half_edge/layout/impred/fixtures"];
     linnest = [
       "crates/linnest/layout/native/fixtures"
@@ -524,6 +525,8 @@
       "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/feynkit-py/tests/installed_ordered_numerator_ports.py"
+      "crates/feynkit-py/tests/standalone_host.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"
       "crates/linnet-py/python/symbolica/community/graph/__init__.py"
