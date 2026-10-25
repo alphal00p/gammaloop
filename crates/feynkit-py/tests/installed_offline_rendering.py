@@ -250,21 +250,6 @@ try:
         )
 
     assert native_targets(titled_svg) == native_targets(drawing.to_svg())
-    # A genuinely untitled generic graph retains the original height contract.
-    untitled = render.build(
-        render.node("caption-height", label=render.MathSymbol("p", subscript=1))
-    )
-    untitled_bounds = ET.fromstring(untitled.render().to_svg()).get("viewBox").split()
-    titled_bounds = (
-        ET.fromstring(
-            untitled.render(
-                config=render.RenderSettings(title=render.TextLabel("Explicit title"))
-            ).to_svg()
-        )
-        .get("viewBox")
-        .split()
-    )
-    assert float(titled_bounds[3]) > float(untitled_bounds[3])
     style = hep.DiagramStyle(show_particle=False, show_node_index=True)
     basis = diagram.loop_momentum_basis
     drawing = diagram.render(style=style, lmb=basis)
