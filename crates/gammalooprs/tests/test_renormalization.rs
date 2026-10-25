@@ -1,5 +1,5 @@
 use gammalooprs::{
-    graph::{Graph, parse::IntoFinalizedRuntimeGraph},
+    graph::{Graph, edge::PossibleParticle, parse::IntoFinalizedRuntimeGraph},
     initialisation::test_initialise,
     model::{Model, ModelGammaLoopExt},
     processes::{Amplitude, AmplitudeGraph},
@@ -12,12 +12,17 @@ use gammalooprs::{
 };
 use idenso::{
     CookMode, CookSettings, Cookable, IndexTooling, coad, cof,
-    color::{CS, ColorSimplifySettings},
+    color::{CS, ColorSimplifier, ColorSimplifySettings},
     color_cas, color_idx,
     dirac::GammaSimplifySettings,
+    representations::ColorFundamental,
     tensor::{AlgebraSettings, ContractSettings, SymbolicTensor},
 };
-use spenso::{shadowing::symbolica_utils::LogPrint, structure::abstract_index::AbstractIndex};
+use linnet::half_edge::subgraph::SuBitGraph;
+use spenso::{
+    shadowing::symbolica_utils::LogPrint,
+    structure::{abstract_index::AbstractIndex, representation::RepName},
+};
 use std::collections::{BTreeMap, BTreeSet};
 use symbolica::{
     atom::{Atom, AtomCore, AtomView, Symbol},
@@ -31,7 +36,22 @@ use vakint::NumericalCoefficient;
 // Symbolica's printer. A separate namespace preserves the literal tensor
 // argument order without depending on the runtime symbol registration order.
 macro_rules! assert_rqft_pole_reference {
-    ($actual:expr, @$reference:literal $(,)?) => {{
+    (graph = $graph:expr, model = $model:expr, actual = $actual:expr, @$reference:literal $(,)?) => {{
+        // A fixed-species diagram has no flavor sum. Supply that independent
+        // multiplicity from its closed quark cycles, never from a Dynkin index.
+        let actual = align_rqft_kinematics_and_color($actual, $model)
+            .to_cof_dimension_invariants()
+            * rqft_quark_flavor_factor($graph, $model);
+        // Only the invariant heads need their native namespace here. Opaque
+        // momentum/tensor reference syntax is not admitted as a tensor.
+        let reference = parse!($reference, default_namespace = "spenso")
+            .to_cof_dimension_invariants();
+        assert_rqft_pole_reference!(
+            actual.to_bare_ordered_string(),
+            @reference.to_bare_ordered_string()
+        );
+    }};
+    ($actual:expr, @$reference:expr $(,)?) => {{
         let actual = parse!($actual, default_namespace = "rqft_pole_reference");
         let expected = parse!($reference, default_namespace = "rqft_pole_reference");
         actual.visitor(&mut |part| {
@@ -45,6 +65,26 @@ macro_rules! assert_rqft_pole_reference {
         });
         assert_eq!((actual - expected).expand(), Atom::Zero);
     }};
+}
+
+fn rqft_closed_quark_loops(graph: &Graph, model: &Model) -> usize {
+    // Reuse the native graph-cycle owner used by ParseGraph::n_fermion_loops.
+    // The RQFT references sum fundamental quark flavors, not ghosts or leptons.
+    let quarks: SuBitGraph = graph.underlying.from_filter(|edge| {
+        let particle = match &edge.particle {
+            PossibleParticle::Particle(particle)
+            | PossibleParticle::MassOverriddenParticle { particle, .. } => {
+                model.particle_by_id(*particle).unwrap()
+            }
+            PossibleParticle::JustMass { .. } => return false,
+        };
+        particle.is_fermion() && particle.color.abs() == 3
+    });
+    graph.underlying.cyclotomatic_number(&quarks)
+}
+
+fn rqft_quark_flavor_factor(graph: &Graph, model: &Model) -> Atom {
+    parse!("nf").pow(Atom::num(rqft_closed_quark_loops(graph, model)))
 }
 
 fn pole_part_uv_settings() -> UVgenerationSettings {
@@ -85,7 +125,7 @@ fn pole_part_uv_settings() -> UVgenerationSettings {
 // GammaLoop and RQFT use opposite ghost-propagator signs (+i versus -i).
 // Their ghost-gluon momentum and color conventions differ as well, so the net
 // graph sign cannot be inferred from the ghost-edge count or applied globally.
-pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
+fn align_rqft_kinematics_and_color(atom: &Atom, model: &Model) -> Atom {
     let cooking = CookSettings::indices()
         .with_mode(CookMode::ReversibleEncoding)
         .with_representation_payloads(true, true);
@@ -119,9 +159,6 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
         .uncook(expression.expression().as_view())
         .replace(CS.nc)
         .with(color_cas!(2, coad!(8)))
-        // RQFT writes the fundamental Dynkin index as T_F = n_f / 2.
-        .replace(color_idx!(2, cof!(3)))
-        .with(parse!("nf") / Atom::num(2))
         .replace(parse!("UFO::aS"))
         .with(parse!("gs").pow(2) / (Atom::var(Symbol::PI) * 4))
         .replace(parse!("UFO::aEW"))
@@ -134,6 +171,20 @@ pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
     // .coefficient_list::<i8>(&[Atom::var(GS.dim_epsilon)])
     // .iter()
     // .fold(Atom::Zero, |a, (e, v)| a + e * v)
+}
+
+// Legacy printer snapshots use `nf` as their trace-index display convention.
+// Physical pole comparisons instead use the graph-aware macro arm above,
+// which keeps the flavor count separate from the group normalization.
+pub fn align_to_rqft(atom: &Atom, model: &Model) -> Atom {
+    align_rqft_kinematics_and_color(atom, model)
+        .replace(color_idx!(2, cof!(3)))
+        .with(parse!("nf") / Atom::num(2))
+        .expand_num()
+        .collect_factors()
+        .collect_num()
+        .collect_symbol::<i16>(GS.dim_epsilon)
+        .collect_factors()
 }
 #[test]
 fn finite_part_quark_lo() {
@@ -152,6 +203,18 @@ fn finite_part_quark_lo() {
         .unwrap();
 
     println!("ren part: {:>}", a.log_print(Some(80)));
+    assert_eq!(rqft_closed_quark_loops(&amp.graphs[0].graph, &model), 0);
+    assert_eq!(
+        rqft_quark_flavor_factor(&amp.graphs[0].graph, &model),
+        Atom::one()
+    );
+    let invariants = align_rqft_kinematics_and_color(&a, &model)
+        .get_all_indeterminates(false)
+        .into_iter()
+        .map(|part| part.to_owned())
+        .collect::<BTreeSet<_>>();
+    assert!(invariants.contains(&color_cas!(2, cof!(3))));
+    assert!(!invariants.contains(&parse!("nf")));
     // RQFT quark_lo_0_in.h forest order, H = p1.p1*gs^2*cf (cf = 4/3):
     // F0 (direct) / H = +ep^-1.
     // Sum / H = +ep^-1; native GammaLoop / RQFT = +1. The one-loop Vakint sign
@@ -160,6 +223,60 @@ fn finite_part_quark_lo() {
         align_to_rqft(&a,&model)
         .to_bare_ordered_string(),@"cas(2,cof(3))*dot(P(0,mink(4)),P(0,mink(4)))*gs^2*ε^(-1)"
     );
+}
+
+#[test]
+fn rqft_quark_flavor_is_independent_of_group_invariants() {
+    test_initialise().unwrap();
+    // Parsing the frozen scalar reference with this namespace must use the
+    // registered owner identities, before any native invariant normalization.
+    for (parsed, registered) in [
+        (
+            parse!("cas(2,cof(3))", default_namespace = "spenso"),
+            color_cas!(2, cof!(3)),
+        ),
+        (
+            parse!("cas(2,coad(8))", default_namespace = "spenso"),
+            color_cas!(2, coad!(8)),
+        ),
+        (
+            parse!("idx(2,cof(3))", default_namespace = "spenso"),
+            color_idx!(2, cof!(3)),
+        ),
+        (parse!("cof(3)", default_namespace = "spenso"), cof!(3)),
+        (parse!("coad(8)", default_namespace = "spenso"), coad!(8)),
+    ] {
+        assert_eq!(parsed, registered);
+    }
+
+    let model = load_generic_model("sm");
+    let graphs: Vec<Graph> = include_str!("fixtures/renormalization/ghost_2loop.dot")
+        .into_finalized_runtime_graph(&model)
+        .unwrap();
+    assert_eq!(
+        graphs
+            .iter()
+            .map(|graph| rqft_closed_quark_loops(graph, &model))
+            .collect::<Vec<_>>(),
+        [0, 0, 0, 1, 0, 0]
+    );
+    let flavor = rqft_quark_flavor_factor(&graphs[3], &model);
+    assert_eq!(flavor, parse!("nf"));
+    assert_eq!(rqft_quark_flavor_factor(&graphs[0], &model), Atom::one());
+
+    for dimension in [2, 3, 4] {
+        // Tr(T_a T_a) gives d_F C_F = d_A T_F in each SAME group.
+        // The independent flavor multiplier is supplied by the graph, and
+        // remains linear even when the invariant basis changes.
+        let fundamental = ColorFundamental {}.to_symbolic([Atom::num(dimension)]);
+        let index = color_idx!(2, fundamental.clone()).to_cof_dimension_invariants();
+        let casimir_trace = (Atom::num(dimension) * color_cas!(2, fundamental)
+            / Atom::num(dimension * dimension - 1))
+        .to_cof_dimension_invariants();
+        assert_eq!(index, Atom::num(1) / Atom::num(2));
+        assert_eq!(casimir_trace, index);
+        assert_eq!(casimir_trace * &flavor, parse!("nf") / Atom::num(2));
+    }
 }
 
 #[test]
@@ -250,7 +367,7 @@ fn finite_part_ghost_2loop() {
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -3/16*ep^-2 + 5/32*ep^-1; native GammaLoop / RQFT = +1.
     assert_rqft_pole_reference!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-3𝑖/16+5𝑖/32*ε)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
+       graph = &amp.graphs[0].graph, model = &model, actual = &a,@"(-3𝑖/16+5𝑖/32*ε)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)");
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[0], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
 
@@ -264,7 +381,7 @@ fn finite_part_ghost_2loop() {
     // F3 (140 -> GS -> 0, not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/16*ep^-2 + 1/32*ep^-1; native GammaLoop / RQFT = -1.
     assert_rqft_pole_reference!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/32*ε+𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       graph = &amp.graphs[1].graph, model = &model, actual = &a,@"(-𝑖/32*ε+𝑖/16)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[1], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=6");
@@ -279,7 +396,7 @@ fn finite_part_ghost_2loop() {
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = -1/8*ep^-2 + 1/16*ep^-1; native GammaLoop / RQFT = -1.
     assert_rqft_pole_reference!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/16*ε+𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       graph = &amp.graphs[2].graph, model = &model, actual = &a,@"(-𝑖/16*ε+𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[2], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
@@ -293,7 +410,7 @@ fn finite_part_ghost_2loop() {
     // Sum / H = +1/4*ep^-2 - 5/24*ep^-1; native GammaLoop / RQFT = -1
     // after preserving the antisymmetric color orientation.
     assert_rqft_pole_reference!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
+       graph = &amp.graphs[3].graph, model = &model, actual = &a,@"(-𝑖/4+5𝑖/24*ε)*cas(2,coad(8))*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*nf*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[3], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
@@ -309,7 +426,7 @@ fn finite_part_ghost_2loop() {
     // Sum / H = -5/8*ep^-2 + 35/48*ep^-1; native GammaLoop / RQFT = -1.
     // RQFT already includes the graph's 1/2 symmetry factor.
     assert_rqft_pole_reference!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(-35𝑖/48*ε+5𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
+       graph = &amp.graphs[4].graph, model = &model, actual = &a,@"(-35𝑖/48*ε+5𝑖/8)*(cas(2,coad(8)))^2*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-2)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[4], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
@@ -324,7 +441,7 @@ fn finite_part_ghost_2loop() {
     // F3 (not emitted by GammaLoop) / H = 0.
     // Sum / H = +1/24*ep^-1; native GammaLoop / RQFT = -1.
     assert_rqft_pole_reference!(
-       align_to_rqft(&a,&model).to_bare_ordered_string(),@"(cas(2,coad(8)))^2*-𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
+       graph = &amp.graphs[5].graph, model = &model, actual = &a,@"(cas(2,coad(8)))^2*-𝑖/24*dot(P(0,mink(4)),P(0,mink(4)))*gs^4*ε^(-1)"
     );
     let stats = assert_new_paths_match_legacy(&mut amp.graphs[5], &model, a, &new_settings);
     insta::assert_snapshot!(stats.to_string(), @"forest_size=4");
