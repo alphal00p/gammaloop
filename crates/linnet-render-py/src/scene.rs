@@ -40,7 +40,32 @@ impl PyDiagramRender {
 
 impl PyDiagramView {
     /// Resolve one scene's settings and retain it for browser/vector completion.
-    /// See [`Self`] for a complete measurement example.
+    /// Clones retain completion state and browser receipts:
+    ///
+    /// ```no_run
+    /// use linnest::svg::Scene;
+    /// use linnet_render_py::PyDiagramView;
+    /// use pyo3::{PyResult, Python};
+    /// # fn example(scene: Scene) -> PyResult<()> {
+    /// Python::initialize();
+    /// Python::attach(|py| -> PyResult<()> {
+    ///     let view = PyDiagramView::from_scene(py, scene, None)?;
+    ///     let retained = view.clone(); // Shares completion with the notebook owner.
+    ///     let request = view.measurement_request(py)?;
+    ///     // Send request to the browser; measured() accepts its complete receipt.
+    ///     // Scripts can explicitly request Chromium instead (requires Playwright).
+    ///     let snapshot = view.measured(py, None, Some("chromium"))?;
+    ///     assert_eq!(retained.to_svg_pages(py)?, snapshot.to_svg_pages()?);
+    ///     let collection = PyDiagramView::from_views(vec![view], None)?;
+    ///     assert_eq!(collection.diagrams().len(), 1);
+    ///     let svg = snapshot.to_svg()?;
+    ///     // Optional vector compilation is separate from the measured snapshot.
+    ///     let outlined = collection.outlined(py)?;
+    ///     assert_eq!(snapshot.to_svg()?, svg);
+    ///     # Ok(())
+    /// })
+    /// # }
+    /// ```
     ///
     /// # Errors
     /// Returns a Python error for unsupported settings or failing selectors.

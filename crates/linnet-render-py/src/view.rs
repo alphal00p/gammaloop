@@ -47,30 +47,17 @@ struct FontResource {
 /// and a completed view rejects different measurements. SVG/HTML exports are
 /// immutable snapshots and never trigger implicit remeasurement.
 ///
-/// ```no_run
-/// use linnest::svg::Scene;
-/// use linnet_render_py::PyDiagramView;
-/// use pyo3::{PyResult, Python};
-/// # fn example(scene: Scene) -> PyResult<()> {
-/// Python::initialize();
-/// Python::attach(|py| -> PyResult<()> {
-///     let view = PyDiagramView::from_scene(py, scene, None)?;
-///     let retained = view.clone(); // Shares completion with the notebook owner.
-///     let request = view.measurement_request(py)?;
-///     // Send request to the browser; measured() accepts its complete receipt.
-///     // Scripts can explicitly request Chromium instead (requires Playwright).
-///     let snapshot = view.measured(py, None, Some("chromium"))?;
-///     assert_eq!(retained.to_svg_pages(py)?, snapshot.to_svg_pages()?);
-///     let collection = PyDiagramView::from_views(vec![view], None)?;
-///     assert_eq!(collection.diagrams().len(), 1);
-///     let svg = snapshot.to_svg()?;
-///     // Optional vector compilation is separate from the measured snapshot.
-///     let outlined = collection.outlined(py)?;
-///     assert_eq!(snapshot.to_svg()?, svg);
-///     # Ok(())
-/// })
-/// # }
-/// ```
+/// With the generic graph bindings installed:
+///
+/// >>> from symbolica.community.graph import DotCodec, Graph
+/// >>> graph = Graph.from_dot("graph { a -- b }", DotCodec.topology())
+/// >>> view = graph.render()
+/// >>> static = view.snapshot()  # Complete static output with default settings.
+/// >>> svg = static.to_svg()
+/// >>> measured = view.measured(browser="chromium")  # Explicit Playwright capture.
+/// >>> outlined = view.outlined()  # Optional typst-py vector labels.
+/// >>> static.to_svg() == svg  # Earlier snapshots remain immutable.
+/// True
 #[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
 #[pyclass(
     module = "symbolica.community.graph",
@@ -742,14 +729,9 @@ impl PyDiagramView {
     }
     /// Save a static snapshot, selecting the format by suffix.
     ///
-    /// ```no_run
-    /// use linnet_render_py::PyDiagramView;
-    /// use pyo3::{PyResult, Python};
-    /// # fn save(py: Python<'_>, completed: PyDiagramView) -> PyResult<()> {
-    /// completed.save(py, "diagram.svg".into())?;
-    /// # Ok(())
-    /// # }
-    /// ```
+    /// >>> from symbolica.community.graph import DotCodec, Graph
+    /// >>> view = Graph.from_dot("graph { a -- b }", DotCodec.topology()).render()
+    /// >>> path = view.save("diagram.svg")
     ///
     /// # Errors
     /// Propagates [`Self::snapshot`] errors, filesystem/export errors, and
@@ -763,14 +745,9 @@ impl PyDiagramView {
     /// Optional notebook dependencies are imported only when displaying a view.
     /// The widget retains a clone of the backend owner until it is closed.
     ///
-    /// ```no_run
-    /// use linnet_render_py::PyDiagramView;
-    /// use pyo3::{PyResult, Python};
-    /// # fn notebook(py: Python<'_>, view: PyDiagramView) -> PyResult<()> {
-    /// let widget = view.widget(py)?;
-    /// # Ok(())
-    /// # }
-    /// ```
+    /// >>> from symbolica.community.graph import DotCodec, Graph
+    /// >>> view = Graph.from_dot("graph { a -- b }", DotCodec.topology()).render()
+    /// >>> widget = view.widget()  # Requires anywidget in this environment.
     ///
     /// # Errors
     /// Propagates font/request errors and Python import or widget setup errors.
