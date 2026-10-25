@@ -1,6 +1,7 @@
 """Synthetic file-contract tests only; no reduction or performance measurement."""
 
 import copy
+import hashlib
 import json
 import tempfile
 import unittest
@@ -2107,6 +2108,851 @@ class ReportContractTests(unittest.TestCase):
             row["artifact_sha256"] = merge.digest(self.artifact)
         with self.assertRaisesRegex(ValueError, "release executable"):
             self.warm_evaluate()
+
+
+class QualificationProjectionTests(unittest.TestCase):
+    """Synthetic metadata only: no actual native success or acceptance is issued."""
+
+    def setUp(self):
+        self.make_fixture()
+
+    @staticmethod
+    def key(index):
+        return [index] + [1] * 14
+
+    def make_fixture(self):
+        # Reuse the existing strict bridge fixture without inheriting/rerunning
+        # its sixty tests. Every payload remains in a synthetic temporary tree.
+        self.base = ReportContractTests()
+        self.base.setUp()
+        self.addCleanup(self.base.doCleanups)
+        self.identity, self.producer, self.accepted_path, self.index = (
+            self.base.cross_cohort_fixture()
+        )
+        self.accepted = merge.read(self.accepted_path)
+        self.binding = self.accepted["semantic_binding"]
+        self.docs, self.paths = {}, {}
+        self.source_files = []
+        source_hashes = {}
+        for filename in (
+            "measure_cache.rs",
+            "build_cache/workload.rs",
+            "build_cache/owner_proof.rs",
+        ):
+            name = "crates/vakint/examples/" + filename
+            path = self.base.root / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("SYNTHETIC WORKER SOURCE ONLY: " + filename)
+            self.source_files.append(merge.evidence(path))
+            source_hashes[name] = merge.digest(path)
+        cohort = merge.read(self.accepted["consumer"]["compiled_cohort"]["path"])
+        self.put(
+            "snapshot",
+            {
+                "test_fixture": True,
+                "head": cohort["main_revision"],
+                "source_sha256": source_hashes,
+            },
+        )
+        self.save("snapshot")
+        cohort["main_source_snapshot_sha256"] = merge.digest(self.paths["snapshot"])
+        self.put("cohort", cohort)
+        self.put("artifact", merge.read(self.base.artifact))
+        self.paths["artifact"] = self.base.artifact
+        self.docs["artifact"]["stamps"].update(
+            {stamp: cohort[field] for field, stamp in merge.COHORT_STAMPS}
+        )
+        self.docs["artifact"]["main_source_snapshot"] = self.reference("snapshot")
+
+        def training(index):
+            return {
+                "id": f"SYNTHETIC_TRAINING_{index}",
+                "powers": self.key(10 + index),
+                "public_input": None,
+                "rationale": "SYNTHETIC UNEXECUTED TRAINING METADATA",
+                "lowered_roots": [],
+                "protected_roots": [],
+            }
+
+        public = []
+        for index in range(13):
+            public.append(
+                {
+                    "id": f"SYNTHETIC_PUBLIC_{index}",
+                    "powers": self.key(100 + index),
+                    "public_input": f"SYNTHETIC PUBLIC INPUT {index}",
+                    "rationale": "SYNTHETIC FILE CONTRACT ONLY",
+                    "lowered_roots": [self.key(1000 + index)],
+                    "protected_roots": [self.key(2000 + index)]
+                    + ([self.key(3000 + index)] if index < 12 else []),
+                }
+            )
+        selection = {
+            "schema": "vakint.five-loop-cache-workload.v1",
+            "data_manifest_sha256": "7" * 64,
+            "source_census_sha256": "9" * 64,
+            "training": [training(0), training(1)],
+            "tuning": copy.deepcopy(public[:1]),
+            "held_out": copy.deepcopy(public[1:]),
+        }
+        self.put("target", copy.deepcopy(selection))
+        self.put("producer_workload", copy.deepcopy(selection))
+        source = copy.deepcopy(selection)
+        source["training"].append(training(2))
+        source["owner_proof"] = None
+        for root in source["tuning"] + source["held_out"]:
+            root["lowered_roots"], root["protected_roots"] = [], []
+        self.put("qualification", source)
+        self.put("proof", merge.read(self.accepted["consumer"]["owner_proof"]["path"]))
+        self.docs["proof"]["compiled_cohort"] = cohort
+        self.docs["proof"]["rows"] = []
+        details = []
+        for index, root in enumerate(public):
+            worker_path = (
+                self.base.root / f"projection-current-{index}/measurement.json"
+            )
+            old_path = (
+                self.base.root / f"projection-historical-{index}/measurement.json"
+            )
+            for path in (worker_path, old_path):
+                path.parent.mkdir()
+                (path.parent / "value.symbolica").write_text(
+                    f"SYNTHETIC EXACT VALUE {index}"
+                )
+                (path.parent / "guards.json").write_text(
+                    json.dumps([f"SYNTHETIC COMPLETE GUARD {index}"])
+                )
+                (path.parent / "unknown-masters.json").write_text("[]")
+            identity = {
+                "data_manifest_sha256": "7" * 64,
+                "source_census_sha256": "9" * 64,
+                "build_git_revision": cohort["main_revision"],
+                "executable_sha256": merge.digest(self.base.binary),
+                "cache_sha256": None,
+                **{
+                    field: source_hashes["crates/vakint/examples/" + filename]
+                    for field, filename in (
+                        ("compiled_driver_sha256", "measure_cache.rs"),
+                        ("compiled_workload_schema_sha256", "build_cache/workload.rs"),
+                        ("compiled_owner_proof_sha256", "build_cache/owner_proof.rs"),
+                    )
+                },
+            }
+            worker = {
+                "test_fixture": True,
+                "success": True,
+                "worker_success": True,
+                "fresh_process": True,
+                "variant": "uncached",
+                "sample": 0,
+                "case_id": root["id"],
+                "declared_common_powers": root["powers"],
+                "identity": identity,
+                "actual_lowered_roots": root["lowered_roots"],
+                "supervision": {
+                    "success": True,
+                    "exit_code": 0,
+                    "deadline_exhausted": False,
+                },
+                "persistent_cache_attachments_before": {
+                    str(loop): False for loop in range(1, 6)
+                },
+                "persistent_cache_attachments_during_evaluation": {
+                    str(loop): False for loop in range(1, 6)
+                },
+                "cache_statistics": {"binding": self.binding},
+                "value_sha256": merge.digest(worker_path.with_name("value.symbolica")),
+                "guards_sha256": merge.digest(worker_path.with_name("guards.json")),
+                "catalogue_closure": {
+                    "closed": True,
+                    "unknown_count": 0,
+                    "unknown_sha256": merge.digest(
+                        worker_path.with_name("unknown-masters.json")
+                    ),
+                },
+                "evaluation_seconds": 12345,
+            }
+            self.put(f"worker{index}", worker, worker_path)
+            self.put(f"historical{index}", copy.deepcopy(worker), old_path)
+            self.docs["proof"]["rows"].append(
+                {
+                    "id": root["id"],
+                    "logical_cohort": "tuning" if index == 0 else "held-out",
+                    "public_input_source_sha256": hashlib.sha256(
+                        root["public_input"].encode()
+                    ).hexdigest(),
+                    "application_binding": self.binding,
+                    "reduction_succeeded": True,
+                    "complete_owner_transport": True,
+                    "mapping_error": None,
+                    "actual_lowered_roots": root["lowered_roots"],
+                    "protected_owner_roots": root["protected_roots"],
+                }
+            )
+            details.append(
+                {
+                    "id": root["id"],
+                    "role": "tuning" if index == 0 else "held_out",
+                    "_fixture_worker": index,
+                }
+            )
+        forbidden = sorted(
+            {
+                tuple(key)
+                for root in public
+                for key in [
+                    root["powers"],
+                    *root["lowered_roots"],
+                    *root["protected_roots"],
+                ]
+            }
+        )
+        self.assertEqual(len(forbidden), 51)
+        self.put(
+            "union",
+            {"forbidden_direct_target_or_owner_keys": forbidden, "forbidden_count": 51},
+        )
+        self.put(
+            "routes",
+            {
+                "semantic_binding": self.binding,
+                "compiled_cohort": cohort,
+                "source_census_sha256": "9" * 64,
+                "rows": [
+                    {
+                        "raw_powers": training(index)["powers"],
+                        "route_success": True,
+                        "route_error": None,
+                        "owner_endpoints": [
+                            {"powers": self.key(7000 + index), "coefficient": "1"}
+                        ],
+                    }
+                    for index in range(3)
+                ],
+            },
+        )
+        self.put(
+            "aliases",
+            {
+                "rows": [
+                    {
+                        "powers": training(index)["powers"],
+                        "eligible_after_external_alias_exclusion": True,
+                        "raw_protected_intersection": False,
+                        "owner_protected_intersections": [],
+                    }
+                    for index in range(3)
+                ]
+            },
+        )
+        self.put(
+            "validator",
+            {
+                "valid": True,
+                "public_cases_checked": 13,
+                "data_manifest_sha256": "7" * 64,
+                "reduction_or_cache_import_performed": False,
+                "identity": {"compiled_cohort": cohort},
+            },
+        )
+        cached_path = self.base.root / "projection-cached/worker.json"
+        cached_path.parent.mkdir()
+        for name in ("value.symbolica", "guards.json"):
+            cached_path.with_name(name).write_bytes(
+                self.paths["worker0"].with_name(name).read_bytes()
+            )
+        cached = copy.deepcopy(self.docs["worker0"])
+        cached.update(variant="cached", native_keys_authenticated=True)
+        cached["identity"] = {
+            "build_git_revision": cohort["main_revision"],
+            "data_manifest_sha256": "7" * 64,
+            "source_census_sha256": "9" * 64,
+            "executable_sha256": merge.digest(self.base.binary),
+            "cache_sha256": merge.digest(self.base.cache),
+        }
+        cached["persistent_cache_attachments_during_evaluation"]["5"] = True
+        cached["cache_statistics"]["file"] = {"records": 3}
+        self.put("cached", cached, cached_path)
+        self.put("import_supervision", {"exit_code": 0, "deadline_exhausted": False})
+        self.put(
+            "import",
+            {
+                "checks": {
+                    key: True
+                    for key in (
+                        "compressed_and_decoded_identity",
+                        "single_member_and_framing",
+                        "native_binding_and_every_record_validation",
+                        "fresh_cached_case_exact_value_and_all_guards",
+                        "catalogue_closure",
+                    )
+                },
+                "actual_file_statistics": {"records": 3},
+                "producer_records": 3,
+            },
+        )
+        self.put(
+            "failed",
+            {
+                "complete": False,
+                "accepted": False,
+                "counts": {
+                    "functional_success": 10,
+                    "deadline_failed": 1,
+                    "not_started_after_failure": 2,
+                    "started_native_workers": 11,
+                    "planned_public_cases": 13,
+                },
+                "failed_case": {"exit_code": 124, "worker_json_exists": False},
+                "mapper_launched": False,
+                "performance_eligible": False,
+            },
+        )
+        self.put(
+            "detail",
+            {
+                "schema": "vakint.qualification-workload-projection-evidence.v1",
+                "fresh_training_reductions_executed": 0,
+                "full_case_key_value_and_guard_evidence": details,
+            },
+        )
+        self.put("native_reviewed_roles", {})
+        self.put("packet", {})
+        self.put(
+            "review",
+            {
+                "schema": "vakint.independent-fallback2-semantic-projection-review.v1",
+                "verdict": "SOUND_FOR_NATIVE_COMPATIBILITY_WITH_EXPLICIT_AUTHENTICATED_PROJECTION_NOT_A_NEW_F022_SUITE_PASS",
+                "source_files": self.source_files,
+            },
+        )
+        self.put(
+            "scope",
+            {"schema": "vakint.independent-projection-validator-scope-addendum.v1"},
+        )
+        self.put(
+            "relation",
+            {
+                "schema": "vakint.qualification-workload-projection.v1",
+                "relation": "unexecuted-training-prefix-pruning",
+            },
+        )
+        self.accepted["checks"]["unchanged_selection"] = False
+        self.rebind()
+
+    def put(self, name, value, path=None):
+        self.docs[name] = value
+        self.paths[name] = path or self.base.root / f"projection-{name}.json"
+
+    def save(self, name):
+        self.paths[name].write_text(json.dumps(self.docs[name], indent=2))
+
+    def reference(self, name):
+        return merge.evidence(self.paths[name])
+
+    def rebind(self):
+        """Refresh only file/cohort links, leaving scientific payload claims editable."""
+        for name in ("snapshot", "cohort", "artifact", "qualification"):
+            self.save(name)
+        source_hash = merge.digest(self.paths["qualification"])
+        for index in range(13):
+            self.docs[f"worker{index}"]["identity"]["workload_sha256"] = source_hash
+            self.save(f"worker{index}")
+            self.save(f"historical{index}")
+        for row in self.docs["proof"]["rows"]:
+            index = int(row["id"].rsplit("_", 1)[1])
+            row["receipt_sha256"] = merge.digest(self.paths[f"worker{index}"])
+            row["workload_sha256"] = source_hash
+        self.save("proof")
+        self.docs["target"]["owner_proof"] = self.reference("proof")
+        self.docs["producer_workload"]["owner_proof"] = self.accepted["producer"][
+            "owner_proof"
+        ]
+        self.save("target")
+        self.save("producer_workload")
+        target_hash = merge.digest(self.paths["target"])
+        self.docs["cached"]["identity"].update(
+            workload_sha256=target_hash,
+            owner_proof={
+                **self.reference("proof"),
+                "compiled_cohort": self.docs["cohort"],
+            },
+        )
+        self.docs["cached"]["owner_proof"] = {
+            **self.reference("proof"),
+            "compiled_cohort": self.docs["cohort"],
+        }
+        self.save("cached")
+        self.save("import_supervision")
+        self.docs["import"].update(
+            actual_cached_worker=self.reference("cached"),
+            supervision=self.reference("import_supervision"),
+        )
+        self.save("import")
+        self.docs["validator"].update(workload_sha256=target_hash)
+        self.docs["validator"]["identity"]["sha256"] = merge.digest(self.paths["proof"])
+        self.save("validator")
+        self.docs["union"]["owner_proof"] = self.reference("proof")
+        self.docs["union"]["compiled_cohort"] = self.reference("cohort")
+        self.save("union")
+        self.save("routes")
+        self.docs["aliases"].update(
+            qualification=self.reference("routes"),
+            protected_union=self.reference("union"),
+            canonical_cohort_sha256=merge.digest(self.paths["cohort"]),
+        )
+        self.save("aliases")
+        self.accepted["producer"]["workload"] = self.reference("producer_workload")
+        self.accepted["consumer"].update(
+            collector_artifacts=self.reference("artifact"),
+            compiled_cohort=self.reference("cohort"),
+            qualification_workload=self.reference("qualification"),
+            final_workload=self.reference("target"),
+            owner_proof=self.reference("proof"),
+            protected_union=self.reference("union"),
+            training_route_qualification=self.reference("routes"),
+            alias_exclusion=self.reference("aliases"),
+        )
+        build = self.producer["raw_report"]
+        build["workload_sha256"] = merge.digest(self.paths["producer_workload"])
+        path = Path(self.producer["evidence"]["path"])
+        path.write_text(json.dumps(build))
+        self.producer["evidence"] = merge.evidence(path)
+        self.accepted["producer"]["build_report"] = merge.evidence(path)
+        self.identity.update(
+            workload_sha256=target_hash,
+            owner_proof={
+                **self.reference("proof"),
+                "compiled_cohort": self.docs["cohort"],
+            },
+        )
+        self.accepted["immutable_selection"] = merge.selected_inputs(
+            self.docs["target"]
+        )
+        detail = self.docs["detail"]
+        detail.update(
+            source_fresh_qualification_workload=self.reference("qualification"),
+            compatibility_target_workload=self.reference("target"),
+            producer_workload=self.reference("producer_workload"),
+            canonical_proof=self.reference("proof"),
+            compiled_cohort=self.reference("cohort"),
+            actual_existing_validator_two_root_result=self.reference("validator"),
+            strict_import_equality_validation=self.reference("import"),
+            two_root_cached_public_case=self.reference("cached"),
+        )
+        for row in detail["full_case_key_value_and_guard_evidence"]:
+            index = row["_fixture_worker"]
+            row.update(
+                actual_qualification_receipt=self.reference(f"worker{index}"),
+                original_producer_receipt=self.reference(f"historical{index}"),
+            )
+        self.save("detail")
+        self.docs["native_reviewed_roles"].update(
+            producer=copy.deepcopy(self.accepted["producer"]),
+            consumer=copy.deepcopy(self.accepted["consumer"]),
+        )
+        self.save("native_reviewed_roles")
+        self.docs["packet"].update(
+            exact_semantic_projection_evidence=self.reference("detail"),
+            native_compatibility_draft=self.reference("native_reviewed_roles"),
+        )
+        self.save("packet")
+        self.save("failed")
+        self.docs["review"].update(
+            evidence_packet=self.reference("packet"),
+            new_attempt_preserved={"postflight": self.reference("failed")},
+        )
+        self.save("review")
+        self.docs["scope"]["review"] = self.reference("review")
+        self.save("scope")
+        self.docs["relation"].update(
+            evidence=self.reference("detail"),
+            independent_review=self.reference("review"),
+            validator_scope=self.reference("scope"),
+            incomplete_attempt=self.reference("failed"),
+        )
+        self.save("relation")
+        self.accepted["qualification_projection"] = self.reference("relation")
+        self.base.refresh_acceptance(self.accepted_path, self.index, self.accepted)
+
+    def evaluate(self):
+        return merge.ReportEvidence(self.index).cache_qualification(
+            self.identity, self.producer
+        )
+
+    def assert_rejected(self):
+        with self.assertRaises(ValueError):
+            self.evaluate()
+
+    def test_explicit_projection_keeps_source_and_target_roles_distinct(self):
+        result = self.evaluate()
+        projection = result["qualification_projection"]
+        self.assertIn("Native compatibility only", projection["scope"])
+        self.assertEqual(set(projection), {"evidence", "raw_relation", "scope"})
+        self.assertNotEqual(
+            result["raw_receipt"]["consumer"]["qualification_workload"],
+            result["raw_receipt"]["consumer"]["final_workload"],
+        )
+
+    def test_missing_projection_preserves_the_strict_default(self):
+        del self.accepted["qualification_projection"]
+        self.accepted["checks"]["unchanged_selection"] = True
+        self.base.refresh_acceptance(self.accepted_path, self.index, self.accepted)
+        self.assert_rejected()
+
+    def test_projection_requires_truthful_false_full_selection_flag(self):
+        self.accepted["checks"]["unchanged_selection"] = True
+        self.rebind()
+        self.assert_rejected()
+
+    def test_training_metadata_must_be_unexecuted(self):
+        self.docs["detail"]["fresh_training_reductions_executed"] = 1
+        self.rebind()
+        self.assert_rejected()
+
+    def test_projection_requires_the_specific_independent_review_contract(self):
+        for change in ("relation", "review", "scope"):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change == "relation":
+                    self.docs["relation"]["relation"] = "SYNTHETIC UNKNOWN PROJECTION"
+                elif change == "review":
+                    self.docs["review"]["verdict"] = "SYNTHETIC UNREVIEWED"
+                else:
+                    self.docs["scope"]["schema"] = "SYNTHETIC UNKNOWN SCOPE"
+                self.rebind()
+                self.assert_rejected()
+
+    def test_training_must_be_exact_two_of_three_prefix(self):
+        for change in ("source_order", "new_target", "nonprefix", "missing_source"):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change == "source_order":
+                    self.docs["qualification"]["training"].reverse()
+                elif change == "new_target":
+                    for name in ("target", "producer_workload"):
+                        self.docs[name]["training"][0]["powers"] = self.key(9999)
+                elif change == "nonprefix":
+                    for name in ("target", "producer_workload"):
+                        self.docs[name]["training"] = copy.deepcopy(
+                            self.docs["qualification"]["training"][1:]
+                        )
+                else:
+                    self.docs["qualification"]["training"].pop()
+                self.rebind()
+                self.assert_rejected()
+
+    def test_public_case_identity_role_and_order_are_preserved(self):
+        for field in ("id", "powers", "public_input", "rationale", "order", "missing"):
+            with self.subTest(field=field):
+                self.make_fixture()
+                roots = self.docs["qualification"]["held_out"]
+                if field == "order":
+                    roots.reverse()
+                elif field == "missing":
+                    roots.pop()
+                elif field == "powers":
+                    roots[0][field] = self.key(999)
+                else:
+                    roots[0][field] += " ALTERED"
+                self.rebind()
+                self.assert_rejected()
+
+    def test_proof_and_review_details_cannot_omit_or_reorder_cases(self):
+        for change in (
+            "missing_proof",
+            "duplicate_proof",
+            "reordered_details",
+            "missing_details",
+        ):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change == "missing_proof":
+                    self.docs["proof"]["rows"].pop()
+                elif change == "duplicate_proof":
+                    self.docs["proof"]["rows"].append(
+                        copy.deepcopy(self.docs["proof"]["rows"][0])
+                    )
+                elif change == "reordered_details":
+                    self.docs["detail"][
+                        "full_case_key_value_and_guard_evidence"
+                    ].reverse()
+                else:
+                    self.docs["detail"]["full_case_key_value_and_guard_evidence"].pop()
+                self.rebind()
+                self.assert_rejected()
+
+    def test_partial_failed_or_backed_source_worker_is_rejected(self):
+        for change in (
+            "success",
+            "worker_success",
+            "exit",
+            "deadline",
+            "backing",
+            "variant",
+        ):
+            with self.subTest(change=change):
+                self.make_fixture()
+                worker = self.docs["worker4"]
+                if change in ("success", "worker_success"):
+                    worker[change] = False
+                elif change == "exit":
+                    worker["supervision"]["exit_code"] = 124
+                elif change == "deadline":
+                    worker["supervision"]["deadline_exhausted"] = True
+                elif change == "backing":
+                    worker["persistent_cache_attachments_during_evaluation"]["5"] = True
+                else:
+                    worker["variant"] = "cached"
+                self.rebind()
+                self.assert_rejected()
+
+    def test_source_worker_cannot_change_case_or_cohort_bindings(self):
+        for field in (
+            "case_id",
+            "declared_common_powers",
+            "build_git_revision",
+            "data_manifest_sha256",
+            "executable_sha256",
+        ):
+            with self.subTest(field=field):
+                self.make_fixture()
+                if field == "case_id":
+                    self.docs["worker4"][field] = "SYNTHETIC_OTHER"
+                elif field == "declared_common_powers":
+                    self.docs["worker4"][field] = self.key(9999)
+                else:
+                    self.docs["worker4"]["identity"][field] = "e" * 64
+                self.rebind()
+                self.assert_rejected()
+
+    def test_reviewed_worker_source_bindings_are_required(self):
+        for change in (
+            "missing_review_source",
+            "wrong_compiled_source",
+            "wrong_snapshot",
+        ):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change == "missing_review_source":
+                    self.docs["review"]["source_files"].pop()
+                elif change == "wrong_compiled_source":
+                    self.docs["worker2"]["identity"]["compiled_driver_sha256"] = (
+                        "e" * 64
+                    )
+                else:
+                    self.docs["snapshot"]["source_sha256"][
+                        "crates/vakint/examples/measure_cache.rs"
+                    ] = "e" * 64
+                self.rebind()
+                self.assert_rejected()
+
+    def test_rehashed_changed_full_result_or_guards_fail_historical_parity(self):
+        for filename, field in (
+            ("value.symbolica", "value_sha256"),
+            ("guards.json", "guards_sha256"),
+        ):
+            with self.subTest(filename=filename):
+                self.make_fixture()
+                path = self.paths["worker3"].with_name(filename)
+                path.write_text("SYNTHETIC CHANGED COMPLETE PAYLOAD")
+                self.docs["worker3"][field] = merge.digest(path)
+                self.rebind()
+                self.assert_rejected()
+
+    def test_complete_source_sidecars_are_rehashed(self):
+        self.paths["worker3"].with_name("guards.json").unlink()
+        with self.assertRaises(FileNotFoundError):
+            self.evaluate()
+
+    def test_authenticated_raw_owner_sets_and_union_are_exact(self):
+        for change in ("raw", "owner", "union", "mapping_error"):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change == "raw":
+                    self.docs["proof"]["rows"][3]["actual_lowered_roots"] = [
+                        self.key(9999)
+                    ]
+                elif change == "owner":
+                    self.docs["proof"]["rows"][3]["protected_owner_roots"] = [
+                        self.key(9999)
+                    ]
+                elif change == "union":
+                    self.docs["union"]["forbidden_direct_target_or_owner_keys"].pop()
+                else:
+                    self.docs["proof"]["rows"][3]["mapping_error"] = "SYNTHETIC FAILURE"
+                self.rebind()
+                self.assert_rejected()
+
+    def test_selected_training_cannot_alias_a_protected_raw_key(self):
+        protected = self.docs["target"]["tuning"][0]["powers"]
+        for name in ("qualification", "target", "producer_workload"):
+            self.docs[name]["training"][0]["powers"] = protected
+        self.docs["routes"]["rows"][0]["raw_powers"] = protected
+        self.docs["aliases"]["rows"][0]["powers"] = protected
+        self.rebind()
+        self.assert_rejected()
+
+    def test_twelve_held_out_owner_sets_must_remain_distinct(self):
+        first = self.docs["target"]["held_out"][0]["protected_roots"]
+        self.docs["target"]["held_out"][1]["protected_roots"] = first
+        self.docs["producer_workload"]["held_out"][1]["protected_roots"] = first
+        self.docs["proof"]["rows"][2]["protected_owner_roots"] = first
+        self.rebind()
+        self.assert_rejected()
+
+    def test_direct_routes_must_bind_the_source_census(self):
+        self.docs["routes"]["source_census_sha256"] = "e" * 64
+        self.rebind()
+        self.assert_rejected()
+
+    def test_selected_training_cannot_alias_any_nonzero_direct_owner(self):
+        self.docs["routes"]["rows"][0]["owner_endpoints"][0]["powers"] = self.docs[
+            "target"
+        ]["held_out"][5]["protected_roots"][0]
+        self.rebind()
+        self.assert_rejected()
+
+    def test_direct_routes_require_nonzero_coefficients_and_eligibility(self):
+        for change in ("zero", "empty", "route_error", "alias"):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change == "zero":
+                    self.docs["routes"]["rows"][0]["owner_endpoints"][0][
+                        "coefficient"
+                    ] = "0"
+                elif change == "empty":
+                    self.docs["routes"]["rows"][0]["owner_endpoints"] = []
+                elif change == "route_error":
+                    self.docs["routes"]["rows"][0]["route_error"] = "SYNTHETIC FAILURE"
+                else:
+                    self.docs["aliases"]["rows"][0][
+                        "eligible_after_external_alias_exclusion"
+                    ] = False
+                self.rebind()
+                self.assert_rejected()
+
+    def test_current_target_native_api_validation_remains_required(self):
+        for field, value in (
+            ("valid", False),
+            ("public_cases_checked", 12),
+            ("data_manifest_sha256", "e" * 64),
+            ("reduction_or_cache_import_performed", True),
+        ):
+            with self.subTest(field=field):
+                self.make_fixture()
+                self.docs["validator"][field] = value
+                self.rebind()
+                self.assert_rejected()
+
+    def test_missing_current_native_api_or_import_reference_is_rejected(self):
+        for field in (
+            "actual_existing_validator_two_root_result",
+            "strict_import_equality_validation",
+        ):
+            with self.subTest(field=field):
+                self.make_fixture()
+                self.docs["detail"][field] = None
+                self.save("detail")
+                # Rehash the containing authority chain without repairing the missing API ref.
+                self.docs["packet"]["exact_semantic_projection_evidence"] = (
+                    self.reference("detail")
+                )
+                self.save("packet")
+                self.docs["review"]["evidence_packet"] = self.reference("packet")
+                self.save("review")
+                self.docs["scope"]["review"] = self.reference("review")
+                self.save("scope")
+                self.docs["relation"].update(
+                    evidence=self.reference("detail"),
+                    independent_review=self.reference("review"),
+                    validator_scope=self.reference("scope"),
+                )
+                self.save("relation")
+                self.accepted["qualification_projection"] = self.reference("relation")
+                self.base.refresh_acceptance(
+                    self.accepted_path, self.index, self.accepted
+                )
+                self.assert_rejected()
+
+    def test_cached_import_requires_actual_success_source_and_backing(self):
+        for change in (
+            "success",
+            "auth",
+            "cohort",
+            "data",
+            "census",
+            "cache",
+            "backing",
+            "import_check",
+            "exit",
+        ):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change == "success":
+                    self.docs["cached"]["success"] = False
+                elif change == "auth":
+                    self.docs["cached"]["native_keys_authenticated"] = False
+                elif change == "cohort":
+                    self.docs["cached"]["identity"]["build_git_revision"] = "e" * 40
+                elif change == "data":
+                    self.docs["cached"]["identity"]["data_manifest_sha256"] = "e" * 64
+                elif change == "census":
+                    self.docs["cached"]["identity"]["source_census_sha256"] = "e" * 64
+                elif change == "cache":
+                    self.docs["cached"]["identity"]["cache_sha256"] = "e" * 64
+                elif change == "backing":
+                    self.docs["cached"][
+                        "persistent_cache_attachments_during_evaluation"
+                    ]["4"] = True
+                elif change == "import_check":
+                    self.docs["import"]["checks"][
+                        "native_binding_and_every_record_validation"
+                    ] = False
+                else:
+                    self.docs["import_supervision"]["exit_code"] = 124
+                self.rebind()
+                self.assert_rejected()
+
+    def test_original_producer_identity_cannot_be_relabelled(self):
+        self.producer["raw_report"]["build_identity"]["build"]["git_revision"] = (
+            "e" * 40
+        )
+        self.rebind()
+        self.assert_rejected()
+
+    def test_failed_target_attempt_is_visible_and_never_promoted(self):
+        for change in ("complete", "accepted", "counts", "worker", "mapper"):
+            with self.subTest(change=change):
+                self.make_fixture()
+                if change in ("complete", "accepted"):
+                    self.docs["failed"][change] = True
+                elif change == "counts":
+                    self.docs["failed"]["counts"]["functional_success"] = 13
+                elif change == "worker":
+                    self.docs["failed"]["failed_case"]["worker_json_exists"] = True
+                else:
+                    self.docs["failed"]["mapper_launched"] = True
+                self.rebind()
+                self.assert_rejected()
+
+    def test_projection_does_not_transfer_source_timings_or_create_a_window(self):
+        result = self.evaluate()
+        self.assertNotIn("evaluation_seconds", result["qualification_projection"])
+        self.assertNotIn("metrics", result["qualification_projection"])
+        functional = {
+            "case_id": "SYNTHETIC_PUBLIC_0",
+            "launcher": {"final_performance_eligible": False},
+            "artifact": self.docs["artifact"],
+        }
+        with self.assertRaisesRegex(ValueError, "functional launcher"):
+            merge.ReportEvidence(self.index).qualify(
+                functional,
+                merge.digest(self.base.binary),
+                "SYNTHETIC_PUBLIC_0",
+                "uncached",
+                0,
+            )
 
 
 if __name__ == "__main__":

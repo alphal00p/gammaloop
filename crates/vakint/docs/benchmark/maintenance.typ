@@ -196,6 +196,43 @@ Hash and selection checks here do not repeat or replace native authentication.
 A later published manifest or cache-inventory update is a separate validation;
 it must never be substituted for the D40 identity used in these timings.
 
+== Explicit projection of unused qualification training metadata
+
+Without #raw("qualification_projection"), an accepted compatibility bridge keeps
+the exact three-way #raw("immutable_selection") equality between producer,
+final consumer workload and qualification workload. The narrow optional relation
+#raw("unexecuted-training-prefix-pruning") instead records
+#raw("checks.unchanged_selection: false"): the qualification metadata is different,
+while the original producer and final two-root selection remain exactly equal.
+
+The hashed relation has schema #raw("vakint.qualification-workload-projection.v1")
+and references #raw("evidence"), #raw("independent_review"),
+#raw("validator_scope") and #raw("incomplete_attempt"). It preserves the original
+complete 42fa qualification and its thirteen successful public receipts, and
+names f022 only as the compatibility target. The target's two training roots
+must be the original producer's unchanged ordered list and the first two of the
+qualification's three unused declarations. Public case IDs, roles, order,
+powers, exact input strings, data, census and actual consumer cohort stay fixed.
+The native worker never executes those training declarations during uncached
+qualification; its reviewed source identity remains bound to the artifact.
+
+The adapter rehashes all original complete result and guard payloads, checks
+proof-derived raw/owner sets, twelve distinct nonempty held-out owner sets,
+the full 51-key protected union and every selected nonzero direct owner endpoint.
+It also requires the actual target OwnerProof validator result and strict cache
+import/equality evidence. The validator checks supplied target metadata against
+the original proof; its thirteen checks are not thirteen fresh reductions.
+The separately failed target attempt remains ten successes, one deadline failure
+and two unstarted cases, with no completed failed-case worker receipt or new
+mapper proof. Matching partial output bytes never complete that attempt.
+
+This relation is native compatibility evidence only. It transfers no timings,
+selects no cache and grants no execution or performance acceptance. All source
+worker identities remain attached to their original qualification hash. A final
+performance sample must still carry its own actual target workload, successful
+supervision, exact output/guards and accepted serialized window. Default
+compatibility, strict cache completion and final-selection checks are unchanged.
+
 == Selecting a completed pilot cache
 
 An original #raw("phase: pilot") build remains a pilot build after a later

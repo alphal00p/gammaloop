@@ -192,13 +192,17 @@ class ReportEvidence:
                 accepted.get("checks", {}).get(check) is True
                 for check in (
                     "canonical_consumer_proof",
-                    "unchanged_selection",
                     "twelve_distinct_held_out_sets",
                     "training_raw_and_nonzero_owner_disjoint",
                     "cache_import_validated",
                 )
             ),
             "cross-cohort cache reuse has no accepted requalification",
+        )
+        projected = accepted.get("qualification_projection") is not None
+        require(
+            accepted.get("checks", {}).get("unchanged_selection") is (not projected),
+            "qualification selection difference must be recorded explicitly",
         )
         documents = {}
         for role, names in (
@@ -285,10 +289,17 @@ class ReportEvidence:
         require(
             selection
             == accepted["immutable_selection"]
-            == selected_inputs(new["final_workload"])
-            == selected_inputs(new["qualification_workload"]),
+            == selected_inputs(new["final_workload"]),
             "requalification changed frozen selection",
         )
+        projection = None
+        if projected:
+            projection = self.qualification_projection(accepted, documents, path.parent)
+        else:
+            require(
+                selection == selected_inputs(new["qualification_workload"]),
+                "requalification changed frozen selection",
+            )
         artifact = new["collector_artifacts"]
         require(
             all(
@@ -303,7 +314,408 @@ class ReportEvidence:
             in {row["sha256"] for row in artifact_binaries(artifact)},
             "requalification consumer artifact/stamps differ",
         )
-        return {"evidence": evidence(path), "raw_receipt": accepted}
+        result = {"evidence": evidence(path), "raw_receipt": accepted}
+        if projection is not None:
+            result["qualification_projection"] = projection
+        return result
+
+    def qualification_projection(self, accepted, documents, base):
+        """Authenticate unused training-prefix metadata, never project timings."""
+        path, relation = hashed_record(accepted["qualification_projection"], base)
+        require(
+            relation.get("schema") == "vakint.qualification-workload-projection.v1"
+            and relation.get("relation") == "unexecuted-training-prefix-pruning",
+            "unknown qualification projection",
+        )
+        detail_path, detail = hashed_record(relation.get("evidence"), path.parent)
+        review_path, review = hashed_record(
+            relation.get("independent_review"), path.parent
+        )
+        scope_path, scope = hashed_record(relation.get("validator_scope"), path.parent)
+        failed_path, failed = hashed_record(
+            relation.get("incomplete_attempt"), path.parent
+        )
+        packet_path, packet = hashed_record(
+            review.get("evidence_packet"), review_path.parent
+        )
+        require(
+            review.get("schema")
+            == "vakint.independent-fallback2-semantic-projection-review.v1"
+            and review.get("verdict")
+            == "SOUND_FOR_NATIVE_COMPATIBILITY_WITH_EXPLICIT_AUTHENTICATED_PROJECTION_NOT_A_NEW_F022_SUITE_PASS"
+            and scope.get("schema")
+            == "vakint.independent-projection-validator-scope-addendum.v1"
+            and scope["review"]["sha256"] == digest(review_path)
+            and packet["exact_semantic_projection_evidence"]["sha256"]
+            == digest(detail_path)
+            and review["new_attempt_preserved"]["postflight"]["sha256"]
+            == digest(failed_path),
+            "projection lacks its reviewed source/validator scope",
+        )
+        _, reviewed = hashed_record(
+            packet["native_compatibility_draft"], packet_path.parent
+        )
+        require(
+            hashed_file(scope["review"], scope_path.parent) == review_path,
+            "validator scope references another independent review",
+        )
+        for role in ("producer", "consumer"):
+            for key, reference in accepted[role].items():
+                require(
+                    reviewed[role][key]["sha256"] == reference["sha256"],
+                    "projection review belongs to another cohort or role",
+                )
+        require(
+            detail.get("schema")
+            == "vakint.qualification-workload-projection-evidence.v1"
+            and detail["source_fresh_qualification_workload"]["sha256"]
+            == accepted["consumer"]["qualification_workload"]["sha256"]
+            and detail["compatibility_target_workload"]["sha256"]
+            == accepted["consumer"]["final_workload"]["sha256"]
+            and detail["producer_workload"]["sha256"]
+            == accepted["producer"]["workload"]["sha256"]
+            and detail["canonical_proof"]["sha256"]
+            == accepted["consumer"]["owner_proof"]["sha256"]
+            and detail["compiled_cohort"]["sha256"]
+            == accepted["consumer"]["compiled_cohort"]["sha256"]
+            and type(detail["fresh_training_reductions_executed"]) is int
+            and detail["fresh_training_reductions_executed"] == 0,
+            "projection source/target identities differ",
+        )
+        old, new = documents["producer"], documents["consumer"]
+        source, target = new["qualification_workload"], new["final_workload"]
+        require(
+            len(source["training"]) == 3
+            and len(target["training"]) == 2
+            and target["training"]
+            == old["workload"]["training"]
+            == source["training"][:2]
+            and source["data_manifest_sha256"] == target["data_manifest_sha256"]
+            and source["source_census_sha256"] == target["source_census_sha256"]
+            and source.get("owner_proof") is None,
+            "projection must retain the original two-root training prefix",
+        )
+        expected = []
+        for role, count in (("tuning", 1), ("held_out", 12)):
+            require(
+                len(source[role]) == len(target[role]) == count,
+                "projection omits public cases",
+            )
+            for original, current in zip(source[role], target[role]):
+                require(
+                    all(
+                        original[key] == current[key]
+                        for key in ("id", "powers", "public_input", "rationale")
+                    ),
+                    "projection changed public case identity, role or order",
+                )
+                expected.append((role, current))
+        proof, cohort = new["owner_proof"], new["compiled_cohort"]
+        rows = {row["id"]: row for row in proof["rows"]}
+        details = detail["full_case_key_value_and_guard_evidence"]
+        require(
+            len(rows) == len(proof["rows"]) == 13
+            and set(rows) == {row["id"] for _, row in expected}
+            and [row["id"] for row in details] == [row["id"] for _, row in expected],
+            "projection proof omits, duplicates or reorders public cases",
+        )
+        artifact = new["collector_artifacts"]
+        snapshot_path, snapshot = hashed_record(artifact["main_source_snapshot"], base)
+        require(
+            digest(snapshot_path) == cohort["main_source_snapshot_sha256"]
+            and snapshot["head"] == cohort["main_revision"],
+            "projection compiled source snapshot differs",
+        )
+        source_hashes = {}
+        for reference in review["source_files"]:
+            source_file = hashed_file(reference, review_path.parent)
+            source_hashes[str(source_file)] = reference["sha256"]
+
+        def key_set(values):
+            return {tuple(value) for value in values}
+
+        forbidden, signatures, complete = set(), set(), {}
+        for (role, root), checked in zip(expected, details):
+            row = rows[root["id"]]
+            worker_path, worker = hashed_record(
+                checked["actual_qualification_receipt"], detail_path.parent
+            )
+            _, historical = hashed_record(
+                checked["original_producer_receipt"], detail_path.parent
+            )
+            supervision, identity = worker["supervision"], worker["identity"]
+            require(
+                worker["success"] is True
+                and worker["worker_success"] is True
+                and worker["fresh_process"] is True
+                and worker["variant"] == "uncached"
+                and type(worker["sample"]) is int
+                and worker["sample"] == 0
+                and supervision["success"] is True
+                and type(supervision["exit_code"]) is int
+                and supervision["exit_code"] == 0
+                and supervision["deadline_exhausted"] is False
+                and not any(worker["persistent_cache_attachments_before"].values())
+                and not any(
+                    worker["persistent_cache_attachments_during_evaluation"].values()
+                ),
+                "projection requires the original complete uncached public success",
+            )
+            require(
+                worker["case_id"] == root["id"] == checked["id"]
+                and checked["role"] == role
+                and worker["declared_common_powers"] == root["powers"]
+                and row["logical_cohort"] == role.replace("_", "-")
+                and row["public_input_source_sha256"]
+                == hashlib.sha256(root["public_input"].encode()).hexdigest()
+                and row["receipt_sha256"] == digest(worker_path)
+                and identity["workload_sha256"]
+                == row["workload_sha256"]
+                == accepted["consumer"]["qualification_workload"]["sha256"]
+                and identity["data_manifest_sha256"] == target["data_manifest_sha256"]
+                and identity["source_census_sha256"] == target["source_census_sha256"]
+                and identity["build_git_revision"] == cohort["main_revision"]
+                and identity["executable_sha256"]
+                == proof["measurement_executable_sha256"]
+                and identity["cache_sha256"] is None
+                and worker["cache_statistics"]["binding"]
+                == row["application_binding"]
+                == accepted["semantic_binding"],
+                "projection source worker belongs to another case/data/cohort",
+            )
+            for field, filename in (
+                ("compiled_driver_sha256", "measure_cache.rs"),
+                ("compiled_workload_schema_sha256", "build_cache/workload.rs"),
+                ("compiled_owner_proof_sha256", "build_cache/owner_proof.rs"),
+            ):
+                name = "crates/vakint/examples/" + filename
+                matches = [
+                    sha for p, sha in source_hashes.items() if p.endswith("/" + name)
+                ]
+                require(
+                    matches == [snapshot["source_sha256"][name]] == [identity[field]],
+                    "projection uses a different reviewed worker",
+                )
+            require(
+                row["reduction_succeeded"] is True
+                and row["complete_owner_transport"] is True
+                and row["mapping_error"] is None
+                and key_set(worker["actual_lowered_roots"])
+                == key_set(row["actual_lowered_roots"])
+                == key_set(root["lowered_roots"])
+                and key_set(row["protected_owner_roots"])
+                == key_set(root["protected_roots"])
+                and root["lowered_roots"]
+                and root["protected_roots"],
+                "projection changed the authenticated raw/owner sets",
+            )
+            for filename, field in (
+                ("value.symbolica", "value_sha256"),
+                ("guards.json", "guards_sha256"),
+            ):
+                require(
+                    worker[field] == historical[field],
+                    "projection changed an original value or complete guard set",
+                )
+                hashed_file(
+                    {
+                        "path": str(worker_path.with_name(filename)),
+                        "sha256": worker[field],
+                    },
+                    base,
+                )
+                original_path = hashed_file(
+                    checked["original_producer_receipt"], detail_path.parent
+                )
+                hashed_file(
+                    {
+                        "path": str(original_path.with_name(filename)),
+                        "sha256": historical[field],
+                    },
+                    base,
+                )
+            closure = worker["catalogue_closure"]
+            unknown = hashed_file(
+                {
+                    "path": str(worker_path.with_name("unknown-masters.json")),
+                    "sha256": closure["unknown_sha256"],
+                },
+                base,
+            )
+            require(
+                closure["closed"] is True
+                and closure["unknown_count"] == 0
+                and read(unknown) == [],
+                "projection source closure is unavailable",
+            )
+            forbidden.update(
+                key_set(root["lowered_roots"])
+                | key_set(root["protected_roots"])
+                | {tuple(root["powers"])}
+            )
+            if role == "held_out":
+                signatures.add(tuple(sorted(key_set(root["protected_roots"]))))
+            complete[root["id"]] = worker
+        union = new["protected_union"]
+        require(
+            len(signatures) == 12
+            and len(forbidden) == 51
+            and forbidden == key_set(union["forbidden_direct_target_or_owner_keys"])
+            and union["owner_proof"]["sha256"]
+            == accepted["consumer"]["owner_proof"]["sha256"]
+            and union["compiled_cohort"]["sha256"]
+            == accepted["consumer"]["compiled_cohort"]["sha256"],
+            "projection changed the complete protected union",
+        )
+        routes, aliases = new["training_route_qualification"], new["alias_exclusion"]
+        require(
+            routes["semantic_binding"] == accepted["semantic_binding"]
+            and routes["compiled_cohort"] == cohort
+            and routes["source_census_sha256"] == target["source_census_sha256"]
+            and aliases["qualification"]["sha256"]
+            == accepted["consumer"]["training_route_qualification"]["sha256"]
+            and aliases["protected_union"]["sha256"]
+            == accepted["consumer"]["protected_union"]["sha256"]
+            and aliases["canonical_cohort_sha256"]
+            == accepted["consumer"]["compiled_cohort"]["sha256"],
+            "projection routes belong to another runtime or protected union",
+        )
+        for root in target["training"]:
+            route = [r for r in routes["rows"] if r["raw_powers"] == root["powers"]]
+            alias = [r for r in aliases["rows"] if r["powers"] == root["powers"]]
+            require(
+                len(route) == len(alias) == 1
+                and route[0]["route_success"] is True
+                and route[0]["route_error"] is None,
+                "projection lacks complete selected-root routing",
+            )
+            endpoints = route[0]["owner_endpoints"]
+            require(
+                endpoints
+                and all(
+                    isinstance(e["coefficient"], str)
+                    and e["coefficient"].strip()
+                    and e["coefficient"].strip() != "0"
+                    for e in endpoints
+                ),
+                "projection lost a nonzero direct owner",
+            )
+            require(
+                tuple(root["powers"]) not in forbidden
+                and key_set([e["powers"] for e in endpoints]).isdisjoint(forbidden)
+                and alias[0]["eligible_after_external_alias_exclusion"] is True
+                and alias[0]["raw_protected_intersection"] is False
+                and alias[0]["owner_protected_intersections"] == [],
+                "projection training leaks a protected raw or owner root",
+            )
+        _, validated = hashed_record(
+            detail["actual_existing_validator_two_root_result"], detail_path.parent
+        )
+        require(
+            validated["valid"] is True
+            and validated["reduction_or_cache_import_performed"] is False
+            and validated["data_manifest_sha256"] == target["data_manifest_sha256"]
+            and validated["public_cases_checked"] == 13
+            and validated["workload_sha256"]
+            == accepted["consumer"]["final_workload"]["sha256"]
+            and validated["identity"]["sha256"]
+            == accepted["consumer"]["owner_proof"]["sha256"]
+            and validated["identity"]["compiled_cohort"] == cohort,
+            "projection lacks actual current-target OwnerProof validation",
+        )
+        import_path, imported = hashed_record(
+            detail["strict_import_equality_validation"], detail_path.parent
+        )
+        cached_path, cached = hashed_record(
+            detail["two_root_cached_public_case"], detail_path.parent
+        )
+        _, observed = hashed_record(imported["supervision"], import_path.parent)
+        require(
+            imported["actual_cached_worker"]["sha256"] == digest(cached_path)
+            and all(
+                imported["checks"].get(k) is True
+                for k in (
+                    "compressed_and_decoded_identity",
+                    "single_member_and_framing",
+                    "native_binding_and_every_record_validation",
+                    "fresh_cached_case_exact_value_and_all_guards",
+                    "catalogue_closure",
+                )
+            )
+            and type(observed["exit_code"]) is int
+            and observed["exit_code"] == 0
+            and observed["deadline_exhausted"] is False
+            and cached["success"] is True
+            and cached["native_keys_authenticated"] is True
+            and cached["variant"] == "cached"
+            and cached["identity"]["workload_sha256"]
+            == accepted["consumer"]["final_workload"]["sha256"]
+            and cached["identity"]["build_git_revision"] == cohort["main_revision"]
+            and cached["identity"]["data_manifest_sha256"]
+            == target["data_manifest_sha256"]
+            and cached["identity"]["source_census_sha256"]
+            == target["source_census_sha256"]
+            and cached["owner_proof"]["sha256"]
+            == accepted["consumer"]["owner_proof"]["sha256"]
+            and cached["owner_proof"]["compiled_cohort"] == cohort
+            and set(cached["persistent_cache_attachments_before"])
+            == {str(n) for n in range(1, 6)}
+            and all(
+                v is False
+                for v in cached["persistent_cache_attachments_before"].values()
+            )
+            and cached["persistent_cache_attachments_during_evaluation"]
+            == {str(n): n == 5 for n in range(1, 6)}
+            and cached["identity"]["executable_sha256"]
+            == proof["measurement_executable_sha256"]
+            and cached["identity"]["cache_sha256"]
+            == accepted["producer"]["cache"]["sha256"]
+            and cached["cache_statistics"]["binding"] == accepted["semantic_binding"]
+            and cached["cache_statistics"]["file"]["records"]
+            == imported["actual_file_statistics"]["records"]
+            == imported["producer_records"]
+            > 0,
+            "projection lacks actual strict native import/evaluation",
+        )
+        baseline = complete.get(cached["case_id"])
+        require(
+            baseline is not None,
+            "cached import case is outside the unchanged public suite",
+        )
+        for filename, field in (
+            ("value.symbolica", "value_sha256"),
+            ("guards.json", "guards_sha256"),
+        ):
+            require(
+                cached[field] == baseline[field],
+                "cached import changed full value/guards",
+            )
+            hashed_file(
+                {"path": str(cached_path.with_name(filename)), "sha256": cached[field]},
+                base,
+            )
+        require(
+            failed["complete"] is False
+            and failed["accepted"] is False
+            and all(type(value) is int for value in failed["counts"].values())
+            and failed["counts"]
+            == {
+                "functional_success": 10,
+                "deadline_failed": 1,
+                "not_started_after_failure": 2,
+                "started_native_workers": 11,
+                "planned_public_cases": 13,
+            }
+            and failed["failed_case"]["exit_code"] == 124
+            and failed["failed_case"]["worker_json_exists"] is False
+            and failed["mapper_launched"] is False,
+            "the incomplete target attempt must not be promoted or omitted",
+        )
+        return {
+            "evidence": evidence(path),
+            "raw_relation": relation,
+            "scope": "Native compatibility only; original13 source identities retained, no fresh target-suite or timing claim.",
+        }
 
     def final_selection(self, producer):
         """Keep a selected pilot's original build separate from the later decision."""
