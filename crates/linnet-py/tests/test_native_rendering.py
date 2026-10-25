@@ -7,7 +7,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from rendering_metrics import external_metrics_snapshot
-
 from symbolica.community import graph
 
 
@@ -54,16 +53,24 @@ class NativeRenderingTests(unittest.TestCase):
                 self.assert_native(result)
                 self.assertEqual(result.to_svg(), result.to_svg_pages()[0])
                 self.assertEqual(result._mime_(), ("text/html", result.to_html()))
-        self.assertIn(
-            "#c58b13",
-            external_metrics_snapshot(
-                self.graph.subgraph(edges=["ab"]).render()
-            ).to_svg(),
-        )
-        self.assertNotIn(
-            "#c58b13",
-            external_metrics_snapshot(self.graph.empty_subgraph().render()).to_svg(),
-        )
+        for owner, highlighted in (
+            (self.graph.subgraph(edges=["ab"]), True),
+            (self.graph.empty_subgraph(), False),
+        ):
+            with self.subTest(highlighted=highlighted):
+                svg = external_metrics_snapshot(owner.render()).to_svg()
+                painted = []
+                for element in ET.fromstring(svg).iter():
+                    if element.tag.rsplit("}", 1)[-1] == "style":
+                        continue
+                    paints = [element.get("stroke", ""), element.get("fill", "")]
+                    for declaration in element.get("style", "").split(";"):
+                        property_name, _, value = declaration.partition(":")
+                        if property_name.strip().lower() in {"stroke", "fill"}:
+                            paints.append(value)
+                    if any(paint.strip().lower() == "#c58b13" for paint in paints):
+                        painted.append(element)
+                self.assertEqual(bool(painted), highlighted)
 
     def test_native_styles_selectors_and_snapshots(self):
         calls = []
@@ -106,12 +113,14 @@ class NativeRenderingTests(unittest.TestCase):
                 path = result.save(Path(directory) / f"native.{suffix}")
                 self.assertGreater(path.stat().st_size, 0)
             for suffix in ("typ", "pdf", "png"):
-                with self.subTest(suffix=suffix):
-                    with self.assertRaisesRegex(
+                with (
+                    self.subTest(suffix=suffix),
+                    self.assertRaisesRegex(
                         ValueError if suffix == "typ" else RuntimeError,
                         "outlined labels",
-                    ):
-                        result.save(Path(directory) / f"native.{suffix}")
+                    ),
+                ):
+                    result.save(Path(directory) / f"native.{suffix}")
 
     def test_multiple_layout_passes_use_native_geometry(self):
         advanced = graph.RenderSettings(
