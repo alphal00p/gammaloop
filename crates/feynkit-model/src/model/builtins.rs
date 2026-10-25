@@ -366,7 +366,8 @@ impl Model {
 #[cfg(test)]
 mod tests {
     use super::Model;
-    use symbolica::{atom::Atom, domains::rational::Rational};
+    use symbolica::atom::Atom;
+    use symbolica::domains::rational::Rational;
 
     #[test]
     fn standard_model_quantum_numbers_and_antiparticles_are_exact() {
@@ -547,10 +548,12 @@ mod tests {
     #[test]
     fn compressed_standard_model_matches_the_source_fixture() {
         let fixture = Model::from_json(include_str!("../../tests/fixtures/sm.json")).unwrap();
-        assert_eq!(Model::standard_model().fingerprint(), fixture.fingerprint());
-        let disk =
-            Model::from_json(include_str!("../../../../assets/models/json/sm/sm.json")).unwrap();
-        assert_eq!(disk.fingerprint(), fixture.fingerprint());
+        let builtin = Model::standard_model();
+        assert_eq!(builtin.fingerprint(), fixture.fingerprint());
+        assert_eq!(builtin.definition(), fixture.definition());
+        let reloaded = Model::from_json(&builtin.to_json().unwrap()).unwrap();
+        assert_eq!(reloaded.fingerprint(), builtin.fingerprint());
+        assert_eq!(reloaded.definition(), builtin.definition());
         assert!(include_bytes!("../../data/sm.json.zlib").len() < 8 * 1024);
     }
 }

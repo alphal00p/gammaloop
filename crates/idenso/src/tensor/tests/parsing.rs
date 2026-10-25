@@ -1,3 +1,7 @@
+use std::collections::BTreeMap;
+
+use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
+use spenso::network::graph::NetworkEdge;
 use spenso::network::parsing::{
     ParseSettings, SchoonschipExpansionMode, ShadowedStructure, ShorthandParsing, StructureFromAtom,
 };
@@ -1039,6 +1043,55 @@ fn infinite_execution() {
             break;
         }
     }
+    // DOT ports are raw half-edge IDs. Check the named tensor boundary and
+    // exact result independently before retaining its storage-layout snapshot.
+    let boundary = |network: &SymbolicNet<AbstractIndex>| {
+        network.graph.graph.check().unwrap();
+        assert_eq!(network.graph.n_nodes(), 1);
+        let mut ports = BTreeMap::new();
+        for (pair, _, edge) in network.graph.graph.iter_edges() {
+            let HedgePair::Unpaired { flow, .. } = pair else {
+                panic!("the completed tensor must expose only dangling ports");
+            };
+            let slot = match edge.data {
+                NetworkEdge::Head => None,
+                NetworkEdge::Slot(slot) => Some(slot.to_atom()),
+                NetworkEdge::BoundPort { .. } => {
+                    panic!("the symbolic tensor must not have filled ports")
+                }
+            };
+            assert!(ports.insert(slot, (flow, edge.orientation)).is_none());
+        }
+        assert_eq!(ports.len(), 6);
+        ports
+    };
+    let mut expected_boundary = BTreeMap::from([(None, (Flow::Source, Orientation::Default))]);
+    let expected_slots = parse_lit!(
+        open_ports(
+            mink(4, l_0),
+            mink(4, l_1),
+            mink(4, l_4),
+            bis(4, l_2),
+            bis(4, l_3)
+        ),
+        default_namespace = "spenso"
+    );
+    let AtomView::Fun(expected_slots) = expected_slots.as_view() else {
+        unreachable!()
+    };
+    for slot in expected_slots.iter() {
+        assert!(
+            expected_boundary
+                .insert(
+                    Some(slot.to_owned()),
+                    (Flow::Source, Orientation::Undirected)
+                )
+                .is_none()
+        );
+    }
+    assert_eq!(boundary(&net_iter), expected_boundary);
+    assert_eq!(symbolic_net_result_atom(&net_iter).expand(), expr.expand());
+
     assert_snapshot!(
         net_iter.snapshot_dot(),@r#"
     digraph {
@@ -1050,20 +1103,22 @@ fn infinite_execution() {
       ext0	 [style=invis];
       0:0:s	-> ext0	 [id=0 color="red"];
       ext1	 [style=invis];
-      0:1:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
+      0:3:s	-> ext1	 [id=1 dir=none color="red" label="mink4|l_0"];
       ext2	 [style=invis];
-      0:2:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
+      0:1:s	-> ext2	 [id=2 dir=none color="red" label="mink4|l_4"];
       ext3	 [style=invis];
-      0:4:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
+      0:5:s	-> ext3	 [id=3 dir=none color="red" label="bis4|l_3"];
       ext4	 [style=invis];
-      0:3:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
+      0:2:s	-> ext4	 [id=4 dir=none color="red" label="mink4|l_1"];
       ext5	 [style=invis];
-      0:5:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
+      0:4:s	-> ext5	 [id=5 dir=none color="red" label="bis4|l_2"];
     }
     "#
     );
     net.execute::<Sequential, SmallestDegree, _, _, _>(&lib, &fnlib)
         .unwrap();
+    assert_eq!(boundary(&net), expected_boundary);
+    assert_eq!(symbolic_net_result_atom(&net).expand(), expr.expand());
 }
 
 #[test]
