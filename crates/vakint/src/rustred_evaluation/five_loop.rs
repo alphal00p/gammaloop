@@ -63,6 +63,10 @@ mod entry_probe_diagnostics;
 mod layer_acceptance;
 
 #[cfg(test)]
+#[path = "five_loop/v7_pinch.rs"]
+mod v7_pinch;
+
+#[cfg(test)]
 #[path = "five_loop/test_profiles.rs"]
 mod test_profiles;
 
