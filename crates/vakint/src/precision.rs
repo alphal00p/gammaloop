@@ -603,6 +603,11 @@ pub(crate) fn evaluate_coefficient(
     combined_sources.extend(legacy::collect_sources(normalized.as_view())?);
     let sources = &combined_sources;
     let mut inputs = HashMap::new();
+    // Match the legacy constant map: this exact default precedes caller inputs.
+    inputs.insert(
+        Atom::var(crate::symbols::S.cmplx_i),
+        TrackedComplex::from_exact_rational(&Complex::new(0.into(), 1.into()), bits),
+    );
     let mut used_sources = Vec::new();
     let mut versions = BTreeSet::new();
     let mut warnings = Vec::new();

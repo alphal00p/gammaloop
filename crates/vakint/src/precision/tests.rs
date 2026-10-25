@@ -642,3 +642,147 @@ fn requested_precision_does_not_promote_a_weak_complex_component() {
     assert!(value.re.prec() > value.im.prec());
     assert!(value.im.prec() <= 60);
 }
+
+#[test]
+fn tracked_imaginary_alias_preserves_symbolic_input_and_evaluates_scalars_and_series() {
+    let engine = Vakint::new().unwrap();
+    let unit = Atom::var(crate::symbols::S.cmplx_i);
+    assert_ne!(unit.clone().pow(2), Atom::num(-1));
+    let epsilon = Atom::var(vk_symbol!("ε"));
+    for digits in [16, 80] {
+        let settings = settings(digits);
+        let (scalar, error) = engine
+            .numerical_evaluation(
+                &settings,
+                unit.as_view(),
+                &Default::default(),
+                &Default::default(),
+                None,
+            )
+            .unwrap();
+        assert!(error.is_none());
+        let value = &scalar.coefficients()[&0];
+        assert!(value.precision().real().exact_zero());
+        assert_eq!(value.value().im.to_rational(), 1);
+        assert!(value.precision().imaginary().absolute_error().is_zero());
+        assert!(scalar.warnings().is_empty());
+
+        let expression =
+            &unit * epsilon.clone().pow(-2) + Atom::one() + unit.clone().pow(2) * &epsilon;
+        let (series, error) = engine
+            .numerical_evaluation(
+                &settings,
+                expression.as_view(),
+                &Default::default(),
+                &Default::default(),
+                None,
+            )
+            .unwrap();
+        assert!(error.is_none());
+        assert_eq!(
+            series.coefficients().keys().copied().collect::<Vec<_>>(),
+            [-2, 0, 1]
+        );
+        assert!(series.coefficients()[&-2].precision().real().exact_zero());
+        assert_eq!(series.coefficients()[&-2].value().im.to_rational(), 1);
+        assert_eq!(series.coefficients()[&0].value().re.to_rational(), 1);
+        assert!(
+            series.coefficients()[&0]
+                .precision()
+                .imaginary()
+                .exact_zero()
+        );
+        assert_eq!(series.coefficients()[&1].value().re.to_rational(), -1);
+        assert!(
+            series.coefficients()[&1]
+                .precision()
+                .imaginary()
+                .exact_zero()
+        );
+        assert!(series.warnings().is_empty());
+    }
+    assert_ne!(unit.clone().pow(2), Atom::num(-1));
+}
+
+#[test]
+fn tracked_imaginary_alias_default_precedes_explicit_parameter_overrides() {
+    let unit = Atom::var(crate::symbols::S.cmplx_i);
+    for (real, imaginary) in [(7, 0), (3, 4)] {
+        let parameters = HashMap::from([(
+            unit.clone(),
+            Complex::new(Float::with_val(256, real), Float::with_val(256, imaginary)),
+        )]);
+        let (value, _) = evaluate_coefficient(
+            (&unit + Atom::one()).as_view(),
+            &BTreeMap::new(),
+            &parameters,
+            &settings(32),
+        )
+        .unwrap();
+        assert_eq!(value.value().re.to_rational(), real + 1);
+        assert_eq!(value.value().im.to_rational(), imaginary);
+    }
+}
+
+#[test]
+fn tracked_imaginary_alias_preserves_independent_component_accuracy() {
+    let (identity, finite) = source("imaginary_alias_finite", "1.23456789012345", 12);
+    let sources = BTreeMap::from([(identity.clone(), finite)]);
+    let expression = Atom::num(2) + Atom::var(crate::symbols::S.cmplx_i) * identity;
+    let (value, warnings) = evaluate_coefficient(
+        expression.as_view(),
+        &sources,
+        &HashMap::new(),
+        &settings(50),
+    )
+    .unwrap();
+    assert_eq!(value.value().re.to_rational(), 2);
+    assert!(value.precision().real().absolute_error().is_zero());
+    assert!(!value.precision().imaginary().absolute_error().is_zero());
+    assert!(value.precision().imaginary().significant_digits().unwrap() < 50);
+    assert!(warnings.iter().any(|warning| {
+        warning.requested_decimal_precision == 50
+            && warning
+                .sources
+                .iter()
+                .any(|source| source.identity == "imaginary_alias_finite")
+    }));
+}
+
+#[test]
+fn tracked_imaginary_alias_does_not_retry_a_limited_tracked_callback() {
+    use std::sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    };
+    use symbolica::atom::EvaluationInfo;
+
+    let calls = Arc::new(AtomicUsize::new(0));
+    let observed = Arc::clone(&calls);
+    let limited = symbolica::symbol!(
+        "vakint_test::imaginary_alias_limited_callback",
+        eval = EvaluationInfo::new().register_tracked(move |tags, arguments, bits| {
+            if !tags.is_empty() || !arguments.is_empty() {
+                return Err("test constant accepts no tags or arguments".into());
+            }
+            observed.fetch_add(1, Ordering::SeqCst);
+            TrackedComplex::from_source_decimal("1.25", 8, bits).map_err(|error| error.to_string())
+        })
+    );
+    let expression = Atom::var(crate::symbols::S.cmplx_i) * Atom::var(limited);
+    let (value, warnings) = evaluate_coefficient(
+        expression.as_view(),
+        &BTreeMap::new(),
+        &HashMap::new(),
+        &settings(60),
+    )
+    .unwrap();
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    assert!(value.precision().real().exact_zero());
+    assert!(value.precision().imaginary().significant_digits().unwrap() < 60);
+    assert!(
+        warnings
+            .iter()
+            .any(|warning| warning.achieved_decimal_precision.is_some())
+    );
+}
