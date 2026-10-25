@@ -189,8 +189,8 @@ fn difference(
         };
         if !d.is_zero() {
             let text = d.to_expression().to_canonical_string();
-            out.push(json!({"terminal": key.integral().powers(),
-                "difference": text.chars().take(400).collect::<String>()}));
+            // full coefficient (no truncation): the C6 gate applies later-staged rows to the difference exactly
+            out.push(json!({"terminal": key.integral().powers(), "difference": text}));
         }
     }
     Ok(out)
@@ -217,7 +217,8 @@ fn rr_case(application: &SavedApplication, case: &Value) -> Value {
         Ok(json!({"outcome": if diff.is_empty() {"pass"} else {"fail"},
             "nontrivial": nontrivial, "lhs_lowered": lhs_keys.len(), "rhs_lowered": rhs_keys.len(),
             "lhs_lowered_keys": lhs_keys.iter().take(64).collect::<Vec<_>>(),
-            "lhs_terminals": keys(&lt), "rhs_terminals": keys(&rt), "difference": diff}))
+            "lhs_terminals": keys(&lt), "rhs_terminals": keys(&rt), "difference": diff,
+            "difference_full": true}))
     };
     let mut value = run().unwrap_or_else(|e| json!({"outcome": "error", "error": e}));
     value["seconds"] = json!(started.elapsed().as_secs_f64());
