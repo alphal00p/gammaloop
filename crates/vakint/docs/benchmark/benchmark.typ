@@ -354,24 +354,46 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
     [ Pending: no completed final strict-cache receipt selected.]
   } else {
     let build = five.cache.raw_report
+    let file = build.preparation.options.single_file
     parbreak()
-    [Producer phase: #raw(build.phase).
+    [Producer #raw(build.build_identity.build.git_revision.slice(0, 12)) · original phase: #raw(build.phase).
     #if five.cache.at("final_selection", default: none) != none [
       Retained completed candidate; selection recorded separately as
       #raw(five.cache.final_selection.evidence.sha256.slice(0, 12)).
     ]
-    #build.preparation.completed_roots / #build.preparation.total_roots selected roots complete;
-    strict Reject policy. Compressed size: #fixed(build.compressed_bytes / 1048576, 3) MiB.
-    Cumulative supervised preparation: #timing(build.elapsed_seconds) s.
+    #box[#build.preparation.completed_roots / #build.preparation.total_roots] selected roots complete;
+    #build.preparation.newly_stored_intermediates intermediate records; strict Reject policy.
+    Compressed size: #fixed(build.compressed_bytes / 1048576, 3) MiB;
+    decoded: #file.identity.decoded_bytes bytes (#fixed(file.identity.decoded_bytes / 1048576, 3) MiB).
+    #if build.phase == "pilot" [Original selected-pilot producer-driver elapsed] else [Producer-driver elapsed]:
+    #raw(str(build.elapsed_seconds)) s,
+    including loading and owner setup, not pure IBP or overall campaign time.
     Cache SHA-256: #raw(build.cache_sha256). Training roots, capture diagnostics and
     source/proof bindings remain in the unmodified build receipt.]
+    if five.cache.at("final_selection", default: none) != none {
+      let selection = five.cache.final_selection
+      let bridge = selection.cache_requalification
+      parbreak()
+      text(8pt)[Accepted native compatibility bridge #raw(bridge.evidence.sha256.slice(0, 12)) ·
+      consumer cohort receipt #raw(bridge.raw_receipt.consumer.compiled_cohort.sha256.slice(0, 12)) ·
+      consumer workload #raw(bridge.raw_receipt.consumer.final_workload.sha256.slice(0, 12)).]
+      if bridge.raw_receipt.at("scope", default: (:)).at("native_compatibility_only", default: false) {
+        text(8pt)[ This does not establish a fresh target-suite pass, later-cohort compatibility or performance.]
+      }
+      let trial = selection.raw_receipt.at("discarded_trial", default: none)
+      if trial != none {
+        parbreak()
+        text(8pt)[Separate rejected trial: #trial.strict_complete_roots / #trial.requested_roots roots complete;
+        #raw(str(trial.whole_attempt_seconds)) s whole attempt; no final gzip candidate.]
+      }
+    }
   }
   v(0.4em)
   block(fill: pale, inset: 9pt, radius: 4pt)[
     *Timing boundaries.* Stages overlap; never sum them. Owner preparation is
     included in saved-application/reduction times. #raw("ibp_excluding_owner_seconds")
     means saved application minus owner preparation, including transport,
-    combination and terminal substitution. Pure IBP, terminal-only and primary
+    combination and terminal substitution. Pure IBP, terminal-only, isolated gzip decode and primary
     owner-subtracted times remain unmeasured. Prepared-input E2E includes current
     input/data/cache loading and public reduction; generator preparation stays
     historical. Fresh/prepared scopes never mix. Initial loading uses Sparse;
@@ -380,8 +402,8 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   ]
   let reuse = five.at("warm_reuse", default: none)
   if reuse != none and reuse.functional_records.len() > 0 {
-    pagebreak()
-    text(20pt, weight: "bold", fill: navy)[Genuinely connected five-loop control]
+    if reuse.status == "measured-paired-reuse" { pagebreak() } else { v(0.6em) }
+    text(if reuse.status == "measured-paired-reuse" { 20pt } else { 13pt }, weight: "bold", fill: navy)[Genuinely connected five-loop control]
     v(0.4em)
     [*Supplement: same-engine warm reuse.* This scalar ladder-pinch control is
     separate from the physical quadratic/q0 workloads and from held-out
@@ -413,7 +435,23 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       CPU #proof.performance_evidence.cpu_affinity; one fixed worker.]
     } else {
       [#reuse.functional_records.len() completed functional pair(s).
+      These observations are non-isolated; no median, range or ratio is reported.
       Three qualified fresh pairs in one accepted window are required for timing aggregates.]
+      for record in reuse.functional_records {
+        v(0.3em)
+        table(columns: (1fr, 1fr), inset: 6pt, stroke: 0.4pt + luma(215),
+          table.header(
+            table.cell(fill: navy, text(fill: white)[First public call · observed seconds]),
+            table.cell(fill: navy, text(fill: white)[Repeated call · observed seconds]),
+          ),
+          table.cell(fill: pale, align(center, raw(str(record.calls.cold.whole_public_application_seconds)))),
+          table.cell(fill: pale, align(center, raw(str(record.calls.warm.whole_public_application_seconds)))),
+        )
+        v(0.2em)
+        text(8pt)[Functional source #raw(record.input.build_git_revision.slice(0, 12)) ·
+        executable #raw(record.input.executable.sha256.slice(0, 12)) ·
+        data #raw(record.input.data_manifests.at("manifest.json").sha256.slice(0, 12)).]
+      }
     }
     v(0.4em)
     block(fill: pale, inset: 10pt, radius: 4pt)[
