@@ -27,7 +27,7 @@ def main():
     )
     args = parser.parse_args()
     if args.fixtures:
-        fixtures = json.loads(args.fixtures.read_text())["font"]
+        fixtures = json.loads(args.fixtures.read_text(encoding="utf-8"))["font"]
     else:
         result = subprocess.run(
             [

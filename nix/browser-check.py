@@ -19,7 +19,7 @@ def main():
     )
     output.mkdir(parents=True)
     environment = dict(os.environ, LINNET_MATHML_BROWSER_DIR=str(output))
-    with (output / "producer.log").open("w") as log:
+    with (output / "producer.log").open("w", encoding="utf-8") as log:
         producer = subprocess.Popen(
             [
                 "cargo",
@@ -76,7 +76,7 @@ def main():
                     producer.kill()
                     producer.wait()
             print(log.name)
-            print(Path(log.name).read_text())
+            print(Path(log.name).read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

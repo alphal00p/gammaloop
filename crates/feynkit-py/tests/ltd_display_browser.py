@@ -61,7 +61,7 @@ def main(directory, executable=None, engine="chromium"):
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         for source in sources:
-            page.set_content(source.read_text())
+            page.set_content(source.read_text(encoding="utf-8"))
             root = page.locator(".feynkit-ltd-result").first
             assert root.get_attribute("data-ready") == "true"
             assert root.locator("details").count() == 2
@@ -125,7 +125,9 @@ def main(directory, executable=None, engine="chromium"):
 
         results = {}
         for name in ("triangle", "three-loop", "reordered"):
-            page.set_content((directory / f"ltd-{name}.html").read_text())
+            page.set_content(
+                (directory / f"ltd-{name}.html").read_text(encoding="utf-8")
+            )
             page.locator("[data-residue-graph] > summary").click()
             page.locator(".lp-graph").wait_for(state="visible")
             results[name] = page.evaluate("""() => {
@@ -199,7 +201,7 @@ def main(directory, executable=None, engine="chromium"):
             }""")
             assert not errors, errors
 
-        source = (directory / "ltd-three-loop.html").read_text()
+        source = (directory / "ltd-three-loop.html").read_text(encoding="utf-8")
         page.set_content(
             '<body data-theme="dark"><iframe style="width:736px;border:0" srcdoc="'
             + html.escape(source, quote=True)
@@ -325,7 +327,7 @@ def main(directory, executable=None, engine="chromium"):
             assert root.evaluate("e=>e.scrollWidth<=e.clientWidth+2"), width
         root.screenshot(path=str(directory / "ltd-mobile.png"))
 
-        page.set_content((directory / "ltd-multiple.html").read_text())
+        page.set_content((directory / "ltd-multiple.html").read_text(encoding="utf-8"))
         roots = page.locator(".feynkit-ltd-result")
         assert roots.count() == 2
         roots.first.locator('[data-sum-index="1"]').click()

@@ -318,7 +318,7 @@ class TensorPrintTests(unittest.TestCase):
         # Exercise the portable custom-display AST independently of gamma's
         # specialized renderer, including Typst's lexical helper scope.
         notation = (
-            (assets / "notation.typ").read_text()
+            (assets / "notation.typ").read_text(encoding="utf-8")
             + '\n#let custom-cancel() = _display-node(("math", "cancel", (("symbol", "J"),)))\n'
         )
         source = '#import "notation.typ": custom-cancel\n$ #custom-cancel() $'

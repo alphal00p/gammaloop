@@ -12,7 +12,9 @@ from symbolica import E, Replacement, S
 from symbolica.community import hepkit as hep
 
 fixture = json.loads(
-    (Path(__file__).parent / "fixtures/feyncalc_etac_topologies.json").read_text()
+    (Path(__file__).parent / "fixtures/feyncalc_etac_topologies.json").read_text(
+        encoding="utf-8"
+    )
 )
 D, k1, k2, n, nb, gkin, meta, u0b = S(
     "etac::D",

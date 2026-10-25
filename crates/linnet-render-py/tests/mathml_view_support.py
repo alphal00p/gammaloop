@@ -239,7 +239,7 @@ def verify_native():
             for suffix, text in (("svg", result.to_svg()), ("html", result.to_html())):
                 path = directory / ("native." + suffix)
                 result.save(path)
-                assert path.read_text() == text
+                assert path.read_text(encoding="utf-8") == text
             for suffix in ("pdf", "png", "typ"):
                 path = directory / ("guarded." + suffix)
                 raises(
@@ -382,7 +382,9 @@ def serve_browser():
                 self.reply(javascript, "text/javascript")
             elif self.path == "/harness.js":
                 self.reply(
-                    (Path(test_directory) / "mathml_view_browser.js").read_text(),
+                    (Path(test_directory) / "mathml_view_browser.js").read_text(
+                        encoding="utf-8"
+                    ),
                     "text/javascript",
                 )
             elif (
@@ -390,7 +392,9 @@ def serve_browser():
                 and self.path.removeprefix("/saved/") in completed
             ):
                 self.reply(
-                    (output / (self.path.removeprefix("/saved/") + ".svg")).read_text(),
+                    (output / (self.path.removeprefix("/saved/") + ".svg")).read_text(
+                        encoding="utf-8"
+                    ),
                     "image/svg+xml",
                 )
             else:
@@ -420,7 +424,7 @@ def serve_browser():
                     result.save(output / (name + ".svg"))
                     result.save(output / (name + ".html"))
                 (output / (name + ".receipt.json")).write_text(
-                    json.dumps(payload, indent=2)
+                    json.dumps(payload, indent=2), encoding="utf-8"
                 )
                 completed[name] = payload
                 self.reply(
@@ -452,7 +456,9 @@ def serve_browser():
             "max_seconds": 240,
             "python": python,
         }
-        (output / "ready.json").write_text(json.dumps(ready, indent=2))
+        (output / "ready.json").write_text(
+            json.dumps(ready, indent=2), encoding="utf-8"
+        )
         print("LINNET_MATHML_READY " + json.dumps(ready), flush=True)
         while (
             finish is None
@@ -469,7 +475,9 @@ def serve_browser():
         "elapsed_seconds": time.monotonic() - started,
         "python": python,
     }
-    (output / "producer-summary.json").write_text(json.dumps(summary, indent=2))
+    (output / "producer-summary.json").write_text(
+        json.dumps(summary, indent=2), encoding="utf-8"
+    )
     assert finish is not None, "browser producer timed out or exhausted request budget"
     assert finish.get("ok") is True, finish
     assert completed.keys() == jobs.keys(), summary

@@ -131,7 +131,7 @@ def main(directory):
         for energy in result.on_shell_energies.values():
             check_math(energy._repr_html_())
         check_math(result.to_expression()._repr_html_())
-        (directory / f"{name}.html").write_text(source)
+        (directory / f"{name}.html").write_text(source, encoding="utf-8")
     print(
         "Canonical OSE and indexed momenta: identity, powers, native/tensor math and CFF/LTD labels passed"
     )

@@ -116,7 +116,7 @@ def main():
     signal.alarm(225)
     try:
         if not args.preflight:
-            producer = json.loads(args.ready.read_text())
+            producer = json.loads(args.ready.read_text(encoding="utf-8"))
             url = producer["url"]
             parsed = urllib.parse.urlparse(url)
             assert (
@@ -320,7 +320,7 @@ def main():
                                 full_page=True,
                             )
                             (output / f"{engine}-{width}-failure.html").write_text(
-                                page.content()
+                                page.content(), encoding="utf-8"
                             )
                             report["failure_context"] = {
                                 "engine": engine,
@@ -362,7 +362,9 @@ def main():
                 report["finish_error"] = str(error)
                 report["ok"] = False
         report["finished_at"] = datetime.datetime.now(datetime.UTC).isoformat()
-        (output / "browser-report.json").write_text(json.dumps(report, indent=2))
+        (output / "browser-report.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8"
+        )
         print(
             json.dumps(
                 {

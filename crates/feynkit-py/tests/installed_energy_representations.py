@@ -222,7 +222,7 @@ def main():
            ext -> a; ext -> d; c -> ext; f -> ext;
            a -> b; b -> c; d -> e; e -> f;
            a -> d; b -> e [lmb_id=0]; c -> f [lmb_id=1]; }""",
-        (FIXTURES / "ltd_three_loop.dot").read_text(),
+        (FIXTURES / "ltd_three_loop.dot").read_text(encoding="utf-8"),
         """digraph tetrahedron { edge [particle="phi"];
            a -> b; a -> c; a -> d;
            b -> c [lmb_id=0]; b -> d [lmb_id=1]; c -> d [lmb_id=2]; }""",

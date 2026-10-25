@@ -115,7 +115,7 @@ def check(diagram, numerator, output=None):
             .together()
             .is_zero()
         )
-        output.write_text(source)
+        output.write_text(source, encoding="utf-8")
     return result
 
 
@@ -149,7 +149,10 @@ def main(directory):
     }""",
     )
     triple = hep.FeynmanDiagram.from_dot(
-        model, (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text()
+        model,
+        (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text(
+            encoding="utf-8"
+        ),
     )
     for diagram in (double, triple):
         selected = diagram.loop_momentum_basis.loop_edges[0]

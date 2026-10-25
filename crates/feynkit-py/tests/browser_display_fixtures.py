@@ -10,7 +10,7 @@ from playwright.sync_api import sync_playwright
 root = Path(os.environ["FEYNKIT_BROWSER_FIXTURES"])
 javascript = (
     Path(test_directory).parents[1] / "linnet-render-py/src/view.js"
-).read_text()
+).read_text(encoding="utf-8")
 with sync_playwright() as driver:
     browser = driver.chromium.launch(executable_path=os.environ["LINNET_TEST_CHROMIUM"])
     try:

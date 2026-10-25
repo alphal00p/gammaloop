@@ -1412,7 +1412,7 @@ class ExplicitNotationExportTests(PagingAssertions):
 
     def test_custom_notation_is_raw_source_and_an_exact_svg_compiler_input(self):
         assets = Path(__file__).resolve().parents[1] / "typst"
-        notation = (assets / "notation.typ").read_text() + (
+        notation = (assets / "notation.typ").read_text(encoding="utf-8") + (
             "\n#let default-notation(settings: (:)) = notation(settings: settings, "
             'heads: ("paging_exports::A": $macron(Z)$))\n'
         )
@@ -1633,12 +1633,14 @@ class RealCompilerExportTests(PagingAssertions):
             # Exercise the portable custom-display AST independently of gamma's
             # specialized renderer, including Typst's lexical helper scope.
             (root / "notation.typ").write_text(
-                (assets / "notation.typ").read_text()
-                + '\n#let custom-cancel() = _display-node(("math", "cancel", (("symbol", "J"),)))\n'
+                (assets / "notation.typ").read_text(encoding="utf-8")
+                + '\n#let custom-cancel() = _display-node(("math", "cancel", (("symbol", "J"),)))\n',
+                encoding="utf-8",
             )
             source = root / "main.typ"
             source.write_text(
-                '#import "notation.typ": custom-cancel\n$ #custom-cancel() $'
+                '#import "notation.typ": custom-cancel\n$ #custom-cancel() $',
+                encoding="utf-8",
             )
             document = typst.compile(
                 str(source), format="html", root=directory
@@ -1656,7 +1658,7 @@ class RealCompilerExportTests(PagingAssertions):
 
     def test_custom_typst_notation_compiles_complete_real_svg_projects(self):
         assets = Path(__file__).resolve().parents[1] / "typst"
-        notation = (assets / "notation.typ").read_text() + (
+        notation = (assets / "notation.typ").read_text(encoding="utf-8") + (
             "\n#let default-notation(settings: (:)) = notation(settings: settings, "
             'heads: ("real_exports::A": $macron(Z)$))\n'
         )

@@ -91,7 +91,7 @@ def main(directory, ltd_directory, executable, engine="chromium"):
             print(f"{engine}: {source.name}", flush=True)
             # Measure one unwrapped math row; small-screen wrapping is checked below.
             page.set_viewport_size({"width": 3200, "height": 1100})
-            page.set_content(source.read_text())
+            page.set_content(source.read_text(encoding="utf-8"))
             page.wait_for_selector(".feynkit-cff-result[data-ready]")
             page.evaluate("document.fonts.load('19px \"STIX Two Math\"'); true")
             page.wait_for_function("document.fonts.check('19px \"STIX Two Math\"')")
@@ -142,7 +142,9 @@ def main(directory, ltd_directory, executable, engine="chromium"):
                 )
             assert not errors, errors
         page.set_viewport_size({"width": 3200, "height": 1100})
-        page.set_content((ltd_directory / "ltd-raised.html").read_text())
+        page.set_content(
+            (ltd_directory / "ltd-raised.html").read_text(encoding="utf-8")
+        )
         page.evaluate("document.fonts.load('19px \"STIX Two Math\"'); true")
         page.wait_for_function("document.fonts.check('19px \"STIX Two Math\"')")
         assert_math_fonts(page, engine)

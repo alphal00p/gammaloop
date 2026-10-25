@@ -3,8 +3,8 @@
 import json
 import re
 import sys
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 import marimo as mo
 from symbolica import E, S
@@ -109,7 +109,7 @@ def check(diagram, name, directory):
                     value /= surfaces[surface]
                 reconstructed += value
         assert (reconstructed - native).together().is_zero(), (name, r["id"])
-    (directory / f"ltd-{name}.html").write_text(source)
+    (directory / f"ltd-{name}.html").write_text(source, encoding="utf-8")
     return ltd, data
 
 
@@ -158,7 +158,10 @@ def main(directory):
     assert (ltd.to_expression() - cff).together().is_zero()
 
     triple = hep.FeynmanDiagram.from_dot(
-        model, (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text()
+        model,
+        (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text(
+            encoding="utf-8"
+        ),
     )
     _, data = check(triple, "three-loop", directory)
     assert triple.loop_count == 3 and len(data["residues"]) == 56
@@ -231,7 +234,7 @@ def main(directory):
     unsafe = hep.FeynmanDiagram.from_dot(
         model,
         (Path(__file__).parent / "fixtures/ltd_three_loop.dot")
-        .read_text()
+        .read_text(encoding="utf-8")
         .replace("triple_box", "unsafe</script><script>throw 1</script>"),
     )
     unsafe_view = unsafe.integrate_energy(method="ltd").render()
@@ -239,7 +242,9 @@ def main(directory):
     assert "</script><script>throw 1</script>" not in source
     repeated_view = ltd.render()
     repeated_source = external_metrics_snapshot(repeated_view).to_html()
-    (directory / "ltd-multiple.html").write_text(repeated_source + repeated_source)
+    (directory / "ltd-multiple.html").write_text(
+        repeated_source + repeated_source, encoding="utf-8"
+    )
     print(
         "LtdRepresentation: native algebra, ordered routing, repeated poles and Marimo dispatch passed"
     )

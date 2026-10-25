@@ -38,7 +38,10 @@ def check(directory):
     cff = diagram.integrate_energy(method="cff")
     orientation = next(o for o in reversed(cff.orientations) if len(o.families) > 1)
     three_loop = hep.FeynmanDiagram.from_dot(
-        model, (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text()
+        model,
+        (Path(__file__).parent / "fixtures/ltd_three_loop.dot").read_text(
+            encoding="utf-8"
+        ),
     )
     family = max(
         three_loop.integrate_energy(method="cff").orientations,
@@ -73,7 +76,7 @@ def check(directory):
         assert "object at" not in repr(value)
         view = value.render()
         source = external_metrics_snapshot(view).to_html()
-        (directory / f"{name}.html").write_text(source)
+        (directory / f"{name}.html").write_text(source, encoding="utf-8")
         assert callable(value._mime_) and callable(value._repr_mimebundle_)
         with patch.object(mo.ui, "anywidget", wraps=mo.ui.anywidget) as adapter:
             markup = mo.as_html(view).text
@@ -108,7 +111,7 @@ def check(directory):
         if "report" not in name:
             assert "data-spenso-math" in source, name
         assert "<table" in mo.as_html(value).text
-        (directory / f"{name}.html").write_text(source)
+        (directory / f"{name}.html").write_text(source, encoding="utf-8")
     coefficient = cff.pole_coefficients(cff.raised_surface_groups()[0])[0]
     assert "pole coefficient, order 1" in repr(coefficient)
     coefficient_view = coefficient.render()

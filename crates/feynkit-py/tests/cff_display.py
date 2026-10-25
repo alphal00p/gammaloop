@@ -152,7 +152,7 @@ def check_cff_displays(fk, diagrams):
     if directory := os.environ.get("CFF_DISPLAY_TEST_OUTPUT"):
         target = Path(directory)
         target.mkdir(parents=True, exist_ok=True)
-        (target / "collection.html").write_text(collection)
+        (target / "collection.html").write_text(collection, encoding="utf-8")
         for index, html in enumerate(pages):
-            (target / f"cff-{index}.html").write_text(html)
+            (target / f"cff-{index}.html").write_text(html, encoding="utf-8")
     print(f"CFF explorer: {len(pages)} native displays passed")

@@ -35,7 +35,7 @@ def main():
     parser.add_argument("--chromium")
     args = parser.parse_args()
     if args.fixtures:
-        rendered = json.loads(args.fixtures.read_text())["explorer"]
+        rendered = json.loads(args.fixtures.read_text(encoding="utf-8"))["explorer"]
     else:
         rendered = subprocess.run(
             [
@@ -55,7 +55,8 @@ print('<section id="standalone">' + library[TensorExpression.dirac_gamma(4)].to_
         page_path = Path(directory) / "explorers.html"
         page_path.write_text(
             '<!doctype html><meta charset="utf-8">'
-            '<body style="margin:24px;color-scheme:light">' + rendered
+            '<body style="margin:24px;color-scheme:light">' + rendered,
+            encoding="utf-8",
         )
         engines = (
             (driver.chromium,) if args.chromium else (driver.webkit, driver.chromium)

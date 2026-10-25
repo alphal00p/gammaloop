@@ -70,7 +70,9 @@ def main():
     )
     assert any(output.is_relative_to(path.resolve()) for path in allowed), output
     output.mkdir(parents=True, exist_ok=True)
-    javascript = (ROOT / "crates/linnet-render-py/src/view.js").read_text()
+    javascript = (ROOT / "crates/linnet-render-py/src/view.js").read_text(
+        encoding="utf-8"
+    )
     wrapper = wrapper_source(javascript)
     source_hash = hashlib.sha256(javascript.encode()).hexdigest()
     report = {"schema": 1, "source_sha256": source_hash, "matrix": [], "ok": False}
@@ -85,7 +87,7 @@ def main():
     signal.alarm(360)
     try:
         if args.ready:
-            producer = json.loads(args.ready.read_text())
+            producer = json.loads(args.ready.read_text(encoding="utf-8"))
             origin = producer["url"]
             parsed = urllib.parse.urlparse(origin)
             assert (
@@ -100,7 +102,7 @@ def main():
             )
             fixtures = {}
         else:
-            retained = json.loads(args.fixture.read_text())
+            retained = json.loads(args.fixture.read_text(encoding="utf-8"))
             assert retained["source_sha256"] == source_hash, (
                 "retained fixture belongs to another source freeze"
             )
@@ -131,12 +133,16 @@ def main():
                         elif address == origin + "/graph-reuse.js":
                             route.fulfill(
                                 content_type="text/javascript",
-                                body=(HERE / "graph_reuse_browser.js").read_text(),
+                                body=(HERE / "graph_reuse_browser.js").read_text(
+                                    encoding="utf-8"
+                                ),
                             )
                         elif address == origin + "/harness.js":
                             route.fulfill(
                                 content_type="text/javascript",
-                                body=(HERE / "mathml_view_browser.js").read_text(),
+                                body=(HERE / "mathml_view_browser.js").read_text(
+                                    encoding="utf-8"
+                                ),
                             )
                         elif address == origin + "/view.js":
                             route.fulfill(
@@ -210,7 +216,7 @@ def main():
                             **manifest["requests"][f"{engine}-350-a"],
                             "completed_html": (
                                 args.ready.parent / f"{engine}-350-a.html"
-                            ).read_text(),
+                            ).read_text(encoding="utf-8"),
                         }
                     post(
                         origin + "/finish",
@@ -223,7 +229,8 @@ def main():
                                 "source_sha256": source_hash,
                                 "fixtures": fixtures,
                             }
-                        )
+                        ),
+                        encoding="utf-8",
                     )
                 for engine in browsers:
                     for name in args.cases or CASES:
@@ -247,7 +254,9 @@ def main():
             except (OSError, ValueError) as error:
                 report["finish_error"] = str(error)
         report["elapsed_seconds"] = time.monotonic() - started
-        (output / "graph-reuse-report.json").write_text(json.dumps(report, indent=2))
+        (output / "graph-reuse-report.json").write_text(
+            json.dumps(report, indent=2), encoding="utf-8"
+        )
         print(
             json.dumps(
                 {

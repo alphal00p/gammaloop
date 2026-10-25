@@ -3,14 +3,14 @@
 import cmath
 import json
 import sys
-from pathlib import Path
 from fractions import Fraction
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "assets/models/ufo"))
 import sm
 
-model = json.loads((ROOT / "assets/models/json/sm/sm.json").read_text())
+model = json.loads((ROOT / "assets/models/json/sm/sm.json").read_text(encoding="utf-8"))
 particles = {p["name"]: p for p in model["particles"]}
 for p in sm.all_particles:
     j = particles[p.name]
@@ -35,7 +35,9 @@ for p in sm.all_particles:
     ), p.name
     assert j["ghost_number"] == p.GhostNumber and j["lepton_number"] == p.LeptonNumber
 params = {p["name"]: p for p in model["parameters"]}
-card = json.loads((ROOT / "assets/models/json/sm/restrict_default.json").read_text())
+card = json.loads(
+    (ROOT / "assets/models/json/sm/restrict_default.json").read_text(encoding="utf-8")
+)
 env = {"cmath": cmath, "complex": complex}
 for f in sm.all_functions:
     env[f.name] = lambda *args, f=f: eval(

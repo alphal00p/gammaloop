@@ -2958,6 +2958,9 @@
       MATHML_CHROMIUM_VERSION = pkgs.chromium.version;
       PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1";
       LINNET_MATHML_BROWSER_ENGINES = "chromium";
+      # Chromium still needs fallback fonts for empty MathML probes and static
+      # snapshots while the widget's bundled math font is unavailable.
+      FONTCONFIG_FILE = pkgs.makeFontsConf {fontDirectories = [pkgs.dejavu_fonts];};
     }) (''
       if [ -z "''${SYMBOLICA_LICENSE:-}" ]; then
         echo "Missing SYMBOLICA_LICENSE environment variable" >&2

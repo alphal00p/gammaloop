@@ -159,7 +159,7 @@ class FactorizedContractionTests(unittest.TestCase):
             Path(__file__).resolve().parents[2]
             / "idenso/benches/data/fk0032-projected.expr"
         )
-        original = E(fixture.read_text())
+        original = E(fixture.read_text(encoding="utf-8"))
         na = S("fk0032::N_A")
         # Change the typed slots before admission and normalize the colour
         # projector by N_A. No SU(N) relation between N_A and C_A is assumed.

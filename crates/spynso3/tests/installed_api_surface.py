@@ -21,7 +21,7 @@ class ApiSurfaceTests(unittest.TestCase):
         tour = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(tour)
         cls.examples, cls.values = tour.run_examples()
-        cls.declarations = ast.parse(STUB.read_text()).body
+        cls.declarations = ast.parse(STUB.read_text(encoding="utf-8")).body
 
     @classmethod
     def tearDownClass(cls):

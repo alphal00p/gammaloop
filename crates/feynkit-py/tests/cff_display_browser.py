@@ -51,7 +51,7 @@ def main(directory, executable=None, engine="chromium"):
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         for source in sources:
-            page.set_content(source.read_text())
+            page.set_content(source.read_text(encoding="utf-8"))
             assert page.locator(".feynkit-cff-result[data-ready=true]").count() == 1
             data = payload(page)
             if data["orientations"]:
@@ -67,7 +67,7 @@ def main(directory, executable=None, engine="chromium"):
         # Nested sums used to wrap at every level in WebKit. Check at a normal
         # notebook cell width, not just a desktop-wide standalone document.
         # Preserve real line breaks on small screens, without overflow.
-        page.set_content((Path(directory) / "cff-2.html").read_text())
+        page.set_content((Path(directory) / "cff-2.html").read_text(encoding="utf-8"))
         choose_orientation(page, 97)
         equation = page.locator(".hs-factored-equation")
         page.set_viewport_size({"width": 736, "height": 1100})
@@ -88,7 +88,9 @@ def main(directory, executable=None, engine="chromium"):
         assert page.evaluate("document.documentElement.scrollWidth <= innerWidth")
         page.set_viewport_size({"width": 800, "height": 1100})
 
-        page.set_content((Path(directory) / "collection.html").read_text())
+        page.set_content(
+            (Path(directory) / "collection.html").read_text(encoding="utf-8")
+        )
         thumbnail = page.locator(".fk-thumbnail").first
         page.wait_for_function(
             "document.querySelector('.fk-thumbnail').naturalWidth > 0"
@@ -101,7 +103,7 @@ def main(directory, executable=None, engine="chromium"):
         assert thumbnail.get_attribute("src") != light
         assert page.locator(".fk-stage > svg").count() == 1
 
-        source = (Path(directory) / "cff-3.html").read_text()
+        source = (Path(directory) / "cff-3.html").read_text(encoding="utf-8")
         page.set_content(
             '<body data-theme="dark"><iframe style="width:736px;border:0" srcdoc="'
             + html.escape(source, quote=True)
