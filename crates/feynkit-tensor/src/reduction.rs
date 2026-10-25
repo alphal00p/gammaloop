@@ -2030,7 +2030,7 @@ mod tests {
     use feynkit_model::Model;
     use idenso::shorthands::UndoShorthands;
     use spenso::structure::abstract_index::AbstractIndex;
-    use spenso::vector_symbol;
+    use spenso::{broadcast_symbol, tensor_symbol, vector_symbol};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
@@ -3748,22 +3748,73 @@ mod tests {
 
     #[test]
     fn incomplete_selected_tensor_collection_is_refused() {
-        let (k, q, p, r) = vectors();
+        let (k, _, _, _) = vectors();
         let dimension = Atom::var(symbol!("feynkit_tensor_test::D_refused_collection"));
         let mu = Atom::var(symbol!("feynkit_tensor_test::refused_mu"));
-        let nu = Atom::var(symbol!("feynkit_tensor_test::refused_nu"));
-        let left = indexed(k, 1, &dimension, &mu) * indexed(p, 1, &dimension, &mu);
-        let right = indexed(q, 1, &dimension, &nu) * indexed(r, 1, &dimension, &nu);
-        let input = (left + right).pow(32);
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
+        let hook = tensor_symbol!(
+            "feynkit_tensor_test::refused_collection_hook",
+            norm = move |_, _| {
+                observed.fetch_add(1, Ordering::Relaxed);
+            }
+        );
+        let value = FunctionBuilder::new(hook)
+            .add_arg(minkowski_slot(&dimension, &mu))
+            .finish();
+        let input = FunctionBuilder::new(broadcast_symbol!(
+            "feynkit_tensor_test::refused_collection_broadcast"
+        ))
+        .add_arg(value)
+        .finish();
+        let source = SymbolicTensor::infer(input).unwrap();
+        let before = source.expression().as_view();
+        calls.store(0, Ordering::Relaxed);
+        // Rebuilding this selected scope would replay a user normalizer. The
+        // existing collector must refuse it without publishing partial rows.
+        let collection_error = source
+            .coefficient_list(TensorCollectFilter::Reps([LibraryRep::from(Minkowski {})]))
+            .unwrap_err()
+            .to_string();
+        assert!(collection_error.contains("did not complete"));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
         let error = TensorReducer::new(dimension)
             .with_integrated_head(k)
-            .reduce(&SymbolicTensor::infer((input.as_view()).to_owned()).unwrap())
+            .reduce(&source)
             .unwrap_err();
         assert!(
             matches!(error, TensorReductionError::TensorAlgebra(ref message)
-            if message.contains("did not complete")),
+            if message == &collection_error),
             "{error}"
         );
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        assert_eq!(source.expression().as_view(), before);
+    }
+
+    #[test]
+    fn finite_selected_tensor_polynomial_completes_without_diagnostic_limits() {
+        let (k, q, p, r) = vectors();
+        let dimension = Atom::var(symbol!("feynkit_tensor_test::D_completed_collection"));
+        let mu = Atom::var(symbol!("feynkit_tensor_test::completed_mu"));
+        let nu = Atom::var(symbol!("feynkit_tensor_test::completed_nu"));
+        let left = indexed(k, 1, &dimension, &mu) * indexed(p, 1, &dimension, &mu);
+        let right = indexed(q, 1, &dimension, &nu) * indexed(r, 1, &dimension, &nu);
+        let source = SymbolicTensor::infer((left + right).pow(2)).unwrap();
+        let result = TensorReducer::new(dimension.clone())
+            .with_integrated_head(k)
+            .reduce(&source)
+            .unwrap();
+        // The odd k term vanishes; <(k.p)^2> = k^2 p^2 / D.
+        let expected = dot(&compact(k, 1, &dimension), &compact(k, 1, &dimension))
+            * dot(&compact(p, 1, &dimension), &compact(p, 1, &dimension))
+            / &dimension
+            + dot(&compact(q, 1, &dimension), &compact(r, 1, &dimension)).pow(2);
+        assert!(
+            (result.expression().unwrap().into_expression() - expected)
+                .together()
+                .is_zero()
+        );
+        assert!(result.is_fully_contracted());
     }
 
     #[test]

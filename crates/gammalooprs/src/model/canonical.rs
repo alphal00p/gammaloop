@@ -1161,7 +1161,9 @@ impl PropagatorGammaLoopExt for Propagator {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feynkit_model::ComplexValue;
     use spenso::{contraction::Contract, structure::HasStructure};
+    use symbolica::parser::ParseSettings;
 
     #[test]
     fn vertex_tensors_preserve_color_spin_axes() {
@@ -1228,6 +1230,57 @@ mod tests {
                 let contracted = spin.contract(&couplings).unwrap().contract(&color).unwrap();
                 assert_eq!(contracted.scalar().unwrap().expand(), expected.expand());
             }
+        }
+    }
+
+    #[test]
+    fn legacy_standard_model_retains_its_distinct_mass_and_gauge_conventions() {
+        let builtin = Model::standard_model();
+        let legacy =
+            Model::from_json(include_str!("../../../../assets/models/json/sm/sm.json")).unwrap();
+        let reloaded = Model::from_json(&legacy.to_json().unwrap()).unwrap();
+        assert_eq!(reloaded.fingerprint(), legacy.fingerprint());
+        assert_eq!(reloaded.to_json().unwrap(), legacy.to_json().unwrap());
+        assert_ne!(legacy.fingerprint(), builtin.fingerprint());
+        assert_eq!(legacy.vertex_rules().len(), 153);
+        assert_eq!(builtin.vertex_rules().len(), 163);
+        for parameter in ["MC", "ymc"] {
+            assert_eq!(
+                legacy.parameter(parameter).unwrap().value,
+                Some(ComplexValue::new(0.0, 0.0))
+            );
+            assert_eq!(
+                builtin.parameter(parameter).unwrap().value,
+                Some(ComplexValue::new(1.27, 0.0))
+            );
+        }
+        // The legacy asset intentionally retains longitudinal vector propagators;
+        // it is not the unrestricted embedded Feynman-gauge model's source fixture.
+        for (name, mass) in [
+            ("W+_propFeynman", "MW"),
+            ("W-_propFeynman", "MW"),
+            ("Z_propFeynman", "MZ"),
+        ] {
+            let transverse = Atom::parse(
+                "-1𝑖*Metric(idx(1,1),idx(1,2))",
+                "UFO",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            let longitudinal = Atom::parse(
+                format!("1𝑖*{mass}^(-2)*P(idx(1,1))*P(idx(1,2))"),
+                "UFO",
+                ParseSettings::default(),
+            )
+            .unwrap();
+            let builtin_numerator = &builtin.propagator(name).unwrap().numerator;
+            let legacy_numerator = &legacy.propagator(name).unwrap().numerator;
+            assert_eq!(builtin_numerator, &transverse);
+            assert!(
+                (legacy_numerator - builtin_numerator - longitudinal)
+                    .expand()
+                    .is_zero()
+            );
         }
     }
 }
