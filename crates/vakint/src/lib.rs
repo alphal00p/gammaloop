@@ -2563,13 +2563,15 @@ impl VakintTerm {
         // Choose the witness before transporting the scalar numerator. A
         // finite saved union may admit only some exact family presentations;
         // ordinary/default backends keep their original matching path.
-        let scalar_five_loop = matches!(integral_specs.canonical_topology, Topology::FiveLoop(_))
-            && matches!(
+        let scalar_rustred =
+            matches!(
                 settings.evaluation_order.0.iter().find(|method| {
                     method.supports(settings, &integral_specs.canonical_topology)
                 }),
                 Some(EvaluationMethod::RustRed(_))
             );
+        let scalar_five_loop =
+            matches!(integral_specs.canonical_topology, Topology::FiveLoop(_)) && scalar_rustred;
         if scalar_five_loop {
             integral_specs = vakint
                 .match_rustred_input(settings, self.integral.as_view(), self.numerator.as_view())?
@@ -2577,7 +2579,7 @@ impl VakintTerm {
         }
 
         integral_specs.apply_replacement_rules()?;
-        if scalar_five_loop {
+        if scalar_rustred {
             self.apply_scalar_numerator_replacement_rules(&integral_specs, settings)?;
         } else {
             self.apply_numerator_replacement_rules(&integral_specs, settings)?;
@@ -3054,10 +3056,8 @@ impl VakintTerm {
         settings: &VakintSettings,
         numerator: AtomView,
     ) -> Result<Atom, VakintError> {
-        // Already scalar syntax has no indexed-loop boundary to normalize.
-        // Its grammar and loop dependence are still checked by RustRed's native
-        // scalar service. Do not initialize an unrelated tensor registry just
-        // to pass through a scalar coefficient or explicit scalar products.
+        // Scalar coefficients and explicit products do not require the tensor
+        // registry. Only known Lorentz heads enter the checked tensor boundary.
         fn has_indexed_loop(value: AtomView<'_>) -> bool {
             if matches!(value, AtomView::Fun(function)
                 if function.get_symbol() == S.k && function.get_nargs() != 1)
@@ -3066,8 +3066,61 @@ impl VakintTerm {
             }
             value.children().any(has_indexed_loop)
         }
-        if !has_indexed_loop(numerator) {
-            return Ok(numerator.to_owned());
+        fn has_native_lorentz(value: AtomView<'_>) -> bool {
+            if let AtomView::Fun(function) = value {
+                if function.get_symbol() == SPENSO_TAG.pure_scalar {
+                    return false;
+                }
+                if [S.k, S.p, S.g, ETS.metric].contains(&function.get_symbol()) {
+                    let arguments = function.iter().collect::<Vec<_>>();
+                    if arguments.iter().any(|argument| {
+                        VakintTerm::spenso_minkowski_slot_parts(*argument).is_some()
+                    }) || (arguments.len() >= 2
+                        && VakintTerm::is_compact_spenso_minkowski_representation(
+                            arguments[arguments.len() - 2],
+                        )
+                        && VakintTerm::is_dot_dummy_index(arguments[arguments.len() - 1]))
+                    {
+                        return true;
+                    }
+                }
+            }
+            value.children().any(has_native_lorentz)
+        }
+        let epsilon = vk_parse!(&settings.epsilon_symbol).map_err(VakintError::SymbolicaError)?;
+        let dimension = Atom::num(4) - Atom::num(2) * epsilon;
+        let mut incompatible_metric = None;
+        numerator.visitor(&mut |value| {
+            if let AtomView::Fun(function) = value {
+                if function.get_symbol() == SPENSO_TAG.pure_scalar {
+                    return false;
+                }
+                if [S.g, ETS.metric].contains(&function.get_symbol()) {
+                    for argument in function.iter() {
+                        if let Some((source_dimension, _)) =
+                            Self::spenso_minkowski_slot_parts(argument)
+                            && !(source_dimension.to_owned() - &dimension)
+                                .expand()
+                                .is_zero()
+                        {
+                            incompatible_metric = Some(source_dimension.to_owned());
+                        }
+                    }
+                }
+            }
+            true
+        });
+        if let Some(source_dimension) = incompatible_metric {
+            return Err(VakintError::InvalidNumerator(format!(
+                "strict RustRed scalar admission cannot retarget native metric dimension {source_dimension} to {dimension}; run the tensor prepass explicitly"
+            )));
+        }
+        // Close known Lorentz components before expansion; free interfaces and
+        // powered dummy scopes retain the existing LorentzTensor semantics.
+        let numerator = lorentz::LorentzTensor::parse(numerator, &dimension)?.expression;
+        let indexed_loop = has_indexed_loop(numerator.as_view());
+        if !indexed_loop && !has_native_lorentz(numerator.as_view()) {
+            return Ok(numerator);
         }
         let mut scalar_settings = settings.clone();
         scalar_settings.use_dot_product_notation = true;
@@ -3076,6 +3129,8 @@ impl VakintTerm {
             integral: Atom::one(),
             vectors: Vec::new(),
         };
+        // Native external slots belong to the existing tensor owner, including
+        // their free interfaces. Integrated tensors still require the prepass.
         term.tensor_reduce_feynkit(&scalar_settings, true)?;
         Ok(term.numerator)
     }
@@ -3233,8 +3288,12 @@ impl VakintTerm {
         let dimension = reducer.dimension();
         let opaque_minkowski_slots = Self::collect_opaque_minkowski_slots(numerator);
         let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
-        let numerator =
-            Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
+        let numerator = Self::vakint_to_spenso_numerator(
+            numerator,
+            dimension,
+            &opaque_minkowski_slots,
+            scalar_only,
+        );
         // Native admission expects atomic representation payloads. Encode the
         // original compound dimension and generated dummy indices reversibly,
         // then restore them before the existing Vakint notation bridge.
@@ -3268,6 +3327,7 @@ impl VakintTerm {
         numerator: AtomView<'_>,
         dimension: &Atom,
         opaque_slots: &BTreeMap<Atom, Atom>,
+        scalar_only: bool,
     ) -> Atom {
         numerator.replace_map(|term, _context, out| {
             if let AtomView::Add(sum) = term {
@@ -3279,7 +3339,12 @@ impl VakintTerm {
                     sum.iter()
                         .map(|summand| {
                             let slots = Self::collect_opaque_minkowski_slots(summand);
-                            Self::vakint_to_spenso_numerator(summand, dimension, &slots)
+                            Self::vakint_to_spenso_numerator(
+                                summand,
+                                dimension,
+                                &slots,
+                                scalar_only,
+                            )
                         })
                         .collect::<Vec<_>>(),
                 );
@@ -3289,6 +3354,30 @@ impl VakintTerm {
                 return;
             };
             let arguments = function.iter().collect::<Vec<_>>();
+            // Scalar admission preserves native external source interfaces.
+            // The public tensor prepass keeps its existing target-dimension
+            // convention; raw Vakint p(id,index) also keeps its old notation.
+            let represented_external = scalar_only
+                && function.get_symbol() == S.p
+                && (arguments
+                    .last()
+                    .is_some_and(|slot| Self::spenso_minkowski_slot_parts(*slot).is_some())
+                    || (arguments.len() >= 3
+                        && Self::is_compact_spenso_minkowski_representation(
+                            arguments[arguments.len() - 2],
+                        )
+                        && Self::is_dot_dummy_index(arguments[arguments.len() - 1])));
+            if represented_external
+                && let Some(vector) = Self::bridge_tagged_vector(
+                    function.get_symbol(),
+                    &arguments,
+                    dimension,
+                    opaque_slots,
+                )
+            {
+                **out = vector;
+                return;
+            }
             if (function.get_symbol() == S.k || function.get_symbol() == S.p)
                 && arguments.len() >= 3
                 && Self::is_compact_spenso_minkowski_representation(arguments[arguments.len() - 2])
@@ -7898,6 +7987,357 @@ mod tests {
             .evaluate_integral(&vakint, &settings, numerator.as_view(), &integral_specs)
             .unwrap();
         assert!(reduced.to_canonical_string().contains("RustRedMaster"));
+    }
+
+    #[test]
+    fn rustred_scalar_contractions_preserve_free_powers_and_foreign_functions() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings::default();
+        let source = vk_parse!("(p(1,11)*p(2,11)+1)^2*p(3,99)*foreign_scalar(1,2)^2").unwrap();
+        let expected = vk_parse!("(dot(p(1),p(2))+1)^2*p(3,99)*foreign_scalar(1,2)^2").unwrap();
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, source.as_view()).unwrap(),
+            expected
+        );
+        for invalid in ["p(1,11)^2*p(2,11)^2", "(p(1,11)*p(2,11))^2*p(3,11)"] {
+            assert!(
+                VakintTerm::scalar_product_form(&settings, vk_parse!(invalid).unwrap().as_view())
+                    .is_err()
+            );
+        }
+    }
+
+    #[test]
+    fn rustred_scalar_contractions_close_native_slots_and_preserve_free_interfaces() {
+        Vakint::initialize_vakint_symbols();
+        let settings = VakintSettings {
+            epsilon_symbol: "ep".into(),
+            ..Default::default()
+        };
+        let dimension = Atom::num(4) - 2 * vk_parse!("ep").unwrap();
+        let slot =
+            |dimension: &Atom, index| function!(Minkowski::selfless_symbol(), dimension, index);
+        let compact = |id, dimension: &Atom| {
+            function!(S.p, id, function!(Minkowski::selfless_symbol(), dimension))
+        };
+        let mu = slot(&dimension, vk_parse!("scalar_native_mu").unwrap());
+        let nu = slot(&dimension, vk_parse!("scalar_native_nu").unwrap());
+        let free = function!(
+            S.p,
+            3,
+            slot(&dimension, vk_parse!("scalar_native_free").unwrap())
+        );
+        let closed = function!(S.p, 1, &mu) * function!(S.g, &mu, &nu) * function!(S.p, 2, &nu);
+        let dot = function!(S.dot, compact(1, &dimension), compact(2, &dimension));
+        let foreign = vk_parse!("foreign_scalar(1,2)^2").unwrap();
+        for power in [1, 2] {
+            let numerator = (closed.clone() + 1).pow(power) * &free * &foreign;
+            let expected = (dot.clone() + 1).pow(power) * &free * &foreign;
+            let result = VakintTerm::scalar_product_form(&settings, numerator.as_view()).unwrap();
+            assert!((result - expected).expand().is_zero());
+        }
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, free.as_view()).unwrap(),
+            free
+        );
+        let metric_trace = function!(ETS.metric, &mu, &mu);
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, metric_trace.as_view()).unwrap(),
+            dimension
+        );
+        let dummy = S.dot_dummy_ind(91);
+        let expanded = function!(
+            S.p,
+            1,
+            function!(Minkowski::selfless_symbol(), &dimension),
+            &dummy
+        ) * function!(
+            S.p,
+            2,
+            function!(Minkowski::selfless_symbol(), &dimension),
+            &dummy
+        );
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, expanded.as_view()).unwrap(),
+            dot
+        );
+        // Native source dimensions need not equal the integration dimension.
+        let six = Atom::num(6);
+        let eight = Atom::num(8);
+        let mu_six = slot(&six, vk_parse!("scalar_native_six").unwrap());
+        let nu_six = slot(&six, vk_parse!("scalar_native_six_open").unwrap());
+        for source in [
+            function!(S.g, &mu_six, &mu_six),
+            function!(S.g, &mu_six, &nu_six),
+            function!(ETS.metric, &mu_six, &nu_six),
+            function!(ETS.metric, &mu_six, &nu_six).pow(2),
+        ] {
+            let error = VakintTerm::scalar_product_form(&settings, source.as_view()).unwrap_err();
+            let message = error.to_string();
+            assert!(message.contains("cannot retarget native metric dimension 6"));
+            assert!(message.contains(&format!("to {dimension}")));
+        }
+        // The native metric constructor already resolves a literal trace exactly.
+        let native_trace = function!(ETS.metric, &mu_six, &mu_six);
+        assert_eq!(native_trace, six);
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, native_trace.as_view()).unwrap(),
+            six
+        );
+        let unresolved_trace = function!(ETS.metric, &mu, &nu).pow(2);
+        assert!(unresolved_trace.contains_symbol(ETS.metric));
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, unresolved_trace.as_view()).unwrap(),
+            dimension
+        );
+        let equal_dimension = vk_parse!("2*(2-ep)").unwrap();
+        let equal_slot = slot(
+            &equal_dimension,
+            vk_parse!("scalar_native_equal_dimension").unwrap(),
+        );
+        let equal_trace = function!(S.g, &equal_slot, &equal_slot);
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, equal_trace.as_view()).unwrap(),
+            dimension
+        );
+        let distinct_dimension = &dimension + vk_parse!("1/10^100").unwrap();
+        let distinct_slot = slot(
+            &distinct_dimension,
+            vk_parse!("scalar_native_distinct_dimension").unwrap(),
+        );
+        let distinct_trace = function!(S.g, &distinct_slot, &distinct_slot);
+        assert!(VakintTerm::scalar_product_form(&settings, distinct_trace.as_view()).is_err());
+        let free_eight = function!(
+            S.p,
+            3,
+            slot(&eight, vk_parse!("scalar_native_eight").unwrap())
+        );
+        let mixed = function!(S.p, 1, &mu_six) * function!(S.p, 2, &mu_six) * &free_eight;
+        let expected = function!(S.dot, compact(1, &six), compact(2, &six)) * &free_eight;
+        assert_eq!(
+            VakintTerm::scalar_product_form(&settings, mixed.as_view()).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn rustred_scalar_contractions_native_external_dot_numerics_are_checked() {
+        let engine = Vakint::new().unwrap();
+        let settings = VakintSettings {
+            epsilon_symbol: "ep".into(),
+            run_time_decimal_precision: 16,
+            ..Default::default()
+        };
+        let dimension = vk_parse!("4-2*ep").unwrap();
+        let compact = |id| function!(S.p, id, function!(Minkowski::selfless_symbol(), &dimension));
+        let native = function!(S.dot, compact(1), compact(2));
+        let original = native.clone();
+        let momentum = |time, space| {
+            Momentum::Real((
+                Float::with_val(256, time),
+                Float::with_val(256, space),
+                Float::with_val(256, 0),
+                Float::with_val(256, 0),
+            ))
+        };
+        let external = HashMap::from_iter([(1, momentum(3, 1)), (2, momentum(5, 4))]);
+        let bare = vk_parse!("dot(p(1),p(2))").unwrap();
+        let (value, statistical) = engine
+            .numerical_evaluation(
+                &settings,
+                bare.as_view(),
+                &HashMap::default(),
+                &HashMap::default(),
+                Some(&external),
+            )
+            .unwrap();
+        assert!(statistical.is_none());
+        let coefficient = &value.coefficients()[&0];
+        assert_eq!(coefficient.value().re.to_rational(), 11);
+        assert!(coefficient.precision().real().significant_digits().unwrap() >= 16);
+        assert!(coefficient.precision().imaginary().exact_zero());
+        for expression in [
+            native.clone(),
+            function!(S.dot, compact(1), function!(S.p, 2)),
+        ] {
+            let (resolved, _) = engine
+                .numerical_evaluation(
+                    &settings,
+                    expression.as_view(),
+                    &HashMap::default(),
+                    &HashMap::default(),
+                    Some(&external),
+                )
+                .unwrap();
+            let resolved = &resolved.coefficients()[&0];
+            assert_eq!(resolved.value(), coefficient.value());
+            assert_eq!(
+                resolved.precision().real().significant_digits(),
+                coefficient.precision().real().significant_digits()
+            );
+            assert_eq!(
+                resolved.precision().real().absolute_error(),
+                coefficient.precision().real().absolute_error()
+            );
+            assert!(resolved.precision().imaginary().exact_zero());
+        }
+        let cancelled = &native - &bare;
+        let (cancelled, _) = engine
+            .numerical_evaluation(
+                &settings,
+                cancelled.as_view(),
+                &HashMap::default(),
+                &HashMap::default(),
+                Some(&external),
+            )
+            .unwrap();
+        assert!(cancelled.coefficients().is_empty());
+        assert!(cancelled.to_atom(vk_symbol!("ep")).unwrap().is_zero());
+        let foreign = function!(
+            S.dot,
+            function!(S.p, 1, function!(Minkowski::selfless_symbol(), 6)),
+            function!(S.p, 2, function!(Minkowski::selfless_symbol(), 6))
+        );
+        let error = engine
+            .numerical_evaluation(
+                &settings,
+                foreign.as_view(),
+                &HashMap::default(),
+                &HashMap::default(),
+                Some(&external),
+            )
+            .unwrap_err();
+        assert!(matches!(&error, VakintError::EvaluationError(message)
+            if message.contains(&foreign.to_canonical_string())
+                && message.contains("source dimension 6")
+                && message.contains(&format!("requested dimension {dimension}"))));
+        let error = engine
+            .numerical_evaluation(
+                &settings,
+                native.as_view(),
+                &HashMap::default(),
+                &HashMap::default(),
+                None,
+            )
+            .unwrap_err();
+        assert!(matches!(&error, VakintError::EvaluationError(message)
+            if message.contains(&native.to_canonical_string())
+                && message.contains("missing external momenta")));
+        assert_eq!(native, original);
+        // Existing expression-valued parameter keys still own their subtrees.
+        for (expression, expected) in [
+            (native.clone(), 17),
+            (native.clone() + 1, 19),
+            (bare.clone(), 23),
+            (bare.clone() + 1, 29),
+        ] {
+            let binding = HashMap::from_iter([(
+                expression.to_canonical_string(),
+                Float::with_val(256, expected),
+            )]);
+            let (value, _) = engine
+                .numerical_evaluation(
+                    &settings,
+                    expression.as_view(),
+                    &binding,
+                    &HashMap::default(),
+                    Some(&external),
+                )
+                .unwrap();
+            assert_eq!(value.coefficients()[&0].value().re.to_rational(), expected);
+            assert!(
+                value.coefficients()[&0]
+                    .precision()
+                    .real()
+                    .significant_digits()
+                    .unwrap()
+                    >= 16
+            );
+        }
+        let subexpression_binding =
+            HashMap::from_iter([(native.to_canonical_string(), Float::with_val(256, 17))]);
+        let scaled = Atom::num(2) * &native;
+        let (scaled, _) = engine
+            .numerical_evaluation(
+                &settings,
+                scaled.as_view(),
+                &subexpression_binding,
+                &HashMap::default(),
+                Some(&external),
+            )
+            .unwrap();
+        assert_eq!(scaled.coefficients()[&0].value().re.to_rational(), 34);
+        let real = HashMap::from_iter([(native.to_canonical_string(), Float::with_val(256, 11))]);
+        let complex = HashMap::from_iter([(
+            native.to_canonical_string(),
+            Complex::new(Float::with_val(256, 7), Float::with_val(256, 3)),
+        )]);
+        let (value, _) = engine
+            .numerical_evaluation(
+                &settings,
+                native.as_view(),
+                &real,
+                &complex,
+                Some(&external),
+            )
+            .unwrap();
+        let coefficient = &value.coefficients()[&0];
+        assert_eq!(coefficient.value().re.to_rational(), 7);
+        assert_eq!(coefficient.value().im.to_rational(), 3);
+        assert!(coefficient.precision().real().significant_digits().unwrap() >= 16);
+        assert!(
+            coefficient
+                .precision()
+                .imaginary()
+                .significant_digits()
+                .unwrap()
+                >= 16
+        );
+    }
+
+    #[test]
+    fn rustred_scalar_contractions_match_staged_evaluation_and_requested_notation() {
+        let engine = Vakint::new().unwrap();
+        let topology = vk_parse!("topo(I1L(muvsq,1))").unwrap();
+        let numerator = vk_parse!("(p(1,11)*p(2,11)+1)*p(3,99)").unwrap();
+        let scalar = vk_parse!("(dot(p(1),p(2))+1)*p(3,99)").unwrap();
+        let free = vk_parse!("p(3,99)").unwrap();
+        for mode in [RustRedMasterMode::Retain, RustRedMasterMode::Symbolic] {
+            for dots in [false, true] {
+                let settings = VakintSettings {
+                    evaluation_order: EvaluationOrder(vec![EvaluationMethod::RustRed(
+                        RustRedEvaluationOptions { master_mode: mode },
+                    )]),
+                    tensor_reduction_method: TensorReductionMethod::FeynKit,
+                    use_dot_product_notation: dots,
+                    form_exe_path: "/scalar-contraction-test-must-not-use-form".into(),
+                    number_of_terms_in_epsilon_expansion: 2,
+                    ..Default::default()
+                };
+                let input = &numerator * &topology;
+                let direct = engine.evaluate(&settings, input.as_view()).unwrap();
+                let staged = engine.tensor_reduce(&settings, input.as_view()).unwrap();
+                let staged = engine
+                    .evaluate_integral(&settings, staged.as_view())
+                    .unwrap();
+                let expected = engine
+                    .evaluate_integral(&settings, (&scalar * &topology).as_view())
+                    .unwrap();
+                let mut free_preserved = false;
+                direct.as_view().visitor(&mut |value| {
+                    free_preserved |= value == free.as_view();
+                    true
+                });
+                assert!(free_preserved);
+                assert_eq!(direct.contains_symbol(S.dot), dots);
+                assert_eq!(staged.contains_symbol(S.dot), dots);
+                let canonical = |value: &Atom| {
+                    VakintTerm::scalar_product_form(&settings, value.as_view()).unwrap()
+                };
+                assert_eq!(canonical(&direct), canonical(&expected));
+                assert_eq!(canonical(&staged), canonical(&expected));
+            }
+        }
     }
 
     #[test]

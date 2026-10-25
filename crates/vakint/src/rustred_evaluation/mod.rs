@@ -212,14 +212,23 @@ impl Vakint {
     ) -> Result<Atom, VakintError> {
         let data = self.rustred_data()?;
         let announced = self.announced_bare_masters()?;
-        if mode == RustRedMasterMode::Retain {
-            return Ok(data.masters.retain(raw, &announced));
+        let result = if mode == RustRedMasterMode::Retain {
+            data.masters.retain(raw, &announced)
+        } else {
+            if !announced.is_empty() {
+                data.masters
+                    .require_coefficients(&combine_exact(raw.clone()), &announced)?;
+            }
+            data.masters.finalize(raw, settings, loop_count, mode)?
+        };
+        if settings.use_dot_product_notation {
+            Ok(result)
+        } else {
+            let indexed = Vakint::convert_from_dot_notation(result.as_view());
+            Ok(crate::VakintTerm::repair_expanded_spenso_vector_slots(
+                indexed.as_view(),
+            ))
         }
-        if !announced.is_empty() {
-            data.masters
-                .require_coefficients(&combine_exact(raw.clone()), &announced)?;
-        }
-        data.masters.finalize(raw, settings, loop_count, mode)
     }
 
     /// Reduce and normalize without inspecting coefficient availability. The

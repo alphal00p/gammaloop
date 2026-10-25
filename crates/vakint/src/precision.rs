@@ -1027,6 +1027,7 @@ pub(crate) fn evaluation_inputs(
         })?;
         parameters.insert(symbol, value.clone());
     }
+    let mut external_dots = BTreeMap::new();
     if let Some(externals) = externals {
         let mut momenta = BTreeMap::new();
         for (&id, momentum) in externals {
@@ -1058,16 +1059,105 @@ pub(crate) fn evaluation_inputs(
                 }
                 let dot = symbolica::function!(
                     crate::symbols::S.dot,
-                    symbolica::function!(crate::symbols::S.p, Atom::num(left_id as i64)),
-                    symbolica::function!(crate::symbols::S.p, Atom::num(right_id as i64))
+                    symbolica::function!(crate::symbols::S.p, Atom::num(left_id)),
+                    symbolica::function!(crate::symbols::S.p, Atom::num(right_id))
                 );
                 let value = left[0].clone() * right[0].clone()
                     - left[1].clone() * right[1].clone()
                     - left[2].clone() * right[2].clone()
                     - left[3].clone() * right[3].clone();
-                expression = expression.replace(dot.to_pattern()).with(value);
+                external_dots.insert(dot, value);
             }
         }
+    }
+    let dimension = Atom::num(4) - Atom::num(2) * Atom::var(epsilon);
+    let mut issue = None;
+    expression = expression.replace_map(|part, _, out| {
+        // Input bindings own complete subtrees, before either dot notation is
+        // resolved. Both notations reuse the same component source identities.
+        if parameters.contains_key(&part.to_owned()) || issue.is_some() {
+            **out = part.to_owned();
+            return;
+        }
+        let AtomView::Fun(function) = part else { return; };
+        if function.get_symbol() == crate::SPENSO_TAG.pure_scalar
+            || function.get_symbol().get_evaluation_info().is_some_and(|info|
+                info.get_tag_count() > 0 && info.get_tag_count() == function.get_nargs())
+        {
+            **out = part.to_owned();
+            return;
+        }
+        if let Some(value) = external_dots.get(&part.to_owned()) {
+            **out = value.clone();
+            return;
+        }
+        if ![crate::symbols::S.dot, crate::SPENSO_TAG.dot].contains(&function.get_symbol())
+            || !function.iter().any(|argument| {
+                matches!(argument, AtomView::Fun(vector)
+                    if vector.get_symbol() == crate::symbols::S.p
+                        && vector.iter().last().is_some_and(crate::VakintTerm::is_compact_spenso_minkowski_representation))
+            })
+        {
+            return;
+        }
+        let failure = |detail: String| VakintError::EvaluationError(format!(
+            "native external-vector dot {}: {detail}", part.to_canonical_string()
+        ));
+        if function.get_nargs() != 2 {
+            issue = Some(failure("expected two external vectors".into()));
+            return;
+        }
+        let mut ids = Vec::with_capacity(2);
+        for argument in function.iter() {
+            let AtomView::Fun(vector) = argument else {
+                issue = Some(failure("expected external p(id) vectors".into()));
+                return;
+            };
+            if vector.get_symbol() != crate::symbols::S.p
+                || !matches!(vector.get_nargs(), 1 | 2)
+            {
+                issue = Some(failure("expected external p(id) vectors".into()));
+                return;
+            }
+            if vector.get_nargs() == 2 {
+                let representation = vector.get(1);
+                if !crate::VakintTerm::is_compact_spenso_minkowski_representation(representation) {
+                    issue = Some(failure("expected a compact Minkowski representation".into()));
+                    return;
+                }
+                let AtomView::Fun(representation) = representation else {
+                    issue = Some(failure("expected a compact Minkowski representation".into()));
+                    return;
+                };
+                let source_dimension = representation.get(0);
+                if !(source_dimension.to_owned() - &dimension).expand().is_zero() {
+                    issue = Some(failure(format!(
+                        "source dimension {source_dimension} differs from requested dimension {dimension}"
+                    )));
+                    return;
+                }
+            }
+            let Ok(id) = usize::try_from(vector.get(0)) else {
+                issue = Some(failure(format!("invalid external momentum id {}", vector.get(0))));
+                return;
+            };
+            ids.push(id);
+        }
+        let bare = symbolica::function!(
+            crate::symbols::S.dot,
+            symbolica::function!(crate::symbols::S.p, ids[0]),
+            symbolica::function!(crate::symbols::S.p, ids[1])
+        );
+        if let Some(value) = external_dots.get(&bare) {
+            **out = value.clone();
+        } else {
+            issue = Some(failure(format!(
+                "missing external momenta for p({}) and p({})", ids[0], ids[1]
+            )));
+        }
+    });
+    if let Some(issue) = issue {
+        return Err(issue);
     }
     Ok((expression, parameters))
 }

@@ -659,6 +659,19 @@ impl MasterCatalog {
             .checked_sub(i64::try_from(loop_count).map_err(failure)?)
             .and_then(|value| value.checked_sub(1))
             .ok_or_else(|| failure("epsilon expansion depth overflow"))?;
+        if !self.basis_aliases.contains_key(&raw)
+            && let Some(master) = self.masters.get(&raw)
+        {
+            // Aliases retain their original validation order, so fallback
+            // cannot hide malformed lower-order coefficient formulas.
+            // A bare master needs its highest requested coefficient directly;
+            // no other term or finite coefficient can cancel this dependency.
+            // General expressions retain the exact combination below.
+            let first = -i64::try_from(master.loop_count).map_err(failure)?;
+            if target >= first {
+                self.coefficient(&self.coefficient_symbol(&raw, target))?;
+            }
+        }
         let symbols: Vec<_> = Self::referenced_masters(&raw).into_iter().collect();
         let terms = raw.coefficient_list::<i32>(&symbols);
         let mut required = BTreeMap::<Atom, i64>::new();
@@ -711,9 +724,6 @@ impl MasterCatalog {
         for (symbol, last) in required {
             let master = &self.masters[&symbol];
             let first = -(master.loop_count as i64);
-            if last.saturating_sub(first) > 4096 {
-                return Err(failure(format!("master {} requires epsilon powers {first}..={last}; expansion work limit is 4096 coefficients (data {})", master.identity, self.version)).into());
-            }
             let mut expansion = Atom::Zero;
             for power in first..=last {
                 let placeholder = self.coefficient_symbol(&symbol, power);
@@ -1515,6 +1525,92 @@ mod tests {
     }
 
     #[test]
+    fn bare_alias_missing_higher_data_does_not_hide_corrupt_lower_formula() {
+        let (mut catalog, alias) = catalog(Some("2"), 80);
+        let (representative_catalog, _) = self::catalog(Some("2"), 80);
+        let representative = catalog.symbol("test-family", &[2]);
+        let mut rich = representative_catalog.masters.into_values().next().unwrap();
+        rich.identity = "valid-high-order-representative".into();
+        rich.coefficients.insert(
+            1,
+            Coefficient {
+                exact: Some("7".into()),
+                numerical: Some("7".into()),
+                significant_digits: Some(80),
+                absolute_error: None,
+                error_is_bounded: false,
+            },
+        );
+        catalog.masters.insert(representative.clone(), rich);
+        catalog
+            .masters
+            .get_mut(&alias)
+            .unwrap()
+            .coefficients
+            .get_mut(&0)
+            .unwrap()
+            .exact = Some("(".into());
+        catalog.load_basis_aliases(vec![
+            (
+                1,
+                representative.clone(),
+                vk_parse!("corruption_test_basis").unwrap(),
+            ),
+            (
+                1,
+                alias.clone(),
+                vk_parse!("corruption_test_basis").unwrap(),
+            ),
+        ]);
+        assert!(catalog.basis_aliases.contains_key(&alias));
+        assert!(
+            catalog
+                .finalize(
+                    representative,
+                    &settings(16, 3),
+                    1,
+                    RustRedMasterMode::Symbolic
+                )
+                .is_ok()
+        );
+        let error = catalog
+            .finalize(alias, &settings(16, 3), 1, RustRedMasterMode::Symbolic)
+            .unwrap_err();
+        assert!(matches!(
+            error,
+            VakintError::RustRedEvaluation(RustRedEvaluationError::ExternalData { .. })
+        ));
+    }
+
+    #[test]
+    fn large_laurent_request_reports_missing_data_without_a_policy_work_limit() {
+        let (catalog, master) = catalog(Some("2"), 80);
+        let request = settings(16, 4099);
+        assert_eq!(
+            catalog
+                .finalize_independent(master.clone(), &request, 1, RustRedMasterMode::Retain,)
+                .unwrap(),
+            master
+        );
+        assert!(
+            catalog
+                .finalize_independent(&master - &master, &request, 1, RustRedMasterMode::Symbolic,)
+                .unwrap()
+                .is_zero()
+        );
+        let error = catalog
+            .finalize_independent(master, &request, 1, RustRedMasterMode::Symbolic)
+            .unwrap_err();
+        assert!(matches!(&error, VakintError::RustRedEvaluation(
+            RustRedEvaluationError::MasterCapability { detail }
+        ) if detail.contains("test-master")
+            && detail.contains("requires unavailable epsilon coefficient 4097")
+            && detail.contains("available powers [-1, 0]")
+            && detail.contains("test-v1")));
+        assert!(!error.to_string().contains("work limit"));
+    }
+
+    #[test]
     fn declared_basis_relations_cancel_missing_orders_without_discarding_richer_alias_data() {
         let (mut catalog, master) = catalog(Some("2"), 80);
         let alias = catalog.symbol("test-family", &[2]);
@@ -1555,7 +1651,7 @@ mod tests {
             (1, alias.clone(), vk_parse!("(3-4*ep)*test_basis").unwrap()),
         ]);
         let raw =
-            (alias.clone() - vk_parse!("3-4*ep").unwrap() * master) / vk_parse!("ep").unwrap();
+            (alias.clone() - vk_parse!("3-4*ep").unwrap() * &master) / vk_parse!("ep").unwrap();
         let retained = catalog
             .finalize(raw.clone(), &settings(80, 2), 1, RustRedMasterMode::Retain)
             .unwrap();
@@ -1565,6 +1661,45 @@ mod tests {
                 .finalize(raw, &settings(80, 2), 1, RustRedMasterMode::Numerical)
                 .unwrap()
                 .is_zero()
+        );
+
+        // Distinct closed dummy names must not manufacture a pole requiring
+        // unavailable orders before the declared basis relation can cancel.
+        let left = vk_parse!("p(1,11)*p(2,11)").unwrap();
+        let right = vk_parse!("p(1,12)*p(2,12)").unwrap();
+        let raw = (&alias * &left - vk_parse!("3-4*ep").unwrap() * &master * &right)
+            / vk_parse!("ep").unwrap();
+        assert!(
+            catalog
+                .finalize(
+                    raw.clone(),
+                    &settings(80, 2),
+                    1,
+                    RustRedMasterMode::Numerical
+                )
+                .is_err()
+        );
+        let combined =
+            crate::VakintTerm::scalar_product_form(&settings(80, 2), raw.as_view()).unwrap();
+        assert!(
+            catalog
+                .finalize(combined, &settings(80, 2), 1, RustRedMasterMode::Numerical)
+                .unwrap()
+                .is_zero()
+        );
+        let uncancelled = &alias * &left / vk_parse!("ep").unwrap();
+        let uncancelled =
+            crate::VakintTerm::scalar_product_form(&settings(80, 2), uncancelled.as_view())
+                .unwrap();
+        assert!(
+            catalog
+                .finalize(
+                    uncancelled,
+                    &settings(80, 2),
+                    1,
+                    RustRedMasterMode::Numerical
+                )
+                .is_err()
         );
 
         catalog

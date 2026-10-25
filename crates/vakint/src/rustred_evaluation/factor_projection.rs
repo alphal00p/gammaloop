@@ -76,6 +76,7 @@ pub(super) fn project(
             indexed.as_view(),
             &input.dimension,
             &opaque_slots,
+            false,
         );
         let cooking = idenso::CookSettings::indices()
             .with_mode(idenso::CookMode::ReversibleEncoding)
