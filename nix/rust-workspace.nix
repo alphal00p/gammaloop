@@ -2747,7 +2747,8 @@
     type = "github";
     owner = "alphal00p";
     repo = "vakint-external-data";
-    rev = "d40afb5a7e6b0e12eba867a4009f66b6d1dccacc";
+    rev = "d4384149b5076de84b3f3fda761585dff1776532";
+    narHash = "sha256-pHABwykEmobTJJlE4mmBdIwpcNwgmx476BKt3Wp+pMU=";
   };
 
   nextestCheckFor = target:
