@@ -242,9 +242,15 @@ The immutable `DiagramRender` retains the measured boxes and embedded math font.
 Its SVG contains XHTML `foreignObject` MathML and is intended for browsers.
 Scripts can explicitly use `view.measured(browser="chromium")` with Playwright
 and Chromium, or send the same view's `measurement_request()` to a browser and
-return its receipt to `view.measured(measurements=receipt)`. Export while
-measurement is pending raises an error. No estimated bounds or automatic
-headless measurement are used.
+return its receipt to `view.measured(measurements=receipt)`. Strict `measured()`
+raises while labels are pending and never uses estimates or an implicit browser.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
 
 `view.outlined()` instead uses optional typst-py to create a vector-label
 snapshot. Use it for PDF, PNG and Typst SVG import, whose consumers otherwise

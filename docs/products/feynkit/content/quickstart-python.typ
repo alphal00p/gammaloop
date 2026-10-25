@@ -65,8 +65,15 @@ Use `help(fk.RenderSettings)` to discover the options.
 Retain the view and display it so the notebook browser can measure its labels.
 Once measurement completes, `view.measured().to_svg()` exports the schematic as
 text. Scripts can explicitly request a local browser with
-`view.measured(browser="chromium").to_svg()`; immediate export of an unmeasured
-view raises an error. Alternative final states are drawn separately.
+`view.measured(browser="chromium").to_svg()`; strict `measured()` raises while
+labels are pending. Alternative final states are drawn separately.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
 
 Model members display their defining data and expressions, rather than only their names:
 

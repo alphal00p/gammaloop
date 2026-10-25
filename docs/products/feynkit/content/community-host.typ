@@ -98,17 +98,10 @@ python -m playwright install chromium
 ```
 
 `owner.render()` returns a `DiagramView` for generic and physics graphs,
-networks, processes, amplitudes, generation collections, CFF and LTD. Displaying
-it measures labels in the actual browser, then calls the existing native
-`Scene::render`. After completion, `view.measured()` returns an immutable
-snapshot whose `to_svg()`, `to_html()` and SVG/HTML `save()` retain the measured
-boxes and embedded font. Scripts opt in with `view.measured(browser="chromium")`,
-or obtain `view.measurement_request()` and return that same view's receipt to
-`view.measured(measurements=receipt)`. A fresh owner's `to_html(browser=None)`
-accepts no receipt and raises while measurement is pending; no browser is
-launched implicitly and no estimated label bounds are substituted.
-Default graph SVG contains XHTML `foreignObject` MathML for browser use.
-PDF, PNG and Typst SVG import require `view.outlined()` so labels become vectors.
+networks, processes, amplitudes, generation collections, CFF and LTD. Static
+exports work immediately through `view.snapshot()`; live widgets can complete
+browser measurement. The migration section below distinguishes static defaults,
+strict measured exports and outlined vector exports.
 
 Native consumers prepare scenes with `PyDiagramView::from_scene` or
 `from_scenes`; the former synchronous `PyDiagramRender::from_scene` entry point
@@ -136,6 +129,60 @@ when offering raw UFO import. Install it with `--no-deps` into the existing host
 the host supplies the single Symbolica extension. The checkout's `uv.lock` instead installs a
 standalone Symbolica 3 kernel for GammaLoop development; do not sync that environment over a
 community host containing its own native extension.
+
+== Migrating notebook and Python display code
+
+Compared with the former embedded-Typst host, rich display now follows
+Symbolica's MIME and Marimo contract. Replace direct calls to the removed
+`_repr_html_()` and `_repr_svg_()` hooks with `to_html()` or `to_svg()` for
+exports, and let the notebook call `_repr_mimebundle_()` or `_display_()` for
+display. MIME bundles always include plain text and complete static HTML or
+SVG. When `anywidget` is installed they additionally offer a live widget;
+without it, static display remains usable in notebooks and saved output.
+
+Graph-like `render()` methods now return a `DiagramView`, rather than a
+completed `DiagramRender`. Default `view.to_svg()`, `view.to_html()` and
+`view.snapshot()` produce complete static output without launching a browser.
+The snapshot uses completed browser measurements when available, otherwise
+optional typst-py outlining when installed, otherwise estimated label bounds
+with the offline STIX MathML font. Estimates do not complete measurement.
+A snapshot is immutable: subsequent widget measurement changes later exports,
+not previously returned snapshots. Collections apply this choice to each child.
+
+`view.measured()` is the stricter operation: it reuses a completed measurement
+and raises while labels are pending. Displaying the live widget completes its
+view using the browser's actual label bounds. Scripts explicitly request
+`view.measured(browser="chromium")`, or pass the complete receipt from that
+same view's `measurement_request()` as `measurements=receipt`. Do not pass both
+arguments. Receipts are view-specific and repeated identical receipts are
+idempotent. Use `view.outlined()` to request vector labels through typst-py
+without a browser; PDF and PNG export require those outlined labels.
+
+`TensorNetwork.to_svg()` continues to export tensor #emph[notation], matching
+its expression display, and requires the optional Python distribution `typst`
+(typst-py). Use `network.render().to_svg()` for the network #emph[diagram].
+The native host no longer contains the embedded Rust Typst compiler, its
+plugin interpreter, or its bundled document fonts. `to_typst()` and
+`to_typst_project()` remain source exports; explicitly compiled vector output
+uses typst-py. Install that package only when those exports are needed.
+
+Notation and tensor `print` mappings now accept an allowlisted MathML subset,
+rather than arbitrary backend markup. Plain, LaTeX and Typst text overrides
+are escaped literal text; use the validated `mathml` mapping for structured
+notation. Register notation through the symbol's owning constructor. The
+registry is process-local: identical registration is accepted, conflicting
+registration raises, and canonical symbol strings and ordinary state exports
+do not serialize it. Explicit validated `spenso.notation` portable attachments
+are the transport for notation; reconstructing a symbol alone is insufficient.
+
+Font resources are discovered through `symbolica.data`, independently of
+compiler installation. Install `symbolica-fonts`, or point
+`SYMBOLICA_DATA_DIRECTORY` at an extracted resource bundle; Python callers can
+also use `symbolica.data.set_directory()` or `set_directories()`. The host's
+`symbolica.data.manifest()` lists expected names, hashes, sizes and loaded
+status. Resources are read lazily and checked against compiled hashes; a
+missing resource can be supplied and the same operation retried. Repository-built
+resource bundles and embedded font exports include the STIX font license.
 
 == Export the documented Python surface
 

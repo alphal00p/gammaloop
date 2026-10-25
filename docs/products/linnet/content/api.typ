@@ -397,7 +397,13 @@ snapshot.save("diagram.svg")
 snapshot.save("diagram.html")
 ```
 
-An unfinished view raises a measurement-pending error when asked for SVG, HTML, or a file.
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
+An unfinished view raises a measurement-pending error only for strict `measured()`.
 No browser is started automatically. Scripts can explicitly use
 `view.measured(browser="chromium")`; install Playwright and Chromium first.
 The measured SVG embeds its font and XHTML `foreignObject` MathML labels.

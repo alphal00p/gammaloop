@@ -40,7 +40,8 @@ parameter labels changes presentation only, preserving algebraic names and expre
 == Native SVG configuration
 
 `diagram.render(...)` returns a `DiagramView`. Displaying it in IPython, Jupyter
-or Marimo sends the labels to the actual browser for measurement. Keep that view
+or Marimo uses static output by default; with `anywidget`, it also sends the
+labels to the actual browser for measurement. Keep that view
 when you want to export the drawing:
 
 // docs-example: compile
@@ -60,12 +61,19 @@ html = snapshot.to_html()
 ```
 
 The immutable `DiagramRender` retains the measured boxes and embedded math font.
-Its SVG contains XHTML `foreignObject` MathML and targets browsers. Export while
-measurement is pending raises an error. Scripts explicitly request
+Its measured SVG contains XHTML `foreignObject` MathML and targets browsers.
+`measured()` raises while measurement is pending. Scripts explicitly request
 `view.measured(browser="chromium")` with optional Playwright and Chromium, or
 return a browser receipt from `view.measurement_request()` to
 `view.measured(measurements=receipt)`. Receipts must come from the same view;
-no automatic headless browser or estimated label bounds are used.
+strict `measured()` never uses estimates or launches a browser implicitly.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
 
 For vector labels, call `outlined = view.outlined()` with optional Python
 typst-py (distribution `typst`). This route is required for PDF, PNG and Typst

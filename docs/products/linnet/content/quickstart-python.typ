@@ -87,14 +87,21 @@ display(view)
 After the browser finishes measuring, `snapshot = view.measured()` returns an
 immutable drawing. `snapshot.to_svg()`, `snapshot.to_html()` and
 `snapshot.save("graph.svg")` preserve its measured boxes and embedded font.
-Exporting a pending view raises an error.
+`measured()` raises while labels are pending.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
 
 Scripts may explicitly request `view.measured(browser="chromium")`. Install
 `playwright>=1.55,<2` and run `python -m playwright install chromium` first.
 The default SVG contains browser MathML in XHTML `foreignObject` elements;
 use `view.outlined()` with optional Python typst-py (distribution `typst>=0.15`)
-for vector labels before PDF, PNG or Typst SVG import. Neither an automatic
-headless browser nor estimated label bounds are used.
+for vector labels before PDF, PNG or Typst SVG import. Strict `measured()`
+never uses estimates or launches a browser implicitly.
 
 Continue with #link("guides/python-rendering/")[Rendering graphs from Python] to explore a
 complete graph with custom drawing selectors. The #link("playground/")[live Python playground]

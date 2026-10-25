@@ -123,8 +123,15 @@ Scripts explicitly choose `view.measured(browser="chromium")`, requiring
 Playwright and Chromium. Alternatively, a browser can measure the probes from
 `view.measurement_request()` and return its receipt to
 `view.measured(measurements=receipt)`. Receipts belong to that same view;
-`graph.to_svg(browser="chromium")` creates a fresh view instead. Pending exports
-raise an error. There is no automatic headless launch or estimated label bound.
+`graph.to_svg(browser="chromium")` creates a fresh view instead. Pending
+`measured()` calls raise an error; strict measurement never uses estimates.
+
+Default `view.snapshot()`, `view.to_svg()` and `view.to_html()` export complete
+static output without launching a browser. They reuse completed measurements,
+otherwise use optional typst-py outlining when available, otherwise estimated
+STIX MathML label bounds. Estimates leave measurement pending. Installing
+`anywidget` adds live notebook measurement; earlier snapshots remain immutable.
+
 
 Use `outlined = view.outlined()` for vector-label SVG through optional Python
 typst-py (distribution `typst`). PDF, PNG and Typst SVG import require this
