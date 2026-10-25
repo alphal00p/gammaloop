@@ -292,6 +292,62 @@ primary/suite aggregates and their acceptance requirements are unchanged.
 
 == Timing and rendering
 
+=== Cumulative physical capture and fresh seen-input reuse
+
+The final cumulative cache includes strict completed roots and intermediate
+descendants produced while running the physical examples. The finite
+#raw("build_cache") workload remains separately identified evidence; it is not
+the sole production source. Preserve every durable prefix and immutable base.
+There is no 50 MiB publication target or 95 MiB aggregate limit for native packs.
+Record actual sizes and operational allowances; an older single-file format's
+bound must not become a campaign-wide truncation policy. See
+#link("../../cache_preparation.typ")[cache preparation and cumulative capture].
+
+The physical capture producer and its fresh seen-input reuse have a separate
+append-only report path:
+
+```sh
+python3 crates/vakint/docs/benchmark/merge_physical_capture_results.py \
+  --base crates/vakint/docs/benchmark/data/results.json \
+  --campaign /path/to/workspace/physical-capture-campaign \
+  --output /path/to/workspace/physical-capture-results.json --select-current
+```
+
+The campaign must already contain the accepted producer and reuse completions,
+their immutable configurations, full output/guard/unknown-master files, terminal
+cache receipts and #raw("seen-reuse-comparison.json"). The adapter performs no
+reduction, cache write, restart or eligibility decision. Missing completion or
+failed flush/close is an error, not a partially populated timing row. While these
+receipts are absent, the report remains explicitly pending; live counters and
+source code are not substitute measurements.
+
+The adapter rehashes the bound evidence and verifies identical executable,
+input, data and settings, exact complete retained result and ordered guards,
+family inventory and unknown-master inventory. It checks fresh-process
+observations, successful completion, no newly captured reuse records, and
+unchanged native snapshot generation and digest. Compiler/codegen receipts
+retain the actual source snapshot and ELF identity; configured profile labels
+alone do not establish optimization. Producer elapsed time includes capture
+overhead. Pure IBP time remains unmeasured.
+
+Append only under #raw("physical_capture_runs") and optionally update
+#raw("selected_physical_capture_run"). Preserve every historical four-loop sample
+and protocol, primary five-loop run, finite cache selection and held-out result.
+This supplement reports *seen physical input*, separately from frozen held-out
+sets. One matched fresh pair remains functional evidence, even with an optimized
+executable: report raw observations and actual cache hits, without a median,
+performance colour, final speedup claim or transfer into another benchmark.
+The original comparison receipt is retained verbatim, including any diagnostic
+ratio and its non-isolated scope. It does not relax the accepted serialized-window
+and repeated-sample requirements above.
+
+```sh
+python3 -m unittest discover -s crates/vakint/docs/benchmark \
+  -p 'test_merge_physical_capture_results.py'
+```
+
+=== Numerical summaries
+
 Medians and full observed ranges are recomputed from actual per-case samples.
 The coloured ratio is always *cached ÷ uncached* (four-loop cells remain
 *RustRed ÷ FMFT*), so green means faster. Do not average different physical inputs

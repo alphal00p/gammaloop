@@ -253,6 +253,35 @@ class GalleryWorkerTests(unittest.TestCase):
 
 
 class GalleryReceiptTests(unittest.TestCase):
+    def test_running_snapshot_never_promotes_progress_to_reduction_timing(self):
+        mo = SimpleNamespace(
+            Html=lambda value: value,
+            vstack=lambda values: values,
+            accordion=lambda values: values,
+            json=lambda value: value,
+        )
+        receipt = {
+            "schema": "vakint.gallery.physical-status.v1",
+            "state": "running_at_observation",
+            "observed_utc": "2026-10-25T22:55:23Z",
+            "running_cache": {"accepted_records": 106699, "committed_records": 106687},
+            "reduction_completed": False,
+            "final_reduction_seconds": None,
+            "speedup": None,
+        }
+        with (
+            patch.object(Gallery, "receipt", return_value=receipt),
+            patch.object(Gallery, "evidence_links", return_value="download"),
+        ):
+            card = Gallery.evidence_card(mo, "synthetic", "Producer snapshot")
+        rendered = repr(card[0]) + repr(card[1])
+        self.assertIn("106,699", rendered)
+        self.assertIn("106,687", rendered)
+        self.assertIn("acknowledged durable", rendered)
+        self.assertIn("not a completed reduction or a measured speedup", rendered)
+        self.assertIn("not a held-out benchmark", rendered)
+        self.assertNotIn("Native reduction · seconds", rendered)
+
     def test_reused_input_null_preparation_is_not_a_current_timing(self):
         tables = []
 

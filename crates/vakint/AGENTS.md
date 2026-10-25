@@ -55,6 +55,16 @@ comparisons require matched fresh samples and an explicitly accepted serialized
 window. Preserve original cohorts, full result/guard checks, and unmeasured null
 phases. The adapter's synthetic file-contract tests do not run reductions.
 
+The cumulative physical-example cache and its fresh seen-input reuse use the
+separate `merge_physical_capture_results.py` adapter described in the same
+maintenance contract. Keep incomplete runs pending until accepted completion,
+flush/close and exact output/guard receipts exist. Preserve every durable cache
+prefix; there is no 50 MiB publication target or 95 MiB aggregate native-pack cap.
+The final cumulative cache must include useful completed work from physical
+examples, not only a finite `build_cache` selection. Never promote a single seen
+reuse, a live counter or diagnostic timing into a held-out or repeated-performance
+claim. Preserve all 48 original four-loop measurements and their provenance.
+
 The five-loop physical collector saves its complete scalar input as
 `prepared-input.json` plus authenticated input/condition payloads. Repeated runs
 reuse a valid bundle in their work directory; use `--prepared-input PATH` to share

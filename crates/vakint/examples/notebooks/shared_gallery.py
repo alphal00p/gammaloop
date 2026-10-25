@@ -305,6 +305,29 @@ class Gallery:
             ]
         )
         schema = receipt.get("schema") if isinstance(receipt, dict) else None
+        if schema == "vakint.gallery.physical-status.v1":
+            native = receipt.get("running_cache", {})
+            fields = [
+                (receipt.get("state", "Not recorded").replace("_", " "), title),
+            ]
+            for key, label in (
+                ("accepted_records", "Cache records enqueued"),
+                ("committed_records", "Cache records acknowledged durable"),
+            ):
+                if native.get(key) is not None:
+                    fields.append((f"{native[key]:,}", label))
+            return mo.vstack(
+                [
+                    cls.metrics(mo, fields),
+                    cls.note(
+                        mo,
+                        "Recorded progress; final comparison pending",
+                        f"Observed {receipt.get('observed_utc', 'at an unrecorded time')}. This immutable snapshot does not refresh automatically. Durable intermediate records are not a completed reduction or a measured speedup. Fresh-process reuse of the same input is a seen-input check, not a held-out benchmark.",
+                        pending=True,
+                    ),
+                    details,
+                ]
+            )
         if schema == "vakint.qcd-ladder.benchmark.v1":
             prepared_input = receipt.get("input_mode") == "prepared"
             completed = receipt.get("reduction_completed") is True

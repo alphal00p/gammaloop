@@ -42,6 +42,15 @@ and #raw("held-out"). An absent receipt is visibly pending and makes no timing
 or successful-reduction claim. The producer remains responsible for scientific
 validation and source/data provenance; a local hash does not certify those facts.
 
+The optional #raw("zero-momentum-running-cache") receipt is an immutable
+observation of an optimized producer and its cumulative native cache. Display
+enqueued and acknowledged-durable record counts separately. Neither count
+establishes completion of the full physical reduction. A fresh process reusing
+that same input is a seen-input check, distinct from the held-out suite.
+Keep final reduction times, speedups and estimates absent until their completed
+authenticated receipts are available. Refreshing this evidence does not require
+changing the deployed native host or starting a numerical calculation.
+
 Browser previews have bounded depth, item counts and string lengths. A receipt
 above 8 MiB is offered as a download instead of being parsed into the page.
 Complete guard lists and unknown-integral identities remain in their original

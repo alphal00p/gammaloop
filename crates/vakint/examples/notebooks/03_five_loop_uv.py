@@ -13,8 +13,9 @@ def _():
     import os
 
     import marimo as mo
-    from shared_gallery import Gallery
     from symbolica.community.hepkit import FeynmanDiagram, Model
+
+    from shared_gallery import Gallery
 
     return FeynmanDiagram, Gallery, Model, mo, os
 
@@ -173,6 +174,11 @@ def _(Gallery, mo):
             Gallery.evidence_card(mo, "quadratic", "Complete quadratic fixture"),
             Gallery.evidence_card(
                 mo, "zero-momentum", "Zero-momentum metric/color diagnostic"
+            ),
+            Gallery.evidence_card(
+                mo,
+                "zero-momentum-running-cache",
+                "Optimized zero-momentum run · cumulative cache progress",
             ),
             mo.md(
                 "Final comparisons use three fresh processes per configuration with the same verified scalar input, medians and ranges, fixed workers/affinity, and exact result/guard checks. Original graph and numerator preparation are reported separately. Warm in-process reuse is reported separately."
