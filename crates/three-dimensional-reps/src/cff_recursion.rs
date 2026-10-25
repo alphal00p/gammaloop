@@ -1,4 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet, HashSet};
+use std::result::Result as StdResult;
 
 use serde::{Deserialize, Serialize};
 use symbolica::domains::integer::Integer;
@@ -320,6 +321,49 @@ impl CffGenerationGraph {
         Self::new(vertices)
     }
 
+    fn strip_tadpoles(
+        &mut self,
+        medium_mode: MediumMode,
+        edge_signs: &[i32],
+        preferred_tadpole_poles: &BTreeMap<usize, i32>,
+    ) -> StdResult<(Vec<ThermalDistributionFactor>, Rational), ResourceLimitError> {
+        resources::checkpoint()?;
+        let self_edges = self
+            .vertices
+            .iter()
+            .flat_map(|vertex| {
+                vertex
+                    .incoming
+                    .iter()
+                    .filter(|edge| {
+                        edge.edge_type == EdgeType::Virtual && vertex.outgoing.contains(edge)
+                    })
+                    .map(|edge| edge.edge_id)
+            })
+            .collect::<BTreeSet<_>>();
+        let mut factors = Vec::new();
+        let mut prefactor = Rational::one();
+        for &edge_id in &self_edges {
+            // Free tadpoles average the two closures. A contact keeps the
+            // closure inherited from its parent, independently of the medium.
+            // The physical pole sign still controls its numerator and mu.
+            let contour_sign = preferred_tadpole_poles
+                .get(&edge_id)
+                .map_or(0, |pole| edge_signs[edge_id] * pole);
+            if medium_mode == MediumMode::Vacuum {
+                prefactor *= Rational::new(1 + i64::from(contour_sign), 2);
+            } else {
+                factors.push(ThermalDistributionFactor {
+                    edge_id: EdgeIndex(edge_id),
+                    sign: contour_sign,
+                    derivative_order: 0,
+                });
+            }
+        }
+        self.remove_virtual_edges(&self_edges);
+        Ok((factors, prefactor))
+    }
+
     fn strip_tadpoles_and_cyclic_chains(
         &mut self,
         parsed: &ParsedGraph,
@@ -331,38 +375,10 @@ impl CffGenerationGraph {
         let mut prefactor = Rational::one();
         loop {
             resources::checkpoint()?;
-            let self_edges = self
-                .vertices
-                .iter()
-                .flat_map(|vertex| {
-                    vertex
-                        .incoming
-                        .iter()
-                        .filter(|edge| {
-                            edge.edge_type == EdgeType::Virtual && vertex.outgoing.contains(edge)
-                        })
-                        .map(|edge| edge.edge_id)
-                })
-                .collect::<BTreeSet<_>>();
-            let mut removed = self_edges.clone();
-            for edge_id in self_edges {
-                // Free tadpoles average the two closures. A contact keeps the
-                // closure inherited from its parent, independently of the medium.
-                // The physical pole sign still controls its numerator and mu.
-                let contour_sign = preferred_tadpole_poles
-                    .get(&edge_id)
-                    .map_or(0, |pole| edge_signs[edge_id] * pole);
-                if medium_mode == MediumMode::Vacuum {
-                    prefactor *= Rational::new(1 + i64::from(contour_sign), 2);
-                } else {
-                    factors.push(ThermalDistributionFactor {
-                        edge_id: EdgeIndex(edge_id),
-                        sign: contour_sign,
-                        derivative_order: 0,
-                    });
-                }
-            }
-            self.remove_virtual_edges(&removed);
+            let (tadpole_factors, tadpole_prefactor) =
+                self.strip_tadpoles(medium_mode, edge_signs, preferred_tadpole_poles)?;
+            factors.extend(tadpole_factors);
+            prefactor *= tadpole_prefactor;
             let mut selected_cycle = None;
             if medium_mode != MediumMode::Vacuum && self.has_directed_cycle() {
                 for vertex in &self.vertices {
@@ -395,10 +411,8 @@ impl CffGenerationGraph {
                     sign: 1,
                     derivative_order,
                 });
-                removed.extend(cycle.iter().copied());
                 self.remove_virtual_edges(&cycle.into_iter().collect());
-            }
-            if removed.is_empty() {
+            } else {
                 break;
             }
         }
@@ -510,8 +524,10 @@ impl CffGenerationGraph {
     }
 }
 
-pub(crate) struct CffSurfaceChain {
-    pub surfaces: Vec<LinearEnergyExpr>,
+/// One causal denominator chain with its exact contour weight.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CffSurfaceChain<S = LinearEnergyExpr> {
+    pub surfaces: Vec<S>,
     pub thermal_weight: ThermalWeight,
     pub prefactor: Rational,
 }
@@ -604,21 +620,34 @@ fn build_base_graph_from_parsed(parsed: &ParsedGraph) -> CffGenerationGraph {
 }
 
 impl CffGenerationGraph {
-    /// Generate causal denominator chains, mapping each selected cut in the
-    /// caller's energy convention. Cyclic orientations have no branches.
+    /// Generate weighted vacuum standalone denominator chains, mapping each
+    /// selected cut in the caller's energy convention. Free tadpoles retain
+    /// both closures with weight one half; fixing an orientation does not
+    /// select an inherited contact prescription. Cyclic orientations have no branches.
     ///
     /// Errors from active resource budgets and the supplied surface callback
     /// stop enumeration without returning a partial chain catalogue.
     pub fn try_surface_chains<S: Clone, E: From<ResourceLimitError>>(
-        &self,
-        surface: &mut impl FnMut(&CffVertex) -> std::result::Result<S, E>,
-    ) -> std::result::Result<Vec<Vec<S>>, E> {
+        mut self,
+        surface: &mut impl FnMut(&CffVertex) -> StdResult<S, E>,
+    ) -> StdResult<Vec<CffSurfaceChain<S>>, E> {
         resources::checkpoint()?;
         if self.has_directed_cycle() {
             return Ok(Vec::new());
         }
+        let (distributions, prefactor) =
+            self.strip_tadpoles(MediumMode::Vacuum, &[], &BTreeMap::new())?;
+        let thermal_weight = ThermalWeight {
+            medium_mode: MediumMode::Vacuum,
+            distributions,
+            numerators: Vec::new(),
+        };
         if self.vertices.len() < 2 {
-            return Ok(vec![Vec::new()]);
+            return Ok(vec![CffSurfaceChain {
+                surfaces: Vec::new(),
+                thermal_weight,
+                prefactor,
+            }]);
         }
         let Some(vertex) = self.vertices.iter().find(|vertex| {
             matches!(vertex.vertex_type(), VertexType::Source | VertexType::Sink)
@@ -629,21 +658,31 @@ impl CffGenerationGraph {
         let selected = surface(vertex)?;
         resources::checkpoint()?;
         if self.vertices.len() == 2 {
-            return Ok(vec![vec![selected]]);
+            return Ok(vec![CffSurfaceChain {
+                surfaces: vec![selected],
+                thermal_weight,
+                prefactor,
+            }]);
         }
         let mut branches = Vec::new();
         for neighbour in self.undirected_neighbours(&vertex.nodes) {
             resources::checkpoint()?;
             let child = self.contract_vertices(&vertex.nodes, &neighbour.nodes);
-            for chain in child.try_surface_chains(surface)? {
+            for mut chain in child.try_surface_chains(surface)? {
                 resources::checkpoint()?;
                 let mut branch = vec![selected.clone()];
-                branch.extend(chain);
-                branches.push(branch);
+                branch.append(&mut chain.surfaces);
+                chain.surfaces = branch;
+                chain.prefactor *= &prefactor;
+                branches.push(chain);
             }
         }
         if branches.is_empty() {
-            branches.push(vec![selected]);
+            branches.push(CffSurfaceChain {
+                surfaces: vec![selected],
+                thermal_weight,
+                prefactor,
+            });
         }
         resources::checkpoint()?;
         Ok(branches)
@@ -829,7 +868,7 @@ mod tests {
         );
 
         let result = budget.run(|| {
-            graph.try_surface_chains(&mut |_| {
+            graph.clone().try_surface_chains(&mut |_| {
                 rss.store(11, Ordering::Relaxed);
                 Ok::<(), GenerationError>(())
             })
@@ -851,6 +890,53 @@ mod tests {
             })
         });
         assert!(matches!(result, Err(GenerationError::SingularBasis)));
+    }
+
+    #[test]
+    fn topology_chains_retain_free_tadpole_weights_and_boundary_roles() {
+        for count in [1, 2] {
+            let edges = (0..count)
+                .map(|edge_id| EdgeRef {
+                    edge_id,
+                    edge_type: EdgeType::Virtual,
+                })
+                .collect::<Vec<_>>();
+            let graph = CffGenerationGraph::new(vec![CffVertex {
+                nodes: BTreeSet::from([0]),
+                incoming: edges.clone(),
+                outgoing: edges,
+            }]);
+            let chains = graph
+                .try_surface_chains(&mut |_| -> Result<()> {
+                    panic!("a standalone tadpole has no causal surface")
+                })
+                .unwrap();
+            assert_eq!(chains.len(), 1);
+            assert!(chains[0].surfaces.is_empty());
+            assert_eq!(chains[0].prefactor, Rational::new(1, 1 << count));
+            assert_eq!(chains[0].thermal_weight, ThermalWeight::default());
+        }
+
+        for edge_type in [
+            EdgeType::External,
+            EdgeType::Boundary,
+            EdgeType::InitialStateCut,
+        ] {
+            let edge = EdgeRef {
+                edge_id: 0,
+                edge_type,
+            };
+            let graph = CffGenerationGraph::new(vec![CffVertex {
+                nodes: BTreeSet::from([0]),
+                incoming: vec![edge],
+                outgoing: vec![edge],
+            }]);
+            let chains = graph
+                .try_surface_chains(&mut |_| Ok::<(), GenerationError>(()))
+                .unwrap();
+            assert_eq!(chains.len(), 1);
+            assert_eq!(chains[0].prefactor, Rational::one());
+        }
     }
 
     #[test]
@@ -1758,8 +1844,7 @@ mod tests {
         parsed.external_edges.clear();
         let mode = MediumMode::ThermodynamicEquilibrium;
         let error = enumerate_cff_surface_chains(&parsed, &[1; 4], mode, &BTreeMap::new())
-            .err()
-            .expect("unreducible orientation must fail generation");
+            .expect_err("unreducible orientation must fail generation");
         assert!(matches!(
             error,
             GenerationError::NoAdmissibleCffVertex {

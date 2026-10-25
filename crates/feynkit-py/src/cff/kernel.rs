@@ -87,7 +87,7 @@ impl CffKernel {
             .iter()
             .map(|o| CffOrientationData {
                 id: o.id.index(),
-                expression: o.expression.to_atom_inverse(),
+                expression: o.to_atom(),
                 directions: o
                     .data
                     .orientation
@@ -104,7 +104,7 @@ impl CffKernel {
                             .filter(|s| *s != SurfaceId::Unit)
                             .map(|s| keys[&s])
                             .collect(),
-                        coefficient: Atom::num(1),
+                        coefficient: Atom::num(o.prefactor.clone()),
                         numerator: Atom::num(1),
                         energies: Vec::new(),
                         numerator_factors: Vec::new(),
@@ -360,9 +360,33 @@ impl CffKernel {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use feynkit_cff::{CffEdge, CffGenerator, CffGraph, EdgeId, VertexId};
     use feynkit_graph::FeynmanDiagram;
     use feynkit_model::Model;
     use symbolica::symbol;
+
+    #[test]
+    fn topology_tadpole_total_and_displayed_families_share_contour_weights() {
+        for count in [1, 2] {
+            let graph = CffGraph::new(
+                1,
+                (0..count).map(|id| {
+                    CffEdge::internal(EdgeId::new(id), VertexId::new(0), VertexId::new(0))
+                }),
+            )
+            .unwrap();
+            let result = CffGenerator::default().generate(&graph).unwrap();
+            let kernel = CffKernel::from_topology(result);
+            assert_eq!(kernel.to_atom(), Atom::num(1));
+            for orientation in &kernel.orientations {
+                assert_eq!(orientation.expression, Atom::num((1, 1 << count)));
+                assert_eq!(orientation.terms.len(), 1);
+                let family = &orientation.terms[0];
+                assert_eq!(family.coefficient, Atom::num((1, 1 << count)));
+                assert_eq!(family.atom(&kernel.surfaces), orientation.expression);
+            }
+        }
+    }
 
     #[test]
     fn polynomial_cff_matches_exact_one_loop_contours() {

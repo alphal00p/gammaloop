@@ -8,8 +8,10 @@ use linnet::half_edge::{
     subgraph::SubGraphLike,
 };
 use serde::{Deserialize, Serialize};
+use symbolica::domains::rational::Rational;
 use symbolica::utils::resources;
 use symbolica::utils::resources::{ResourceBudget, ResourceLimits};
+use three_dimensional_reps::cff_recursion::{CffVertex, EdgeType};
 
 use crate::{
     CffEdge, CffError, CffExpression, CffGraph, EdgeFlow, EdgeId, EdgeKind, EdgeOrientation,
@@ -639,12 +641,13 @@ impl CffGenerator {
             }
 
             let id = OrientationId(orientations.len());
-            let expression = self.generate_tree(oriented_graph, cache, identifier)?;
+            let (prefactor, expression) = self.generate_tree(oriented_graph, cache, identifier)?;
             resources::checkpoint()?;
             orientations.push(OrientationExpression {
                 id,
                 data: OrientationData { orientation },
                 expression,
+                prefactor,
             });
         }
 
@@ -704,8 +707,7 @@ impl CffGenerator {
         graph: WorkingGraph,
         cache: &mut SurfaceCache,
         orientation: usize,
-    ) -> Result<ExpressionTree<SurfaceId>, CffError> {
-        use three_dimensional_reps::cff_recursion::{CffVertex, EdgeType};
+    ) -> Result<(Rational, ExpressionTree<SurfaceId>), CffError> {
         let chains = graph
             .shared_topology()
             .try_surface_chains(&mut |vertex: &CffVertex| {
@@ -732,18 +734,24 @@ impl CffGenerator {
         let Some(first) = chains.first() else {
             return Err(CffError::NoSourceOrSink { orientation });
         };
-        let root = first.first().copied().unwrap_or(SurfaceId::Unit);
+        let prefactor = first.prefactor.clone();
+        let root = first.surfaces.first().copied().unwrap_or(SurfaceId::Unit);
         let mut tree = ExpressionTree::from_root(root);
         for chain in chains {
             resources::checkpoint()?;
+            if chain.prefactor != prefactor {
+                return Err(CffError::Invariant(format!(
+                    "vacuum topology chains have different contour weights for orientation {orientation}"
+                )));
+            }
             let mut parent = crate::NodeId::ROOT;
-            for surface in chain.into_iter().skip(1) {
+            for surface in chain.surfaces.into_iter().skip(1) {
                 parent = tree
                     .insert(parent, surface)
                     .expect("newly inserted tree parent exists");
             }
         }
-        Ok(tree)
+        Ok((prefactor, tree))
     }
 
     fn prepare_surface(&self, surface: Surface) -> Result<Surface, CffError> {
@@ -903,6 +911,12 @@ impl WorkingGraph {
                 continue;
             }
             for vertex in &mut self.vertices {
+                if vertex.incoming.iter().any(|item| item.id == edge)
+                    && vertex.outgoing.iter().any(|item| item.id == edge)
+                {
+                    // Reversing a self-loop changes its pole sign, not its incidence.
+                    continue;
+                }
                 if let Some(position) = vertex.outgoing.iter().position(|item| item.id == edge) {
                     let edge = vertex.outgoing.remove(position);
                     vertex.incoming.push(edge);
@@ -1227,6 +1241,7 @@ mod tests {
         half_edge::subgraph::{ModifySubSet, SuBitGraph},
         parser::DotGraph,
     };
+    use symbolica::atom::Atom;
 
     fn edge(index: usize) -> EdgeId {
         EdgeId::new(index)
@@ -1247,6 +1262,100 @@ mod tests {
             ],
         )
         .unwrap()
+    }
+
+    fn tadpoles(count: usize) -> CffGraph {
+        CffGraph::new(
+            1,
+            (0..count).map(|id| CffEdge::internal(edge(id), vertex(0), vertex(0))),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn free_tadpoles_average_both_orientations_without_losing_odd_cancellation() {
+        for count in [1, 2] {
+            let result = CffGenerator::default().generate(&tadpoles(count)).unwrap();
+            assert_eq!(result.report.acyclic_orientations, 1 << count);
+            assert!(result.surfaces.is_empty());
+            assert_eq!(result.expression.to_atom(), Atom::num(1));
+            let mut odd = Atom::Zero;
+            for orientation in result.orientations() {
+                assert_eq!(orientation.prefactor, Rational::new(1, 1 << count));
+                assert_eq!(
+                    orientation.denominator_products(),
+                    vec![vec![SurfaceId::Unit]]
+                );
+                let sign = if orientation.data.orientation[edge(0)] == EdgeOrientation::Default {
+                    1
+                } else {
+                    -1
+                };
+                odd += Atom::num(sign) * orientation.to_atom();
+            }
+            assert!(odd.is_zero());
+        }
+    }
+
+    #[test]
+    fn fixed_free_tadpole_orientation_keeps_its_half_weight() {
+        for orientation in [EdgeOrientation::Default, EdgeOrientation::Reversed] {
+            let result = CffGenerator::new(
+                CffOptions::default().with_fixed_orientation(edge(0), orientation),
+            )
+            .generate(&tadpoles(1))
+            .unwrap();
+            assert_eq!(result.report.acyclic_orientations, 1);
+            assert_eq!(result.expression.to_atom(), Atom::num((1, 2)));
+        }
+        let contracted = CffGenerator::new(CffOptions::default().with_contracted_edge(edge(0)))
+            .generate(&tadpoles(1))
+            .unwrap();
+        assert_eq!(contracted.expression.to_atom(), Atom::num(1));
+    }
+
+    #[test]
+    fn attached_tadpole_preserves_bubble_surfaces_and_total_normalization() {
+        let bare = CffGenerator::default().generate(&bubble()).unwrap();
+        let mut edges = bubble().edges().to_vec();
+        edges.push(CffEdge::internal(edge(4), vertex(0), vertex(0)));
+        let graph = CffGraph::new(2, edges).unwrap();
+        let attached = CffGenerator::default().generate(&graph).unwrap();
+        assert_eq!(bare.surfaces, attached.surfaces);
+        assert_eq!(
+            attached.report.acyclic_orientations,
+            2 * bare.report.acyclic_orientations
+        );
+        assert_eq!(attached.expression.to_atom(), bare.expression.to_atom());
+        assert!(
+            attached
+                .orientations()
+                .iter()
+                .all(|o| o.prefactor == Rational::new(1, 2))
+        );
+        assert!(
+            bare.orientations()
+                .iter()
+                .all(|o| o.prefactor == Rational::one())
+        );
+    }
+
+    #[test]
+    fn weighted_tadpole_json_and_native_round_trips_require_the_coefficient() {
+        let result = CffGenerator::default().generate(&tadpoles(2)).unwrap();
+        let json = serde_json::to_string(&result).unwrap();
+        assert_eq!(serde_json::from_str::<CffResult>(&json).unwrap(), result);
+        let bytes = bincode::encode_to_vec(&result, bincode::config::standard()).unwrap();
+        let (decoded, used) =
+            bincode::decode_from_slice::<CffResult, _>(&bytes, bincode::config::standard())
+                .unwrap();
+        assert_eq!(used, bytes.len());
+        assert_eq!(decoded, result);
+        let mut legacy = serde_json::to_value(&result).unwrap();
+        for orientation in legacy["expression"]["orientations"].as_array_mut().unwrap() {
+            orientation.as_object_mut().unwrap().remove("prefactor");
+        }
+        assert!(serde_json::from_value::<CffResult>(legacy).is_err());
     }
 
     #[test]

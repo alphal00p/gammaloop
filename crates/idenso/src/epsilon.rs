@@ -1,3 +1,6 @@
+use std::iter;
+
+use spenso::structure::{OrderedStructure, TensorStructure};
 use spenso::{
     network::{
         library::symbolic::ETS,
@@ -7,7 +10,7 @@ use spenso::{
         abstract_index::AbstractIndex,
         dimension::Dimension,
         representation::{LibraryRep, RepName, Representation},
-        slot::Slot,
+        slot::{Slot, SlotMatcher},
     },
     tensor_symbol,
 };
@@ -126,6 +129,7 @@ impl EpsilonSimplifierPass {
         let _ = *EPSILON_SYMBOL;
         expr.replace_map(|term, _context, out| {
             let rewritten = match term {
+                AtomView::Fun(_) => Self::simplify_vector_arguments(term),
                 AtomView::Pow(_) => Self::simplify_power(term),
                 AtomView::Mul(_) => Self::simplify_pair_product(term),
                 _ => None,
@@ -134,6 +138,100 @@ impl EpsilonSimplifierPass {
                 **out = rewritten;
             }
         })
+    }
+
+    /// Expand only sums and scalar weights in compact vector arguments. Indexed
+    /// component arguments are not multilinear variables and remain unchanged.
+    fn simplify_vector_arguments(expr: AtomView<'_>) -> Option<Atom> {
+        let AtomView::Fun(function) = expr else {
+            return None;
+        };
+        if function.get_symbol() != *EPSILON_SYMBOL {
+            return None;
+        }
+        let arguments = function.iter().collect::<Vec<_>>();
+        if !arguments
+            .iter()
+            .any(|argument| matches!(argument, AtomView::Add(_) | AtomView::Mul(_)))
+        {
+            return None;
+        }
+
+        let mut slots = SlotMatcher::default();
+        let mut representation: Option<Representation<LibraryRep>> = None;
+        let mut pending = arguments.clone();
+        while let Some(argument) = pending.pop() {
+            let (_, candidate) =
+                slots.compact_vector_sequence::<AbstractIndex>(iter::once((0, argument)), false)?;
+            // Compact axes are not materialized by this observation. Any
+            // remaining ports belong to explicit tensor spectators.
+            let structure =
+                OrderedStructure::<LibraryRep, AbstractIndex>::syntactic_structure_from_atom(
+                    argument, &mut slots,
+                )
+                .ok()?;
+            if !structure.canonical().is_scalar() {
+                return None;
+            }
+            if representation.is_some_and(|previous| previous != candidate) {
+                return None;
+            }
+            representation = Some(candidate);
+            match argument {
+                AtomView::Add(sum) => pending.extend(sum.iter()),
+                AtomView::Mul(product) => {
+                    let (position, _) = slots.compact_vector_sequence::<AbstractIndex>(
+                        product.iter().enumerate(),
+                        false,
+                    )?;
+                    pending.push(product.iter().nth(position)?);
+                }
+                _ => {}
+            }
+        }
+        let representation = representation?;
+        if !representation.rep.is_self_dual()
+            && representation.dim != Dimension::Concrete(arguments.len())
+        {
+            return None;
+        }
+
+        let replace_argument = |position, replacement| {
+            FunctionBuilder::new(*EPSILON_SYMBOL)
+                .add_args(arguments.iter().enumerate().map(|(index, &argument)| {
+                    if index == position {
+                        replacement
+                    } else {
+                        argument
+                    }
+                }))
+                .finish()
+        };
+        for (position, &argument) in arguments.iter().enumerate() {
+            match argument {
+                AtomView::Add(sum) => {
+                    return Some(Atom::add_many(
+                        sum.iter().map(|term| replace_argument(position, term)),
+                    ));
+                }
+                AtomView::Mul(product) => {
+                    // The materializer proves that every remaining factor has
+                    // a scalar interface, including internally contracted tensors.
+                    let (vector_position, _) = slots.compact_vector_sequence::<AbstractIndex>(
+                        product.iter().enumerate(),
+                        false,
+                    )?;
+                    let vector = product.iter().nth(vector_position)?;
+                    let coefficient =
+                        Atom::mul_many(product.iter().enumerate().filter_map(|(index, factor)| {
+                            (index != vector_position).then_some(factor)
+                        }));
+                    return Some(coefficient * replace_argument(position, vector));
+                }
+                _ => {}
+            }
+        }
+        None
     }
 
     /// Runs the epsilon identities to a fixed point, then lets metric
@@ -366,27 +464,148 @@ impl EpsilonSimplifierPass {
 
 #[cfg(test)]
 mod test {
+    use std::array;
+
     use insta::assert_snapshot;
     use spenso::{
         g, mink,
         network::{library::symbolic::ETS, parsing::AtomStructureExt, tags::SPENSO_TAG},
         p, q,
         structure::partial::PartialStructure,
-        trace,
+        tensor, trace, vector,
     };
     use symbolica::{
         atom::{Atom, AtomCore, AtomView, FunctionBuilder},
-        parse,
+        parse, symbol,
     };
     use symbolica_utils::AtomPrintExt;
 
     use crate::{
-        epsilon as eps, gamma, gamma5,
+        coad, epsilon as eps, gamma, gamma5,
         tensor::{AlgebraSettings, SymbolicTensor},
         test_support::test_initialize,
     };
 
     use super::{EPSILON_SYMBOL, EpsilonSimplifier, contract_epsilon4, epsilon4};
+
+    #[test]
+    fn dependent_compact_vectors_annihilate_epsilon() {
+        test_initialize();
+        let p = vector!(epsilon_dependent_p, mink!(4));
+        let q = vector!(epsilon_dependent_q, mink!(4));
+        let r = vector!(epsilon_dependent_r, mink!(4));
+        let dependent = &p + &q - &r;
+        assert_eq!(
+            epsilon4(&dependent, &p, &q, &r).simplify_epsilon(),
+            Atom::Zero
+        );
+    }
+
+    #[test]
+    fn single_compact_epsilon_reaches_the_production_scheduler() {
+        test_initialize();
+        let p = vector!(epsilon_scheduler_p, mink!(4));
+        let q = vector!(epsilon_scheduler_q, mink!(4));
+        let r = vector!(epsilon_scheduler_r, mink!(4));
+        let source = epsilon4(&(&p + &q - &r), &p, &q, &r);
+        let result = SymbolicTensor::<PartialStructure>::infer(source)
+            .unwrap()
+            .simplify_algebra(&AlgebraSettings {
+                epsilon: true,
+                ..AlgebraSettings::default()
+            })
+            .unwrap();
+        assert_eq!(result.expression(), &Atom::Zero);
+    }
+
+    #[test]
+    fn compact_epsilon_is_linear_in_vector_sums() {
+        test_initialize();
+        let p = vector!(epsilon_sum_p, mink!(4));
+        let q = vector!(epsilon_sum_q, mink!(4));
+        let r = vector!(epsilon_sum_r, mink!(4));
+        let s = vector!(epsilon_sum_s, mink!(4));
+        let t = vector!(epsilon_sum_t, mink!(4));
+        let sum = &p + &q;
+        let expected = epsilon4(&p, &r, &s, &t) + epsilon4(&q, &r, &s, &t);
+        assert_eq!(epsilon4(&sum, &r, &s, &t).simplify_epsilon(), expected);
+    }
+
+    #[test]
+    fn compact_epsilon_extracts_exact_scalar_weights() {
+        test_initialize();
+        let p = vector!(epsilon_weight_p, mink!(4));
+        let q = vector!(epsilon_weight_q, mink!(4));
+        let r = vector!(epsilon_weight_r, mink!(4));
+        let s = vector!(epsilon_weight_s, mink!(4));
+        let coefficient = Atom::num((2, 3)) * Atom::i();
+        let weighted = &coefficient * &p;
+        assert_eq!(
+            epsilon4(&weighted, &q, &r, &s).simplify_epsilon(),
+            &coefficient * epsilon4(&p, &q, &r, &s),
+        );
+        assert_eq!(
+            epsilon4(&weighted, &p, &q, &r).simplify_epsilon(),
+            Atom::Zero
+        );
+    }
+
+    #[test]
+    fn compact_epsilon_retains_factored_scalar_spectators() {
+        test_initialize();
+        let p = vector!(epsilon_factored_p, mink!(4));
+        let q = vector!(epsilon_factored_q, mink!(4));
+        let r = vector!(epsilon_factored_r, mink!(4));
+        let s = vector!(epsilon_factored_s, mink!(4));
+        let t = vector!(epsilon_factored_t, mink!(4));
+        let a = Atom::var(symbol!("epsilon_factor_test::a"; Scalar));
+        let spectator = (a + Atom::one()).pow(37);
+        let source = &spectator * epsilon4(&(&p + &q), &r, &s, &t);
+        let expected = &spectator * (epsilon4(&p, &r, &s, &t) + epsilon4(&q, &r, &s, &t));
+        let result = source.simplify_epsilon();
+        assert_eq!(result, expected);
+        assert!(matches!(result.as_view(), AtomView::Mul(product)
+            if product.iter().any(|factor| factor == spectator.as_view())));
+    }
+
+    #[test]
+    fn epsilon_linearity_does_not_change_indexed_components_or_phase() {
+        test_initialize();
+        let mu = mink!(4, epsilon_component_mu);
+        let nu = mink!(4, epsilon_component_nu);
+        let rho = mink!(4, epsilon_component_rho);
+        let sigma = mink!(4, epsilon_component_sigma);
+        let source = epsilon4(&mu, &nu, &rho, &sigma);
+        assert_eq!(source.simplify_epsilon(), source);
+        let weighted_slot = epsilon4(&(2 * &mu), &nu, &rho, &sigma);
+        assert_eq!(weighted_slot.simplify_epsilon(), weighted_slot);
+        let rows: [[Atom; 4]; 4] =
+            array::from_fn(|i| array::from_fn(|j| if i == j { Atom::one() } else { Atom::Zero }));
+        assert_eq!(contract_epsilon4(&rows), -Atom::i());
+    }
+
+    #[test]
+    fn epsilon_linearity_requires_one_homogeneous_compact_vector() {
+        test_initialize();
+        let p = vector!(epsilon_homogeneous_p, mink!(4));
+        let short = vector!(epsilon_homogeneous_short, mink!(3));
+        let q = vector!(epsilon_homogeneous_q, mink!(4));
+        let r = vector!(epsilon_homogeneous_r, mink!(4));
+        let s = vector!(epsilon_homogeneous_s, mink!(4));
+        let mixed = epsilon4(&(&p + &short), &q, &r, &s);
+        assert_eq!(mixed.simplify_epsilon(), mixed);
+        let two_vectors = epsilon4(&(&p * &q), &q, &r, &s);
+        assert_eq!(two_vectors.simplify_epsilon(), two_vectors);
+        let colored = tensor!(
+            epsilon_vector_with_spectator,
+            mink!(4),
+            coad!(8, epsilon_external_color)
+        );
+        let weighted_colored = epsilon4(&(2 * &colored), &q, &r, &s);
+        assert_eq!(weighted_colored.simplify_epsilon(), weighted_colored);
+        let mixed_spectator = epsilon4(&(&p + &colored), &q, &r, &s);
+        assert_eq!(mixed_spectator.simplify_epsilon(), mixed_spectator);
+    }
 
     #[test]
     fn color_epsilon_dual_pair_contracts_to_positive_norm() {

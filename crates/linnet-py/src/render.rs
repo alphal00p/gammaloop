@@ -460,6 +460,29 @@ mod tests {
             py.import("sys")?
                 .getattr("modules")?
                 .set_item("symbolica.community.graph", &linnet)?;
+            let locals = PyDict::new(py);
+            py.run(
+                cr#"import xml.etree.ElementTree as ET
+from symbolica.community import graph as render
+# A genuinely untitled generic graph retains the original height contract.
+untitled = render.build(
+    render.node("caption-height", label=render.MathSymbol("p", subscript=1))
+)
+untitled_bounds = ET.fromstring(untitled.render().to_svg()).get("viewBox").split()
+titled_bounds = (
+    ET.fromstring(
+        untitled.render(
+            config=render.RenderSettings(title=render.TextLabel("Explicit title"))
+        ).to_svg()
+    )
+    .get("viewBox")
+    .split()
+)
+assert float(titled_bounds[3]) > float(untitled_bounds[3])
+"#,
+                Some(&locals),
+                Some(&locals),
+            )?;
             let source =
                 std::ffi::CString::new(include_str!("../tests/test_svg_interaction.py")).unwrap();
             let fixture = PyModule::from_code(

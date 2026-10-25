@@ -3,8 +3,8 @@
 All graph weights, momentum routing, UV expansion, color/tensor reduction and
 IBP are shared APIs.  The only analytic integral input is I(1)|pole = M/eps;
 physical loop integration restores i/(16*pi**2), and a4 = gs**2/(16*pi**2).
-The SM model supplies the canonical UFO ghost rule; only the gluon gauge
-parameter is specialized here.
+A fixture-local model supplies the upstream UUV1 reference rule; the gluon
+gauge parameter is specialized below.
 References: FeynCalcExamples/QCD/OneLoop/{Renormalization,GhGl-Gh}.
 """
 
@@ -25,6 +25,49 @@ for propagator in spec["propagators"]:
             "/spenso::dot(UFO::P(spenso::mink(4)),UFO::P(spenso::mink(4))))"
         )
 model = hep.Model.from_json(json.dumps(spec))
+# Explicit upstream-UUV1 reference at mg5amcnlo/mg5amcnlo
+# a5b17913ef0b6e1c872016f94d0fb610207dab47; canonical models remain unchanged.
+_reference_base = model
+_reference_base_json = _reference_base.to_json()
+_canonical_builtin = hep.Model.standard_model()
+_canonical_builtin_json = _canonical_builtin.to_json()
+_base_definition = json.loads(_reference_base_json)
+_upstream_definition = json.loads(_reference_base_json)
+_base_uuv1 = next(
+    item for item in _base_definition["lorentz_structures"] if item["name"] == "UUV1"
+)
+next(
+    item
+    for item in _upstream_definition["lorentz_structures"]
+    if item["name"] == "UUV1"
+)[
+    "structure"
+] = "UFO::P(UFO::idx(1,3),UFO::idx(1,2))+UFO::P(UFO::idx(1,3),UFO::idx(1,3))"
+model = hep.Model.from_json(json.dumps(_upstream_definition))
+_upstream_roundtrip = json.loads(model.to_json())
+_reference_uuv1 = next(
+    item for item in _upstream_roundtrip["lorentz_structures"] if item["name"] == "UUV1"
+)
+_reference_vertex = next(
+    item for item in _upstream_roundtrip["vertex_rules"] if item["name"] == "V_35"
+)
+_reference_coupling = next(
+    item for item in _upstream_roundtrip["couplings"] if item["name"] == "GC_10"
+)
+assert _reference_uuv1["spins"] == [-1, -1, 3]
+assert _reference_vertex["particles"] == ["ghG", "ghG~", "g"]
+assert _reference_vertex["lorentz_structures"] == ["UUV1"]
+assert _reference_vertex["couplings"] == [["GC_10"]]
+assert E(_reference_coupling["expression"], default_namespace="UFO") == E("-UFO::G")
+_restored_definition = json.loads(model.to_json())
+next(
+    item
+    for item in _restored_definition["lorentz_structures"]
+    if item["name"] == "UUV1"
+)["structure"] = _base_uuv1["structure"]
+assert _restored_definition == _base_definition
+assert _reference_base.to_json() == _reference_base_json
+assert _canonical_builtin.to_json() == _canonical_builtin_json
 D, eps, M, mUV, x, integral, xi, s, dA = S(
     "ghost_uv::D",
     "ghost_uv::eps",
@@ -110,23 +153,26 @@ for pdg in (9000005, -9000005):
                 _ordering(_value), _value
             )
             weight /= _external_ordering
+            assert weight.is_scalar
+            weight = weight.to_expression()
             assert weight == one
             # Keep every external Lorentz/color slot open; no polarization or
             # contraction with external momentum can hide an unwanted tensor.
-            numerator = model.expand_couplings(
-                diagram.numerator_expression().to_expression()
+            numerator = diagram.numerator_expression().rename_indices(
+                {
+                    hedge(half.id, 1): [a, b, c][half.edge.external_index]
+                    for half in diagram.half_edges
+                    if half.edge.is_external
+                },
+                intern="indices",
             )
-            for half in diagram.half_edges:
-                if half.edge.is_external:
-                    numerator = numerator.replace(
-                        hedge(half.id, 1), [a, b, c][half.edge.external_index]
-                    )
-            numerator = numerator.replace(coad(8, idx), coad(dA, idx))
+            numerator = model.expand_couplings(numerator)
             if loops:
-                numerator = diagram.uv_expansion(
-                    mUV, numerator=numerator
-                ).to_expression()
-            numerator = diagram.momentum_basis().route_expression(numerator)
+                numerator = diagram.uv_expansion(mUV, numerator=numerator)
+            numerator = (
+                diagram.momentum_basis().route_expression(numerator).to_expression()
+            )
+            numerator = numerator.replace(coad(8, idx), coad(dA, idx))
             numerator = (
                 numerator.replace(mink(dim, idx), mink(D, idx))
                 .replace(mink(dim), mink(D))
@@ -144,10 +190,9 @@ for pdg in (9000005, -9000005):
                 .simplify_algebra(gamma=False, color=True)
                 .contract(collect_chains=False, collect_traces=False)
                 .to_dots()
-                .to_expression()
             )
             scalar = family.rewrite_numerator(
-                kinematics.apply(reducer.reduce(tensor)), [x]
+                kinematics.apply(reducer.reduce(tensor)).to_expression(), [x]
             )
             scalar = (weight * scalar).together().expand()
             assert not scalar.matches(K(arguments))

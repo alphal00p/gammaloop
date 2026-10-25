@@ -330,7 +330,11 @@ impl PyParticle {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> hep.Model.qcd().particle("g").typstname
+    /// >>> import json
+    /// >>> definition = json.loads(hep.Model.qcd().to_json())
+    /// >>> next(p for p in definition["particles"] if p["name"] == "g")["typstname"] = "g"
+    /// >>> annotated = hep.Model.from_json(json.dumps(definition))
+    /// >>> annotated.particle("g").typstname
     /// 'g'
     #[getter]
     fn typstname(&self) -> Option<&str> {
@@ -342,7 +346,11 @@ impl PyParticle {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> hep.Model.qcd().particle("u").antitypstname
+    /// >>> import json
+    /// >>> definition = json.loads(hep.Model.qcd().to_json())
+    /// >>> next(p for p in definition["particles"] if p["name"] == "u")["antitypstname"] = "overline(u)"
+    /// >>> annotated = hep.Model.from_json(json.dumps(definition))
+    /// >>> annotated.particle("u").antitypstname
     /// 'overline(u)'
     #[getter]
     fn antitypstname(&self) -> Option<&str> {
@@ -852,7 +860,11 @@ impl PyParameter {
     /// Examples
     /// --------
     /// >>> from symbolica.community import hepkit as hep
-    /// >>> hep.Model.standard_model().parameter("aS").typstname
+    /// >>> import json
+    /// >>> definition = json.loads(hep.Model.standard_model().to_json())
+    /// >>> next(p for p in definition["parameters"] if p["name"] == "aS")["typstname"] = "alpha_s"
+    /// >>> annotated = hep.Model.from_json(json.dumps(definition))
+    /// >>> annotated.parameter("aS").typstname
     /// 'alpha_s'
     #[getter]
     fn typstname(&self) -> Option<&str> {
