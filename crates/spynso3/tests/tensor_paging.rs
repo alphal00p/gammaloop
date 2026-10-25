@@ -1,6 +1,5 @@
 //! Run the public Python paging regressions against this build's native owners.
-//! Requires the notebook Python dependencies and configured Symbolica fonts.
-//! Run explicitly with `cargo test -p spynso3 --test tensor_paging -- --ignored`.
+//! Uses the embedded PyO3 interpreter; optional widget/compiler tests skip when unavailable.
 #![cfg(feature = "native")]
 
 use spynso3::SpensoModule;
@@ -14,7 +13,6 @@ use symbolica::api::python;
 use symbolica::api::python::SymbolicaCommunityModule;
 
 #[test]
-#[ignore = "requires optional notebook Python dependencies and external Symbolica fonts"]
 fn direct_tensor_paging() {
     Python::initialize();
     Python::attach(|py| {

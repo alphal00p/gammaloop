@@ -489,6 +489,10 @@ class BrowserPagingTests(PagingAssertions):
             )
         self.assertEqual(self.value.to_expression(), self.original)
 
+    @unittest.skipUnless(
+        importlib.util.find_spec("anywidget") is not None,
+        "live widget navigation requires the optional anywidget package",
+    )
     def test_live_widget_navigation_and_page_size(self):
         widget = self.pager._get_widget()
         self.pager._on_message(widget, {"action": "attach", "view": "browser"}, [])
