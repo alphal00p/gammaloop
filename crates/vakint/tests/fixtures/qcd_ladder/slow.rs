@@ -5,6 +5,64 @@ use symbolica::atom::AtomView;
 #[path = "mod.rs"]
 mod fixture;
 
+#[test]
+fn generated_qcd_ladder_color_factor_matches_fixed_su3() -> fixture::Result<()> {
+    use idenso::{
+        IndexTooling,
+        color::ColorSimplifySettings,
+        representations::{ColorAdjoint, ColorFundamental, ColorSextet},
+        tensor::{AlgebraContraction, AlgebraSettings, ReductionStatus, SymbolicTensor},
+    };
+    use spenso::{
+        network::library::symbolic::ETS,
+        shadowing::TensorCollectFilter,
+        structure::{
+            abstract_index::AbstractIndex, representation::LibrarySlot, slot::IsAbstractSlot,
+        },
+    };
+
+    let evidence = tempfile::tempdir()?;
+    let generated = fixture::dress(evidence.path())?;
+    let diagram = &generated.diagrams[0];
+    let numerator = diagram
+        .numerator()
+        .multiply(diagram.numerator_prefactor())?;
+    let color_filter = TensorCollectFilter::Reps([
+        ColorFundamental {}.into(),
+        ColorAdjoint {}.into(),
+        ColorSextet {}.into(),
+    ]);
+    let rows = numerator.coefficient_list(color_filter)?;
+    assert_eq!(rows.len(), 1, "the generated ladder has one color sector");
+    let (color, coefficient) = &rows[0];
+    assert!(!coefficient.expression().is_zero());
+    let mut residual_has_color = false;
+    coefficient.expression().visitor(&mut |node| {
+        residual_has_color |= color_filter.matches(node);
+        !residual_has_color
+    });
+    assert!(!residual_has_color);
+    let ports = color.expression().list_dangling::<AbstractIndex>()?;
+    assert_eq!(ports.len(), 2);
+    for port in &ports {
+        let slot = LibrarySlot::<AbstractIndex>::try_from(port.as_view())?;
+        assert_eq!(slot.rep_name(), ColorAdjoint {}.into());
+    }
+    let closed = SymbolicTensor::infer(color.expression() * ETS.metric(&ports[0], &ports[1]))?;
+    let reduced = closed.simplify_algebra(&AlgebraSettings {
+        gamma: Some(Default::default()),
+        color: Some(ColorSimplifySettings::default().with_cof_dimension_invariants()),
+        contract: AlgebraContraction::Dots,
+        ..Default::default()
+    })?;
+    assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
+    assert!(reduced.is_scalar());
+    // Four rungs give T_R d_A (C_F - C_A/2)^4. The generated color
+    // sector excludes couplings and the overall graph/fermion-loop factor.
+    assert_eq!(reduced.expression(), &Atom::num((1, 324)));
+    Ok(())
+}
+
 #[test_log::test]
 #[ignore = "full reduction: requires VAKINT_SAVED_APPLICATION; set VAKINT_QCD_LADDER_PREPARED_INPUT to reuse verified scalar preparation"]
 fn qcd_ladder_quadratic_transverse_projection_and_saved_application() -> fixture::Result<()> {
