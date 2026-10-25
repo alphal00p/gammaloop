@@ -1,9 +1,16 @@
 use super::*;
 use gammalooprs::{
+    graph::{edge::PossibleParticle, global::evaluate_overall_factor},
+    momentum::SignOrZero,
     observables::{HistogramSnapshot, HistogramSnapshotKind},
-    utils::FloatLike,
+    processes::ProcessCollection,
+    utils::{FloatLike, GS},
 };
-use symbolica::domains::float::Real;
+use symbolica::{
+    atom::{Atom, AtomCore},
+    domains::float::Real,
+    function,
+};
 
 pub(super) fn decimal_scalar<T>(value: &str) -> Result<F<T>>
 where
@@ -215,6 +222,27 @@ pub(super) fn setup_gg_hhh_threshold_amplitude_cli(
         Some(test_name.to_string()),
         true,
     )?;
+    let [left, right] = [0usize, 1].map(|owner| function!(GS.hedgeaind, owner, 1usize));
+    let projector = (Atom::i() / Atom::num(8))
+        * spenso::g!(
+            idenso::coad!(8, left.clone()),
+            idenso::coad!(8, right.clone())
+        )
+        * function!(GS.epsilon, 0usize, spenso::mink!(4, left.clone()))
+        * function!(GS.epsilon, 1usize, spenso::mink!(4, right.clone()));
+    // GL60 is the native signed topology of the historical GL15 fixture. Its
+    // physical chord8 coordinate is checked below before generating integrands.
+    let generate_diagrams = format!(
+        r#"generate amp g g > h h h / u d c s b QED==3 [{{1}}]
+                --only-diagrams
+                --numerator-grouping only_detect_zeroes
+                --select-graphs GL60
+                --loop-momentum-bases GL60=8
+                --global-prefactor-projector '{}'
+                -p gg_hhh
+                -i 1L"#,
+        projector.to_canonical_string(),
+    );
 
     run_commands(
         &mut cli,
@@ -266,15 +294,190 @@ rotation_axis = []
 disable_threshold_subtraction = false
 '"#,
             "remove processes",
-            r#"generate amp g g > h h h / u d c s b QED==3 [{1}]
-                --only-diagrams
-                --numerator-grouping only_detect_zeroes
-                --select-graphs GL42
-                --loop-momentum-bases GL42=2
-                --global-prefactor-num '1𝑖*(1/8)*spenso::g(spenso::coad(8,FeynKit::SourceIndex(5,1)),
-                                                           spenso::coad(8,FeynKit::SourceIndex(6,1)))'
-                -p gg_hhh
-                -i 1L"#,
+            &generate_diagrams,
+        ],
+    )?;
+
+    {
+        let process = cli
+            .state
+            .resolve_process_ref(Some(&ProcessRef::Unqualified("gg_hhh".into())))?;
+        let ProcessCollection::Amplitudes(amplitudes) =
+            &cli.state.process_list.processes[process].collection
+        else {
+            eyre::bail!("gg->hhh threshold fixture must remain an amplitude");
+        };
+        let amplitude = amplitudes
+            .get("1L")
+            .ok_or_else(|| eyre::eyre!("missing gg->hhh amplitude"))?;
+        eyre::ensure!(
+            amplitude.graphs.len() == 1,
+            "expected one historical gg->hhh topology"
+        );
+        let graph = &amplitude.graphs[0].graph;
+        eyre::ensure!(
+            graph.n_nodes() == 5 && graph.n_edges() == 10,
+            "historical gg->hhh incidence changed"
+        );
+        eyre::ensure!(graph.global_prefactor.num == Atom::one());
+        eyre::ensure!(
+            graph.global_prefactor.projector == projector,
+            "full process projector was not preserved"
+        );
+        eyre::ensure!(evaluate_overall_factor(graph.overall_factor.as_view()) == Atom::num(-1));
+        eyre::ensure!(
+            graph
+                .loop_momentum_basis
+                .loop_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect_vec()
+                == [8]
+        );
+        eyre::ensure!(
+            graph
+                .loop_momentum_basis
+                .ext_edges
+                .iter()
+                .map(|edge| edge.0)
+                .collect_vec()
+                == [0, 1, 2, 3, 4]
+        );
+        let mut vertices = std::collections::BTreeMap::new();
+        let old_vertex_by_external = [4usize, 1, 2, 3, 0];
+        for (pair, edge, data) in graph.iter_edges().filter(|(pair, _, _)| pair.is_unpaired()) {
+            let external = graph
+                .loop_momentum_basis
+                .ext_edges
+                .iter()
+                .position(|candidate| *candidate == edge)
+                .ok_or_else(|| eyre::eyre!("unexpected external edge in gg->hhh fixture"))?;
+            let hedge = pair.any_hedge();
+            let incoming = external < 2;
+            eyre::ensure!(graph.flow(hedge).is_sink() == incoming);
+            eyre::ensure!(graph[hedge].ufo_order.value == 2);
+            eyre::ensure!(!data.data.is_dummy);
+            let PossibleParticle::Particle(particle) = &data.data.particle else {
+                eyre::bail!("historical external leg must retain its native particle");
+            };
+            eyre::ensure!(
+                cli.state.model.particle_by_id(*particle)?.pdg_code
+                    == if incoming { 21 } else { 25 }
+            );
+            eyre::ensure!(
+                vertices
+                    .insert(old_vertex_by_external[external], graph.node_id(hedge))
+                    .is_none()
+            );
+        }
+        eyre::ensure!(
+            vertices.len() == 5
+                && vertices
+                    .values()
+                    .copied()
+                    .collect::<std::collections::BTreeSet<_>>()
+                    .len()
+                    == 5
+        );
+        for (role, expected) in ["V_141", "V_137", "V_141", "V_141", "V_137"]
+            .iter()
+            .enumerate()
+        {
+            let (_, _, vertex) = graph
+                .iter_nodes()
+                .find(|(id, _, _)| *id == vertices[&role])
+                .unwrap();
+            let rule = cli.state.model.vertex_rule_by_id(
+                vertex
+                    .vertex_rule
+                    .ok_or_else(|| eyre::eyre!("missing historical interaction"))?,
+            )?;
+            eyre::ensure!(rule.name == *expected);
+            let pdgs = rule
+                .particles
+                .iter()
+                .map(|particle| {
+                    cli.state
+                        .model
+                        .particle_by_id(*particle)
+                        .map(|particle| particle.pdg_code)
+                })
+                .collect::<std::result::Result<Vec<_>, _>>()?;
+            eyre::ensure!(pdgs == [-6, 6, if *expected == "V_137" { 21 } else { 25 }]);
+        }
+        for (old_edge, source, target) in [
+            (5usize, 3usize, 0usize),
+            (6, 0, 4),
+            (7, 1, 2),
+            (8, 4, 1),
+            (9, 2, 3),
+        ] {
+            let matches = graph
+                .iter_edges()
+                .filter(|(pair, _, _)| {
+                    pair.is_paired()
+                        && graph.node_id(pair.any_hedge()) == vertices[&source]
+                        && graph.node_id(graph.inv(pair.any_hedge())) == vertices[&target]
+                })
+                .collect_vec();
+            eyre::ensure!(
+                matches.len() == 1,
+                "historical directed t edge {old_edge} changed"
+            );
+            let (pair, edge, data) = &matches[0];
+            eyre::ensure!(
+                edge.0 == old_edge,
+                "native edge labels no longer identify the historical chord"
+            );
+            let source = pair.any_hedge();
+            eyre::ensure!(graph.flow(source).is_source());
+            eyre::ensure!(
+                (
+                    graph[source].ufo_order.value,
+                    graph[graph.inv(source)].ufo_order.value
+                ) == (0, 1)
+            );
+            eyre::ensure!(
+                SignOrZero::from(data.orientation) == SignOrZero::Plus && !data.data.is_dummy
+            );
+            let PossibleParticle::Particle(particle) = &data.data.particle else {
+                eyre::bail!("historical t edge must retain its native particle");
+            };
+            eyre::ensure!(cli.state.model.particle_by_id(*particle)?.pdg_code == 6);
+            eyre::ensure!(cli.state.model.particle_mass(*particle)?.name == "MT");
+        }
+        let k = function!(GS.loop_mom, 0usize);
+        let [p0, p1, p2, p3] = [0usize, 1, 2, 3].map(|index| function!(GS.external_mom, index));
+        let expected = [
+            p0.clone(),
+            p1.clone(),
+            p2.clone(),
+            p3.clone(),
+            &p0 + &p1 - &p2 - &p3,
+            &k + &p1 - &p2 - &p3,
+            &k - &p0,
+            &k + &p1,
+            k.clone(),
+            &k + &p1 - &p2,
+        ];
+        for (_, edge, _) in graph.iter_edges() {
+            let actual = graph
+                .loop_momentum_basis
+                .loop_atom::<Atom>(edge, GS.loop_mom, &[], false)
+                + graph
+                    .loop_momentum_basis
+                    .ext_atom::<Atom>(edge, GS.external_mom, &[], false);
+            eyre::ensure!(
+                actual == expected[edge.0],
+                "historical signed chord8 routing changed on edge {}",
+                edge.0
+            );
+        }
+    }
+
+    run_commands(
+        &mut cli,
+        &[
             "generate",
             "set model MT=173.0",
             "set model WT=0.0",
