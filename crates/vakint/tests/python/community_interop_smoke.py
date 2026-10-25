@@ -7,9 +7,12 @@ selects a validated local external-data checkout for the 5L catalogue checks.
 """
 
 import builtins
+import hashlib
+import json
 import os
 import sys
 import unittest
+from pathlib import Path
 from unittest.mock import patch
 
 if os.environ.get("VAKINT_TEST_HOST") == "standalone":
@@ -106,6 +109,9 @@ class CommunityInteroperability(unittest.TestCase):
         os.environ.get("VAKINT_TEST_ARTIFACTS"), "local 5L data not selected"
     )
     def test_uncomputed_five_loop_catalogue_keeps_shared_graph_types(self):
+        artifacts = Path(os.environ["VAKINT_TEST_ARTIFACTS"])
+        manifest = json.loads((artifacts / "5L/manifest.json").read_text())
+        expected_cache = manifest["cache"]
         engine = Vakint(evaluation_order=[])
         report = engine.load_official_external_data(
             5, local_artifacts_path=os.environ["VAKINT_TEST_ARTIFACTS"]
@@ -114,10 +120,36 @@ class CommunityInteroperability(unittest.TestCase):
             [item["loop_count"] for item in report["loops"]], [1, 2, 3, 4, 5]
         )
         cache = engine.cache_statistics(5)
-        self.assertFalse(cache["attached"])
+        self.assertEqual(cache["attached"], expected_cache["available"])
         self.assertFalse(cache["ram_is_process_rss"])
         self.assertIsNotNone(cache["saved_application"])
-        self.assertIsNone(cache["saved_application"]["file"])
+        if expected_cache["available"]:
+            self.assertTrue(report["loops"][-1]["cache_loaded"])
+            self.assertEqual(
+                expected_cache["format"], "rustred.saved-application-cache-file.v1"
+            )
+            for relative in (expected_cache["path"], expected_cache["metadata"]):
+                self.assertEqual(
+                    hashlib.sha256(
+                        (artifacts / "5L" / relative).read_bytes()
+                    ).hexdigest(),
+                    manifest["files"][relative]["sha256"],
+                )
+            metadata = json.loads(
+                (artifacts / "5L" / expected_cache["metadata"]).read_text()
+            )
+            single_file = metadata["preparation_report"]["options"]["single_file"]
+            self.assertEqual(single_file["binding"], expected_cache["binding"])
+            self.assertEqual(
+                cache["saved_application"]["binding"], expected_cache["binding"]
+            )
+            file = cache["saved_application"]["file"]
+            self.assertEqual(file["records"], single_file["records"])
+            for field in ("compressed_bytes", "decoded_bytes"):
+                self.assertEqual(file[field], expected_cache["identity"][field])
+        else:
+            self.assertFalse(report["loops"][-1]["cache_loaded"])
+            self.assertIsNone(cache["saved_application"]["file"])
         self.assertEqual(cache["saved_application"]["native"]["cached_integrals"], 0)
         binding = cache["saved_application"]["binding"]
         engine.detach_cache(5)
