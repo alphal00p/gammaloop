@@ -14,7 +14,9 @@
 //! from v7-pinch/scripts/gen_cases.py), `VAKINT_V7_REPORT` (JSONL, appended;
 //! cases already present are skipped, so a rerun resumes), optional
 //! `VAKINT_V7_BUDGET_SECONDS` (default 1500), `VAKINT_V7_VK` (0 disables the
-//! frontend path), `VAKINT_V7_ONLY` (comma-separated case ids).
+//! frontend path), `VAKINT_V7_ONLY` (comma-separated case ids), `VAKINT_V7_CASE_TIMEOUT` (seconds,
+//! default 0 = none): a watchdog records a case that exceeds it as outcome "timeout" and EXITS the process
+//! with code 3 (a reduction cannot be interrupted safely); the caller reruns to resume after that case.
 use super::*;
 use rustred_app::SavedApplicationIntegral;
 use serde_json::{Value, json};
@@ -281,6 +283,33 @@ fn staged_pack_pinch_consistency_v7() {
         .append(true)
         .open(&report)
         .unwrap();
+    let case_timeout: u64 = std::env::var("VAKINT_V7_CASE_TIMEOUT")
+        .ok()
+        .map_or(0, |v| v.parse().unwrap());
+    let current: Arc<Mutex<Option<(Value, Instant)>>> = Arc::new(Mutex::new(None));
+    if case_timeout > 0 {
+        let current = current.clone();
+        let report = report.clone();
+        let root = root.clone();
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(5));
+                let guard = current.lock().unwrap();
+                if let Some((case, since)) = guard.as_ref()
+                    && since.elapsed().as_secs() > case_timeout
+                {
+                    let line = json!({"id": case["id"], "group": case["group"], "class": case["class"],
+                        "variant": case["variant"], "seed": case["seed"], "root": root,
+                        "rr": {"outcome": "timeout", "seconds": since.elapsed().as_secs_f64()}});
+                    let mut f = std::fs::OpenOptions::new().append(true).open(&report).unwrap();
+                    writeln!(f, "{line}").unwrap();
+                    f.flush().unwrap();
+                    println!("{}", json!({"event": "case_timeout", "id": case["id"]}));
+                    std::process::exit(3);
+                }
+            }
+        });
+    }
     let (mut ran, mut skipped_budget) = (0usize, 0usize);
     for case in cases["cases"].as_array().unwrap() {
         let id = case["id"].as_str().unwrap().to_owned();
@@ -291,6 +320,7 @@ fn staged_pack_pinch_consistency_v7() {
             skipped_budget += 1;
             continue;
         }
+        *current.lock().unwrap() = Some((case.clone(), Instant::now()));
         let rr = rr_case(&application, case);
         let mut line = json!({"id": id, "group": case["group"], "class": case["class"],
             "variant": case["variant"], "seed": case["seed"], "root": root,
@@ -300,8 +330,11 @@ fn staged_pack_pinch_consistency_v7() {
             line["vk_sigma"] = vk_case(&vakint, &settings, &case["lhs"], &case["rhs"]);
             line["vk_identity"] = vk_case(&vakint, &settings, &case["lhs_identity"], &case["rhs"]);
         }
+        let mut guard = current.lock().unwrap();
+        *guard = None;
         writeln!(out, "{line}").unwrap();
         out.flush().unwrap();
+        drop(guard);
         ran += 1;
     }
     println!("{}", json!({"event": "done", "ran": ran, "skipped_budget": skipped_budget,
