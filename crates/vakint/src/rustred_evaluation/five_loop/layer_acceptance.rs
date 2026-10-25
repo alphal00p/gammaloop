@@ -409,43 +409,41 @@ fn exact_basis_expression_alias_route_prototype_on_scratch_pack() {
         settings
     };
     let retain = mode_settings(crate::RustRedMasterMode::Retain);
+    let symbolic = mode_settings(crate::RustRedMasterMode::Symbolic);
     let numerical = mode_settings(crate::RustRedMasterMode::Numerical);
-    let retained = vakint.evaluate_integral(&retain, input_a.as_view());
-    report["retain_aliased"] = json!(retained.as_ref().map(|a| a.to_canonical_string()).map_err(|e| e.to_string()));
-    let t = Instant::now();
-    let value_a = vakint.evaluate_integral(&numerical, input_a.as_view());
-    let value_b = vakint.evaluate_integral(&numerical, input_b.as_view());
-    report["numerical_seconds"] = json!(t.elapsed().as_secs_f64());
-    report["numerical_aliased"] = json!(value_a.as_ref().map(|a| a.to_canonical_string()).map_err(|e| e.to_string()));
-    report["numerical_basis"] = json!(value_b.as_ref().map(|a| a.to_canonical_string()).map_err(|e| e.to_string()));
-    // Without the alias the aliased master has no coefficients: numerical
-    // evaluation must fail with a capability error (shown for contrast).
+    let show = |value: &Result<Atom, VakintError>| -> Value {
+        json!(value.as_ref().map(|a| a.to_canonical_string()).map_err(|e| e.to_string()))
+    };
+    let mut timed = |label: &str, settings: &VakintSettings, input: &Atom| {
+        let t = Instant::now();
+        let value = vakint.evaluate_integral(settings, input.as_view());
+        report[label] = json!({"seconds": t.elapsed().as_secs_f64(), "value": show(&value)});
+        value
+    };
+    // Retain keeps the 640 symbols (aliases are never applied there).
+    let _ = timed("retain_aliased", &retain, &input_a);
+    let _ = timed("retain_basis", &retain, &input_b);
+    // Symbolic: the aliased master has no coefficients; finalize applies the
+    // alias and evaluates the basis master's exact toy coefficients.
+    let sym_a = timed("symbolic_aliased", &symbolic, &input_a);
+    let sym_b = timed("symbolic_basis", &symbolic, &input_b);
+    // Numerical: shown for the constraint (unresolved-master check runs
+    // before any alias is tried).
+    let _ = timed("numerical_aliased", &numerical, &input_a);
     let mut agreement = None;
-    if let (Ok(a), Ok(b)) = (&value_a, &value_b) {
+    if let (Ok(a), Ok(b)) = (&sym_a, &sym_b) {
         let difference = (a.clone() - ratio.clone() * b.clone()).expand();
-        let mut largest = 0f64;
-        difference.visitor(&mut |part| {
-            if let AtomView::Num(number) = part {
-                if let symbolica::coefficient::CoefficientView::Float(_, _) = number.get_coeff_view() {
-                    let text = part.to_canonical_string();
-                    if let Ok(value) = text.trim_matches(|c| c == '(' || c == ')').parse::<f64>() {
-                        largest = largest.max(value.abs());
-                    }
-                }
-            }
-            true
-        });
-        let scale_b = b.to_canonical_string();
-        agreement = Some(json!({"difference": difference.to_canonical_string(),
-            "largest_float_in_difference": largest, "basis_value_text_bytes": scale_b.len()}));
+        agreement = Some(json!({"exact_zero": difference.is_zero(),
+            "difference": difference.to_canonical_string()}));
     }
-    report["agreement"] = json!(agreement);
+    report["symbolic_agreement"] = json!(agreement);
     let text = serde_json::to_string_pretty(&report).unwrap();
     println!("{text}");
     if let Some(path) = std::env::var_os("VAKINT_ALIAS_REPORT") {
         std::fs::write(path, &text).unwrap();
     }
-    assert!(value_a.is_ok() && value_b.is_ok(), "numerical evaluation failed");
-    let retained = retained.unwrap().to_canonical_string();
-    assert!(!retained.is_empty());
+    assert!(
+        agreement.is_some_and(|a| a["exact_zero"] == true),
+        "symbolic alias evaluation must equal RATIO times the basis evaluation"
+    );
 }
