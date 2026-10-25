@@ -1,4 +1,5 @@
 use super::*;
+use crate::tensor::{AlgebraSettings, ContractSettings, SymbolicTensor};
 use insta::assert_snapshot;
 use spenso::{network::library::symbolic::ETS, shadowing::IntoAtom};
 use symbolica::function;
@@ -272,7 +273,29 @@ fn sun_simplify_id52_repeated_trace_pair() {
     let r = TestReps::new();
     let expr = sun_trace!(r, i1, i2, i1, i2);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*dA*idx(2,cof(Nc))+cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
+    let actual = SymbolicTensor::infer(expr)
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression();
+    let fundamental = r.cof_nc.to_symbolic([]);
+    let adjoint = r.coad_da.to_symbolic([]);
+    let reference = ((color_cas!(2, &fundamental) - color_cas!(2, &adjoint) / Atom::num(2))
+        * r.coad_da.dim.to_symbolic()
+        * color_idx!(2, &fundamental))
+    .expand();
+    assert_snapshot!(reference.to_bare_ordered_string(), @"-1/2*cas(2,coad(dA))*dA*idx(2,cof(Nc))+cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*Nc+-1/2*Nc*cas(2,coad(dA))*cas(2,cof(Nc))");
+    TestReps::assert_color_invariant_equivalence(&actual, &reference, &fundamental, &adjoint);
 }
 
 #[test]
@@ -299,7 +322,27 @@ fn sun_simplify_id66_trace_adjacent_pairs() {
     let r = TestReps::new();
     let expr = sun_trace!(r, a, a, b, b);
 
-    assert_snapshot!(crate::tensor::SymbolicTensor::infer((expr).as_atom_view().to_owned()).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().to_bare_ordered_string(), @"cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
+    let actual = SymbolicTensor::infer(expr)
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression();
+    let fundamental = r.cof_nc.to_symbolic([]);
+    let adjoint = r.coad_da.to_symbolic([]);
+    let reference =
+        color_cas!(2, &fundamental) * r.coad_da.dim.to_symbolic() * color_idx!(2, &fundamental);
+    assert_snapshot!(reference.to_bare_ordered_string(), @"cas(2,cof(Nc))*dA*idx(2,cof(Nc))");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(cas(2,cof(Nc)))^2*Nc");
+    TestReps::assert_color_invariant_equivalence(&actual, &reference, &fundamental, &adjoint);
 }
 
 #[test]

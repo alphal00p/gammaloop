@@ -24,7 +24,9 @@ use spenso::{antisym, chain, network::parsing::ShadowedStructure, s, slot, sym, 
 use symbolica::{function, parse, parse_lit};
 
 use crate::shorthands::schoonschip::Schoonschip;
-use crate::tensor::{SymbolicNetExt, SymbolicNetParse, SymbolicTensor};
+use crate::tensor::{
+    AlgebraSettings, ContractSettings, SymbolicNetExt, SymbolicNetParse, SymbolicTensor,
+};
 use crate::{Cookable, IndexTooling};
 use crate::{color_cas, color_f, color_gram, color_idx, color_str_t, color_t, f};
 
@@ -2478,25 +2480,36 @@ fn ratio_simplify() {
         default_namespace = "spenso"
     );
 
-    let simplified =
-        crate::tensor::SymbolicTensor::infer((expr.cook_indices()).as_atom_view().to_owned())
-            .unwrap()
-            .simplify_algebra(&crate::tensor::AlgebraSettings {
-                color: Some(crate::color::ColorSimplifySettings::default()),
-                ..Default::default()
-            })
-            .unwrap()
-            .contract(crate::tensor::ContractSettings {
-                collect_chains: false,
-                collect_traces: false,
-                ..Default::default()
-            })
-            .unwrap()
-            .into_expression();
+    let simplified = SymbolicTensor::infer(expr.cook_indices())
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression();
 
-    assert_snapshot!(simplified.collect_with_map(|a| {
+    let actual = simplified.collect_with_map(|a| {
         matches!(a, AtomView::Fun(f) if f.get_symbol() == CS.cas || f.get_symbol() == CS.idx || f.get_symbol() == CS.gram)
-    }).into_inner().unwrap_collect().collect_factors().to_bare_ordered_string(), @"(-𝑖/2)*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
+    }).into_inner().unwrap_collect().collect_factors();
+    let fundamental_dimension = Atom::var(symbol!("spenso::ahaha"));
+    let adjoint_dimension = Atom::var(symbol!("spenso::ohoho"));
+    let fundamental = ColorFundamental {}.to_symbolic([&fundamental_dimension]);
+    let adjoint = ColorAdjoint {}.to_symbolic([&adjoint_dimension]);
+    let reference = -Atom::i() / Atom::num(2)
+        * parse_lit!(G ^ 4 * ee ^ 2, default_namespace = "spenso")
+        * color_cas!(2, &adjoint)
+        * color_idx!(2, &fundamental)
+        * adjoint_dimension;
+    assert_snapshot!(reference.to_bare_ordered_string(), @"(-𝑖/2)*G^4*cas(2,coad(ohoho))*ee^2*idx(2,cof(ahaha))*ohoho");
+    assert_snapshot!(actual.to_bare_ordered_string(), @"(-𝑖/2)*G^4*ahaha*cas(2,coad(ohoho))*cas(2,cof(ahaha))*ee^2");
+    TestReps::assert_color_invariant_equivalence(&actual, &reference, &fundamental, &adjoint);
 }
 
 #[test]
@@ -2529,10 +2542,31 @@ fn structure_pair_with_closed_generator_chain_matches_form() {
             .with(dimension_value.to_pattern()),
         expr
     );
+    let actual = SymbolicTensor::infer(admitted)
+        .unwrap()
+        .simplify_algebra(&AlgebraSettings {
+            color: Some(ColorSimplifySettings::default()),
+            ..Default::default()
+        })
+        .unwrap()
+        .contract(ContractSettings {
+            collect_chains: false,
+            collect_traces: false,
+            ..Default::default()
+        })
+        .unwrap()
+        .into_expression()
+        .replace(dimension.to_pattern())
+        .with(dimension_value.to_pattern());
+    let fundamental = ColorFundamental {}.to_symbolic([Atom::var(CS.nc)]);
+    let adjoint = ColorAdjoint {}.to_symbolic([dimension_value.clone()]);
+    let reference = -dimension_value * color_cas!(2, &adjoint) * color_idx!(2, &fundamental);
     assert_snapshot!(
-        crate::tensor::SymbolicTensor::infer(admitted).unwrap().simplify_algebra(&crate::tensor::AlgebraSettings { color: Some(crate::color::ColorSimplifySettings::default()), ..Default::default() }).unwrap().contract(crate::tensor::ContractSettings { collect_chains: false, collect_traces: false, ..Default::default() }).unwrap().into_expression().replace(dimension.to_pattern()).with(dimension_value.to_pattern()).to_bare_ordered_string(),
+        reference.to_bare_ordered_string(),
         @"(-1+Nc^2)*-1*cas(2,coad(-1+Nc^2))*idx(2,cof(Nc))"
     );
+    assert_snapshot!(actual.to_bare_ordered_string(), @"-1*Nc*cas(2,coad(-1+Nc^2))*cas(2,cof(Nc))");
+    TestReps::assert_color_invariant_equivalence(&actual, &reference, &fundamental, &adjoint);
 }
 
 #[test]

@@ -480,9 +480,17 @@ fn color_terminal_metrics_treat_wildcard_spelled_indices_as_literals() {
     let source =
         SymbolicTensor::infer(trace!(&reps.cof_nc; [color_t!(&slot), color_t!(&slot)])).unwrap();
     let reduced = source.simplify_algebra(&color_settings()).unwrap();
+    let reference = reps.coad_da.dim.to_symbolic() * color_idx!(2, &reps.cof_nc);
     assert_eq!(
         reduced.expression,
-        reps.coad_da.dim.to_symbolic() * color_idx!(2, &reps.cof_nc)
+        reps.cof_nc.dim.to_symbolic() * color_cas!(2, &reps.cof_nc)
+    );
+    assert_eq!(reduced.structure, source.structure);
+    TestReps::assert_color_invariant_equivalence(
+        &reduced.expression,
+        &reference,
+        &reps.cof_nc.to_symbolic([]),
+        &reps.coad_da.to_symbolic([]),
     );
     assert_eq!(reduced.reduction_status(), ReductionStatus::Complete);
 }

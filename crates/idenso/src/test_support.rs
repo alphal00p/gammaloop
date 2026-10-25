@@ -6,7 +6,11 @@ use spenso::{
     symbol_set,
 };
 
+use crate::color::{CS, ColorCasimirSettings, ColorSimplifier};
 use crate::representations::{Bispinor, ColorAdjoint, ColorFundamental};
+use symbolica::atom::{Atom, AtomCore, AtomView};
+use symbolica::id::Replacement;
+use symbolica::symbol;
 
 #[derive(Clone)]
 pub(crate) struct TestReps {
@@ -46,6 +50,101 @@ pub(crate) fn test_initialize() -> &'static TestReps {
 impl TestReps {
     pub(crate) fn new() -> Self {
         test_initialize().clone()
+    }
+
+    /// Check two color invariant forms without choosing a flavor multiplicity.
+    /// The supplied representations must belong to the same Lie algebra.
+    pub(crate) fn assert_color_invariant_equivalence(
+        actual: &Atom,
+        reference: &Atom,
+        fundamental: &Atom,
+        adjoint: &Atom,
+    ) {
+        let fundamental_function = fundamental.as_fun_view().unwrap();
+        let adjoint_function = adjoint.as_fun_view().unwrap();
+        assert_eq!(fundamental_function.get_symbol(), CS.fundamental_rep);
+        assert_eq!(adjoint_function.get_symbol(), CS.adjoint_rep);
+        assert_eq!(fundamental_function.get_nargs(), 1);
+        assert_eq!(adjoint_function.get_nargs(), 1);
+        let fundamental_dimension = fundamental_function.iter().next().unwrap().to_owned();
+        let adjoint_dimension = adjoint_function.iter().next().unwrap().to_owned();
+        // These six symbolic references name dimensions, not numeric scalar
+        // coefficients. Replacing a literal dimension would also replace an
+        // unrelated occurrence of that number in a reference coefficient.
+        assert!(!matches!(fundamental_dimension.as_view(), AtomView::Num(_)));
+        assert!(!matches!(adjoint_dimension.as_view(), AtomView::Num(_)));
+
+        let settings = ColorCasimirSettings::default().without_fundamental_dimension_rewrite();
+        let actual_basis =
+            actual.to_color_casimir_with(fundamental.as_view(), adjoint.as_view(), settings);
+        let reference_basis =
+            reference.to_color_casimir_with(fundamental.as_view(), adjoint.as_view(), settings);
+        assert!(
+            (actual_basis - reference_basis)
+                .together()
+                .expand()
+                .is_zero(),
+            "invariant basis mismatch for {fundamental} and {adjoint}"
+        );
+
+        for n in [2, 3, 4] {
+            let replacements = [
+                Replacement::new(
+                    fundamental.clone(),
+                    ColorFundamental {}.to_symbolic([Atom::num(n)]),
+                ),
+                Replacement::new(
+                    adjoint.clone(),
+                    ColorAdjoint {}.to_symbolic([Atom::num(n * n - 1)]),
+                ),
+                Replacement::new(fundamental_dimension.clone(), Atom::num(n)),
+                Replacement::new(adjoint_dimension.clone(), Atom::num(n * n - 1)),
+            ];
+            let actual_value = actual
+                .replace_multiple(&replacements)
+                .to_cof_dimension_invariants();
+            let reference_value = reference
+                .replace_multiple(&replacements)
+                .to_cof_dimension_invariants();
+            assert!(
+                (actual_value - reference_value)
+                    .together()
+                    .expand()
+                    .is_zero(),
+                "SU({n}) value mismatch for {fundamental} and {adjoint}"
+            );
+        }
+
+        // Check arbitrary generator normalization before any division by T_R.
+        // The zero case therefore remains a polynomial identity at T_R = 0.
+        let n = Atom::var(symbol!("color_reference_check::N"));
+        let t = Atom::var(symbol!("color_reference_check::t"));
+        let adjoint_value = n.pow(2) - Atom::one();
+        let zero = Atom::Zero;
+        for normalization in [&t, &zero] {
+            let replacements = [
+                Replacement::new(
+                    CS.cas(Atom::num(2), fundamental),
+                    normalization * &adjoint_value / &n,
+                ),
+                Replacement::new(
+                    CS.cas(Atom::num(2), adjoint),
+                    Atom::num(2) * normalization * &n,
+                ),
+                Replacement::new(CS.idx(Atom::num(2), fundamental), (*normalization).clone()),
+                Replacement::new(fundamental_dimension.clone(), n.clone()),
+                Replacement::new(adjoint_dimension.clone(), adjoint_value.clone()),
+            ];
+            let actual_value = actual.replace_multiple(&replacements);
+            let reference_value = reference.replace_multiple(&replacements);
+            assert!(
+                (actual_value - reference_value)
+                    .together()
+                    .expand()
+                    .is_zero(),
+                "normalization {normalization} mismatch for {fundamental} and {adjoint}"
+            );
+        }
     }
 
     fn build() -> Self {
