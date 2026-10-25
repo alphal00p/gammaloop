@@ -93,13 +93,11 @@ impl SurfaceCache {
 }
 
 impl CffExpression {
-    /// Bare denominator expression in canonical eta/H coordinates, without energy or measure factors.
+    /// Weighted denominator expression in canonical eta/H coordinates, without energy or measure factors.
     pub fn to_atom(&self) -> Atom {
         self.orientations
             .iter()
-            .fold(Atom::Zero, |sum, orientation| {
-                sum + orientation.expression.to_atom_inverse()
-            })
+            .fold(Atom::Zero, |sum, orientation| sum + orientation.to_atom())
     }
 
     /// GammaLoop's loop-energy integration phase and remaining spatial measure.
