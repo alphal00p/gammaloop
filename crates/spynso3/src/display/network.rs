@@ -7,6 +7,7 @@ use crate::network::execution::ExecutionStatus;
 use linnest::svg::{Dash, Details, EdgeDrawing, LabelSource, NodeDrawing, Scene, Stroke};
 use linnest::{TypstEdgeSpec, TypstEndpointSpec, TypstGraphSpec, TypstNodeSpec};
 use linnet::half_edge::involution::{Flow, HedgePair, Orientation};
+use linnet_render_py::PyErrExt;
 use linnet_render_py::{PyDiagramView, PyRenderSettings};
 use pyo3::exceptions::PyRuntimeError;
 use pyo3::types::{PyAnyMethods, PyDictMethods, PyListMethods};
@@ -456,7 +457,7 @@ impl SpensoNet {
                 .call_method1("dumps", (self.render_snapshot(py)?,))?
                 .extract::<String>()?,
         )
-        .map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
         let runtime = PyRuntimeError::new_err;
         let scene = Self::network_scene(&snapshot).map_err(runtime)?;
         PyDiagramView::from_scene(py, scene, config)

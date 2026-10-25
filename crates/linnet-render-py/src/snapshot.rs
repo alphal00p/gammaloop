@@ -1,4 +1,5 @@
 //! Immutable render snapshots, shared by generic graphs and domain renderers.
+use crate::PyErrExt;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -136,17 +137,18 @@ impl PyDiagramRender {
             }
         };
         if let Some(parent) = output.parent().filter(|path| !path.as_os_str().is_empty()) {
-            fs::create_dir_all(parent).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            fs::create_dir_all(parent)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
         }
         if let Some(text) = text {
-            fs::write(&output, text).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+            fs::write(&output, text)
+                .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
             Ok(output)
         } else {
             let bytes = self.export_pages(extension)?;
             match bytes.as_slice() {
-                [page] => {
-                    fs::write(&output, page).map_err(|e| PyRuntimeError::new_err(e.to_string()))?
-                }
+                [page] => fs::write(&output, page)
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?,
                 _ => {
                     return Err(PyValueError::new_err(
                         "use save_pages() for multiple PNG pages",
@@ -173,13 +175,15 @@ impl PyDiagramRender {
                 ));
             }
         };
-        fs::create_dir_all(&directory).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+        fs::create_dir_all(&directory)
+            .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
         pages
             .into_iter()
             .enumerate()
             .map(|(index, page)| {
                 let path = directory.join(format!("page-{}.{format}", index + 1));
-                fs::write(&path, page).map_err(|e| PyRuntimeError::new_err(e.to_string()))?;
+                fs::write(&path, page)
+                    .map_err(|e| PyRuntimeError::new_err(e.to_string()).with_rust_cause(&e))?;
                 Ok(path)
             })
             .collect()

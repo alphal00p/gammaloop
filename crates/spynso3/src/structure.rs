@@ -1,4 +1,5 @@
 use idenso::representations::{ColorAdjoint, ColorFundamental, ColorSextet};
+use linnet_render_py::PyErrExt;
 use std::collections::BTreeMap;
 use symbolica_notation::{DisplayText, MathMlSubset, Notation};
 
@@ -234,13 +235,13 @@ impl SpensoName {
                     ));
                 }
                 if backend == "mathml" {
-                    notation.mathml = Some(
-                        MathMlSubset::parse(&source)
-                            .map_err(|error| PyValueError::new_err(error.to_string()))?,
-                    );
+                    notation.mathml = Some(MathMlSubset::parse(&source).map_err(|error| {
+                        PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                    })?);
                 } else {
-                    let text = DisplayText::new(source)
-                        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                    let text = DisplayText::new(source).map_err(|error| {
+                        PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                    })?;
                     match backend.as_str() {
                         "plain" => notation.text.plain = Some(text),
                         "latex" => notation.text.latex = Some(text),
@@ -493,9 +494,9 @@ impl SpensoName {
             unreachable!("a single Symbolica symbol constructor result is a variable")
         };
         if let Some(notation) = notation {
-            notation
-                .register(name.get_symbol())
-                .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            notation.register(name.get_symbol()).map_err(|error| {
+                PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+            })?;
         }
         Ok(SpensoName {
             name: name.get_symbol(),

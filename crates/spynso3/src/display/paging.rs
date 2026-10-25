@@ -2,6 +2,7 @@
 use crate::display;
 use crate::display::{DisplaySettings, IndexAliases, TensorDisplayMode};
 use idenso::tensor::{SymbolicTensor, composition};
+use linnet_render_py::PyErrExt;
 use pyo3::exceptions::PyValueError;
 use pyo3::types::{PyAnyMethods, PyDict, PyDictMethods};
 use pyo3::{Bound, Py, PyAny, PyErr, PyResult, Python};
@@ -185,7 +186,10 @@ fn export_error(py: Python<'_>, error: ExportError) -> PyErr {
         ..
     } = error
     {
-        exception.set_cause(py, Some(PyValueError::new_err(source.to_string())));
+        exception.set_cause(
+            py,
+            Some(PyValueError::new_err(source.to_string()).with_rust_cause(&source)),
+        );
     }
     exception
 }

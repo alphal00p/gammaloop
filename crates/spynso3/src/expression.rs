@@ -1,4 +1,5 @@
 use crate::display::DisplaySettings;
+use linnet_render_py::PyErrExt;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -153,13 +154,13 @@ pub struct TensorExpression {
 
 impl TensorExpression {
     pub(crate) fn inference_error(error: TensorInferenceError) -> PyErr {
-        let message = match error {
+        let message = match &error {
             TensorInferenceError::Interrupted => return PyKeyboardInterrupt::new_err(()),
             TensorInferenceError::Network(error) => {
-                return NetworkToolingError::new_err(error.to_string());
+                return NetworkToolingError::new_err(error.to_string()).with_rust_cause(error);
             }
             TensorInferenceError::InvalidBuiltinSignature { factory, signature } => {
-                let constructor = match factory {
+                let constructor = match *factory {
                     "gamma" => "dirac_gamma",
                     "f" => "color_f",
                     "t" => "color_t",
@@ -171,7 +172,7 @@ impl TensorExpression {
             }
             error => error.to_string(),
         };
-        PyValueError::new_err(message)
+        PyValueError::new_err(message).with_rust_cause(&error)
     }
 
     /// Construct from untrusted symbolic syntax. Infer missing structure and
@@ -3401,7 +3402,7 @@ impl TensorExpression {
         let left = Self::structured(&self_);
         let right = TensorOperand::extract(rhs)?.into_structured()?;
         left.multiply(&right)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))
             .and_then(|value| Self::from_structured(py, value))
             .map(TensorDispatch::Expression)
             .and_then(|result| result.into_py_any(py))
@@ -3451,7 +3452,7 @@ impl TensorExpression {
         let right = Self::structured(&self_);
         let left = TensorOperand::extract(lhs)?.into_structured()?;
         left.multiply(right)
-            .map_err(|error| PyValueError::new_err(error.to_string()))
+            .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))
             .and_then(|value| Self::from_structured(py, value))
             .map(TensorDispatch::Expression)
     }
@@ -7933,6 +7934,7 @@ mod tests {
 
     #[test]
     fn tensor_scalar_arguments_must_precede_mixed_ports() {
+        Python::initialize();
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let slot = representation
             .slot::<AbstractIndex, _>(AbstractIndex::Normal(29))
@@ -7963,6 +7965,7 @@ mod tests {
 
     #[test]
     fn explicit_scalar_functions_keep_tensor_metadata_opaque() {
+        Python::initialize();
         let scalar = symbol!("opaque_tensor_metadata"; Scalar);
         let vector = spenso::vector_symbol!("opaque_metadata_vector");
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
@@ -7988,6 +7991,7 @@ mod tests {
 
     #[test]
     fn rank_one_tensor_calls_require_one_final_structural_port() {
+        Python::initialize();
         let name = spenso::vector_symbol!("rank_one_tensor_call");
         let representation = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
         let valid = FunctionBuilder::new(name)

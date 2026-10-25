@@ -3,11 +3,13 @@ use super::{
     LengthUnit, MathScript, MathValue, NativeEnum, NativeValue, RenderSettingsTransport, TextValue,
 };
 use crate::drawing::{DrawingKind, EDGE_FIELDS, NODE_FIELDS};
+use crate::PyErrExt;
 use linnest::svg::{Config, Dash, EdgeDrawing, LabelSource, NodeDrawing, Scene, Stroke};
 use linnest::TypstGraphSpec;
 use pyo3::exceptions::PyValueError;
 use pyo3::{PyErr, PyResult, Python};
 use serde_json::{Error as JsonError, Value};
+use std::error::Error as StdError;
 use symbolica_notation::IndexDisplay;
 
 use std::collections::BTreeMap;
@@ -51,6 +53,8 @@ impl NativeSceneError {
         let error = PyValueError::new_err(self.to_string());
         if let Self::JsonValue(cause) | Self::TypstSource(cause) = self {
             Python::attach(|py| error.set_cause(py, Some(cause)));
+        } else if let Some(source) = self.source() {
+            return error.with_rust_cause(source);
         }
         error
     }
@@ -823,7 +827,6 @@ mod tests {
     use crate::typst::{ColorValue, PyTextStyle, SelectorCallbacks, TypstModuleSource};
     use roxmltree::Document;
     use serde_json::json;
-    use std::error::Error as _;
 
     #[test]
     fn label_absence_is_distinct_from_invalid_content_and_styles() {

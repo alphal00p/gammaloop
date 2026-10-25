@@ -1,4 +1,5 @@
 //! Prepared native scenes provide static snapshots and optional live measurements.
+use crate::PyErrExt;
 use std::collections::BTreeMap;
 use std::ffi::CString;
 use std::path::PathBuf;
@@ -286,7 +287,7 @@ impl PyDiagramView {
         }
         let bytes = STIX_TWO_MATH
             .bytes()
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()).with_rust_cause(&error))?;
         let encoded: String = py
             .import("base64")?
             .call_method1("b64encode", (PyBytes::new(py, &bytes),))?
@@ -330,6 +331,7 @@ impl PyDiagramView {
             .extract()?;
         let receipt: Receipt = serde_json::from_str(&json).map_err(|error| {
             PyValueError::new_err(format!("invalid label measurements: {error}"))
+                .with_rust_cause(&error)
         })?;
         if receipt.id != self.id {
             return Err(PyValueError::new_err(
@@ -356,9 +358,9 @@ impl PyDiagramView {
                     height: label.height,
                     baseline: label.baseline,
                 };
-                metrics
-                    .validate()
-                    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                metrics.validate().map_err(|error| {
+                    PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                })?;
                 Ok(metrics)
             })
             .collect()
@@ -406,15 +408,17 @@ impl PyDiagramView {
                     let typeset = if let Some(metrics) = metrics {
                         scene
                             .typeset_mathml(&metrics[offset..offset + count])
-                            .map_err(|error| PyValueError::new_err(error.to_string()))?
+                            .map_err(|error| {
+                                PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                            })?
                     } else if count == 0 {
-                        scene
-                            .typeset(&[])
-                            .map_err(|error| PyValueError::new_err(error.to_string()))?
+                        scene.typeset(&[]).map_err(|error| {
+                            PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                        })?
                     } else {
-                        let source = scene
-                            .label_document()
-                            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+                        let source = scene.label_document().map_err(|error| {
+                            PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                        })?;
                         let pages = typst_export::compile_sources(
                             py,
                             &BTreeMap::from([("main.typ".into(), source.into_bytes())]),
@@ -422,13 +426,14 @@ impl PyDiagramView {
                         )?
                         .into_iter()
                         .map(|bytes| {
-                            String::from_utf8(bytes)
-                                .map_err(|error| PyRuntimeError::new_err(error.to_string()))
+                            String::from_utf8(bytes).map_err(|error| {
+                                PyRuntimeError::new_err(error.to_string()).with_rust_cause(&error)
+                            })
                         })
                         .collect::<PyResult<Vec<_>>>()?;
-                        scene
-                            .typeset(&pages)
-                            .map_err(|error| PyValueError::new_err(error.to_string()))?
+                        scene.typeset(&pages).map_err(|error| {
+                            PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                        })?
                     };
                     offset += count;
                     let svg = scene.render(&typeset).map_err(PyRuntimeError::new_err)?;
@@ -497,9 +502,9 @@ impl PyDiagramView {
         let metrics = labels
             .iter()
             .map(|label| {
-                label
-                    .estimated_metrics()
-                    .map_err(|error| PyValueError::new_err(error.to_string()))
+                label.estimated_metrics().map_err(|error| {
+                    PyValueError::new_err(error.to_string()).with_rust_cause(&error)
+                })
             })
             .collect::<PyResult<Vec<_>>>()?;
         let css = if metrics.is_empty() {

@@ -4,6 +4,7 @@
 //! [`structured_to_html`]; these examples avoid Python module lookup and tensor
 //! inference. [`format_atom`] supplies the same default plain notation.
 
+use linnet_render_py::PyErrExt;
 use std::cmp::Reverse;
 use std::collections::{BTreeMap, BTreeSet, BinaryHeap, HashMap, HashSet};
 use std::fmt::Write;
@@ -1426,8 +1427,8 @@ fn typst_custom_print_source(settings: &DisplaySettings, atom: &Atom) -> PyResul
     let mut index_labels = BTreeMap::new();
     let mut callback_symbols = Vec::new();
     for symbol in atom.get_all_symbols(true) {
-        if let Some(notation) =
-            Notation::lookup(symbol).map_err(|error| PyRuntimeError::new_err(error.to_string()))?
+        if let Some(notation) = Notation::lookup(symbol)
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()).with_rust_cause(&error))?
         {
             let name = symbol.get_name().to_owned();
             if let Some(head) = &notation.head {
@@ -1956,7 +1957,7 @@ impl<'a> ConcreteTensorView<'a> {
         let storage = self
             .layout
             .logical_expanded_to_storage_flat(logical)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))?;
         let value = tensor_value_at_storage(self.tensor, storage)
             .ok_or_else(|| PyValueError::new_err("missing stored tensor component"))?;
         format_tensor_value_html(py, &value, self.settings)

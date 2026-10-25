@@ -1,3 +1,4 @@
+use linnet_render_py::PyErrExt;
 use linnet_render_py::{PyDiagramView, PyRenderSettings};
 use pyo3::exceptions::PyImportError;
 use std::{collections::HashMap, ops::Deref, sync::Arc};
@@ -721,10 +722,10 @@ impl SpensoNet {
     pub(crate) fn broadcast_function(self, function: Symbol) -> PyResult<Self> {
         let structure = Wrap
             .apply(&function, self.structure)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))?;
         let materialized = Wrap
             .apply(&function, self.materialized)
-            .map_err(|error| PyValueError::new_err(error.to_string()))?;
+            .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))?;
         Self::finish(self.network.fun(function), structure, materialized)
     }
 

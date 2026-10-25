@@ -2,6 +2,7 @@ use crate::error;
 use crate::graph::PyFeynmanDiagram;
 use feynkit_graph::{FeynmanDiagram, SceneOptions};
 use feynkit_model::{Model, ParticleId};
+use linnet_render_py::PyErrExt;
 use linnet_render_py::PyRenderSettings;
 use pyo3::exceptions::PyValueError;
 use spynso3::display as tensor_display;
@@ -205,7 +206,7 @@ pub(crate) fn process_view(
         .map(|state| {
             options
                 .process_scene(model, incoming, state, &resolved_config)
-                .map_err(|error| PyValueError::new_err(error.to_string()))
+                .map_err(|error| PyValueError::new_err(error.to_string()).with_rust_cause(&error))
         })
         .collect::<PyResult<Vec<_>>>()?;
     // process_scene resolves these settings before pinning legs around the blob.
