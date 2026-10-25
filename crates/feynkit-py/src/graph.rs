@@ -2656,6 +2656,11 @@ impl PyFeynmanDiagram {
         &self,
         without: Option<&DiagramSelection>,
     ) -> PyResult<SymbolicTensor<PartialStructure>> {
+        if without.is_none() && self.is_complete() {
+            // Region traversal need not preserve the complete owner's authored port order.
+            self.inner.validate().map_err(error::diagram)?;
+            return Ok(self.inner.numerator().clone());
+        }
         let graph = self.inner.underlying();
         let excluded = without.map_or_else(
             || SuBitGraph::empty(graph.n_hedges()),

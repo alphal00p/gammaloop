@@ -512,7 +512,7 @@ impl SymbolicTensor<PartialStructure> {
                                     (value, certified) = before.simplify_color_parts(settings.color.unwrap(), plan.settled.entry(COLOR).or_default())?;
                                     value
                                 }
-                                EPSILON if observed.epsilon_degree < 2 => before.clone(),
+                                EPSILON if observed.epsilon_degree == 0 => before.clone(),
                                 EPSILON => before.collect_with_map(crate::tensor::CollectionMode::Monomials, None,
                                     |value| matches!(value, AtomView::Fun(function) if function.get_symbol() == *crate::epsilon::EPSILON_SYMBOL),
                                     |selected, complete, _| plan.settled.entry(EPSILON).or_default().run(selected, complete, |selected| {
