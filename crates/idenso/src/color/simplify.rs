@@ -1156,22 +1156,9 @@ impl ColorAlgebraSimplifier {
             let Some(chain) = &factor.chain else {
                 continue;
             };
-            let Some(dimension) = color_adjoint_dimension(&chain.start) else {
+            let Some(representation) = chain.adjoint_representation() else {
                 continue;
             };
-            if color_adjoint_dimension(&chain.end).as_ref() != Some(&dimension)
-                || chain.factors.is_empty()
-            {
-                continue;
-            }
-            let representation = adjoint_rep(dimension);
-            if chain
-                .factors
-                .iter()
-                .any(|&matrix| adjoint_generator(representation.as_view(), matrix).is_none())
-            {
-                continue;
-            }
             let ports = SlotCounts::of(factor.atom);
             let outside = SlotCounts::of_factors(
                 product
@@ -1208,26 +1195,91 @@ impl ColorAlgebraSimplifier {
             // never a notation-only opening that the contractor could recollect.
             // A self-closure needs no outside ports. Materialization preserves
             // the caller's whole-term proof; it never establishes one itself.
-            let reduced = Self::simplify_symmetric_prefix_structure_product(&candidate)
-                .or_else(|| {
-                    self.settings
-                        .evaluate_traces
-                        .then(|| {
-                            Self::simplify_cubic_trace_contraction(&candidate)
-                                .or_else(|| self.simplify_trace_structure_product(&candidate))
-                        })
-                        .flatten()
-                })
-                .or_else(|| self.simplify_chain_structure_product(&candidate))
-                .or_else(|| Self::simplify_symmetric_structure_product(&candidate))
-                .or_else(|| Self::simplify_symmetric_structure_pair_product(&candidate))
-                .or_else(|| self.simplify_two_f_loop_product(&candidate))
-                .or_else(|| self.simplify_adjoint_loop_product(&candidate, whole_term));
-            if reduced.is_some() {
-                return reduced;
+            if let Some(reduced) = self.simplify_exposed_adjoint_product(&candidate, whole_term) {
+                return Some(reduced);
+            }
+            for (partner_index, partner) in product.factors.iter().enumerate().skip(index + 1) {
+                let Some(partner_chain) = &partner.chain else {
+                    continue;
+                };
+                if partner_chain.adjoint_representation().as_ref() != Some(&representation) {
+                    continue;
+                }
+                let partner_ports = SlotCounts::of(partner.atom);
+                if partner_ports.opaque
+                    || ports
+                        .ports()
+                        .filter(|port| partner_ports.get(port) == Some(1))
+                        .take(2)
+                        .count()
+                        < 2
+                {
+                    continue;
+                }
+                let pair = SlotCounts::of_factors([factor.atom, partner.atom]);
+                let beside = SlotCounts::of_factors(
+                    product
+                        .factors
+                        .iter()
+                        .enumerate()
+                        .filter(|(other, _)| *other != index && *other != partner_index)
+                        .map(|(_, factor)| factor.atom),
+                );
+                let mut matcher = SlotMatcher::default();
+                let closed_pair = pair.counts.iter().all(|(_, count, slot)| {
+                    *count == 2
+                        && matches!(matcher.classify(*slot), SlotMatch::Explicit(slot)
+                            if !slot.is_concrete_index())
+                });
+                if pair.opaque || beside.opaque || !closed_pair || beside.meets(&pair) {
+                    continue;
+                }
+                let AtomView::Fun(partner_function) = partner.atom else {
+                    continue;
+                };
+                let Some(exposed_partner) = candidate
+                    .factors
+                    .iter()
+                    .position(|factor| factor.atom == partner.atom)
+                else {
+                    continue;
+                };
+                let Ok(explicit_partner) = self.dummies.materialize_indexed_chain(partner_function)
+                else {
+                    continue;
+                };
+                // Only a connected, closed pair is opened speculatively. Keep
+                // the original expression unless an existing identity fires.
+                let pair = candidate.replacing_one(exposed_partner, explicit_partner);
+                let pair = ProductView::parse(pair.as_view());
+                if let Some(reduced) = self.simplify_exposed_adjoint_product(&pair, whole_term) {
+                    return Some(reduced);
+                }
             }
         }
         None
+    }
+
+    fn simplify_exposed_adjoint_product(
+        &self,
+        product: &ProductView,
+        whole_term: bool,
+    ) -> Option<Atom> {
+        Self::simplify_symmetric_prefix_structure_product(product)
+            .or_else(|| {
+                self.settings
+                    .evaluate_traces
+                    .then(|| {
+                        Self::simplify_cubic_trace_contraction(product)
+                            .or_else(|| self.simplify_trace_structure_product(product))
+                    })
+                    .flatten()
+            })
+            .or_else(|| self.simplify_chain_structure_product(product))
+            .or_else(|| Self::simplify_symmetric_structure_product(product))
+            .or_else(|| Self::simplify_symmetric_structure_pair_product(product))
+            .or_else(|| self.simplify_two_f_loop_product(product))
+            .or_else(|| self.simplify_adjoint_loop_product(product, whole_term))
     }
 
     // Preserve main's exact singlet/adjoint projection after the local colour
@@ -2854,6 +2906,20 @@ struct ChainView<'a> {
 }
 
 impl<'a> ChainView<'a> {
+    fn adjoint_representation(&self) -> Option<Atom> {
+        let dimension = color_adjoint_dimension(&self.start)?;
+        if color_adjoint_dimension(&self.end).as_ref() != Some(&dimension)
+            || self.factors.is_empty()
+        {
+            return None;
+        }
+        let representation = adjoint_rep(dimension);
+        self.factors
+            .iter()
+            .all(|&factor| adjoint_generator(representation.as_view(), factor).is_some())
+            .then_some(representation)
+    }
+
     fn parse(expr: AtomView<'a>) -> Option<Self> {
         let AtomView::Fun(f) = expr else {
             return None;
@@ -4759,6 +4825,163 @@ mod reconstruction_tests {
                         }
                     }
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn joint_adjoint_chains_reduce_the_closed_tetrahedron() {
+        test_support::test_initialize();
+        let symbolic_dimension = Atom::var(symbol!("joint_chain::dA"));
+        let spectator = tensor!(joint_chain_spectator, mink!(4, 71101));
+        let one = Atom::one();
+        for dimension in [
+            symbolic_dimension.clone(),
+            Atom::num(3),
+            Atom::num(8),
+            Atom::num(15),
+        ] {
+            let [d0, d1, d2, d3] = ["d_0", "d_1", "d_2", "d_3"].map(|name| {
+                ColorAdjoint {}.to_symbolic([
+                    &dimension,
+                    &Atom::var(symbol!(&format!("joint_chain::{name}"))),
+                ])
+            });
+            let adjoint = adjoint_rep(dimension.clone());
+            let invariant = &dimension * quadratic_casimir(adjoint.clone()).pow(2) / Atom::num(2);
+            for (weight, reverse_first) in [
+                (Atom::one(), false),
+                (Atom::i(), false),
+                (Atom::one(), true),
+            ] {
+                let (input, output) = if reverse_first {
+                    (T.chain_out, T.chain_in)
+                } else {
+                    (T.chain_in, T.chain_out)
+                };
+                // This is the native two-chain network left in the ghost pole,
+                // with F^a_ij = f(a,i,j) and its original ordered connections.
+                let left = chain!(
+                    &d0,
+                    &d1,
+                    &weight * color_f!(&d3, Atom::var(input), Atom::var(output)),
+                    color_f!(&d2, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                );
+                let right = chain!(
+                    &d2,
+                    &d3,
+                    color_f!(&d0, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                    color_f!(&d1, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                );
+                let network = left * right;
+                let coefficient =
+                    Atom::num(if reverse_first { -1 } else { 1 }) * weight * &invariant;
+                for factor in [&one, &spectator] {
+                    let source = SymbolicTensor::infer(factor * &network).unwrap();
+                    for color in [
+                        ColorSimplifySettings::default(),
+                        ColorSimplifySettings::default().without_one_shot_traces(),
+                    ] {
+                        let settings = AlgebraSettings {
+                            color: Some(color),
+                            ..Default::default()
+                        };
+                        let result = source.simplify_algebra(&settings).unwrap();
+                        let expected = factor * &coefficient;
+                        assert_eq!(result.expression(), &expected);
+                        assert_eq!(
+                            result.structure().logical_slots(),
+                            source.structure().logical_slots()
+                        );
+                        SymbolicTensor::validate_atom(result.expression()).unwrap();
+                        assert!(result.same_value(&result.simplify_algebra(&settings).unwrap()));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn joint_adjoint_chain_opening_rejects_captured_mixed_and_open_components() {
+        test_support::test_initialize();
+        let [d0, d1, d2, d3, open] =
+            adjoint_slots("joint_chain_guard", ["d_0", "d_1", "d_2", "d_3", "open"]);
+        let left = chain!(
+            &d0,
+            &d1,
+            color_f!(&d3, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            color_f!(&d2, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+        );
+        let right = chain!(
+            &d2,
+            &d3,
+            color_f!(&d0, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            color_f!(&d1, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+        );
+        assert!(SymbolicTensor::infer(&left * &right).unwrap().is_scalar());
+        let foreign = tensor_symbol!("joint_chain_guard::foreign");
+        let captured = &left * &right * function!(foreign, &d0);
+        assert!(SymbolicTensor::infer(captured.clone()).is_err());
+        let mixed = ColorAdjoint {}.to_symbolic([Atom::num(15), Atom::num(71103)]);
+        let mixed_right = chain!(
+            &d2,
+            &d3,
+            color_f!(&d0, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            color_f!(&mixed, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+        );
+        let open_right = chain!(
+            &d2,
+            &open,
+            color_f!(&d0, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            color_f!(&d1, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+        );
+        let open_source = &left * open_right;
+        assert_eq!(
+            SymbolicTensor::infer(open_source.clone()).unwrap().rank(),
+            2
+        );
+        let foreign_right = chain!(
+            &d2,
+            &d3,
+            color_f!(&d0, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            function!(foreign, &d1, T.chain_in, T.chain_out),
+        );
+        let [f0, f1, f2, f3] = [0, 1, 2, 3].map(|index| {
+            ColorAdjoint {}.to_symbolic([Atom::num(8), AIND_SYMBOLS.cind.call(index)])
+        });
+        let fixed = chain!(
+            &f0,
+            &f1,
+            color_f!(&f3, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            color_f!(&f2, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+        ) * chain!(
+            &f2,
+            &f3,
+            color_f!(&f0, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            color_f!(&f1, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+        );
+        // Raw component payloads are rejected at native admission; the
+        // internal owner must not mistake them for summed abstract indices.
+        assert!(SymbolicTensor::infer(fixed.clone()).is_err());
+        for expression in [
+            captured,
+            &left * mixed_right,
+            open_source,
+            &left * foreign_right,
+            fixed,
+        ] {
+            let dummies = ParseState::default();
+            dummies.reserve_indices(expression.as_view());
+            let simplifier = ColorAlgebraSimplifier::new(Default::default(), dummies);
+            for whole_term in [false, true] {
+                assert!(
+                    simplifier
+                        .simplify_adjoint_chain_connection(
+                            &ProductView::parse(expression.as_view()),
+                            whole_term,
+                        )
+                        .is_none()
+                );
             }
         }
     }
