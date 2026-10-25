@@ -59,6 +59,10 @@ mod admission_census_tests;
 mod entry_probe_diagnostics;
 
 #[cfg(test)]
+#[path = "five_loop/layer_acceptance.rs"]
+mod layer_acceptance;
+
+#[cfg(test)]
 #[path = "five_loop/test_profiles.rs"]
 mod test_profiles;
 
