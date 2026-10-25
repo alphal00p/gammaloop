@@ -190,6 +190,8 @@ export async function mountPair(engine, width) {
     assert(response.ok && result.native === true, `native completion failed: ${JSON.stringify(result)}`);
     assert(result.id === record.request.id, 'backend crossed view identity');
     record.result=result;
+    assert(result.request.pending === false, "backend did not publish completion");
+    record.fields.request={...record.request,...result.request};
     record.update(result);
     await waitReady(record);
     completionOrder.push(record.name);

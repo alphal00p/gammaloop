@@ -94,7 +94,6 @@ def _widget_class(javascript):
             super().__init__(request=initial, scripts=list(scripts))
             self._view = owner
             self._views = set()
-            self._measured = not initial.get("pending", True)
             if html is not None:
                 self.rendered = {
                     "id": self.request["id"],
@@ -116,13 +115,13 @@ def _widget_class(javascript):
                 receipt = content.get("measurements", {})
                 if (
                     not isinstance(receipt, dict)
-                    or self._measured
+                    or not self.request.get("pending", True)
                     or receipt.get("id") != self.request["id"]
                 ):
                     return
                 try:
                     snapshot = self._view.measured(measurements=receipt)
-                    self._measured = True
+                    self.request = {**self.request, "pending": False}
                     self.rendered = {
                         "id": self.request["id"],
                         "html": self._notebook_html(snapshot.to_html()),

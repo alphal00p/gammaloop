@@ -395,6 +395,12 @@ def serve_browser():
                 name = self.path.removeprefix("/receipt/")
                 assert self.path.startswith("/receipt/") and name in jobs
                 assert name not in completed, "duplicate native completion"
+                widget = widgets[name]
+                assert widget.request["pending"]
+                widget._receive(
+                    widget, {"action": "measure", "measurements": payload}, []
+                )
+                assert widget.request["pending"] is False
                 with no_optional_imports():
                     result = verify_capture(jobs[name], name, payload)
                     result.save(output / (name + ".svg"))
@@ -409,6 +415,7 @@ def serve_browser():
                         "html": result.to_html(),
                         "svg": result.to_svg(),
                         "native": True,
+                        "request": widget.request,
                     }
                 )
             except (

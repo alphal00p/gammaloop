@@ -1366,7 +1366,11 @@ with sync_playwright() as driver:
     fn retained_widget_keeps_its_backend_owner_and_comm_after_detach() {
         Python::initialize();
         Python::attach(|py| -> PyResult<()> {
-            let view = channel_view(py, 1)?;
+            let mut view = channel_view(py, 1)?;
+            let Source::Scenes(scenes) = Arc::get_mut(&mut view.source).unwrap() else {
+                unreachable!()
+            };
+            scenes[0].title = Some(LabelSource::text("remount"));
             let locals = PyDict::new(py);
             locals.set_item("widget", view.widget(py)?)?;
             py.run(
@@ -1381,8 +1385,15 @@ def deliver(message):
 
 try:
     deliver({'action': 'attach', 'view': 'first'})
-    receipt = {'id': widget.request['id'], 'metrics': []}
+    assert widget.request['pending'] is True
+    receipt = {'id': widget.request['id'], 'metrics': [
+        {'id': label['id'], 'width': 35, 'height': 19, 'baseline': 12}
+        for label in widget.request['labels']
+    ]}
+    deliver({'action': 'measure', 'measurements': {**receipt, 'id': 'stale'}})
+    assert widget.request['pending'] is True
     deliver({'action': 'measure', 'measurements': receipt})
+    assert widget.request['pending'] is False
     html = widget.rendered['html']
     deliver({'action': 'dispose', 'view': 'first'})
     assert widget._views == set()
@@ -1392,9 +1403,15 @@ try:
 
     deliver({'action': 'attach', 'view': 'second'})
     assert widget._views == {'second'}
+    assert widget.request['pending'] is False
+    completed = widget._view.widget()
+    try:
+        assert completed.request['pending'] is False
+    finally:
+        completed.close()
     deliver({'action': 'measure', 'measurements': receipt})
     assert widget.rendered['html'] == html
-    assert widget._view.measured().to_html() == html
+    assert widget._notebook_html(widget._view.measured().to_html()) == html
     deliver({'action': 'dispose', 'view': 'second'})
     assert widget.comm is comm
 finally:
