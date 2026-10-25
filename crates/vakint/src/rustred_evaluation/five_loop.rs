@@ -1204,13 +1204,31 @@ mod tests {
     }
 
     #[test_log::test]
-    #[ignore = "requires VAKINT_SAVED_APPLICATION pointing to an external generation-54 package"]
+    #[ignore = "requires VAKINT_SAVED_APPLICATION pointing to <data root>/5L/ibps of the external 640-terminal package"]
     fn external_package_all_factorized_terminals_reduce_through_existing_lower_programs() {
         use rustred::reduction::terminal_normalization::VacuumProductProjection;
-        let path = std::env::var_os("VAKINT_SAVED_APPLICATION")
-            .expect("set VAKINT_SAVED_APPLICATION to the uncommitted external package");
+        let path = PathBuf::from(
+            std::env::var_os("VAKINT_SAVED_APPLICATION")
+                .expect("set VAKINT_SAVED_APPLICATION to the uncommitted external package"),
+        );
+        // Lower-loop factors are reduced with the 1L-4L programs of the same
+        // data root, as in production (`load_external_data`). Without them the
+        // engine falls back to the vendored data, which stop at three loops, and
+        // every factor that needs a 4L program is an `UnresolvedFactor` (e.g. the
+        // 4L factor [1,1,1,1,1,1,1,0,0,0] of [0,1,1,0,0,0,1,0,1,1,0,1,0,1,1]).
+        let root = std::env::var_os("VAKINT_EXTERNAL_DATA_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| {
+                path.canonicalize()
+                    .unwrap()
+                    .parent()
+                    .and_then(Path::parent)
+                    .expect("VAKINT_SAVED_APPLICATION is <data root>/5L/ibps")
+                    .to_path_buf()
+            });
         let mut settings = settings();
-        let vakint = Vakint::new().unwrap();
+        let mut vakint = Vakint::new().unwrap();
+        vakint.load_external_data(&root, 4).unwrap();
         let before_load_clone = vakint.clone();
         assert!(vakint.topologies.five_loop_catalogue_statistics().is_none());
         assert!(
@@ -1220,7 +1238,7 @@ mod tests {
                 .is_none()
         );
         let vakint = vakint
-            .with_rustred_application(&mut settings, PathBuf::from(path))
+            .with_rustred_application(&mut settings, path)
             .unwrap();
         let application = vakint.loaded_application().unwrap();
         let cloned_application = before_load_clone.saved_application(&settings).unwrap();
@@ -1327,16 +1345,18 @@ mod tests {
             reducer.clear_cache().unwrap();
             cross_count += usize::from(crosses);
         }
-        assert_eq!(positive_count, 38, "pinned generation-54 scalar products");
+        // Pinned to the published 640-terminal package (generation 54 had
+        // 38 scalar products, 14 numerator charts and 3 cross projections).
+        assert_eq!(positive_count, 25, "pinned 640-pack scalar products");
         assert_eq!(
             positive_supports.len(),
             19,
             "all factorized support classes"
         );
         assert_eq!(
-            projected_count, 14,
-            "pinned generation-54 numerator product inventory"
+            projected_count, 7,
+            "pinned 640-pack numerator product inventory"
         );
-        assert_eq!(cross_count, 3, "native cross-ISP transport inventory");
+        assert_eq!(cross_count, 2, "native cross-ISP transport inventory");
     }
 }
