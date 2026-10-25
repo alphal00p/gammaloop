@@ -291,8 +291,8 @@ mod test {
         test_initialise().unwrap();
         let expr = parse_lit!(
             -GC_1 * GC_11
-                ^ 2 * Q(4, mink(dim, gammalooprs::edge(4, 1)))
-                    * Q(5, mink(dim, gammalooprs::edge(5, 1)))
+                ^ 2 * gammalooprs::Q(4, mink(dim, gammalooprs::edge(4, 1)))
+                    * gammalooprs::Q(5, mink(dim, gammalooprs::edge(5, 1)))
                     * g(
                         mink(dim, gammalooprs::hedge(16)),
                         mink(dim, gammalooprs::hedge(17))
@@ -313,27 +313,27 @@ mod test {
                         dind(cof(3, gammalooprs::hedge(6))),
                         cof(3, gammalooprs::hedge(7))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(4)),
                         bis(4, gammalooprs::hedge(6)),
                         mink(dim, gammalooprs::hedge(8))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(7)),
                         bis(4, gammalooprs::hedge(13)),
                         mink(dim, gammalooprs::hedge(17))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(11)),
                         bis(4, gammalooprs::hedge(5)),
                         mink(dim, gammalooprs::hedge(16))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(5)),
                         bis(4, gammalooprs::hedge(4)),
                         mink(dim, gammalooprs::edge(4, 1))
                     )
-                    * gamma(
+                    * spenso::gamma(
                         bis(4, gammalooprs::hedge(6)),
                         bis(4, gammalooprs::hedge(7)),
                         mink(dim, gammalooprs::edge(5, 1))

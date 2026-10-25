@@ -433,7 +433,9 @@ mod tests {
     #[test]
     fn test_structure_parsing() {
         initialise().unwrap();
-        let expr = parse_lit!(gamma(
+        // This eight-slot test tensor is distinct from the builtin Euler Gamma.
+        let _ = spenso::tensor_symbol!("gammalooprs::gamma");
+        let expr = parse_lit!(gammalooprs::gamma(
             spenso::mink(4, edge(1, 1)),
             spenso::mink(4, edge(1)),
             spenso::mink(4, hedge(1, 1)),

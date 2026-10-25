@@ -2123,6 +2123,51 @@ pub mod test {
                 .iter()
                 .any(|edge| shrunken.filter.includes(&g[edge].1))
         );
+        // Contracting the disjoint forest edges (a,b) and (d,e) preserves
+        // both cycles. The quotient has vertices ab,c,de,f and directed edges
+        // ab->c, c->ab, de->f, f->de, c->de. Check its incidence equations
+        // independently of the DOT printer and of the selected loop carriers.
+        assert_eq!(g.cyclotomatic_number(&outer), 2);
+        assert_eq!(lmb.loop_edges.len(), 2);
+        assert!(lmb.ext_edges.is_empty());
+        let coefficients = [1, 2, 4, 5, 6].map(|edge| {
+            let signature = &lmb.edge_signatures[EdgeIndex::from(edge)];
+            assert!(
+                signature
+                    .external
+                    .iter()
+                    .all(|sign| *sign == SignOrZero::Zero)
+            );
+            signature
+                .internal
+                .iter()
+                .map(|sign| match sign {
+                    SignOrZero::Plus => 1_i8,
+                    SignOrZero::Minus => -1,
+                    SignOrZero::Zero => 0,
+                })
+                .collect::<Vec<_>>()
+        });
+        let [first_out, first_back, second_out, second_back, bridge] = coefficients;
+        for index in 0..2 {
+            assert_eq!(-first_out[index] + first_back[index], 0, "vertex ab");
+            assert_eq!(
+                first_out[index] - first_back[index] - bridge[index],
+                0,
+                "vertex c"
+            );
+            assert_eq!(
+                -second_out[index] + second_back[index] + bridge[index],
+                0,
+                "vertex de"
+            );
+            assert_eq!(second_out[index] - second_back[index], 0, "vertex f");
+        }
+        assert_ne!(
+            first_out[0] * second_out[1] - first_out[1] * second_out[0],
+            0,
+            "the two surviving cycles need independent loop momenta"
+        );
         assert_snapshot!(g.dot_lmb_of(&remainder, &lmb));
     }
 

@@ -816,7 +816,7 @@ impl ColorAlgebraSimplifier {
             return Some(rewritten);
         }
 
-        if factors.len() > 2
+        if factors.len() >= 2
             && let Some(rewritten) = Self::simplify_adjacent_trace_casimir(&rep, &factors)
         {
             return Some(rewritten);
@@ -1106,7 +1106,7 @@ impl ColorAlgebraSimplifier {
             return Some(zero);
         }
         if !matches!(product, AtomView::Mul(_)) {
-            return None;
+            return self.simplify_adjoint_chain_connection(&parsed, whole_term);
         }
         let product = parsed;
 
@@ -1137,7 +1137,7 @@ impl ColorAlgebraSimplifier {
                     .flatten()
                     .inspect(|_| self.certificate.expansion.set(true))
             })
-            .or_else(|| self.simplify_adjoint_chain_connection(&product))
+            .or_else(|| self.simplify_adjoint_chain_connection(&product, whole_term))
             .or_else(|| self.distribute_color_sum_factor(&product, complete, whole_term))
             .or_else(|| self.simplify_embedded_color_node(&product, complete, whole_term))
             .or_else(|| {
@@ -1147,7 +1147,11 @@ impl ColorAlgebraSimplifier {
             })
     }
 
-    fn simplify_adjoint_chain_connection(&self, product: &ProductView) -> Option<Atom> {
+    fn simplify_adjoint_chain_connection(
+        &self,
+        product: &ProductView,
+        whole_term: bool,
+    ) -> Option<Atom> {
         for (index, factor) in product.factors.iter().enumerate() {
             let Some(chain) = &factor.chain else {
                 continue;
@@ -1177,14 +1181,17 @@ impl ColorAlgebraSimplifier {
                     .filter(|(other, _)| *other != index)
                     .map(|(_, factor)| factor.atom),
             );
+            let internally_closed =
+                ports.counts.iter().all(|(_, count, _)| *count == 2) && !outside.meets(&ports);
             if ports.opaque
                 || outside.opaque
-                || ports
-                    .ports()
-                    .filter(|port| outside.get(port) == Some(1))
-                    .take(2)
-                    .count()
-                    < 2
+                || (!internally_closed
+                    && ports
+                        .ports()
+                        .filter(|port| outside.get(port) == Some(1))
+                        .take(2)
+                        .count()
+                        < 2)
             {
                 continue;
             }
@@ -1199,7 +1206,8 @@ impl ColorAlgebraSimplifier {
             // Expose only this connected colour factor, using the source's
             // reserved dummy state. Commit an existing cross-factor identity,
             // never a notation-only opening that the contractor could recollect.
-            // These local identities do not promote complete/whole-term context.
+            // A self-closure needs no outside ports. Materialization preserves
+            // the caller's whole-term proof; it never establishes one itself.
             let reduced = Self::simplify_symmetric_prefix_structure_product(&candidate)
                 .or_else(|| {
                     self.settings
@@ -1212,7 +1220,9 @@ impl ColorAlgebraSimplifier {
                 })
                 .or_else(|| self.simplify_chain_structure_product(&candidate))
                 .or_else(|| Self::simplify_symmetric_structure_product(&candidate))
-                .or_else(|| Self::simplify_symmetric_structure_pair_product(&candidate));
+                .or_else(|| Self::simplify_symmetric_structure_pair_product(&candidate))
+                .or_else(|| self.simplify_two_f_loop_product(&candidate))
+                .or_else(|| self.simplify_adjoint_loop_product(&candidate, whole_term));
             if reduced.is_some() {
                 return reduced;
             }
@@ -4435,6 +4445,14 @@ fn positive_integer(expr: AtomView) -> Option<i64> {
 #[cfg(test)]
 mod reconstruction_tests {
     use super::*;
+    use crate::tensor::{AlgebraContraction, AlgebraSettings};
+    use crate::test_support;
+    use crate::test_support::TestReps;
+    use crate::{CookMode, CookSettings, IndexTooling};
+    use spenso::structure::dimension::Dimension;
+    use spenso::structure::representation::Euclidean;
+    use spenso::{mink, tensor, tensor_symbol};
+    use std::collections::{BTreeMap, BTreeSet};
     use std::sync::{Arc, Mutex};
     use symbolica::{domains::float::Float, parse, parse_lit, symbol};
 
@@ -4611,6 +4629,173 @@ mod reconstruction_tests {
             ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first)]),
             spenso::dind!(ColorFundamental {}.to_symbolic([Atom::num(3), Atom::num(first + 1)])),
         )
+    }
+
+    #[test]
+    fn closed_two_generator_trace_keeps_the_external_line_casimir() {
+        test_support::test_initialize();
+        let [a, b] = adjoint_slots("closed_pair_casimir", ["a", "b"]);
+        let representation = fundamental_rep(Atom::num(3));
+        let closed = trace!(&representation, color_t!(&a), color_t!(&a));
+        let distinct = trace!(&representation, color_t!(&a), color_t!(&b));
+        for color in [
+            ColorSimplifySettings::default(),
+            ColorSimplifySettings::default().without_one_shot_traces(),
+        ] {
+            let settings = AlgebraSettings {
+                color: Some(color),
+                ..Default::default()
+            };
+            for normalization in [Atom::one(), Atom::num(3)] {
+                let source = SymbolicTensor::infer(&closed / &normalization).unwrap();
+                let result = source.simplify_algebra(&settings).unwrap();
+                let expected =
+                    Atom::num(3) * quadratic_casimir(representation.clone()) / &normalization;
+                assert_eq!(result.expression(), &expected);
+                assert!(result.is_scalar());
+                assert!(result.same_value(&result.simplify_algebra(&settings).unwrap()));
+            }
+            let source = SymbolicTensor::infer(distinct.clone()).unwrap();
+            let result = source.simplify_algebra(&settings).unwrap();
+            let expected =
+                quadratic_index(representation.clone()) * color_metric(a.clone(), b.clone());
+            assert_eq!(result.expression(), &expected);
+            assert_eq!(
+                result.structure().logical_slots(),
+                source.structure().logical_slots()
+            );
+            assert_eq!(result.rank(), 2);
+        }
+
+        let compact = ColorAdjoint {}.to_symbolic([Atom::num(8)]);
+        let open = trace!(&representation, color_t!(&compact), color_t!(&compact));
+        let source = SymbolicTensor::infer(open.clone()).unwrap();
+        assert_eq!(source.rank(), 2);
+        let simplifier = ColorAlgebraSimplifier::new(Default::default(), ParseState::default());
+        assert!(
+            simplifier
+                .simplify_trace_node(open.as_view(), true, LineContext::Isolated)
+                .is_none()
+        );
+        let different_space = ColorAdjoint {}.to_symbolic([Atom::num(15), Atom::num(71021)]);
+        let mixed = trace!(&representation, color_t!(&a), color_t!(&different_space));
+        assert!(
+            simplifier
+                .simplify_trace_node(mixed.as_view(), true, LineContext::Isolated)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn closed_adjoint_tetrahedra_keep_orientation_and_function_indices() {
+        test_support::test_initialize();
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let spectator = tensor!(closed_tetrahedron_spectator, mink!(4, 71023));
+        let one = Atom::one();
+        for dimension in [3, 8, 15] {
+            let [a, b, c, d, x] = [0, 7, 2, 8, 1_000_001].map(|index| {
+                let head = if index == 1_000_001 {
+                    symbol!("gammalooprs::dummy")
+                } else {
+                    symbol!("gammalooprs::hedge")
+                };
+                ColorAdjoint {}.to_symbolic([Atom::num(dimension), head.call(index)])
+            });
+            let invariant = Atom::num((dimension, 2))
+                * adjoint_casimir_for_dimension(Atom::num(dimension)).pow(2);
+            for reverse_first in [false, true] {
+                let (input, output) = if reverse_first {
+                    (T.chain_out, T.chain_in)
+                } else {
+                    (T.chain_in, T.chain_out)
+                };
+                // These are the two exact closed color networks left by the
+                // ghost pole fixture, with its original raw-f ordering.
+                let self_closed = chain!(
+                    &b,
+                    &a,
+                    color_f!(&a, Atom::var(input), Atom::var(output)),
+                    color_f!(&x, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                    color_f!(&b, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                    color_f!(&x, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                );
+                let connected = chain!(
+                    &a,
+                    &b,
+                    color_f!(&c, Atom::var(input), Atom::var(output)),
+                    color_f!(&d, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                    color_f!(&a, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                ) * color_f!(&c, &b, &d);
+                let orientation = Atom::num(if reverse_first { -1 } else { 1 });
+                for (network, coefficient) in [
+                    (self_closed, -&orientation * &invariant),
+                    (connected, &orientation * &invariant),
+                ] {
+                    for factor in [&one, &spectator] {
+                        let expression = factor * &network;
+                        let source =
+                            SymbolicTensor::infer(cooking.try_cook(expression.as_view()).unwrap())
+                                .unwrap();
+                        for color in [
+                            ColorSimplifySettings::default(),
+                            ColorSimplifySettings::default().without_one_shot_traces(),
+                        ] {
+                            let settings = AlgebraSettings {
+                                color: Some(color),
+                                ..Default::default()
+                            };
+                            let result = source.simplify_algebra(&settings).unwrap();
+                            assert_eq!(result.expression(), &(factor * &coefficient));
+                            assert_eq!(
+                                result.structure().logical_slots(),
+                                source.structure().logical_slots()
+                            );
+                            SymbolicTensor::validate_atom(result.expression()).unwrap();
+                            assert!(
+                                result.same_value(&result.simplify_algebra(&settings).unwrap())
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn internally_closed_adjoint_chains_reject_captured_and_mixed_slots() {
+        test_support::test_initialize();
+        let [a, b, x, c] = adjoint_slots("closed_chain_guard", ["a", "b", "x", "c"]);
+        let foreign = tensor_symbol!("closed_chain_guard::foreign");
+        let other_x = ColorAdjoint {}.to_symbolic([Atom::num(15), Atom::num(71029)]);
+        let network = |middle: &Atom, endpoint: &Atom| {
+            chain!(
+                &b,
+                &a,
+                color_f!(&a, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                color_f!(middle, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                color_f!(endpoint, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+                color_f!(&x, Atom::var(T.chain_in), Atom::var(T.chain_out)),
+            )
+        };
+        for expression in [
+            network(&x, &b) * function!(foreign, &a),
+            network(&other_x, &b),
+            network(&x, &c),
+        ] {
+            let dummies = ParseState::default();
+            dummies.reserve_indices(expression.as_view());
+            let simplifier = ColorAlgebraSimplifier::new(Default::default(), dummies);
+            assert!(
+                simplifier
+                    .simplify_adjoint_chain_connection(
+                        &ProductView::parse(expression.as_view()),
+                        false,
+                    )
+                    .is_none()
+            );
+        }
     }
 
     #[test]
@@ -4923,7 +5108,10 @@ mod reconstruction_tests {
             // when the neighbouring tensor has no applicable colour identity.
             assert!(
                 simplifier
-                    .simplify_adjoint_chain_connection(&ProductView::parse(expression.as_view()))
+                    .simplify_adjoint_chain_connection(
+                        &ProductView::parse(expression.as_view()),
+                        false,
+                    )
                     .is_none(),
                 "{expression}"
             );
@@ -4937,7 +5125,7 @@ mod reconstruction_tests {
         );
         assert!(
             simplifier
-                .simplify_adjoint_chain_connection(&ProductView::parse(retained.as_view()))
+                .simplify_adjoint_chain_connection(&ProductView::parse(retained.as_view()), false,)
                 .is_none()
         );
     }
@@ -5352,26 +5540,30 @@ mod reconstruction_tests {
     /// another representation spelled like a colour port is internal too.
     #[test]
     fn colour_power_renames_dummies_that_share_a_port_label() {
-        use crate::IndexTooling;
-        use crate::tensor::{AlgebraContraction, AlgebraSettings};
-        crate::test_support::test_initialize();
+        test_support::test_initialize();
         let adjoint = ColorAdjoint {}.new_rep(symbol!("power_ports::Na"));
         let label = |name: &str| Atom::var(symbol!(&format!("power_ports::{name}")));
         let [p, q] = ["p", "q"].map(|name| adjoint.to_symbolic([label(name)]));
         let rep = ColorFundamental {}
             .new_rep(symbol!("power_ports::Nc"))
             .to_symbolic([]);
-        let [v, w] = ["V", "W"].map(|name| spenso::tensor_symbol!(&format!("power_ports::{name}")));
-        let euclidean = |name: &str| {
-            spenso::structure::representation::Euclidean {}
-                .new_rep(4)
-                .to_symbolic([label(name)])
-        };
+        let [v, w] = ["V", "W"].map(|name| tensor_symbol!(&format!("power_ports::{name}")));
+        let euclidean = |name: &str| Euclidean {}.new_rep(4).to_symbolic([label(name)]);
         let dot = |name: &str| function!(v, euclidean(name)) * function!(w, euclidean(name));
         let sum = trace!(&rep, color_t!(&p), color_t!(&q)) * dot("p")
             + color_metric(p.clone(), q.clone()) * dot("r");
-        let result = SymbolicTensor::infer(sum.pow(Atom::num(2)))
-            .unwrap()
+        let mut source_slots = BTreeSet::new();
+        sum.visitor(&mut |node| {
+            if let AtomView::Fun(function) = node
+                && [v, w].contains(&function.get_symbol())
+            {
+                assert_eq!(function.get_nargs(), 1);
+                source_slots.insert(function.iter().next().unwrap().to_owned());
+            }
+            true
+        });
+        let source = SymbolicTensor::infer(sum.pow(Atom::num(2))).unwrap();
+        let result = source
             .simplify_algebra(&AlgebraSettings {
                 color: Some(ColorSimplifySettings::default()),
                 contract: AlgebraContraction::None,
@@ -5380,23 +5572,77 @@ mod reconstruction_tests {
             .unwrap();
         // Capturing euc(4,p) would leave it on three ports.
         let readmitted = SymbolicTensor::infer(result.expression().clone()).unwrap();
+        assert!(source.is_scalar());
+        assert_eq!(
+            result.structure().logical_slots(),
+            source.structure().logical_slots()
+        );
+        assert_eq!(
+            readmitted.structure().logical_slots(),
+            result.structure().logical_slots()
+        );
+        let expanded = result.expression().expand();
+        let summands = match expanded.as_view() {
+            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
+            term => vec![term],
+        };
+        for summand in summands {
+            let mut pairs = BTreeMap::<Atom, [usize; 2]>::new();
+            summand.visitor(&mut |node| {
+                if let AtomView::Fun(function) = node
+                    && [v, w].contains(&function.get_symbol())
+                {
+                    assert_eq!(function.get_nargs(), 1);
+                    let slot = function.iter().next().unwrap();
+                    let native = SlotMatcher::default()
+                        .parse::<LibraryRep, AbstractIndex>(slot)
+                        .unwrap();
+                    assert_eq!(native.rep().rep, LibraryRep::from(Euclidean {}));
+                    assert_eq!(native.rep().dim, Dimension::Concrete(4));
+                    pairs.entry(slot.to_owned()).or_default()
+                        [usize::from(function.get_symbol() == w)] += 1;
+                }
+                true
+            });
+            assert_eq!(pairs.len(), 2, "each copy retains its own closed pair");
+            assert!(pairs.values().all(|counts| *counts == [1, 1]));
+            assert!(
+                pairs.keys().any(|slot| !source_slots.contains(slot)),
+                "one pair must be fresh; the other may retain a source label"
+            );
+        }
         let fresh = ParseState::<AbstractIndex>::default();
         let [d0, d1] = [fresh.fresh_index(), fresh.fresh_index()].map(Atom::from);
         let paired = |index: &Atom| {
-            let slot = spenso::structure::representation::Euclidean {}
-                .new_rep(4)
-                .to_symbolic([index.clone()]);
+            let slot = Euclidean {}.new_rep(4).to_symbolic([index.clone()]);
             function!(v, &slot) * function!(w, slot)
         };
         let expected = (quadratic_index(rep.clone()) + Atom::one()).pow(Atom::num(2))
             * Atom::var(symbol!("power_ports::Na"))
             * paired(&d0)
             * paired(&d1);
-        let difference = (readmitted.expression().clone() - expected)
+        let canonical_actual = readmitted
+            .expression()
             .canonize(AbstractIndex::Dummy)
             .unwrap()
             .expand();
-        assert!(difference.is_zero(), "{}", result.expression());
+        let canonical_expected = (Atom::var(symbol!("power_ports::Na"))
+            * (Atom::one() + quadratic_index(rep.clone()) + quadratic_index(rep.clone()).pow(2))
+            + Atom::var(symbol!("power_ports::Nc")) * quadratic_casimir(rep.clone()))
+            * paired(&d0)
+            * paired(&d1);
+        let canonical_expected = canonical_expected
+            .canonize(AbstractIndex::Dummy)
+            .unwrap()
+            .expand();
+        assert_eq!(canonical_actual, canonical_expected);
+        let reference = expected.canonize(AbstractIndex::Dummy).unwrap().expand();
+        TestReps::assert_color_invariant_equivalence(
+            &canonical_actual,
+            &reference,
+            &rep,
+            &adjoint.to_symbolic([]),
+        );
     }
 
     /// Distributing a sum into a product renames the summand's own dummies

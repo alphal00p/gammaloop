@@ -342,8 +342,8 @@ mod tests {
     use super::*;
     use idenso::{bis, gamma};
     use linnet::half_edge::involution::EdgeIndex;
-    use spenso::{chain, mink};
-    use symbolica::symbol;
+    use spenso::{chain, mink, tensor_symbol};
+    use symbolica::{function, symbol};
 
     #[test]
     fn compare_canonicalizes_contracted_uv_indices() {
@@ -363,14 +363,42 @@ mod tests {
         };
         let legacy = expression(1);
         let hedge = expression(0);
+        assert_ne!(legacy, hedge);
         let legacy = ComparableExpr::new(&legacy);
         let hedge = ComparableExpr::new(&hedge);
 
-        assert_ne!(legacy.normalized().unwrap(), hedge.normalized().unwrap());
         assert!(
             legacy
                 .equivalent_to(&hedge)
                 .expect("test expressions should canonicalize")
+        );
+    }
+
+    #[test]
+    fn compare_canonicalizes_labels_retained_by_normalization() {
+        crate::initialisation::test_initialise().unwrap();
+        let left = tensor_symbol!("gammalooprs::compare_fallback_left");
+        let right = tensor_symbol!("gammalooprs::compare_fallback_right");
+        let expression = |topology| {
+            let lorentz = mink!(4, Atom::from(Aind::UVTerm(topology, 2)));
+            let spinor = bis!(4, Atom::from(Aind::UVTerm(topology, 3)));
+            function!(left, lorentz.clone(), spinor.clone()) * function!(right, lorentz, spinor)
+        };
+        let legacy = expression(1);
+        let hedge = expression(0);
+        assert_ne!(legacy, hedge);
+        let legacy = ComparableExpr::new(&legacy);
+        let hedge = ComparableExpr::new(&hedge);
+
+        // Neither head has two ports in one representation to form a chain.
+        assert_ne!(
+            legacy.normalized().unwrap().collect_factors(),
+            hedge.normalized().unwrap().collect_factors()
+        );
+        assert!(
+            legacy
+                .equivalent_to(&hedge)
+                .expect("contracted mixed-representation labels should canonicalize")
         );
     }
 }
