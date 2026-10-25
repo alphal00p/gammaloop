@@ -211,7 +211,7 @@ impl Graph {
                 orientations: vec![],
             };
             for orientation in expr.orientations.iter() {
-                let eta_expr = orientation.expression.to_atom_inverse();
+                let eta_expr = orientation.to_atom();
                 let mut ose_expr = eta_expr.replace_multiple(&replacement_rules);
 
                 let inverse_energies = get_cff_inverse_energy_product_impl(
@@ -241,5 +241,89 @@ impl Graph {
 
         let cut_cff = CutCFF { terms };
         Ok(cut_cff)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use feynkit_cff::RaisedEnergySurfaceGroup;
+    use linnet::half_edge::subgraph::SuBitGraph;
+
+    use super::*;
+    use crate::{
+        finalized_runtime_dot, graph::parse::IntoFinalizedRuntimeGraph,
+        initialisation::test_initialise,
+    };
+
+    #[test]
+    fn residue_terms_preserve_attached_tadpole_weight_and_normalization() {
+        test_initialise().unwrap();
+        assert!(symbolica::license::LicenseManager::is_licensed());
+        let mut graph: Graph = finalized_runtime_dot!(
+            digraph bubble_with_tadpole {
+                projector=1
+                edge [particle=scalar_1 num=1]
+                node [num=1]
+                ext [style=invis]
+                ext -> A:0 [id=3 sink="{ufo_order:0}"]
+                B:1 -> ext [id=2 source="{ufo_order:2}"]
+                A:2 -> B:3 [id=1 lmb_id=0 source="{ufo_order:1}" sink="{ufo_order:0}"]
+                A:4 -> B:5 [id=0 source="{ufo_order:2}" sink="{ufo_order:1}"]
+                A:6 -> A:7 [id=4 lmb_id=1 source="{ufo_order:3}" sink="{ufo_order:4}"]
+            },
+            "scalars"
+        )
+        .unwrap();
+        assert_eq!(graph.get_loop_number(), 2);
+        let pattern = OrientationPattern::default();
+        let rewrite = graph.get_esurface_canonization(&graph.loop_momentum_basis);
+        let generated = graph.generate_cff(&[], &rewrite, &pattern).unwrap();
+        let surface = *generated.expression.energy_surface_ids().first().unwrap();
+        let group = RaisedEnergySurfaceGroup {
+            surface_ids: vec![surface],
+            max_occurrence: 1,
+        };
+        let residue = generated
+            .select_energy_surface_residue(&group)
+            .into_iter()
+            .next()
+            .unwrap();
+
+        let mut cuts = CutSet::empty(graph.n_hedges());
+        cuts.residue_selector.lu_cut = Some(group);
+        let contract: SuBitGraph = graph.empty_subgraph();
+        let actual = graph.cff(&contract, &cuts, &pattern).unwrap();
+        let replacements = graph.surface_cache.get_all_replacements(&[]);
+        let inverse_energies =
+            get_cff_inverse_energy_product_impl(&graph, &graph.underlying.full_filter(), &[]);
+        // Keep the original two-loop phase (-i)^2 and spatial measure.
+        let normalization = -Atom::num(1) / (Atom::var(GS.pi) * 2).pow(6);
+        let expected = residue
+            .orientations
+            .iter()
+            .map(|orientation| {
+                // The attached free tadpole contributes exactly one half.
+                let weighted_tree = Atom::num((1, 2)) * orientation.expression.to_atom_inverse();
+                weighted_tree.replace_multiple(&replacements)
+                    * inverse_energies.clone()
+                    * normalization.clone()
+            })
+            .collect::<Vec<_>>();
+        assert!(expected.iter().any(|atom| !atom.is_zero()));
+        assert_eq!(actual.terms.len(), 1);
+        let term = &actual.terms[&CutCFFIndex {
+            left_threshold_order: None,
+            right_threshold_order: None,
+            lu_cut_order: Some(1),
+        }];
+        assert_eq!(term.expression, expected);
+        assert_eq!(
+            term.orientations,
+            residue
+                .orientations
+                .iter()
+                .map(|orientation| orientation.data.orientation.clone())
+                .collect::<Vec<_>>()
+        );
     }
 }

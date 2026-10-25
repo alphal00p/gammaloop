@@ -67,7 +67,7 @@ impl CffExpressionExt for CffResult {
         self.orientations
             .iter()
             .filter(|orientation| pattern.filter(orientation.orientation()))
-            .map(|orientation| orientation.expression.to_atom_inverse())
+            .map(|orientation| orientation.to_atom())
             .reduce(|sum, term| sum + term)
             .unwrap_or_default()
     }
@@ -77,7 +77,7 @@ impl CffExpressionExt for CffResult {
             .iter()
             .map(|orientation| {
                 if pattern.filter(orientation.orientation()) {
-                    orientation.expression.to_atom_inverse()
+                    orientation.to_atom()
                 } else {
                     Atom::Zero
                 }
@@ -93,12 +93,81 @@ impl CffExpressionExt for CffResult {
             .iter()
             .map(|orientation| {
                 let atom = if pattern.filter(orientation.orientation()) {
-                    orientation.expression.to_atom_inverse()
+                    orientation.to_atom()
                 } else {
                     Atom::Zero
                 };
                 (atom, orientation.data.clone())
             })
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use feynkit_cff::{CffEdge, CffGenerator, CffGraph, EdgeId, VertexId};
+
+    use super::*;
+    use crate::initialisation::test_initialise;
+
+    #[test]
+    fn all_root_lowerings_preserve_free_tadpole_weights_and_selection() {
+        test_initialise().unwrap();
+        assert!(symbolica::license::LicenseManager::is_licensed());
+
+        for count in [1, 2] {
+            let graph = CffGraph::new(
+                1,
+                (0..count).map(|edge| {
+                    CffEdge::internal(EdgeId::new(edge), VertexId::new(0), VertexId::new(0))
+                }),
+            )
+            .unwrap();
+            let result = CffGenerator::default().generate(&graph).unwrap();
+            assert_eq!(result.orientations.len(), 1 << count);
+            let weight = Atom::num((1_i64, 1_i64 << count));
+            let selected =
+                OrientationPattern::from_orientation(&result.orientations[OrientationId(0)]);
+            let rejected = OrientationPattern::from(Atom::Zero);
+
+            for (pattern, expected_total) in [
+                (OrientationPattern::default(), Atom::num(1)),
+                (selected, weight.clone()),
+                (rejected, Atom::Zero),
+            ] {
+                // A free self-loop contributes one half per contour direction.
+                // This sum is authored independently of the owner's lowering API.
+                let explicit_sum = result
+                    .orientations
+                    .iter()
+                    .filter(|orientation| pattern.filter(orientation.orientation()))
+                    .fold(Atom::Zero, |sum, _| sum + weight.clone());
+                assert_eq!(explicit_sum, expected_total);
+                assert_eq!(
+                    CffExpressionExt::to_atom(&result, pattern.clone()),
+                    expected_total
+                );
+
+                let atoms = result.get_orientation_atoms(pattern.clone());
+                let with_data = result.get_orientation_atoms_with_data(pattern.clone());
+                assert_eq!(atoms.len(), result.orientations.len());
+                assert_eq!(with_data.len(), result.orientations.len());
+                for (index, orientation) in result.orientations.iter().enumerate() {
+                    let expected = if pattern.filter(orientation.orientation()) {
+                        weight.clone()
+                    } else {
+                        Atom::Zero
+                    };
+                    let id = OrientationId(index);
+                    assert_eq!(atoms[id], expected);
+                    assert_eq!(with_data[id].0, expected);
+                    assert_eq!(with_data[id].1, orientation.data);
+                }
+                assert_eq!(
+                    atoms.into_iter().fold(Atom::Zero, |sum, term| sum + term),
+                    expected_total
+                );
+            }
+        }
     }
 }

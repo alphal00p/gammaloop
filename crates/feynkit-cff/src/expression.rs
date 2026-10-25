@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
+use symbolica::atom::Atom;
+use symbolica::domains::rational::Rational;
 use typed_index_collections::TiVec;
 
 use crate::{
@@ -31,9 +33,19 @@ pub struct OrientationExpression {
     pub id: OrientationId,
     pub data: OrientationData,
     pub expression: ExpressionTree<SurfaceId>,
+    /// Exact contour weight, including the average over free tadpole closures.
+    /// This required field changes the native serialized layout; older
+    /// topology-only preparations must be regenerated.
+    #[bincode(with_serde)]
+    pub prefactor: Rational,
 }
 
 impl OrientationExpression {
+    /// Lower the complete weighted denominator expression for this orientation.
+    pub fn to_atom(&self) -> Atom {
+        Atom::num(self.prefactor.clone()) * self.expression.to_atom_inverse()
+    }
+
     /// Unfold the tree into denominator products, one vector per additive term.
     pub fn denominator_products(&self) -> Vec<Vec<SurfaceId>> {
         self.expression
@@ -252,7 +264,9 @@ impl CffExpression {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{EdgeOrientation, GraphOrientation, NodeId};
+    use crate::{
+        EdgeOrientation, EnergySurface, ExternalShift, GraphOrientation, NodeId, Surface, VertexSet,
+    };
 
     fn expression_with_raised_surfaces() -> CffExpression {
         let first = SurfaceId::Energy(EnergySurfaceId(0));
@@ -265,7 +279,33 @@ mod tests {
                 orientation: GraphOrientation::new(),
             },
             expression: tree,
+            prefactor: Rational::one(),
         }])
+    }
+
+    #[test]
+    fn legacy_native_orientation_without_contour_weight_is_rejected() {
+        #[derive(bincode::Encode)]
+        struct LegacyOrientation {
+            id: OrientationId,
+            data: OrientationData,
+            expression: ExpressionTree<SurfaceId>,
+        }
+        let old = LegacyOrientation {
+            id: OrientationId(0),
+            data: OrientationData {
+                orientation: GraphOrientation::new(),
+            },
+            expression: ExpressionTree::from_root(SurfaceId::Unit),
+        };
+        let bytes = bincode::encode_to_vec(old, bincode::config::standard()).unwrap();
+        assert!(
+            bincode::decode_from_slice::<OrientationExpression, _>(
+                &bytes,
+                bincode::config::standard()
+            )
+            .is_err()
+        );
     }
 
     #[test]
@@ -285,6 +325,45 @@ mod tests {
                 .expression
                 .root_to_leaf_paths(),
             vec![vec![&SurfaceId::Unit, &SurfaceId::Unit]]
+        );
+    }
+
+    #[test]
+    fn nonunit_contour_weight_survives_surface_remap_and_raised_residue() {
+        let mut expression = expression_with_raised_surfaces();
+        expression.orientations[OrientationId(0)].prefactor = Rational::new(-3, 8);
+        let mut source = SurfaceCache::default();
+        for edge in [0, 1] {
+            source.intern(Surface::Energy(EnergySurface {
+                energies: vec![EdgeId::new(edge)],
+                external_shift: ExternalShift::default(),
+                vertex_set: VertexSet::default(),
+            }));
+        }
+        let mut destination = SurfaceCache::default();
+        destination.intern(Surface::Energy(EnergySurface {
+            energies: vec![EdgeId::new(9)],
+            external_shift: ExternalShift::default(),
+            vertex_set: VertexSet::default(),
+        }));
+        let remap = destination.merge(&source);
+        expression.remap_surfaces(&remap).unwrap();
+        assert_eq!(
+            expression.to_atom(),
+            Atom::num((-3, 8))
+                / Atom::from(SurfaceId::Energy(EnergySurfaceId(1)))
+                / Atom::from(SurfaceId::Energy(EnergySurfaceId(2)))
+        );
+        let residues = expression.select_energy_surface_residue(&RaisedEnergySurfaceGroup {
+            surface_ids: vec![EnergySurfaceId(1), EnergySurfaceId(2)],
+            max_occurrence: 2,
+        });
+        assert_eq!(residues[0].to_atom(), Atom::Zero);
+        assert_eq!(residues[1].to_atom(), Atom::num((-3, 8)));
+        assert!(
+            residues
+                .iter()
+                .all(|r| r.orientations()[0].prefactor == Rational::new(-3, 8))
         );
     }
 
