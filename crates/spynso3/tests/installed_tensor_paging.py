@@ -3,6 +3,7 @@
 import builtins
 import importlib.util
 import itertools
+import json
 import re
 import sys
 import tempfile
@@ -15,7 +16,7 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import Mock, patch
 
-from symbolica import AtomType, E, MathMLViewer, PrintMode, S
+from symbolica import AtomType, E, Expression, MathMLViewer, PrintMode, S
 from symbolica.community.tensor import (
     AUTO,
     DisplaySettings,
@@ -33,6 +34,11 @@ from symbolica.community.tensor import (
     trace,
 )
 from symbolica.community.tensor_native import _compile_typst
+
+try:
+    from anywidget import AnyWidget
+except ImportError:
+    AnyWidget = None
 
 
 def graph_index_print(expression, *, mode, **options):
@@ -175,6 +181,27 @@ class DirectLeafPathTests(PagingAssertions):
                 side_effect=AssertionError("paging invoked the Typst compiler"),
             )
         )
+
+    def test_loaded_legacy_mathml_is_literal_and_forbidden_elements_are_rejected(self):
+        payload = '<img src="x" onerror="legacy_loaded_xss=1"/>'
+        head = S(
+            "paging_xss::" + json.dumps(payload),
+            tags=["spenso::tensor", "spenso::print-head:mathml:" + payload],
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            filename = str(Path(directory) / "expression.bin")
+            head(1).save(filename)
+            loaded = Expression.load(filename)
+        value = TensorExpression(loaded)
+        html = value.to_html()
+        self.assertNotIn("<img", html)
+        self.assertIn("&lt;img", html)
+        root = ET.fromstring(re.search(r"<math\b.*?</math>", html, re.DOTALL).group())
+        self.assertIn(json.dumps(payload), "".join(root.itertext()))
+        self.assertEqual(value.to_expression(), loaded)
+        for forbidden in (payload, "<script>alert(1)</script>", "<iframe/>"):
+            with self.subTest(forbidden=forbidden), self.assertRaises(ValueError):
+                TensorName("paging_xss::Rejected", print={"mathml": forbidden})
 
     def test_native_and_browser_pages_need_no_typst_module_worker_or_compiler(self):
         gamma = TensorExpression.dirac_gamma(4)
@@ -491,12 +518,10 @@ class BrowserPagingTests(PagingAssertions):
         self.assertEqual(self.value.to_expression(), self.original)
 
     @unittest.skipUnless(
-        importlib.util.find_spec("anywidget") is not None,
+        AnyWidget is not None,
         "live widget navigation requires the optional anywidget package",
     )
     def test_live_widget_navigation_and_page_size(self):
-        from anywidget import AnyWidget
-
         widget = self.pager._get_widget()
         self.pager._on_message(widget, {"action": "attach", "view": "browser"}, [])
         self.assertIsInstance(widget, AnyWidget)
