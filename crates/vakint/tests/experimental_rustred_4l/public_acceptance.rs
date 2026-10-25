@@ -1,8 +1,11 @@
 //! End-to-end tests through the public backend, without a test-local reducer.
 
 use super::{acceptance_inputs, retained_parent_descriptor, test_utils};
+use symbolica::domains::float::{Complex, Float};
 use test_utils::{EvaluationTestInput, EvaluationTestLane, RustRedParityPolicy, TensorPrepass};
-use vakint::{EvaluationMethod, EvaluationOrder, FMFTOptions};
+use vakint::{
+    EvaluationMethod, EvaluationOrder, FMFTOptions, NumericalEvaluationResult, VakintSettings,
+};
 
 #[path = "external_master_oracle.rs"]
 mod external_master_oracle;
@@ -35,9 +38,48 @@ fn h_rank_four_matches_reference_without_form() {
         ),
         reference["raw_form_sha256"].as_str().unwrap()
     );
-    let expected = serde_json::from_value(reference["coefficients"].clone()).unwrap();
+    let expected: Vec<(i64, (String, String))> =
+        serde_json::from_value(reference["coefficients"].clone()).unwrap();
     let masses = case.parameters_at_reference_point(settings.run_time_decimal_precision);
     let external = case.externals_at_reference_point(settings.run_time_decimal_precision);
+    // Exercise the public default indexed path directly. The shared comparison
+    // helper below deliberately selects compact dots and cannot cover this path.
+    assert!(!settings.use_dot_product_notation);
+    let direct = test_utils::get_vakint(VakintSettings {
+        evaluation_order: EvaluationOrder::rustred_only(),
+        ..settings.clone()
+    });
+    let evaluated = direct.evaluate(case.input.as_view()).unwrap();
+    let (numerical, statistical) = direct
+        .numerical_evaluation(
+            evaluated.as_view(),
+            &masses,
+            &Default::default(),
+            Some(&external),
+        )
+        .unwrap();
+    let direct_reference = NumericalEvaluationResult::from_values(
+        expected
+            .iter()
+            .map(|(power, (real, imaginary))| {
+                (
+                    *power,
+                    Complex::new(
+                        Float::parse(real.as_str(), Some(settings.get_binary_precision())).unwrap(),
+                        Float::parse(imaginary.as_str(), Some(settings.get_binary_precision()))
+                            .unwrap(),
+                    ),
+                )
+            })
+            .collect(),
+        settings.run_time_decimal_precision,
+    );
+    let (matches, detail) =
+        numerical.does_approx_match(&direct_reference, statistical.as_ref(), 1.0e-30, 1.0);
+    assert!(
+        matches,
+        "default indexed H32 disagrees with the original reference: {detail}"
+    );
     test_utils::compare_vakint_evaluations_vs_reference(
         settings.clone(),
         &[EvaluationTestLane::rustred_scalar(

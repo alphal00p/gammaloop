@@ -646,7 +646,7 @@ impl Vakint {
                 term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
                 log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
                 let result =
-                    application.evaluate_detailed(settings, term.numerator.as_view(), &matched)?;
+                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched)?;
                 value += result.value;
                 conditions.extend(result.nonzero_conditions);
                 families.extend(result.families);

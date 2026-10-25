@@ -239,6 +239,10 @@ impl Vakint {
         numerator: AtomView,
         integral_specs: &ReplacementRules,
     ) -> Result<Atom, VakintError> {
+        // Raw contributions must combine before the public notation is restored.
+        let mut scalar_settings = settings.clone();
+        scalar_settings.use_dot_product_notation = true;
+        let settings = &scalar_settings;
         let options = &RustRedEvaluationOptions {
             master_mode: RustRedMasterMode::Retain,
         };

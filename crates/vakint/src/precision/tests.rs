@@ -146,6 +146,72 @@ fn source(name: &str, value: &str, digits: u32) -> (Atom, FiniteSource) {
 }
 
 #[test]
+fn raw_center_and_original_error_survive_until_checked_symbolic_conversion() {
+    let tracked = TrackedComplex::from_decimal_with_error(
+        "1.23456789123456789123456789",
+        "1e-10",
+        256,
+        ErrorQuality::Estimated,
+    )
+    .unwrap();
+    let coefficient = NumericalCoefficient::from_tracked(tracked.clone(), 16);
+    assert_eq!(coefficient.value().re, tracked.ball.re.center);
+    assert_eq!(
+        coefficient.precision().real().absolute_error(),
+        &tracked.ball.re.radius
+    );
+    assert_eq!(
+        coefficient.precision().real().quality(),
+        ErrorQuality::Estimated
+    );
+    assert_eq!(
+        coefficient.precision().imaginary().absolute_error(),
+        &tracked.ball.im.radius
+    );
+    assert!(coefficient.precision().imaginary().exact_zero());
+    assert!(coefficient.precision().real().significant_digits().unwrap() < 12);
+
+    let encoded = coefficient.to_atom().unwrap();
+    let AtomView::Num(number) = encoded.as_view() else {
+        panic!("expected encoded Float")
+    };
+    let symbolica::coefficient::CoefficientView::Float(real, imaginary) = number.get_coeff_view()
+    else {
+        panic!("expected encoded Float")
+    };
+    let real = real.to_float();
+    assert!(imaginary.to_float().is_zero());
+    assert_ne!(real.to_rational(), coefficient.value().re.to_rational());
+    assert!(real.prec() <= coefficient.precision().real().significant_bits().unwrap());
+    let rounded = tracked.rounded(Some(decimal_bits(16))).unwrap();
+    assert_eq!(real, rounded.ball.re.center);
+    let shift = (real.to_rational() - tracked.ball.re.center.to_rational()).abs();
+    assert!(shift + tracked.ball.re.radius.to_rational() <= rounded.ball.re.radius.to_rational());
+}
+
+#[test]
+fn explicit_presentation_caps_do_not_reduce_the_raw_center_or_increase_export_precision() {
+    let tracked = TrackedComplex::from_decimal_with_error(
+        "1.23456789123456789123456789",
+        "1e-70",
+        256,
+        ErrorQuality::Bounded,
+    )
+    .unwrap();
+    let coefficient = NumericalCoefficient::from_tracked(tracked.clone(), 16);
+    let presented = coefficient.capped_decimal_precision(50);
+    assert_eq!(coefficient.value().re, tracked.ball.re.center);
+    assert!(presented.value().re.prec() <= decimal_bits(16));
+    assert_eq!(presented.maximum_export_bits, decimal_bits(16));
+    assert!(presented.precision().real().absolute_error() >= &tracked.ball.re.radius);
+    assert_eq!(
+        presented.precision().real().quality(),
+        ErrorQuality::Bounded
+    );
+    assert!(coefficient.to_real_float().unwrap().prec() <= decimal_bits(16));
+}
+
+#[test]
 fn independent_master_cancellation_loses_measured_digits() {
     Vakint::initialize_vakint_symbols();
     let sources = BTreeMap::from([
@@ -162,6 +228,11 @@ fn independent_master_cancellation_loses_measured_digits() {
     .unwrap();
     let digits = coefficient.precision().real().significant_digits().unwrap();
     assert!((20..=25).contains(&digits), "achieved {digits} digits");
+    // The central estimate still retains its guard digits; its uncertainty is
+    // independently limited by the two validated finite sources.
+    let expected_center = Float::parse("1e-25", Some(320)).unwrap().to_rational();
+    let center_error = (coefficient.value().re.to_rational() - expected_center).abs();
+    assert!(center_error < Float::parse("1e-70", Some(320)).unwrap().to_rational());
     assert!(coefficient.precision().imaginary().exact_zero());
     assert!(
         warnings

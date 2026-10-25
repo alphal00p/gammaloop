@@ -266,6 +266,51 @@ fn cross_integral_cancellation_precedes_master_coefficient_availability() {
 }
 
 #[test]
+fn raw_scalar_normalization_keeps_dots_independently_of_public_notation() {
+    let engine = Vakint::new().unwrap();
+    let mut config = settings(RustRedMasterMode::Retain);
+    config.epsilon_symbol = "ep".into();
+    let integral = vakint_parse!("topo(I1L(1,2))").unwrap();
+    let numerator = vakint_parse!("dot(p(1),p(2))").unwrap();
+    let mut matched = engine
+        .match_topologies_for_settings(&config, integral.as_view())
+        .unwrap()
+        .unwrap();
+    matched.apply_replacement_rules().unwrap();
+    config.use_dot_product_notation = false;
+    let indexed = engine
+        .rustred_reduce(&config, numerator.as_view(), &matched)
+        .unwrap();
+    config.use_dot_product_notation = true;
+    let compact = engine
+        .rustred_reduce(&config, numerator.as_view(), &matched)
+        .unwrap();
+    assert_eq!(indexed, compact);
+    assert!(indexed.contains_symbol(S.dot));
+    assert!(!indexed.contains_symbol(S.dot_dummy_ind));
+}
+
+#[test]
+fn tadpole_recurrence_with_external_scalar_cancels_before_availability_in_both_notations() {
+    let engine = Vakint::new().unwrap();
+    let mut config = settings(RustRedMasterMode::Numerical);
+    config.epsilon_symbol = "ep".into();
+    config.number_of_terms_in_epsilon_expansion = 8;
+    let input = vakint_parse!("dot(p(1),p(2))*(topo(I1L(1,2))-(1-ep)*topo(I1L(1,1)))").unwrap();
+    for dots in [false, true] {
+        config.use_dot_product_notation = dots;
+        assert!(engine.evaluate(&config, input.as_view()).unwrap().is_zero());
+        let tensor = engine.tensor_reduce(&config, input.as_view()).unwrap();
+        assert!(
+            engine
+                .evaluate_integral(&config, tensor.as_view())
+                .unwrap()
+                .is_zero()
+        );
+    }
+}
+
+#[test]
 fn cross_integral_cancellation_removes_uncomputed_residuals_before_numeric_checks() {
     let (engine, _) = bounded_sunset();
     let input = vakint_parse!("topo(I2L(1,2,1,1))-(dot(k(1),k(1))-1)*topo(I2L(1,3,1,1))").unwrap();

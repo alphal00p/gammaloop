@@ -76,20 +76,18 @@ pub struct PrecisionWarning {
 pub struct NumericalCoefficient {
     value: Complex<Float>,
     precision: CoefficientPrecision,
+    maximum_export_bits: u32,
 }
 
 impl NumericalCoefficient {
     pub(crate) fn from_tracked(value: TrackedComplex, requested: u32) -> Self {
-        let maximum_bits = decimal_bits(requested);
-        // A failed export (in particular uncertain zero) is still a useful
-        // numerical result. Keep its midpoint and uncertainty for inspection.
-        let rounded = value.rounded(Some(maximum_bits)).unwrap_or(value);
+        // Keep the evaluated center and its original enclosure together. A
+        // checked symbolic export may round the center, but raw inspection and
+        // comparisons must not lose digits merely because the error is larger.
         Self {
-            value: Complex::new(
-                rounded.ball.re.center.clone(),
-                rounded.ball.im.center.clone(),
-            ),
-            precision: rounded.precision(),
+            value: Complex::new(value.ball.re.center.clone(), value.ball.im.center.clone()),
+            precision: value.precision(),
+            maximum_export_bits: decimal_bits(requested),
         }
     }
 
@@ -109,7 +107,12 @@ impl NumericalCoefficient {
 
     /// Lower a presentation limit while retaining the measured absolute error.
     pub fn capped_decimal_precision(&self, requested: u32) -> Self {
-        Self::from_tracked(self.as_tracked(), requested)
+        let value = self.as_tracked();
+        let maximum_bits = self.maximum_export_bits.min(decimal_bits(requested));
+        let rounded = value.rounded(Some(maximum_bits)).unwrap_or(value);
+        let mut result = Self::from_tracked(rounded, requested);
+        result.maximum_export_bits = maximum_bits;
+        result
     }
 
     pub(crate) fn as_tracked(&self) -> TrackedComplex {
@@ -136,7 +139,7 @@ impl NumericalCoefficient {
         self.check_export()?;
         let value = self
             .as_tracked()
-            .to_float_with_precision()
+            .to_float_with_max_precision(self.maximum_export_bits)
             .map_err(VakintError::NumericalPrecision)?;
         Ok(Atom::num(value))
     }
@@ -146,7 +149,7 @@ impl NumericalCoefficient {
         self.check_export()?;
         self.real_midpoint()?;
         self.as_tracked()
-            .to_float_with_precision()
+            .to_float_with_max_precision(self.maximum_export_bits)
             .map(|value| value.re)
             .map_err(VakintError::NumericalPrecision)
     }

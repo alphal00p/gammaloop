@@ -655,12 +655,11 @@ impl MasterCatalog {
             &HashMap::new(),
             &settings,
         )?;
-        let number = match available_precision {
-            precision::AvailablePrecision::FixedPrecision(cap) if cap < prec => {
-                number.capped_decimal_precision(cap)
-            }
-            _ => number,
+        let cap = match available_precision {
+            precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
+            precision::AvailablePrecision::ArbitraryPrecision => prec,
         };
+        let number = number.capped_decimal_precision(cap);
         for warning in &mut warnings {
             if warning.achieved_decimal_precision.is_some() {
                 warning.achieved_decimal_precision = number.precision().real().significant_digits();
@@ -734,12 +733,11 @@ impl MasterCatalog {
                 &HashMap::new(),
                 &settings,
             )?;
-            let number = match prepared.available_precision() {
-                precision::AvailablePrecision::FixedPrecision(cap) if cap < prec => {
-                    number.capped_decimal_precision(cap)
-                }
-                _ => number,
+            let cap = match prepared.available_precision() {
+                precision::AvailablePrecision::FixedPrecision(cap) => cap.min(prec),
+                precision::AvailablePrecision::ArbitraryPrecision => prec,
             };
+            let number = number.capped_decimal_precision(cap);
             for warning in &mut warnings {
                 if warning.achieved_decimal_precision.is_some() {
                     warning.achieved_decimal_precision =

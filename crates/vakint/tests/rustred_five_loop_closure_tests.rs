@@ -367,6 +367,37 @@ fn independent_native_pinch_fixtures_have_checked_mass_and_routing() -> Result<(
     Ok(())
 }
 
+#[test_log::test]
+fn retained_external_scalar_notation_preserves_full_five_loop_guards() -> Result<()> {
+    let context = engine()?;
+    let fixtures = five_loop_closure::factorized::fixtures(&context.engine)?;
+    let pair = fixtures
+        .iter()
+        .find(|pair| pair.label == "single_positive_line")
+        .ok_or("missing frozen factorized single-line fixture")?;
+    let scalar =
+        vakint_symbol!("dot").call((vakint_symbol!("p").call(1), vakint_symbol!("p").call(2)));
+    let input = scalar * &pair.cancelled;
+    let mut compact_settings = context.settings.clone();
+    compact_settings.use_dot_product_notation = true;
+    let compact = context
+        .engine
+        .evaluate_rustred_symbolic(&compact_settings, input.as_view())?;
+    let mut indexed_settings = compact_settings.clone();
+    indexed_settings.use_dot_product_notation = false;
+    let indexed = context
+        .engine
+        .evaluate_rustred_symbolic(&indexed_settings, input.as_view())?;
+    assert!(!compact.value.is_zero());
+    assert!(compact.value.contains_symbol(vakint_symbol!("dot")));
+    assert!(!indexed.value.contains_symbol(vakint_symbol!("dot")));
+    let restored = Vakint::convert_to_dot_notation(indexed.value.as_view());
+    assert!((restored - compact.value).expand().together().is_zero());
+    assert_eq!(indexed.nonzero_conditions, compact.nonzero_conditions);
+    assert_eq!(indexed.families, compact.families);
+    Ok(())
+}
+
 macro_rules! closure_tests {
     ($($name:ident),+ $(,)?) => { $(
         #[test_log::test]
