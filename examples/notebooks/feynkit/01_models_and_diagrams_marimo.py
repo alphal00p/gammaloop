@@ -120,9 +120,9 @@ def _(mo):
     mo.md(r"""
     ## Model-owned generation and inclusive loop ranges
 
-    `Model.generate_diagrams` is the main entry point. External states may use
+    `model.process(...).generate_diagrams(...)` is the main entry point. External states may use
     `Particle` objects directly, avoiding a second lookup or a hand-written PDG
-    code. Set `kind="cross_section"` to construct cross-section graph
+    code. Use `process.generate_cross_section(...)` for cross-section graph
     structures; this does not numerically integrate phase space. Loop bounds
     are inclusive.
     """)
@@ -173,9 +173,9 @@ def _(incoming_particles, mo, model, outgoing_particles, table):
                 title=progress.stage.replace("_", " ").title(), subtitle=_count
             )
 
-        generated = model.generate_diagrams(
-            incoming=incoming_particles,
-            outgoing=outgoing_particles,
+        generated = model.process(
+            incoming=incoming_particles, outgoing=outgoing_particles
+        ).generate_diagrams(
             loops=(0, 1),
             progress=_report,
             max_vertices=3,
