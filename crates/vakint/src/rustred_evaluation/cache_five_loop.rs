@@ -19,7 +19,10 @@ use rustred::{
         GuardedCacheBacking, GuardedCacheBackingError, GuardedCacheBackingErrorKind,
         GuardedCaptureStatistics, GuardedIntermediateCapture,
     },
-    solver::{CandidateRoutedPersistentCacheStatistics, CandidateStatistics, UnresolvedPolicy},
+    solver::{
+        CandidateRoutedApplicationObserver, CandidateRoutedPersistentCacheStatistics,
+        CandidateStatistics, UnresolvedPolicy,
+    },
 };
 use rustred_app::{
     AppError, AppErrorKind, CachePreparationBackend, CachePreparationReport,
@@ -36,6 +39,7 @@ use super::{
     RustRedCacheLoadOptions, RustRedCachePreparationOptions, RustRedCacheStatistics,
     RustRedCacheWorkload, operation, resource_checkpoint,
 };
+use crate::rustred_evaluation::monitor::MonitorContext;
 use crate::rustred_evaluation::{data::RustRedData, five_loop::SavedApplication};
 use crate::{Vakint, VakintError, VakintSettings};
 
@@ -218,6 +222,7 @@ impl SavedApplication {
         &self,
         prepared: &mut PreparedSavedApplication<15>,
         terms: Vec<(IntegralKey, Coefficient)>,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<SavedApplicationReduction, VakintError> {
         if log::log_enabled!(target: "vakint::cache_workload", log::Level::Debug) {
             let roots = terms
@@ -229,20 +234,36 @@ impl SavedApplication {
         }
         let mut attached = self.cache.lock().map_err(failure)?;
         let Some(cache) = attached.as_mut() else {
-            return prepared
-                .reduce_routed_linear_combination(terms)
-                .map_err(operation)
-                .map_err(Into::into);
+            return match observation {
+                Some(observation) => prepared.reduce_routed_linear_combination_with_observation(
+                    terms,
+                    observation,
+                    None,
+                ),
+                None => prepared.reduce_routed_linear_combination(terms),
+            }
+            .map_err(operation)
+            .map_err(Into::into);
         };
         let binding = cache.file.binding().clone();
-        let result = prepared
-            .reduce_routed_linear_combination_with_cache(
+        let result = match observation {
+            Some(observation) => prepared
+                .reduce_routed_linear_combination_with_cache_and_observation(
+                    terms,
+                    &binding,
+                    Some(&mut cache.file),
+                    None,
+                    observation,
+                    None,
+                ),
+            None => prepared.reduce_routed_linear_combination_with_cache(
                 terms,
                 &binding,
                 Some(&mut cache.file),
                 None,
-            )
-            .map_err(operation)?;
+            ),
+        }
+        .map_err(operation)?;
         cache.add_work(result.statistics().persistent_cache);
         Ok(result)
     }
@@ -420,6 +441,7 @@ impl Vakint {
         options: &RustRedCachePreparationOptions,
         cancellation: &AtomicBool,
         observer: impl FnMut(&CachePreparationReport) -> Result<(), AppError>,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<CachePreparationReport, VakintError> {
         let started = Instant::now();
         resource_checkpoint()?;
@@ -470,6 +492,7 @@ impl Vakint {
             native,
             backing: None,
             coverage: Vec::new(),
+            observation,
         };
         let workload = options.workload.plan(
             &backend,
@@ -491,6 +514,7 @@ impl Vakint {
         // allowance. It must not eat the supervisor's finalization reserve.
         let setup_elapsed = started.elapsed();
         resolved.time_limit = resolved.time_limit.saturating_sub(setup_elapsed);
+        MonitorContext::native_phase(backend.observation.as_deref_mut(), "strict_cache_roots");
         let mut report = prepare_application_cache(
             &workload,
             &resolved,
@@ -503,6 +527,10 @@ impl Vakint {
         report.options["strict_application_setup_seconds"] = setup_elapsed.as_secs_f64().into();
         report.elapsed = started.elapsed();
         if report.status == CachePreparationStatus::Complete {
+            MonitorContext::native_phase(
+                backend.observation.as_deref_mut(),
+                "cache_compaction_and_validation",
+            );
             if cancellation.load(Ordering::Relaxed) {
                 report.status = CachePreparationStatus::Cancelled;
                 return Ok(report);
@@ -640,7 +668,9 @@ fn write_atomic(output: &Path, bytes: &[u8]) -> Result<(), VakintError> {
     Ok(())
 }
 
-struct SavedBackend {
+struct SavedBackend<'observation, 'callback> {
+    // A stack-local borrow for this explicit preparation call, never an engine cache owner.
+    observation: Option<&'observation mut CandidateRoutedApplicationObserver<'callback>>,
     prepared: PreparedSavedApplication<15>,
     binding: Vec<ApplicationCacheBinding>,
     native: SavedApplicationOptions,
@@ -708,7 +738,7 @@ impl GuardedIntermediateCapture for RootCapture<'_> {
     }
 }
 
-impl CachePreparationBackend for SavedBackend {
+impl CachePreparationBackend for SavedBackend<'_, '_> {
     fn bindings(&self) -> &[ApplicationCacheBinding] {
         &self.binding
     }
@@ -791,14 +821,29 @@ impl CachePreparationBackend for SavedBackend {
             root: None,
             inner: capture,
         };
-        self.prepared.reduce_linear_combination_with_cache(
-            [(target.integral().clone(), one)],
-            &self.binding[0],
-            self.backing
-                .as_mut()
-                .map(|backing| backing as &mut dyn GuardedCacheBacking),
-            Some(&mut capture),
-        )?;
+        let terms = [(target.integral().clone(), one)];
+        let backing = self
+            .backing
+            .as_mut()
+            .map(|backing| backing as &mut dyn GuardedCacheBacking);
+        match self.observation.as_deref_mut() {
+            Some(observation) => self
+                .prepared
+                .reduce_linear_combination_with_cache_and_observation(
+                    terms,
+                    &self.binding[0],
+                    backing,
+                    Some(&mut capture),
+                    observation,
+                    None,
+                ),
+            None => self.prepared.reduce_linear_combination_with_cache(
+                terms,
+                &self.binding[0],
+                backing,
+                Some(&mut capture),
+            ),
+        }?;
         let root = capture.root;
         let root = match root {
             Some(root) => Some(root),
@@ -1049,7 +1094,7 @@ mod tests {
             let mut prepared = application.prepared.lock().unwrap();
             let one = prepared.family().coefficient_context().one();
             application
-                .reduce_saved(&mut prepared, vec![(target.clone(), one)])
+                .reduce_saved(&mut prepared, vec![(target.clone(), one)], None)
                 .unwrap()
         };
         engine.load_cache(5, &output, &Default::default()).unwrap();
@@ -1057,7 +1102,7 @@ mod tests {
             let mut prepared = application.prepared.lock().unwrap();
             let one = prepared.family().coefficient_context().one();
             application
-                .reduce_saved(&mut prepared, vec![(target.clone(), one)])
+                .reduce_saved(&mut prepared, vec![(target.clone(), one)], None)
                 .unwrap()
         };
         assert_eq!(reference.terms(), cached.terms());

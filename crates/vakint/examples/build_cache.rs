@@ -3,6 +3,7 @@
 //! Run `cargo run --release -p vakint --example build_cache -- --help`.
 //! A supervisor and an independent worker watchdog enforce the wall deadline.
 //! Interrupted checkpoints are retained, but never called complete.
+//! Monitored timings are diagnostics, not unmonitored benchmark measurements.
 use std::{
     fs::{self, File, OpenOptions},
     io::{Read, Write},
@@ -14,12 +15,15 @@ use std::{
 
 use eyre::{Context, Result, bail, ensure};
 use rustred::family::IntegralKey;
-use rustred_app::CachePreparationStatus;
+use rustred_app::{CachePreparationReport, CachePreparationStatus};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use symbolica::utils::resources::{ResourceBudget, ResourceLimits, checkpoint};
-use vakint::{RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheWorkload, Vakint};
+use vakint::{
+    RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheWorkload, RustRedMonitorDisplay,
+    RustRedMonitorOptions, RustRedSnapshotViewer, Vakint,
+};
 
 const MIB: u64 = 1024 * 1024;
 
@@ -49,6 +53,7 @@ struct Options {
     retained_coefficient_mib: Option<u64>,
     max_process_rss_mib: Option<u64>,
     max_elapsed_seconds: Option<u64>,
+    monitor: RustRedMonitorOptions,
     worker: bool,
     worker_budget: Option<Attempt>,
 }
@@ -131,7 +136,7 @@ impl Options {
         .map(|name| (name, std::env::var(name).ok()))
         .into_iter()
         .collect::<std::collections::BTreeMap<_, _>>();
-        Ok(json!({
+        let mut identity = json!({
             "schema": "vakint.five-loop-cache-build-identity.v3",
             "workload_sha256": workload_hash,
             "source_census": self.source_census.canonicalize()?,
@@ -169,7 +174,20 @@ impl Options {
                 "available_parallelism": std::thread::available_parallelism()?.get(),
                 "worker_environment": worker_environment,
             },
-        }))
+        });
+        if self.monitor.enabled() {
+            identity["execution"]["monitor"] = json!({
+                "display": match self.monitor.display {
+                    RustRedMonitorDisplay::Off => "off",
+                    RustRedMonitorDisplay::Tui => "tui",
+                    RustRedMonitorDisplay::Json => "json",
+                },
+                "progress_snapshot": self.monitor.progress_snapshot,
+                "interval_seconds": self.monitor.interval.as_secs_f64(),
+                "diagnostic_timing": true,
+            });
+        }
+        Ok(identity)
     }
 
     fn parse() -> Result<Option<Self>> {
@@ -184,6 +202,7 @@ impl Options {
         let mut retained_coefficient_mib: Option<u64> = None;
         let mut max_process_rss_mib: Option<u64> = None;
         let mut max_elapsed_seconds: Option<u64> = None;
+        let mut monitor = RustRedMonitorOptions::default();
         let mut worker = false;
         let mut worker_budget = None;
         let mut args = std::env::args().skip(1);
@@ -197,6 +216,11 @@ impl Options {
                     --retained-coefficient-mib N Native coefficient capacity (default: unbounded; alias: --ram-mib)\n\
                     --max-process-rss-mib N   Whole worker RSS budget (default: unbounded)\n\
                     --max-elapsed-seconds N   Tighter cumulative worker time budget (default: hard deadline)\n\
+                    --monitor                 TUI diagnostics (requires progress-tui; default: off)\n\
+                    --progress-snapshot PATH  Latest native JSON; enables diagnostics without a TUI\n\
+                    --progress-interval-seconds N Safe-boundary interval, finite and nonnegative (default: 1)\n\
+                    --monitor defaults its non-TTY snapshot to work-dir/monitor.json.\n\
+                    Monitored timings are diagnostics, not unmonitored benchmark measurements.\n\
                     Final production uses --phase final --prepare-seconds 32400 --max-seconds 36000.\n\
                     Freeze training/tuning/held-out inputs first. This command does not select roots.\n\
                     Run in an optimized build with fixed affinity; all work and receipts stay in --work-dir.\n\
@@ -207,6 +231,10 @@ impl Options {
             }
             if arg == "--worker" {
                 worker = true;
+                continue;
+            }
+            if arg == "--monitor" {
+                monitor.display = RustRedMonitorDisplay::Tui;
                 continue;
             }
             let value = args
@@ -226,6 +254,15 @@ impl Options {
                 }
                 "--max-process-rss-mib" => max_process_rss_mib = Some(value.parse()?),
                 "--max-elapsed-seconds" => max_elapsed_seconds = Some(value.parse()?),
+                "--progress-snapshot" => monitor.progress_snapshot = Some(value.into()),
+                "--progress-interval-seconds" => {
+                    let seconds: f64 = value.parse()?;
+                    ensure!(
+                        seconds.is_finite() && seconds >= 0.0,
+                        "progress interval must be finite and nonnegative"
+                    );
+                    monitor.interval = Duration::try_from_secs_f64(seconds)?;
+                }
                 "--worker-budget" => worker_budget = Some(serde_json::from_str(&value)?),
                 _ => bail!("unknown argument {arg}"),
             }
@@ -244,19 +281,26 @@ impl Options {
             max_elapsed_seconds != Some(0),
             "elapsed allowance must be positive"
         );
+        let work_dir: PathBuf = work_dir.ok_or_else(|| eyre::eyre!("--work-dir is required"))?;
+        // The supervised worker redirects its terminal streams to worker.log.
+        if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none() {
+            monitor.progress_snapshot = Some(work_dir.join("monitor.json"));
+        }
+        monitor.validate()?;
         Ok(Some(Self {
             artifacts: artifacts.ok_or_else(|| eyre::eyre!("--artifacts is required"))?,
             workload: workload.ok_or_else(|| eyre::eyre!("--workload is required"))?,
             source_census: source_census
                 .ok_or_else(|| eyre::eyre!("--source-census is required"))?,
             output: output.ok_or_else(|| eyre::eyre!("--output is required"))?,
-            work_dir: work_dir.ok_or_else(|| eyre::eyre!("--work-dir is required"))?,
+            work_dir,
             phase,
             prepare_seconds,
             max_seconds,
             retained_coefficient_mib,
             max_process_rss_mib,
             max_elapsed_seconds,
+            monitor,
             worker,
             worker_budget,
         }))
@@ -465,28 +509,32 @@ fn build_cache(
         .create(true)
         .append(true)
         .open(options.work_dir.join("progress.jsonl"))?;
-    let report = engine.prepare_cache(
-        5,
-        &options.output,
-        &preparation,
-        &AtomicBool::new(false),
-        |report| {
-            serde_json::to_writer(&mut progress, &report.to_document())
-                .and_then(|()| writeln!(progress).map_err(serde_json::Error::io))
-                .map_err(|error| {
-                    rustred_app::AppError::new(
-                        rustred_app::AppErrorKind::Serialization,
-                        error.to_string(),
-                    )
-                })?;
-            progress.flush().map_err(|error| {
+    let observer = |report: &CachePreparationReport| {
+        serde_json::to_writer(&mut progress, &report.to_document())
+            .and_then(|()| writeln!(progress).map_err(serde_json::Error::io))
+            .map_err(|error| {
                 rustred_app::AppError::new(
                     rustred_app::AppErrorKind::Serialization,
                     error.to_string(),
                 )
-            })
-        },
-    )?;
+            })?;
+        progress.flush().map_err(|error| {
+            rustred_app::AppError::new(rustred_app::AppErrorKind::Serialization, error.to_string())
+        })
+    };
+    let cancellation = AtomicBool::new(false);
+    let report = if options.monitor.enabled() {
+        engine.prepare_cache_with_monitor(
+            5,
+            &options.output,
+            &preparation,
+            &cancellation,
+            observer,
+            &options.monitor,
+        )?
+    } else {
+        engine.prepare_cache(5, &options.output, &preparation, &cancellation, observer)?
+    };
     ensure!(
         digest(&options.workload)? == workload_hash,
         "workload changed during preparation; preserve the candidate and investigate"
@@ -682,6 +730,15 @@ fn run(options: Options, worker_started: Instant) -> Result<()> {
             "build_identity": identity,
         }),
     )?;
+    let mut viewer = if options.monitor.display == RustRedMonitorDisplay::Tui {
+        options
+            .monitor
+            .progress_snapshot
+            .as_deref()
+            .map(|path| RustRedSnapshotViewer::new(path, options.monitor.no_color))
+    } else {
+        None
+    };
     let mut child = Command::new(std::env::current_exe()?)
         .args(std::env::args_os().skip(1))
         .arg("--worker")
@@ -692,6 +749,9 @@ fn run(options: Options, worker_started: Instant) -> Result<()> {
         .stderr(log)
         .spawn()
         .context("start cache worker")?;
+    if let Some(viewer) = viewer.as_mut() {
+        viewer.bind_worker_pid(child.id());
+    }
     let (success, hard_deadline) = loop {
         let expired = started.elapsed() >= Duration::from_secs_f64(attempt.hard_seconds)
             || unix_seconds()? >= attempt.hard_deadline_unix_seconds;
@@ -703,8 +763,12 @@ fn run(options: Options, worker_started: Instant) -> Result<()> {
             child.wait()?;
             break (false, true);
         }
+        if let Some(viewer) = viewer.as_mut() {
+            viewer.refresh();
+        }
         std::thread::sleep(Duration::from_millis(200));
     };
+    drop(viewer);
     let elapsed_seconds = started.elapsed().as_secs_f64();
     let supervision = json!({
         "state": "finished", "success": success, "hard_deadline_exhausted": hard_deadline,

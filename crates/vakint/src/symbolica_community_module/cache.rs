@@ -22,8 +22,40 @@ use rustred_app::{
 use super::vakint_to_python_error;
 use crate::{
     RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheSaveMode, RustRedCacheStatistics,
-    RustRedCacheWorkload, Vakint,
+    RustRedCacheWorkload, RustRedMonitorDisplay, RustRedMonitorOptions, Vakint,
 };
+
+pub(super) fn monitor_options(
+    monitor: &str,
+    progress_snapshot: Option<PathBuf>,
+    interval: f64,
+) -> PyResult<RustRedMonitorOptions> {
+    let display = match monitor {
+        "off" => RustRedMonitorDisplay::Off,
+        "tui" => RustRedMonitorDisplay::Tui,
+        "json" => RustRedMonitorDisplay::Json,
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "monitor must be 'off', 'tui' or 'json'",
+            ));
+        }
+    };
+    let interval = Duration::try_from_secs_f64(interval).map_err(|_| {
+        pyo3::exceptions::PyValueError::new_err(
+            "progress_interval_seconds must be finite and nonnegative",
+        )
+    })?;
+    let options = RustRedMonitorOptions {
+        display,
+        progress_snapshot,
+        interval,
+        ..Default::default()
+    };
+    options
+        .validate()
+        .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
+    Ok(options)
+}
 
 pub(super) fn check_loops(loops: usize) -> PyResult<()> {
     if !(1..=5).contains(&loops) {
@@ -267,7 +299,7 @@ pub(super) fn prepare(
     options: RustRedCachePreparationOptions,
     progress: Option<Py<PyAny>>,
     cancel: Option<Py<PyAny>>,
-    interval: f64,
+    monitor: RustRedMonitorOptions,
 ) -> PyResult<Py<PyDict>> {
     for callback in [&progress, &cancel].into_iter().flatten() {
         if !callback.bind(py).is_callable() {
@@ -276,11 +308,7 @@ pub(super) fn prepare(
             ));
         }
     }
-    let interval = Duration::try_from_secs_f64(interval).map_err(|_| {
-        pyo3::exceptions::PyValueError::new_err(
-            "progress_interval_seconds must be finite and nonnegative",
-        )
-    })?;
+    let interval = monitor.interval;
     let cancelled = AtomicBool::new(false);
     let mut observer = PythonProgress {
         progress,
@@ -293,9 +321,20 @@ pub(super) fn prepare(
         let observer = &mut observer;
         let cancelled = &cancelled;
         py.detach(move || {
-            engine.prepare_cache(loops, &output, &options, cancelled, |report| {
-                observer.observe(report, cancelled)
-            })
+            if monitor.enabled() {
+                engine.prepare_cache_with_monitor(
+                    loops,
+                    &output,
+                    &options,
+                    cancelled,
+                    |report| observer.observe(report, cancelled),
+                    &monitor,
+                )
+            } else {
+                engine.prepare_cache(loops, &output, &options, cancelled, |report| {
+                    observer.observe(report, cancelled)
+                })
+            }
         })
     };
     if let Some(error) = observer.exception.take() {

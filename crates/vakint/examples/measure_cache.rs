@@ -21,7 +21,8 @@ use sha2::{Digest, Sha256};
 use symbolica::atom::{AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
-    RustRedMasterMode, Vakint, VakintSettings,
+    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedSnapshotViewer, Vakint,
+    VakintSettings,
 };
 use workload::{Root, Workload};
 
@@ -165,6 +166,7 @@ struct Options {
     worker_deadline: Option<f64>,
     provisional: bool,
     only_case: Option<String>,
+    monitor: RustRedMonitorOptions,
 }
 
 impl Options {
@@ -222,6 +224,7 @@ impl Options {
         let mut worker_deadline = None;
         let mut provisional = false;
         let mut only_case = None;
+        let mut monitor = RustRedMonitorOptions::default();
         let mut args = std::env::args().skip(1);
         while let Some(arg) = args.next() {
             if matches!(arg.as_str(), "--help" | "-h") {
@@ -232,6 +235,10 @@ impl Options {
                      [--only-case ID] selects one frozen case and requires --provisional.\n\
                      Every case/sample/variant runs in a fresh process. Default: three samples, 300s each.\n\
                      Omit --cache for an uncached baseline; final cache comparisons require three samples.\n\
+                     [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\n\
+                     Monitoring defaults off; --monitor needs progress-tui and uses worker work-dir/monitor.json.\n\
+                     A snapshot path enables native JSON without a TUI; interval defaults to 1s.\n\
+                     Monitored timings include diagnostic observation overhead.\n\
                      Run with fixed affinity in a serialized measurement window."
                 );
                 return Ok(None);
@@ -242,6 +249,10 @@ impl Options {
             }
             if arg == "--provisional" {
                 provisional = true;
+                continue;
+            }
+            if arg == "--monitor" {
+                monitor.display = RustRedMonitorDisplay::Tui;
                 continue;
             }
             let value = args
@@ -261,6 +272,10 @@ impl Options {
                 "--variant" => variant = value,
                 "--sample" => sample = Some(value.parse()?),
                 "--worker-deadline" => worker_deadline = Some(value.parse()?),
+                "--progress-snapshot" => monitor.progress_snapshot = Some(value.into()),
+                "--progress-interval-seconds" => {
+                    monitor.interval = Duration::try_from_secs_f64(value.parse()?)?;
+                }
                 _ => bail!("unknown argument {arg}"),
             }
         }
@@ -284,6 +299,7 @@ impl Options {
             only_case.is_none() || provisional,
             "--only-case requires --provisional; final comparisons use the complete frozen suite"
         );
+        monitor.validate()?;
         Ok(Some(Self {
             artifacts: artifacts.ok_or_else(|| eyre::eyre!("--artifacts is required"))?,
             workload: workload.ok_or_else(|| eyre::eyre!("--workload is required"))?,
@@ -301,12 +317,13 @@ impl Options {
             worker_deadline,
             provisional,
             only_case,
+            monitor,
         }))
     }
 
     fn identity(&self) -> Result<Value> {
         let workload: Workload = serde_json::from_slice(&fs::read(&self.workload)?)?;
-        Ok(json!({
+        let mut identity = json!({
             "workload_sha256":digest(&self.workload)?,
             "load_prepared_caches":false,
             "cached_variant_persistent_loops":[5],
@@ -326,7 +343,21 @@ impl Options {
             "provisional":self.provisional,"only_case":self.only_case,
             "cpu_affinity":fs::read_to_string("/proc/self/status").ok().and_then(|status|status.lines().find_map(|line|line.strip_prefix("Cpus_allowed_list:").map(str::trim).map(str::to_owned))),
             "rayon_num_threads":std::env::var("RAYON_NUM_THREADS").ok(),
-        }))
+        });
+        if self.monitor.enabled() {
+            identity["monitor"] = json!({
+                "display": match self.monitor.display {
+                    RustRedMonitorDisplay::Off => "off",
+                    RustRedMonitorDisplay::Tui => "tui",
+                    RustRedMonitorDisplay::Json => "json",
+                },
+                "progress_snapshot": self.monitor.progress_snapshot,
+                "default_snapshot": "worker-work-dir/monitor.json",
+                "interval_seconds": self.monitor.interval.as_secs_f64(),
+                "diagnostic_timing": true,
+            });
+        }
+        Ok(identity)
     }
 }
 
@@ -504,7 +535,15 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         .lock()
         .map_err(|error| eyre::eyre!(error.to_string()))? = Stages::default();
     let started = Instant::now();
-    let outcome = engine.evaluate_rustred_symbolic(&settings, input.as_view());
+    let outcome = if options.monitor.enabled() {
+        let mut monitor = options.monitor.clone();
+        if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none() {
+            monitor.progress_snapshot = Some(options.work_dir.join("monitor.json"));
+        }
+        engine.evaluate_rustred_symbolic_with_monitor(&settings, input.as_view(), &monitor)
+    } else {
+        engine.evaluate_rustred_symbolic(&settings, input.as_view())
+    };
     let evaluation_seconds = started.elapsed().as_secs_f64();
     let owners_after = engine.rustred_application_owner_preparation_statistics()?;
     let owner_seconds = owners_after
@@ -770,6 +809,16 @@ fn main() -> Result<()> {
                             }),
                         )?;
                         let log = File::create(directory.join("worker.log"))?;
+                        let mut viewer = if options.monitor.display == RustRedMonitorDisplay::Tui {
+                            let path = options
+                                .monitor
+                                .progress_snapshot
+                                .clone()
+                                .unwrap_or_else(|| directory.join("monitor.json"));
+                            Some(RustRedSnapshotViewer::new(&path, options.monitor.no_color))
+                        } else {
+                            None
+                        };
                         let launched = Command::new(std::env::current_exe()?)
                             .args(std::env::args_os().skip(1))
                             .arg("--worker")
@@ -791,6 +840,9 @@ fn main() -> Result<()> {
                             Ok(mut child) => {
                                 let child_pid = child.id();
                                 let supervisor_pid = std::process::id();
+                                if let Some(viewer) = viewer.as_mut() {
+                                    viewer.bind_worker_pid(child_pid);
+                                }
                                 let (status, expired) = loop {
                                     let expired = started.elapsed()
                                         >= Duration::from_secs(options.max_case_seconds)
@@ -805,8 +857,12 @@ fn main() -> Result<()> {
                                         child.kill()?;
                                         break (child.wait()?, true);
                                     }
+                                    if let Some(viewer) = viewer.as_mut() {
+                                        viewer.refresh();
+                                    }
                                     std::thread::sleep(Duration::from_millis(200));
                                 };
+                                drop(viewer);
                                 let wall_finished = SystemTime::now();
                                 json!({"success":status.success() && !expired,
                                     "exit_code":status.code(),"exit_status":status.to_string(),
@@ -817,8 +873,11 @@ fn main() -> Result<()> {
                                     "finished_unix_seconds":wall_finished.duration_since(UNIX_EPOCH)?.as_secs_f64(),
                                     "interval_scope":"supervisor pre-spawn setup through supervisor-observed worker completion"})
                             }
-                            Err(error) => json!({"success":false,"launch_error":error.to_string(),
-                                "elapsed_seconds":started.elapsed().as_secs_f64()}),
+                            Err(error) => {
+                                drop(viewer);
+                                json!({"success":false,"launch_error":error.to_string(),
+                                    "elapsed_seconds":started.elapsed().as_secs_f64()})
+                            }
                         }
                     };
                     let worker_path = directory.join("worker.json");

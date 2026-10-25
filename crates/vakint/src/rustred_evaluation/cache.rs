@@ -5,6 +5,9 @@ use std::{
     sync::atomic::AtomicBool,
 };
 
+use super::monitor::{MonitorContext, RustRedMonitorOptions};
+use rustred::solver::CandidateRoutedApplicationObserver;
+
 use rustred::{
     family::IntegralKey,
     reduction::{
@@ -218,10 +221,74 @@ impl Vakint {
         cancellation: &AtomicBool,
         observer: impl FnMut(&CachePreparationReport) -> Result<(), rustred_app::AppError>,
     ) -> Result<CachePreparationReport, VakintError> {
+        self.prepare_cache_observed(
+            loop_count,
+            output.as_ref(),
+            options,
+            cancellation,
+            observer,
+            None,
+        )
+    }
+
+    /// Prepare the same strict cache workload with optional native per-call diagnostics.
+    pub fn prepare_cache_with_monitor(
+        &self,
+        loop_count: usize,
+        output: impl AsRef<Path>,
+        options: &RustRedCachePreparationOptions,
+        cancellation: &AtomicBool,
+        observer: impl FnMut(&CachePreparationReport) -> Result<(), rustred_app::AppError>,
+        monitor: &RustRedMonitorOptions,
+    ) -> Result<CachePreparationReport, VakintError> {
+        MonitorContext::run(monitor, |mut observation| {
+            let result = self.prepare_cache_observed(
+                loop_count,
+                output.as_ref(),
+                options,
+                cancellation,
+                observer,
+                observation.as_deref_mut(),
+            );
+            if let Ok(report) = &result {
+                MonitorContext::native_phase(
+                    observation,
+                    match report.status {
+                        rustred_app::CachePreparationStatus::Complete => {
+                            "cache_preparation_complete"
+                        }
+                        rustred_app::CachePreparationStatus::Cancelled => {
+                            "cache_preparation_cancelled"
+                        }
+                        _ => "cache_preparation_incomplete",
+                    },
+                );
+            }
+            result
+        })
+    }
+
+    fn prepare_cache_observed(
+        &self,
+        loop_count: usize,
+        output: &Path,
+        options: &RustRedCachePreparationOptions,
+        cancellation: &AtomicBool,
+        observer: impl FnMut(&CachePreparationReport) -> Result<(), rustred_app::AppError>,
+        mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<CachePreparationReport, VakintError> {
+        MonitorContext::native_phase(observation.as_deref_mut(), "cache_preparation_setup");
         resource_checkpoint()?;
         if loop_count == 5 {
-            return self.prepare_five_loop_cache(output.as_ref(), options, cancellation, observer);
+            return self.prepare_five_loop_cache(
+                output,
+                options,
+                cancellation,
+                observer,
+                observation,
+            );
         }
+        MonitorContext::native_phase(observation, "lower_loop_cache_preparation_unobserved");
         if options.checkpoint_path.is_some() {
             return Err(operation(rustred_app::AppError::new(
                 rustred_app::AppErrorKind::Input,
@@ -247,7 +314,7 @@ impl Vakint {
             return prepare_application_cache(
                 &workload,
                 &resolved,
-                output.as_ref(),
+                output,
                 cancellation,
                 &mut backend,
                 observer,
@@ -274,7 +341,7 @@ impl Vakint {
         prepare_application_cache(
             &workload,
             &resolved,
-            output.as_ref(),
+            output,
             cancellation,
             &mut backend,
             observer,

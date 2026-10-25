@@ -29,6 +29,8 @@ idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "preserve-ca
 log = "0.4.29"
 once_cell.workspace = true
 regex = "1.12.2"
+ratatui = { workspace = true, features = ["crossterm_0_28"], optional = true }
+crossterm = { version = "0.28.1", optional = true }
 rug = "1.28.0"
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
@@ -62,6 +64,7 @@ feynkit-generator = { git = "https://github.com/alphal00p/gammaloop", branch = "
 test-log = "0.2.19"
 
 [features]
+progress-tui = ["dep:ratatui", "dep:crossterm", "rustix/termios"]
 feynkit-ingress = []
 # Expose candidate diagnostics and offline validation helpers.
 experimental-rustred = []

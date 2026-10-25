@@ -25,6 +25,7 @@ pub(crate) mod five_loop;
 mod four_loop;
 mod matching;
 mod materialize;
+pub(crate) mod monitor;
 mod numerator;
 #[cfg(test)]
 mod terminal;
@@ -37,6 +38,8 @@ pub mod experimental;
 #[allow(dead_code)]
 mod experimental;
 
+use monitor::MonitorContext;
+use rustred::solver::CandidateRoutedApplicationObserver;
 use std::fmt;
 
 use symbolica::atom::{Atom, AtomView};
@@ -239,6 +242,16 @@ impl Vakint {
         numerator: AtomView,
         integral_specs: &ReplacementRules,
     ) -> Result<Atom, VakintError> {
+        self.rustred_reduce_observed(settings, numerator, integral_specs, None)
+    }
+
+    pub(crate) fn rustred_reduce_observed(
+        &self,
+        settings: &VakintSettings,
+        numerator: AtomView,
+        integral_specs: &ReplacementRules,
+        mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<Atom, VakintError> {
         // Raw contributions must combine before the public notation is restored.
         let mut scalar_settings = settings.clone();
         scalar_settings.use_dot_product_notation = true;
@@ -248,10 +261,18 @@ impl Vakint {
         };
         crate::citations::USED_CITATIONS.record(crate::citations::CitationSource::RustRed);
         if integral_specs.canonical_topology.get_integral().n_loops == 5 {
-            return self
-                .saved_application(settings)?
-                .evaluate(settings, numerator, integral_specs);
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "saved_application_preparation",
+            );
+            return self.saved_application(settings)?.evaluate(
+                settings,
+                numerator,
+                integral_specs,
+                observation.as_deref_mut(),
+            );
         }
+        MonitorContext::native_phase(observation, "lower_loop_reduction_unobserved");
         if integral_specs.canonical_topology.get_integral().n_loops == 4 {
             return four_loop::evaluate(self, settings, numerator, integral_specs, options);
         }

@@ -14,6 +14,7 @@ use std::{
     sync::{Arc, LazyLock, Mutex},
 };
 
+use super::monitor::{MonitorContext, RustRedMonitorOptions};
 use rustred::algebra::Coefficient;
 use rustred::family::IntegralKey;
 use rustred::input::{Compiler, Limits, LoweringLimits, TextProject, TextPropagator};
@@ -23,6 +24,7 @@ use rustred::reduction::terminal_normalization::{
     VacuumTensorProjectionInput, VerifiedVacuumProductChart,
 };
 use rustred::scalar_numerator::{FamilyScalarNumeratorService, ScalarNumeratorLimits};
+use rustred::solver::CandidateRoutedApplicationObserver;
 use rustred_app::{
     PreparedSavedApplication, SavedApplicationOptions, SavedApplicationProductChartStatistics,
     SavedApplicationProductStatistics, load_saved_application,
@@ -614,12 +616,35 @@ impl Vakint {
         settings: &VakintSettings,
         input: AtomView,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        self.evaluate_rustred_symbolic_observed(settings, input, None)
+    }
+
+    /// Retain exact five-loop masters and guards with optional per-call diagnostics.
+    pub fn evaluate_rustred_symbolic_with_monitor(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        monitor: &RustRedMonitorOptions,
+    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        MonitorContext::run(monitor, |observation| {
+            self.evaluate_rustred_symbolic_observed(settings, input, observation)
+        })
+    }
+
+    fn evaluate_rustred_symbolic_observed(
+        &self,
+        settings: &VakintSettings,
+        input: AtomView,
+        mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<RustRedSymbolicEvaluation, VakintError> {
         settings.with_resource_budget(|| {
+            MonitorContext::native_phase(observation.as_deref_mut(), "saved_application_preparation");
             self.validate_settings(settings)?;
             let application = self.saved_application(settings)?;
             let mut expression = VakintExpression::try_from(input)?;
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_input input={input}");
             let canonical_started = std::time::Instant::now();
+            MonitorContext::native_phase(observation.as_deref_mut(), "canonicalization");
             expression.canonicalize(settings, &self.topologies, false)?;
             log::debug!(target: "vakint::saved_application", "phase=frontend_canonicalization elapsed_seconds={:.6}", canonical_started.elapsed().as_secs_f64());
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_canonical input={expression}");
@@ -629,6 +654,7 @@ impl Vakint {
             let mut tensor_settings = settings.clone();
             tensor_settings.use_dot_product_notation = true;
             let tensor_started = std::time::Instant::now();
+            MonitorContext::native_phase(observation.as_deref_mut(), "tensor_prepass");
             expression.tensor_reduce(self, &tensor_settings)?;
             log::debug!(target: "vakint::saved_application", "phase=frontend_tensor_prepass elapsed_seconds={:.6}", tensor_started.elapsed().as_secs_f64());
             log::debug!(target: "vakint::five_loop_match", "phase=symbolic_tensor_reduced input={expression}");
@@ -638,6 +664,7 @@ impl Vakint {
             for mut term in VakintExpression::split_integrals(Atom::from(expression).as_view())? {
                 symbolica::utils::resources::checkpoint()?;
                 let matching_started = std::time::Instant::now();
+                MonitorContext::native_phase(observation.as_deref_mut(), "routing_verification");
                 let mut matched = self
                     .match_rustred_input(settings, term.integral.as_view(), term.numerator.as_view())?
                     .ok_or_else(|| failure("input has no registered topology match"))?;
@@ -646,11 +673,12 @@ impl Vakint {
                 term.apply_scalar_numerator_replacement_rules(&matched, settings)?;
                 log::debug!(target: "vakint::five_loop_match", "phase=symbolic_candidate_numerator numerator={}", term.numerator);
                 let result =
-                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched)?;
+                    application.evaluate_detailed(&tensor_settings, term.numerator.as_view(), &matched, observation.as_deref_mut())?;
                 value += result.value;
                 conditions.extend(result.nonzero_conditions);
                 families.extend(result.families);
             }
+            MonitorContext::native_phase(observation, "retained_master_combination");
             let value = self.finalize_rustred(
                 super::combine_exact(value),
                 settings,
@@ -817,8 +845,11 @@ impl SavedApplication {
         settings: &VakintSettings,
         numerator: AtomView,
         matched: &ReplacementRules,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<Atom, VakintError> {
-        Ok(self.evaluate_detailed(settings, numerator, matched)?.value)
+        Ok(self
+            .evaluate_detailed(settings, numerator, matched, observation)?
+            .value)
     }
 
     fn evaluate_detailed(
@@ -826,7 +857,9 @@ impl SavedApplication {
         settings: &VakintSettings,
         numerator: AtomView,
         matched: &ReplacementRules,
+        mut observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
     ) -> Result<RustRedSymbolicEvaluation, VakintError> {
+        MonitorContext::native_phase(observation.as_deref_mut(), "scalar_lowering");
         let lowering_started = std::time::Instant::now();
         let descriptor = select(&matched.canonical_topology)?;
         let input = MatchedScalarInput::prepare(
@@ -927,8 +960,10 @@ impl SavedApplication {
         let mut families = BTreeMap::new();
         for ((spectator, exponent), terms) in batches {
             let application_started = std::time::Instant::now();
-            let reduced = self.reduce_saved(&mut application, terms)?;
+            MonitorContext::native_phase(observation.as_deref_mut(), "saved_rule_application");
+            let reduced = self.reduce_saved(&mut application, terms, observation.as_deref_mut())?;
             log::debug!(target: "vakint::saved_application", "phase=saved_rule_application elapsed_seconds={:.6}", application_started.elapsed().as_secs_f64());
+            MonitorContext::native_phase(observation.as_deref_mut(), "terminal_geometry");
             let products_started = std::time::Instant::now();
             let mut contribution = Atom::Zero;
             let mut products = Vec::new();
@@ -1009,6 +1044,10 @@ impl SavedApplication {
                     }
                 }
             }
+            MonitorContext::native_phase(
+                observation.as_deref_mut(),
+                "lower_factor_normalization_unobserved",
+            );
             let normalized = self
                 .product_reducer
                 .lock()
@@ -1401,7 +1440,7 @@ mod tests {
             .unwrap();
         assert_scalar_limit(
             application
-                .evaluate_detailed(&strict, term.numerator.as_view(), &matched)
+                .evaluate_detailed(&strict, term.numerator.as_view(), &matched, None)
                 .unwrap_err(),
         );
         let after = vakint.rustred_application_cache_statistics().unwrap();

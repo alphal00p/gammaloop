@@ -1168,7 +1168,9 @@ impl VakintWrapper {
     /// and `max_roots`) explicitly enable their native diagnostic profiles;
     /// omission leaves count stops disabled. `batch_records` selects the flush
     /// layout, while `extra_dots` and `numerator_rank` select a workload.
-    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, checkpoint_path=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0))]
+    /// `monitor` selects optional per-call native diagnostics; detaching its TUI
+    /// never requests cancellation. `progress_snapshot` writes latest native JSON.
+    #[pyo3(signature = (n_loops, output_path, *, ram_bytes=None, disk_bytes=None, cache_policy="evict-lru", cache_terms=None, cache_integrals=None, max_rule_applications=None, time_limit_seconds=None, checkpoint_interval_seconds=None, max_roots=None, batch_records=None, extra_dots=None, numerator_rank=None, workload=None, checkpoint_path=None, resume=true, progress=None, cancel=None, progress_interval_seconds=1.0, monitor="off", progress_snapshot=None))]
     #[allow(clippy::too_many_arguments, clippy::type_complexity)]
     pub fn prepare_cache(
         &self,
@@ -1193,9 +1195,13 @@ impl VakintWrapper {
         progress: Option<Py<PyAny>>,
         cancel: Option<Py<PyAny>>,
         progress_interval_seconds: f64,
+        monitor: &str,
+        progress_snapshot: Option<PathBuf>,
     ) -> PyResult<Py<PyDict>> {
         resources::run_committing(self.settings.rustred_resources, || {
             cache::check_loops(n_loops)?;
+            let monitor =
+                cache::monitor_options(monitor, progress_snapshot, progress_interval_seconds)?;
             let mut options = crate::RustRedCachePreparationOptions::default();
             options.storage.ram_bytes = ram_bytes;
             options.storage.disk_bytes = disk_bytes;
@@ -1232,7 +1238,7 @@ impl VakintWrapper {
                 options,
                 progress,
                 cancel,
-                progress_interval_seconds,
+                monitor,
             )
         })
     }
@@ -1437,20 +1443,41 @@ impl VakintWrapper {
     /// expressions required to be nonzero at generic dimension. No numerical
     /// master values are substituted. The ordinary native tensor prepass runs
     /// before scalar application, with the same settings as `evaluate`.
+    /// Optional `monitor` diagnostics are local to this call. A snapshot path
+    /// enables JSON output independently of the terminal display.
+    #[pyo3(signature = (integral_expression, *, monitor="off", progress_snapshot=None, progress_interval_seconds=1.0))]
     #[allow(clippy::type_complexity)]
     pub fn evaluate_rustred_symbolic(
         &self,
+        py: Python<'_>,
         integral_expression: PythonExpression,
+        monitor: &str,
+        progress_snapshot: Option<PathBuf>,
+        progress_interval_seconds: f64,
     ) -> PyResult<(
         PythonExpression,
         Vec<PythonExpression>,
         Vec<(PythonExpression, String)>,
     )> {
         resources::run(self.settings.rustred_resources, || {
-            let result = self
-                .vakint
-                .evaluate_rustred_symbolic(&self.settings, integral_expression.expr.as_view())
-                .map_err(vakint_to_python_error)?;
+            let monitor =
+                cache::monitor_options(monitor, progress_snapshot, progress_interval_seconds)?;
+            let result = if monitor.enabled() {
+                let engine = self.vakint.clone();
+                let settings = self.settings.clone();
+                let input = integral_expression.expr.clone();
+                py.detach(move || {
+                    engine.evaluate_rustred_symbolic_with_monitor(
+                        &settings,
+                        input.as_view(),
+                        &monitor,
+                    )
+                })
+            } else {
+                self.vakint
+                    .evaluate_rustred_symbolic(&self.settings, integral_expression.expr.as_view())
+            }
+            .map_err(vakint_to_python_error)?;
             Ok((
                 result.value.into(),
                 result
@@ -1764,7 +1791,7 @@ impl VakintWrapper {
         })
     }
 
-    #[pyo3(signature = (integral_expression))]
+    #[pyo3(signature = (integral_expression, *, monitor="off", progress_snapshot=None, progress_interval_seconds=1.0))]
     /// Perform the complete parametric evaluation of the Vakint integral represented by the Symbolica expression given in input.
     /// Note that the tensor reduction will be automatically performed on the input given.
     ///
@@ -1792,12 +1819,31 @@ impl VakintWrapper {
     ///
     /// integral_expression : Expression
     ///   A Symbolica expression representing a vakint integral.
-    pub fn evaluate(&self, integral_expression: PythonExpression) -> PyResult<PythonExpression> {
+    /// Optional native diagnostics use `monitor="tui"` or `monitor="json"`.
+    /// A `progress_snapshot` path also enables JSON with terminal monitoring off.
+    pub fn evaluate(
+        &self,
+        py: Python<'_>,
+        integral_expression: PythonExpression,
+        monitor: &str,
+        progress_snapshot: Option<PathBuf>,
+        progress_interval_seconds: f64,
+    ) -> PyResult<PythonExpression> {
         resources::run(self.settings.rustred_resources, || {
-            let result = self
-                .vakint
-                .evaluate(&self.settings, integral_expression.expr.as_view())
-                .map_err(vakint_to_python_error)?;
+            let monitor =
+                cache::monitor_options(monitor, progress_snapshot, progress_interval_seconds)?;
+            let result = if monitor.enabled() {
+                let engine = self.vakint.clone();
+                let settings = self.settings.clone();
+                let input = integral_expression.expr.clone();
+                py.detach(move || {
+                    engine.evaluate_with_monitor(&settings, input.as_view(), &monitor)
+                })
+            } else {
+                self.vakint
+                    .evaluate(&self.settings, integral_expression.expr.as_view())
+            }
+            .map_err(vakint_to_python_error)?;
             Ok(result.into())
         })
     }

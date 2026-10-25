@@ -10,15 +10,15 @@ use std::{
     io::{BufWriter, Write},
     path::PathBuf,
     sync::Mutex,
-    time::Instant,
+    time::{Duration, Instant},
 };
 use symbolica::atom::{Atom, AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
-    RustRedMasterMode, Vakint, VakintSettings,
+    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, Vakint, VakintSettings,
 };
 
-const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--cache PATH] [--warm]";
+const USAGE: &str = "usage: five_loop_qcd_ladder --work-dir PATH [--artifacts PATH] [--projection quadratic|zero-momentum] [--coefficient-representation sparse|factorized] [--prepared-input PATH|--fresh-prepare] [--prepare-only|--dress-only] [--cache PATH] [--warm] [--monitor] [--progress-snapshot PATH] [--progress-interval-seconds N]\nMonitoring defaults off. --monitor requires progress-tui and defaults its snapshot to work-dir/monitor.json. A snapshot path enables native JSON without a TUI; interval defaults to 1s and must be finite and nonnegative. Monitored timings include diagnostic observation overhead.";
 
 struct StageLogger(Mutex<BTreeMap<String, Vec<f64>>>);
 static LOGGER: StageLogger = StageLogger(Mutex::new(BTreeMap::new()));
@@ -80,6 +80,7 @@ fn main() -> fixture::Result<()> {
     let mut fresh_prepare = false;
     let mut dress_only = false;
     let mut warm = false;
+    let mut monitor = RustRedMonitorOptions::default();
     let mut coefficient_representation = CandidateCacheRepresentation::Sparse;
     let mut projection = fixture::Projection::QuadraticTransverse;
     let mut arguments = std::env::args_os().skip(1);
@@ -111,6 +112,21 @@ fn main() -> fixture::Result<()> {
             Some("--fresh-prepare") => fresh_prepare = true,
             Some("--dress-only") => dress_only = true,
             Some("--warm") => warm = true,
+            Some("--monitor") => monitor.display = RustRedMonitorDisplay::Tui,
+            Some("--progress-snapshot") => {
+                monitor.progress_snapshot = Some(PathBuf::from(
+                    arguments.next().ok_or("missing progress snapshot path")?,
+                ));
+            }
+            Some("--progress-interval-seconds") => {
+                let seconds = arguments
+                    .next()
+                    .ok_or("missing progress interval")?
+                    .into_string()
+                    .map_err(|_| "progress interval must be UTF-8")?
+                    .parse::<f64>()?;
+                monitor.interval = Duration::try_from_secs_f64(seconds)?;
+            }
             Some("--coefficient-representation") => {
                 coefficient_representation = match arguments
                     .next()
@@ -151,6 +167,10 @@ fn main() -> fixture::Result<()> {
         CandidateCacheRepresentation::Factorized => "factorized",
     };
     let work = work.ok_or("--work-dir is required")?;
+    if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none() {
+        monitor.progress_snapshot = Some(work.join("monitor.json"));
+    }
+    monitor.validate()?;
     std::fs::create_dir_all(&work)?;
     log::set_logger(&LOGGER).map_err(|error| error.to_string())?;
     log::set_max_level(log::LevelFilter::Debug);
@@ -237,6 +257,18 @@ fn main() -> fixture::Result<()> {
         "contributions":prepared.contributions, "input_sha256":manifest.input.sha256,
         "input_bytes":manifest.input.bytes, "prepared_nonzero_conditions":prepared.nonzero_conditions.iter().map(AtomCore::to_canonical_string).collect::<Vec<_>>(),
         "persistent_cache":cache, "reduction_completed":false});
+    if monitor.enabled() {
+        report["monitor"] = json!({
+            "display": match monitor.display {
+                RustRedMonitorDisplay::Off => "off",
+                RustRedMonitorDisplay::Tui => "tui",
+                RustRedMonitorDisplay::Json => "json",
+            },
+            "progress_snapshot": monitor.progress_snapshot,
+            "interval_seconds": monitor.interval.as_secs_f64(),
+            "diagnostic_timing": true,
+        });
+    }
     std::fs::write(
         work.join("benchmark.json"),
         serde_json::to_vec_pretty(&report)?,
@@ -330,7 +362,13 @@ fn main() -> fixture::Result<()> {
     let owners_before = engine.rustred_application_owner_preparation_statistics()?;
     LOGGER.0.lock().map_err(|error| error.to_string())?.clear();
     let started = Instant::now();
-    let outcome = engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view());
+    // This collector evaluates in its own terminal; the native context owns its
+    // TUI directly. Only collectors with redirected workers need a snapshot viewer.
+    let outcome = if monitor.enabled() {
+        engine.evaluate_rustred_symbolic_with_monitor(&settings, prepared.input.as_view(), &monitor)
+    } else {
+        engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())
+    };
     report["reduction_seconds"] = json!(started.elapsed().as_secs_f64());
     report["end_to_end_seconds"] = json!(total_started.elapsed().as_secs_f64());
     report["warnings"] = json!(*WARNINGS.lock().map_err(|error| error.to_string())?);
@@ -464,7 +502,15 @@ fn main() -> fixture::Result<()> {
     if warm {
         LOGGER.0.lock().map_err(|error| error.to_string())?.clear();
         let started = Instant::now();
-        let second = engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())?;
+        let second = if monitor.enabled() {
+            engine.evaluate_rustred_symbolic_with_monitor(
+                &settings,
+                prepared.input.as_view(),
+                &monitor,
+            )?
+        } else {
+            engine.evaluate_rustred_symbolic(&settings, prepared.input.as_view())?
+        };
         report["warm_reduction_seconds"] = json!(started.elapsed().as_secs_f64());
         report["warm_stages"] = json!(*LOGGER.0.lock().map_err(|error| error.to_string())?);
         if !(result.value - second.value).together().expand().is_zero()
