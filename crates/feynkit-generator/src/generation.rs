@@ -3524,29 +3524,12 @@ impl Generator {
                 self.interaction_expression(rule_id, instantiation)?,
                 None,
             )?,
-            NumeratorTemplate::Admitted { .. } => {
-                let numerator = template.instantiate(instantiation)?;
-                // Raw model rules have no declared axis order: retain the
-                // normalized occurrence order used by actual-owner admission.
-                let structure = composition::interface_in_atom_order(
-                    numerator.expression(),
-                    numerator.structure(),
-                )
-                .expect("template admission established enumerable explicit ports");
-                let logical = numerator.structure().logical_slots();
-                let axes = structure
-                    .logical_slots()
-                    .iter()
-                    .map(|slot| {
-                        logical
-                            .iter()
-                            .position(|original| original == slot)
-                            .expect("template transport preserves every explicit interface slot")
-                    })
-                    .collect::<Vec<_>>();
-                numerator.permuted(&axes).map_err(DiagramError::from)?
-            }
-        };
+            NumeratorTemplate::Admitted { .. } => template.instantiate(instantiation)?,
+        }
+        // Raw rules declare no axis order. Named interfaces use the same
+        // canonical convention after actual-owner admission and template
+        // transport; leaf argument order continues to specify the tensor.
+        .canonicalize_named_interface();
         self.numerators
             .interactions
             .write()
@@ -3758,27 +3741,9 @@ impl Generator {
                 instantiation.propagator_expression(&propagator, particle.color)?,
                 None,
             )?,
-            NumeratorTemplate::Admitted { .. } => {
-                let numerator = template.instantiate(&instantiation)?;
-                let structure = composition::interface_in_atom_order(
-                    numerator.expression(),
-                    numerator.structure(),
-                )
-                .expect("template admission established enumerable explicit ports");
-                let logical = numerator.structure().logical_slots();
-                let axes = structure
-                    .logical_slots()
-                    .iter()
-                    .map(|slot| {
-                        logical
-                            .iter()
-                            .position(|original| original == slot)
-                            .expect("template transport preserves every explicit interface slot")
-                    })
-                    .collect::<Vec<_>>();
-                numerator.permuted(&axes).map_err(DiagramError::from)?
-            }
-        };
+            NumeratorTemplate::Admitted { .. } => template.instantiate(&instantiation)?,
+        }
+        .canonicalize_named_interface();
         self.numerators
             .propagators
             .write()
@@ -7784,7 +7749,8 @@ mod tests {
                         .unwrap(),
                     None,
                 )
-                .unwrap();
+                .unwrap()
+                .canonicalize_named_interface();
                 assert_eq!(actual.expression(), expected.expression());
                 assert_eq!(
                     actual.structure().logical_slots(),
@@ -7804,7 +7770,7 @@ mod tests {
     }
 
     #[test]
-    fn interaction_template_order_matches_actual_owner_admission() {
+    fn interaction_templates_use_canonical_named_interfaces_and_actual_owner_values() {
         for expression in [
             "Metric(1,2)",
             "P(idx(1,1),1)*P(idx(1,2),2)",
@@ -7839,12 +7805,14 @@ mod tests {
                         .unwrap(),
                     None,
                 )
-                .unwrap();
+                .unwrap()
+                .canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{expression}: {permutation:?}"
                 );
+                assert_eq!(actual.presentation_atom(), *actual.expression());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),
@@ -7861,7 +7829,7 @@ mod tests {
     }
 
     #[test]
-    fn propagator_template_order_matches_actual_owner_admission() {
+    fn propagator_templates_use_canonical_named_interfaces_and_actual_owner_values() {
         for expression in ["Metric(1,2)", "P(idx(1,1))*P(idx(1,2))"] {
             let mut definition = serde_json::to_value(scalar_model()).unwrap();
             definition["propagators"][0]["numerator"] = json!(expression);
@@ -7890,12 +7858,14 @@ mod tests {
                         .unwrap(),
                     None,
                 )
-                .unwrap();
+                .unwrap()
+                .canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{expression}: {hedges:?}"
                 );
+                assert_eq!(actual.presentation_atom(), *actual.expression());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),
@@ -7912,7 +7882,7 @@ mod tests {
     }
 
     #[test]
-    fn interaction_scoped_pairs_do_not_reorder_public_ports() {
+    fn interaction_scoped_pairs_preserve_leaf_arguments_with_canonical_free_interfaces() {
         let _ = tensor_symbol!("UFO::generation_scoped_order_tensor");
         let _ = Minkowski {}.new_rep(4).to_symbolic([]);
         for scalar in [
@@ -7965,11 +7935,15 @@ mod tests {
                         ))
                     })
                 );
+                // Canonical free interfaces do not rewrite the tensor leaf
+                // whose authored arguments were just checked above.
+                let expected = expected.canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{scalar}"
                 );
+                assert_eq!(actual.presentation_atom(), *actual.expression());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),
@@ -7986,7 +7960,7 @@ mod tests {
     }
 
     #[test]
-    fn propagator_scoped_pairs_do_not_reorder_public_ports() {
+    fn propagator_scoped_pairs_preserve_leaf_arguments_with_canonical_free_interfaces() {
         let _ = tensor_symbol!("UFO::generation_scoped_prop_tensor");
         let _ = Minkowski {}.new_rep(4).to_symbolic([]);
         for scalar in ["(P(1,1)*P(1,2)+1)", "spenso::bracket(P(1,1),P(1,2))^2"] {
@@ -8037,11 +8011,13 @@ mod tests {
                         ))
                     })
                 );
+                let expected = expected.canonicalize_named_interface();
                 assert_eq!(
                     actual.expression().as_view().get_data(),
                     expected.expression().as_view().get_data(),
                     "{scalar}"
                 );
+                assert_eq!(actual.presentation_atom(), *actual.expression());
                 assert_eq!(
                     actual.structure().logical_slots(),
                     expected.structure().logical_slots(),

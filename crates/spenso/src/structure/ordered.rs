@@ -72,7 +72,7 @@ impl super::IndexedStructure {
     /// Return the explicitly indexed slots in their declared logical order.
     pub fn logical_slots(&self) -> Vec<Slot<LibraryRep, AbstractIndex>> {
         self.layout()
-            .canonical_to_logical(&self.canonical().external_structure())
+            .canonical_to_logical(&self.canonical().structure)
     }
 
     /// Project index metadata to the partial interface without changing storage order.

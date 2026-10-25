@@ -2643,8 +2643,10 @@ pyo3_stub_gen::define_stub_info_gatherer!(stub_info);
 
 #[cfg(test)]
 mod tests {
+    use crate::AtomsOrFloats;
     use idenso::{dirac::AGS, representations::initialize};
     use spenso::network::parsing::ParseSettings;
+    use spenso::structure::partial::PartialSlot;
     use spenso::structure::{
         OrderedStructure, TensorStructure,
         dimension::Dimension,
@@ -3231,6 +3233,77 @@ mod tests {
             product.structure.structure().logical_slots()[0].aind,
             PartialIndex::Explicit(AbstractIndex::Normal(41))
         );
+    }
+
+    #[test]
+    fn consuming_all_open_ports_preserves_named_axis_components_and_later_contractions() {
+        initialize();
+        Python::initialize();
+        Python::attach(|py| -> PyResult<()> {
+            let free = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
+            let contracted = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+            let named = |index| free.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)));
+            let network = |name: &str, ports: Vec<PartialSlot>, values: Vec<f64>| {
+                let (descriptor, name) = tensor_descriptor(name, ports);
+                let expression = TensorExpression::from_known_parts(
+                    py,
+                    descriptor.expression().clone(),
+                    descriptor.structure().clone(),
+                    Some(name),
+                    Vec::new(),
+                )?;
+                SpensoNet::from_tensor(Spensor::dense(
+                    expression.bind(py).as_any().extract()?,
+                    AtomsOrFloats::Floats(values),
+                )?)
+            };
+            let left = network(
+                "network_consumed_open_left",
+                vec![named(9), contracted.slot(PartialIndex::open(0)), named(3)],
+                (1..=12).map(f64::from).collect(),
+            )?;
+            let right = network(
+                "network_consumed_open_right",
+                vec![contracted.slot(PartialIndex::Explicit(AbstractIndex::Normal(42)))],
+                vec![1., 10., 100.],
+            )?;
+            let product = left.contract_ports(ConvertibleToSpensoNet(right), 1, 0)?;
+            let expected_ports = [named(3), named(9)];
+            assert_eq!(product.semantic_slots(), expected_ports);
+            assert_eq!(
+                product.materialized.structure().logical_slots(),
+                expected_ports
+            );
+
+            let mut executed = product.clone();
+            executed.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, executed.result_tensor(None)?)?;
+            // The source array is T[a,b,c] = 6*a + 2*b + c + 1.
+            // Summing b against [1,10,100] leaves 666*a + 111*c + 531,
+            // exposed in canonical named order [c,a], including off-diagonals.
+            for (indices, expected) in [
+                ((0, 0), 531.),
+                ((0, 1), 1197.),
+                ((1, 0), 642.),
+                ((1, 1), 1308.),
+            ] {
+                assert_eq!(
+                    result.bind(py).get_item(indices)?.extract::<f64>()?,
+                    expected
+                );
+            }
+
+            let probe = network("network_consumed_open_probe", vec![named(3)], vec![2., 5.])?;
+            let mut result = product.contract_ports(ConvertibleToSpensoNet(probe), 0, 0)?;
+            assert_eq!(result.semantic_slots(), [named(9)]);
+            assert_eq!(result.materialized.structure().logical_slots(), [named(9)]);
+            result.execute(None, None, None, ExecutionMode::All)?;
+            let result = Py::new(py, result.result_tensor(None)?)?;
+            assert_eq!(result.bind(py).get_item(0)?.extract::<f64>()?, 4272.);
+            assert_eq!(result.bind(py).get_item(1)?.extract::<f64>()?, 8934.);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

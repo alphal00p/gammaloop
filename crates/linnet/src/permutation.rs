@@ -45,9 +45,9 @@ use std::{
 };
 
 use crate::half_edge::{
+    HedgeGraph, NodeIndex,
     involution::Hedge,
     subgraph::{BaseSubgraph, InternalSubGraph, ModifySubSet, SuBitGraph, SubSetLike, SubSetOps},
-    HedgeGraph, NodeIndex,
 };
 use ahash::AHashSet;
 use thiserror::Error;
@@ -480,8 +480,8 @@ impl Permutation {
         self.map.iter().map(|&idx| s[idx].clone()).collect()
     }
 
-    /// Applies `self` in-place to the provided slice by using transpositions
-    /// derived from the cycle decomposition.
+    /// Applies `self` in-place by walking its cycles with one visited buffer.
+    /// Identity permutations require no scratch allocation.
     ///
     /// # Examples
     ///
@@ -496,14 +496,11 @@ impl Permutation {
     where
         S: AsMut<[T]>,
     {
-        let transpositions = self.transpositions();
-        for (i, j) in transpositions.iter().rev() {
-            slice.as_mut().swap(*i, *j);
-        }
+        Self::apply_map_in_place(&self.map, slice.as_mut());
     }
 
-    /// Applies the inverse of `self` in-place to the provided slice by using transpositions
-    /// derived from the cycle decomposition.
+    /// Applies the inverse of `self` in-place by walking its inverse cycles.
+    /// Identity permutations require no scratch allocation.
     ///
     /// # Examples
     ///
@@ -518,9 +515,27 @@ impl Permutation {
     where
         S: AsMut<[T]>,
     {
-        let transpositions = self.transpositions();
-        for (i, j) in transpositions {
-            slice.as_mut().swap(i, j);
+        Self::apply_map_in_place(&self.inv, slice.as_mut());
+    }
+
+    fn apply_map_in_place<T>(map: &[usize], slice: &mut [T]) {
+        let Some(first_moved) = map.iter().enumerate().position(|(i, &target)| i != target) else {
+            return;
+        };
+        let mut visited = vec![false; map.len()];
+        for start in first_moved..map.len() {
+            if visited[start] || map[start] == start {
+                continue;
+            }
+            visited[start] = true;
+            let mut next = map[start];
+            // Anchor swaps follow the source-to-destination map forward, moving each
+            // original value to its image. Walking the inverse map reverses the cycle.
+            while !visited[next] {
+                visited[next] = true;
+                slice.swap(start, next);
+                next = map[next];
+            }
         }
     }
 
@@ -1120,7 +1135,7 @@ pub trait HedgeGraphExt {
     fn hedges_between(&self, a: NodeIndex, b: NodeIndex) -> SuBitGraph;
 
     fn permute_subgraph<S: SubSetLike>(&self, subgraph: &S, hedge_perm: &Permutation)
-        -> SuBitGraph;
+    -> SuBitGraph;
 
     fn orientation_ord(&self, hedge: Hedge) -> u8;
 }
@@ -1653,7 +1668,7 @@ mod tests {
     #[test]
     fn test_iter_slice_panic_too_short() {
         let p = Permutation::from_map(vec![0, 1, 2]); // Needs slice of length at least 3
-                                                      // The iterator constructors panic on this condition; the helper lets us check it directly.
+        // The iterator constructors panic on this condition; the helper lets us check it directly.
         assert_eq!(max_out_of_bounds_index(&p.map, 2), Some(2));
     }
 
@@ -1668,7 +1683,7 @@ mod tests {
             map: vec![0, 5, 1],
             inv: vec![0, 2, 1],
         }; // map[1] = 5
-           // This covers the corrupted-map case without depending on panic handling in the test runner.
+        // This covers the corrupted-map case without depending on panic handling in the test runner.
         assert_eq!(max_out_of_bounds_index(&p.map, 3), Some(5));
     }
 
@@ -2168,16 +2183,19 @@ mod tests {
 
     #[test]
     fn test_apply_in_place_same_as_ref() {
-        // Create a few different permutations for testing
         let permutations = [
+            Permutation::id(0),
+            Permutation::id(1),
+            Permutation::id(4),
             Permutation::from_map(vec![2, 0, 1, 3]),
             Permutation::from_map(vec![3, 2, 1, 0]),
             Permutation::from_map(vec![1, 0, 3, 2]),
+            Permutation::from_map(vec![2, 0, 1, 4, 3, 5]),
+            Permutation::from_map(vec![0, 2, 3, 1, 5, 4, 6]),
         ];
 
         for perm in &permutations {
-            // Test data
-            let data = vec![10, 20, 30, 40];
+            let data: Vec<_> = (0..perm.map().len()).map(|i| i.to_string()).collect();
 
             // Apply using by-reference method
             let result_by_ref = perm.apply_slice(&data);

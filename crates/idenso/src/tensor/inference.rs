@@ -319,7 +319,7 @@ impl<'a> BorrowedTensorParts<'a> {
 
     pub(super) fn product_is_normalized(&self) -> bool {
         self.proofs.validated.get() == Some(&true)
-            && self.structure.open_positions().is_empty()
+            && !self.structure.has_unresolved_ports()
             && *self.proofs.normalized_product.get_or_init(|| {
                 !self.expression.as_view().needs_normalization()
                     && !SymbolicTensor::<PartialStructure>::has_unresolved_ports(

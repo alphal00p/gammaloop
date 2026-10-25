@@ -24,7 +24,7 @@ use spenso::structure::partial::{
 };
 use spenso::structure::representation::{LibraryRep, LibrarySlot, RepName, Representation};
 use spenso::structure::slot::{IsAbstractSlot, Slot, SlotMatch, SlotMatcher};
-use spenso::structure::{OrderedStructure, SlotIndex, TensorStructure};
+use spenso::structure::{Canonicalized, OrderedStructure, SlotIndex, TensorStructure};
 use std::cell::OnceCell;
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::{HashMap, HashSet};
@@ -66,10 +66,17 @@ impl SymbolicTensor<PartialStructure> {
         let is_metric =
             matches!(atom.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
         let is_composite = !matches!(atom.as_view(), AtomView::Fun(_));
+        // Only anonymous occurrence IDs need rebasing; explicit layouts already
+        // carry their established storage and logical-axis correspondence.
+        let interface = if interface.has_unresolved_ports() {
+            interface.canonicalize_open_ports()
+        } else {
+            interface
+        };
         Self {
             proofs: Default::default(),
             expression: atom,
-            structure: interface.canonicalize_open_ports(),
+            structure: interface,
             is_metric,
             is_composite,
         }
@@ -81,6 +88,26 @@ impl SymbolicTensor<PartialStructure> {
 
     pub fn is_scalar(&self) -> bool {
         self.rank() == 0
+    }
+
+    fn interface_is_named(interface: &PartialStructure) -> bool {
+        interface.canonical().external_indices_iter().all(|index| {
+            let PartialIndex::Explicit(index) = index else {
+                return false;
+            };
+            // Materialized graph ports still own positional occurrences.
+            // Their explicit storage wrapper does not make them named axes.
+            CookSettings::index_has_open_port(index).is_ok_and(|open| !open)
+        })
+    }
+
+    fn has_canonical_layout(&self) -> bool {
+        (0..self.rank()).all(|position| {
+            self.structure
+                .layout()
+                .canonical_to_logical_position(position)
+                == position
+        })
     }
 
     /// Exact normalized tensor-value equality, including public logical port order.
@@ -276,10 +303,13 @@ impl SymbolicTensor<PartialStructure> {
         }
     }
 
-    /// Build a presentation-only atom whose surviving tensor ports follow the
-    /// public logical interface rather than `OrderedStructure`'s canonical
-    /// storage order.
+    /// Present positional ports in their public logical order. Canonical named
+    /// interfaces do not declare a leaf argument order; their payload is shown
+    /// verbatim so a free-axis permutation cannot change the tensor's meaning.
     pub fn presentation_atom(&self) -> Atom {
+        if Self::interface_is_named(&self.structure) && self.has_canonical_layout() {
+            return self.expression.clone();
+        }
         let slots = self.structure.logical_slots();
         let mut state = PortRewriteState::new(slots.len());
         state.bulk_arithmetic = PortRewriteState::exact_arithmetic(self.expression.as_view());
@@ -293,6 +323,9 @@ impl SymbolicTensor<PartialStructure> {
     /// logical interface. Additive occurrence order must survive slicing; a
     /// fragment is not a newly inferred tensor and introduces no new indices.
     pub fn presentation_fragment(&self, fragment: AtomView<'_>) -> Atom {
+        if Self::interface_is_named(&self.structure) && self.has_canonical_layout() {
+            return fragment.to_owned();
+        }
         let slots = self.structure.logical_slots();
         let mut state = PortRewriteState::new(slots.len());
         state.bulk_arithmetic = PortRewriteState::exact_arithmetic(fragment);
@@ -394,21 +427,24 @@ fn automatically_contractible(left: &PartialSlot, right: &PartialSlot) -> bool {
 }
 
 pub fn compatible_pairs(left: &PartialStructure, right: &PartialStructure) -> Vec<PortPair> {
-    let left = left.logical_slots();
-    let right = right.logical_slots();
-    left.iter()
+    let mut pairs = left
+        .canonical()
+        .external_structure_iter()
         .enumerate()
         .flat_map(|(left_position, left_slot)| {
             right
-                .iter()
+                .canonical()
+                .external_structure_iter()
                 .enumerate()
-                .filter(move |(_, right_slot)| automatically_contractible(left_slot, right_slot))
+                .filter(move |(_, right_slot)| automatically_contractible(&left_slot, right_slot))
                 .map(move |(right_position, _)| PortPair {
-                    left: left_position,
-                    right: right_position,
+                    left: left.layout().canonical_to_logical_position(left_position),
+                    right: right.layout().canonical_to_logical_position(right_position),
                 })
         })
-        .collect()
+        .collect::<Vec<_>>();
+    pairs.sort_unstable_by_key(|pair| (pair.left, pair.right));
+    pairs
 }
 
 fn is_structured_scalar(value: AtomView<'_>) -> bool {
@@ -743,9 +779,23 @@ impl ExplicitIndexOccurrences {
     pub(super) fn product(
         sources: &[&SymbolicTensor<PartialStructure>],
     ) -> Result<Self, TensorCompositionError> {
+        if let [left, right] = sources
+            && !left.structure.has_unresolved_ports()
+            && !right.structure.has_unresolved_ports()
+        {
+            let left = left
+                .explicit_index_occurrences()
+                .map_err(TensorCompositionError::from)?;
+            let right = right
+                .explicit_index_occurrences()
+                .map_err(TensorCompositionError::from)?;
+            let result = left.merge(right, OccurrenceMerge::Product);
+            result.validate()?;
+            return Ok(result);
+        }
         let mut result = Self::default();
         for source in sources {
-            let positional = !source.structure.open_positions().is_empty();
+            let positional = source.structure.has_unresolved_ports();
             let raw_observation;
             let observed = if positional {
                 if source.expression.is_zero() && source.proofs.occurrences.get().is_none() {
@@ -1017,7 +1067,7 @@ impl ExplicitIndexOccurrences {
     }
 
     pub(super) fn append(&mut self, other: &Self) {
-        self.merge(other, OccurrenceMerge::Product);
+        *self = self.merge(other, OccurrenceMerge::Product);
     }
 
     /// Remove one selected public occurrence before simultaneous relabelling.
@@ -1072,11 +1122,10 @@ impl ExplicitIndexOccurrences {
     }
 
     pub(super) fn branch_max(&mut self, other: &Self) {
-        self.merge(other, OccurrenceMerge::Alternatives);
+        *self = self.merge(other, OccurrenceMerge::Alternatives);
     }
 
-    fn merge(&mut self, other: &Self, mode: OccurrenceMerge) {
-        self.selected_pair |= other.selected_pair;
+    fn merge(&self, other: &Self, mode: OccurrenceMerge) -> Self {
         let mut indices = Vec::with_capacity(self.indices.len() + other.indices.len());
         let mut dummies: SubSet<SlotIndex> = iter::empty().collect();
         let mut orientations = Vec::with_capacity(self.indices.len() + other.indices.len());
@@ -1136,11 +1185,13 @@ impl ExplicitIndexOccurrences {
                 overflow.get_or_insert(slot);
             }
         }
-        drop((left, right));
-        self.indices = indices;
-        self.dummies = dummies;
-        self.orientations = orientations;
-        self.overflow = overflow;
+        Self {
+            indices,
+            dummies,
+            orientations,
+            overflow,
+            selected_pair: self.selected_pair || other.selected_pair,
+        }
     }
 
     pub(super) fn retain(
@@ -1891,7 +1942,7 @@ pub(crate) fn rewrite_interface_ports(
     }
     let mut state = PortRewriteState::new(slots.len());
     state.explicit_copies =
-        value.proofs.validated.get() == Some(&true) && value.structure.open_positions().is_empty();
+        value.proofs.validated.get() == Some(&true) && !value.structure.has_unresolved_ports();
     if replacements.values().any(|replacement| {
         matches!(replacement.as_view(), AtomView::Fun(vector)
         if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
@@ -1912,7 +1963,7 @@ pub(crate) fn rewrite_interface_ports(
             .all(|replacement| PortRewriteState::exact_arithmetic(replacement.as_view()));
     let atom =
         rewrite_ports(value.expression.as_view(), &slots, replacements, &mut state).into_owned();
-    if !(value.proofs.validated.get() == Some(&true) && value.structure.open_positions().is_empty())
+    if !(value.proofs.validated.get() == Some(&true) && !value.structure.has_unresolved_ports())
         && let Some(position) = replacements
             .keys()
             .copied()
@@ -2037,13 +2088,6 @@ fn without_positions(interface: &PartialStructure, positions: &[usize]) -> Parti
     )
 }
 
-fn concatenate_interfaces(
-    left: impl IntoIterator<Item = PartialSlot>,
-    right: impl IntoIterator<Item = PartialSlot>,
-) -> PartialStructure {
-    PartialStructure::from_logical_slots(left.into_iter().chain(right))
-}
-
 pub fn port_atom(slot: PartialSlot) -> Atom {
     match slot.aind {
         PartialIndex::Explicit(index) => slot.rep().slot::<AbstractIndex, _>(index).to_atom(),
@@ -2071,6 +2115,69 @@ pub enum ProductPlan {
 }
 
 impl ProductPlan {
+    /// Canonicalize the free interface once every surviving port is named.
+    /// Unresolved survivors retain the order of their admitted occurrences.
+    fn free_interface(
+        left: &SymbolicTensor<PartialStructure>,
+        right: &SymbolicTensor<PartialStructure>,
+        pairs: &[PortPair],
+    ) -> PartialStructure {
+        if pairs.is_empty() {
+            if left.is_scalar() {
+                return right.structure.clone();
+            }
+            if right.is_scalar() {
+                return left.structure.clone();
+            }
+        }
+        let named = SymbolicTensor::interface_is_named(&left.structure)
+            && SymbolicTensor::interface_is_named(&right.structure);
+        let left = &left.structure;
+        let right = &right.structure;
+        if named {
+            let left_slots = left
+                .canonical()
+                .external_structure_iter()
+                .enumerate()
+                .filter(|(position, _)| {
+                    let position = left.layout().canonical_to_logical_position(*position);
+                    !pairs.iter().any(|pair| pair.left == position)
+                })
+                .map(|(_, slot)| slot);
+            let right_slots = right
+                .canonical()
+                .external_structure_iter()
+                .enumerate()
+                .filter(|(position, _)| {
+                    let position = right.layout().canonical_to_logical_position(*position);
+                    !pairs.iter().any(|pair| pair.right == position)
+                })
+                .map(|(_, slot)| slot);
+            let interface: PartialStructure = left_slots.chain(right_slots).collect();
+            return Canonicalized::identity(interface.into_canonical());
+        }
+        let interface = PartialStructure::from_logical_slots(
+            left.logical_slots()
+                .into_iter()
+                .enumerate()
+                .filter(|(position, _)| !pairs.iter().any(|pair| pair.left == *position))
+                .map(|(_, slot)| slot)
+                .chain(
+                    right
+                        .logical_slots()
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(position, _)| !pairs.iter().any(|pair| pair.right == *position))
+                        .map(|(_, slot)| slot),
+                ),
+        );
+        if SymbolicTensor::interface_is_named(&interface) {
+            Canonicalized::identity(interface.into_canonical())
+        } else {
+            interface
+        }
+    }
+
     /// Allocate all graph-port assignments for this already-selected product.
     /// Semantic interfaces choose pairings; materialized views use the same
     /// original logical positions and never infer pairings from fresh labels.
@@ -2121,9 +2228,7 @@ impl ProductPlan {
                     ));
                 };
                 let atom = left.expression.as_ref() * right.expression.as_ref();
-                if !left.structure.open_positions().is_empty()
-                    || !right.structure.open_positions().is_empty()
-                {
+                if left.structure.has_unresolved_ports() || right.structure.has_unresolved_ports() {
                     validate_explicit_index_occurrences(&atom)?;
                 }
                 let value = if left.borrowed_parts().product_is_normalized()
@@ -2283,7 +2388,7 @@ impl SymbolicTensor<PartialStructure> {
     ) -> Result<Self, TensorCompositionError> {
         if sources
             .iter()
-            .all(|source| source.structure.open_positions().is_empty())
+            .all(|source| !source.structure.has_unresolved_ports())
         {
             if let Some(occurrences) = self.proofs.occurrences.get() {
                 occurrences.validate()?;
@@ -2366,7 +2471,7 @@ impl SymbolicTensor<PartialStructure> {
         }
         self.explicit_index_occurrences()
             .map_err(TensorCompositionError::from)?;
-        if self.structure.open_positions().is_empty() {
+        if !self.structure.has_unresolved_ports() {
             if axes.iter().copied().eq(0..rank) {
                 return Ok(self.clone());
             }
@@ -2398,6 +2503,44 @@ impl SymbolicTensor<PartialStructure> {
         value.structure =
             PartialStructure::from_logical_slots(axes.iter().map(|&axis| slots[axis]));
         Ok(value)
+    }
+
+    /// Use canonical free-index order when every public port has a name.
+    ///
+    /// This changes only interface layout: leaf arguments, index identities and
+    /// carried collision history retain their meanings. Unresolved interfaces
+    /// retain their positional order. No admission or validation is performed.
+    ///
+    /// ```
+    /// use idenso::tensor::SymbolicTensor;
+    /// use spenso::structure::TensorStructure;
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::partial::PartialStructureExt;
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    /// use spenso::structure::slot::IsAbstractSlot;
+    /// use spenso::tensor_symbol;
+    /// use symbolica::function;
+    ///
+    /// let rep = Euclidean {}.new_rep(3).to_lib();
+    /// let ports = [9, 3].map(|index| rep.slot(AbstractIndex::Normal(index)).to_atom());
+    /// let expression = function!(tensor_symbol!("docs::canonical_axes"), &ports[0], &ports[1]);
+    /// let tensor = SymbolicTensor::infer(expression.clone())?;
+    /// let canonical = tensor.canonicalize_named_interface();
+    /// assert_eq!(canonical.expression(), &expression);
+    /// assert_eq!(canonical.presentation_atom(), expression);
+    /// assert_eq!(
+    ///     canonical.structure().logical_slots(),
+    ///     canonical.structure().canonical().external_structure(),
+    /// );
+    /// # Ok::<(), idenso::tensor::inference::TensorInferenceError>(())
+    /// ```
+    #[must_use]
+    pub fn canonicalize_named_interface(mut self) -> Self {
+        if Self::interface_is_named(&self.structure) && !self.has_canonical_layout() {
+            self.structure = Canonicalized::identity(self.structure.into_canonical());
+            self.proofs = self.proofs.algebra_result();
+        }
+        self
     }
 
     /// Give each unresolved public port a fresh explicit identity, preserving logical order.
@@ -2436,7 +2579,7 @@ impl SymbolicTensor<PartialStructure> {
     /// # Ok::<(), Box<dyn Error>>(())
     /// ```
     pub fn materialized(&self) -> Result<Self, TensorCompositionError> {
-        if self.structure.open_positions().is_empty() {
+        if !self.structure.has_unresolved_ports() {
             self.explicit_index_occurrences()
                 .map_err(TensorCompositionError::from)?;
             return Ok(self.clone());
@@ -2554,7 +2697,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         replacements: &HashMap<usize, AbstractIndex>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
-        let explicit = self.structure.open_positions().is_empty();
+        let explicit = !self.structure.has_unresolved_ports();
         let mut occurrences = ExplicitIndexOccurrences::product(&[self])?;
         let mut logical = self.structure.logical_slots();
         let mut mapped = Vec::new();
@@ -2682,7 +2825,7 @@ impl SymbolicTensor<PartialStructure> {
                 start_rep.to_symbolic([]),
                 factors.iter().map(|factor| factor.to_owned()),
             );
-        let interface = if self.structure.open_positions().is_empty() {
+        let interface = if !self.structure.has_unresolved_ports() {
             interface
         } else {
             interface_in_atom_order(&atom, &interface)?
@@ -2691,6 +2834,12 @@ impl SymbolicTensor<PartialStructure> {
             .validate_rewrite("normalize_closed_root_chain", &[&self])
     }
 
+    /// Form an outer product without implicit contractions.
+    ///
+    /// Named free axes use canonical representation/index order; leaf argument
+    /// order is unchanged. If any free port is unresolved or carries an internal
+    /// open-axis marker, axes retain left-then-right logical order. A scalar
+    /// operand preserves the other operand's declared logical interface.
     /// See the [example](Self::materialized).
     ///
     /// # Errors
@@ -2701,13 +2850,27 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<Self, TensorCompositionError> {
-        let left_slots = self.structure.logical_slots();
-        let right_slots = right.structure.logical_slots();
         let collisions = compatible_pairs(&self.structure, &right.structure)
             .into_iter()
             .filter(|pair| {
-                matches!(left_slots[pair.left].aind, PartialIndex::Explicit(_))
-                    && matches!(right_slots[pair.right].aind, PartialIndex::Explicit(_))
+                let left = self.structure.canonical().get_aind(
+                    self.structure
+                        .layout()
+                        .logical_to_canonical_position(pair.left),
+                );
+                let right = right.structure.canonical().get_aind(
+                    right
+                        .structure
+                        .layout()
+                        .logical_to_canonical_position(pair.right),
+                );
+                matches!(
+                    (left, right),
+                    (
+                        Some(PartialIndex::Explicit(_)),
+                        Some(PartialIndex::Explicit(_))
+                    )
+                )
             })
             .collect::<Vec<_>>();
         if !collisions.is_empty() {
@@ -2718,21 +2881,20 @@ impl SymbolicTensor<PartialStructure> {
         } else {
             SymbolicTensor::bracket_product(self.expression.as_view(), right.expression.as_view())
         };
-        if !self.structure.open_positions().is_empty()
-            || !right.structure.open_positions().is_empty()
-        {
+        if self.structure.has_unresolved_ports() || right.structure.has_unresolved_ports() {
             validate_explicit_index_occurrences(&atom)?;
         }
-        SymbolicTensor::from_normalized_parts(
-            atom,
-            concatenate_interfaces(
-                self.structure.logical_slots(),
-                right.structure.logical_slots(),
-            ),
-        )
-        .validate_rewrite("outer", &[self, right])
+        SymbolicTensor::from_normalized_parts(atom, ProductPlan::free_interface(self, right, &[]))
+            .validate_rewrite("outer", &[self, right])
     }
 
+    /// Contract pairs selected in the operands' public logical axis order.
+    ///
+    /// When every surviving free port is named, the result exposes canonical
+    /// representation/index order, even if the contraction consumes unresolved
+    /// input ports. Surviving unresolved ports or internal open-axis markers keep
+    /// left-then-right logical order. Empty `positions` uses [`Self::outer`],
+    /// including its scalar-operand convention. Leaf argument order is unchanged.
     /// See the [example](Self::materialized).
     ///
     /// # Errors
@@ -2806,6 +2968,14 @@ impl SymbolicTensor<PartialStructure> {
                         .map(|(_, slot)| slot),
                 ),
         );
+        // All unresolved inputs may have been consumed by this contraction.
+        // Semantic and materialized applications must choose the same layout
+        // from their surviving ports, independently of the input spelling.
+        let interface = if Self::interface_is_named(&interface) {
+            Canonicalized::identity(interface.into_canonical())
+        } else {
+            interface
+        };
         let dummies = OnceCell::new();
         let mut left_indices = HashMap::new();
         let mut right_indices = HashMap::new();
@@ -2818,8 +2988,8 @@ impl SymbolicTensor<PartialStructure> {
             left_indices.insert(pair.left, index);
             right_indices.insert(pair.right, index);
         }
-        let explicit = self.structure.open_positions().is_empty()
-            && right.structure.open_positions().is_empty();
+        let explicit =
+            !self.structure.has_unresolved_ports() && !right.structure.has_unresolved_ports();
         let materialized;
         let (materialized_left, materialized_right) = if explicit {
             (self, right)
@@ -2890,7 +3060,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         channel: MatrixChannel,
     ) -> Result<(Atom, Vec<Atom>), TensorCompositionError> {
-        if self.structure.open_positions().is_empty() {
+        if !self.structure.has_unresolved_ports() {
             self.explicit_index_occurrences()
                 .map_err(TensorCompositionError::from)?;
         } else {
@@ -3103,8 +3273,7 @@ impl SymbolicTensor<PartialStructure> {
                 port_atom(right_output),
                 factors.into_iter().chain(right_factors),
             );
-        if self.structure.open_positions().is_empty() && right.structure.open_positions().is_empty()
-        {
+        if !self.structure.has_unresolved_ports() && !right.structure.has_unresolved_ports() {
             let value = SymbolicTensor::from_normalized_parts(atom, interface);
             let _ = value.proofs.occurrences.set(Arc::new(occurrences));
             value
@@ -3130,9 +3299,27 @@ impl SymbolicTensor<PartialStructure> {
         if self.is_scalar() || right.is_scalar() {
             return Ok(ProductPlan::Scalar);
         }
+        let candidates = compatible_pairs(&self.structure, &right.structure);
+        if Self::interface_is_named(&self.structure) && Self::interface_is_named(&right.structure) {
+            // Named slots determine every pairing. Their canonical storage
+            // already contains the complete interface; neither logical-slot
+            // reconstruction nor the unresolved matching solver is needed.
+            for (position, pair) in candidates.iter().enumerate() {
+                if candidates[..position]
+                    .iter()
+                    .any(|previous| previous.left == pair.left || previous.right == pair.right)
+                {
+                    return Err(TensorCompositionError::Ambiguous(candidates));
+                }
+            }
+            return Ok(if candidates.is_empty() {
+                ProductPlan::Outer
+            } else {
+                ProductPlan::Contract(candidates)
+            });
+        }
         let left_slots = self.structure.logical_slots();
         let right_slots = right.structure.logical_slots();
-        let candidates = compatible_pairs(&self.structure, &right.structure);
         // Repeated explicit labels fix their partners before unresolved ports are considered.
         let mut pairs = candidates
             .iter()
@@ -3280,6 +3467,11 @@ impl SymbolicTensor<PartialStructure> {
     /// Select scalar, outer, contraction, or matrix composition from the stored ports.
     /// Ambiguous pairings return an error. The fallible `*` operator delegates here:
     /// `let product = (&left * &right)?;`.
+    /// Named outer/contraction results expose canonical free-axis order without
+    /// reordering leaf arguments. Surviving unresolved ports or internal open-axis
+    /// markers retain left-then-right logical order. Scalar multiplication keeps
+    /// the other operand's declared logical interface, and matrix composition
+    /// retains the input/output channel order of [`Self::compose`].
     /// See the [example](SymbolicTensor).
     ///
     /// # Errors
@@ -3291,7 +3483,7 @@ impl SymbolicTensor<PartialStructure> {
         right: &SymbolicTensor<PartialStructure>,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
         for source in [self, right] {
-            if source.structure.open_positions().is_empty() {
+            if !source.structure.has_unresolved_ports() {
                 source
                     .explicit_index_occurrences()
                     .map_err(TensorCompositionError::from)?;
@@ -3311,27 +3503,14 @@ impl SymbolicTensor<PartialStructure> {
             && self.borrowed_parts().product_is_normalized()
             && right.borrowed_parts().product_is_normalized()
         {
-            // The plan already checked pairing and ambiguity. Retain its
-            // logical order, including nominal ports carried only by zero.
+            // The plan already checked pairing and ambiguity. Named free
+            // interfaces use canonical order, including ports carried only by
+            // zero; scalar operations retain the declared operand layout.
             let interface = match &plan {
                 ProductPlan::Scalar if self.is_scalar() => right.structure.clone(),
                 ProductPlan::Scalar => self.structure.clone(),
-                ProductPlan::Outer => concatenate_interfaces(
-                    self.structure.logical_slots(),
-                    right.structure.logical_slots(),
-                ),
-                ProductPlan::Contract(pairs) => concatenate_interfaces(
-                    without_positions(
-                        &self.structure,
-                        &pairs.iter().map(|pair| pair.left).collect::<Vec<_>>(),
-                    )
-                    .logical_slots(),
-                    without_positions(
-                        &right.structure,
-                        &pairs.iter().map(|pair| pair.right).collect::<Vec<_>>(),
-                    )
-                    .logical_slots(),
-                ),
+                ProductPlan::Outer => ProductPlan::free_interface(self, right, &[]),
+                ProductPlan::Contract(pairs) => ProductPlan::free_interface(self, right, pairs),
                 ProductPlan::Compose(..) => unreachable!(),
             };
             let occurrences = ExplicitIndexOccurrences::product(&[self, right])?;
@@ -3368,7 +3547,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         channel: MatrixChannel,
     ) -> Result<SymbolicTensor<PartialStructure>, TensorCompositionError> {
-        if self.structure.open_positions().is_empty() {
+        if !self.structure.has_unresolved_ports() {
             self.explicit_index_occurrences()
                 .map_err(TensorCompositionError::from)?;
         } else {
@@ -3433,7 +3612,7 @@ impl SymbolicTensor<PartialStructure> {
                 (channel.input, index),
                 (channel.output, index),
             ]))?;
-            let interface = if self.structure.open_positions().is_empty() {
+            let interface = if !self.structure.has_unresolved_ports() {
                 interface
             } else {
                 interface_in_atom_order(&atom, &interface)?
@@ -3450,7 +3629,7 @@ impl SymbolicTensor<PartialStructure> {
 
         let (coefficient, factors) = self.chain_parts(channel)?;
         let atom = coefficient * shadowing::trace(input.rep().to_symbolic([]), factors);
-        let interface = if self.structure.open_positions().is_empty() {
+        let interface = if !self.structure.has_unresolved_ports() {
             interface
         } else {
             interface_in_atom_order(&atom, &interface)?
@@ -4577,6 +4756,10 @@ mod tests {
         let matrix = SPENSO_TAG.tensor_symbol("coalesced_copy_multiport");
         let v = SymbolicTensor::infer(atom(matrix, &[i, k])).unwrap();
         let square = v.multiply(&v).unwrap();
+        let canonical_ports =
+            [i, i, k, k].map(|index| representation.slot(PartialIndex::Explicit(index)));
+        assert_eq!(square.structure.logical_slots(), canonical_ports);
+        assert_eq!(square.expression, atom(matrix, &[i, k]).pow(2));
         let relabelled = square
             .reindex_interface_ports(&HashMap::from([(0, j), (3, l)]))
             .unwrap();
@@ -4584,8 +4767,9 @@ mod tests {
             relabelled.expression,
             atom(matrix, &[j, k]) * atom(matrix, &[i, l])
         );
+        // The second complete copy's i axis is at canonical position one.
         let second = square
-            .reindex_interface_ports(&HashMap::from([(2, j)]))
+            .reindex_interface_ports(&HashMap::from([(1, j)]))
             .unwrap();
         assert_eq!(
             second.expression,
@@ -4593,8 +4777,11 @@ mod tests {
         );
         let permuted = v.permuted(&[1, 0]).unwrap();
         let square = permuted.multiply(&permuted).unwrap();
+        assert_eq!(square.structure.logical_slots(), canonical_ports);
+        assert_eq!(square.expression, atom(matrix, &[i, k]).pow(2));
+        // Select k from the first copy and i from the second by canonical axes.
         let relabelled = square
-            .reindex_interface_ports(&HashMap::from([(0, l), (3, j)]))
+            .reindex_interface_ports(&HashMap::from([(2, l), (1, j)]))
             .unwrap();
         assert_eq!(
             relabelled.expression,
@@ -4956,6 +5143,223 @@ mod tests {
             assert!(zero_result.expression.as_view().is_zero());
             assert_eq!(zero_result.structure.logical_slots(), expected);
         }
+    }
+
+    #[test]
+    fn named_products_canonicalize_free_interfaces_and_preserve_leaf_meaning_and_history() {
+        test_support::test_initialize();
+        let minkowski = Minkowski {}.new_rep(4).cast::<LibraryRep>();
+        let color = ColorFundamental {}.new_rep(3).cast::<LibraryRep>();
+        let port = |representation: Representation<LibraryRep>, index| {
+            representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
+        };
+        let left_ports = [
+            port(minkowski, 9),
+            port(rep(), 7),
+            port(color, 8),
+            port(rep(), 3),
+        ];
+        let right_ports = [
+            port(color.dual(), 8),
+            port(color.dual(), 2),
+            port(minkowski, 20),
+        ];
+        let admitted = |name, ports: &[PartialSlot]| {
+            SymbolicTensor::from_declared_parts(
+                FunctionBuilder::new(SPENSO_TAG.tensor_symbol(name))
+                    .add_args(ports.iter().copied().map(port_atom))
+                    .finish(),
+                PartialStructure::from_logical_slots(ports.iter().copied()),
+            )
+            .unwrap()
+        };
+        let left = admitted("canonical_named_left", &left_ports);
+        let right = admitted("canonical_named_right", &right_ports);
+        let layout = left.structure.layout();
+        assert!((0..left.rank()).any(|position| {
+            layout.logical_to_canonical_position(layout.logical_to_canonical_position(position))
+                != position
+        }));
+        let plan = left.product_plan(&right).unwrap();
+        assert!(matches!(
+            &plan,
+            ProductPlan::Contract(pairs) if pairs == &[PortPair { left: 2, right: 0 }]
+        ));
+        let expected = PartialStructure::from_logical_slots([
+            left_ports[0],
+            left_ports[1],
+            left_ports[3],
+            right_ports[1],
+            right_ports[2],
+        ])
+        .canonical()
+        .external_structure();
+        for result in [
+            left.multiply(&right).unwrap(),
+            plan.apply(&left, &right).unwrap(),
+        ] {
+            assert_eq!(result.expression, &left.expression * &right.expression);
+            assert_eq!(result.presentation_atom(), result.expression);
+            assert_eq!(
+                result.presentation_fragment(left.expression.as_view()),
+                left.expression,
+            );
+            assert_eq!(result.structure.logical_slots(), expected);
+            assert!(result.structure.logical_slots().contains(&right_ports[1]));
+            assert!(!result.structure.logical_slots().contains(&left_ports[2]));
+            let occurrences = result.explicit_index_occurrences().unwrap();
+            assert_eq!(occurrences.count(color.slot(AbstractIndex::Normal(8))), 2);
+            SymbolicTensor::validate_interface(result.expression(), result.structure()).unwrap();
+        }
+        // Scalar operations continue to expose the externally declared axes.
+        let scalar = SymbolicTensor::infer(Atom::num(2)).unwrap();
+        assert_eq!(left.multiply(&scalar).unwrap().structure, left.structure);
+        assert_eq!(scalar.multiply(&left).unwrap().structure, left.structure);
+        let probe = admitted("canonical_named_probe", &[left_ports[2]]);
+        let cancelled = left.try_sub(&left).unwrap().canonicalize_named_interface();
+        for zero in [cancelled, left.with_checked_expression(Atom::Zero).unwrap()] {
+            let result = zero.multiply(&right).unwrap();
+            assert!(result.is_zero());
+            assert_eq!(result.structure.logical_slots(), expected);
+            assert!(matches!(
+                result.multiply(&probe),
+                Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+            ));
+        }
+    }
+
+    #[test]
+    fn consuming_all_open_ports_aligns_named_survivors_before_later_positional_contraction() {
+        test_support::test_initialize();
+        let minkowski = Minkowski {}.new_rep(4).cast::<LibraryRep>();
+        let named = |index| minkowski.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)));
+        let left_ports = [named(9), rep().slot(PartialIndex::open(0)), named(3)];
+        let right_ports = [rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(42)))];
+        let left = partial_tensor(
+            SPENSO_TAG.tensor_symbol("consumed_open_left"),
+            &left_ports,
+            &left_ports,
+        );
+        let right = partial_tensor(
+            SPENSO_TAG.tensor_symbol("consumed_open_right"),
+            &right_ports,
+            &right_ports,
+        );
+        let plan = ProductPlan::Contract(vec![PortPair { left: 1, right: 0 }]);
+        let semantic = plan.apply(&left, &right).unwrap();
+        let (left_indices, right_indices) = plan.alignment_indices(&left, &right).unwrap();
+        let materialized = plan
+            .apply(
+                &left.reindex_interface_ports(&left_indices).unwrap(),
+                &right.reindex_interface_ports(&right_indices).unwrap(),
+            )
+            .unwrap();
+        assert!(semantic.same_value(&materialized));
+        let probe = partial_tensor(
+            SPENSO_TAG.tensor_symbol("consumed_open_probe"),
+            &[named(3)],
+            &[named(3)],
+        );
+        let next = ProductPlan::Contract(vec![PortPair { left: 0, right: 0 }]);
+        let expected_expression = &semantic.expression * &probe.expression;
+        for result in [semantic, materialized] {
+            assert_eq!(result.structure.logical_slots(), [named(3), named(9)]);
+            let contracted = next.apply(&result, &probe).unwrap();
+            assert_eq!(contracted.structure.logical_slots(), [named(9)]);
+            assert_eq!(contracted.expression, expected_expression);
+        }
+    }
+
+    #[test]
+    fn canonical_named_routing_keeps_open_materialized_positions_and_encoded_markers() {
+        test_support::test_initialize();
+        let minkowski = Minkowski {}.new_rep(4).cast::<LibraryRep>();
+        let color = ColorFundamental {}.new_rep(3).cast::<LibraryRep>();
+        let left = tensor("canonical_positional_left", &[minkowski, color, rep()]);
+        let right = tensor("canonical_positional_right", &[color.dual()]);
+        // Network storage materializes admitted descriptors. Raw carriers do
+        // not certify that their explicit Open markers are storage identities.
+        let left = SymbolicTensor::from_declared_parts(left.expression, left.structure).unwrap();
+        let right = SymbolicTensor::from_declared_parts(right.expression, right.structure).unwrap();
+        let plan = ProductPlan::Contract(vec![PortPair { left: 1, right: 0 }]);
+        let semantic = plan.apply(&left, &right).unwrap();
+        let (left_indices, right_indices) = plan.alignment_indices(&left, &right).unwrap();
+        let materialized_left = left.reindex_interface_ports(&left_indices).unwrap();
+        let materialized_right = right.reindex_interface_ports(&right_indices).unwrap();
+        let materialized = plan.apply(&materialized_left, &materialized_right).unwrap();
+        for result in [semantic, materialized] {
+            assert_eq!(
+                result
+                    .structure
+                    .logical_slots()
+                    .into_iter()
+                    .map(|slot| slot.rep())
+                    .collect::<Vec<_>>(),
+                [minkowski, rep()],
+            );
+            let original = result.structure.clone();
+            assert_eq!(result.canonicalize_named_interface().structure, original);
+        }
+
+        let scope = symbol!("canonical_open_scope");
+        let marker = AbstractIndex::Open { owner: 71, axis: 0 };
+        let scoped = marker.scoped(scope);
+        let encoded = CookSettings::reversible()
+            .cook_function(scoped.to_atom().as_fun_view().unwrap())
+            .unwrap();
+        let encoded = AbstractIndex::try_from(encoded.as_view()).unwrap();
+        for marker in [marker, scoped, encoded, encoded.scoped(scope)] {
+            let interface = PartialStructure::from_logical_slots([
+                minkowski.slot(PartialIndex::Explicit(marker)),
+                rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(17))),
+            ]);
+            let zero = SymbolicTensor::new(Atom::Zero, interface.clone());
+            assert_eq!(zero.canonicalize_named_interface().structure, interface);
+        }
+    }
+
+    #[test]
+    fn canonical_named_pairing_checks_representation_dimension_and_uniqueness() {
+        test_support::test_initialize();
+        let color = ColorFundamental {}.new_rep(3).cast::<LibraryRep>();
+        let slot = color.slot(PartialIndex::Explicit(AbstractIndex::Normal(51)));
+        let left = partial_tensor(
+            SPENSO_TAG.tensor_symbol("canonical_matching_left"),
+            &[slot],
+            &[slot],
+        );
+        for (other, expected_dimension) in [(color.dual(), 4), (color, 3)] {
+            let other = Representation {
+                dim: Dimension::Concrete(expected_dimension),
+                ..other
+            }
+            .slot(slot.aind);
+            let right = partial_tensor(
+                SPENSO_TAG.tensor_symbol("canonical_matching_right"),
+                &[other],
+                &[other],
+            );
+            assert!(matches!(left.product_plan(&right), Ok(ProductPlan::Outer)));
+            assert_eq!(left.multiply(&right).unwrap().rank(), 2);
+            assert!(matches!(
+                left.contract_ports(&right, &[PortPair { left: 0, right: 0 }]),
+                Err(TensorCompositionError::IncompatiblePorts { .. })
+            ));
+        }
+        let partner = color.dual().slot(slot.aind);
+        let repeated = SymbolicTensor::new(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([slot, slot]),
+        );
+        let right = partial_tensor(
+            SPENSO_TAG.tensor_symbol("canonical_matching_partner"),
+            &[partner],
+            &[partner],
+        );
+        assert!(matches!(
+            repeated.product_plan(&right),
+            Err(TensorCompositionError::Ambiguous(_))
+        ));
     }
 
     #[test]

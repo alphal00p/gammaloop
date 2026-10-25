@@ -48,6 +48,44 @@ impl CanonicalLayout {
         self.representation.0.map().len()
     }
 
+    /// Returns the canonical storage position of a logical axis in constant time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `position >= self.order()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use spenso::structure::CanonicalLayout;
+    ///
+    /// let layout = CanonicalLayout::identity(3);
+    /// assert_eq!(layout.logical_to_canonical_position(1), 1);
+    /// ```
+    pub fn logical_to_canonical_position(&self, position: usize) -> usize {
+        let representation_position = self.representation.0.map()[position];
+        self.index.0.map()[representation_position]
+    }
+
+    /// Returns the logical position of a canonical storage axis in constant time.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `position >= self.order()`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use spenso::structure::CanonicalLayout;
+    ///
+    /// let layout = CanonicalLayout::identity(3);
+    /// assert_eq!(layout.canonical_to_logical_position(1), 1);
+    /// ```
+    pub fn canonical_to_logical_position(&self, position: usize) -> usize {
+        let representation_position = self.index.0.inv()[position];
+        self.representation.0.inv()[representation_position]
+    }
+
     pub fn logical_to_representation<T: Clone>(&self, values: &[T]) -> Vec<T> {
         self.representation.0.apply_slice(values)
     }
@@ -70,8 +108,9 @@ impl CanonicalLayout {
     }
 
     pub fn canonical_to_logical<T: Clone>(&self, values: &[T]) -> Vec<T> {
-        let representation_order = self.canonical_to_representation(values);
-        self.representation_to_logical(&representation_order)
+        (0..self.order())
+            .map(|position| values[self.logical_to_canonical_position(position)].clone())
+            .collect()
     }
 }
 
@@ -243,3 +282,67 @@ pub trait TensorIdentity {
 // representation and index permutations:
 // println!("Layout:{layout:?}");
 // println!("Pending:{pending:?}");
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn canonical_layout_preserves_noncommuting_axis_orders() {
+        let layout = CanonicalLayout::from_permutations(
+            Permutation::from_map(vec![1, 2, 0, 3]),
+            Permutation::from_map(vec![0, 3, 2, 1]),
+        );
+        let logical = [
+            String::from("a"),
+            String::from("b"),
+            String::from("c"),
+            String::from("d"),
+        ];
+        let canonical = [
+            String::from("c"),
+            String::from("d"),
+            String::from("b"),
+            String::from("a"),
+        ];
+
+        assert_eq!(layout.logical_to_canonical(&logical), canonical);
+        assert_eq!(layout.canonical_to_logical(&canonical), logical);
+        for (logical_position, canonical_position) in [3, 2, 0, 1].into_iter().enumerate() {
+            assert_eq!(
+                layout.logical_to_canonical_position(logical_position),
+                canonical_position,
+            );
+            assert_eq!(
+                layout.canonical_to_logical_position(canonical_position),
+                logical_position,
+            );
+        }
+    }
+
+    #[test]
+    fn identity_layout_preserves_empty_single_and_multiple_axes() {
+        for order in 0..=3 {
+            let layout = CanonicalLayout::identity(order);
+            let values: Vec<_> = (0..order).map(|position| position.to_string()).collect();
+            assert_eq!(layout.canonical_to_logical(&values), values);
+            assert_eq!(layout.logical_to_canonical(&values), values);
+            for position in 0..order {
+                assert_eq!(layout.logical_to_canonical_position(position), position);
+                assert_eq!(layout.canonical_to_logical_position(position), position);
+            }
+        }
+    }
+
+    #[test]
+    #[should_panic]
+    fn logical_position_rejects_out_of_bounds_axis() {
+        CanonicalLayout::identity(3).logical_to_canonical_position(3);
+    }
+
+    #[test]
+    #[should_panic]
+    fn canonical_position_rejects_out_of_bounds_axis() {
+        CanonicalLayout::identity(0).canonical_to_logical_position(0);
+    }
+}

@@ -88,6 +88,25 @@ pub trait PartialStructureExt: Sized {
     /// Different spaces and dimensions are allowed. Scalars return an empty vector.
     fn representations(&self) -> Result<Vec<Representation<LibraryRep>>, StructureError>;
     fn canonicalize_open_ports(&self) -> Self;
+    /// Whether any port is unresolved, without reconstructing logical order.
+    ///
+    /// Explicit indices used as internal open-axis markers are already
+    /// materialized and do not count as unresolved ports here.
+    ///
+    /// ```
+    /// use spenso::structure::abstract_index::AbstractIndex;
+    /// use spenso::structure::partial::{PartialIndex, PartialStructure, PartialStructureExt};
+    /// use spenso::structure::representation::{ExtendibleReps, RepName};
+    ///
+    /// let rep = ExtendibleReps::EUCLIDEAN.new_rep(3);
+    /// let open = PartialStructure::from_logical_slots([rep.slot(PartialIndex::open(0))]);
+    /// assert!(open.has_unresolved_ports());
+    /// let stored = PartialStructure::from_logical_slots([
+    ///     rep.slot(PartialIndex::Explicit(AbstractIndex::Open { owner: 7, axis: 0 })),
+    /// ]);
+    /// assert!(!stored.has_unresolved_ports());
+    /// ```
+    fn has_unresolved_ports(&self) -> bool;
     fn open_positions(&self) -> Vec<usize>;
     fn materialize_open_ports(
         &self,
@@ -116,8 +135,8 @@ impl PartialStructureExt for PartialStructure {
     }
 
     fn logical_slots(&self) -> Vec<PartialSlot> {
-        let canonical = self.canonical().external_structure();
-        self.layout().canonical_to_logical(&canonical)
+        self.layout()
+            .canonical_to_logical(&self.canonical().structure)
     }
 
     fn slots(&self) -> Result<Vec<Slot<LibraryRep, AbstractIndex>>, StructureError> {
@@ -130,6 +149,12 @@ impl PartialStructureExt for PartialStructure {
 
     fn canonicalize_open_ports(&self) -> Self {
         Self::from_logical_slots(self.logical_slots())
+    }
+
+    fn has_unresolved_ports(&self) -> bool {
+        self.canonical()
+            .external_indices_iter()
+            .any(|index| matches!(index, PartialIndex::Open(_)))
     }
 
     fn open_positions(&self) -> Vec<usize> {
@@ -277,6 +302,8 @@ mod tests {
     #[test]
     fn scalar_structure_supports_both_homogeneous_accessors() {
         let scalar = PartialStructure::from_logical_slots([]);
+        assert!(!scalar.has_unresolved_ports());
+        assert!(scalar.logical_slots().is_empty());
         assert!(scalar.slots().unwrap().is_empty());
         assert!(scalar.representations().unwrap().is_empty());
     }
@@ -288,6 +315,11 @@ mod tests {
             rep.slot(PartialIndex::Open(OpenPortId(9))),
             rep.slot(PartialIndex::Open(OpenPortId(2))),
         ]);
+        assert!(structure.has_unresolved_ports());
+        let materialized = PartialStructure::from_logical_slots([rep.slot(
+            PartialIndex::Explicit(AbstractIndex::Open { owner: 9, axis: 0 }),
+        )]);
+        assert!(!materialized.has_unresolved_ports());
 
         assert_eq!(
             structure
@@ -301,12 +333,14 @@ mod tests {
 
     #[test]
     fn logical_slots_reverse_both_sorting_permutations() {
-        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(4));
+        let euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(3));
+        let small_euc = ExtendibleReps::EUCLIDEAN.new_rep(Dimension::Concrete(2));
         let mink = ExtendibleReps::MINKOWSKI.new_rep(Dimension::Concrete(4));
         let logical = vec![
             mink.slot(PartialIndex::open(0)),
             euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(8))),
             euc.slot(PartialIndex::Explicit(AbstractIndex::Normal(3))),
+            small_euc.slot(PartialIndex::open(1)),
         ];
         let structure = PartialStructure::from_logical_slots(logical.clone());
 
