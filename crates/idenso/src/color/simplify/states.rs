@@ -65,37 +65,6 @@ impl ColorAlgebraSimplifier {
         (renamed || merged_count < count)
             .then(|| Atom::mul_many(common.into_iter().chain([merged.as_view()])))
     }
-
-    /// Distribute the exact number of each top-level `number * sum` term over
-    /// its sum of colour states; `None` when there is none. Spectator sums
-    /// and rounded numbers stay factored.
-    pub(super) fn merging_row_numbers(expression: AtomView<'_>) -> Option<Atom> {
-        let terms = match expression {
-            AtomView::Add(sum) => sum.iter().collect::<Vec<_>>(),
-            _ => vec![expression],
-        };
-        let mut distributed = false;
-        let mut merged = Vec::with_capacity(terms.len());
-        for term in terms {
-            if let AtomView::Mul(product) = term
-                && product.get_nargs() == 2
-                && let [AtomView::Num(number), AtomView::Add(sum)]
-                | [AtomView::Add(sum), AtomView::Num(number)] =
-                    product.iter().collect::<Vec<_>>().as_slice()
-                && matches!(
-                    number.get_coeff_view(),
-                    CoefficientView::Natural(..) | CoefficientView::Large(..)
-                )
-                && atom_contains_color_node(sum.as_view())
-            {
-                merged.extend(sum.iter().map(|state| state * number.as_view()));
-                distributed = true;
-            } else {
-                merged.push(term.to_owned());
-            }
-        }
-        distributed.then(|| Atom::add_many(merged))
-    }
 }
 
 /// The colour monomials of `term` as lists of factors, or `None` beyond

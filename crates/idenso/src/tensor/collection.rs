@@ -37,6 +37,9 @@ use super::{
     simplification::observation::DomainObservations,
 };
 
+mod collected;
+pub(crate) use collected::{CollectedOutput, CollectedPolynomial};
+
 type Result<T> = std::result::Result<T, TensorInferenceError>;
 
 #[cfg(test)]
