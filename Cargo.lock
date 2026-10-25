@@ -94,9 +94,7 @@ dependencies = [
  "typst",
  "typst-bundle",
  "typst-kit",
- "typst-library",
  "typst-pdf",
- "typst-svg",
  "walkdir",
 ]
 
@@ -7612,6 +7610,8 @@ dependencies = [
 [[package]]
 name = "typst-library"
 version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12becd02464849f1507f3c4ef3f401a4d28d5938cc74b6acc6f1d703458bf393"
 dependencies = [
  "arrayvec",
  "az",
@@ -7760,6 +7760,8 @@ dependencies = [
 [[package]]
 name = "typst-svg"
 version = "0.15.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5df6dc785695aae085678bd6657aa04a1d26058a76ed042e738658078bca681e"
 dependencies = [
  "base64 0.22.1",
  "comemo",
