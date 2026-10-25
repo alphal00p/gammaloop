@@ -5,6 +5,7 @@ import importlib.util
 import itertools
 import re
 import sys
+import tempfile
 import unicodedata
 import unittest
 import xml.etree.ElementTree as ET
@@ -1594,6 +1595,38 @@ class ExplicitNotationExportTests(PagingAssertions):
     "optional real SVG integration requires the typst package; compiler contracts run unconditionally",
 )
 class RealCompilerExportTests(PagingAssertions):
+    def test_portable_custom_cancellation_retains_its_html_stroke(self):
+        import typst
+
+        assets = Path(__file__).resolve().parents[1] / "typst"
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "render.typ").write_bytes((assets / "render.typ").read_bytes())
+            # Exercise the portable custom-display AST independently of gamma's
+            # specialized renderer, including Typst's lexical helper scope.
+            (root / "notation.typ").write_text(
+                (assets / "notation.typ").read_text()
+                + '\n#let custom-cancel() = _display-node(("math", "cancel", (("symbol", "J"),)))\n'
+            )
+            source = root / "main.typ"
+            source.write_text(
+                '#import "notation.typ": custom-cancel\n$ #custom-cancel() $'
+            )
+            document = typst.compile(
+                str(source), format="html", root=directory
+            ).decode()
+            svg = typst.compile(str(source), format="svg", root=directory).decode()
+        root = ET.fromstring(re.search(r"<math\b.*?</math>", document, re.DOTALL)[0])
+        strokes = [node for node in root.iter() if "data-spenso-cancel" in node.attrib]
+        self.assertEqual(len(strokes), 1)
+        self.assertEqual(strokes[0].attrib["data-spenso-cancel"], "updiagonal")
+        self.assertEqual(
+            unicodedata.normalize("NFKC", "".join(strokes[0].itertext())).strip(), "J"
+        )
+        self.assertIn("<svg", svg)
+        self.assertNotIn("data-spenso-cancel", svg)
+
+
     def test_custom_typst_notation_compiles_complete_real_svg_projects(self):
         assets = Path(__file__).resolve().parents[1] / "typst"
         notation = (assets / "notation.typ").read_text() + (

@@ -3,7 +3,6 @@
 import re
 import unittest
 import xml.etree.ElementTree as ET
-from unittest.mock import Mock
 
 from symbolica import E, FormattedOutput, PrintMode
 from symbolica.community import tensor as sp
@@ -128,9 +127,16 @@ class SymbolicDisplayTests(unittest.TestCase):
         for rendered in (str(value), repr(value), str(output), repr(output)):
             self.assertEqual(rendered, plain)
         for rendered in (value, output):
-            pretty = Mock()
+            class Pretty:
+                def __init__(self):
+                    self.parts = []
+
+                def text(self, text):
+                    self.parts.append(text)
+
+            pretty = Pretty()
             rendered._repr_pretty_(pretty, False)
-            pretty.text.assert_called_once_with(plain)
+            self.assertEqual(pretty.parts, [plain])
         return html
 
     def test_formatted_only_computes_each_requested_backend_once(self):
