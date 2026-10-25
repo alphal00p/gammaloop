@@ -508,6 +508,7 @@
       "crates/feynkit-py/tests/cff_display.py"
       "crates/feynkit-py/tests/installed_wavefunctions.py"
       "crates/feynkit-py/tests/installed_offline_rendering.py"
+      "crates/feynkit-py/tests/installed_ordered_numerator_ports.py"
       "crates/feynkit-py/tests/standalone_host.py"
       "crates/spynso3/tests/installed_tensor_network_display.py"
       "crates/linnet-py/tests/test_community_rendering.py"
