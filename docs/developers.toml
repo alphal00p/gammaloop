@@ -200,7 +200,11 @@ anchor = "pub fn generate("
 # No-impact attestation 2026-10-23: boxed error sources preserve numerator-template admission and error propagation.
 # Reviewed 2026-10-23: native label writers omit local zero; template binding
 # preserves that spelling. Numerator ownership and caching are unchanged.
-digest = "672732ee50bec4d09f0453e34cb7220c3ddd3535"
+# Reviewed 2026-10-25: templates delegate injective label transport to
+# NumeratorInterface, preserving hidden zero history through the same owner as
+# graph translation. Generic callback errors retain their original Rust types.
+# Generation/cache admission and axis-order ownership remain as documented; new regressions compare direct and template transport.
+digest = "c6353d34dcf95aa6006928573b87db2f24f53ba9"
 
 [[section.note.scope]]
 path = "crates/feynkit-model/src/model.rs"

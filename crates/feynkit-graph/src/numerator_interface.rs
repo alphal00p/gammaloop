@@ -163,16 +163,29 @@ impl NumeratorInterface {
     /// Native indices and individual reversible labels share one injective map,
     /// including indices carried only by a zero. The original expression is
     /// translated once; checked tensor parts retain the established port order.
-    pub(crate) fn translate(
+    /// See [`NumeratorInterface`] for constructing a zero with retained ports.
+    ///
+    /// # Errors
+    /// Rejects noninjective mappings, invalid labels and callback results with
+    /// an incompatible interface, and propagates translation failures.
+    pub fn translate<E>(
         tensor: &SymbolicTensor<PartialStructure>,
-        translate: impl Fn(&Atom) -> Result<Atom, DiagramError>,
-    ) -> Result<SymbolicTensor<PartialStructure>, DiagramError> {
+        translate: impl Fn(&Atom) -> Result<Atom, E>,
+    ) -> Result<SymbolicTensor<PartialStructure>, E>
+    where
+        E: From<DiagramError>,
+    {
         let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let invalid = |message: String| DiagramError::Invariant {
-            operation: "transporting diagram indices",
-            message,
+        let invalid = |message: String| {
+            E::from(DiagramError::Invariant {
+                operation: "transporting diagram indices",
+                message,
+            })
         };
-        let mut indices = HashSet::new();
+        let mut indices = tensor
+            .explicit_indices()
+            .map_err(DiagramError::from)?
+            .collect::<HashSet<_>>();
         let mut slots = SlotMatcher::default();
         let mut collect = |value: &Atom| {
             let mut failure = None;
@@ -284,7 +297,9 @@ impl NumeratorInterface {
         });
         if !tensor.structure().open_positions().is_empty() && !expression.is_zero() {
             if logical == original_slots {
-                return Ok(tensor.with_checked_expression(expression)?);
+                return Ok(tensor
+                    .with_checked_expression(expression)
+                    .map_err(DiagramError::from)?);
             }
             if !InterfaceInference::normalization_is_intrinsic(tensor.expression().as_view()) {
                 return Err(invalid(
@@ -306,16 +321,24 @@ impl NumeratorInterface {
             // The native positional rewrite certifies the mapped boundary.
             // Its checked-expression guard then protects anonymous occurrences
             // from changes to the remaining momentum and scalar heads.
-            let boundary = tensor.reindex_interface_ports(&replacements)?;
-            return Ok(boundary.with_checked_expression(expression)?);
+            let boundary = tensor
+                .reindex_interface_ports(&replacements)
+                .map_err(DiagramError::from)?;
+            return Ok(boundary
+                .with_checked_expression(expression)
+                .map_err(DiagramError::from)?);
         }
-        // Translation is an existing checked boundary: callback output must
-        // return a typed error in release and debug builds alike. Admit the
-        // declared result directly instead of claiming producer trust first.
-        Ok(SymbolicTensor::from_declared_parts(
-            expression,
-            PartialStructure::from_logical_slots(logical),
-        )?)
+        // Check callback output before transferring authoritative index history.
+        // Rebuilding declared parts here would discard identities hidden by zero.
+        // Invalid boundaries must return typed errors in release and debug builds.
+        SymbolicTensor::validate_interface(
+            &expression,
+            &PartialStructure::from_logical_slots(logical),
+        )
+        .map_err(DiagramError::from)?;
+        Ok(tensor
+            .with_renamed_indices(expression, &renaming)
+            .map_err(DiagramError::from)?)
     }
 }
 
@@ -396,24 +419,24 @@ mod tests {
                 .iter()
                 .all(|slot| matches!(slot.aind, PartialIndex::Explicit(AbstractIndex::Named(..))))
         );
-        let translate = |atom: &Atom| {
+        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             Ok(atom.replace_multiple([
                 Replacement::new(indices[0].to_pattern(), indices[1].clone()),
                 Replacement::new(indices[1].to_pattern(), indices[0].clone()),
             ]))
         };
         let expected = NumeratorInterface::admit(translate(&input).unwrap(), None).unwrap();
-        let mapped = NumeratorInterface::translate(&source, translate).unwrap();
+        let mapped = NumeratorInterface::translate::<DiagramError>(&source, translate).unwrap();
         assert!(mapped.same_value(&expected));
         let zero = source.with_checked_expression(Atom::Zero).unwrap();
-        let mapped_zero = NumeratorInterface::translate(&zero, translate).unwrap();
+        let mapped_zero = NumeratorInterface::translate::<DiagramError>(&zero, translate).unwrap();
         assert!(mapped_zero.is_zero());
         assert_eq!(
             mapped_zero.structure().logical_slots(),
             expected.structure().logical_slots()
         );
         assert!(
-            NumeratorInterface::translate(&source, |atom| Ok(atom
+            NumeratorInterface::translate::<DiagramError>(&source, |atom| Ok(atom
                 .replace(indices[0].to_pattern())
                 .with(indices[1].clone())))
             .is_err()
@@ -448,7 +471,7 @@ mod tests {
             ),
         )
         .unwrap();
-        let translate = |atom: &Atom| {
+        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             Ok(atom.replace_multiple([
                 Replacement::new(
                     source_indices[0].to_atom().to_pattern(),
@@ -470,7 +493,7 @@ mod tests {
                     (1, target_indices[0]),
                 ]))
                 .unwrap();
-            let mapped = NumeratorInterface::translate(&value, translate).unwrap();
+            let mapped = NumeratorInterface::translate::<DiagramError>(&value, translate).unwrap();
             assert!(mapped.same_value(&expected));
             assert_eq!(mapped.is_zero(), value.is_zero());
             assert_eq!(
@@ -499,7 +522,7 @@ mod tests {
             None,
         )
         .unwrap();
-        let translate = |atom: &Atom| {
+        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             Ok(atom
                 .replace(source_index.to_atom().to_pattern())
                 .with(target_index.to_atom()))
@@ -510,7 +533,7 @@ mod tests {
             source.clone(),
             source.with_checked_expression(Atom::Zero).unwrap(),
         ] {
-            let mapped = NumeratorInterface::translate(&value, translate).unwrap();
+            let mapped = NumeratorInterface::translate::<DiagramError>(&value, translate).unwrap();
             assert_eq!(mapped.structure().logical_slots(), expected);
             assert_eq!(mapped.structure().open_positions(), vec![0, 2]);
             assert_eq!(mapped.is_zero(), value.is_zero());
@@ -531,7 +554,7 @@ mod tests {
         let target_momenta = [3, 2].map(|owner| function!(momentum, owner, rep.to_symbolic([])));
         let source =
             NumeratorInterface::admit(&source_momenta[0] * &source_momenta[1], None).unwrap();
-        let translate = |atom: &Atom| {
+        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             Ok(atom.replace_multiple([
                 Replacement::new(source_momenta[0].to_pattern(), target_momenta[0].clone()),
                 Replacement::new(source_momenta[1].to_pattern(), target_momenta[1].clone()),
@@ -539,7 +562,7 @@ mod tests {
         };
         let expression = translate(source.expression()).unwrap();
         assert!(source.with_checked_expression(expression).is_err());
-        assert!(NumeratorInterface::translate(&source, translate).is_err());
+        assert!(NumeratorInterface::translate::<DiagramError>(&source, translate).is_err());
     }
 
     #[test]
@@ -549,7 +572,7 @@ mod tests {
         let source_index = function!(symbols::hedge_index(), 1);
         let target_index = function!(symbols::hedge_index(), 9);
         let opaque = symbol!("feynkit_graph::opaque_source_label");
-        let translate = |atom: &Atom| {
+        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             Ok(atom
                 .replace(source_index.to_pattern())
                 .with(target_index.clone()))
@@ -576,7 +599,8 @@ mod tests {
                 source.clone(),
                 source.with_checked_expression(Atom::Zero).unwrap(),
             ] {
-                let mapped = NumeratorInterface::translate(&value, translate).unwrap();
+                let mapped =
+                    NumeratorInterface::translate::<DiagramError>(&value, translate).unwrap();
                 assert_eq!(
                     mapped.structure().logical_slots(),
                     expected.structure().logical_slots()
@@ -637,7 +661,7 @@ mod tests {
                 let expected = value
                     .reindex_interface_ports(&HashMap::from([(0, target)]))
                     .unwrap();
-                let mapped = NumeratorInterface::translate(&value, |atom| {
+                let mapped = NumeratorInterface::translate::<DiagramError>(&value, |atom| {
                     Ok(atom
                         .replace(function!(symbols::hedge_index(), 1).to_pattern())
                         .with(function!(symbols::hedge_index(), 9)))
@@ -673,7 +697,7 @@ mod tests {
         ] {
             for (from, to) in [(&native, &opaque), (&opaque, &native)] {
                 assert!(
-                    NumeratorInterface::translate(&value, |atom| {
+                    NumeratorInterface::translate::<DiagramError>(&value, |atom| {
                         Ok(atom.replace(from.to_pattern()).with(to.clone()))
                     })
                     .is_err()
@@ -697,20 +721,20 @@ mod tests {
             );
         let source = NumeratorInterface::admit(input.clone(), None).unwrap();
         assert_eq!(source.rank(), 1);
-        let translate = |atom: &Atom| {
+        let translate = |atom: &Atom| -> Result<Atom, DiagramError> {
             Ok(atom.replace_multiple([
                 Replacement::new(dummy.to_pattern(), new_dummy.clone()),
                 Replacement::new(external.to_pattern(), new_external.clone()),
             ]))
         };
         let expected = NumeratorInterface::admit(translate(&input).unwrap(), None).unwrap();
-        let mapped = NumeratorInterface::translate(&source, translate).unwrap();
+        let mapped = NumeratorInterface::translate::<DiagramError>(&source, translate).unwrap();
         assert!(mapped.same_value(&expected));
         assert_eq!(mapped.rank(), 1);
         assert!(mapped.expression().contains(&new_dummy));
         assert!(!mapped.expression().contains(&dummy));
         assert!(
-            NumeratorInterface::translate(&source, |atom| {
+            NumeratorInterface::translate::<DiagramError>(&source, |atom| {
                 Ok(atom.replace(dummy.to_pattern()).with(external.clone()))
             })
             .is_err()
@@ -743,7 +767,7 @@ mod tests {
         .unwrap();
         calls.store(0, Ordering::Relaxed);
         assert!(
-            NumeratorInterface::translate(&source, |atom| {
+            NumeratorInterface::translate::<DiagramError>(&source, |atom| {
                 Ok(atom
                     .replace(source_index.to_pattern())
                     .with(target_index.clone()))

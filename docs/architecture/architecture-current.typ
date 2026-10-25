@@ -389,7 +389,9 @@ The generator's model-bound numerator cache retains admitted templates for rules
 whose explicit index identities can be localized injectively. Instantiation
 transports their logical ports and scoped index history, including identities
 absent from a normalized zero, and restores the raw rule's occurrence-based
-logical axis order. Rules with unresolved ports, callback-sensitive notation or
+logical axis order. `NumeratorInterface::translate` owns this transport for
+both templates and existing graph factors, retaining checked callback boundaries
+and using Idenso's metadata-preserving index renaming. Rules with unresolved ports, callback-sensitive notation or
 ambiguous scoped aliases remain source expressions until localized at their
 actual graph owner, where they undergo checked admission. The same cache retains
 the resulting localized vertex and propagator factors.

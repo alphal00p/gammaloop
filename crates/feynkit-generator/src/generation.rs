@@ -1574,69 +1574,10 @@ impl NumeratorTemplate {
         &self,
         instantiation: &NumeratorInstantiation<'_>,
     ) -> Result<SymbolicTensor<PartialStructure>, GenerationError> {
-        let Self::Admitted { tensor, labels } = self else {
+        let Self::Admitted { tensor, .. } = self else {
             unreachable!("dynamic rules are constructed at their actual owner")
         };
-        let cooking = CookSettings::indices().with_mode(CookMode::ReversibleEncoding);
-        let mut renaming = HashMap::with_capacity(labels.len());
-        let mut encoded = HashMap::new();
-        for (index, decoded) in labels {
-            let mut mapped = instantiation.bind_template(decoded)?;
-            let target = if mapped == decoded {
-                *index
-            } else {
-                let mut scopes = Vec::new();
-                while let Some(function) = mapped.as_fun_view()
-                    && function.get_symbol() == AbstractIndex::scope_symbol()
-                {
-                    let arguments = function.iter().collect::<Vec<_>>();
-                    let [AtomView::Var(scope), inner] = arguments.as_slice() else {
-                        unreachable!("admitted index scope")
-                    };
-                    scopes.push(scope.get_symbol());
-                    mapped = (*inner).to_owned();
-                }
-                if let Some(function) = mapped.as_fun_view() {
-                    mapped = cooking.cook_function(function).map_err(|source| {
-                        DiagramError::TensorCooking {
-                            operation: "instantiating an admitted numerator template",
-                            source: Box::new(source),
-                        }
-                    })?;
-                }
-                scopes.into_iter().rev().fold(
-                    AbstractIndex::try_from(mapped.as_view()).map_err(|source| {
-                        DiagramError::TensorIndex {
-                            operation: "instantiating an admitted numerator template",
-                            source: Box::new(source),
-                        }
-                    })?,
-                    |index, scope| index.scoped(scope),
-                )
-            };
-            renaming.insert(*index, target);
-            // Reversible labels are opaque during the native-label pass. Map
-            // each complete index afterwards, including symbols inside scopes.
-            if decoded != &index.to_atom() {
-                encoded.insert(index.to_atom(), target.to_atom());
-            }
-        }
-        let expression = instantiation.bind_template(tensor.expression())?;
-        let expression = if encoded.is_empty() {
-            expression
-        } else {
-            expression.replace_map(|node, _, output| {
-                if let Some(target) = encoded.get(&node.to_owned()) {
-                    **output = target.clone();
-                }
-            })
-        };
-        // Admission established the raw rule; scalar momentum aliases retain
-        // its metadata. This injective relabeling also transports identities
-        // retained only by a zero. No callbacks run.
-        Ok(tensor
-            .with_renamed_indices(expression, &renaming)
-            .map_err(DiagramError::from)?)
+        NumeratorInterface::translate(tensor, |atom| instantiation.bind_template(atom))
     }
 }
 
@@ -8381,8 +8322,16 @@ mod tests {
         let target = labels([legs[0].hedge, legs[1].hedge]);
         for source in [source, zero] {
             let was_zero = source.is_zero();
+            let direct =
+                NumeratorInterface::translate(&source, |atom| instantiation.bind_template(atom))
+                    .unwrap();
             let template = NumeratorTemplate::admitted(source).unwrap();
             let mapped = template.instantiate(&instantiation).unwrap();
+            assert_eq!(
+                mapped.explicit_indices().unwrap().collect::<Vec<_>>(),
+                direct.explicit_indices().unwrap().collect::<Vec<_>>(),
+                "template and direct translation must retain identical index history",
+            );
             assert_eq!(
                 mapped.structure().logical_slots(),
                 vec![target[1], target[0]]
@@ -8390,6 +8339,53 @@ mod tests {
             assert_eq!(mapped.is_zero(), was_zero);
             SymbolicTensor::validate_interface(mapped.expression(), mapped.structure()).unwrap();
         }
+    }
+
+    #[test]
+    fn zero_template_and_direct_transport_retain_hidden_index_history() {
+        let index = AbstractIndex::Named(symbols::hedge_index().into(), 0, 2);
+        let port = Minkowski {}
+            .new_rep(4)
+            .cast::<LibraryRep>()
+            .slot::<AbstractIndex, _>(index)
+            .to_atom();
+        let source = NumeratorInterface::admit(
+            FunctionBuilder::new(tensor_symbol!("generation_template_hidden_pair"))
+                .add_arg(&port)
+                .add_arg(&port)
+                .finish(),
+            None,
+        )
+        .unwrap()
+        .with_algebra_result(Atom::Zero)
+        .unwrap();
+        assert_eq!(source.rank(), 0);
+        let legs = tensor_test_legs();
+        let instantiation = NumeratorInstantiation {
+            owner: NumeratorOwner::Vertex(7),
+            legs: &legs[..2],
+        };
+        let direct =
+            NumeratorInterface::translate(&source, |atom| instantiation.bind_template(atom))
+                .unwrap();
+        let mapped = NumeratorTemplate::admitted(source)
+            .unwrap()
+            .instantiate(&instantiation)
+            .unwrap();
+        let expected = vec![AbstractIndex::Named(
+            symbols::hedge_index().into(),
+            legs[0].hedge,
+            2,
+        )];
+        assert_eq!(
+            direct.explicit_indices().unwrap().collect::<Vec<_>>(),
+            expected
+        );
+        assert_eq!(
+            mapped.explicit_indices().unwrap().collect::<Vec<_>>(),
+            expected
+        );
+        assert!(mapped.is_zero());
     }
 
     #[test]

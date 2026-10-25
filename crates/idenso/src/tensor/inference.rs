@@ -706,6 +706,19 @@ impl SymbolicTensor<PartialStructure> {
         self.borrowed_parts().explicit_index_occurrences()
     }
 
+    /// Iterate retained explicit indices, including identities hidden by cancellation.
+    /// Transporters use these together with the logical interface; see
+    /// [`Self::with_renamed_indices`] for a metadata-preserving relabeling.
+    ///
+    /// # Errors
+    /// Returns an admission error if the tensor's retained metadata is invalid.
+    pub fn explicit_indices(&self) -> InferenceResult<impl Iterator<Item = AbstractIndex> + '_> {
+        Ok(self
+            .explicit_index_occurrences()?
+            .entries()
+            .map(|(slot, _)| slot.aind()))
+    }
+
     /// Construct parts whose producer has established their complete tensor interface.
     /// This performs no inference, validation, or normalization. Callers must
     /// establish compatible ports in every summand, valid tensor signatures,
