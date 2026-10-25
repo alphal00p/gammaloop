@@ -26,7 +26,11 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 ROOT = Path(__file__).resolve().parents[3]
-ARTIFACTS = ROOT / ".local/graph-mathml-labels/browser"
+ARTIFACTS = Path(
+    os.environ.get(
+        "LINNET_MATHML_BROWSER_ROOT", ROOT / ".local/graph-mathml-labels/browser"
+    )
+)
 
 
 def runtime_environment():
@@ -68,6 +72,12 @@ def main():
     parser.add_argument("--ready", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument(
+        "--engines",
+        nargs="+",
+        choices=("chromium", "webkit"),
+        default=["chromium", "webkit"],
+    )
     args = parser.parse_args()
     output = args.output.resolve()
     assert output.is_relative_to(ARTIFACTS.resolve()), output
@@ -114,13 +124,17 @@ def main():
                 and parsed.hostname == "127.0.0.1"
                 and parsed.port
             )
-            assert len(producer["jobs"]) == 8
+            assert len(producer["jobs"]) == 4 * len(args.engines)
             report["producer"] = producer
         with sync_playwright() as playwright:
-            for engine in ("chromium", "webkit"):
+            for engine in args.engines:
                 browser = launch(playwright, engine)
                 try:
-                    expected = "151." if engine == "chromium" else "27.2"
+                    expected = (
+                        os.environ.get("MATHML_CHROMIUM_VERSION", "151.")
+                        if engine == "chromium"
+                        else "27.2"
+                    )
                     assert browser.version.startswith(expected), browser.version
                     report["engines"].append(
                         {"engine": engine, "version": browser.version}

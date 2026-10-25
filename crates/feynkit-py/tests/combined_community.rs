@@ -54,6 +54,46 @@ fn shared_numeric_external_states_in_installed_host() {
 }
 
 #[test]
+#[ignore = "browser fixture producer requires optional Marimo and AnyWidget; runs in the browser CI group"]
+fn browser_display_fixtures() {
+    Python::initialize();
+    Python::attach(|py| -> PyResult<()> {
+        let symbolica = install_package(py, "symbolica")?;
+        let core = PyModule::new(py, "symbolica.core")?;
+        python::create_symbolica_module(&core)?;
+        py.import("sys")?
+            .getattr("modules")?
+            .set_item("symbolica.core", &core)?;
+        symbolica.add("core", &core)?;
+        // Installed scripts import the public re-exports from the package root.
+        for name in ["E", "S", "Expression", "Replacement"] {
+            symbolica.add(name, core.getattr(name)?)?;
+        }
+        let community = install_package(py, "symbolica.community")?;
+        symbolica.add("community", &community)?;
+        register_native::<GraphModule>(&core)?;
+        register_native::<FeynkitModule>(&core)?;
+        register_native::<SpensoModule>(&core)?;
+        import_wrapper(py, &community, "symbolica.community.graph", GRAPH_WRAPPER)?;
+        import_wrapper(
+            py,
+            &community,
+            "symbolica.community.hepkit",
+            FEYNKIT_WRAPPER,
+        )?;
+        import_wrapper(py, &community, "symbolica.community.tensor", SPENSO_WRAPPER)?;
+        let code = CString::new(include_str!("browser_display_fixtures.py")).unwrap();
+        let locals = PyDict::new(py);
+        locals.set_item(
+            "test_directory",
+            concat!(env!("CARGO_MANIFEST_DIR"), "/tests"),
+        )?;
+        py.run(&code, Some(&locals), Some(&locals))
+    })
+    .unwrap();
+}
+
+#[test]
 fn qcd_rich_display_requires_no_python_rendering_packages() {
     Python::initialize();
     Python::attach(|py| -> PyResult<()> {

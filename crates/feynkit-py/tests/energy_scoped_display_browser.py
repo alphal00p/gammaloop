@@ -4,6 +4,7 @@ import json
 import sys
 from pathlib import Path
 
+from generalized_energy_display_browser import offline_fonts
 from playwright.sync_api import sync_playwright
 
 
@@ -14,6 +15,7 @@ def check(directory, executable, engine="chromium"):
             args=["--no-sandbox"] if engine == "chromium" else [],
         )
         page = browser.new_page(viewport={"width": 800, "height": 1000})
+        offline_fonts(page)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         for scope in ("orientation", "family"):

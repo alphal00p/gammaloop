@@ -1827,7 +1827,10 @@ end_anchor = "workspacePackageExtraSourceRootsForSourcePackages ="
 # Reviewed 2026-10-23: Global build sources include the shared graph Python/JavaScript assets; compile-time Spynso sources include the embedded paging fixture. Build algorithms and test selection are unchanged.
 # Reviewed 2026-10-23: removed the orphaned compiler crate and its assets;
 # remaining browser font ownership and producer/runtime boundaries match the cache note.
-digest = "c24349a73066d80b2007f9aad5d44ac28a9e44cb"
+# Reviewed 2026-10-25: browser CI declares native fixture and browser-script source
+# ownership, with pinned Chromium/Playwright/AnyWidget/Marimo runtime tools. The
+# separate nextest group reuses per-crate producers; ci.typ records this added coverage.
+digest = "5bb33f0636444ee9a41e219d9b0c9d7a0afccdbb"
 
 [[section.note.scope]]
 path = "nix/documentation.nix"
@@ -1870,7 +1873,10 @@ end_anchor = "sortedUnique ="
 # runtime tool so its Typst tests run; documentation groups are unchanged.
 # Reviewed 2026-10-15: Package grouping remains part of runtime producer selection;
 # this historical note defers current limits and trigger policy to ci.typ.
-digest = "0a568cb5712045aee37d96bfb2f91d3d32b7e9b9"
+# Reviewed 2026-10-25: browser CI declares native fixture and browser-script source
+# ownership, with pinned Chromium/Playwright/AnyWidget/Marimo runtime tools. The
+# separate nextest group reuses per-crate producers; ci.typ records this added coverage.
+digest = "311d8dbf20da058cf60c74c651491629d7eb6ce6"
 
 [[section.note.scope]]
 path = "nix/rust-workspace.nix"

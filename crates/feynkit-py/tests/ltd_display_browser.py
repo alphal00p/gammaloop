@@ -8,6 +8,7 @@ import json
 import sys
 from pathlib import Path
 
+from generalized_energy_display_browser import offline_fonts
 from playwright.sync_api import sync_playwright
 
 
@@ -56,6 +57,7 @@ def main(directory, executable=None, engine="chromium"):
         page = browser.new_page(
             viewport={"width": 800, "height": 1100}, device_scale_factor=1.5
         )
+        offline_fonts(page)
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         for source in sources:

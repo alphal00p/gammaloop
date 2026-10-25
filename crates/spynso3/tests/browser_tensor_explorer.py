@@ -4,6 +4,7 @@ Run with a Playwright-enabled Python; --python selects the Spenso interpreter.
 """
 
 import argparse
+import json
 import subprocess
 import sys
 import tempfile
@@ -30,29 +31,37 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--screenshot", type=Path)
+    parser.add_argument("--fixtures", type=Path)
+    parser.add_argument("--chromium")
     args = parser.parse_args()
-    rendered = subprocess.run(
-        [
-            args.python,
-            "-c",
-            """from symbolica.community.tensor import TensorExpression, TensorLibrary
+    if args.fixtures:
+        rendered = json.loads(args.fixtures.read_text())["explorer"]
+    else:
+        rendered = subprocess.run(
+            [
+                args.python,
+                "-c",
+                """from symbolica.community.tensor import TensorExpression, TensorLibrary
 library = TensorLibrary.hep_lib_atom()
 print('<section id="standalone">' + library[TensorExpression.dirac_gamma(4)].to_html()
       + '</section><section id="library">' + library.to_html() + '</section>')
 """,
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout
     with tempfile.TemporaryDirectory() as directory, sync_playwright() as driver:
         page_path = Path(directory) / "explorers.html"
         page_path.write_text(
             '<!doctype html><meta charset="utf-8">'
             '<body style="margin:24px;color-scheme:light">' + rendered
         )
-        for engine in (driver.webkit, driver.chromium):
-            browser = engine.launch()
+        engines = (
+            (driver.chromium,) if args.chromium else (driver.webkit, driver.chromium)
+        )
+        for engine in engines:
+            browser = engine.launch(executable_path=args.chromium)
             page = browser.new_page(viewport={"width": 1000, "height": 1800})
             page.goto(page_path.as_uri())
             chip = page.locator('.sl-chip[title="spenso::gamma"]')

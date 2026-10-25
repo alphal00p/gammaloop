@@ -127,6 +127,7 @@ class SymbolicDisplayTests(unittest.TestCase):
         for rendered in (str(value), repr(value), str(output), repr(output)):
             self.assertEqual(rendered, plain)
         for rendered in (value, output):
+
             class Pretty:
                 def __init__(self):
                     self.parts = []

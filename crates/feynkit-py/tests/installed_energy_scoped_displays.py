@@ -81,7 +81,14 @@ def check(directory):
         widget = adapter.call_args.args[0]
         try:
             assert "marimo-ui-element" in markup
-            assert widget.rendered["html"] == source
+            # The widget shares its font separately; complete exports embed it.
+            font = (
+                '<style data-linnet-font="true">'
+                + view.measurement_request()["font_css"]
+                + "</style>"
+            )
+            assert source.count(font) == 1
+            assert widget.rendered["html"] == source.replace(font, "", 1)
         finally:
             widget.close()
 

@@ -18,6 +18,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--chromium")
+    parser.add_argument("--fixtures", type=Path)
     parser.add_argument(
         "--font",
         type=Path,
@@ -25,11 +26,14 @@ def main():
         / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
     )
     args = parser.parse_args()
-    result = subprocess.run(
-        [
-            args.python,
-            "-c",
-            """import json
+    if args.fixtures:
+        fixtures = json.loads(args.fixtures.read_text())["font"]
+    else:
+        result = subprocess.run(
+            [
+                args.python,
+                "-c",
+                """import json
 from symbolica import E
 from symbolica.community import tensor as spenso
 expression = spenso.TensorExpression(E('(a/(b+c)+d/(e+f))*(g+h)+z'))
@@ -41,14 +45,13 @@ print(json.dumps([expression.to_html(), spenso.load_math_font(),
                   long_sum.to_html(), wide_term.to_html(),
                   wide_product.to_html(), wide_fraction.to_html()]))
 """,
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    )
-    html, setup, long_sum, wide_term, wide_product, wide_fraction = json.loads(
-        result.stdout
-    )
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        fixtures = json.loads(result.stdout)
+    html, setup, long_sum, wide_term, wide_product, wide_fraction = fixtures
     assert "data:font" not in html
     assert len(html.encode()) < 10_000
     assert setup.count("data:font/woff2;base64,") == 1
@@ -84,7 +87,15 @@ print(json.dumps([expression.to_html(), spenso.load_math_font(),
             page.evaluate("() => document.fonts.ready")
             measurements = page.evaluate("""() => {
                 const math = document.querySelector('math');
-                const outer = math.querySelector('mfrac').parentElement.parentElement;
+                let outer = math.querySelector('mfrac').parentElement;
+                while (outer && !(outer.children.length === 3 &&
+                    outer.firstElementChild.localName === 'mo' &&
+                    outer.firstElementChild.textContent === '(' &&
+                    outer.lastElementChild.localName === 'mo' &&
+                    outer.lastElementChild.textContent === ')')) {
+                    outer = outer.parentElement;
+                }
+                if (!outer) throw new Error('no fenced fraction sum');
                 const brackets = [outer.firstElementChild, outer.lastElementChild];
                 const content = outer.children[1];
                 return {

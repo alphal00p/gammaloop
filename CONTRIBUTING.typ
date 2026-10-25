@@ -778,6 +778,13 @@ documentation check validates generated inputs, renders latest and snapshot
 sites, checks their HTML, and exercises publication behavior. Licensed checks,
 including documentation, require `SYMBOLICA_LICENSE` in your local environment.
 An unchanged successful Nix check can be reused without executing its tests again.
+The separate `gammaloop-nextest-browser` check runs real Chromium/widget tests
+with pinned Nix browser and Python dependencies, plus native fixture producers.
+Run it explicitly with `nix build --impure .#checks.x86_64-linux.gammaloop-nextest-browser`.
+The ordinary Spynso suite includes paging even without AnyWidget; its live-widget
+case skips when the optional package is absent. See
+#link("docs/architecture/ci.typ")[the CI inventory] for browser coverage and inputs.
+
 `nix flake check --impure` additionally builds the CLI, standalone Rustdoc,
 persistent Typst renderer and WASM checks exported by the flake.
 

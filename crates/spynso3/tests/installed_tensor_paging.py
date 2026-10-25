@@ -495,9 +495,12 @@ class BrowserPagingTests(PagingAssertions):
         "live widget navigation requires the optional anywidget package",
     )
     def test_live_widget_navigation_and_page_size(self):
+        from anywidget import AnyWidget
+
         widget = self.pager._get_widget()
         self.pager._on_message(widget, {"action": "attach", "view": "browser"}, [])
-        self.assertTrue(widget.page["supports_expansion"])
+        self.assertIsInstance(widget, AnyWidget)
+        self.assertIs(widget.page["supports_expansion"], True)
         self.assertPage(widget.page)
         for action, expected in (("next", 25), ("previous", 0)):
             self.pager._on_message(widget, {"action": action, "request": action}, [])
@@ -1626,7 +1629,6 @@ class RealCompilerExportTests(PagingAssertions):
         self.assertIn("<svg", svg)
         self.assertNotIn("data-spenso-cancel", svg)
 
-
     def test_custom_typst_notation_compiles_complete_real_svg_projects(self):
         assets = Path(__file__).resolve().parents[1] / "typst"
         notation = (assets / "notation.typ").read_text() + (
@@ -1726,7 +1728,30 @@ def browser_fixtures():
                 "back": restored,
             }
         )
-    return {"esm": esm, "cases": cases}
+    from symbolica.community import tensor as spenso
+
+    expressions = [
+        "(a/(b+c)+d/(e+f))*(g+h)+z",
+        "+".join(f"a{i}/(b{i}+c{i})" for i in range(12)),
+        "*".join(f"x{i}" for i in range(30)) + "+z",
+        "*".join(f"x{i}" for i in range(30)),
+        "(" + "*".join(f"x{i}" for i in range(30)) + "+z)/(D+1)",
+    ]
+    html = [TensorExpression(E(source)).to_html() for source in expressions]
+    library = spenso.TensorLibrary.hep_lib_atom()
+    explorer = (
+        '<section id="standalone">'
+        + library[TensorExpression.dirac_gamma(4)].to_html()
+        + '</section><section id="library">'
+        + library.to_html()
+        + "</section>"
+    )
+    return {
+        "esm": esm,
+        "cases": cases,
+        "font": [html[0], spenso.load_math_font(), *html[1:]],
+        "explorer": explorer,
+    }
 
 
 if __name__ == "__main__":

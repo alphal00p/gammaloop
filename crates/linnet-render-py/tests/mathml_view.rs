@@ -320,7 +320,7 @@ fn mathml_view_scene_and_collection_ownership() {
 }
 
 #[test]
-#[ignore = "manual browser producer; run with mathml_view_browser.py"]
+#[ignore = "requires AnyWidget and the Playwright/Chromium client mathml_view_browser.py"]
 fn mathml_view_browser_producer() {
     run_python("serve_browser").unwrap();
 }

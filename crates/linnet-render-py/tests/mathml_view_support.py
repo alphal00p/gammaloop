@@ -299,7 +299,12 @@ def verify_outlined():
 
 def serve_browser():
     output = Path(os.environ["LINNET_MATHML_BROWSER_DIR"]).resolve()
-    allowed = Path(test_directory).parents[2] / ".local/graph-mathml-labels/browser"
+    allowed = Path(
+        os.environ.get(
+            "LINNET_MATHML_BROWSER_ROOT",
+            Path(test_directory).parents[2] / ".local/graph-mathml-labels/browser",
+        )
+    )
     assert output.is_relative_to(allowed.resolve()), output
     output.mkdir(parents=True, exist_ok=True)
     python = {
@@ -311,13 +316,19 @@ def serve_browser():
         "pyo3_config_file": os.environ.get("PYO3_CONFIG_FILE"),
         "python_home": os.environ.get("PYTHONHOME"),
     }
+    engines = os.environ.get("LINNET_MATHML_BROWSER_ENGINES", "chromium,webkit").split(
+        ","
+    )
+    assert engines and set(engines) <= {"chromium", "webkit"}
     jobs = {
         f"{engine}-{width}-{slot}": native.fresh_view(f"{engine}-{width}-{slot}")
-        for engine in ("chromium", "webkit")
+        for engine in engines
         for width in (350, 1400)
         for slot in ("a", "b")
     }
     requests = {name: view.measurement_request() for name, view in jobs.items()}
+    widgets = {name: view.widget() for name, view in jobs.items()}
+    assert all(widget.scripts for widget in widgets.values())
     assert len({request["id"] for request in requests.values()}) == len(jobs)
     completed = {}
     finish = None
@@ -357,6 +368,9 @@ def serve_browser():
                 self.reply(
                     {
                         "requests": requests,
+                        "scripts": {
+                            name: widget.scripts for name, widget in widgets.items()
+                        },
                         "native": True,
                         "python": python,
                         "source_sha256": hashlib.sha256(
@@ -446,6 +460,8 @@ def serve_browser():
             and Handler.handled < 256
         ):
             server.handle_request()
+    for widget in widgets.values():
+        widget.close()
     summary = {
         "completed": list(completed),
         "expected": list(jobs),

@@ -149,7 +149,9 @@ export async function mountPair(engine, width) {
     host.className = 'host'; host.style.width = `${width}px`;
     host.dataset.job = name;
     document.querySelector('#hosts').append(host);
-    const fields = {request,rendered:{}}, callbacks = new Map();
+    const scripts = manifest.scripts[name];
+    assert(Array.isArray(scripts) && scripts.length > 0, "native widget scripts missing");
+    const fields = {request,scripts,rendered:{}}, callbacks = new Map();
     const record = {name,request,host,fields,callbacks,messages:[],events:[],receipt:null};
     host.addEventListener('linnet:rendered', event => {
       const doc=event.detail.document;

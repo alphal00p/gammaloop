@@ -6,6 +6,23 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 
 
+def offline_fonts(page):
+    """Keep all browser resources offline, serving the repository's pinned font."""
+
+    def resource(route):
+        if route.request.url.endswith("/STIXTwoMath-Regular.woff2"):
+            route.fulfill(
+                path=Path(__file__).parents[2]
+                / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
+                content_type="font/woff2",
+                headers={"Access-Control-Allow-Origin": "*"},
+            )
+        else:
+            raise AssertionError(f"unexpected browser resource: {route.request.url}")
+
+    page.route("**/*", resource)
+
+
 def assert_baselines(page):
     groups = page.locator(".hs-factored-equation").evaluate("""root => {
         const baseline = element => {
@@ -67,15 +84,7 @@ def main(directory, ltd_directory, executable, engine="chromium"):
             args=["--no-sandbox"] if engine == "chromium" else [],
         )
         page = browser.new_page(viewport={"width": 736, "height": 1100})
-        page.route(
-            "**/*STIXTwoMath-Regular.woff2",
-            lambda route: route.fulfill(
-                path=Path(__file__).parents[2]
-                / "linnet-render-py/fonts/STIXTwoMath-Regular.woff2",
-                content_type="font/woff2",
-                headers={"Access-Control-Allow-Origin": "*"},
-            ),
-        )
+        offline_fonts(page)
         errors = []
         page.on("pageerror", lambda e: errors.append(str(e)))
         for source in sorted(directory.glob("cff-degree-*.html")):

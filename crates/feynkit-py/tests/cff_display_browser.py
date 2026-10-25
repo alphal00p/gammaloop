@@ -8,7 +8,7 @@ import json
 import sys
 from pathlib import Path
 
-from generalized_energy_display_browser import assert_baselines
+from generalized_energy_display_browser import assert_baselines, offline_fonts
 from playwright.sync_api import sync_playwright
 
 
@@ -47,6 +47,7 @@ def main(directory, executable=None, engine="chromium"):
             args=["--no-sandbox"] if engine == "chromium" else [],
         )
         page = browser.new_page(viewport={"width": 800, "height": 1100})
+        offline_fonts(page)
         errors = []
         page.on("pageerror", lambda error: errors.append(str(error)))
         for source in sources:
@@ -271,16 +272,25 @@ def main(directory, executable=None, engine="chromium"):
         assert 0 < geometry["scale"] <= 4 / 3 + 1e-6, geometry
         assert abs(geometry["dx"]) < 1e-4 and abs(geometry["dy"]) < 1e-4, geometry
         # Edge bodies do not change orientation; only their arrowheads do.
-        arrow = graph.locator('[data-flip-edge][aria-disabled="false"]').first
-        edge = arrow.get_attribute("data-flip-edge")
-        before = root.locator("[data-sum-input]").input_value()
-        point = graph.locator(
-            f'path[data-edge="{edge}"][data-flow="source"]'
-        ).first.evaluate("""path => {
-          const p=path.getPointAtLength(path.getTotalLength()*.1);
-          const screen=new DOMPoint(p.x,p.y).matrixTransform(path.getScreenCTM());
-          return {x:screen.x,y:screen.y};
+        body = graph.evaluate("""graph => {
+          for (const arrow of graph.querySelectorAll('[data-flip-edge][aria-disabled="false"]')) {
+            const edge=arrow.dataset.flipEdge;
+            for (const path of graph.querySelectorAll(`path[data-edge="${edge}"]`)) {
+              for (const fraction of [.1,.3,.5,.7,.9]) {
+                const p=path.getPointAtLength(path.getTotalLength()*fraction);
+                const screen=new DOMPoint(p.x,p.y).matrixTransform(path.getScreenCTM());
+                // The old first-edge sample can lie beneath an arrow's hit area.
+                if (document.elementFromPoint(screen.x,screen.y) === path)
+                  return {edge,x:screen.x,y:screen.y};
+              }
+            }
+          }
+          throw new Error('no unobscured edge body click target');
         }""")
+        edge = body.pop("edge")
+        arrow = graph.locator(f'[data-flip-edge="{edge}"]')
+        before = root.locator("[data-sum-input]").input_value()
+        point = body
         page.mouse.click(**point)
         assert root.locator("[data-sum-input]").input_value() == before
         camera.focus()
