@@ -12,6 +12,7 @@ use pyo3::{
     types::{PyCFunction, PyDict, PyList, PyModule},
 };
 use spynso3::SpensoModule;
+use spynso3::expression::TensorExpression;
 use symbolica::{
     api::python::{SymbolicaCommunityModule, create_symbolica_module},
     atom::Atom,
@@ -243,6 +244,76 @@ fn feynkit_and_spenso_share_one_symbolica_kernel_in_both_import_orders() {
                 Some(&registration),
                 Some(&registration),
             )?;
+            py.run(
+                c"ordered_left = spenso.TensorName('feynkit_py_test::ordered_left')(spenso.Representation.mink(4)('feynkit_py_test::left_mu'), spenso.Representation.coad(8)('feynkit_py_test::left_color'))\nordered_right = spenso.TensorName('feynkit_py_test::ordered_right')(spenso.Representation.mink(4)('feynkit_py_test::right_mu'), spenso.Representation.coad(8)('feynkit_py_test::right_color'))",
+                Some(&registration),
+                Some(&registration),
+            )?;
+            let ordered_left = registration.get_item("ordered_left")?.unwrap();
+            let ordered_right = registration.get_item("ordered_right")?.unwrap();
+            let left_numerator = ordered_left
+                .extract::<PyRef<'_, TensorExpression>>()?
+                .structured()
+                .clone();
+            let right_numerator = ordered_right
+                .extract::<PyRef<'_, TensorExpression>>()?
+                .structured()
+                .clone();
+            let rule = model.vertex_rule_id("V_3_SCALAR_000").unwrap();
+            let particle = model.particle_id("scalar_0").unwrap();
+            let mut ordered_builder = FeynmanDiagram::builder(model.clone(), "ordered-ports");
+            let mut left = DiagramVertex::interaction("left", rule);
+            left.numerator = left_numerator.clone();
+            let left = ordered_builder.add_vertex(left);
+            let mut right = DiagramVertex::interaction("right", rule);
+            right.numerator = right_numerator;
+            let right = ordered_builder.add_vertex(right);
+            for _ in 0..3 {
+                ordered_builder
+                    .add_edge(right, left, DiagramEdge::new(particle, false))
+                    .unwrap();
+            }
+            let ordered = ordered_builder.build().unwrap();
+            let inconsistent = ordered
+                .map_data(
+                    |id, vertex| {
+                        let mut vertex = vertex.clone();
+                        if id == left {
+                            vertex.numerator = NumeratorInterface::admit(Atom::num(2), None).unwrap();
+                        }
+                        vertex
+                    },
+                    |_, _, edge| edge.clone(),
+                )
+                .unwrap();
+            let repaired = inconsistent
+                .clone()
+                .with_numerator_fragments([], [])
+                .unwrap();
+            let replaced = ordered.clone().with_numerator(left_numerator).unwrap();
+            let ordered_locals = PyDict::new(py);
+            ordered_locals.set_item("core", &core)?;
+            ordered_locals.set_item("feynkit", &feynkit)?;
+            ordered_locals.set_item("spenso", &spenso)?;
+            ordered_locals.set_item("model", Py::new(py, PyModel::from(model.clone()))?)?;
+            ordered_locals.set_item("ordered_left", ordered_left)?;
+            ordered_locals.set_item("ordered_right", ordered_right)?;
+            for (name, diagram) in [
+                ("ordered_diagram", ordered),
+                ("inconsistent_diagram", inconsistent),
+                ("repaired_diagram", repaired),
+                ("replaced_diagram", replaced),
+            ] {
+                ordered_locals.set_item(name, Py::new(py, PyFeynmanDiagram::from(diagram))?)?;
+            }
+            let ordered_checks = CString::new(include_str!("installed_ordered_numerator_ports.py"))
+                .expect("ordered-port checks contain no null byte");
+            let ordered_args = ordered_locals.copy()?;
+            py.run(&ordered_checks, Some(&ordered_locals), Some(&ordered_locals))?;
+            ordered_locals
+                .get_item("check_ordered_numerator_ports")?
+                .unwrap()
+                .call((), Some(&ordered_args))?;
             let tensor_numerator = Atom::parse(
                 "k(spenso::mink(D,mu))*k(spenso::mink(D,nu))",
                 "feynkit_py_test",

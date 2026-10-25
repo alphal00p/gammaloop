@@ -12,10 +12,52 @@ from pathlib import Path
 
 from symbolica import E, S
 from symbolica.community import hepkit as hep
-from symbolica.community.tensor import TensorExpression
+from symbolica.community.tensor import Representation, TensorExpression
 
 model = hep.Model(Path(__file__).parents[2] / "feynkit-model/tests/fixtures/sm.json")
+p2 = "UFO::P(UFO::idx(1,3),UFO::idx(1,2))"
+p3 = "UFO::P(UFO::idx(1,3),UFO::idx(1,3))"
+# Explicit upstream-UUV1 reference at mg5amcnlo/mg5amcnlo
+# a5b17913ef0b6e1c872016f94d0fb610207dab47; canonical models remain unchanged.
+_reference_base = model
+_reference_base_json = _reference_base.to_json()
+_canonical_builtin = hep.Model.standard_model()
+_canonical_builtin_json = _canonical_builtin.to_json()
+_base_definition = json.loads(_reference_base_json)
+_upstream_definition = json.loads(_reference_base_json)
+_base_uuv1 = next(
+    item for item in _base_definition["lorentz_structures"] if item["name"] == "UUV1"
+)
+next(
+    item
+    for item in _upstream_definition["lorentz_structures"]
+    if item["name"] == "UUV1"
+)["structure"] = p2 + "+" + p3
+model = hep.Model.from_json(json.dumps(_upstream_definition))
 specification = json.loads(model.to_json())
+_reference_uuv1 = next(
+    item for item in specification["lorentz_structures"] if item["name"] == "UUV1"
+)
+_reference_vertex = next(
+    item for item in specification["vertex_rules"] if item["name"] == "V_35"
+)
+_reference_coupling = next(
+    item for item in specification["couplings"] if item["name"] == "GC_10"
+)
+assert _reference_uuv1["spins"] == [-1, -1, 3]
+assert _reference_vertex["particles"] == ["ghG", "ghG~", "g"]
+assert _reference_vertex["lorentz_structures"] == ["UUV1"]
+assert _reference_vertex["couplings"] == [["GC_10"]]
+assert E(_reference_coupling["expression"], default_namespace="UFO") == E("-UFO::G")
+_restored_definition = json.loads(model.to_json())
+next(
+    item
+    for item in _restored_definition["lorentz_structures"]
+    if item["name"] == "UUV1"
+)["structure"] = _base_uuv1["structure"]
+assert _restored_definition == _base_definition
+assert _reference_base.to_json() == _reference_base_json
+assert _canonical_builtin.to_json() == _canonical_builtin_json
 vertices = {
     "V_12": (["ghA", "ghWm~", "W-"], "GC_3"),
     "V_13": (["ghA", "ghWp~", "W+"], "GC_4"),
@@ -44,8 +86,6 @@ rules = {
     if vertex["lorentz_structures"] == ["UUV1"]
 }
 assert set(rules) == set(vertices)
-p2 = "UFO::P(UFO::idx(1,3),UFO::idx(1,2))"
-p3 = "UFO::P(UFO::idx(1,3),UFO::idx(1,3))"
 uuv = next(
     item for item in specification["lorentz_structures"] if item["name"] == "UUV1"
 )
@@ -119,8 +159,10 @@ for name, (particles, coupling_name) in vertices.items():
             )
         )[index]
         actual = model.expand_couplings(
-            diagram.numerator_expression(in_lmb=True).to_expression()
-        ).replace(mink(4, port), mink(4, mu))
+            diagram.numerator_expression(in_lmb=True).rename_indices(
+                {Representation.mink(4)(port): mu}
+            )
+        ).to_expression()
         color = one
         if name == "V_35":
             # Keep the full upstream f(a_ghost, a_antighost, a_gluon), including
@@ -131,14 +173,16 @@ for name, (particles, coupling_name) in vertices.items():
                 half["edge"]: hedge(number, 1) for number, half in enumerate(half_edges)
             }
             color = TensorExpression.color_f(8)(
-                *(indices[edges[external].id] for external in slots)
+                *(indices[edges[external].id] for external in slots), intern="indices"
             ).to_expression()
         # External Grassmann states use the canonical (antighost, ghost)
         # order. Crossing keeps the UFO vertex tensor unchanged and records
         # the permutation sign separately in the diagram's overall factor.
         ordering_sign = one if slots[1] < slots[0] else -one
         assert diagram.overall_factor_expression(evaluate=True) == ordering_sign
-        assert diagram.numerator_prefactor_expression() == one
+        _prefactor = diagram.numerator_prefactor_expression()
+        assert _prefactor.is_scalar
+        assert _prefactor.to_expression() == one
         residual = (
             TensorExpression(actual - coupling * color * momentum)
             .contract(collect_chains=False, collect_traces=False)

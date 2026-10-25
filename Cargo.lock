@@ -7623,7 +7623,7 @@ dependencies = [
 [[package]]
 name = "typst-library"
 version = "0.15.1"
-source = "git+https://github.com/alphal00p/gammaloop?branch=preserve-canonical-numerator-interfaces#b00e0bc936813d71ea9e5084c5015d60fb15c0ec"
+source = "git+https://github.com/alphal00p/gammaloop?branch=preserve-canonical-numerator-interfaces#18206088a8167a78316acd12dce4f05475a07cd1"
 dependencies = [
  "arrayvec",
  "az",
@@ -7791,7 +7791,7 @@ dependencies = [
 [[package]]
 name = "typst-svg"
 version = "0.15.1"
-source = "git+https://github.com/alphal00p/gammaloop?branch=preserve-canonical-numerator-interfaces#b00e0bc936813d71ea9e5084c5015d60fb15c0ec"
+source = "git+https://github.com/alphal00p/gammaloop?branch=preserve-canonical-numerator-interfaces#18206088a8167a78316acd12dce4f05475a07cd1"
 dependencies = [
  "base64 0.22.1",
  "comemo",
