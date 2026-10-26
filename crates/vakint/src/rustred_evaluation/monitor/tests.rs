@@ -377,6 +377,36 @@ fn pause_and_detach_only_change_the_display() {
     state.observe(snapshot(2, 50, 20, 1), Duration::from_secs(2));
     assert_eq!(state.view(Duration::from_secs(2)).frontier, frozen.frontier);
     assert_eq!(state.latest.unique_entered, 50);
+    let now = Duration::from_secs(2);
+    state.latest.resources = ResourceUsage::from_proc(
+        "VmRSS: 10 kB\nVmHWM: 20 kB",
+        "MemTotal: 100 kB\nMemAvailable: 80 kB\nMemFree: 30 kB",
+    );
+    state.latest.resource_sample_at = Some(now);
+    let live = serde_json::to_value(state.live_view(now)).unwrap();
+    for (action, scroll, help) in [
+        (UiAction::ScrollUp, 0, false),
+        (UiAction::PageUp, 0, false),
+        (UiAction::ToggleHelp, 0, true),
+        (UiAction::ScrollDown, 1, true),
+        (UiAction::PageDown, 11, true),
+        (UiAction::PageUp, 1, true),
+        (UiAction::ScrollUp, 0, true),
+        (UiAction::ToggleHelp, 0, false),
+    ] {
+        state.apply(action, now);
+        let view = state.view(now);
+        assert_eq!(view.scroll, scroll);
+        assert_eq!(view.show_help, help);
+        assert_eq!(view.frontier, frozen.frontier);
+        assert_eq!(serde_json::to_value(state.live_view(now)).unwrap(), live);
+    }
+    state.scroll = usize::MAX - 1;
+    for action in [UiAction::PageDown, UiAction::ScrollDown] {
+        state.apply(action, now);
+        assert_eq!(state.view(now).scroll, usize::MAX);
+        assert_eq!(serde_json::to_value(state.live_view(now)).unwrap(), live);
+    }
     state.apply(UiAction::Detach, Duration::from_secs(2));
     assert!(state.detached());
     assert_eq!(state.latest.status, MonitorStatus::Running);
