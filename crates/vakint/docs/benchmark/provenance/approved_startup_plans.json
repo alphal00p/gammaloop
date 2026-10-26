@@ -1,0 +1,39 @@
+{
+  "schema": "vakint.approved-startup-plan-checkpoint-index.v1",
+  "archive": "vakint-approved-startup-plans-20261026.tar.gz",
+  "archive_bytes": 21445,
+  "archive_sha256": "0c6464fba9712fc113148e15cc1c12f4cbed0f025b1b526373a229066b1352ee",
+  "members": 5,
+  "manifest": {
+    "schema": "vakint.approved-startup-plan-inputs.v1",
+    "scope": "Historical approved user inputs; original bytes, not a new completion claim or maintained plan copy.",
+    "files": {
+      "5L_PUSH_PLAN.md": {
+        "bytes": 21173,
+        "sha256": "bb7a760882216714f48d2659293d1e97ffbf50c25de0b6891fa5a7333d89f1b6"
+      },
+      "PRECISION_AND_INSPECTION_PLAN.md": {
+        "bytes": 18333,
+        "sha256": "c8265c9c9b194ef32c95b20d4d160a2b564604d1d5c670bf2dbbc4b74b6ca339"
+      },
+      "VAKINT_EXTERNAL_DATA_PLAN.md": {
+        "bytes": 15683,
+        "sha256": "5cafd7cb78e2ffe664cb7c095b53983ec1a899907914ffdd15b489077cfde99f"
+      },
+      "package_plans.py": {
+        "bytes": 2277,
+        "sha256": "6e6d09e3f0d70568abd3e2b949056804e0394d16c4ce995fb3651988e5c4d6f9"
+      }
+    }
+  },
+  "note": "approved_startup_plans.typ",
+  "scope": "Historical approved input preservation only. Originals unchanged; no final goal or numerical acceptance claim.",
+  "independent_packaging_review_sha256": "e4f2c18cc19a1b3794b6b1206768d16f3eebe35999df1425bb97f348a38f3312",
+  "checks": {
+    "exact_original_inputs": true,
+    "normalized_safe_regular_members": true,
+    "independent_byte_identical_reconstruction": true,
+    "packager_ruff_format_and_check": true,
+    "Typst_compile": true
+  }
+}
