@@ -43,6 +43,9 @@ mod chain;
 mod product;
 
 #[cfg(test)]
+use product::NAMED_PRODUCT_WORK;
+
+#[cfg(test)]
 thread_local! {
     pub(crate) static DUMMY_RESERVATION_WALKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
@@ -529,6 +532,12 @@ fn automatically_contractible(left: &PartialSlot, right: &PartialSlot) -> bool {
 }
 
 pub fn compatible_pairs(left: &PartialStructure, right: &PartialStructure) -> Vec<PortPair> {
+    #[cfg(test)]
+    NAMED_PRODUCT_WORK.with(|work| {
+        let mut observed = work.get();
+        observed.cartesian_checks += left.canonical().order() * right.canonical().order();
+        work.set(observed);
+    });
     let mut pairs = left
         .canonical()
         .external_structure_iter()
@@ -2218,6 +2227,14 @@ pub enum ProductPlan {
 }
 
 impl ProductPlan {
+    fn named_pairs_are_ambiguous(pairs: &[PortPair]) -> bool {
+        pairs.iter().enumerate().any(|(position, pair)| {
+            pairs[..position]
+                .iter()
+                .any(|previous| previous.left == pair.left || previous.right == pair.right)
+        })
+    }
+
     fn named(
         left: &PartialStructure,
         right: &PartialStructure,
@@ -2228,13 +2245,8 @@ impl ProductPlan {
         let candidates = compatible_pairs(left, right);
         // Named slots determine every pairing, without the unresolved matching
         // solver or any inspection of the tensor payloads.
-        for (position, pair) in candidates.iter().enumerate() {
-            if candidates[..position]
-                .iter()
-                .any(|previous| previous.left == pair.left || previous.right == pair.right)
-            {
-                return Err(TensorCompositionError::Ambiguous(candidates));
-            }
+        if Self::named_pairs_are_ambiguous(&candidates) {
+            return Err(TensorCompositionError::Ambiguous(candidates));
         }
         Ok(if candidates.is_empty() {
             Self::Outer
@@ -4214,6 +4226,331 @@ mod tests {
             paired.multiply(&factors[22]),
             Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
         ));
+    }
+
+    #[test]
+    fn multiply_many_prepares_fixed_dimension_ports_once_without_prefix_cartesian_work() {
+        test_support::test_initialize();
+        let ports = (0..49)
+            .map(|position| {
+                rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(
+                    99820 + position,
+                )))
+            })
+            .collect::<Vec<_>>();
+        let factors = ports
+            .windows(2)
+            .enumerate()
+            .map(|(position, ports)| {
+                let ports = [ports[1], ports[0]];
+                SymbolicTensor::from_declared_parts(
+                    FunctionBuilder::new(
+                        SPENSO_TAG.tensor_symbol(&format!("prepared_chain_{position}")),
+                    )
+                    .add_args(ports.map(port_atom))
+                    .finish(),
+                    PartialStructure::from_logical_slots(ports),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let expected = factors
+            .iter()
+            .try_fold(
+                SymbolicTensor::infer(Atom::one()).unwrap(),
+                |product, factor| product.multiply(factor),
+            )
+            .unwrap();
+        NAMED_PRODUCT_WORK.with(|work| work.set(Default::default()));
+        let actual = SymbolicTensor::multiply_many(&factors).unwrap();
+        let work = NAMED_PRODUCT_WORK.with(|work| work.get());
+        assert_eq!(work.interface_builds, 1);
+        assert_eq!(work.cartesian_checks, 0);
+        assert_eq!(work.inventory_checks, factors.len() - 1);
+        assert!(actual.same_value(&expected));
+        assert_eq!(actual.structure.logical_slots(), [ports[0], ports[48]]);
+        assert_eq!(
+            actual
+                .explicit_index_occurrences()
+                .unwrap()
+                .oriented_entries()
+                .collect::<Vec<_>>(),
+            expected
+                .explicit_index_occurrences()
+                .unwrap()
+                .oriented_entries()
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn multiply_many_preparation_preserves_atomic_duplicate_diagnostics() {
+        test_support::test_initialize();
+        let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
+        let index = AbstractIndex::Normal(99871);
+        let matched = base.slot(PartialIndex::Explicit(index));
+        let left = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([
+                rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(9))),
+                matched,
+                rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(1))),
+            ]),
+        )
+        .unwrap();
+        let right = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([
+                base.dual().slot(PartialIndex::Explicit(index)),
+                rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(7))),
+                base.dual().slot(PartialIndex::Explicit(index)),
+            ]),
+        )
+        .unwrap();
+        let one = SymbolicTensor::infer(Atom::one()).unwrap();
+        let prefix = one.multiply(&left).unwrap();
+        let position = prefix
+            .structure
+            .logical_slots()
+            .iter()
+            .position(|slot| *slot == matched)
+            .unwrap();
+        let expected = [
+            PortPair {
+                left: position,
+                right: 0,
+            },
+            PortPair {
+                left: position,
+                right: 2,
+            },
+        ];
+        for result in [
+            prefix.multiply(&right),
+            SymbolicTensor::multiply_many([&left, &right]),
+        ] {
+            let Err(TensorCompositionError::Ambiguous(pairs)) = result else {
+                panic!("both incoming duplicates must see the original partner");
+            };
+            assert_eq!(pairs, expected);
+        }
+        let mixed = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([
+                Representation {
+                    rep: rep().rep,
+                    dim: Dimension::Symbolic(symbol!("prepared_diagnostic_dimension").into()),
+                }
+                .slot(PartialIndex::Explicit(AbstractIndex::Normal(99872))),
+                rep()
+                    .rep
+                    .new_rep(2)
+                    .slot(PartialIndex::Explicit(AbstractIndex::Normal(99872))),
+            ]),
+        )
+        .unwrap();
+        let legacy_prefix = prefix.multiply(&mixed).unwrap();
+        let position = legacy_prefix
+            .structure
+            .logical_slots()
+            .iter()
+            .position(|slot| *slot == matched)
+            .unwrap();
+        let expected = [
+            PortPair {
+                left: position,
+                right: 0,
+            },
+            PortPair {
+                left: position,
+                right: 2,
+            },
+        ];
+        for result in [
+            legacy_prefix.multiply(&right),
+            SymbolicTensor::multiply_many([&left, &mixed, &right]),
+        ] {
+            let Err(TensorCompositionError::Ambiguous(pairs)) = result else {
+                panic!("legacy prefix order must supply the reported positions");
+            };
+            assert_eq!(pairs, expected);
+        }
+        // Reverse the duplicate side: both live old occurrences remain visible.
+        let repeated = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([matched, matched]),
+        )
+        .unwrap();
+        let partner = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([base.dual().slot(PartialIndex::Explicit(index))]),
+        )
+        .unwrap();
+        assert!(
+            matches!(SymbolicTensor::multiply_many([&repeated, &partner]),
+                Err(TensorCompositionError::Ambiguous(pairs))
+                    if pairs == [PortPair { left: 0, right: 0 }, PortPair { left: 1, right: 0 }]
+            )
+        );
+    }
+
+    #[test]
+    fn multiply_many_preparation_never_contracts_ports_within_a_factor() {
+        test_support::test_initialize();
+        let slot = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(99873)));
+        let nominal_pair = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([slot, slot]),
+        )
+        .unwrap();
+        let scalar = SymbolicTensor::infer(Atom::num(3)).unwrap();
+        let result = assert_many_matches_fold(&[&scalar, &nominal_pair, &scalar]);
+        assert_eq!(result.expression, Atom::Zero);
+        assert_eq!(result.structure.logical_slots(), [slot, slot]);
+        assert_eq!(
+            result
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(rep().slot(AbstractIndex::Normal(99873))),
+            2
+        );
+        let probe = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots([slot]),
+        )
+        .unwrap();
+        assert!(matches!(
+            result.multiply(&probe),
+            Err(TensorCompositionError::Ambiguous(_))
+        ));
+    }
+
+    #[test]
+    fn multiply_many_preparation_certifies_symbolic_ties_and_oriented_dimension_groups() {
+        test_support::test_initialize();
+        let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
+        let n = Dimension::Symbolic(symbol!("prepared_dimension_n").into());
+        let m = Dimension::Symbolic(symbol!("prepared_dimension_m").into());
+        let specifications = [
+            (base.rep, Dimension::Concrete(3)),
+            (base.dual().rep, Dimension::Concrete(5)),
+            (base.rep, n),
+            (base.dual().rep, m),
+            (base.rep, Dimension::Concrete(3)),
+            (base.rep, m),
+        ];
+        let factors = specifications
+            .into_iter()
+            .enumerate()
+            .map(|(position, (representation, dimension))| {
+                let index = AbstractIndex::Normal(99880 + position)
+                    .scoped(symbol!("prepared_dimension_scope"));
+                let slot = Representation {
+                    rep: representation,
+                    dim: dimension,
+                }
+                .slot(PartialIndex::Explicit(index));
+                SymbolicTensor::from_declared_parts(
+                    Atom::Zero,
+                    PartialStructure::from_logical_slots([slot]),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let expected = assert_many_matches_fold(&factors.iter().collect::<Vec<_>>());
+        NAMED_PRODUCT_WORK.with(|work| work.set(Default::default()));
+        let actual = SymbolicTensor::multiply_many(&factors).unwrap();
+        assert!(actual.same_value(&expected));
+        assert_eq!(actual.rank(), specifications.len());
+        assert_eq!(
+            NAMED_PRODUCT_WORK.with(|work| work.get()).interface_builds,
+            1
+        );
+    }
+
+    #[test]
+    fn multiply_many_preparation_preserves_twenty_one_slot_legacy_sorting() {
+        test_support::test_initialize();
+        // Distinct symbolic dimensions retain the legacy comparator's ties,
+        // while keeping each admitted occurrence key within its branch bound.
+        let symbolic = (0..17)
+            .map(|position| {
+                Dimension::Symbolic(symbol!(format!("prepared_legacy_dimension_{position}")).into())
+            })
+            .collect::<Vec<_>>();
+        let dimensions = [
+            Dimension::Concrete(2),
+            symbolic[0],
+            symbolic[1],
+            Dimension::Concrete(2),
+            Dimension::Concrete(1),
+            symbolic[2],
+            symbolic[3],
+            Dimension::Concrete(1),
+        ]
+        .into_iter()
+        .chain(symbolic[4..].iter().copied());
+        let ports = dimensions
+            .map(|dimension| {
+                Representation {
+                    rep: rep().rep,
+                    dim: dimension,
+                }
+                .slot(PartialIndex::Explicit(AbstractIndex::Normal(0)))
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(ports.len(), 21);
+        let zero = SymbolicTensor::from_declared_parts(
+            Atom::Zero,
+            PartialStructure::from_logical_slots(ports),
+        )
+        .unwrap();
+        let scalar = SymbolicTensor::infer(Atom::num(2)).unwrap();
+        let result = assert_many_matches_fold(&[&zero, &scalar, &scalar]);
+        assert_eq!(result.expression, Atom::Zero);
+        assert_eq!(result.rank(), 21);
+        assert_eq!(
+            result
+                .explicit_index_occurrences()
+                .unwrap()
+                .entries()
+                .count(),
+            19
+        );
+    }
+
+    #[test]
+    fn multiply_many_preparation_materializes_the_prefix_when_certification_changes() {
+        test_support::test_initialize();
+        let symbolic = (0..21).map(|position| {
+            Dimension::Symbolic(symbol!(format!("prepared_transition_dimension_{position}")).into())
+        });
+        let dimensions = symbolic.chain([Dimension::Concrete(2), Dimension::Concrete(1)]);
+        let factors = dimensions
+            .map(|dimension| {
+                let slot = Representation {
+                    rep: rep().rep,
+                    dim: dimension,
+                }
+                .slot(PartialIndex::Explicit(AbstractIndex::Normal(0)));
+                SymbolicTensor::from_declared_parts(
+                    Atom::Zero,
+                    PartialStructure::from_logical_slots([slot]),
+                )
+                .unwrap()
+            })
+            .collect::<Vec<_>>();
+        let expected = assert_many_matches_fold(&factors.iter().collect::<Vec<_>>());
+        NAMED_PRODUCT_WORK.with(|work| work.set(Default::default()));
+        let actual = SymbolicTensor::multiply_many(&factors).unwrap();
+        let work = NAMED_PRODUCT_WORK.with(|work| work.get());
+        assert!(actual.same_value(&expected));
+        assert_eq!(actual.rank(), 23);
+        assert_eq!(
+            work.interface_builds, 2,
+            "certified prefix, then the legacy final step"
+        );
+        assert_eq!(work.cartesian_checks, 0);
     }
 
     #[test]
