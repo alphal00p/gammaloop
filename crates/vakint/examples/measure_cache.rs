@@ -8,6 +8,8 @@
     )
 )]
 mod owner_proof;
+#[path = "build_cache/resource_guard_admission.rs"]
+mod resource_guard_admission;
 #[path = "build_cache/workload.rs"]
 mod workload;
 
@@ -1295,6 +1297,9 @@ fn main() -> Result<()> {
     let Some(options) = Options::parse()? else {
         return Ok(());
     };
+    if options.worker {
+        let _guard_admission = resource_guard_admission::admit_from_task_env()?;
+    }
     let expected_identity = if options.worker {
         Some(options.arm_worker_watchdog()?)
     } else {

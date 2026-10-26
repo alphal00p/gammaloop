@@ -449,6 +449,10 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
     let mut last_node_completion = None;
     let mut document_received = Duration::ZERO;
     let mut last_publish = None::<Instant>;
+    let mut last_resource_sample = None::<Instant>;
+    // Task-scoped presentation input only, captured once. This never arms a guard.
+    let guard_snapshot =
+        std::env::var_os("VAKINT_RESOURCE_GUARD_SNAPSHOT").map(std::path::PathBuf::from);
     loop {
         if !shared.stopping.load(Ordering::Relaxed) {
             let _ = receiver.recv_timeout(Duration::from_millis(50));
@@ -473,7 +477,9 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
         let mut force_publish = false;
         if let Some((mut display, document, cycle, completion, force)) = update {
             force_publish = force;
-            display.rss_bytes = rss_bytes();
+            // A native notice does not reset the independent OS sample or its age.
+            display.resources = state.latest.resources.clone();
+            display.resource_sample_at = state.latest.resource_sample_at;
             state.observe(display, shared.started.elapsed());
             if let Some(document) = document {
                 last_document = Some(document);
@@ -481,6 +487,18 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
             }
             last_cycle = cycle;
             last_node_completion = completion;
+        }
+        if force_publish
+            || shared.stopping.load(Ordering::Relaxed)
+            || last_resource_sample.is_none_or(|last| {
+                last.elapsed() >= options.interval.max(Duration::from_millis(100))
+            })
+        {
+            // Presentation-thread I/O only; no native progress/rate sample is added.
+            state.latest.resources = resource_usage(guard_snapshot.as_deref());
+            state.latest.resource_sample_at =
+                cfg!(target_os = "linux").then(|| shared.started.elapsed());
+            last_resource_sample = Some(Instant::now());
         }
         #[cfg(feature = "progress-tui")]
         if terminal.is_some() {
@@ -516,21 +534,27 @@ fn worker(shared: Arc<Shared>, receiver: mpsc::Receiver<()>, options: RustRedMon
             && let Some(native) = &last_document
         {
             let mut document = native.clone();
-            state.latest.rss_bytes = rss_bytes();
-            let view = state.view(shared.started.elapsed());
-            document["monitor"] = serde_json::json!({
-                "scope": "observational consumer presentation; native fields unchanged",
-                "phase": state.latest.phase,
-                "status": format!("{:?}", view.status),
-                "worker_pid": std::process::id(),
-                "published_unix_seconds": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).ok().map(|value| value.as_secs_f64()),
-                "native_document_age_seconds": shared.started.elapsed().saturating_sub(document_received).as_secs_f64(),
-                "estimates": view.estimates,
-                "view": view,
-                "last_cycle": last_cycle,
-                "last_node_completion": last_node_completion,
-                "global_remaining_work_certificate": false,
-            });
+            // Only the nested visual view may be frozen, never status/ETA/resources.
+            let mut monitor = state.presentation(shared.started.elapsed());
+            monitor["scope"] =
+                "observational consumer presentation; native fields unchanged".into();
+            monitor["worker_pid"] = std::process::id().into();
+            monitor["published_unix_seconds"] = serde_json::json!(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .map(|value| value.as_secs_f64())
+            );
+            monitor["native_document_age_seconds"] = shared
+                .started
+                .elapsed()
+                .saturating_sub(document_received)
+                .as_secs_f64()
+                .into();
+            monitor["last_cycle"] = serde_json::json!(last_cycle);
+            monitor["last_node_completion"] = serde_json::json!(last_node_completion);
+            monitor["global_remaining_work_certificate"] = false.into();
+            document["monitor"] = monitor;
             if let Err(error) = file.write(&document).and_then(|()| {
                 if stderr_json {
                     stream.write(&document)
@@ -740,21 +764,21 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
                 "caller expression; not inferred from canonical R".into(),
             ),
             (
-                "Current output terms".into(),
+                "Native output terms (sampled)".into(),
                 envelope
                     .complexity
                     .terms
                     .map_or_else(|| "unknown".into(), |v| v.to_string()),
             ),
             (
-                "Coefficient term census".into(),
+                "Native coefficient terms (sampled)".into(),
                 envelope.complexity.coefficient_terms.map_or_else(
                     || "unknown / not materialized for telemetry".into(),
                     |v| v.to_string(),
                 ),
             ),
             (
-                "Coefficient bytes".into(),
+                "Native coefficient bytes (sampled)".into(),
                 envelope
                     .complexity
                     .coefficient_bytes
@@ -805,28 +829,535 @@ fn update_display(pending: &mut Pending, envelope: &Envelope<'_>, detail: bool, 
     display.events = pending.events.iter().cloned().collect();
 }
 
-fn rss_bytes() -> Option<u64> {
+fn resource_usage(guard_snapshot: Option<&std::path::Path>) -> super::ResourceUsage {
     #[cfg(target_os = "linux")]
     {
-        let status = std::fs::read_to_string("/proc/self/status").ok()?;
-        status.lines().find_map(|line| {
-            line.strip_prefix("VmRSS:")?
-                .split_whitespace()
-                .next()?
-                .parse::<u64>()
-                .ok()?
-                .checked_mul(1024)
-        })
+        let status = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
+        let meminfo = std::fs::read_to_string("/proc/meminfo").unwrap_or_default();
+        let mut sample = super::ResourceUsage::from_proc(&status, &meminfo);
+        if let Some(path) = guard_snapshot {
+            sample.guard = GuardBinding { path }.sample();
+        }
+        sample
     }
     #[cfg(not(target_os = "linux"))]
     {
-        None
+        let _ = guard_snapshot;
+        super::ResourceUsage::default()
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy)]
+struct ProcessIdentity {
+    pid: u64,
+    start_ticks: u64,
+    uid: u32,
+}
+
+#[cfg(target_os = "linux")]
+impl ProcessIdentity {
+    fn read(pid: u64) -> io::Result<Self> {
+        use std::os::unix::fs::MetadataExt;
+        let path = std::path::PathBuf::from(format!("/proc/{pid}"));
+        let stat = std::fs::read_to_string(path.join("stat"))?;
+        let fields = stat
+            .rsplit_once(')')
+            .ok_or_else(|| io::Error::other("invalid process stat"))?
+            .1
+            .split_whitespace()
+            .collect::<Vec<_>>();
+        if matches!(fields.first(), Some(&"Z" | &"X")) {
+            return Err(io::Error::other("registered process is terminal"));
+        }
+        let start_ticks = fields
+            .get(19)
+            .and_then(|value| value.parse().ok())
+            .ok_or_else(|| io::Error::other("missing process start ticks"))?;
+        Ok(Self {
+            pid,
+            start_ticks,
+            uid: std::fs::metadata(path)?.uid(),
+        })
+    }
+}
+
+/// Read-only attachment to the existing external guard, never a policy executor.
+#[cfg(target_os = "linux")]
+struct GuardBinding<'a> {
+    path: &'a std::path::Path,
+}
+
+#[cfg(target_os = "linux")]
+impl GuardBinding<'_> {
+    fn document(
+        path: &std::path::Path,
+    ) -> io::Result<(serde_json::Value, Vec<u8>, std::time::SystemTime)> {
+        use std::{io::Read, os::unix::fs::OpenOptionsExt};
+        let file = std::fs::OpenOptions::new()
+            .read(true)
+            .custom_flags(rustix::fs::OFlags::NONBLOCK.bits() as i32)
+            .open(path)?;
+        let metadata = file.metadata()?;
+        if !metadata.is_file() || metadata.len() > 65536 {
+            return Err(io::Error::other(
+                "guard input must be a bounded regular file",
+            ));
+        }
+        let modified = metadata.modified()?;
+        let mut bytes = Vec::new();
+        file.take(65537).read_to_end(&mut bytes)?;
+        if bytes.len() > 65536 {
+            return Err(io::Error::other("guard input grew beyond bound"));
+        }
+        let value = serde_json::from_slice(&bytes).map_err(io::Error::other)?;
+        Ok((value, bytes, modified))
+    }
+
+    fn sample(&self) -> super::ResourceGuardView {
+        let result = (|| {
+            use sha2::{Digest, Sha256};
+            if !self.path.is_absolute() {
+                return Err(io::Error::other("guard path must be absolute"));
+            }
+            let parent = self
+                .path
+                .parent()
+                .ok_or_else(|| io::Error::other("missing guard directory"))?;
+            let (heartbeat, _, modified) = Self::document(self.path)?;
+            let (registration, _, _) = Self::document(&parent.join("registration.json"))?;
+            let (config, bytes, _) = Self::document(&parent.join("guard-config.json"))?;
+            let pid = registration["guard"]["pid"]
+                .as_u64()
+                .ok_or_else(|| io::Error::other("missing guard PID"))?;
+            let guard_proc = std::path::PathBuf::from(format!("/proc/{pid}"));
+            let cwd = std::fs::read_link(guard_proc.join("cwd"))?;
+            let cgroup = std::fs::read_to_string(guard_proc.join("cgroup"))?;
+            if config["output_directory"]
+                .as_str()
+                .map(std::path::Path::new)
+                != Some(parent)
+                || cwd != parent
+                || registration["guard"]["cwd"]
+                    .as_str()
+                    .map(std::path::Path::new)
+                    != Some(cwd.as_path())
+                || registration["guard"]["cgroup"].as_str() != Some(cgroup.trim())
+            {
+                return Err(io::Error::other(
+                    "guard workspace or cgroup binding differs",
+                ));
+            }
+            let identities = (
+                ProcessIdentity::read(pid)?,
+                ProcessIdentity::read(u64::from(std::process::id()))?,
+            );
+            let age = modified.elapsed().map_err(io::Error::other)?;
+            self.project(
+                (&config, &format!("{:x}", Sha256::digest(bytes))),
+                &registration,
+                &heartbeat,
+                identities,
+                age,
+            )
+        })();
+        result.unwrap_or_else(|error: io::Error| super::ResourceGuardView {
+            source: Some(self.path.to_string_lossy().chars().take(512).collect()),
+            detail: Some(error.to_string().chars().take(256).collect()),
+            ..Default::default()
+        })
+    }
+
+    fn project(
+        &self,
+        config: (&serde_json::Value, &str),
+        registration: &serde_json::Value,
+        heartbeat: &serde_json::Value,
+        identities: (ProcessIdentity, ProcessIdentity),
+        age: Duration,
+    ) -> io::Result<super::ResourceGuardView> {
+        let (config, digest) = config;
+        let (guard, current) = identities;
+        let interval = config["sample_seconds"]
+            .as_u64()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| io::Error::other("invalid guard interval"))?;
+        let threshold = config["threshold_bytes"]
+            .as_u64()
+            .filter(|value| *value > 0)
+            .ok_or_else(|| io::Error::other("invalid guard floor"))?;
+        if config["schema"] != "vakint.physical-memory-floor-config.v1"
+            || config["activation_approved"] != true
+            || registration["schema"] != "vakint.physical-memory-floor-registration.v1"
+            || heartbeat["schema"] != "vakint.physical-memavailable-guard.v1"
+            || registration["config_sha256"] != digest
+            || registration["guard"]["pid"] != guard.pid
+            || heartbeat["guard_pid"] != guard.pid
+            || registration["guard"]["start_ticks"] != guard.start_ticks
+            || config["uid"] != guard.uid
+            || guard.uid != current.uid
+            || registration["guard"]["uids"]
+                != serde_json::json!([guard.uid, guard.uid, guard.uid, guard.uid])
+            || registration["threshold_bytes"] != threshold
+            || heartbeat["threshold_bytes"] != threshold
+            || registration["sample_seconds"] != interval
+            || heartbeat["sample_seconds"] != interval
+            || heartbeat["latched_abort"].as_bool().is_none()
+            || heartbeat.get("sample_error").is_none()
+        {
+            return Err(io::Error::other(
+                "guard config, registration, process or snapshot binding differs",
+            ));
+        }
+        let slots = config["slots"]
+            .as_array()
+            .filter(|slots| slots.len() <= 16)
+            .ok_or_else(|| io::Error::other("missing or excessive registered guard slots"))?;
+        let mut report = super::ResourceGuardView {
+            threshold_bytes: Some(threshold),
+            sample_seconds: Some(interval),
+            report_age_seconds: Some(age.as_secs_f64()),
+            reported_latched_abort: heartbeat["latched_abort"].as_bool(),
+            guard_pid: Some(guard.pid),
+            source: Some(self.path.to_string_lossy().chars().take(512).collect()),
+            detail: Some("current process has no verified registered coverage".into()),
+            ..Default::default()
+        };
+        for slot in slots {
+            let name = slot["name"]
+                .as_str()
+                .ok_or_else(|| io::Error::other("missing guard slot name"))?;
+            let observed = &heartbeat["slots"][name];
+            let state = observed["state"]
+                .as_str()
+                .ok_or_else(|| io::Error::other("missing guard slot state"))?;
+            let target = observed
+                .get("target")
+                .or_else(|| observed["event"].get("target"));
+            report.registered_slots.push(format!(
+                "{}: {}{}",
+                name.chars().take(64).collect::<String>(),
+                state.chars().take(64).collect::<String>(),
+                target.map_or_else(String::new, |target| format!(
+                    " PID {}/{}",
+                    target["pid"], target["start_ticks"]
+                ))
+            ));
+            if registration["slots"].get(name).is_some()
+                && slot["uid"] == current.uid
+                && target.is_some_and(|target| {
+                    target["pid"] == current.pid && target["start_ticks"] == current.start_ticks
+                })
+                && (slot["target"].is_null() || target == Some(&slot["target"]))
+            {
+                report.registered_worker = Some(
+                    serde_json::json!({"slot":name,"pid":current.pid,"start_ticks":current.start_ticks}),
+                );
+                report.current_process_covered = state == "ARMED_EXACT_PIDFD";
+                report.status = if report.current_process_covered {
+                    "active"
+                } else {
+                    "fault"
+                }
+                .into();
+                report.detail = Some(format!("registered slot reports {state}"));
+            }
+        }
+        if heartbeat["sample_error"] != serde_json::Value::Null
+            || !heartbeat["MemAvailable_bytes"].is_u64()
+        {
+            report.status = "fault".into();
+            report.current_process_covered = false;
+            report.detail = Some("guard reports a missing or failed OS sample".into());
+        } else if report.reported_latched_abort == Some(true) {
+            report.status = "latched_abort".into();
+            report.current_process_covered = false;
+        }
+        if age.as_secs_f64() > 3.0 * interval as f64 {
+            report.status = "unknown".into();
+            report.current_process_covered = false;
+            report.detail = Some("stale guard report; no active coverage claim".into());
+        }
+        Ok(report)
     }
 }
 
 #[cfg(all(test, unix, not(target_arch = "wasm32")))]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn guard_attachment_requires_bound_live_identity_freshness_and_actual_slot_coverage() {
+        let binding = GuardBinding {
+            path: std::path::Path::new("/workspace/guard-fixture/heartbeat.json"),
+        };
+        let config = serde_json::json!({"schema":"vakint.physical-memory-floor-config.v1",
+            "activation_approved":true,"uid":7,"sample_seconds":1,"threshold_bytes":50000000000_u64,
+            "slots":[{"name":"q0","uid":7,"target":{"pid":33,"start_ticks":44}},
+                {"name":"future","uid":7,"target":null}]});
+        let registration = serde_json::json!({"schema":"vakint.physical-memory-floor-registration.v1",
+            "config_sha256":"fixture-digest","threshold_bytes":50000000000_u64,"sample_seconds":1,
+            "guard":{"pid":11,"start_ticks":22,"uids":[7,7,7,7]},"slots":{"q0":{},"future":{}}});
+        let heartbeat = serde_json::json!({"schema":"vakint.physical-memavailable-guard.v1",
+            "guard_pid":11,"threshold_bytes":50000000000_u64,"sample_seconds":1,"latched_abort":false,
+            "sample_error":null,"MemAvailable_bytes":60000000000_u64,"slots":{
+                "q0":{"state":"ARMED_EXACT_PIDFD","target":{"pid":33,"start_ticks":44}},
+                "future":{"state":"WAITING_AUTHORIZED_FUTURE_LAUNCH"}}});
+        let identities = (
+            ProcessIdentity {
+                pid: 11,
+                start_ticks: 22,
+                uid: 7,
+            },
+            ProcessIdentity {
+                pid: 33,
+                start_ticks: 44,
+                uid: 7,
+            },
+        );
+        let observe = |config: &serde_json::Value,
+                       registration: &serde_json::Value,
+                       heartbeat: &serde_json::Value,
+                       identities,
+                       age| {
+            binding.project(
+                (config, "fixture-digest"),
+                registration,
+                heartbeat,
+                identities,
+                age,
+            )
+        };
+        let report = observe(
+            &config,
+            &registration,
+            &heartbeat,
+            identities,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert_eq!(report.status, "active");
+        assert!(report.current_process_covered);
+        assert_eq!(report.threshold_bytes, Some(50000000000));
+        assert_eq!(report.registered_worker.as_ref().unwrap()["slot"], "q0");
+        let other_worker = (
+            identities.0,
+            ProcessIdentity {
+                pid: 34,
+                ..identities.1
+            },
+        );
+        let unregistered = observe(
+            &config,
+            &registration,
+            &heartbeat,
+            other_worker,
+            Duration::ZERO,
+        )
+        .unwrap();
+        assert_eq!(unregistered.status, "unknown");
+        assert!(!unregistered.current_process_covered);
+        let stale = observe(
+            &config,
+            &registration,
+            &heartbeat,
+            identities,
+            Duration::from_secs(4),
+        )
+        .unwrap();
+        assert_eq!(stale.status, "unknown");
+        assert!(!stale.current_process_covered);
+        for (field, value) in [
+            ("start_ticks", serde_json::json!(23)),
+            ("uids", serde_json::json!([8, 8, 8, 8])),
+        ] {
+            let mut wrong = registration.clone();
+            wrong["guard"][field] = value;
+            assert!(observe(&config, &wrong, &heartbeat, identities, Duration::ZERO).is_err());
+        }
+        let mut wrong_digest = registration.clone();
+        wrong_digest["config_sha256"] = "other".into();
+        assert!(
+            observe(
+                &config,
+                &wrong_digest,
+                &heartbeat,
+                identities,
+                Duration::ZERO
+            )
+            .is_err()
+        );
+        let mut latched = heartbeat.clone();
+        latched["latched_abort"] = true.into();
+        let report = observe(&config, &registration, &latched, identities, Duration::ZERO).unwrap();
+        assert_eq!(report.status, "latched_abort");
+        assert!(!report.current_process_covered);
+        let mut fault = heartbeat.clone();
+        fault["sample_error"] = "synthetic OS error".into();
+        assert_eq!(
+            observe(&config, &registration, &fault, identities, Duration::ZERO)
+                .unwrap()
+                .status,
+            "fault"
+        );
+        assert_eq!(super::super::ResourceGuardView::default().status, "unknown");
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn guard_attachment_rejects_fifo_and_oversized_inputs_without_a_writer() {
+        let directory = tempfile::tempdir().unwrap();
+        let fifo = directory.path().join("heartbeat.json");
+        rustix::fs::mkfifoat(
+            rustix::fs::CWD,
+            &fifo,
+            rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+        )
+        .unwrap();
+        let started = Instant::now();
+        assert!(GuardBinding::document(&fifo).is_err());
+        assert!(started.elapsed() < Duration::from_secs(1));
+        let large = directory.path().join("large.json");
+        std::fs::write(&large, vec![b' '; 65537]).unwrap();
+        assert!(GuardBinding::document(&large).is_err());
+        let report = GuardBinding { path: &fifo }.sample();
+        assert_eq!(report.status, "unknown");
+        assert!(!report.current_process_covered);
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn real_proc_memory_refreshes_during_synthetic_native_silence_and_keeps_cycle_failure() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("resources.json");
+        let options = RustRedMonitorOptions {
+            progress_snapshot: Some(path.clone()),
+            interval: Duration::from_millis(100),
+            ..Default::default()
+        };
+        let failure = MonitorContext::run::<()>(&options, |mut observer| {
+            // Real OS sampling/file publication; synthetic control events only.
+            // No saved application, coefficient, cache or reduction is loaded.
+            MonitorContext::native_phase(observer.as_deref_mut(), "synthetic_busy_phase");
+            let deadline = Instant::now() + Duration::from_secs(5);
+            let first = loop {
+                if let Ok(bytes) = std::fs::read(&path) {
+                    let document: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                    if document["monitor"]["resources"]["rss_bytes"].is_u64() {
+                        break document;
+                    }
+                }
+                assert!(Instant::now() < deadline, "resource publication timed out");
+                thread::sleep(Duration::from_millis(5));
+            };
+            let refreshed = loop {
+                let document: serde_json::Value =
+                    serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+                if document["monitor"]["published_unix_seconds"]
+                    .as_f64()
+                    .unwrap()
+                    > first["monitor"]["published_unix_seconds"].as_f64().unwrap()
+                    && document["monitor"]["native_document_age_seconds"]
+                        .as_f64()
+                        .unwrap()
+                        >= 0.1
+                {
+                    break document;
+                }
+                assert!(
+                    Instant::now() < deadline,
+                    "independent OS refresh timed out"
+                );
+                thread::sleep(Duration::from_millis(5));
+            };
+            assert!(
+                refreshed["monitor"]["resources"]["sample_age_seconds"]
+                    .as_f64()
+                    .unwrap()
+                    < 0.1
+            );
+            assert!(refreshed["monitor"]["last_cycle"].is_null());
+            let mut cycle = Envelope::new(Event::CycleDetected, "synthetic-resource-fixture");
+            cycle.activity = Activity::CoefficientCombination;
+            cycle.status = Status::Failed;
+            observer.as_mut().unwrap().emit(cycle);
+            Err(VakintError::EvaluationError(
+                "synthetic cycle fixture".into(),
+            ))
+        })
+        .unwrap_err();
+        assert!(matches!(failure, VakintError::EvaluationError(message)
+            if message == "synthetic cycle fixture"));
+        let document: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let resources = &document["monitor"]["resources"];
+        for field in [
+            "rss_bytes",
+            "peak_rss_bytes",
+            "mem_total_bytes",
+            "mem_available_bytes",
+            "mem_free_bytes",
+        ] {
+            assert!(resources[field].is_u64(), "{field}");
+        }
+        assert!(
+            resources["peak_rss_bytes"].as_u64().unwrap()
+                >= resources["rss_bytes"].as_u64().unwrap()
+        );
+        assert!(
+            resources["source"]
+                .as_str()
+                .unwrap()
+                .contains("/proc/meminfo")
+        );
+        assert_eq!(document["monitor"]["status"], "Failed");
+        assert_eq!(
+            document["monitor"]["global_remaining_work_certificate"],
+            false
+        );
+        assert!(document["monitor"]["last_cycle"].is_object());
+        let view: super::super::MonitorView =
+            serde_json::from_value(document["monitor"]["view"].clone()).unwrap();
+        assert!(
+            view.estimates
+                .iter()
+                .any(|(label, value)| label == "Discovered-frontier ETA"
+                    && value.contains("unknown"))
+        );
+        assert!(
+            view.events
+                .iter()
+                .any(|event| event.contains("CycleDetected"))
+        );
+        #[cfg(feature = "progress-tui")]
+        {
+            let backend = ratatui::backend::TestBackend::new(220, 80);
+            let mut terminal = ratatui::Terminal::new(backend).unwrap();
+            terminal
+                .draw(|frame| super::super::tui::draw(frame, &view, false))
+                .unwrap();
+            let rendered = terminal
+                .backend()
+                .buffer()
+                .content
+                .iter()
+                .map(|cell| cell.symbol())
+                .collect::<String>();
+            for label in [
+                "VmRSS / VmHWM",
+                "MemAvailable / MemFree",
+                "usable / unused",
+                "MemTotal",
+                "sample age",
+                "Full symbolic expression size",
+                "CycleDetected",
+                "Failed",
+            ] {
+                assert!(rendered.contains(label), "missing {label}");
+            }
+        }
+    }
 
     #[test]
     fn dirty_activity_respects_file_cadence_and_final_document_is_drained() {

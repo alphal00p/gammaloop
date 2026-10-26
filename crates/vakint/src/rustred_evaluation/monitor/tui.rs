@@ -431,6 +431,32 @@ mod tests {
     }
 
     #[test]
+    fn memory_labels_keep_os_and_symbolic_scopes_explicit() {
+        // Synthetic OS values exercise presentation only, not a reduction.
+        let mut state = MonitorState::default();
+        state.latest.resources = super::super::ResourceUsage::from_proc(
+            "VmRSS: 17 kB\nVmHWM: 29 kB",
+            "MemTotal: 1000 kB\nMemAvailable: 700 kB\nMemFree: 200 kB",
+        );
+        state.latest.resource_sample_at = Some(Duration::ZERO);
+        let view = state.view(Duration::from_secs(3));
+        let rendered = text(&render(&view, 220, 80, false));
+        for label in [
+            "VmRSS / VmHWM",
+            "MemAvailable / MemFree",
+            "usable / unused",
+            "MemTotal",
+            "sample age",
+            "Full symbolic expression size",
+            "unknown",
+            "Current canonical R / A / D",
+        ] {
+            assert!(rendered.contains(label), "missing {label}: {rendered}");
+        }
+        assert!(rendered.contains("Local observations"));
+    }
+
+    #[test]
     fn wide_and_narrow_views_preserve_supplied_scopes_and_unknowns() {
         let view = view();
         for (width, height) in [(150, 40), (54, 40)] {

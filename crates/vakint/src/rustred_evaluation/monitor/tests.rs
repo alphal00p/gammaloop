@@ -27,6 +27,131 @@ fn row<'a>(rows: &'a [(String, String)], label: &str) -> &'a str {
 }
 
 #[test]
+fn proc_memory_preserves_process_peak_and_host_usable_unused_scopes() {
+    let resources = ResourceUsage::from_proc(
+        "Name:\tfixture\nVmRSS:\t17 kB\nVmHWM:\t29 kB\n",
+        "MemTotal: 1000 kB\nMemAvailable: 700 kB\nMemFree: 200 kB\n",
+    );
+    assert_eq!(resources.rss_bytes, Some(17 * 1024));
+    assert_eq!(resources.peak_rss_bytes, Some(29 * 1024));
+    assert_eq!(resources.mem_total_bytes, Some(1000 * 1024));
+    assert_eq!(resources.mem_available_bytes, Some(700 * 1024));
+    assert_eq!(resources.mem_free_bytes, Some(200 * 1024));
+    assert_ne!(resources.mem_available_bytes, resources.mem_free_bytes);
+    assert!(resources.sample_age_seconds.is_none());
+}
+
+#[test]
+fn proc_memory_missing_malformed_units_duplicates_and_overflow_stay_unknown() {
+    assert!(ResourceUsage::from_proc("", "").source.is_none());
+    for status in [
+        "",
+        "VmRSS: missing kB",
+        "VmRSS: -1 kB",
+        "VmRSS: 12 MB",
+        "VmRSS: 12 kB extra",
+        "VmRSS: 1 kB\nVmRSS: 2 kB",
+        "VmRSS: 18446744073709551615 kB",
+    ] {
+        let resources = ResourceUsage::from_proc(status, "MemAvailable: 9 kB\n");
+        assert_eq!(resources.rss_bytes, None, "{status}");
+        assert_eq!(resources.mem_available_bytes, Some(9 * 1024));
+        assert_eq!(resources.mem_free_bytes, None);
+        assert_eq!(resources.peak_rss_bytes, None);
+    }
+}
+
+#[test]
+fn display_freeze_does_not_freeze_live_resource_json_or_its_age() {
+    let mut state = MonitorState::default();
+    state.observe(snapshot(0, 3, 1, 0), Duration::ZERO);
+    state.latest.resources = ResourceUsage::from_proc("VmRSS: 1 kB", "MemAvailable: 2 kB");
+    state.latest.resource_sample_at = Some(Duration::ZERO);
+    state.apply(UiAction::ToggleFreeze, Duration::from_secs(1));
+    state.latest.resources = ResourceUsage::from_proc("VmRSS: 3 kB", "MemAvailable: 4 kB");
+    state.latest.resources.guard = ResourceGuardView {
+        status: "latched_abort".into(),
+        sample_seconds: Some(1),
+        report_age_seconds: Some(0.0),
+        reported_latched_abort: Some(true),
+        ..Default::default()
+    };
+    state.latest.resource_sample_at = Some(Duration::from_secs(5));
+    // A synthetic terminal failure after native silence retains the old census.
+    let mut failed = state.latest.clone();
+    failed.elapsed = Duration::from_secs(6);
+    failed.status = MonitorStatus::Failed;
+    failed.request_finished = true;
+    failed.phase = "synthetic_failed_finalization".into();
+    failed
+        .events
+        .push("CycleDetected / synthetic fixture".into());
+    state.observe(failed, Duration::from_secs(6));
+    let frozen = state.view(Duration::from_secs(7));
+    assert!(frozen.frozen);
+    assert!(row(&frozen.cache, "Process VmRSS / VmHWM bytes").starts_with("1024 /"));
+    let live = serde_json::to_value(state.live_resources(Duration::from_secs(7))).unwrap();
+    assert_eq!(live["rss_bytes"], 3 * 1024);
+    assert_eq!(live["mem_available_bytes"], 4 * 1024);
+    assert_eq!(live["sample_age_seconds"], 2.0);
+    assert_eq!(live["guard"]["status"], "latched_abort");
+    assert_eq!(live["guard"]["report_age_seconds"], 2.0);
+    assert!(
+        row(&frozen.cache, "Local guard state / current-PID coverage").starts_with("unknown /")
+    );
+    let stale = state.live_resources(Duration::from_secs(9));
+    assert_eq!(stale.guard.status, "unknown");
+    assert_eq!(stale.guard.reported_latched_abort, Some(true));
+    let published = state.presentation(Duration::from_secs(7));
+    assert_eq!(published["status"], "Failed");
+    assert_eq!(published["phase"], "synthetic_failed_finalization");
+    assert_eq!(published["view"]["frozen"], true);
+    assert_eq!(published["view"]["status"], "Running");
+    let estimates: Vec<(String, String)> =
+        serde_json::from_value(published["estimates"].clone()).unwrap();
+    assert_eq!(row(&estimates, "Estimate sample age"), "7.0s");
+    assert!(row(&estimates, "Discovered-frontier ETA").contains("unknown"));
+    assert_eq!(published["resources"]["guard"]["status"], "latched_abort");
+}
+
+#[test]
+fn fresh_os_memory_does_not_refresh_native_progress_eta_or_infer_cycle() {
+    let mut state = MonitorState::default();
+    let mut native = snapshot(0, 3, 1, 0);
+    native.native_observed_at = Some(Duration::ZERO);
+    native.current_key = Some("Route [2,1]".into());
+    native.current_degrees = Some((0, 3, 3));
+    state.observe(native, Duration::ZERO);
+    state.latest.resources = ResourceUsage::from_proc(
+        "VmRSS: 10 kB\nVmHWM: 20 kB",
+        "MemTotal: 100 kB\nMemAvailable: 80 kB\nMemFree: 30 kB",
+    );
+    state.latest.resource_sample_at = Some(Duration::from_secs(5));
+    let view = state.view(Duration::from_secs(6));
+    assert_eq!(
+        state
+            .live_resources(Duration::from_secs(6))
+            .sample_age_seconds,
+        Some(1.0)
+    );
+    assert_eq!(row(&view.overview, "Last native observation age"), "6.0s");
+    assert_eq!(row(&view.estimates, "Estimate sample age"), "6.0s");
+    assert!(row(&view.estimates, "Discovered-frontier ETA").contains("unknown"));
+    assert_eq!(
+        row(&view.complexity, "Current canonical R / A / D"),
+        "0 / 3 / 3"
+    );
+    assert!(row(&view.complexity, "Full symbolic expression size").contains("unknown"));
+    assert_eq!(view.status, MonitorStatus::Running);
+    assert!(view.events.is_empty());
+    assert!(row(&view.cache, "Host MemAvailable / MemFree bytes").contains("usable / unused"));
+    let json = serde_json::to_value(state.live_resources(Duration::from_secs(6))).unwrap();
+    assert_eq!(json["mem_available_bytes"], 80 * 1024);
+    assert_eq!(json["mem_free_bytes"], 30 * 1024);
+    assert_eq!(json["sample_age_seconds"], 1.0);
+}
+
+#[test]
 fn default_is_unobserved_but_snapshot_path_is_an_explicit_opt_in() {
     let mut options = RustRedMonitorOptions::default();
     assert!(!options.enabled());

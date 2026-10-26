@@ -1,6 +1,8 @@
 //! Prepare the complete physical five-loop source, or reuse its verified scalar input.
 #[path = "../tests/fixtures/qcd_ladder/mod.rs"]
 mod fixture;
+#[path = "build_cache/resource_guard_admission.rs"]
+mod resource_guard_admission;
 use ::vakint;
 use rustred::solver::CandidateCacheRepresentation;
 use serde_json::json;
@@ -295,6 +297,8 @@ fn main() -> fixture::Result<()> {
     }
     monitor.validate()?;
 
+    let _guard_admission = resource_guard_admission::admit_from_task_env()?;
+
     std::fs::create_dir_all(&work)?;
     let write_report = |report: &serde_json::Value| -> fixture::Result<()> {
         std::fs::write(
@@ -368,6 +372,15 @@ fn main() -> fixture::Result<()> {
     let mut report = json!({"schema":"vakint.qcd-ladder.benchmark.v1", "projection":prepared.projection,
         "coefficient_representation":representation_name,
         "source_commit":git(&["rev-parse", "HEAD"]), "source_dirty":git(&["status", "--porcelain"]).map(|value| !value.is_empty()),
+        "compiled_cohort":{
+            "main_revision":option_env!("VAKINT_CACHE_BUILD_GIT_REVISION"),
+            "native_revision":option_env!("VAKINT_CACHE_BUILD_RUSTRED_REVISION"),
+            "kernel_revision":option_env!("VAKINT_CACHE_BUILD_SYMBOLICA_REVISION"),
+            "main_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_MAIN_SOURCE_SNAPSHOT_SHA256"),
+            "native_source_snapshot_sha256":option_env!("VAKINT_CACHE_BUILD_NATIVE_SOURCE_SNAPSHOT_SHA256"),
+            "rustc":option_env!("VAKINT_CACHE_BUILD_RUSTC"),
+            "profile":option_env!("VAKINT_CACHE_BUILD_PROFILE"),
+        },
         "executable_sha256":format!("{:x}", Sha256::digest(std::fs::read(std::env::current_exe()?)?)),
         "fresh_native_preparation":fresh_native_preparation,
         "input_mode":if fresh_native_preparation {"fresh"} else {"prepared"},

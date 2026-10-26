@@ -204,8 +204,101 @@ pub(super) struct DisplaySnapshot {
     pub complexity: Vec<(String, String)>,
     pub path: Vec<String>,
     pub events: Vec<String>,
-    pub rss_bytes: Option<u64>,
+    pub resources: ResourceUsage,
+    pub resource_sample_at: Option<Duration>,
     pub native_observed_at: Option<Duration>,
+}
+
+/// OS observations, independent of native progress or coefficient payloads.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct ResourceUsage {
+    pub rss_bytes: Option<u64>,
+    pub peak_rss_bytes: Option<u64>,
+    pub mem_total_bytes: Option<u64>,
+    pub mem_available_bytes: Option<u64>,
+    pub mem_free_bytes: Option<u64>,
+    pub source: Option<String>,
+    pub sample_age_seconds: Option<f64>,
+    #[serde(default)]
+    pub guard: ResourceGuardView,
+}
+
+/// A read-only report of a separately owned, explicitly bound local guard.
+#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(super) struct ResourceGuardView {
+    pub status: String,
+    pub threshold_bytes: Option<u64>,
+    pub sample_seconds: Option<u64>,
+    pub report_age_seconds: Option<f64>,
+    pub reported_latched_abort: Option<bool>,
+    pub guard_pid: Option<u64>,
+    pub current_process_covered: bool,
+    pub registered_worker: Option<serde_json::Value>,
+    pub registered_slots: Vec<String>,
+    pub source: Option<String>,
+    pub detail: Option<String>,
+}
+
+impl Default for ResourceGuardView {
+    fn default() -> Self {
+        Self {
+            status: "unknown".into(),
+            threshold_bytes: None,
+            sample_seconds: None,
+            report_age_seconds: None,
+            reported_latched_abort: None,
+            guard_pid: None,
+            current_process_covered: false,
+            registered_worker: None,
+            registered_slots: Vec::new(),
+            source: None,
+            detail: Some("no explicit task guard binding".into()),
+        }
+    }
+}
+
+impl ResourceUsage {
+    #[cfg(any(target_os = "linux", test))]
+    fn from_proc(status: &str, meminfo: &str) -> Self {
+        let mut sample = Self {
+            rss_bytes: Self::proc_bytes(status, "VmRSS"),
+            peak_rss_bytes: Self::proc_bytes(status, "VmHWM"),
+            mem_total_bytes: Self::proc_bytes(meminfo, "MemTotal"),
+            mem_available_bytes: Self::proc_bytes(meminfo, "MemAvailable"),
+            mem_free_bytes: Self::proc_bytes(meminfo, "MemFree"),
+            source: Some("Linux /proc/self/status + /proc/meminfo".into()),
+            sample_age_seconds: None,
+            guard: Default::default(),
+        };
+        if [
+            sample.rss_bytes,
+            sample.peak_rss_bytes,
+            sample.mem_total_bytes,
+            sample.mem_available_bytes,
+            sample.mem_free_bytes,
+        ]
+        .iter()
+        .all(Option::is_none)
+        {
+            sample.source = None;
+        }
+        sample
+    }
+
+    #[cfg(any(target_os = "linux", test))]
+    fn proc_bytes(document: &str, key: &str) -> Option<u64> {
+        let mut fields = document.lines().filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            (name == key).then_some(value)
+        });
+        let value = fields.next()?;
+        if fields.next().is_some() {
+            return None;
+        }
+        let mut parts = value.split_whitespace();
+        let bytes = parts.next()?.parse::<u64>().ok()?.checked_mul(1024)?;
+        (parts.next()? == "kB" && parts.next().is_none()).then_some(bytes)
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -257,6 +350,44 @@ pub(super) struct MonitorState {
 }
 
 impl MonitorState {
+    /// Only the nested visual view freezes. Machine-readable state stays live.
+    pub(super) fn presentation(&self, now: Duration) -> serde_json::Value {
+        let live = self.live_view(now);
+        serde_json::json!({
+            "phase": self.latest.phase,
+            "status": format!("{:?}", live.status),
+            "resources": self.live_resources(now),
+            "estimates": live.estimates,
+            "view": self.view(now),
+        })
+    }
+
+    pub(super) fn live_resources(&self, now: Duration) -> ResourceUsage {
+        let mut resources = self.latest.resources.clone();
+        let age = self
+            .latest
+            .resource_sample_at
+            .map(|at| now.saturating_sub(at).as_secs_f64());
+        resources.sample_age_seconds = resources.source.as_ref().and(age);
+        if let Some(age) = resources.guard.report_age_seconds.as_mut() {
+            *age += self
+                .latest
+                .resource_sample_at
+                .map_or(0.0, |at| now.saturating_sub(at).as_secs_f64());
+            if resources
+                .guard
+                .sample_seconds
+                .is_some_and(|interval| *age > 3.0 * interval as f64)
+            {
+                resources.guard.status = "unknown".into();
+                resources.guard.current_process_covered = false;
+                resources.guard.detail =
+                    Some("stale guard report; no active coverage claim".into());
+            }
+        }
+        resources
+    }
+
     pub(super) fn observe(&mut self, snapshot: DisplaySnapshot, now: Duration) {
         let resets = snapshot.native_epoch != self.latest.native_epoch
             || snapshot.elapsed < self.latest.elapsed
@@ -374,6 +505,75 @@ impl MonitorState {
             ),
         ];
         complexity.extend(snapshot.complexity.iter().cloned());
+        complexity.push((
+            "Full symbolic expression size".into(),
+            "unknown / never formatted for monitoring".into(),
+        ));
+        let resources = self.live_resources(now);
+        let mut cache = vec![
+            (
+                "Process VmRSS / VmHWM bytes".into(),
+                format!(
+                    "{} / {} (current / process peak; not payload)",
+                    count(resources.rss_bytes),
+                    count(resources.peak_rss_bytes)
+                ),
+            ),
+            (
+                "Host MemAvailable / MemFree bytes".into(),
+                format!(
+                    "{} / {} (usable / unused)",
+                    count(resources.mem_available_bytes),
+                    count(resources.mem_free_bytes)
+                ),
+            ),
+            (
+                "Host MemTotal bytes".into(),
+                count(resources.mem_total_bytes),
+            ),
+            (
+                "OS memory source / sample age".into(),
+                format!(
+                    "{} / {}",
+                    resources.source.as_deref().unwrap_or("unavailable"),
+                    resources
+                        .sample_age_seconds
+                        .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
+                ),
+            ),
+        ];
+        cache.push((
+            "Local guard state / current-PID coverage".into(),
+            format!(
+                "{} / {}",
+                resources.guard.status,
+                if resources.guard.current_process_covered {
+                    "reported armed; PID/start matched"
+                } else {
+                    "unverified"
+                }
+            ),
+        ));
+        cache.push((
+            "Guard MemAvailable floor / report age".into(),
+            format!(
+                "{} bytes / {} (explicit local policy only)",
+                count(resources.guard.threshold_bytes),
+                resources
+                    .guard
+                    .report_age_seconds
+                    .map_or_else(|| "unknown".into(), |age| format!("{age:.1}s"))
+            ),
+        ));
+        cache.push((
+            "Guard registered workers (reported)".into(),
+            if resources.guard.registered_slots.is_empty() {
+                "unknown".into()
+            } else {
+                resources.guard.registered_slots.join("; ")
+            },
+        ));
+        cache.extend(snapshot.cache.iter().cloned());
         MonitorView {
             title: "RustRed · request".into(),
             subtitle:
@@ -412,12 +612,8 @@ impl MonitorState {
                     ),
                 ),
                 (
-                    "Current root output terms".into(),
+                    "Native root output terms (sampled)".into(),
                     count(snapshot.root_output_terms),
-                ),
-                (
-                    "Process RSS bytes (not coefficient payload)".into(),
-                    count(snapshot.rss_bytes),
                 ),
             ],
             frontier: vec![
@@ -450,7 +646,7 @@ impl MonitorState {
                     ),
                 ),
             ],
-            cache: snapshot.cache.clone(),
+            cache,
             complexity,
             estimates: self.estimates(age),
             path: snapshot.path.clone(),
