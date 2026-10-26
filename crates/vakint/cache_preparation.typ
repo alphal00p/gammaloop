@@ -204,6 +204,65 @@ imposed. The final distribution inventory records cumulative roots and
 descendants, exact native bindings, physical producer provenance and measured
 compressed/decoded size. Numerical master availability is unchanged.
 
+=== Running-cache API
+
+For five loops, `attach_running_cache(5, path, ...)` creates or resumes a
+standalone writable delta; `load_running_cache` requires it to exist. Immutable
+`base_paths` and frozen `snapshots` may be supplied separately. A bundle-managed
+child directory cannot be reopened as a standalone writer: use the whole bundle
+as a base and a separate delta. Native admission captures only strictly completed
+nodes and their exact guards, even if another branch leaves the parent unresolved.
+
+`read_backing=False` disables persistent reads while retaining ordinary RAM
+memoization and capture. With persistent reads enabled, `read_delta=False`
+reads only the supplied
+immutable bases/snapshots while capturing into the delta; it requires a readable
+base. `load_cache_snapshot(5, snapshots=[...], base_paths=[...])` attaches a
+read-only view without a writer or new capture. Frozen generations never refresh.
+
+For an engine with 5L data loaded and a scalar `integral_expression`, the public
+symbolic reduction returns the retained value, nonzero conditions and family map:
+
+```python
+control = engine.attach_running_cache(5, "workspace/cache/delta", read_backing=False)
+try:
+    value, conditions, families = engine.evaluate_rustred_symbolic(
+        integral_expression, progress_snapshot="workspace/cache/progress.json",
+    )
+    durable = engine.save_running_cache(5)
+    assert durable["accepted_records"] == durable["committed_records"]
+    assert durable["pending_records"] == durable["pending_bytes"] == 0
+    snapshot = engine.freeze_running_cache(5, "workspace/cache/frozen.rrindex")
+finally:
+    try:
+        engine.detach_cache(5)
+    finally:
+        control.close()
+engine.load_cache_snapshot(5, snapshots=[snapshot])
+```
+
+The independent control's `report()`, `flush()`, `snapshot(new_sidecar_path)` and
+`close()` work without acquiring the reducer lock. Accepted records are queued;
+committed records have durable acknowledgement. These are session publication
+counters, not a census of unique keys in all bases. Inspect writer/admission errors
+and pending counters. `save_running_cache` is a flush barrier, not a legacy
+single-file export. `freeze_running_cache` returns a JSON-compatible descriptor
+and writes native binary index metadata to a new sidecar outside the delta;
+preserve that descriptor, its data
+directory and all explicit immutable bases. It does not copy the payloads or
+freeze other bases. A running/composed attachment cannot be exported through
+`save_cache(..., mode="full-snapshot")`; keep the frozen descriptor and its
+explicit bases instead. Detachment flushes but a retained control keeps the writer
+lease; `close()` flushes and releases it for all clones.
+
+Monitoring defaults off. `evaluate_rustred_symbolic` and `prepare_cache` accept
+`monitor="off"|"json"|"tui"`, `progress_snapshot` and
+`progress_interval_seconds`. JSON mode requires a snapshot path; a path also
+enables JSON observation when display is off. The TUI
+requires the `progress-tui` feature. Pressing `q` detaches the display and does
+not cancel reduction or stop cache capture. Observation adds overhead and does
+not establish master closure or an estimate of remaining work.
+
 The #link("examples/measure_cache.rs")[suite measurement driver] runs each
 case, repetition and cache variant in a fresh process. Both variants load the
 same authenticated local checkout with `load_prepared_caches: false`, so no
@@ -427,8 +486,9 @@ the five-loop single-file implementation described above.
 == Explicit import and download
 
 On Linux and macOS, `import_cache` and `download_cache` publish an independently
-validated native snapshot into a new directory. Both require the SHA-256 of a
-trusted USTAR gzip archive, obtained independently of the archive bytes. Its
+validated native snapshot for one through five loops into a new directory.
+The default `format="archive"` requires the SHA-256 of a trusted USTAR gzip
+archive, obtained independently of the archive bytes. Its
 single root is `cache/`, containing the native `bundle.rrindex` and `bindings/`
 layout. Only regular files and directories are accepted; links, sparse files,
 PAX/GNU extension headers, duplicate paths and traversal paths are refused.
@@ -441,7 +501,7 @@ report = engine.import_cache(
 engine.load_cache(4, report["output"])
 ```
 
-Alternatively, download from a supplied final HTTP(S) URL; redirects are refused:
+For archive mode, download from a supplied final HTTP(S) URL; redirects are refused:
 
 ```python
 report = engine.download_cache(
@@ -450,6 +510,27 @@ report = engine.download_cache(
 )
 engine.load_cache(4, "downloaded-four-loop-cache")
 ```
+
+Large five-loop native packs can instead use `format="multipart_manifest"`.
+Here `sha256` authenticates the transport manifest; each part and native file is
+checked against its inventory before atomic publication. Local parts must be
+regular sibling files named by the manifest. Multipart download accepts HTTPS,
+uses explicit part URLs or names relative to the manifest URL, and permits up to
+eight redirects. `max_manifest_bytes` optionally raises the manifest read limit; aggregate
+transfer, extraction, temporary-space and entry allowances remain explicit.
+The parts contain unchanged native cache bytes, not another reduction codec.
+
+```python
+report = engine.import_cache(
+    5, "nativepack-manifest.json", "workspace/cache/imported",
+    sha256=trusted_manifest_sha256, format="multipart_manifest",
+)
+engine.load_cache(5, report["output"])
+```
+
+The matching Rust options constructor is
+`RustRedCacheTransferOptions::multipart_manifest(expected_sha256)`. Transfer
+does not attach the resulting snapshot; call `load_cache` explicitly afterward.
 
 The local October 14 four-loop transport archive is 63,548,634 bytes and has
 SHA-256 `de037d50a105c31d6126563525dc951436e252037b47ad6f763951b1f66a6276`.
@@ -777,11 +858,12 @@ maximum RSS; this small workflow is not a performance comparison.
 The current local `Vakint` Python wrapper exposes the same `prepare_cache`,
 `load_cache`, `save_cache`, `clear_cache`, `detach_cache` and `cache_statistics`
 operations for one through five loops. Explicit `import_cache` and `download_cache`
-transport the one-through-four-loop directory packs on supported native platforms;
-use official external-data loading or a single explicit file for five loops.
-The transfer facade is source-checked and its native
-implementation passes eight focused tests and an independent repeat. The final
-private host passes all eleven Python smoke tests, including explicit import,
+transport native directory packs for all five loop counts on supported native
+platforms, including explicitly selected multipart manifests. Five-loop users
+also have the running-cache and immutable-snapshot APIs described above.
+The earlier transfer facade was source-checked and its native
+implementation passed eight focused tests and an independent repeat. That
+private host passed all eleven Python smoke tests, including explicit import,
 and the nine public transfer cases described next. The earlier host receipts
 below retain their original scope. Use a coherent Symbolica /
 HepKit extension build, never a separately loaded second Symbolica kernel.

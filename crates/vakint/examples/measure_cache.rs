@@ -21,8 +21,8 @@ use sha2::{Digest, Sha256};
 use symbolica::atom::{AtomCore, AtomView};
 use vakint::{
     EvaluationMethod, EvaluationOrder, OfficialExternalDataOptions, RustRedEvaluationOptions,
-    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedSnapshotViewer, Vakint,
-    VakintSettings,
+    RustRedMasterMode, RustRedMonitorDisplay, RustRedMonitorOptions, RustRedRunningCacheOptions,
+    RustRedSnapshotViewer, Vakint, VakintSettings,
 };
 use workload::{Root, Workload};
 
@@ -155,6 +155,9 @@ struct Options {
     workload: PathBuf,
     source_census: PathBuf,
     cache: Option<PathBuf>,
+    running_cache: Option<PathBuf>,
+    running_cache_capture_only: bool,
+    running_cache_no_read_delta: bool,
     work_dir: PathBuf,
     suite: String,
     repetitions: usize,
@@ -213,6 +216,9 @@ impl Options {
         let mut workload = None;
         let mut source_census = None;
         let mut cache = None;
+        let mut running_cache = None;
+        let mut running_cache_capture_only = false;
+        let mut running_cache_no_read_delta = false;
         let mut work_dir = None;
         let mut suite = "tuning".to_owned();
         let mut repetitions = 3;
@@ -231,6 +237,10 @@ impl Options {
                 println!(
                     "measure_cache --artifacts PATH --workload JSON --source-census FILE --work-dir PATH\n\
                      [--cache FILE.gz] [--suite tuning|held-out] [--repetitions N] [--max-case-seconds N]\n\
+                     [--running-cache PATH] [--running-cache-capture-only] persist completed native records.\n\
+                     PATH is a capture root; each case/sample/variant owns a separate native delta.\n\
+                     Capture-only disables persistent reads and cannot be combined with --cache.\n\
+                     [--running-cache-no-read-delta] reads immutable bases only; requires --running-cache.\n\
                      [--provisional] permits legacy functional pilots without native key authentication.\n\
                      [--only-case ID] selects one frozen case and requires --provisional.\n\
                      Every case/sample/variant runs in a fresh process. Default: three samples, 300s each.\n\
@@ -251,6 +261,14 @@ impl Options {
                 provisional = true;
                 continue;
             }
+            if arg == "--running-cache-capture-only" {
+                running_cache_capture_only = true;
+                continue;
+            }
+            if arg == "--running-cache-no-read-delta" {
+                running_cache_no_read_delta = true;
+                continue;
+            }
             if arg == "--monitor" {
                 monitor.display = RustRedMonitorDisplay::Tui;
                 continue;
@@ -263,6 +281,7 @@ impl Options {
                 "--workload" => workload = Some(value.into()),
                 "--source-census" => source_census = Some(value.into()),
                 "--cache" => cache = Some(value.into()),
+                "--running-cache" => running_cache = Some(value.into()),
                 "--work-dir" => work_dir = Some(value.into()),
                 "--suite" => suite = value,
                 "--repetitions" => repetitions = value.parse()?,
@@ -296,6 +315,14 @@ impl Options {
             "cached worker needs --cache"
         );
         ensure!(
+            !running_cache_capture_only || (running_cache.is_some() && cache.is_none()),
+            "--running-cache-capture-only requires --running-cache and forbids --cache"
+        );
+        ensure!(
+            !running_cache_no_read_delta || running_cache.is_some(),
+            "--running-cache-no-read-delta requires --running-cache"
+        );
+        ensure!(
             only_case.is_none() || provisional,
             "--only-case requires --provisional; final comparisons use the complete frozen suite"
         );
@@ -307,6 +334,9 @@ impl Options {
                 .ok_or_else(|| eyre::eyre!("--source-census is required"))?,
             work_dir: work_dir.ok_or_else(|| eyre::eyre!("--work-dir is required"))?,
             cache,
+            running_cache,
+            running_cache_capture_only,
+            running_cache_no_read_delta,
             suite,
             repetitions,
             max_case_seconds,
@@ -355,6 +385,14 @@ impl Options {
                 "default_snapshot": "worker-work-dir/monitor.json",
                 "interval_seconds": self.monitor.interval.as_secs_f64(),
                 "diagnostic_timing": true,
+            });
+        }
+        if let Some(path) = &self.running_cache {
+            identity["running_cache"] = json!({
+                "path":path,"read_backing":!self.running_cache_capture_only,
+                "capture_only":self.running_cache_capture_only,
+                "read_delta":!self.running_cache_no_read_delta,
+                "delta_scope":"one native delta per case, sample and variant",
             });
         }
         Ok(identity)
@@ -464,7 +502,7 @@ fn validate_catalogue_closure(receipt: &Value, directory: &Path) -> Result<()> {
 
 fn persistent_cache_attachments(engine: &Vakint) -> Result<BTreeMap<usize, bool>> {
     (1..=5)
-        .map(|loops| Ok((loops, engine.cache_statistics(loops)?.attached)))
+        .map(|loops| Ok((loops, engine.cache_statistics(loops)?.has_read_backing())))
         .collect()
 }
 
@@ -509,176 +547,417 @@ fn measure(options: &Options, root: &Root, identity: &Value, workload: &Workload
         engine.clear_cache(5)?;
     }
     let cache_loading_seconds = cache_started.elapsed().as_secs_f64();
-    let caches_during_evaluation = persistent_cache_attachments(&engine)?;
-    ensure!(
-        caches_during_evaluation
-            .iter()
-            .all(|(&loops, &attached)| attached == (options.variant == "cached" && loops == 5)),
-        "measurement must use no persistent backing or only the manual five-loop file"
-    );
-    let proof_started = Instant::now();
-    let binding = engine
-        .cache_statistics(5)?
-        .saved_application
-        .ok_or_else(|| eyre::eyre!("missing loaded application binding"))?
-        .to_document()["binding"]
-        .clone();
-    let proof = OwnerProof::load(workload, &options.workload, &options.artifacts, &binding)?;
-    ensure!(
-        options.provisional || proof.is_some(),
-        "final measurement requires validated owner proof"
-    );
-    let owner_proof_seconds = proof_started.elapsed().as_secs_f64();
-    let owners_before = engine.rustred_application_owner_preparation_statistics()?;
-    *LOGGER
-        .0
-        .lock()
-        .map_err(|error| eyre::eyre!(error.to_string()))? = Stages::default();
-    let started = Instant::now();
-    let outcome = if options.monitor.enabled() {
-        let mut monitor = options.monitor.clone();
-        if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none() {
-            monitor.progress_snapshot = Some(options.work_dir.join("monitor.json"));
-        }
-        engine.evaluate_rustred_symbolic_with_monitor(&settings, input.as_view(), &monitor)
-    } else {
-        engine.evaluate_rustred_symbolic(&settings, input.as_view())
-    };
-    let evaluation_seconds = started.elapsed().as_secs_f64();
-    let owners_after = engine.rustred_application_owner_preparation_statistics()?;
-    let owner_seconds = owners_after
-        .preparation_time
-        .saturating_sub(owners_before.preparation_time)
-        .as_secs_f64();
-    let stages = LOGGER
-        .0
-        .lock()
-        .map_err(|error| eyre::eyre!(error.to_string()))?;
-    let saved_seconds = stages
-        .seconds
-        .get("saved_rule_application")
-        .map_or(0.0, |samples| samples.iter().sum::<f64>());
-    let statistics = engine
-        .cache_statistics(5)?
-        .saved_application
-        .map(|s| s.to_document());
-    let mut receipt = json!({
-        "schema":"vakint.five-loop-cache-measurement.v1","identity":identity,
-        "case_id":root.id,"variant":options.variant,"sample":options.sample,"input_sha256":format!("{:x}",Sha256::digest(input.to_canonical_string().as_bytes())),
-        "declared_common_powers":root.powers,"rationale":root.rationale,
-        "frozen_lowered_roots":root.lowered_roots,"frozen_protected_roots":root.protected_roots,
-        "actual_lowered_roots":stages.input_roots,
-        "provisional":options.provisional,
-        "owner_proof":proof.as_ref().map(OwnerProof::identity),"owner_proof_validation_seconds":owner_proof_seconds,
-        "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
-        "fresh_process":true,"data_loading_seconds":data_loading_seconds,"cache_loading_seconds":cache_loading_seconds,
-        "external_data":data_report,"persistent_cache_attachments_before":caches_before,
-        "persistent_cache_attachments_during_evaluation":caches_during_evaluation,
-        "persistent_cache_policy":if options.variant=="cached" {"manual-five-loop-only"} else {"none"},
-        "evaluation_seconds":evaluation_seconds,"saved_application_including_owner_seconds":saved_seconds,
-        "owner_preparation_seconds":owner_seconds,"ibp_excluding_owner_seconds":(saved_seconds-owner_seconds).max(0.0),
-        // Retain the existing field name, but never label this derived interval
-        // pure IBP: the native call also transports and combines exact terms.
-        "native_timing_scope":{
-            "saved_application_including_owner_seconds":"Native entry transport, lazy owner preparation, DAG reduction, exact sum, and terminal substitution",
-            "ibp_excluding_owner_seconds":"Saved application interval minus actual deferred-owner preparation; entry transport, exact combination and terminal substitution remain included",
-            "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
-            "separate_native_phase_durations_available":false
-        },
-        "owner_preparation_policy":"deferred on demand; actual stat delta, no common prewarm",
-        "end_to_end_scope":"supervisor worker spawn through exit, including loading, evaluation and output serialization",
-        "owner_preparation_during_load_seconds":owners_before.preparation_time.as_secs_f64(),
-        "stages":stages.seconds,"lowering_receipts":stages.lowered,"warnings":stages.warnings,"cache_statistics":statistics,
+    let running_cache_path = options
+        .running_cache
+        .as_ref()
+        .map(|root_path| {
+            let sample = options
+                .sample
+                .ok_or_else(|| eyre::eyre!("running-cache worker requires a sample number"))?;
+            Ok::<_, eyre::Report>(root_path.join(format!(
+                "case-{:x}-sample-{sample}-{}",
+                Sha256::digest(root.id.as_bytes()),
+                options.variant
+            )))
+        })
+        .transpose()?;
+    let running_read_backing = running_cache_path.is_some() && !options.running_cache_capture_only;
+    let running_cache_started = Instant::now();
+    let running_cache = running_cache_path
+        .as_ref()
+        .map(|path| {
+            ensure!(
+                !path.exists(),
+                "preserve the existing worker running cache; choose a fresh --running-cache root"
+            );
+            engine
+                .attach_running_cache(
+                    5,
+                    path,
+                    &RustRedRunningCacheOptions {
+                        read_backing: running_read_backing,
+                        read_delta: !options.running_cache_no_read_delta,
+                        ..Default::default()
+                    },
+                )
+                .map_err(eyre::Report::from)
+        })
+        .transpose()?;
+    let running_cache_loading_seconds = running_cache_started.elapsed().as_secs_f64();
+    let mut running_cache_receipt = None;
+    let measured = (|| -> Result<()> {
+        let running_cache_attached =
+            running_cache.is_some() && engine.cache_statistics(5)?.attached;
+        let caches_during_evaluation = persistent_cache_attachments(&engine)?;
+        ensure!(
+            caches_during_evaluation.iter().all(|(&loops, &attached)| {
+                attached == ((options.variant == "cached" || running_read_backing) && loops == 5)
+            }),
+            "measurement persistent backing differs from the declared five-loop cache policy"
+        );
+        let proof_started = Instant::now();
+        let binding = engine
+            .cache_statistics(5)?
+            .saved_application
+            .ok_or_else(|| eyre::eyre!("missing loaded application binding"))?
+            .to_document()["binding"]
+            .clone();
+        let proof = OwnerProof::load(workload, &options.workload, &options.artifacts, &binding)?;
+        ensure!(
+            options.provisional || proof.is_some(),
+            "final measurement requires validated owner proof"
+        );
+        let owner_proof_seconds = proof_started.elapsed().as_secs_f64();
+        let owners_before = engine.rustred_application_owner_preparation_statistics()?;
+        *LOGGER
+            .0
+            .lock()
+            .map_err(|error| eyre::eyre!(error.to_string()))? = Stages::default();
+        let started = Instant::now();
+        let outcome = if options.monitor.enabled() {
+            let mut monitor = options.monitor.clone();
+            if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none()
+            {
+                monitor.progress_snapshot = Some(options.work_dir.join("monitor.json"));
+            }
+            engine.evaluate_rustred_symbolic_with_monitor(&settings, input.as_view(), &monitor)
+        } else {
+            engine.evaluate_rustred_symbolic(&settings, input.as_view())
+        };
+        let evaluation_seconds = started.elapsed().as_secs_f64();
+        // The native flush is the durability acknowledgement on success and ordinary
+        // reduction errors. Killed workers rely on the native periodic checkpoints.
+        running_cache_receipt = running_cache.as_ref().map(|control| {
+        let started = Instant::now();
+        let flushed = control.flush();
+        let flush_seconds = started.elapsed().as_secs_f64();
+        let flush_complete = flushed
+            .as_ref()
+            .is_ok_and(|report| report.pending_records == 0 && report.writer_error.is_none());
+        let (report, error) = match flushed {
+            Ok(report) => (
+                Some(report.to_document()),
+                (!flush_complete)
+                    .then(|| "native flush did not commit all accepted records".to_owned()),
+            ),
+            Err(error) => {
+                eprintln!("running-cache flush failed: {error}");
+                (
+                    control.report().ok().map(|report| report.to_document()),
+                    Some(error.to_string()),
+                )
+            }
+        };
+        let mut snapshot_seconds = None;
+        let mut snapshot_sidecar = None;
+        let mut snapshot_descriptor = None;
+        let (snapshot, snapshot_error) = if flush_complete {
+            let started = Instant::now();
+            let frozen = (|| -> Result<Value> {
+                let delta = fs::canonicalize(
+                    running_cache_path
+                        .as_ref()
+                        .ok_or_else(|| eyre::eyre!("running cache has no delta path"))?,
+                )?;
+                let directory =
+                    fs::canonicalize(&options.work_dir)?.join("running-cache-snapshots");
+                ensure!(
+                    !directory.starts_with(&delta),
+                    "snapshot must be outside the running delta"
+                );
+                fs::create_dir_all(&directory)?;
+                let directory = fs::canonicalize(directory)?;
+                ensure!(
+                    !directory.starts_with(&delta),
+                    "snapshot directory resolves inside the running delta"
+                );
+                let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+                let sidecar =
+                    directory.join(format!("measure-{}-{stamp}.rrindex", std::process::id()));
+                let descriptor = sidecar.with_extension("json");
+                ensure!(
+                    !sidecar.exists() && !descriptor.exists(),
+                    "preserve the existing running-cache snapshot"
+                );
+                snapshot_sidecar = Some(sidecar.clone());
+                snapshot_descriptor = Some(descriptor.clone());
+                let document = control.snapshot(&sidecar)?.to_document();
+                let mut file = OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&descriptor)?;
+                serde_json::to_writer_pretty(&mut file, &document)?;
+                file.sync_all()?;
+                File::open(directory)?.sync_all()?;
+                Ok(document)
+            })();
+            snapshot_seconds = Some(started.elapsed().as_secs_f64());
+            match frozen {
+                Ok(snapshot) => (Some(snapshot), None),
+                Err(error) => {
+                    eprintln!("running-cache snapshot failed: {error}");
+                    (None, Some(error.to_string()))
+                }
+            }
+        } else {
+            (None, None)
+        };
+        json!({
+            "path":running_cache_path,"read_backing":running_read_backing,
+            "capture_only":options.running_cache_capture_only,
+            "read_delta":!options.running_cache_no_read_delta,
+            "loading_seconds":running_cache_loading_seconds,"flush_seconds":flush_seconds,
+            "report":report,"flush_error":error,"flush_complete":flush_complete,
+            "snapshot":snapshot,"snapshot_error":snapshot_error,"snapshot_seconds":snapshot_seconds,
+            "snapshot_sidecar":snapshot_sidecar,"snapshot_descriptor":snapshot_descriptor,
+            "reduction_error":outcome.as_ref().err().map(ToString::to_string),
+        })
     });
-    let authentication = stages.authenticate(
-        &root.lowered_roots,
-        &root.protected_roots,
-        options.provisional,
-        proof.as_ref(),
-        &root.id,
-    );
-    receipt["native_keys_authenticated"] = authentication
-        .as_ref()
-        .is_ok_and(|authenticated| *authenticated)
+        let reduction_error_message = outcome.as_ref().err().map(ToString::to_string);
+        let (outcome, mut reduction_error): (_, Option<eyre::Report>) = match outcome {
+            Ok(result) => (Some(result), None),
+            Err(error) => (None, Some(error.into())),
+        };
+        let mut preserve_reduction_error = |secondary: eyre::Report| {
+            if running_cache_receipt.is_some()
+                && let Some(primary) = reduction_error.take()
+            {
+                eprintln!("measurement reporting error after reduction failed: {secondary}");
+                primary
+            } else {
+                secondary
+            }
+        };
+        if let Some(receipt) = &running_cache_receipt {
+            write_json(&options.work_dir.join("running-cache.json"), receipt)
+                .map_err(&mut preserve_reduction_error)?;
+        }
+        let owners_after = engine
+            .rustred_application_owner_preparation_statistics()
+            .map_err(eyre::Report::from)
+            .map_err(&mut preserve_reduction_error)?;
+        let owner_seconds = owners_after
+            .preparation_time
+            .saturating_sub(owners_before.preparation_time)
+            .as_secs_f64();
+        let stages = LOGGER
+            .0
+            .lock()
+            .map_err(|error| eyre::eyre!(error.to_string()))
+            .map_err(&mut preserve_reduction_error)?;
+        let saved_seconds = stages
+            .seconds
+            .get("saved_rule_application")
+            .map_or(0.0, |samples| samples.iter().sum::<f64>());
+        let statistics = engine
+            .cache_statistics(5)
+            .map_err(eyre::Report::from)
+            .map_err(&mut preserve_reduction_error)?
+            .saved_application
+            .map(|s| s.to_document());
+        let mut receipt = json!({
+            "schema":"vakint.five-loop-cache-measurement.v1","identity":identity,
+            "case_id":root.id,"variant":options.variant,"sample":options.sample,"input_sha256":format!("{:x}",Sha256::digest(input.to_canonical_string().as_bytes())),
+            "declared_common_powers":root.powers,"rationale":root.rationale,
+            "frozen_lowered_roots":root.lowered_roots,"frozen_protected_roots":root.protected_roots,
+            "actual_lowered_roots":stages.input_roots,
+            "provisional":options.provisional,
+            "owner_proof":proof.as_ref().map(OwnerProof::identity),"owner_proof_validation_seconds":owner_proof_seconds,
+            "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
+            "fresh_process":true,"data_loading_seconds":data_loading_seconds,"cache_loading_seconds":cache_loading_seconds,
+            "external_data":data_report,"persistent_cache_attachments_before":caches_before,
+            "persistent_cache_attachments_during_evaluation":caches_during_evaluation,
+            "persistent_cache_policy":match (options.variant=="cached", running_read_backing) {
+                (true,true)=>"manual-five-loop-and-running-cache",
+                (false,true)=>"running-cache",
+                (true,false)=>"manual-five-loop-only",
+                (false,false)=>"none",
+            },
+            "evaluation_seconds":evaluation_seconds,"saved_application_including_owner_seconds":saved_seconds,
+            "owner_preparation_seconds":owner_seconds,"ibp_excluding_owner_seconds":(saved_seconds-owner_seconds).max(0.0),
+            // Retain the existing field name, but never label this derived interval
+            // pure IBP: the native call also transports and combines exact terms.
+            "native_timing_scope":{
+                "saved_application_including_owner_seconds":"Native entry transport, lazy owner preparation, DAG reduction, exact sum, and terminal substitution",
+                "ibp_excluding_owner_seconds":"Saved application interval minus actual deferred-owner preparation; entry transport, exact combination and terminal substitution remain included",
+                "pure_ibp_seconds":null,"terminal_substitution_seconds":null,
+                "separate_native_phase_durations_available":false
+            },
+            "owner_preparation_policy":"deferred on demand; actual stat delta, no common prewarm",
+            "end_to_end_scope":"supervisor worker spawn through exit, including loading, evaluation and output serialization",
+            "owner_preparation_during_load_seconds":owners_before.preparation_time.as_secs_f64(),
+            "stages":stages.seconds,"lowering_receipts":stages.lowered,"warnings":stages.warnings,"cache_statistics":statistics,
+        });
+        if let Some(running_cache) = &running_cache_receipt {
+            receipt["running_cache"] = running_cache.clone();
+            receipt["running_cache_attached"] = running_cache_attached.into();
+        }
+        let authentication = stages.authenticate(
+            &root.lowered_roots,
+            &root.protected_roots,
+            options.provisional,
+            proof.as_ref(),
+            &root.id,
+        );
+        receipt["native_keys_authenticated"] = authentication
+            .as_ref()
+            .is_ok_and(|authenticated| *authenticated)
+            .into();
+        receipt["native_key_authentication"] = if !stages.input_roots_seen {
+            "unavailable"
+        } else if authentication
+            .as_ref()
+            .is_ok_and(|authenticated| *authenticated)
+        {
+            "verified-lowered-inputs-with-frozen-owner-protection"
+        } else {
+            "unverified"
+        }
         .into();
-    receipt["native_key_authentication"] = if !stages.input_roots_seen {
-        "unavailable"
-    } else if authentication
-        .as_ref()
-        .is_ok_and(|authenticated| *authenticated)
-    {
-        "verified-lowered-inputs-with-frozen-owner-protection"
-    } else {
-        "unverified"
-    }
-    .into();
-    match outcome {
-        Ok(result) => {
-            // Inspect the final combined expression against the instance's
-            // declared identities. Retain success does not imply catalogue
-            // closure, an independent master basis, or numerical availability.
-            let known = engine
-                .master_symbols()?
-                .into_iter()
-                .map(|symbol| symbol.as_atom().clone())
-                .collect::<BTreeSet<_>>();
-            let mut masters = BTreeSet::new();
-            result.value.visitor(&mut |part| {
+        match outcome {
+            Some(result) => {
+                // Inspect the final combined expression against the instance's
+                // declared identities. Retain success does not imply catalogue
+                // closure, an independent master basis, or numerical availability.
+                let known = engine
+                    .master_symbols()?
+                    .into_iter()
+                    .map(|symbol| symbol.as_atom().clone())
+                    .collect::<BTreeSet<_>>();
+                let mut masters = BTreeSet::new();
+                result.value.visitor(&mut |part| {
                 if matches!(part, AtomView::Fun(function) if function.get_symbol() == vakint::vakint_symbol!("RustRedMaster")) {
                     masters.insert(part.to_owned());
                     return false;
                 }
                 true
             });
-            let unknown = masters
-                .difference(&known)
-                .map(AtomCore::to_canonical_string)
-                .collect::<BTreeSet<_>>();
-            let unknown_path = options.work_dir.join("unknown-masters.json");
-            write_json(&unknown_path, &json!(unknown))?;
-            receipt["catalogue_closure"] = json!({
-                "closed":unknown.is_empty(),"master_count":masters.len(),
-                "unknown_count":unknown.len(),"unknown_masters":unknown,
-                "unknown_file":"unknown-masters.json","unknown_sha256":digest(&unknown_path)?,
-                "scope":"Final combined retained master identities versus loaded catalogue declarations",
-                "independent_basis_claim":false,"numerical_evaluation_claim":false
-            });
-            write_bytes(
-                &options.work_dir.join("value.symbolica"),
-                result.value.to_canonical_string().as_bytes(),
-            )?;
-            let guards = result
-                .nonzero_conditions
-                .iter()
-                .map(AtomCore::to_canonical_string)
-                .collect::<BTreeSet<_>>();
-            write_json(&options.work_dir.join("guards.json"), &json!(guards))?;
-            receipt["success"] = true.into();
-            receipt["retained_result_available"] = true.into();
-            receipt["value_sha256"] = digest(&options.work_dir.join("value.symbolica"))?.into();
-            receipt["guards_sha256"] = digest(&options.work_dir.join("guards.json"))?.into();
+                let unknown = masters
+                    .difference(&known)
+                    .map(AtomCore::to_canonical_string)
+                    .collect::<BTreeSet<_>>();
+                let unknown_path = options.work_dir.join("unknown-masters.json");
+                write_json(&unknown_path, &json!(unknown))?;
+                receipt["catalogue_closure"] = json!({
+                    "closed":unknown.is_empty(),"master_count":masters.len(),
+                    "unknown_count":unknown.len(),"unknown_masters":unknown,
+                    "unknown_file":"unknown-masters.json","unknown_sha256":digest(&unknown_path)?,
+                    "scope":"Final combined retained master identities versus loaded catalogue declarations",
+                    "independent_basis_claim":false,"numerical_evaluation_claim":false
+                });
+                write_bytes(
+                    &options.work_dir.join("value.symbolica"),
+                    result.value.to_canonical_string().as_bytes(),
+                )?;
+                let guards = result
+                    .nonzero_conditions
+                    .iter()
+                    .map(AtomCore::to_canonical_string)
+                    .collect::<BTreeSet<_>>();
+                write_json(&options.work_dir.join("guards.json"), &json!(guards))?;
+                receipt["success"] = true.into();
+                receipt["retained_result_available"] = true.into();
+                receipt["value_sha256"] = digest(&options.work_dir.join("value.symbolica"))?.into();
+                receipt["guards_sha256"] = digest(&options.work_dir.join("guards.json"))?.into();
+            }
+            None => {
+                receipt["success"] = false.into();
+                receipt["retained_result_available"] = false.into();
+                receipt["catalogue_closure"] = Value::Null;
+                receipt["error"] = json!(reduction_error_message);
+            }
         }
-        Err(error) => {
+        if let Err(error) = authentication {
             receipt["success"] = false.into();
-            receipt["retained_result_available"] = false.into();
-            receipt["catalogue_closure"] = Value::Null;
-            receipt["error"] = error.to_string().into();
+            if running_cache_receipt.is_some() && !receipt["error"].is_null() {
+                receipt["native_key_authentication_error"] = error.to_string().into();
+            } else {
+                receipt["error"] = error.to_string().into();
+            }
         }
+        if let Some(running_cache) = &running_cache_receipt {
+            for phase in ["flush", "snapshot"] {
+                if let Some(error) = running_cache[format!("{phase}_error")].as_str() {
+                    receipt["success"] = false.into();
+                    if receipt["error"].is_null() {
+                        receipt["error"] = format!("running-cache {phase} failed: {error}").into();
+                    }
+                }
+            }
+        }
+        if &options.identity().map_err(&mut preserve_reduction_error)? != identity {
+            return Err(preserve_reduction_error(eyre::eyre!(
+                "measurement inputs changed during evaluation"
+            )));
+        }
+        write_json(&options.work_dir.join("worker.json"), &receipt)
+            .map_err(&mut preserve_reduction_error)?;
+        if running_cache_receipt.is_some()
+            && let Some(error) = reduction_error
+        {
+            return Err(error);
+        }
+        ensure!(
+            receipt["success"] == true,
+            "public evaluation failed; inspect measurement.json"
+        );
+        Ok(())
+    })();
+    // Finalize the shared native writer even when validation or output fails.
+    // The original evaluation error remains primary if persistence also fails.
+    let close_error = running_cache.as_ref().and_then(|control| {
+        let started = Instant::now();
+        let closed = control.close();
+        let document = match &closed {
+            Ok(report) => Some(report.to_document()),
+            Err(_) => control.report().ok().map(|report| report.to_document()),
+        };
+        let receipt = running_cache_receipt.get_or_insert_with(|| {
+            json!({
+                "path":running_cache_path,"read_backing":running_read_backing,
+                "capture_only":options.running_cache_capture_only,
+                "read_delta":!options.running_cache_no_read_delta,
+                "loading_seconds":running_cache_loading_seconds,
+            })
+        });
+        receipt["flush_report"] = receipt["report"].clone();
+        receipt["report"] = document.clone().into();
+        receipt["close"] = json!({"seconds":started.elapsed().as_secs_f64(),
+            "report":document,"error":closed.as_ref().err().map(ToString::to_string)});
+        receipt["terminal"] = true.into();
+        closed.err()
+    });
+    let terminal_receipt = (|| -> Result<()> {
+        if let Some(receipt) = &running_cache_receipt {
+            write_json(&options.work_dir.join("running-cache.json"), receipt)?;
+            let worker_path = options.work_dir.join("worker.json");
+            if worker_path.exists() {
+                let mut worker: Value = serde_json::from_slice(&fs::read(&worker_path)?)?;
+                worker["running_cache"] = receipt.clone();
+                if let Some(error) = &close_error {
+                    worker["success"] = false.into();
+                    if worker["error"].is_null() {
+                        worker["error"] = json!(format!("running-cache close failed: {error}"));
+                    }
+                }
+                write_json(&worker_path, &worker)?;
+            }
+        }
+        Ok(())
+    })();
+    if let Err(error) = measured {
+        if let Err(secondary) = terminal_receipt {
+            eprintln!("running-cache terminal receipt failed: {secondary}");
+        }
+        return Err(error);
     }
-    if let Err(error) = authentication {
-        receipt["success"] = false.into();
-        receipt["error"] = error.to_string().into();
+    if let Some(error) = close_error {
+        if let Err(secondary) = terminal_receipt {
+            eprintln!("running-cache terminal receipt failed: {secondary}");
+        }
+        return Err(error.into());
     }
-    ensure!(
-        &options.identity()? == identity,
-        "measurement inputs changed during evaluation"
-    );
-    write_json(&options.work_dir.join("worker.json"), &receipt)?;
-    ensure!(
-        receipt["success"] == true,
-        "public evaluation failed; inspect measurement.json"
-    );
-    Ok(())
+    terminal_receipt
 }
 
 fn main() -> Result<()> {

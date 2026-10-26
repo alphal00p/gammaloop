@@ -28,6 +28,13 @@ mod five;
 pub use five::RustRedSavedCacheStatistics;
 pub(super) use five::{SavedFiveLoopCache, saved_application_digest};
 
+#[path = "cache_running.rs"]
+mod running;
+pub use running::{
+    RustRedRunningCacheControl, RustRedRunningCacheOptions, RustRedRunningCacheReport,
+    RustRedRunningCacheSnapshot,
+};
+
 #[path = "cache_save.rs"]
 mod save;
 pub use save::{RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveReport};
@@ -106,6 +113,18 @@ pub struct RustRedCacheStatistics {
     pub disk: Option<SavedApplicationCachePackStatistics>,
     pub namespaces: Vec<RustRedCacheNamespaceStatistics>,
     pub backing_budget_fallbacks: usize,
+}
+
+impl RustRedCacheStatistics {
+    /// A capture-only running writer is attached but performs no persistent
+    /// lookup. Keep this distinct from both attachment and resident memoization.
+    pub fn has_read_backing(&self) -> bool {
+        self.attached
+            && self
+                .saved_application
+                .as_ref()
+                .is_none_or(|saved| saved.read_backing)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

@@ -3,7 +3,8 @@ use crate::{RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheWorklo
 use flate2::{Compression, write::GzEncoder};
 use rustred::family::IntegralKey;
 use rustred_app::CachePreparationStatus;
-use std::{io::Cursor, sync::atomic::AtomicBool, time::Instant};
+use serde_json::{Value, json};
+use std::{collections::BTreeMap, io::Cursor, sync::atomic::AtomicBool, time::Instant};
 
 struct Fixture {
     scratch: tempfile::TempDir,
@@ -100,6 +101,30 @@ impl Fixture {
                 .starts_with(".vakint-cache-transfer-")
         }));
     }
+
+    fn assert_imported_records(&self, output: &Path) {
+        let (_, program) = program(&self.engine, 1).unwrap();
+        let bindings = [program.binding().clone()];
+        let imported =
+            SavedApplicationCacheBundle::open_generated(output, &bindings, Default::default())
+                .unwrap();
+        let original = SavedApplicationCacheBundle::open_generated(
+            &self.source,
+            &bindings,
+            Default::default(),
+        )
+        .unwrap();
+        let mut imported = imported.open_reader(program.binding()).unwrap();
+        let mut original = original.open_reader(program.binding()).unwrap();
+        for power in [2, 3, 4] {
+            let key = rustred::persistence::application_cache::ApplicationCacheKey::guarded_root(
+                &IntegralKey::try_new([power]).unwrap(),
+            );
+            let expected = original.lookup(&key, program.context()).unwrap();
+            assert!(expected.is_some(), "prepared root/descendant is absent");
+            assert_eq!(imported.lookup(&key, program.context()).unwrap(), expected);
+        }
+    }
 }
 
 #[test]
@@ -125,29 +150,7 @@ fn import_verifies_native_snapshot_and_does_not_attach_or_copy_preparation_check
         .load_cache(1, fixture.output(), &Default::default())
         .unwrap();
     assert!(fixture.engine.cache_statistics(1).unwrap().attached);
-    let (_, program) = program(&fixture.engine, 1).unwrap();
-    let bundle = SavedApplicationCacheBundle::open_generated(
-        &fixture.output(),
-        &[program.binding().clone()],
-        Default::default(),
-    )
-    .unwrap();
-    let source = SavedApplicationCacheBundle::open_generated(
-        &fixture.source,
-        &[program.binding().clone()],
-        Default::default(),
-    )
-    .unwrap();
-    let mut imported = bundle.open_reader(program.binding()).unwrap();
-    let mut original = source.open_reader(program.binding()).unwrap();
-    for power in [2, 3, 4] {
-        let key = rustred::persistence::application_cache::ApplicationCacheKey::guarded_root(
-            &IntegralKey::try_new([power]).unwrap(),
-        );
-        let expected = original.lookup(&key, program.context()).unwrap();
-        assert!(expected.is_some(), "prepared root/descendant is absent");
-        assert_eq!(imported.lookup(&key, program.context()).unwrap(), expected);
-    }
+    fixture.assert_imported_records(&fixture.output());
     fixture.assert_no_staging();
 }
 
@@ -445,5 +448,801 @@ fn explicit_loopback_http_download_matches_local_import_and_refuses_large_respon
             assert_eq!(result.unwrap().copied.preserved_record_references, 3);
         }
         fixture.assert_no_staging();
+    }
+}
+
+struct MultipartFixture {
+    fixture: Fixture,
+    descriptor: PathBuf,
+    manifest: Value,
+}
+
+impl MultipartFixture {
+    fn new() -> Self {
+        let fixture = Fixture::new();
+        let mut files = BTreeMap::new();
+        Self::inventory(&fixture.source, Path::new("cache"), &mut files);
+        assert!(files.len() >= 3);
+        let (_, program) = program(&fixture.engine, 1).unwrap();
+        let binding = program.binding();
+        let bundle = SavedApplicationCacheBundle::open_generated(
+            &fixture.source,
+            &[binding.clone()],
+            Default::default(),
+        )
+        .unwrap();
+        let reader = bundle.open_reader(binding).unwrap();
+        let indexes = files
+            .keys()
+            .filter(|path| path.ends_with(".rrindex"))
+            .cloned()
+            .collect::<Vec<_>>();
+        let chunks = files
+            .keys()
+            .filter(|path| path.ends_with(".rrchunk.gz"))
+            .cloned()
+            .collect::<Vec<_>>();
+        assert_eq!(indexes.len(), 2);
+        assert!(!chunks.is_empty());
+        let manifest = json!({
+            "schema":"vakint.nativepack-transport.v1", "loop_count":1,
+            "binding":{"artifact_digest":binding.artifact_digest,
+                "family_fingerprint":binding.family_fingerprint,
+                "physical_arity":binding.physical_arity,"layer":binding.layer},
+            "generation":reader.generation(),
+            "stored_record_references":reader.statistics().records,
+            "files":files,
+            "parts":[
+                {"kind":"indexes","archive":"indexes.tar.gz","members":indexes},
+                {"kind":"chunks","archive":"chunks.tar.gz","members":chunks}
+            ]
+        });
+        let descriptor = fixture.scratch.path().join("transport.json");
+        let mut multipart = Self {
+            fixture,
+            descriptor,
+            manifest,
+        };
+        for part in 0..2 {
+            multipart.replace_part(part, multipart.archive_part(part));
+        }
+        multipart.write_manifest();
+        multipart
+    }
+
+    fn inventory(source: &Path, relative: &Path, files: &mut BTreeMap<String, Value>) {
+        if source.is_dir() {
+            for entry in fs::read_dir(source).unwrap() {
+                let entry = entry.unwrap();
+                Self::inventory(&entry.path(), &relative.join(entry.file_name()), files);
+            }
+        } else {
+            let name = source.file_name().unwrap().to_string_lossy();
+            if name.ends_with(".rrindex") || name.ends_with(".rrchunk.gz") {
+                let bytes = fs::read(source).unwrap();
+                files.insert(
+                    relative.to_str().unwrap().to_owned(),
+                    Self::identity(&bytes),
+                );
+            }
+        }
+    }
+
+    fn identity(bytes: &[u8]) -> Value {
+        json!({"bytes":bytes.len(),"sha256":format!("{:x}",Sha256::digest(bytes))})
+    }
+
+    fn part_path(&self, part: usize) -> PathBuf {
+        self.fixture
+            .scratch
+            .path()
+            .join(self.manifest["parts"][part]["archive"].as_str().unwrap())
+    }
+
+    fn archive_part(&self, part: usize) -> Vec<u8> {
+        let mut archive = tar::Builder::new(Vec::new());
+        for member in self.manifest["parts"][part]["members"].as_array().unwrap() {
+            let member = member.as_str().unwrap();
+            let source = self
+                .fixture
+                .source
+                .join(member.strip_prefix("cache/").unwrap());
+            let mut header = tar::Header::new_ustar();
+            header.set_entry_type(tar::EntryType::Regular);
+            header.set_mode(0o600);
+            header.set_size(fs::metadata(&source).unwrap().len());
+            archive
+                .append_data(&mut header, member, File::open(source).unwrap())
+                .unwrap();
+        }
+        Self::gzip(&archive.into_inner().unwrap())
+    }
+
+    fn gzip(bytes: &[u8]) -> Vec<u8> {
+        let mut gzip = GzEncoder::new(Vec::new(), Compression::fast());
+        gzip.write_all(bytes).unwrap();
+        gzip.finish().unwrap()
+    }
+
+    fn replace_part(&mut self, part: usize, bytes: Vec<u8>) {
+        fs::write(self.part_path(part), &bytes).unwrap();
+        self.manifest["parts"][part]["archive_bytes"] = bytes.len().into();
+        self.manifest["parts"][part]["archive_sha256"] =
+            format!("{:x}", Sha256::digest(&bytes)).into();
+    }
+
+    fn write_manifest(&self) {
+        fs::write(
+            &self.descriptor,
+            serde_json::to_vec(&self.manifest).unwrap(),
+        )
+        .unwrap();
+    }
+
+    fn options(&self) -> RustRedCacheTransferOptions {
+        self.write_manifest();
+        RustRedCacheTransferOptions::multipart_manifest(
+            Sha256::digest(fs::read(&self.descriptor).unwrap()).into(),
+        )
+    }
+
+    fn assert_failure(&self, options: &RustRedCacheTransferOptions) {
+        assert!(
+            self.fixture
+                .engine
+                .import_cache(1, &self.descriptor, self.fixture.output(), options)
+                .is_err()
+        );
+        assert!(!self.fixture.output().exists());
+        assert!(!self.fixture.engine.cache_statistics(1).unwrap().attached);
+        self.fixture.assert_no_staging();
+    }
+}
+
+#[test]
+fn multipart_manifest_above_default_size_imports_with_explicit_larger_grant() {
+    const MIB: u64 = 1024 * 1024;
+    let multipart = MultipartFixture::new();
+    let descriptor_bytes = 17 * MIB;
+    let mut remaining = descriptor_bytes - fs::metadata(&multipart.descriptor).unwrap().len();
+    let mut block = [b' '; BUFFER_BYTES];
+    {
+        let mut descriptor = OpenOptions::new()
+            .append(true)
+            .open(&multipart.descriptor)
+            .unwrap();
+        // JSON permits trailing whitespace. Stream padding and hashing so the
+        // fixture does not retain another manifest-sized allocation.
+        while remaining > 0 {
+            let count = remaining.min(block.len() as u64) as usize;
+            descriptor.write_all(&block[..count]).unwrap();
+            remaining -= count as u64;
+        }
+    }
+    assert_eq!(
+        fs::metadata(&multipart.descriptor).unwrap().len(),
+        descriptor_bytes
+    );
+    let mut descriptor = File::open(&multipart.descriptor).unwrap();
+    let mut hash = Sha256::new();
+    loop {
+        let count = descriptor.read(&mut block).unwrap();
+        if count == 0 {
+            break;
+        }
+        hash.update(&block[..count]);
+    }
+    let mut options = RustRedCacheTransferOptions::multipart_manifest(hash.finalize().into());
+    assert_eq!(options.max_manifest_bytes, 16 * MIB);
+    multipart.assert_failure(&options);
+    options.max_manifest_bytes = 32 * MIB;
+    let output = multipart.fixture.output();
+    let report = multipart
+        .fixture
+        .engine
+        .import_cache(1, &multipart.descriptor, &output, &options)
+        .unwrap();
+    assert_eq!(report.sha256, options.expected_sha256);
+    assert_eq!(report.copied.preserved_record_references, 3);
+    assert!(
+        !multipart
+            .fixture
+            .engine
+            .cache_statistics(1)
+            .unwrap()
+            .attached
+    );
+    multipart.fixture.assert_imported_records(&output);
+    multipart.fixture.assert_no_staging();
+}
+
+#[test]
+fn multipart_manifest_growth_checks_ambient_allocation_headroom() {
+    use symbolica::utils::resources::{ResourceBudget, ResourceLimitError, ResourceLimits};
+
+    let scratch = tempfile::tempdir().unwrap();
+    let engine = Vakint::new().unwrap();
+    let output = scratch.path().join("imported");
+    let options = RustRedCacheTransferOptions::multipart_manifest([0; 32]);
+    let transfer = Transfer::new(&engine, 1, &output, &options).unwrap();
+    let budget = ResourceBudget::with_memory_monitor(
+        ResourceLimits {
+            max_process_rss_bytes: Some(64),
+            max_elapsed: None,
+        },
+        || Ok(64),
+    );
+    budget
+        .run(|| transfer.admit_manifest_growth(4, 8, 4))
+        .unwrap();
+    let error = budget
+        .run(|| transfer.admit_manifest_growth(4, 8, 5))
+        .unwrap_err();
+    assert_eq!(error.kind(), AppErrorKind::Limit);
+    assert_eq!(
+        error.resource_limit_error(),
+        Some(&ResourceLimitError::Memory {
+            rss_bytes: 64,
+            additional_bytes: 1,
+            limit_bytes: 64,
+        })
+    );
+    ResourceBudget::with_memory_monitor(
+        ResourceLimits {
+            max_process_rss_bytes: Some(65),
+            max_elapsed: None,
+        },
+        || Ok(64),
+    )
+    .run(|| transfer.admit_manifest_growth(4, 8, 5))
+    .unwrap();
+}
+
+#[test]
+fn multipart_manifest_exact_byte_grant_succeeds_and_one_byte_less_refuses() {
+    let multipart = MultipartFixture::new();
+    let mut options = multipart.options();
+    let descriptor_bytes = fs::metadata(&multipart.descriptor).unwrap().len();
+    options.max_manifest_bytes = descriptor_bytes - 1;
+    multipart.assert_failure(&options);
+    options.max_manifest_bytes = descriptor_bytes;
+    let report = multipart
+        .fixture
+        .engine
+        .import_cache(
+            1,
+            &multipart.descriptor,
+            multipart.fixture.output(),
+            &options,
+        )
+        .unwrap();
+    assert_eq!(report.copied.preserved_record_references, 3);
+    multipart.fixture.assert_no_staging();
+}
+
+#[test]
+fn multipart_manifest_raw_duplicate_inventory_key_refuses_before_opening_parts() {
+    let multipart = MultipartFixture::new();
+    let mut descriptor = serde_json::to_string(&multipart.manifest).unwrap();
+    let marker = "\"files\":{";
+    let position = descriptor.find(marker).unwrap() + marker.len();
+    let identity =
+        serde_json::to_string(&multipart.manifest["files"]["cache/bundle.rrindex"]).unwrap();
+    // Keep both identical keys in the raw JSON; Value would normalize them.
+    descriptor.insert_str(position, &format!("\"cache/bundle.rrindex\":{identity},"));
+    fs::write(&multipart.descriptor, descriptor.as_bytes()).unwrap();
+    let options = RustRedCacheTransferOptions::multipart_manifest(
+        Sha256::digest(descriptor.as_bytes()).into(),
+    );
+    for part in 0..multipart.manifest["parts"].as_array().unwrap().len() {
+        fs::remove_file(multipart.part_path(part)).unwrap();
+    }
+    let error = multipart
+        .fixture
+        .engine
+        .import_cache(
+            1,
+            &multipart.descriptor,
+            multipart.fixture.output(),
+            &options,
+        )
+        .unwrap_err();
+    assert!(
+        error
+            .to_string()
+            .contains("duplicate multipart file inventory path"),
+        "unexpected failure before the absent parts: {error}"
+    );
+    assert!(!multipart.fixture.output().exists());
+    assert!(
+        !multipart
+            .fixture
+            .engine
+            .cache_statistics(1)
+            .unwrap()
+            .attached
+    );
+    multipart.fixture.assert_no_staging();
+}
+
+#[test]
+fn multipart_offline_import_preserves_native_records_without_attaching() {
+    let mut multipart = MultipartFixture::new();
+    // Local descriptor import must use adjacent verified parts, without fetching
+    // the optional remote locations supplied for explicit download callers.
+    for part in multipart.manifest["parts"].as_array_mut().unwrap() {
+        part["url"] = "http://127.0.0.1:9/not-used.tar.gz".into();
+    }
+    let options = multipart.options();
+    let report = multipart
+        .fixture
+        .engine
+        .import_cache(
+            1,
+            &multipart.descriptor,
+            multipart.fixture.output(),
+            &options,
+        )
+        .unwrap();
+    let archive_bytes = fs::metadata(&multipart.descriptor).unwrap().len()
+        + multipart.manifest["parts"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|part| part["archive_bytes"].as_u64().unwrap())
+            .sum::<u64>();
+    let files = multipart.manifest["files"].as_object().unwrap();
+    assert_eq!(report.archive_bytes, archive_bytes);
+    assert_eq!(report.entries, files.len());
+    assert_eq!(
+        report.extracted_bytes,
+        files
+            .values()
+            .map(|file| file["bytes"].as_u64().unwrap())
+            .sum::<u64>()
+    );
+    assert_eq!(report.copied.preserved_record_references, 3);
+    assert_eq!(report.sha256, options.expected_sha256);
+    assert!(
+        !multipart
+            .fixture
+            .engine
+            .cache_statistics(1)
+            .unwrap()
+            .attached
+    );
+    assert!(
+        !multipart
+            .fixture
+            .output()
+            .join("preparation.rrcheckpoint")
+            .exists()
+    );
+    multipart
+        .fixture
+        .assert_imported_records(&multipart.fixture.output());
+    multipart.fixture.assert_no_staging();
+}
+
+#[test]
+fn multipart_descriptor_part_and_native_integrity_are_independent() {
+    let mut multipart = MultipartFixture::new();
+    let mut options = multipart.options();
+    options.expected_sha256[0] ^= 1;
+    multipart.assert_failure(&options);
+
+    let original = multipart.manifest.clone();
+    for field in ["archive_sha256", "archive_bytes"] {
+        multipart.manifest = original.clone();
+        multipart.manifest["parts"][1][field] = if field == "archive_sha256" {
+            "00".repeat(32).into()
+        } else {
+            (multipart.manifest["parts"][1][field].as_u64().unwrap() + 1).into()
+        };
+        multipart.assert_failure(&multipart.options());
+    }
+    multipart.manifest = original;
+    let member = multipart.manifest["parts"][1]["members"][0]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let source = multipart
+        .fixture
+        .source
+        .join(member.strip_prefix("cache/").unwrap());
+    let mut bytes = fs::read(&source).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    fs::write(source, &bytes).unwrap();
+    multipart.manifest["files"][&member] = MultipartFixture::identity(&bytes);
+    multipart.replace_part(1, multipart.archive_part(1));
+    // All transport checksums now agree with the changed file. Native's
+    // committed chunk descriptor must still reject its changed payload.
+    multipart.assert_failure(&multipart.options());
+}
+
+#[test]
+fn multipart_binding_census_and_partition_contract_are_enforced() {
+    let mut multipart = MultipartFixture::new();
+    let original = multipart.manifest.clone();
+    for case in 0..10 {
+        multipart.manifest = original.clone();
+        match case {
+            0 => {
+                multipart.manifest["binding"]["artifact_digest"][0] =
+                    (original["binding"]["artifact_digest"][0].as_u64().unwrap() ^ 1).into()
+            }
+            1 => {
+                multipart.manifest["generation"] =
+                    (original["generation"].as_u64().unwrap() + 1).into()
+            }
+            2 => multipart.manifest["stored_record_references"] = 4.into(),
+            3 => multipart.manifest["parts"][0]["kind"] = "chunks".into(),
+            4 => multipart.manifest["parts"][1]["kind"] = "indexes".into(),
+            5 => {
+                let duplicate = multipart.manifest["parts"][0]["members"][0].clone();
+                multipart.manifest["parts"][1]["members"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(duplicate);
+            }
+            6 => {
+                multipart.manifest["parts"][1]["members"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
+            }
+            7 => {
+                let member = multipart.manifest["parts"][1]["members"][0]
+                    .as_str()
+                    .unwrap()
+                    .to_owned();
+                let file = &mut multipart.manifest["files"][&member];
+                file["bytes"] = (file["bytes"].as_u64().unwrap() + 1).into();
+            }
+            8 => multipart.manifest["parts"][1]["archive"] = "../outside.tar.gz".into(),
+            _ => {
+                let member = multipart.manifest["parts"][1]["members"][0]
+                    .as_str()
+                    .unwrap()
+                    .to_owned();
+                multipart.manifest["files"][&member]["sha256"] = "00".repeat(32).into();
+            }
+        }
+        multipart.assert_failure(&multipart.options());
+    }
+}
+
+#[test]
+fn multipart_unreferenced_native_indexes_are_not_silently_discarded() {
+    let mut multipart = MultipartFixture::new();
+    let index = multipart.manifest["parts"][0]["members"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|member| member.as_str().unwrap())
+        .find(|member| member.contains("/bindings/"))
+        .unwrap()
+        .to_owned();
+    let namespace = index.split('/').nth(2).unwrap();
+    let mut other_namespace = namespace.as_bytes().to_vec();
+    other_namespace[0] = if other_namespace[0] == b'0' {
+        b'1'
+    } else {
+        b'0'
+    };
+    let extra = format!(
+        "cache/bindings/{}/cache.rrindex",
+        String::from_utf8(other_namespace).unwrap()
+    );
+    let source = multipart
+        .fixture
+        .source
+        .join(index.strip_prefix("cache/").unwrap());
+    let destination = multipart
+        .fixture
+        .source
+        .join(extra.strip_prefix("cache/").unwrap());
+    fs::create_dir_all(destination.parent().unwrap()).unwrap();
+    fs::write(destination, fs::read(source).unwrap()).unwrap();
+    multipart.manifest["files"][&extra] = multipart.manifest["files"][&index].clone();
+    multipart.manifest["parts"][0]["members"]
+        .as_array_mut()
+        .unwrap()
+        .push(extra.into());
+    multipart.replace_part(0, multipart.archive_part(0));
+    multipart.assert_failure(&multipart.options());
+}
+
+#[test]
+fn multipart_tar_paths_trailing_data_and_crc_fail_after_transport_authentication() {
+    let mut multipart = MultipartFixture::new();
+    let original = fs::read(multipart.part_path(1)).unwrap();
+    for case in 0..7 {
+        let bytes = match case {
+            0 => hostile_archive(&[("cache/../escape", tar::EntryType::Regular)], 0),
+            1 => hostile_archive(&[("cache/link", tar::EntryType::Symlink)], 0),
+            2 => {
+                let mut decoded = Vec::new();
+                MultiGzDecoder::new(Cursor::new(&original))
+                    .read_to_end(&mut decoded)
+                    .unwrap();
+                decoded.push(1);
+                MultipartFixture::gzip(&decoded)
+            }
+            3 => {
+                let mut bytes = original.clone();
+                let crc = bytes.len() - 8;
+                bytes[crc] ^= 1;
+                bytes
+            }
+            4 => {
+                let mut bytes = original.clone();
+                bytes.extend(hostile_archive(
+                    &[("cache/hidden", tar::EntryType::Regular)],
+                    0,
+                ));
+                bytes
+            }
+            5 => {
+                // The descriptor's partition stays disjoint, but the later
+                // chunk archive actually tries to repeat an earlier index.
+                let duplicate = multipart.manifest["parts"][0]["members"][0].clone();
+                multipart.manifest["parts"][1]["members"]
+                    .as_array_mut()
+                    .unwrap()
+                    .push(duplicate);
+                let bytes = multipart.archive_part(1);
+                multipart.manifest["parts"][1]["members"]
+                    .as_array_mut()
+                    .unwrap()
+                    .pop();
+                bytes
+            }
+            _ => original[..original.len() - 5].to_vec(),
+        };
+        multipart.replace_part(1, bytes);
+        multipart.assert_failure(&multipart.options());
+        assert!(!multipart.fixture.scratch.path().join("escape").exists());
+    }
+}
+
+#[test]
+fn multipart_limits_cover_all_parts_with_entry_limits_active_by_default() {
+    let multipart = MultipartFixture::new();
+    let options = multipart.options();
+    assert!(!options.diagnostics_enabled);
+    let report = multipart
+        .fixture
+        .engine
+        .import_cache(
+            1,
+            &multipart.descriptor,
+            multipart.fixture.scratch.path().join("baseline"),
+            &options,
+        )
+        .unwrap();
+    for case in 0..4 {
+        let mut limited = options.clone();
+        match case {
+            0 => limited.max_archive_bytes = report.archive_bytes - 1,
+            1 => limited.max_extracted_bytes = report.extracted_bytes - 1,
+            2 => limited.max_entries = report.entries - 1,
+            _ => limited.max_temporary_bytes = report.extracted_bytes,
+        }
+        multipart.assert_failure(&limited);
+    }
+    let mut exact = options;
+    exact.max_archive_bytes = report.archive_bytes;
+    exact.max_extracted_bytes = report.extracted_bytes;
+    exact.max_entries = report.entries;
+    let output = multipart.fixture.output();
+    let exact_report = multipart
+        .fixture
+        .engine
+        .import_cache(1, &multipart.descriptor, &output, &exact)
+        .unwrap();
+    assert_eq!(exact_report.entries, report.entries);
+    assert_eq!(exact_report.extracted_bytes, report.extracted_bytes);
+    multipart.fixture.assert_no_staging();
+}
+
+#[test]
+fn multipart_expired_whole_transfer_refuses_before_publication() {
+    let multipart = MultipartFixture::new();
+    let mut options = multipart.options();
+    options.timeout = Duration::from_secs(1);
+    let output = multipart.fixture.output();
+    let mut transfer = Transfer::new(&multipart.fixture.engine, 1, &output, &options).unwrap();
+    transfer.started = Instant::now() - Duration::from_secs(2);
+    assert!(transfer.import_multipart(&multipart.descriptor).is_err());
+    assert!(!output.exists());
+    multipart.fixture.assert_no_staging();
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+fn multipart_descriptor_refuses_links_and_fifos_before_opening() {
+    let multipart = MultipartFixture::new();
+    let options = multipart.options();
+    let link = multipart
+        .fixture
+        .scratch
+        .path()
+        .join("descriptor-link.json");
+    std::os::unix::fs::symlink(&multipart.descriptor, &link).unwrap();
+    assert!(
+        multipart
+            .fixture
+            .engine
+            .import_cache(1, &link, multipart.fixture.output(), &options)
+            .is_err()
+    );
+
+    let fifo = multipart.fixture.scratch.path().join("descriptor.fifo");
+    rustix::fs::mkfifoat(
+        rustix::fs::CWD,
+        &fifo,
+        rustix::fs::Mode::RUSR | rustix::fs::Mode::WUSR,
+    )
+    .unwrap();
+    let stop = Arc::new(AtomicBool::new(false));
+    let writer_stop = Arc::clone(&stop);
+    let writer_path = fifo.clone();
+    let bytes = fs::read(&multipart.descriptor).unwrap();
+    // If a regression opens the FIFO, supply a valid descriptor so the test
+    // fails instead of leaving a blocked reader until the test-run deadline.
+    let writer = std::thread::spawn(move || {
+        let deadline = Instant::now() + Duration::from_secs(2);
+        while !writer_stop.load(std::sync::atomic::Ordering::Relaxed) {
+            if let Ok(fd) = rustix::fs::open(
+                &writer_path,
+                rustix::fs::OFlags::WRONLY | rustix::fs::OFlags::NONBLOCK,
+                rustix::fs::Mode::empty(),
+            ) {
+                let _ = File::from(fd).write_all(&bytes);
+                return true;
+            }
+            assert!(Instant::now() < deadline, "FIFO admission did not return");
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        false
+    });
+    let result =
+        multipart
+            .fixture
+            .engine
+            .import_cache(1, &fifo, multipart.fixture.output(), &options);
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    assert!(!writer.join().unwrap(), "descriptor FIFO was opened");
+    assert!(result.is_err());
+    assert!(!multipart.fixture.output().exists());
+    multipart.fixture.assert_no_staging();
+}
+
+#[test]
+fn multipart_http_download_verifies_parts_and_bounds_redirects() {
+    let multipart = MultipartFixture::new();
+    let mut options = multipart.options();
+    options.timeout = Duration::from_secs(10);
+    for case in 0..3 {
+        let redirect = case == 1;
+        let redirect_loop = case == 2;
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut responses = Vec::new();
+        if redirect {
+            responses.push((
+                "/transport.json".to_owned(),
+                b"HTTP/1.1 302 Found\r\nLocation: /accepted.json\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
+            ));
+        }
+        if redirect_loop {
+            for _ in 0..10 {
+                responses.push((
+                    "/transport.json".to_owned(),
+                    b"HTTP/1.1 302 Found\r\nLocation: /transport.json\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".to_vec(),
+                ));
+            }
+        }
+        let descriptor_path = if redirect {
+            "/accepted.json"
+        } else {
+            "/transport.json"
+        };
+        let descriptor = fs::read(&multipart.descriptor).unwrap();
+        let parts = multipart.manifest["parts"].as_array().unwrap();
+        for (path, body) in std::iter::once((descriptor_path.to_owned(), descriptor)).chain(
+            parts.iter().enumerate().map(|(index, part)| {
+                (
+                    format!("/{}", part["archive"].as_str().unwrap()),
+                    fs::read(multipart.part_path(index)).unwrap(),
+                )
+            }),
+        ) {
+            let mut response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                body.len(),
+            )
+            .into_bytes();
+            response.extend(body);
+            if !redirect_loop {
+                responses.push((path, response));
+            }
+        }
+        let stop = Arc::new(AtomicBool::new(false));
+        let server_stop = Arc::clone(&stop);
+        let server = std::thread::spawn(move || {
+            let deadline = Instant::now() + Duration::from_secs(10);
+            let mut requests = 0;
+            for (path, response) in responses {
+                let mut stream = loop {
+                    if server_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                        return requests;
+                    }
+                    match listener.accept() {
+                        Ok((stream, _)) => break stream,
+                        Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                            assert!(
+                                Instant::now() < deadline,
+                                "multipart HTTP request timed out"
+                            );
+                            std::thread::sleep(Duration::from_millis(2));
+                        }
+                        Err(error) => panic!("multipart HTTP accept failed: {error}"),
+                    }
+                };
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(10)))
+                    .unwrap();
+                let mut request = Vec::new();
+                let mut block = [0; 1024];
+                while !request.windows(4).any(|part| part == b"\r\n\r\n") {
+                    let read = stream.read(&mut block).unwrap();
+                    assert_ne!(read, 0);
+                    request.extend_from_slice(&block[..read]);
+                    assert!(request.len() <= 4096);
+                }
+                assert!(String::from_utf8_lossy(&request).starts_with(&format!("GET {path} ")));
+                requests += 1;
+                let _ = stream.write_all(&response);
+            }
+            requests
+        });
+        let output = multipart.fixture.scratch.path().join(match case {
+            0 => "download",
+            1 => "redirect",
+            _ => "redirect-loop",
+        });
+        let result = multipart.fixture.engine.download_cache(
+            1,
+            &format!("http://{address}/transport.json"),
+            &output,
+            &options,
+        );
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        let requests = server.join().unwrap();
+        if redirect_loop {
+            assert!(result.is_err());
+            assert!(
+                (2..=9).contains(&requests),
+                "redirect limit did not bound requests: {requests}"
+            );
+            assert!(!output.exists());
+        } else {
+            assert_eq!(result.unwrap().copied.preserved_record_references, 3);
+            assert_eq!(requests, 1 + parts.len() + usize::from(redirect));
+            multipart.fixture.assert_imported_records(&output);
+        }
+        assert!(
+            !multipart
+                .fixture
+                .engine
+                .cache_statistics(1)
+                .unwrap()
+                .attached
+        );
+        multipart.fixture.assert_no_staging();
     }
 }

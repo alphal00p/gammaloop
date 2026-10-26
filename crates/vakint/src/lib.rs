@@ -44,7 +44,9 @@ pub use rustred::solver::{
 pub use rustred_evaluation::cache::{
     RustRedCacheLoadOptions, RustRedCacheNamespaceStatistics, RustRedCachePreparationOptions,
     RustRedCacheRoot, RustRedCacheSaveMode, RustRedCacheSaveOptions, RustRedCacheSaveReport,
-    RustRedCacheStatistics, RustRedCacheWorkload, RustRedSavedCacheStatistics,
+    RustRedCacheStatistics, RustRedCacheWorkload, RustRedRunningCacheControl,
+    RustRedRunningCacheOptions, RustRedRunningCacheReport, RustRedRunningCacheSnapshot,
+    RustRedSavedCacheStatistics,
 };
 #[cfg(all(unix, not(target_arch = "wasm32")))]
 pub use rustred_evaluation::cache::{RustRedCacheTransferOptions, RustRedCacheTransferReport};

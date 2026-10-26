@@ -19,11 +19,77 @@ use rustred_app::{
     CachePreparationStatus, SavedApplicationCachePackStatistics,
 };
 
+#[cfg(feature = "python_stubgen")]
+use pyo3_stub_gen::derive::*;
+
 use super::vakint_to_python_error;
 use crate::{
     RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheSaveMode, RustRedCacheStatistics,
     RustRedCacheWorkload, RustRedMonitorDisplay, RustRedMonitorOptions, Vakint,
 };
+
+/// Independent native I/O control; it never borrows a prepared reduction owner.
+#[cfg_attr(feature = "python_stubgen", gen_stub_pyclass)]
+#[pyclass(
+    name = "RunningCacheControl",
+    module = "symbolica.community.hepkit.vakint",
+    frozen,
+    from_py_object
+)]
+#[derive(Clone)]
+pub struct RunningCacheControlWrapper {
+    pub(super) control: crate::RustRedRunningCacheControl,
+    pub(super) resources: crate::ResourceLimits,
+}
+
+impl super::ModuleInit for RunningCacheControlWrapper {}
+
+#[cfg_attr(feature = "python_stubgen", gen_stub_pymethods)]
+#[cfg_attr(not(feature = "python_stubgen"), pyo3_stub_gen_derive::remove_gen_stub)]
+#[pymethods]
+impl RunningCacheControlWrapper {
+    /// Read native queue and durability counters without locking the reducer.
+    pub fn report(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        super::resources::run(self.resources, || {
+            let control = self.control.clone();
+            let report = py.detach(move || control.report()).map_err(native_error)?;
+            running_report(py, &report)
+        })
+    }
+
+    /// Acknowledge a native durability barrier, independently of evaluation.
+    pub fn flush(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        super::resources::run_committing(self.resources, || {
+            let control = self.control.clone();
+            let report = py.detach(move || control.flush()).map_err(native_error)?;
+            running_report(py, &report)
+        })
+    }
+
+    /// Freeze the current delta generation into a native descriptor.
+    pub fn snapshot(&self, py: Python<'_>, sidecar_path: PathBuf) -> PyResult<Py<PyDict>> {
+        super::resources::run_committing(self.resources, || {
+            let control = self.control.clone();
+            let snapshot = py
+                .detach(move || control.snapshot(&sidecar_path))
+                .map_err(native_error)?;
+            json_report(py, &snapshot.to_document().to_string())
+        })
+    }
+
+    /// Flush and release the native writer lock for every cloned control.
+    pub fn close(&self, py: Python<'_>) -> PyResult<Py<PyDict>> {
+        super::resources::run_committing(self.resources, || {
+            let control = self.control.clone();
+            let report = py.detach(move || control.close()).map_err(native_error)?;
+            running_report(py, &report)
+        })
+    }
+}
+
+fn native_error(source: AppError) -> PyErr {
+    vakint_to_python_error(crate::RustRedEvaluationError::CacheOperation { source }.into())
+}
 
 pub(super) fn monitor_options(
     monitor: &str,
@@ -84,6 +150,80 @@ pub(super) fn save_mode(value: &str) -> PyResult<RustRedCacheSaveMode> {
         )),
     }
 }
+
+#[allow(clippy::too_many_arguments)]
+pub(super) fn running_options(
+    py: Python<'_>,
+    read_backing: bool,
+    read_delta: bool,
+    base_paths: Option<Vec<PathBuf>>,
+    snapshots: Option<Vec<Py<PyDict>>>,
+    disk_bytes: Option<u64>,
+    max_pending_records: Option<usize>,
+    max_pending_bytes: Option<usize>,
+    batch_records: Option<usize>,
+    batch_bytes: Option<usize>,
+    checkpoint_interval_seconds: Option<f64>,
+) -> PyResult<crate::RustRedRunningCacheOptions> {
+    let mut options = crate::RustRedRunningCacheOptions {
+        read_backing,
+        read_delta,
+        base_paths: base_paths.unwrap_or_default(),
+        ..Default::default()
+    };
+    if let Some(snapshots) = snapshots {
+        let json = PyModule::import(py, "json")?;
+        options.snapshots = snapshots
+            .into_iter()
+            .map(|snapshot| {
+                let document: String = json
+                    .call_method1("dumps", (snapshot.bind(py),))?
+                    .extract()?;
+                let document = serde_json::from_str(&document).map_err(|error| {
+                    pyo3::exceptions::PyValueError::new_err(format!(
+                        "invalid running-cache snapshot document: {error}"
+                    ))
+                })?;
+                crate::RustRedRunningCacheSnapshot::from_document(&document).map_err(|source| {
+                    vakint_to_python_error(
+                        crate::RustRedEvaluationError::CacheOperation { source }.into(),
+                    )
+                })
+            })
+            .collect::<PyResult<Vec<_>>>()?;
+    }
+    if let Some(value) = disk_bytes {
+        options.native.storage.max_disk_bytes = value;
+    }
+    if let Some(value) = max_pending_records {
+        options.native.max_pending_records = value;
+    }
+    if let Some(value) = max_pending_bytes {
+        options.native.max_pending_bytes = value;
+    }
+    if let Some(value) = batch_records {
+        options.native.batch_records = value;
+    }
+    if let Some(value) = batch_bytes {
+        options.native.batch_bytes = value;
+    }
+    if let Some(value) = checkpoint_interval_seconds {
+        options.native.checkpoint_interval = Duration::try_from_secs_f64(value).map_err(|_| {
+            pyo3::exceptions::PyValueError::new_err(
+                "checkpoint_interval_seconds must be finite and nonnegative",
+            )
+        })?;
+    }
+    Ok(options)
+}
+
+pub(super) fn running_report(
+    py: Python<'_>,
+    report: &crate::RustRedRunningCacheReport,
+) -> PyResult<Py<PyDict>> {
+    json_report(py, &report.to_document().to_string())
+}
+
 pub(super) fn apply_native_overrides(
     limits: &mut ReductionLimits,
     ram_bytes: Option<u64>,
@@ -154,6 +294,8 @@ pub(super) fn json_report(py: Python<'_>, document: &str) -> PyResult<Py<PyDict>
 #[allow(clippy::too_many_arguments)]
 pub(super) fn transfer_options(
     sha256: &str,
+    format: &str,
+    manifest_bytes: Option<u64>,
     archive_bytes: Option<u64>,
     extracted_bytes: Option<u64>,
     entries: Option<usize>,
@@ -171,7 +313,18 @@ pub(super) fn transfer_options(
         *value = u8::from_str_radix(&sha256[index * 2..index * 2 + 2], 16)
             .map_err(|error| pyo3::exceptions::PyValueError::new_err(error.to_string()))?;
     }
-    let mut options = crate::RustRedCacheTransferOptions::new(digest);
+    let mut options = match format {
+        "archive" => crate::RustRedCacheTransferOptions::new(digest),
+        "multipart_manifest" => crate::RustRedCacheTransferOptions::multipart_manifest(digest),
+        _ => {
+            return Err(pyo3::exceptions::PyValueError::new_err(
+                "format must be 'archive' or 'multipart_manifest'",
+            ));
+        }
+    };
+    if let Some(value) = manifest_bytes {
+        options.max_manifest_bytes = value;
+    }
     if let Some(value) = archive_bytes {
         options.max_archive_bytes = value;
     }
@@ -200,8 +353,10 @@ pub(super) fn transfer_options(
 pub(super) fn transfer_report(
     py: Python<'_>,
     report: crate::RustRedCacheTransferReport,
+    format: &str,
 ) -> PyResult<Py<PyDict>> {
     let result = PyDict::new(py);
+    result.set_item("format", format)?;
     result.set_item("output", report.output.to_string_lossy())?;
     result.set_item(
         "sha256",

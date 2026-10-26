@@ -55,6 +55,41 @@ Passing retained uncertainty sources to pySecDec returns an explicit error befor
 Use #source-link("crates/vakint/external_data.typ", label: "the external-data guide")
 for campaign coverage, cache bindings, and release conventions.
 
+== Incremental five-loop caches and monitoring
+
+`attach_running_cache(5, path, ...)` creates or resumes a standalone native delta;
+`load_running_cache` requires an existing one. Native capture keeps strictly
+completed roots and descendants with their exact nonzero conditions, including
+useful completed work from a parent that ultimately remains partially reduced.
+Partial nodes never become strict shortcuts. Immutable bases stay separate from
+the delta; use `read_backing=False` for capture without persistent reads, or
+`read_delta=False` to keep reads restricted to explicit immutable bases/snapshots.
+
+The returned `RunningCacheControl` exposes `report()`, `flush()`, `snapshot(path)`
+and `close()` independently of the reducer lock. Accepted records are queued;
+committed records are durably acknowledged. `save_running_cache(5)` flushes;
+`freeze_running_cache(5, path)` writes a new native index outside the delta and
+returns its descriptor.
+`load_cache_snapshot(5, snapshots=[descriptor])` reads a frozen generation without
+capturing new work. Retain the descriptor, referenced data and explicit bases;
+freezing does not copy payloads. Closing the control releases its writer lease.
+Bundle-managed child directories cannot be used as standalone writable deltas.
+
+Python's `evaluate_rustred_symbolic(integral_expression, ...)` returns the retained
+value, nonzero conditions and family map. This method and `prepare_cache` accept
+`monitor="off"`, `"json"` or `"tui"`, a `progress_snapshot` path and
+`progress_interval_seconds`. JSON mode requires a snapshot path.
+Monitoring defaults off; the TUI requires
+`progress-tui`. Pressing `q` closes only the display: reduction and capture continue.
+
+On supported native platforms, `import_cache` and `download_cache` transport
+directory packs for one through five loops. Select `format="multipart_manifest"`
+explicitly for a large native pack and authenticate its manifest with `sha256`;
+`max_manifest_bytes` optionally adjusts its read limit. Import/download publishes
+a new directory without attaching it. There is no 50/95 MiB aggregate native-pack
+cap. See #source-link("crates/vakint/cache_preparation.typ", label: "the cache guide")
+for the lifecycle example, explicit operational limits and snapshot semantics.
+
 The #link("reference/rust/")[Rust orientation] identifies the compiled crates, versions, and
 feature matrix and links directly to native Rustdoc. The generated
 #link("reference/topologies/")[topology reference] records the runtime topology library and

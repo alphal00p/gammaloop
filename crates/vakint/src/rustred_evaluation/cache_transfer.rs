@@ -14,8 +14,11 @@ use std::{
     io::{Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
+
+#[path = "cache_transfer_multipart.rs"]
+mod multipart;
 
 const BUFFER_BYTES: usize = 64 * 1024;
 // Conventional tar writers pad the final record to twenty 512-byte blocks.
@@ -23,18 +26,24 @@ const TAR_PADDING_BYTES: u64 = 10 * 1024;
 
 /// Explicit logical-byte bounds on transport/staging, separate from reduction
 /// RAM and filesystem allocated blocks or metadata.
-/// The checksum must come from a trusted source independently of the archive.
+/// The checksum must come from a trusted source independently of the input.
 #[derive(Clone, Debug)]
 pub struct RustRedCacheTransferOptions {
+    multipart_manifest: bool,
     pub expected_sha256: [u8; 32],
-    /// Enable the entry-count diagnostic; inactive during ordinary transfer.
+    /// Enable entry-count diagnostics for ordinary single-archive transfers.
+    /// Multipart manifests always enforce their aggregate entry allowance.
     pub diagnostics_enabled: bool,
+    /// Maximum authenticated multipart manifest bytes. Raise explicitly for
+    /// large snapshots; ambient memory limits still govern allocation.
+    pub max_manifest_bytes: u64,
     pub max_archive_bytes: u64,
     pub max_extracted_bytes: u64,
     /// Counts all tar entries, including directories; also bounds path metadata.
     pub max_entries: usize,
     /// Archive + extracted files + verified native snapshot, concurrently.
     pub max_temporary_bytes: u64,
+    /// HTTP timeout; multipart mode also enforces one complete operation deadline.
     pub timeout: Duration,
     pub storage: SavedApplicationCachePackLimits,
 }
@@ -42,8 +51,10 @@ pub struct RustRedCacheTransferOptions {
 impl RustRedCacheTransferOptions {
     pub fn new(expected_sha256: [u8; 32]) -> Self {
         Self {
+            multipart_manifest: false,
             expected_sha256,
             diagnostics_enabled: false,
+            max_manifest_bytes: 16 * 1024 * 1024,
             max_archive_bytes: u64::MAX,
             max_extracted_bytes: u64::MAX,
             max_entries: 100_000,
@@ -56,23 +67,35 @@ impl RustRedCacheTransferOptions {
         self.diagnostics_enabled = true;
         self
     }
+
+    /// The required checksum authenticates a multipart transport manifest.
+    /// Its parts contain unchanged native files, not a different cache codec.
+    pub fn multipart_manifest(expected_sha256: [u8; 32]) -> Self {
+        Self {
+            multipart_manifest: true,
+            ..Self::new(expected_sha256)
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RustRedCacheTransferReport {
     pub output: PathBuf,
+    /// Archive bytes, or manifest plus all archive parts in multipart mode.
     pub archive_bytes: u64,
     pub extracted_bytes: u64,
     pub entries: usize,
+    /// Authenticated input checksum: archive or multipart manifest, respectively.
     pub sha256: [u8; 32],
     pub copied: SavedApplicationCacheCopyStatistics,
 }
 
 impl Vakint {
-    /// Import a gzip-compressed tar with regular files/directories below
-    /// `cache/`. Verify its required checksum before extracting, then publish
-    /// an independent native snapshot at a NEW destination. No cache is loaded
-    /// and preparation checkpoints are not copied. Supported on Linux/macOS.
+    /// Import a gzip tar, or a multipart manifest selected by the options.
+    /// Local multipart archives are regular sibling files named by the manifest.
+    /// Verify the required input checksum and native files before publishing an
+    /// independent snapshot at a NEW destination. This does not attach a cache;
+    /// preparation checkpoints are not copied. Supported on Linux/macOS.
     pub fn import_cache(
         &self,
         loop_count: usize,
@@ -82,6 +105,9 @@ impl Vakint {
     ) -> Result<RustRedCacheTransferReport, VakintError> {
         let transfer =
             Transfer::new(self, loop_count, output.as_ref(), options).map_err(operation)?;
+        if options.multipart_manifest {
+            return transfer.import_multipart(archive.as_ref());
+        }
         let input = File::open(archive)
             .map_err(input_error)
             .map_err(operation)?;
@@ -89,10 +115,10 @@ impl Vakint {
     }
 
     /// Download only when explicitly called. HTTP(S) transport uses native TLS
-    /// verification and a required independently trusted archive checksum.
-    /// Redirects are disabled; supply the final URL of the `.tar.gz` bytes.
-    /// Identity encoding is requested. The checksum and archive-byte bound
-    /// apply after any HTTP content decoding performed by the transport.
+    /// verification and a required independently trusted input checksum.
+    /// Ordinary archive mode refuses redirects. Explicit multipart mode requires
+    /// HTTPS and permits at most eight redirects, including release asset URLs.
+    /// Identity encoding is requested; checksums cover the resulting input bytes.
     /// Loading the published cache is a separate call.
     pub fn download_cache(
         &self,
@@ -103,6 +129,9 @@ impl Vakint {
     ) -> Result<RustRedCacheTransferReport, VakintError> {
         let transfer =
             Transfer::new(self, loop_count, output.as_ref(), options).map_err(operation)?;
+        if options.multipart_manifest {
+            return transfer.download_multipart(url);
+        }
         if !url.starts_with("https://") && !url.starts_with("http://") {
             return Err(operation(input_error("cache URL must use HTTP or HTTPS")).into());
         }
@@ -146,6 +175,16 @@ struct Transfer<'a> {
     output: &'a Path,
     parent: &'a Path,
     options: &'a RustRedCacheTransferOptions,
+    started: Instant,
+}
+
+struct TransferCensus {
+    archive_bytes: u64,
+    held_archive_bytes: u64,
+    extracted_bytes: u64,
+    entries: usize,
+    sha256: [u8; 32],
+    expected_native_inventory: Option<(usize, u64)>,
 }
 
 impl<'a> Transfer<'a> {
@@ -156,9 +195,9 @@ impl<'a> Transfer<'a> {
         options: &'a RustRedCacheTransferOptions,
     ) -> Result<Self, AppError> {
         checkpoint()?;
-        if !(1..=4).contains(&loop_count) {
+        if !(1..=5).contains(&loop_count) {
             return Err(input_error(
-                "cache transfer supports one through four loops",
+                "cache transfer supports one through five loops",
             ));
         }
         if !cfg!(any(target_os = "linux", target_os = "macos")) {
@@ -168,9 +207,11 @@ impl<'a> Transfer<'a> {
         }
         if output.file_name().is_none()
             || options.timeout.is_zero()
+            || (options.multipart_manifest && options.max_manifest_bytes == 0)
             || options.max_archive_bytes == 0
             || options.max_extracted_bytes == 0
-            || (options.diagnostics_enabled && options.max_entries == 0)
+            || ((options.diagnostics_enabled || options.multipart_manifest)
+                && options.max_entries == 0)
             || options.max_temporary_bytes == 0
         {
             return Err(input_error(
@@ -192,7 +233,39 @@ impl<'a> Transfer<'a> {
             output,
             parent,
             options,
+            started: Instant::now(),
         })
+    }
+
+    fn tick(&self) -> Result<(), AppError> {
+        checkpoint()?;
+        if self.options.multipart_manifest && self.started.elapsed() >= self.options.timeout {
+            return Err(limit_error("complete multipart transfer deadline exceeded"));
+        }
+        Ok(())
+    }
+
+    fn bindings(
+        &self,
+    ) -> Result<Vec<rustred::persistence::application_cache::ApplicationCacheBinding>, VakintError>
+    {
+        if self.loop_count == 5 {
+            let application = self.engine.five_loop_cache_application()?;
+            let prepared = application
+                .prepared
+                .lock()
+                .map_err(|_| operation(input_error("saved application lock poisoned")))?;
+            Ok(vec![prepared.cache_binding(application.cache_digest)])
+        } else if self.loop_count == 4 {
+            Ok(super::super::four_loop::cache::programs(self.engine)?
+                .iter()
+                .map(|program| program.binding().clone())
+                .collect())
+        } else {
+            Ok(vec![
+                program(self.engine, self.loop_count)?.1.binding().clone(),
+            ])
+        }
     }
 
     fn receive(&self, mut input: impl Read) -> Result<RustRedCacheTransferReport, VakintError> {
@@ -220,14 +293,28 @@ impl<'a> Transfer<'a> {
         let (extracted_bytes, entries) = self
             .extract(archive, &extracted, archive_bytes)
             .map_err(operation)?;
-        let bindings = if self.loop_count == 4 {
-            super::super::four_loop::cache::programs(self.engine)?
-                .iter()
-                .map(|program| program.binding().clone())
-                .collect::<Vec<_>>()
-        } else {
-            vec![program(self.engine, self.loop_count)?.1.binding().clone()]
-        };
+        self.finish(
+            &extracted,
+            scratch.path(),
+            TransferCensus {
+                archive_bytes,
+                held_archive_bytes: archive_bytes,
+                extracted_bytes,
+                entries,
+                sha256,
+                expected_native_inventory: None,
+            },
+        )
+    }
+
+    fn finish(
+        &self,
+        extracted: &Path,
+        scratch: &Path,
+        census: TransferCensus,
+    ) -> Result<RustRedCacheTransferReport, VakintError> {
+        self.tick().map_err(operation)?;
+        let bindings = self.bindings()?;
         let bundle = SavedApplicationCacheBundle::open_generated(
             &extracted.join("cache"),
             &bindings,
@@ -240,24 +327,55 @@ impl<'a> Transfer<'a> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(operation)?;
         let mut limits = self.options.storage;
-        limits.max_disk_bytes = limits
-            .max_disk_bytes
-            .min(self.options.max_temporary_bytes - archive_bytes - extracted_bytes);
-        let verified = scratch.path().join("verified");
-        let (writer, copied) = SavedApplicationCacheBundleWriter::copy_bases_to_new(
-            &verified,
-            &bindings,
-            &bases.iter().collect::<Vec<_>>(),
-            limits,
-        )
+        limits.max_disk_bytes = limits.max_disk_bytes.min(
+            self.options
+                .max_temporary_bytes
+                .checked_sub(census.held_archive_bytes)
+                .and_then(|n| n.checked_sub(census.extracted_bytes))
+                .ok_or_else(|| operation(limit_error("native copy staging allowance exhausted")))?,
+        );
+        let verified = scratch.join("verified");
+        let copy = || {
+            SavedApplicationCacheBundleWriter::copy_bases_to_new(
+                &verified,
+                &bindings,
+                &bases.iter().collect::<Vec<_>>(),
+                limits,
+            )
+        };
+        let (writer, copied) = if self.options.multipart_manifest {
+            self.tick().map_err(operation)?;
+            let remaining = self.options.timeout.saturating_sub(self.started.elapsed());
+            symbolica::utils::resources::ResourceBudget::new(
+                symbolica::utils::resources::ResourceLimits {
+                    max_process_rss_bytes: None,
+                    max_elapsed: Some(remaining),
+                },
+            )
+            .run(copy)
+        } else {
+            copy()
+        }
         .map_err(operation)?;
         drop(writer);
+        if census
+            .expected_native_inventory
+            .is_some_and(|(chunks, bytes)| {
+                copied.copied_chunks != chunks || copied.compressed_bytes != bytes
+            })
+        {
+            return Err(operation(input_error(
+                "native referenced chunks differ from transport inventory",
+            ))
+            .into());
+        }
+        self.tick().map_err(operation)?;
         let report = RustRedCacheTransferReport {
             output: self.output.to_path_buf(),
-            archive_bytes,
-            extracted_bytes,
-            entries,
-            sha256,
+            archive_bytes: census.archive_bytes,
+            extracted_bytes: census.extracted_bytes,
+            entries: census.entries,
+            sha256: census.sha256,
             copied,
         };
         self.publish(&verified).map_err(operation)?;
@@ -297,107 +415,9 @@ impl<'a> Transfer<'a> {
         output: &Path,
         archive_bytes: u64,
     ) -> Result<(u64, usize), AppError> {
-        let allowance = self
-            .options
-            .max_extracted_bytes
-            .min(self.options.max_temporary_bytes - archive_bytes);
-        // A count-derived transport allowance is diagnostic only. Ordinary
-        // transfers validate actual data bytes and ambient RAM/time budgets.
-        let tar_allowance = if self.options.diagnostics_enabled && allowance != u64::MAX {
-            (self.options.max_entries as u64)
-                .checked_mul(1024)
-                .and_then(|overhead| allowance.checked_add(overhead))
-                .and_then(|value| value.checked_add(TAR_PADDING_BYTES))
-                .ok_or_else(|| limit_error("tar allowance overflow"))?
-        } else {
-            u64::MAX
-        };
-        let mut decoded = MultiGzDecoder::new(archive).take(tar_allowance.saturating_add(1));
-        let mut seen = BTreeSet::new();
-        let mut bytes = 0u64;
-        {
-            let mut tar = tar::Archive::new(&mut decoded);
-            for entry in tar.entries().map_err(input_error)?.raw(true) {
-                let mut entry = entry.map_err(input_error)?;
-                checkpoint()?;
-                if self.options.diagnostics_enabled && seen.len() >= self.options.max_entries {
-                    return Err(limit_error("archive entry count exceeds allowance"));
-                }
-                let kind = entry.header().entry_type();
-                if !kind.is_file() && !kind.is_dir() {
-                    return Err(input_error(
-                        "cache archive permits only regular files and directories",
-                    ));
-                }
-                let path = entry.path().map_err(input_error)?.into_owned();
-                let mut components = path.components();
-                if components.next() != Some(Component::Normal("cache".as_ref()))
-                    || components.any(|component| !matches!(component, Component::Normal(_)))
-                    || !seen.insert(path.clone())
-                {
-                    return Err(input_error("invalid or duplicate cache archive path"));
-                }
-                let size = entry.size();
-                if kind.is_dir() && size != 0 {
-                    return Err(input_error("archive directory contains data"));
-                }
-                bytes = bytes
-                    .checked_add(size)
-                    .ok_or_else(|| limit_error("extracted byte count overflow"))?;
-                if bytes > allowance {
-                    return Err(limit_error("extracted cache exceeds transfer allowance"));
-                }
-                let destination = output.join(path);
-                if kind.is_dir() {
-                    fs::create_dir_all(&destination).map_err(input_error)?;
-                } else {
-                    fs::create_dir_all(
-                        destination
-                            .parent()
-                            .ok_or_else(|| input_error("invalid file path"))?,
-                    )
-                    .map_err(input_error)?;
-                    let mut file = OpenOptions::new()
-                        .write(true)
-                        .create_new(true)
-                        .open(destination)
-                        .map_err(input_error)?;
-                    let mut copied = 0u64;
-                    let mut buffer = [0u8; BUFFER_BYTES];
-                    loop {
-                        checkpoint()?;
-                        let read = entry.read(&mut buffer).map_err(input_error)?;
-                        if read == 0 {
-                            break;
-                        }
-                        file.write_all(&buffer[..read]).map_err(input_error)?;
-                        copied = copied
-                            .checked_add(read as u64)
-                            .ok_or_else(|| limit_error("archive file byte count overflow"))?;
-                    }
-                    if copied != size {
-                        return Err(input_error("truncated cache archive file"));
-                    }
-                }
-            }
-        }
-        // Consume the gzip trailer to verify its CRC and reject data hidden
-        // beyond the tar terminator. Padding is bounded just like tar headers.
-        let mut buffer = [0u8; BUFFER_BYTES];
-        loop {
-            checkpoint()?;
-            let read = decoded.read(&mut buffer).map_err(input_error)?;
-            if read == 0 {
-                break;
-            }
-            if buffer[..read].iter().any(|&byte| byte != 0) {
-                return Err(input_error("data follows cache tar terminator"));
-            }
-        }
-        if decoded.limit() == 0 {
-            return Err(limit_error("decoded tar exceeds allowance"));
-        }
-        Ok((bytes, seen.len()))
+        let mut state = multipart::Extraction::default();
+        self.extract_into(archive, output, archive_bytes, &mut state, None)?;
+        Ok((state.bytes, state.entries))
     }
 
     fn publish(&self, verified: &Path) -> Result<(), AppError> {

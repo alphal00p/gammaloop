@@ -5,7 +5,10 @@ use std::{
     fs,
     io::{Read, Write},
     path::{Path, PathBuf},
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
     time::Instant,
 };
 
@@ -30,7 +33,9 @@ use rustred_app::{
     PreparedSavedApplication, SavedApplicationCacheBundle, SavedApplicationCacheFile,
     SavedApplicationCacheFileLimits, SavedApplicationCacheFileStatistics,
     SavedApplicationCachePack, SavedApplicationEntryCoveragePolicy, SavedApplicationOptions,
-    SavedApplicationReduction, load_saved_application, prepare_application_cache,
+    SavedApplicationReadOnlyCache, SavedApplicationReduction, SavedApplicationRunningCache,
+    SavedApplicationRunningCacheBase, SavedApplicationRunningCacheControl, load_saved_application,
+    prepare_application_cache,
 };
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -43,7 +48,7 @@ use crate::rustred_evaluation::monitor::MonitorContext;
 use crate::rustred_evaluation::{data::RustRedData, five_loop::SavedApplication};
 use crate::{Vakint, VakintError, VakintSettings};
 
-fn failure(error: impl std::fmt::Display) -> VakintError {
+pub(super) fn failure(error: impl std::fmt::Display) -> VakintError {
     operation(AppError::new(AppErrorKind::Input, error.to_string())).into()
 }
 
@@ -136,10 +141,15 @@ pub(in crate::rustred_evaluation) fn saved_application_digest(
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RustRedSavedCacheStatistics {
     pub binding: ApplicationCacheBinding,
+    pub read_backing: bool,
     pub native: CandidateStatistics,
     /// Cumulative work of successful requests using the attached backing.
     pub persistent: CandidateRoutedPersistentCacheStatistics,
     pub file: Option<SavedApplicationCacheFileStatistics>,
+    pub pack: Option<rustred_app::SavedApplicationCachePackStatistics>,
+    /// Native report; enqueued records are explicitly distinct from durable
+    /// checkpoints. This is a primitive snapshot, not an engine callback.
+    pub running: Option<Value>,
 }
 
 impl RustRedSavedCacheStatistics {
@@ -152,6 +162,7 @@ impl RustRedSavedCacheStatistics {
                 "physical_arity": self.binding.physical_arity,
                 "layer": self.binding.layer,
             },
+            "read_backing": self.read_backing,
             "native": {
                 "rule_applications": self.native.rule_applications(),
                 "cache_hits": self.native.cache_hits(),
@@ -171,16 +182,104 @@ impl RustRedSavedCacheStatistics {
                 "decoded_coefficient_terms": file.decoded_coefficient_terms, "decoded_coefficient_bytes": file.decoded_coefficient_bytes,
                 "hits": file.hits, "misses": file.misses,
             })),
+            "pack": self.pack.map(|pack| json!({
+                "runs": pack.runs, "chunks": pack.chunks, "records": pack.records,
+                "referenced_chunk_bytes": pack.referenced_chunk_bytes,
+                "manifest_bytes": pack.manifest_bytes,
+                "directory_owned_bytes": pack.directory_owned_bytes,
+                "hits": pack.hits, "misses": pack.misses,
+            })),
+            "running": self.running,
         })
     }
 }
 
 pub(in crate::rustred_evaluation) struct SavedFiveLoopCache {
-    file: SavedApplicationCacheFile,
-    persistent: CandidateRoutedPersistentCacheStatistics,
+    pub(super) binding: ApplicationCacheBinding,
+    pub(super) backing: SavedFiveLoopBacking,
+    pub(super) persistent: CandidateRoutedPersistentCacheStatistics,
+}
+
+pub(super) enum SavedFiveLoopBacking {
+    File(SavedApplicationCacheFile),
+    Pack(Box<CheckpointBacking>),
+    ReadOnly(SavedApplicationReadOnlyCache),
+    Running {
+        session: Arc<Mutex<SavedApplicationRunningCache>>,
+        read_backing: bool,
+        read_only: Option<SavedApplicationReadOnlyCache>,
+    },
 }
 
 impl SavedFiveLoopCache {
+    pub(super) fn running_control(
+        &self,
+    ) -> Option<Result<SavedApplicationRunningCacheControl, VakintError>> {
+        match &self.backing {
+            SavedFiveLoopBacking::Running { session, .. } => Some(
+                session
+                    .lock()
+                    .map(|session| session.control())
+                    .map_err(failure),
+            ),
+            _ => None,
+        }
+    }
+
+    pub(in crate::rustred_evaluation) fn flush(&self) -> Result<(), VakintError> {
+        if let Some(control) = self.running_control() {
+            let control = control?;
+            let report = control.report().map_err(operation)?;
+            if report.closed && report.pending_records == 0 && report.writer_error.is_none() {
+                return Ok(());
+            }
+            control.flush().map_err(operation)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn immutable_base(&self) -> Result<SavedApplicationRunningCacheBase, VakintError> {
+        match &self.backing {
+            SavedFiveLoopBacking::File(file) => {
+                Ok(SavedApplicationRunningCacheBase::File(file.fork_reader()))
+            }
+            SavedFiveLoopBacking::Pack(pack) => {
+                Ok(SavedApplicationRunningCacheBase::Pack(pack.0.fork_reader()))
+            }
+            _ => Err(failure(
+                "detach the active running or composed snapshot attachment before attaching another writer; supply immutable bases explicitly",
+            )),
+        }
+    }
+
+    fn fork(&self) -> Self {
+        let backing = match &self.backing {
+            SavedFiveLoopBacking::File(file) => SavedFiveLoopBacking::File(file.fork_reader()),
+            SavedFiveLoopBacking::Pack(pack) => {
+                SavedFiveLoopBacking::Pack(Box::new(CheckpointBacking(pack.0.fork_reader())))
+            }
+            SavedFiveLoopBacking::ReadOnly(reader) => {
+                SavedFiveLoopBacking::ReadOnly(reader.fork_reader())
+            }
+            SavedFiveLoopBacking::Running {
+                session,
+                read_backing,
+                read_only,
+            } => SavedFiveLoopBacking::Running {
+                session: Arc::clone(session),
+                read_backing: *read_backing,
+                read_only: read_only
+                    .as_ref()
+                    .map(SavedApplicationReadOnlyCache::fork_reader),
+            },
+        };
+        Self {
+            binding: self.binding.clone(),
+            backing,
+            persistent: Default::default(),
+        }
+    }
+
     fn add_work(&mut self, work: CandidateRoutedPersistentCacheStatistics) {
         macro_rules! add { ($($field:ident),* $(,)?) => { $(self.persistent.$field = self.persistent.$field.saturating_add(work.$field);)* }; }
         add!(
@@ -197,6 +296,29 @@ impl SavedFiveLoopCache {
 }
 
 impl SavedApplication {
+    fn reduce_routed_terms_with_cache<'storage>(
+        prepared: &mut PreparedSavedApplication<15>,
+        terms: Vec<(IntegralKey, Coefficient)>,
+        binding: &ApplicationCacheBinding,
+        backing: Option<&'storage mut (dyn GuardedCacheBacking + 'storage)>,
+        capture: Option<&'storage mut (dyn GuardedIntermediateCapture + 'storage)>,
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<SavedApplicationReduction, AppError> {
+        match observation {
+            Some(observation) => prepared
+                .reduce_routed_linear_combination_with_cache_and_observation(
+                    terms,
+                    binding,
+                    backing,
+                    capture,
+                    observation,
+                    None,
+                ),
+            None => prepared
+                .reduce_routed_linear_combination_with_cache(terms, binding, backing, capture),
+        }
+    }
+
     /// Operational settings may rebuild a reducer without changing the exact
     /// program. Keep only a semantically compatible immutable backing; native
     /// resident results and request counters start fresh in the new session.
@@ -208,12 +330,9 @@ impl SavedApplication {
         let binding = prepared.cache_binding(self.cache_digest);
         let previous = previous.cache.lock().map_err(failure)?;
         if let Some(previous) = previous.as_ref()
-            && previous.file.binding() == &binding
+            && previous.binding == binding
         {
-            *self.cache.lock().map_err(failure)? = Some(SavedFiveLoopCache {
-                file: previous.file.fork_reader(),
-                persistent: Default::default(),
-            });
+            *self.cache.lock().map_err(failure)? = Some(previous.fork());
         }
         Ok(())
     }
@@ -245,23 +364,64 @@ impl SavedApplication {
             .map_err(operation)
             .map_err(Into::into);
         };
-        let binding = cache.file.binding().clone();
-        let result = match observation {
-            Some(observation) => prepared
-                .reduce_routed_linear_combination_with_cache_and_observation(
-                    terms,
-                    &binding,
-                    Some(&mut cache.file),
-                    None,
-                    observation,
-                    None,
-                ),
-            None => prepared.reduce_routed_linear_combination_with_cache(
+        let binding = cache.binding.clone();
+        let result = match &mut cache.backing {
+            SavedFiveLoopBacking::File(file) => Self::reduce_routed_terms_with_cache(
+                prepared,
                 terms,
                 &binding,
-                Some(&mut cache.file),
+                Some(file),
                 None,
+                observation,
             ),
+            SavedFiveLoopBacking::Pack(pack) => Self::reduce_routed_terms_with_cache(
+                prepared,
+                terms,
+                &binding,
+                Some(pack.as_mut()),
+                None,
+                observation,
+            ),
+            SavedFiveLoopBacking::ReadOnly(reader) => Self::reduce_routed_terms_with_cache(
+                prepared,
+                terms,
+                &binding,
+                Some(reader),
+                None,
+                observation,
+            ),
+            SavedFiveLoopBacking::Running {
+                session,
+                read_backing,
+                read_only,
+            } => {
+                let mut session = session.lock().map_err(failure)?;
+                if *read_backing && read_only.is_none() {
+                    session.with_io(|backing, capture| {
+                        Self::reduce_routed_terms_with_cache(
+                            prepared,
+                            terms,
+                            &binding,
+                            Some(backing),
+                            Some(capture),
+                            observation,
+                        )
+                    })
+                } else {
+                    session.with_capture(|capture| {
+                        Self::reduce_routed_terms_with_cache(
+                            prepared,
+                            terms,
+                            &binding,
+                            read_only
+                                .as_mut()
+                                .map(|reader| reader as &mut dyn GuardedCacheBacking),
+                            Some(capture),
+                            observation,
+                        )
+                    })
+                }
+            }
         }
         .map_err(operation)?;
         cache.add_work(result.statistics().persistent_cache);
@@ -270,7 +430,9 @@ impl SavedApplication {
 }
 
 impl Vakint {
-    fn five_loop_cache_application(&self) -> Result<std::sync::Arc<SavedApplication>, VakintError> {
+    pub(super) fn five_loop_cache_application(
+        &self,
+    ) -> Result<std::sync::Arc<SavedApplication>, VakintError> {
         if self.rustred_application.lock().map_err(failure)?.is_some() {
             self.loaded_application()
         } else {
@@ -288,7 +450,6 @@ impl Vakint {
                 "lookup_budget_policy applies to lower-loop chunk packs; the five-loop single-file cache has no per-lookup I/O budget",
             ));
         }
-        let limits = file_limits(options.storage)?;
         let application = self.five_loop_cache_application()?;
         // Keep the runtime settings/session identity intact. A cache attachment
         // is not permission to silently replace the active arithmetic limits.
@@ -312,30 +473,54 @@ impl Vakint {
         }
         let mut prepared = application.prepared.lock().map_err(failure)?;
         let binding = prepared.cache_binding(application.cache_digest);
-        let file = if let Some(identity) = options.file_identity {
-            SavedApplicationCacheFile::open_generated(path, &binding, &identity, limits)
+        let backing = if path.is_dir() {
+            if options.file_identity.is_some() {
+                return Err(failure(
+                    "a single-file identity cannot authenticate a native pack directory",
+                ));
+            }
+            match super::running::RustRedRunningCacheOptions::open_base(
+                path,
+                &binding,
+                options.storage,
+            )? {
+                SavedApplicationRunningCacheBase::File(file) => SavedFiveLoopBacking::File(file),
+                SavedApplicationRunningCacheBase::Pack(pack) => {
+                    SavedFiveLoopBacking::Pack(Box::new(CheckpointBacking(pack)))
+                }
+            }
         } else {
-            SavedApplicationCacheFile::open(path, &binding, limits)
-        }
-        .map_err(operation)?;
-        let mut validation = file.fork_reader();
-        for key in file.keys() {
-            let record = validation
-                .lookup(key, prepared.family().coefficient_context())
-                .map_err(operation)?
-                .ok_or_else(|| failure("cache index references an absent record"))?;
-            prepared
-                .validate_completed_cache_record(&binding, &record)
-                .map_err(operation)?;
-        }
+            let limits = file_limits(options.storage)?;
+            let file = if let Some(identity) = options.file_identity {
+                SavedApplicationCacheFile::open_generated(path, &binding, &identity, limits)
+            } else {
+                SavedApplicationCacheFile::open(path, &binding, limits)
+            }
+            .map_err(operation)?;
+            let mut validation = file.fork_reader();
+            for key in file.keys() {
+                let record = validation
+                    .lookup(key, prepared.family().coefficient_context())
+                    .map_err(operation)?
+                    .ok_or_else(|| failure("cache index references an absent record"))?;
+                prepared
+                    .validate_completed_cache_record(&binding, &record)
+                    .map_err(operation)?;
+            }
+            SavedFiveLoopBacking::File(file)
+        };
         // No old attachment or resident result is discarded until the complete
         // framing, binding and index have been checked successfully.
         let mut attached = application.cache.lock().map_err(failure)?;
+        if let Some(previous) = attached.as_ref() {
+            previous.flush()?;
+        }
         // All fallible resource work precedes the replacement commit.
         resource_checkpoint()?;
         prepared.clear_cache().map_err(operation)?;
         *attached = Some(SavedFiveLoopCache {
-            file,
+            binding,
+            backing,
             persistent: Default::default(),
         });
         Ok(())
@@ -349,15 +534,42 @@ impl Vakint {
             attached: attached.is_some(),
             saved_application: Some(RustRedSavedCacheStatistics {
                 binding: prepared.cache_binding(application.cache_digest),
+                read_backing: attached.as_ref().is_some_and(|cache| match &cache.backing {
+                    SavedFiveLoopBacking::Running { read_backing, .. } => *read_backing,
+                    _ => true,
+                }),
                 native: prepared.cache_statistics(),
                 persistent: attached
                     .as_ref()
                     .map_or(Default::default(), |cache| cache.persistent),
-                file: attached
-                    .as_ref()
-                    .map(|cache| cache.file.statistics())
-                    .transpose()
-                    .map_err(operation)?,
+                file: match attached.as_ref().map(|cache| &cache.backing) {
+                    Some(SavedFiveLoopBacking::File(file)) => {
+                        Some(file.statistics().map_err(operation)?)
+                    }
+                    _ => None,
+                },
+                pack: match attached.as_ref().map(|cache| &cache.backing) {
+                    Some(SavedFiveLoopBacking::Pack(pack)) => Some(pack.0.statistics()),
+                    _ => None,
+                },
+                running: match attached.as_ref().map(|cache| &cache.backing) {
+                    Some(SavedFiveLoopBacking::Running {
+                        session,
+                        read_backing,
+                        read_only,
+                    }) => {
+                        let report = session
+                            .lock()
+                            .map_err(failure)?
+                            .control()
+                            .report()
+                            .map_err(operation)?;
+                        Some(
+                            json!({"read_backing": read_backing, "read_delta": read_only.is_none() && *read_backing, "native": report.to_document()}),
+                        )
+                    }
+                    _ => None,
+                },
             }),
             ..Default::default()
         })
@@ -386,22 +598,38 @@ impl Vakint {
         if matches!(mode, super::RustRedCacheSaveMode::FullSnapshot)
             && let Some(cache) = attached.as_ref()
         {
-            let mut reader = cache.file.fork_reader();
-            for key in cache.file.keys() {
-                let record = reader
-                    .lookup(key, context)
-                    .map_err(operation)?
-                    .ok_or_else(|| failure("cache index references an absent record"))?;
-                prepared
-                    .validate_completed_cache_record(&sink.binding, &record)
-                    .map_err(operation)?;
+            let mut accept = |record: ApplicationCacheRecord| -> Result<(), AppError> {
+                prepared.validate_completed_cache_record(&sink.binding, &record)?;
                 sink.store_completed(&record, context).map_err(|error| {
                     if let GuardedCacheBackingErrorKind::Resource(resource) = &error.kind {
-                        operation(AppError::resource(resource.clone())).into()
+                        AppError::resource(resource.clone())
                     } else {
-                        failure(error)
+                        AppError::new(AppErrorKind::Execution, error.to_string())
                     }
-                })?;
+                })
+            };
+            match &cache.backing {
+                SavedFiveLoopBacking::File(file) => {
+                    let mut reader = file.fork_reader();
+                    for key in file.keys() {
+                        let record = reader
+                            .lookup(key, context)
+                            .map_err(operation)?
+                            .ok_or_else(|| failure("cache index references an absent record"))?;
+                        accept(record).map_err(operation)?;
+                    }
+                }
+                SavedFiveLoopBacking::Pack(pack) => {
+                    pack.0
+                        .fork_reader()
+                        .visit_completed_records(context, accept)
+                        .map_err(operation)?;
+                }
+                SavedFiveLoopBacking::ReadOnly(_) | SavedFiveLoopBacking::Running { .. } => {
+                    return Err(failure(
+                        "use freeze_running_cache for a native running snapshot; composed immutable bases remain explicit and are not copied to a legacy single-file export",
+                    ));
+                }
             }
         }
         sink.exported_terms = 0;
@@ -486,6 +714,23 @@ impl Vakint {
             ));
         }
         let binding = prepared.cache_binding(application.cache_digest);
+        let running = {
+            let attached = application.cache.lock().map_err(failure)?;
+            match attached.as_ref().map(|cache| &cache.backing) {
+                Some(SavedFiveLoopBacking::Running {
+                    session,
+                    read_backing,
+                    read_only,
+                }) => Some((
+                    Arc::clone(session),
+                    *read_backing,
+                    read_only
+                        .as_ref()
+                        .map(SavedApplicationReadOnlyCache::fork_reader),
+                )),
+                _ => None,
+            }
+        };
         let mut backend = SavedBackend {
             prepared,
             binding: vec![binding],
@@ -493,6 +738,7 @@ impl Vakint {
             backing: None,
             coverage: Vec::new(),
             observation,
+            running,
         };
         let workload = options.workload.plan(
             &backend,
@@ -596,7 +842,7 @@ impl Vakint {
     }
 }
 
-fn file_limits(
+pub(super) fn file_limits(
     storage: rustred_app::SavedApplicationCachePackLimits,
 ) -> Result<SavedApplicationCacheFileLimits, VakintError> {
     // Pack chunk limits describe each checkpoint chunk, whereas the completed
@@ -676,9 +922,42 @@ struct SavedBackend<'observation, 'callback> {
     native: SavedApplicationOptions,
     backing: Option<CheckpointBacking>,
     coverage: Vec<Value>,
+    running: Option<(
+        Arc<Mutex<SavedApplicationRunningCache>>,
+        bool,
+        Option<SavedApplicationReadOnlyCache>,
+    )>,
 }
 
-struct CheckpointBacking(SavedApplicationCachePack);
+impl SavedBackend<'_, '_> {
+    fn reduce_root_terms_with_cache<'storage>(
+        prepared: &mut PreparedSavedApplication<15>,
+        terms: [(IntegralKey, Coefficient); 1],
+        binding: &ApplicationCacheBinding,
+        backing: Option<&'storage mut (dyn GuardedCacheBacking + 'storage)>,
+        capture: &'storage mut (dyn GuardedIntermediateCapture + 'storage),
+        observation: Option<&mut CandidateRoutedApplicationObserver<'_>>,
+    ) -> Result<SavedApplicationReduction, AppError> {
+        match observation {
+            Some(observation) => prepared.reduce_linear_combination_with_cache_and_observation(
+                terms,
+                binding,
+                backing,
+                Some(capture),
+                observation,
+                None,
+            ),
+            None => prepared.reduce_linear_combination_with_cache(
+                terms,
+                binding,
+                backing,
+                Some(capture),
+            ),
+        }
+    }
+}
+
+pub(super) struct CheckpointBacking(pub(super) SavedApplicationCachePack);
 impl GuardedCacheBacking for CheckpointBacking {
     fn binding(&self) -> &ApplicationCacheBinding {
         self.0.binding()
@@ -699,6 +978,119 @@ impl GuardedCacheBacking for CheckpointBacking {
     }
 }
 
+/// Two existing immutable backing views; the running delta is searched first.
+/// Admission and decoding remain native, and this borrowed view retains no data.
+struct BackingOverlay<'first, 'second> {
+    first: &'first mut dyn GuardedCacheBacking,
+    second: Option<&'second mut dyn GuardedCacheBacking>,
+}
+impl GuardedCacheBacking for BackingOverlay<'_, '_> {
+    fn binding(&self) -> &ApplicationCacheBinding {
+        self.first.binding()
+    }
+    fn lookup(
+        &mut self,
+        key: &ApplicationCacheKey,
+        context: &CoefficientContext,
+    ) -> Result<Option<ApplicationCacheRecord>, GuardedCacheBackingError> {
+        let result = self.first.lookup(key, context)?;
+        if result.is_some() {
+            return Ok(result);
+        }
+        match self.second.as_mut() {
+            Some(second) => second.lookup(key, context),
+            None => Ok(None),
+        }
+    }
+    fn store_completed(
+        &mut self,
+        _: &ApplicationCacheRecord,
+        _: &CoefficientContext,
+    ) -> Result<(), GuardedCacheBackingError> {
+        Ok(())
+    }
+}
+
+/// Forward the same completed native record to preparation's existing sink and
+/// the cumulative writer. Native calls wants/store consecutively for one node;
+/// retain only that decision, never a second record index or coefficient table.
+struct CapturePair<'a> {
+    first: &'a mut dyn GuardedIntermediateCapture,
+    second: &'a mut dyn GuardedIntermediateCapture,
+    wanted: Option<(ApplicationCacheKey, bool, bool)>,
+}
+impl GuardedIntermediateCapture for CapturePair<'_> {
+    fn fail_on_materialization_limit(&self) -> bool {
+        self.first.fail_on_materialization_limit() || self.second.fail_on_materialization_limit()
+    }
+
+    fn capture_backing_hits(&self) -> bool {
+        // Strict preparation may need a root imported from its checkpoint.
+        // Preserve that required copy even though the optional running sink
+        // can consequently publish a duplicate. These counters are record
+        // publications, never a claim of globally unique cache keys.
+        true
+    }
+
+    fn metadata_limit_bytes(&self) -> Option<usize> {
+        match (
+            self.first.metadata_limit_bytes(),
+            self.second.metadata_limit_bytes(),
+        ) {
+            // Either sink can admit a completed node. Each still enforces its
+            // own queue/storage grants; the optional writer cannot narrow the
+            // existing preparation sink's native metadata allowance.
+            (Some(a), Some(b)) => Some(a.max(b)),
+            _ => None,
+        }
+    }
+    fn report_statistics(&mut self, statistics: GuardedCaptureStatistics) {
+        self.first.report_statistics(statistics);
+        self.second.report_statistics(statistics);
+    }
+    fn wants(
+        &mut self,
+        key: &ApplicationCacheKey,
+        context: &CoefficientContext,
+    ) -> Result<bool, GuardedCacheBackingError> {
+        let first = self.first.wants(key, context)?;
+        let second = self.second.wants(key, context)?;
+        self.wanted = Some((key.clone(), first, second));
+        Ok(first || second)
+    }
+    fn store_completed(
+        &mut self,
+        record: &ApplicationCacheRecord,
+        context: &CoefficientContext,
+    ) -> Result<(), GuardedCacheBackingError> {
+        let Some((key, first, second)) = self.wanted.take() else {
+            return Err(backing_error(AppError::new(
+                AppErrorKind::InternalInvariant,
+                "capture store has no preceding admission",
+            )));
+        };
+        if key != record.key {
+            return Err(backing_error(AppError::new(
+                AppErrorKind::InternalInvariant,
+                "capture admission key changed before store",
+            )));
+        }
+        let first = if first {
+            self.first.store_completed(record, context)
+        } else {
+            Ok(())
+        };
+        let second = if second {
+            self.second.store_completed(record, context)
+        } else {
+            Ok(())
+        };
+        // Attempt both owners even when preparation's sink fails. Its original
+        // failure remains primary; the running control retains its own fault.
+        first.and(second)
+    }
+}
+
 /// Retain the selected native root while forwarding bounded optional captures.
 /// A native root is not reconstructed from post-substitution master coefficients.
 struct RootCapture<'a> {
@@ -707,6 +1099,14 @@ struct RootCapture<'a> {
     inner: &'a mut dyn GuardedIntermediateCapture,
 }
 impl GuardedIntermediateCapture for RootCapture<'_> {
+    fn fail_on_materialization_limit(&self) -> bool {
+        self.inner.fail_on_materialization_limit()
+    }
+
+    fn capture_backing_hits(&self) -> bool {
+        self.inner.capture_backing_hits()
+    }
+
     fn metadata_limit_bytes(&self) -> Option<usize> {
         self.inner.metadata_limit_bytes()
     }
@@ -826,24 +1226,65 @@ impl CachePreparationBackend for SavedBackend<'_, '_> {
             .backing
             .as_mut()
             .map(|backing| backing as &mut dyn GuardedCacheBacking);
-        match self.observation.as_deref_mut() {
-            Some(observation) => self
-                .prepared
-                .reduce_linear_combination_with_cache_and_observation(
-                    terms,
-                    &self.binding[0],
-                    backing,
-                    Some(&mut capture),
-                    observation,
-                    None,
-                ),
-            None => self.prepared.reduce_linear_combination_with_cache(
+        let prepared = &mut self.prepared;
+        let binding = &self.binding[0];
+        let observation = self.observation.as_deref_mut();
+        if let Some((session, read_backing, read_only)) = &mut self.running {
+            let mut session = session.lock().map_err(|_| {
+                AppError::new(
+                    AppErrorKind::InternalInvariant,
+                    "running cache session lock poisoned",
+                )
+            })?;
+            if *read_backing && read_only.is_none() {
+                session.with_io(|running_backing, running_capture| {
+                    let mut backing = BackingOverlay {
+                        first: running_backing,
+                        second: backing,
+                    };
+                    let mut captures = CapturePair {
+                        first: &mut capture,
+                        second: running_capture,
+                        wanted: None,
+                    };
+                    Self::reduce_root_terms_with_cache(
+                        prepared,
+                        terms,
+                        binding,
+                        Some(&mut backing),
+                        &mut captures,
+                        observation,
+                    )
+                })?;
+            } else {
+                session.with_capture(|running_capture| {
+                    let mut captures = CapturePair {
+                        first: &mut capture,
+                        second: running_capture,
+                        wanted: None,
+                    };
+                    Self::reduce_root_terms_with_cache(
+                        prepared,
+                        terms,
+                        binding,
+                        read_only
+                            .as_mut()
+                            .map(|reader| reader as &mut dyn GuardedCacheBacking),
+                        &mut captures,
+                        observation,
+                    )
+                })?;
+            }
+        } else {
+            Self::reduce_root_terms_with_cache(
+                prepared,
                 terms,
-                &self.binding[0],
+                binding,
                 backing,
-                Some(&mut capture),
-            ),
-        }?;
+                &mut capture,
+                observation,
+            )?;
+        }
         let root = capture.root;
         let root = match root {
             Some(root) => Some(root),
@@ -867,12 +1308,28 @@ impl CachePreparationBackend for SavedBackend<'_, '_> {
     fn statistics(&self) -> Value {
         let native = self.prepared.cache_statistics();
         let work = self.prepared.cache_work_statistics();
+        let running = self.running.as_ref().map(|(session, read_backing, read_only)| {
+            let report = session
+                .lock()
+                .map_err(|_| "running cache session lock poisoned".to_owned())
+                .and_then(|session| {
+                    session
+                        .control()
+                        .report()
+                        .map_err(|error| error.to_string())
+                });
+            match report {
+                Ok(report) => json!({"read_backing":read_backing,"read_delta":read_only.is_none() && *read_backing,"native":report.to_document()}),
+                Err(error) => json!({"read_backing":read_backing,"report_error":error}),
+            }
+        });
         json!({
             "native": {"rule_applications":native.rule_applications(), "cache_hits":native.cache_hits(),
                 "coalescing_additions":native.coalescing_additions(), "cached_integrals":native.cached_integrals(),
                 "cached_coefficient_terms":native.cached_coefficient_terms(), "cached_coefficient_bytes":native.cached_coefficient_bytes()},
             "cache_work": {"evicted_entries":work.evicted_entries, "evicted_coefficient_terms":work.evicted_coefficient_terms,
                 "evicted_coefficient_bytes":work.evicted_coefficient_bytes, "recomputed_nodes":work.recomputed_nodes},
+            "running": running,
         })
     }
 }
@@ -978,6 +1435,271 @@ impl GuardedCacheBacking for Snapshot {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    #[ignore = "requires VAKINT_TEST_EXTERNAL_DATA with the authenticated five-loop campaign"]
+    fn running_cache_captures_without_reads_and_reopens_as_a_pinned_backing() {
+        let source =
+            std::env::var_os("VAKINT_TEST_EXTERNAL_DATA").expect("set VAKINT_TEST_EXTERNAL_DATA");
+        let scratch = tempfile::tempdir().unwrap();
+        let delta = scratch.path().join("delta");
+        let mut engine = Vakint::new().unwrap();
+        engine.load_external_data(source, 5).unwrap();
+        engine.detach_cache(5).unwrap();
+        let application = engine.loaded_application().unwrap();
+        let target = IntegralKey::try_new([0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 0, 5]).unwrap();
+        let reduce = |observed: bool| {
+            use rustred::solver::{
+                CandidateRoutedApplicationEnvelope, CandidateRoutedApplicationEvent,
+                CandidateRoutedApplicationStatus, CandidateRoutedObservationOptions,
+                CandidateRoutedObserverControl, CandidateRoutedObserverStatus,
+            };
+
+            let mut sequence = 0;
+            let mut core_finished = 0;
+            let mut request_finished = 0;
+            let mut completed_unique = 0;
+            let mut node_completions = 0;
+            let result = {
+                let mut callback = |event: &CandidateRoutedApplicationEnvelope<'_>| {
+                    assert!(event.sequence > sequence);
+                    sequence = event.sequence;
+                    if event.event == CandidateRoutedApplicationEvent::CoreFinished {
+                        core_finished += 1;
+                        completed_unique = event.metrics.completed_unique_operational_nodes;
+                        assert!(!event.request_finished);
+                        assert!(event.frontier.is_some());
+                        assert_eq!(
+                            event.snapshot.unwrap().status,
+                            CandidateRoutedApplicationStatus::Succeeded
+                        );
+                    }
+                    if matches!(
+                        event.event,
+                        CandidateRoutedApplicationEvent::NodeCompleted(_)
+                    ) {
+                        node_completions += 1;
+                    }
+                    if event.event == CandidateRoutedApplicationEvent::RequestFinished {
+                        request_finished += 1;
+                        assert!(event.request_finished);
+                        assert_eq!(event.status, CandidateRoutedApplicationStatus::Succeeded);
+                        assert!(event.snapshot.is_some());
+                    }
+                    Ok(CandidateRoutedObserverControl::Continue)
+                };
+                let mut observation = CandidateRoutedApplicationObserver::new(
+                    CandidateRoutedObservationOptions {
+                        interval: std::time::Duration::ZERO,
+                        ..Default::default()
+                    },
+                    &mut callback,
+                );
+                let mut prepared = application.prepared.lock().unwrap();
+                let one = prepared.family().coefficient_context().one();
+                let result = application
+                    .reduce_saved(
+                        &mut prepared,
+                        vec![(target.clone(), one)],
+                        observed.then_some(&mut observation),
+                    )
+                    .unwrap();
+                assert_eq!(observation.status(), CandidateRoutedObserverStatus::Active);
+                result
+            };
+            assert_eq!(core_finished, usize::from(observed));
+            assert_eq!(request_finished, usize::from(observed));
+            (result, completed_unique, node_completions)
+        };
+        let reference = reduce(false).0;
+        let assert_parity = |result: &SavedApplicationReduction| {
+            assert_eq!(reference.terms(), result.terms());
+            assert_eq!(reference.nonzero_conditions(), result.nonzero_conditions());
+            assert_eq!(reference.unresolved(), result.unresolved());
+            let families = |reduction: &SavedApplicationReduction| {
+                reduction
+                    .terms()
+                    .keys()
+                    .map(|integral| integral.family_fingerprint().to_owned())
+                    .collect::<std::collections::BTreeSet<_>>()
+            };
+            assert_eq!(families(&reference), families(result));
+            assert_eq!(
+                reference.terminal_substitution_additions(),
+                result.terminal_substitution_additions()
+            );
+        };
+        engine.clear_cache(5).unwrap();
+        let options = super::super::RustRedRunningCacheOptions {
+            read_backing: false,
+            ..Default::default()
+        };
+        let control = engine.attach_running_cache(5, &delta, &options).unwrap();
+        let captured = reduce(false).0;
+        assert_parity(&captured);
+        assert_eq!(reference.terms(), captured.terms());
+        assert_eq!(
+            reference.nonzero_conditions(),
+            captured.nonzero_conditions()
+        );
+        let report = control.report().unwrap();
+        assert!(report.accepted_records > 0);
+        assert_eq!(report.accepted_records, report.committed_records);
+        assert_eq!(report.pending_records, 0);
+        assert!(report.writer_error.is_none());
+        let stats = engine
+            .cache_statistics(5)
+            .unwrap()
+            .saved_application
+            .unwrap();
+        assert_eq!(stats.persistent.lookups, 0);
+        assert!(stats.running.is_some());
+
+        // Reducer reloads must share this exact lease, not reopen the writer.
+        {
+            let attached = application.cache.lock().unwrap();
+            let original = attached.as_ref().unwrap();
+            let fork = original.fork();
+            let SavedFiveLoopBacking::Running {
+                session: original, ..
+            } = &original.backing
+            else {
+                panic!("running attachment expected")
+            };
+            let SavedFiveLoopBacking::Running { session: fork, .. } = &fork.backing else {
+                panic!("running attachment expected")
+            };
+            assert!(Arc::ptr_eq(original, fork));
+        }
+        let frozen = engine
+            .freeze_running_cache(5, scratch.path().join("frozen.rrindex"))
+            .unwrap();
+        assert_eq!(frozen.delta.generation, report.generation);
+        // A second writer is refused without changing the current attachment.
+        assert!(
+            engine
+                .attach_running_cache(5, &delta, &Default::default())
+                .is_err()
+        );
+        assert_eq!(control.report().unwrap().generation, report.generation);
+        engine.detach_cache(5).unwrap();
+        assert_eq!(control.close().unwrap().pending_records, 0);
+
+        let readonly = super::super::RustRedRunningCacheOptions {
+            snapshots: vec![frozen.clone()],
+            ..Default::default()
+        };
+        engine.load_cache_snapshot(5, &readonly).unwrap();
+        assert!(engine.running_cache_control(5).is_err());
+        let cached = reduce(true).0;
+        assert_parity(&cached);
+        assert_eq!(reference.terms(), cached.terms());
+        assert_eq!(reference.nonzero_conditions(), cached.nonzero_conditions());
+        let work = engine
+            .cache_statistics(5)
+            .unwrap()
+            .saved_application
+            .unwrap()
+            .persistent;
+        assert!(work.route_hits + work.apply_hits > 0);
+        engine.detach_cache(5).unwrap();
+
+        // A frozen read set still captures into a distinct active writer. It
+        // must keep both observation and capture on the with_capture branch.
+        let frozen_reads = super::super::RustRedRunningCacheOptions {
+            snapshots: vec![frozen.clone()],
+            read_delta: false,
+            ..Default::default()
+        };
+        let frozen_writer = engine
+            .attach_running_cache(5, scratch.path().join("frozen-read-delta"), &frozen_reads)
+            .unwrap();
+        let captured = reduce(true).0;
+        assert_parity(&captured);
+        let work = engine
+            .cache_statistics(5)
+            .unwrap()
+            .saved_application
+            .unwrap()
+            .persistent;
+        assert!(work.requested_root_hits + work.intermediate_hits > 0);
+        let frozen_report = frozen_writer.flush().unwrap();
+        assert_eq!(frozen_report.accepted_records, 0);
+        assert_eq!(frozen_report.committed_records, 0);
+        assert_eq!(frozen_report.pending_records, 0);
+        assert!(frozen_report.writer_error.is_none());
+        engine.detach_cache(5).unwrap();
+        frozen_writer.close().unwrap();
+
+        // Exercise the composed observer + read/write session from a fresh
+        // delta, then reopen it after releasing every reducer resident entry.
+        let monitored_delta = scratch.path().join("monitored-delta");
+        let monitored = engine
+            .attach_running_cache(5, &monitored_delta, &Default::default())
+            .unwrap();
+        let (cold, completed_unique, node_completions) = reduce(true);
+        assert_parity(&cold);
+        assert!(completed_unique > 0);
+        assert!(node_completions > 0);
+        let durable = monitored.flush().unwrap();
+        assert!(durable.accepted_records > 0);
+        assert_eq!(durable.accepted_records, durable.committed_records);
+        assert_eq!(durable.pending_records, 0);
+        assert!(durable.writer_error.is_none());
+        engine.detach_cache(5).unwrap();
+        monitored.close().unwrap();
+        let monitored = engine
+            .load_running_cache(5, &monitored_delta, &Default::default())
+            .unwrap();
+        let warm = reduce(true).0;
+        assert_parity(&warm);
+        let work = engine
+            .cache_statistics(5)
+            .unwrap()
+            .saved_application
+            .unwrap()
+            .persistent;
+        assert!(work.requested_root_hits + work.intermediate_hits > 0);
+        let reopened = monitored.flush().unwrap();
+        assert_eq!(reopened.accepted_records, 0);
+        assert_eq!(reopened.pending_records, 0);
+        assert_eq!(reopened.generation, durable.generation);
+        engine.detach_cache(5).unwrap();
+        monitored.close().unwrap();
+
+        let resumed = engine
+            .load_running_cache(5, &delta, &Default::default())
+            .unwrap();
+        assert_eq!(
+            resumed.report().unwrap().generation,
+            frozen.delta.generation
+        );
+        let cached = reduce(true).0;
+        assert_parity(&cached);
+        assert_eq!(reference.terms(), cached.terms());
+        assert_eq!(reference.nonzero_conditions(), cached.nonzero_conditions());
+        let work = engine
+            .cache_statistics(5)
+            .unwrap()
+            .saved_application
+            .unwrap()
+            .persistent;
+        assert!(work.requested_root_hits + work.intermediate_hits > 0);
+        let warm = resumed.flush().unwrap();
+        assert_eq!(warm.accepted_records, 0);
+        assert_eq!(warm.committed_records, 0);
+        assert_eq!(warm.pending_records, 0);
+        assert_eq!(warm.generation, frozen.delta.generation);
+        let warm_snapshot = resumed
+            .snapshot(&scratch.path().join("warm.rrindex"))
+            .unwrap();
+        assert_eq!(
+            warm_snapshot.delta.manifest_digest,
+            frozen.delta.manifest_digest
+        );
+        resumed.close().unwrap();
+        engine.detach_cache(5).unwrap();
+    }
 
     #[test]
     fn single_file_limits_preserve_global_bounds_and_reject_chunk_overrides() {

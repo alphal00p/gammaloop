@@ -85,6 +85,7 @@ macro_rules! define_vakint_python_surface {
 
 define_vakint_python_surface! {
     VakintWrapper,
+    cache::RunningCacheControlWrapper,
     NumericalEvaluationResultWrapper,
     VakintExpressionWrapper,
     VakintEvaluationMethodWrapper,
@@ -1298,6 +1299,155 @@ impl VakintWrapper {
         })
     }
 
+    /// Attach incremental native capture, creating its delta if necessary.
+    /// Immutable bases remain separate. `read_backing=False` disables all
+    /// persistent reads while retaining ordinary RAM memoization and capture.
+    /// `read_delta=False` reads only the pinned bases and snapshots. The returned
+    /// control can report or checkpoint while evaluation holds the engine.
+    /// Queue and checkpoint options use the native defaults when omitted.
+    #[pyo3(signature = (n_loops, path, *, read_backing=true, read_delta=true, base_paths=None, snapshots=None, disk_bytes=None, max_pending_records=None, max_pending_bytes=None, batch_records=None, batch_bytes=None, checkpoint_interval_seconds=None))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn attach_running_cache(
+        &mut self,
+        py: Python<'_>,
+        n_loops: usize,
+        path: PathBuf,
+        read_backing: bool,
+        read_delta: bool,
+        base_paths: Option<Vec<PathBuf>>,
+        snapshots: Option<Vec<Py<PyDict>>>,
+        disk_bytes: Option<u64>,
+        max_pending_records: Option<usize>,
+        max_pending_bytes: Option<usize>,
+        batch_records: Option<usize>,
+        batch_bytes: Option<usize>,
+        checkpoint_interval_seconds: Option<f64>,
+    ) -> PyResult<cache::RunningCacheControlWrapper> {
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let options = cache::running_options(
+                py,
+                read_backing,
+                read_delta,
+                base_paths,
+                snapshots,
+                disk_bytes,
+                max_pending_records,
+                max_pending_bytes,
+                batch_records,
+                batch_bytes,
+                checkpoint_interval_seconds,
+            )?;
+            let engine = self.vakint.clone();
+            let control = py
+                .detach(move || engine.attach_running_cache(n_loops, path, &options))
+                .map_err(vakint_to_python_error)?;
+            Ok(cache::RunningCacheControlWrapper {
+                control,
+                resources: self.settings.rustred_resources,
+            })
+        })
+    }
+
+    /// Resume an existing incremental native cache; never create a new delta.
+    /// This has the same read policy and queue options as `attach_running_cache`.
+    #[pyo3(signature = (n_loops, path, *, read_backing=true, read_delta=true, base_paths=None, snapshots=None, disk_bytes=None, max_pending_records=None, max_pending_bytes=None, batch_records=None, batch_bytes=None, checkpoint_interval_seconds=None))]
+    #[allow(clippy::too_many_arguments)]
+    pub fn load_running_cache(
+        &mut self,
+        py: Python<'_>,
+        n_loops: usize,
+        path: PathBuf,
+        read_backing: bool,
+        read_delta: bool,
+        base_paths: Option<Vec<PathBuf>>,
+        snapshots: Option<Vec<Py<PyDict>>>,
+        disk_bytes: Option<u64>,
+        max_pending_records: Option<usize>,
+        max_pending_bytes: Option<usize>,
+        batch_records: Option<usize>,
+        batch_bytes: Option<usize>,
+        checkpoint_interval_seconds: Option<f64>,
+    ) -> PyResult<cache::RunningCacheControlWrapper> {
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let options = cache::running_options(
+                py,
+                read_backing,
+                read_delta,
+                base_paths,
+                snapshots,
+                disk_bytes,
+                max_pending_records,
+                max_pending_bytes,
+                batch_records,
+                batch_bytes,
+                checkpoint_interval_seconds,
+            )?;
+            let engine = self.vakint.clone();
+            let control = py
+                .detach(move || engine.load_running_cache(n_loops, path, &options))
+                .map_err(vakint_to_python_error)?;
+            Ok(cache::RunningCacheControlWrapper {
+                control,
+                resources: self.settings.rustred_resources,
+            })
+        })
+    }
+
+    /// Attach immutable bases and frozen native descriptors without a writer.
+    /// Frozen generations do not refresh, and evaluation captures no records.
+    #[pyo3(signature = (n_loops, *, base_paths=None, snapshots=None, disk_bytes=None))]
+    pub fn load_cache_snapshot(
+        &mut self,
+        py: Python<'_>,
+        n_loops: usize,
+        base_paths: Option<Vec<PathBuf>>,
+        snapshots: Option<Vec<Py<PyDict>>>,
+        disk_bytes: Option<u64>,
+    ) -> PyResult<()> {
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let options = cache::running_options(
+                py, true, false, base_paths, snapshots, disk_bytes, None, None, None, None, None,
+            )?;
+            let engine = self.vakint.clone();
+            py.detach(move || engine.load_cache_snapshot(n_loops, &options))
+                .map_err(vakint_to_python_error)
+        })
+    }
+
+    /// Flush accepted native records and return the acknowledged durable report.
+    /// A flush failure is an error; pending records must not be reported saved.
+    pub fn save_running_cache(&self, py: Python<'_>, n_loops: usize) -> PyResult<Py<PyDict>> {
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let engine = self.vakint.clone();
+            let report = py
+                .detach(move || engine.save_running_cache(n_loops))
+                .map_err(vakint_to_python_error)?;
+            cache::running_report(py, &report)
+        })
+    }
+
+    /// Flush and freeze a small native descriptor for this delta generation.
+    /// Immutable base payloads are referenced separately and are never copied.
+    pub fn freeze_running_cache(
+        &self,
+        py: Python<'_>,
+        n_loops: usize,
+        sidecar_path: PathBuf,
+    ) -> PyResult<Py<PyDict>> {
+        resources::run_committing(self.settings.rustred_resources, || {
+            cache::check_loops(n_loops)?;
+            let engine = self.vakint.clone();
+            let snapshot = py
+                .detach(move || engine.freeze_running_cache(n_loops, sidecar_path))
+                .map_err(vakint_to_python_error)?;
+            cache::json_report(py, &snapshot.to_document().to_string())
+        })
+    }
+
     /// Explicitly save `resident-roots` or a portable `full-snapshot`.
     /// The latter copies captured bases without coefficient decoding, then
     /// writes the resident overlay and requires a new destination. Partial
@@ -1326,10 +1476,10 @@ impl VakintWrapper {
         })
     }
 
-    /// Import a trusted SHA-256 checked USTAR gzip archive into a new native
-    /// snapshot directory. This does not attach the cache to evaluation.
+    /// Import a trusted SHA-256 checked archive or native multipart manifest.
+    /// The imported snapshot is not attached to evaluation automatically.
     #[cfg(all(unix, not(target_arch = "wasm32")))]
-    #[pyo3(signature = (n_loops, archive_path, output_path, *, sha256, max_archive_bytes=None, max_extracted_bytes=None, max_entries=None, max_temporary_bytes=None, disk_bytes=None))]
+    #[pyo3(signature = (n_loops, archive_path, output_path, *, sha256, format="archive", max_manifest_bytes=None, max_archive_bytes=None, max_extracted_bytes=None, max_entries=None, max_temporary_bytes=None, disk_bytes=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn import_cache(
         &self,
@@ -1338,6 +1488,8 @@ impl VakintWrapper {
         archive_path: String,
         output_path: String,
         sha256: &str,
+        format: &str,
+        max_manifest_bytes: Option<u64>,
         max_archive_bytes: Option<u64>,
         max_extracted_bytes: Option<u64>,
         max_entries: Option<usize>,
@@ -1348,6 +1500,8 @@ impl VakintWrapper {
             cache::check_loops(n_loops)?;
             let options = cache::transfer_options(
                 sha256,
+                format,
+                max_manifest_bytes,
                 max_archive_bytes,
                 max_extracted_bytes,
                 max_entries,
@@ -1359,14 +1513,15 @@ impl VakintWrapper {
             let report = py
                 .detach(move || engine.import_cache(n_loops, archive_path, output_path, &options))
                 .map_err(vakint_to_python_error)?;
-            cache::transfer_report(py, report)
+            cache::transfer_report(py, report, format)
         })
     }
 
-    /// Explicit HTTP(S) download with a required trusted checksum. Supply the
-    /// final URL: redirects are refused. Load the published snapshot separately.
+    /// Explicit download with a required trusted checksum. Archive downloads
+    /// refuse redirects; HTTPS multipart downloads follow at most eight redirects.
+    /// Load the published snapshot separately.
     #[cfg(all(unix, not(target_arch = "wasm32")))]
-    #[pyo3(signature = (n_loops, url, output_path, *, sha256, max_archive_bytes=None, max_extracted_bytes=None, max_entries=None, max_temporary_bytes=None, disk_bytes=None, timeout_seconds=None))]
+    #[pyo3(signature = (n_loops, url, output_path, *, sha256, format="archive", max_manifest_bytes=None, max_archive_bytes=None, max_extracted_bytes=None, max_entries=None, max_temporary_bytes=None, disk_bytes=None, timeout_seconds=None))]
     #[allow(clippy::too_many_arguments)]
     pub fn download_cache(
         &self,
@@ -1375,6 +1530,8 @@ impl VakintWrapper {
         url: String,
         output_path: String,
         sha256: &str,
+        format: &str,
+        max_manifest_bytes: Option<u64>,
         max_archive_bytes: Option<u64>,
         max_extracted_bytes: Option<u64>,
         max_entries: Option<usize>,
@@ -1386,6 +1543,8 @@ impl VakintWrapper {
             cache::check_loops(n_loops)?;
             let options = cache::transfer_options(
                 sha256,
+                format,
+                max_manifest_bytes,
                 max_archive_bytes,
                 max_extracted_bytes,
                 max_entries,
@@ -1397,7 +1556,7 @@ impl VakintWrapper {
             let report = py
                 .detach(move || engine.download_cache(n_loops, &url, output_path, &options))
                 .map_err(vakint_to_python_error)?;
-            cache::transfer_report(py, report)
+            cache::transfer_report(py, report, format)
         })
     }
 

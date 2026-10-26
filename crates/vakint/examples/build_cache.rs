@@ -1,4 +1,6 @@
-//! Reproducible, explicitly selected five-loop cache preparation.
+//! Optional finite five-loop cache preparation from an explicitly selected workload.
+//! Running caches also accumulate completed reductions from physical examples;
+//! this driver retains the selected-workload budget and size checks.
 //!
 //! Run `cargo run --release -p vakint --example build_cache -- --help`.
 //! A supervisor and an independent worker watchdog enforce the wall deadline.
@@ -22,7 +24,7 @@ use sha2::{Digest, Sha256};
 use symbolica::utils::resources::{ResourceBudget, ResourceLimits, checkpoint};
 use vakint::{
     RustRedCachePreparationOptions, RustRedCacheRoot, RustRedCacheWorkload, RustRedMonitorDisplay,
-    RustRedMonitorOptions, RustRedSnapshotViewer, Vakint,
+    RustRedMonitorOptions, RustRedRunningCacheOptions, RustRedSnapshotViewer, Vakint,
 };
 
 const MIB: u64 = 1024 * 1024;
@@ -46,6 +48,9 @@ struct Options {
     workload: PathBuf,
     source_census: PathBuf,
     output: PathBuf,
+    running_cache: Option<PathBuf>,
+    running_cache_capture_only: bool,
+    running_cache_no_read_delta: bool,
     work_dir: PathBuf,
     phase: String,
     prepare_seconds: u64,
@@ -175,6 +180,13 @@ impl Options {
                 "worker_environment": worker_environment,
             },
         });
+        if let Some(path) = &self.running_cache {
+            identity["running_cache"] = json!({
+                "path":path,"read_backing":!self.running_cache_capture_only,
+                "capture_only":self.running_cache_capture_only,
+                "read_delta":!self.running_cache_no_read_delta,
+            });
+        }
         if self.monitor.enabled() {
             identity["execution"]["monitor"] = json!({
                 "display": match self.monitor.display {
@@ -195,6 +207,9 @@ impl Options {
         let mut workload = None;
         let mut source_census = None;
         let mut output = None;
+        let mut running_cache = None;
+        let mut running_cache_capture_only = false;
+        let mut running_cache_no_read_delta = false;
         let mut work_dir = None;
         let mut phase = "pilot".to_owned();
         let mut prepare_seconds = 840;
@@ -216,12 +231,16 @@ impl Options {
                     --retained-coefficient-mib N Native coefficient capacity (default: unbounded; alias: --ram-mib)\n\
                     --max-process-rss-mib N   Whole worker RSS budget (default: unbounded)\n\
                     --max-elapsed-seconds N   Tighter cumulative worker time budget (default: hard deadline)\n\
+                    --running-cache PATH     Capture completed native records in a separate delta directory\n\
+                    --running-cache-capture-only Disable persistent reads; requires --running-cache\n\
+                    --running-cache-no-read-delta Read immutable bases only; requires --running-cache\n\
                     --monitor                 TUI diagnostics (requires progress-tui; default: off)\n\
                     --progress-snapshot PATH  Latest native JSON; enables diagnostics without a TUI\n\
                     --progress-interval-seconds N Safe-boundary interval, finite and nonnegative (default: 1)\n\
                     --monitor defaults its non-TTY snapshot to work-dir/monitor.json.\n\
                     Monitored timings are diagnostics, not unmonitored benchmark measurements.\n\
-                    Final production uses --phase final --prepare-seconds 32400 --max-seconds 36000.\n\
+                    Historical selected-workload budget: --phase final --prepare-seconds 32400 --max-seconds 36000.\n\
+                    This finite builder is optional; running caches also accumulate work from physical examples.\n\
                     Freeze training/tuning/held-out inputs first. This command does not select roots.\n\
                     Run in an optimized build with fixed affinity; all work and receipts stay in --work-dir.\n\
                     Record build metadata using VAKINT_CACHE_BUILD_RUSTC, VAKINT_CACHE_BUILD_PROFILE,\n\
@@ -237,6 +256,14 @@ impl Options {
                 monitor.display = RustRedMonitorDisplay::Tui;
                 continue;
             }
+            if arg == "--running-cache-capture-only" {
+                running_cache_capture_only = true;
+                continue;
+            }
+            if arg == "--running-cache-no-read-delta" {
+                running_cache_no_read_delta = true;
+                continue;
+            }
             let value = args
                 .next()
                 .ok_or_else(|| eyre::eyre!("missing value for {arg}"))?;
@@ -245,6 +272,7 @@ impl Options {
                 "--workload" => workload = Some(value.into()),
                 "--source-census" => source_census = Some(value.into()),
                 "--output" => output = Some(value.into()),
+                "--running-cache" => running_cache = Some(value.into()),
                 "--work-dir" => work_dir = Some(value.into()),
                 "--phase" => phase = value,
                 "--prepare-seconds" => prepare_seconds = value.parse()?,
@@ -281,6 +309,18 @@ impl Options {
             max_elapsed_seconds != Some(0),
             "elapsed allowance must be positive"
         );
+        ensure!(
+            !running_cache_capture_only || running_cache.is_some(),
+            "--running-cache-capture-only requires --running-cache"
+        );
+        ensure!(
+            !running_cache_no_read_delta || running_cache.is_some(),
+            "--running-cache-no-read-delta requires --running-cache"
+        );
+        ensure!(
+            running_cache.is_none() || running_cache != output,
+            "--running-cache must be separate from the prepared --output file"
+        );
         let work_dir: PathBuf = work_dir.ok_or_else(|| eyre::eyre!("--work-dir is required"))?;
         // The supervised worker redirects its terminal streams to worker.log.
         if monitor.display == RustRedMonitorDisplay::Tui && monitor.progress_snapshot.is_none() {
@@ -293,6 +333,9 @@ impl Options {
             source_census: source_census
                 .ok_or_else(|| eyre::eyre!("--source-census is required"))?,
             output: output.ok_or_else(|| eyre::eyre!("--output is required"))?,
+            running_cache,
+            running_cache_capture_only,
+            running_cache_no_read_delta,
             work_dir,
             phase,
             prepare_seconds,
@@ -481,104 +524,306 @@ fn build_cache(
         options.phase != "final" || proof.is_some(),
         "final preparation requires validated owner proof"
     );
-    let loading_seconds = started.elapsed().as_secs_f64();
-    let mut preparation = RustRedCachePreparationOptions {
-        checkpoint_path: Some(options.work_dir.join("checkpoints")),
-        ..Default::default()
-    };
-    preparation.storage.time_limit_seconds =
-        attempt.preparation_allowance(unix_seconds()?, started.elapsed())?;
-    preparation.storage.ram_bytes = options.retained_coefficient_mib.map(|mib| mib * MIB);
-    // The final gzip target is checked below; scratch checkpoints are not
-    // constrained by the final representation size.
-    preparation.storage.disk_bytes = None;
-    preparation.storage.max_roots = workload.training.len();
-    preparation.workload = RustRedCacheWorkload::Explicit(
-        workload
-            .training
-            .iter()
-            .map(|root| {
-                Ok(RustRedCacheRoot {
-                    namespace: 0,
-                    integral: IntegralKey::try_new(root.powers.clone())?,
+    let running_cache_started = Instant::now();
+    let running_cache = options
+        .running_cache
+        .as_ref()
+        .map(|path| {
+            engine.attach_running_cache(
+                5,
+                path,
+                &RustRedRunningCacheOptions {
+                    read_backing: !options.running_cache_capture_only,
+                    read_delta: !options.running_cache_no_read_delta,
+                    ..Default::default()
+                },
+            )
+        })
+        .transpose()?;
+    let running_cache_loading_seconds = running_cache_started.elapsed().as_secs_f64();
+    let mut running_cache_receipt = None;
+    let evaluation = (|| -> Result<()> {
+        let loading_seconds = started.elapsed().as_secs_f64();
+        let mut preparation = RustRedCachePreparationOptions {
+            checkpoint_path: Some(options.work_dir.join("checkpoints")),
+            ..Default::default()
+        };
+        preparation.storage.time_limit_seconds =
+            attempt.preparation_allowance(unix_seconds()?, started.elapsed())?;
+        preparation.storage.ram_bytes = options.retained_coefficient_mib.map(|mib| mib * MIB);
+        // The final gzip target is checked below; scratch checkpoints are not
+        // constrained by the final representation size.
+        preparation.storage.disk_bytes = None;
+        preparation.storage.max_roots = workload.training.len();
+        preparation.workload = RustRedCacheWorkload::Explicit(
+            workload
+                .training
+                .iter()
+                .map(|root| {
+                    Ok(RustRedCacheRoot {
+                        namespace: 0,
+                        integral: IntegralKey::try_new(root.powers.clone())?,
+                    })
                 })
-            })
-            .collect::<Result<Vec<_>>>()?,
-    );
-    let mut progress = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(options.work_dir.join("progress.jsonl"))?;
-    let observer = |report: &CachePreparationReport| {
-        serde_json::to_writer(&mut progress, &report.to_document())
-            .and_then(|()| writeln!(progress).map_err(serde_json::Error::io))
-            .map_err(|error| {
+                .collect::<Result<Vec<_>>>()?,
+        );
+        let mut progress = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(options.work_dir.join("progress.jsonl"))?;
+        let observer = |report: &CachePreparationReport| {
+            serde_json::to_writer(&mut progress, &report.to_document())
+                .and_then(|()| writeln!(progress).map_err(serde_json::Error::io))
+                .map_err(|error| {
+                    rustred_app::AppError::new(
+                        rustred_app::AppErrorKind::Serialization,
+                        error.to_string(),
+                    )
+                })?;
+            progress.flush().map_err(|error| {
                 rustred_app::AppError::new(
                     rustred_app::AppErrorKind::Serialization,
                     error.to_string(),
                 )
-            })?;
-        progress.flush().map_err(|error| {
-            rustred_app::AppError::new(rustred_app::AppErrorKind::Serialization, error.to_string())
-        })
-    };
-    let cancellation = AtomicBool::new(false);
-    let report = if options.monitor.enabled() {
-        engine.prepare_cache_with_monitor(
-            5,
-            &options.output,
-            &preparation,
-            &cancellation,
-            observer,
-            &options.monitor,
-        )?
-    } else {
-        engine.prepare_cache(5, &options.output, &preparation, &cancellation, observer)?
-    };
-    ensure!(
-        digest(&options.workload)? == workload_hash,
-        "workload changed during preparation; preserve the candidate and investigate"
-    );
-    ensure!(
-        digest(&options.artifacts.join("manifest.json"))? == workload.data_manifest_sha256,
-        "external data changed during preparation; preserve the candidate and investigate"
-    );
-    ensure!(
-        digest(&options.source_census)? == workload.source_census_sha256,
-        "source census changed during preparation; preserve the candidate and investigate"
-    );
-    let complete = report.status == CachePreparationStatus::Complete;
-    let mut receipt = json!({
-        "schema": "vakint.five-loop-cache-build.v2", "phase": options.phase,
-        "workload_sha256": workload_hash, "data_manifest_sha256": workload.data_manifest_sha256,
-        "source_census_sha256": workload.source_census_sha256,
-        "loading_seconds": loading_seconds, "elapsed_seconds": started.elapsed().as_secs_f64(),
-        "complete": complete, "preparation": report.to_document(),
-        "selected_training_roots": workload.training.len(), "frozen_held_out_inputs": workload.held_out.len(),
-        "source_census": options.source_census, "attempt": attempt,
-        "publishable": false,
-        "owner_proof":proof.as_ref().map(OwnerProof::identity),
-        "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
+            })
+        };
+        let cancellation = AtomicBool::new(false);
+        let outcome = if options.monitor.enabled() {
+            engine.prepare_cache_with_monitor(
+                5,
+                &options.output,
+                &preparation,
+                &cancellation,
+                observer,
+                &options.monitor,
+            )
+        } else {
+            engine.prepare_cache(5, &options.output, &preparation, &cancellation, observer)
+        };
+        // Flush accepted completed nodes even when strict preparation returns an
+        // ordinary error. This does not turn a partial reduction into a cache rule.
+        running_cache_receipt = running_cache.as_ref().map(|control| {
+            let started = Instant::now();
+            let flushed = control.flush();
+            let flush_seconds = started.elapsed().as_secs_f64();
+            let flush_complete = flushed
+                .as_ref()
+                .is_ok_and(|report| report.pending_records == 0 && report.writer_error.is_none());
+            let (report, error) = match flushed {
+                Ok(report) => (
+                    Some(report.to_document()),
+                    (!flush_complete)
+                        .then(|| "native flush did not commit all accepted records".to_owned()),
+                ),
+                Err(error) => {
+                    eprintln!("running-cache flush failed: {error}");
+                    (
+                        control.report().ok().map(|report| report.to_document()),
+                        Some(error.to_string()),
+                    )
+                }
+            };
+            let mut snapshot_seconds = None;
+            let mut snapshot_sidecar = None;
+            let mut snapshot_descriptor = None;
+            let (snapshot, snapshot_error) = if flush_complete {
+                let started = Instant::now();
+                let frozen = (|| -> Result<Value> {
+                    let delta = fs::canonicalize(
+                        options
+                            .running_cache
+                            .as_ref()
+                            .ok_or_else(|| eyre::eyre!("running cache has no delta path"))?,
+                    )?;
+                    let directory =
+                        fs::canonicalize(&options.work_dir)?.join("running-cache-snapshots");
+                    ensure!(
+                        !directory.starts_with(&delta),
+                        "snapshot must be outside the running delta"
+                    );
+                    fs::create_dir_all(&directory)?;
+                    let directory = fs::canonicalize(directory)?;
+                    ensure!(
+                        !directory.starts_with(&delta),
+                        "snapshot directory resolves inside the running delta"
+                    );
+                    let stamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_nanos();
+                    let sidecar = directory.join(format!(
+                        "build-{}-{}-{stamp}.rrindex",
+                        options.phase,
+                        std::process::id()
+                    ));
+                    let descriptor = sidecar.with_extension("json");
+                    ensure!(
+                        !sidecar.exists() && !descriptor.exists(),
+                        "preserve the existing running-cache snapshot"
+                    );
+                    snapshot_sidecar = Some(sidecar.clone());
+                    snapshot_descriptor = Some(descriptor.clone());
+                    let document = control.snapshot(&sidecar)?.to_document();
+                    let mut file = OpenOptions::new()
+                        .write(true)
+                        .create_new(true)
+                        .open(&descriptor)?;
+                    serde_json::to_writer_pretty(&mut file, &document)?;
+                    file.sync_all()?;
+                    File::open(directory)?.sync_all()?;
+                    Ok(document)
+                })();
+                snapshot_seconds = Some(started.elapsed().as_secs_f64());
+                match frozen {
+                    Ok(snapshot) => (Some(snapshot), None),
+                    Err(error) => {
+                        eprintln!("running-cache snapshot failed: {error}");
+                        (None, Some(error.to_string()))
+                    }
+                }
+            } else {
+                (None, None)
+            };
+            json!({
+                "path":options.running_cache,"read_backing":!options.running_cache_capture_only,
+                "capture_only":options.running_cache_capture_only,
+                "read_delta":!options.running_cache_no_read_delta,
+                "loading_seconds":running_cache_loading_seconds,"flush_seconds":flush_seconds,
+                "report":report,"flush_error":error,"flush_complete":flush_complete,
+                "snapshot":snapshot,"snapshot_error":snapshot_error,"snapshot_seconds":snapshot_seconds,
+                "snapshot_sidecar":snapshot_sidecar,"snapshot_descriptor":snapshot_descriptor,
+                "preparation_error":outcome.as_ref().err().map(ToString::to_string),
+            })
+        });
+        if let Some(receipt) = &running_cache_receipt
+            && let Err(error) = write_json(&options.work_dir.join("running-cache.json"), receipt)
+        {
+            if outcome.is_err() {
+                eprintln!("running-cache receipt error: {error}");
+            } else {
+                return Err(error);
+            }
+        }
+        let report = match outcome {
+            Ok(report) => report,
+            Err(error) => {
+                if let Some(running_cache) = &running_cache_receipt {
+                    let receipt = json!({
+                        "schema":"vakint.five-loop-cache-build.v2","phase":options.phase,
+                        "attempt":attempt,"elapsed_seconds":started.elapsed().as_secs_f64(),
+                        "complete":false,"publishable":false,"error":error.to_string(),
+                        "running_cache":running_cache,
+                    });
+                    if let Err(receipt_error) =
+                        write_json(&options.work_dir.join("worker.json"), &receipt)
+                    {
+                        eprintln!("running-cache worker receipt error: {receipt_error}");
+                    }
+                }
+                return Err(error.into());
+            }
+        };
+        ensure!(
+            digest(&options.workload)? == workload_hash,
+            "workload changed during preparation; preserve the candidate and investigate"
+        );
+        ensure!(
+            digest(&options.artifacts.join("manifest.json"))? == workload.data_manifest_sha256,
+            "external data changed during preparation; preserve the candidate and investigate"
+        );
+        ensure!(
+            digest(&options.source_census)? == workload.source_census_sha256,
+            "source census changed during preparation; preserve the candidate and investigate"
+        );
+        let complete = report.status == CachePreparationStatus::Complete;
+        let mut receipt = json!({
+            "schema": "vakint.five-loop-cache-build.v2", "phase": options.phase,
+            "workload_sha256": workload_hash, "data_manifest_sha256": workload.data_manifest_sha256,
+            "source_census_sha256": workload.source_census_sha256,
+            "loading_seconds": loading_seconds, "elapsed_seconds": started.elapsed().as_secs_f64(),
+            "complete": complete, "preparation": report.to_document(),
+            "selected_training_roots": workload.training.len(), "frozen_held_out_inputs": workload.held_out.len(),
+            "source_census": options.source_census, "attempt": attempt,
+            "publishable": false,
+            "owner_proof":proof.as_ref().map(OwnerProof::identity),
+            "owner_root_correlations":proof.as_ref().map(OwnerProof::correlations),
+        });
+        if let Some(running_cache) = &running_cache_receipt {
+            receipt["running_cache"] = running_cache.clone();
+        }
+        if complete {
+            let bytes = fs::metadata(&options.output)?.len();
+            receipt["compressed_bytes"] = bytes.into();
+            receipt["cache_sha256"] = digest(&options.output)?.into();
+            receipt["within_50_mib_target"] = (bytes <= 50 * MIB).into();
+            // Historical target is descriptive; valuable completed caches have no size cap.
+        }
+        // Publication is decided only after the supervisor verifies cumulative
+        // elapsed time and the worker's successful exit.
+        write_json(&options.work_dir.join("worker.json"), &receipt)?;
+        if let Some(running_cache) = &running_cache_receipt {
+            for phase in ["flush", "snapshot"] {
+                if let Some(error) = running_cache[format!("{phase}_error")].as_str() {
+                    bail!("running-cache {phase} failed: {error}");
+                }
+            }
+        }
+        ensure!(
+            complete,
+            "cache preparation was incomplete; inspect its durable progress and report"
+        );
+        Ok(())
+    })();
+    // Close outside the fallible preparation/reporting scope so every ordinary
+    // exit releases the shared writer lease and records its durability result.
+    let close_error = running_cache.as_ref().and_then(|control| {
+        let started = Instant::now();
+        let closed = control.close();
+        let document = match &closed {
+            Ok(report) => Some(report.to_document()),
+            Err(_) => control.report().ok().map(|report| report.to_document()),
+        };
+        let receipt = running_cache_receipt.get_or_insert_with(|| {
+            json!({
+                "path":options.running_cache,"read_backing":!options.running_cache_capture_only,
+                "capture_only":options.running_cache_capture_only,
+                "read_delta":!options.running_cache_no_read_delta,
+                "loading_seconds":running_cache_loading_seconds,
+            })
+        });
+        receipt["flush_report"] = receipt["report"].clone();
+        receipt["report"] = json!(document);
+        receipt["close"] = json!({"seconds":started.elapsed().as_secs_f64(),
+            "report":document,"error":closed.as_ref().err().map(ToString::to_string)});
+        receipt["terminal"] = json!(true);
+        receipt["preparation_error"] = json!(evaluation.as_ref().err().map(ToString::to_string));
+        closed.err()
     });
-    if complete {
-        let bytes = fs::metadata(&options.output)?.len();
-        receipt["compressed_bytes"] = bytes.into();
-        receipt["cache_sha256"] = digest(&options.output)?.into();
-        receipt["within_50_mib_target"] = (bytes <= 50 * MIB).into();
-        // A larger candidate requires a separately reviewed measured exception;
-        // this baseline builder never silently relaxes the selected size target.
+    let terminal_receipt_error = (|| -> Result<()> {
+        if let Some(receipt) = &running_cache_receipt {
+            write_json(&options.work_dir.join("running-cache.json"), receipt)?;
+            let worker = options.work_dir.join("worker.json");
+            if worker.exists() {
+                let mut document: Value = serde_json::from_slice(&fs::read(&worker)?)?;
+                document["running_cache"] = receipt.clone();
+                write_json(&worker, &document)?;
+            }
+        }
+        Ok(())
+    })()
+    .err();
+    if let Some(error) = &close_error {
+        eprintln!("running-cache close failed: {error}");
     }
-    // Publication is decided only after the supervisor verifies cumulative
-    // elapsed time and the worker's successful exit.
-    write_json(&options.work_dir.join("worker.json"), &receipt)?;
-    ensure!(
-        complete,
-        "cache preparation was incomplete; inspect its durable progress and report"
-    );
-    ensure!(
-        receipt["within_50_mib_target"] == true,
-        "completed cache exceeds 50 MiB; retain it as a candidate, not a publishable selection"
-    );
+    if let Some(error) = &terminal_receipt_error {
+        eprintln!("running-cache terminal receipt error: {error}");
+    }
+    // Preserve the original preparation/reporting error over a secondary
+    // persistence error; successful work still requires acknowledged closure.
+    evaluation?;
+    if let Some(error) = close_error {
+        return Err(error.into());
+    }
+    if let Some(error) = terminal_receipt_error {
+        return Err(error);
+    }
     Ok(())
 }
 
@@ -799,8 +1044,7 @@ fn run(options: Options, worker_started: Instant) -> Result<()> {
         let cumulative_seconds = previous_seconds + started.elapsed().as_secs_f64();
         publishable = success
             && cumulative_seconds <= options.max_seconds as f64
-            && receipt["complete"] == true
-            && receipt["within_50_mib_target"] == true;
+            && receipt["complete"] == true;
         receipt["elapsed_seconds"] = cumulative_seconds.into();
         receipt["executable_sha256"] = supervision["executable_sha256"].clone();
         receipt["build_identity"] = identity;

@@ -707,6 +707,9 @@ impl SavedApplication {
         let mut products = self.product_reducer.lock().map_err(failure)?;
         let mut witnesses = self.witnesses.lock().map_err(failure)?;
         super::cache::resource_checkpoint()?;
+        if detach_backing && let Some(cache) = attached.as_ref() {
+            cache.flush()?;
+        }
         // These native clears release retained entries without allocation or
         // resource polls. The commit therefore cannot introduce a ResourceError.
         prepared.clear_cache().map_err(super::cache::operation)?;
