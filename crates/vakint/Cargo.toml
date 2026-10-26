@@ -24,6 +24,7 @@ feynkit-kinematics = { git = "https://github.com/alphal00p/gammaloop", branch = 
 feynkit-py = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false, optional = true }
 feynkit-tensor = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 flate2 = "1.1.9"
+idenso = { git = "https://github.com/alphal00p/gammaloop", branch = "feynkit", default-features = false }
 log = "0.4.29"
 regex = "1.12.2"
 rug = "1.28.0"

@@ -21,8 +21,9 @@ use crate::utils::set_precision_in_polynomial_atom;
 use ahash::RandomState;
 use colored::Colorize;
 use eyre::Result;
-use feynkit_tensor::TensorReducer;
+use feynkit_tensor::{TensorReducer, TensorReductionError};
 use graph::Graph;
+use idenso::{CookMode, CookSettings};
 #[allow(unused)]
 use log::{debug, info, warn};
 pub use rustred_evaluation::{RustRedEvaluationError, RustRedEvaluationOptions};
@@ -2767,7 +2768,20 @@ impl VakintTerm {
         let opaque_compact_vectors = Self::collect_opaque_compact_vectors(numerator, dimension);
         let numerator =
             Self::vakint_to_spenso_numerator(numerator, dimension, &opaque_minkowski_slots);
-        let reduced = reducer.reduce(numerator.as_view())?.into_expression();
+        // Native tensor admission requires atomic dimensions and index payloads.
+        // Reversibly encode compound values until the Vakint notation is restored.
+        let cooking = CookSettings::indices()
+            .with_mode(CookMode::ReversibleEncoding)
+            .with_representation_payloads(true, true);
+        let numerator = cooking
+            .try_cook(numerator.as_view())
+            .map_err(|error| TensorReductionError::TensorAlgebra(error.to_string()))?;
+        let numerator = reducer.admit(numerator)?;
+        let reduced = reducer
+            .reduce(&numerator)?
+            .into_expression()?
+            .into_expression();
+        let reduced = cooking.uncook(reduced.as_view());
         let reduced = Self::bridge_opaque_projectors(reduced.as_view(), next_bridge_dummy);
         let reduced =
             Self::spenso_to_vakint_numerator(reduced.as_view(), dimension, &opaque_compact_vectors);
