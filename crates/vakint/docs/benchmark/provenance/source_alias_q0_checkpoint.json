@@ -1,0 +1,23 @@
+{
+  "schema": "vakint.private-source-alias-q0-reader-checkpoint-index.v1",
+  "archive": "vakint-5l-source-alias-q0-reader-20261026.tar.gz",
+  "archive_bytes": 21804,
+  "archive_sha256": "89f4e87565001ec00cbee6b83da2dfa26242eaec044e7deec08fc55853abbe97",
+  "archive_manifest_sha256": "739cb27288ee19e8e3f4dfa5414a5c0dc074434844cc3af68f881792493af750",
+  "members": 9,
+  "exact_original_files": 7,
+  "note": "source_alias_q0_checkpoint.typ",
+  "source_build_snapshot_utc": "2026-10-26T18:04:02.062083+00:00",
+  "checks": {
+    "exact_frozen_file_hashes": true,
+    "two_archive_passes_byte_identical": true,
+    "normalized_regular_files_and_safe_paths": true,
+    "gzip_mtime_zero_and_no_filename": true,
+    "archive_member_bytes_equal_originals": true,
+    "secret_patterns_and_configured_values_absent": true,
+    "rustfmt_check_original_sources": true,
+    "earlier_checkpoint_files_unchanged": true,
+    "typst_note_compile": true
+  },
+  "scope": "Source-only q0 reader checkpoint of the 18:04:02 UTC SEALED_NOT_EXECUTED build snapshot; no later runtime controls, proof or acceptance, no full CI or final-release claim."
+}
