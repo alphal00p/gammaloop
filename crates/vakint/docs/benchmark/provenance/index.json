@@ -1,0 +1,19 @@
+{
+  "schema": "vakint.producer-source-supplement-index.v1",
+  "archive": "vakint-5l-producer-source-supplement-20261026.tar.gz",
+  "archive_bytes": 117835,
+  "archive_sha256": "d2cc4a3e6407fac74ca0fb1706893e746f6a54d83d87c013fcad2ca9b8416fae",
+  "archive_manifest_sha256": "fa41a8928f23a44b3792005fd5928b227ff45fe1fe54b5dbfa23240aaff997d0",
+  "members": 50,
+  "note": "producer_sources.typ",
+  "qualified_helper_executable_sha256": "48917fd9be0abc900f8a511057b5eb0e3e6f3f275c0c7b74cf318ec47cd7264a",
+  "native_revision": "b209adb1e774242bcbe0417fed223317566561bd",
+  "symbolica_revision": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+  "checks": {
+    "actual_source_members_and_checksums": true,
+    "two_archive_builds_byte_identical": true,
+    "normalized_regular_files_only": true,
+    "gzip_mtime_zero": true
+  },
+  "scope": "Frozen development source preservation; no executable or cache payload. Relocation creates a new source/build cohort. No fresh-host rebuild or final-release inclusion claimed."
+}

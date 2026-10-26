@@ -632,6 +632,14 @@ beside its unique ID, kind, and scope. Use a new output directory; preserve
 failed attempts and original receipts. An unchanged source index/inventory
 allows an already validated selected export to retain its original identity.
 
+The #link("provenance/producer_sources.typ")[producer source supplement] preserves
+the exact private exporter, build recorders, admission helpers and controller
+examples used for the qualified optimized pilot. Its checksummed source archive
+and index live beside that note. These are development source records; relocation
+requires new paths, source hashes, compiler identity and guard registration.
+The archive contains no cache payload or credentials and makes no fresh-host
+rebuild or final-release claim.
+
 ```sh
 python3 crates/vakint/docs/benchmark/compose_cumulative_cache_report.py \
   --source /path/to/workspace/provenance/source.json \
