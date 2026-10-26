@@ -219,6 +219,38 @@ The separate #raw("all_source_runs_completed") also accounts for retained incomp
 Snapshot preservation alone has #raw("performance_eligible: false") and never
 supplies missing timings or pretends to be a completed finite cache workload.
 
+A generic completed tuning capture uses #raw("kind: running-capture") and
+#raw("scope: completed-capture"). Its producer remains the original measurement;
+separate hashed completion evidence joins the accepted functional result to the
+exact embedded capture, successful flush/close, zero pending work, Native
+snapshot and frozen index. The snapshot barrier binds that completion and records
+#raw("producer_completed: true"). The accepted legacy tuning receipt binds its
+actual worker and terminal; the CLI monitor chain additionally binds its
+postflight, result and retained-capture evidence. Original provisional and
+starting-key-authentication flags remain unchanged. This scope contributes only
+to #raw("all_source_runs_completed"), never to completed physical examples or
+scientific/performance qualification. A failed or unfinished source remains a
+#raw("committed-prefix").
+
+#raw("compose_cumulative_cache_report.py --union-validation ACTUAL_RECEIPT")
+composes an existing ordered Native opaque-union receipt with repeated
+#raw("--source") descriptors. It requires actual per-source Native censuses and
+frozen snapshots, exact source order, bindings, copied/reference arithmetic and
+the producer's own compiled artifact and resource admission. Completion receipts
+alone cannot supply those Native preservation checks. All original-source
+validators run before the new report directory is published; rejected evidence
+leaves no accepted report behind. The single-source strict-preparation command
+retains its existing behavior.
+
+The union command also requires #raw("--data-manifest PATH") and
+#raw("--proof-root PATH"). The manifest's authenticated bytes supply report data
+context, not a claim that the standalone Native producer loaded that dataset or
+linked Vakint. They do not alter its compiled cohort or rebase original source
+data roots. The proof root resolves the actual producer's artifact references.
+Current consumer, application-binding, import, exposure and performance joins
+remain separate requirements. A preservation receipt is not final HEAVY/LIGHT
+delivery, an application evaluation, a distinct-key census or source eligibility.
+
 Final cumulative-cache suites additionally require an independently accepted
 #raw("vakint.cumulative-cache-consumer-requalification.v1") receipt. It binds the
 original source starting-key inventories and route/alias exclusion against the

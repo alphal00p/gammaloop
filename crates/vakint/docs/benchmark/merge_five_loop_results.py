@@ -433,6 +433,44 @@ class ReportEvidence:
         )
         return source, document
 
+    @staticmethod
+    def captured_tuning_measurement(origin, semantic_binding):
+        """Validate the original legacy measurement without promoting its flags."""
+        require(
+            isinstance(origin.get("identity"), dict),
+            "captured tuning measurement lacks its original identity",
+        )
+        identity = origin["identity"]
+        require(
+            origin.get("schema") == "vakint.five-loop-cache-measurement.v1"
+            and origin.get("success") is True
+            and ("worker_success" not in origin or origin["worker_success"] is True)
+            and (
+                "supervision" not in origin
+                or isinstance(origin["supervision"], dict)
+                and origin["supervision"].get("success") is True
+                and origin["supervision"].get("deadline_exhausted") is False
+                and type(origin["supervision"].get("exit_code")) is int
+                and origin["supervision"]["exit_code"] == 0
+            )
+            and all(
+                origin.get(key) is None
+                for key in ("error", "failure", "resource_failure")
+            )
+            and origin.get("provisional") is True
+            and origin.get("native_keys_authenticated") is False
+            and identity.get("provisional") is True
+            and identity["suite"] == "tuning"
+            and identity["only_case"] == origin["case_id"]
+            and isinstance(identity.get("data_manifest_sha256"), str)
+            and re.fullmatch(r"[0-9a-f]{64}", identity["data_manifest_sha256"])
+            and same_json_value(
+                origin["cache_statistics"]["binding"], semantic_binding
+            ),
+            "captured tuning measurement differs from its legacy workload/case/binding",
+        )
+        return identity
+
     def light_cache_record(self, path, cache, physical_scope):
         """A selected file is produced by strict export, never by a finite workload."""
         path, report = self.strict_record(evidence(path), self.path.parent)
@@ -1887,46 +1925,16 @@ class ReportEvidence:
                 ]
                 require(len(cases) == 1, "captured tuning case is absent or ambiguous")
                 case = cases[0]
-                require(
-                    isinstance(origin.get("identity"), dict),
-                    "captured tuning measurement lacks its original identity",
+                identity = ReportEvidence.captured_tuning_measurement(
+                    origin, producer["raw_report"]["semantic_binding"]
                 )
-                identity = origin["identity"]
                 require(
-                    origin.get("schema") == "vakint.five-loop-cache-measurement.v1"
-                    and origin.get("success") is True
-                    and (
-                        "worker_success" not in origin
-                        or origin["worker_success"] is True
-                    )
-                    and (
-                        "supervision" not in origin
-                        or isinstance(origin["supervision"], dict)
-                        and origin["supervision"].get("success") is True
-                        and origin["supervision"].get("deadline_exhausted") is False
-                        and type(origin["supervision"].get("exit_code")) is int
-                        and origin["supervision"]["exit_code"] == 0
-                    )
-                    and all(
-                        origin.get(key) is None
-                        for key in ("error", "failure", "resource_failure")
-                    )
-                    and origin.get("provisional") is True
-                    and origin.get("native_keys_authenticated") is False
-                    and identity.get("provisional") is True
-                    and identity["suite"] == "tuning"
-                    and identity["only_case"] == origin["case_id"] == row["case_id"]
+                    origin["case_id"] == row["case_id"]
                     and identity["workload_sha256"] == digest(input_path)
                     and identity["source_census_sha256"]
                     == inputs["source_census_sha256"]
-                    and isinstance(identity.get("data_manifest_sha256"), str)
-                    and re.fullmatch(r"[0-9a-f]{64}", identity["data_manifest_sha256"])
                     and identity["data_manifest_sha256"]
-                    == inputs["data_manifest_sha256"]
-                    and same_json_value(
-                        origin["cache_statistics"]["binding"],
-                        producer["raw_report"]["semantic_binding"],
-                    ),
+                    == inputs["data_manifest_sha256"],
                     "captured tuning measurement differs from its legacy workload/case/binding",
                 )
                 proof = docs["owner_proof"]
@@ -3110,6 +3118,244 @@ def strict_preparation_source(source, base):
     }
 
 
+def completed_capture_source(source, documents, base, *, semantic_binding):
+    """Join a completed legacy tuning capture without certifying a physical run."""
+    require(
+        source.get("kind") == "running-capture"
+        and source.get("scope") == "completed-capture",
+        "completed capture must retain its own source scope",
+    )
+    docs = dict(documents)
+    producer = docs["producer"]["raw_receipt"]
+    identity = ReportEvidence.captured_tuning_measurement(producer, semantic_binding)
+    capture = docs["capture"]["raw_receipt"]
+    snapshot = docs["snapshot"]["raw_receipt"]
+    barrier = docs["barrier"]["raw_receipt"]
+    artifact = semantic_binding.get("artifact_digest")
+    require(
+        set(semantic_binding)
+        == {"artifact_digest", "family_fingerprint", "physical_arity", "layer"}
+        and isinstance(artifact, list)
+        and len(artifact) == 32
+        and all(type(byte) is int and 0 <= byte <= 255 for byte in artifact)
+        and isinstance(semantic_binding["family_fingerprint"], str)
+        and semantic_binding["family_fingerprint"]
+        and type(semantic_binding["physical_arity"]) is int
+        and semantic_binding["physical_arity"] == 15
+        and semantic_binding["layer"] == "saved-application-route-apply-v1",
+        "completed capture semantic binding is malformed",
+    )
+    # Native snapshot serde records this digest as hex; cache statistics expose
+    # its bytes. Compare the same binding without rewriting either receipt.
+    require(
+        same_json_value(
+            snapshot.get("binding"),
+            {**semantic_binding, "artifact_digest": bytes(artifact).hex()},
+        ),
+        "completed capture snapshot binding differs from its producer",
+    )
+    native = capture["report"]
+    counters = (
+        "generation",
+        "accepted_records",
+        "committed_records",
+        "pending_records",
+        "pending_bytes",
+    )
+    require(
+        same_json_value(producer["running_cache"], capture)
+        and capture.get("terminal") is True
+        and capture.get("flush_complete") is True
+        and all(
+            capture.get(key) is None
+            for key in ("flush_error", "snapshot_error", "reduction_error")
+        )
+        and capture["close"].get("error") is None
+        and same_json_value(capture["close"]["report"], native)
+        and native.get("schema") == "rustred.running-application-cache.v1"
+        and native.get("closed") is True
+        and native.get("writer_error") is None
+        and native.get("last_error") is None
+        and all(type(native.get(key)) is int and native[key] >= 0 for key in counters)
+        and native["generation"] > 0
+        and native["accepted_records"] == native["committed_records"] > 0
+        and native["pending_records"] == native["pending_bytes"] == 0
+        and capture["flush_report"].get("schema") == native["schema"]
+        and capture["flush_report"].get("writer_error") is None
+        and capture["flush_report"].get("last_error") is None
+        and same_json_value(
+            {key: capture["flush_report"][key] for key in counters},
+            {key: native[key] for key in counters},
+        )
+        and same_json_value(capture["snapshot"], snapshot)
+        and Path(capture["snapshot_descriptor"]).resolve()
+        == Path(docs["snapshot"]["evidence"]["path"])
+        and Path(capture["snapshot_sidecar"]).resolve()
+        == Path(docs["index"]["evidence"]["path"]),
+        "completed capture differs from its actual clean flush/close/snapshot",
+    )
+    producer_path = Path(docs["producer"]["evidence"]["path"])
+    for filename, field in (
+        ("value.symbolica", "value_sha256"),
+        ("guards.json", "guards_sha256"),
+    ):
+        require(
+            isinstance(producer.get(field), str)
+            and re.fullmatch(r"[0-9a-f]{64}", producer[field]),
+            "completed capture lacks full output/guard identities",
+        )
+        hashed_file(
+            {"path": str(producer_path.with_name(filename)), "sha256": producer[field]},
+            base,
+        )
+    completion_path, completion = ReportEvidence.strict_record(
+        source["completion"], base
+    )
+    docs["completion"] = {
+        "evidence": evidence(completion_path),
+        "raw_receipt": completion,
+    }
+    require(
+        hashed_file(
+            barrier["completion"], Path(docs["barrier"]["evidence"]["path"]).parent
+        )
+        == completion_path,
+        "snapshot barrier names another capture completion",
+    )
+    if (
+        completion.get("schema")
+        == "vakint.large-native-cache.functional-tuning-receipt.v1"
+    ):
+        terminal_path, terminal = ReportEvidence.strict_record(
+            completion["actual_terminal"], completion_path.parent
+        )
+        docs["terminal"] = {
+            "evidence": evidence(terminal_path),
+            "raw_receipt": terminal,
+        }
+        closed = completion["new_closed_capture"]
+        parity = completion["functional_parity"]
+        scope = completion["scope"]
+        require(
+            completion.get("status") == "PASS_EXPOSED_TUNING_ONLY"
+            and hashed_file(completion["actual_worker"], completion_path.parent)
+            == producer_path
+            and hashed_file(completion["workload"], completion_path.parent)
+            and completion["workload"]["sha256"] == identity["workload_sha256"]
+            and terminal.get("schema") == "vakint.large-native-cache.tuning-pilot.v1"
+            and terminal.get("state") == "PASS"
+            and type(terminal.get("worker_returncode")) is int
+            and terminal["worker_returncode"] == 0
+            and hashed_file(terminal["worker_receipt"], terminal_path.parent)
+            == producer_path
+            and terminal["case_id"] == producer["case_id"]
+            and terminal.get("value_bytes_equal") is True
+            and terminal.get("complete_sorted_unique_guard_set_equal") is True
+            and parity["value_sha256"] == producer["value_sha256"]
+            and parity["complete_exported_guard_set_sha256"]
+            == producer["guards_sha256"]
+            and scope.get("provisional") is True
+            and all(
+                scope.get(key) is False
+                for key in (
+                    "native_keys_authenticated",
+                    "held_out",
+                    "performance_qualification",
+                    "final_cache_complete",
+                )
+            )
+            and closed.get("closed") is True
+            and closed.get("error") is None
+            and all(
+                closed[key] == native[key] and type(closed[key]) is int
+                for key in (
+                    "generation",
+                    "accepted_records",
+                    "committed_records",
+                    "pending_records",
+                )
+            )
+            and Path(closed["path"]).resolve() == Path(capture["path"]).resolve()
+            and Path(closed["cache_index"]["path"]).resolve()
+            == Path(capture["path"]).resolve() / "cache.rrindex"
+            and closed["cache_index"]["sha256"] == docs["index"]["evidence"]["sha256"]
+            and type(closed["cache_index"]["bytes"]) is int
+            and closed["cache_index"]["bytes"] == snapshot["delta"]["manifest_bytes"]
+            and hashed_file(closed["snapshot_descriptor"], completion_path.parent)
+            == Path(docs["snapshot"]["evidence"]["path"]),
+            "functional tuning receipt differs from its completed captured source",
+        )
+    else:
+        require(
+            completion.get("status")
+            == "PASS_ACTUAL_ONE_REGULAR_CLI_Q_AND_RUNNING_CAPTURE",
+            "unknown completed capture receipt",
+        )
+        for name in ("result", "capture_evidence"):
+            refpath, document = ReportEvidence.strict_record(source[name], base)
+            docs[name] = {"evidence": evidence(refpath), "raw_receipt": document}
+        result = docs["result"]["raw_receipt"]
+        retained = docs["capture_evidence"]["raw_receipt"]
+        unit = completion["unit_terminal_properties"]
+        require(
+            completion["result_sha256"] == source["result"]["sha256"]
+            and completion["capture_evidence_sha256"]
+            == source["capture_evidence"]["sha256"]
+            and result["running_capture_evidence_sha256"]
+            == source["capture_evidence"]["sha256"]
+            and result.get("status") == "PASS"
+            and result.get("full_value_and_guards_byte_parity") is True
+            and result.get("performance_claim") is False
+            and same_json_value(result["current_identity"], identity)
+            and all(
+                result[key] == producer[key]
+                for key in ("input_sha256", "value_sha256", "guards_sha256")
+            )
+            and type(result["running_accepted_records"]) is int
+            and type(result["running_committed_records"]) is int
+            and result["running_accepted_records"] == native["accepted_records"]
+            and result["running_committed_records"] == native["committed_records"]
+            and len(result["runs"]) == 1
+            and result["runs"][0]["mode"] == "monitored-q"
+            and type(result["runs"][0]["returncode"]) is int
+            and result["runs"][0]["returncode"] == 0
+            and result["runs"][0].get("timed_out") is False
+            and result["runs"][0]["errors"] == []
+            and unit["ActiveState"] == "inactive"
+            and unit["SubState"] == "dead"
+            and unit["Result"] == "success"
+            and unit["ExecMainStatus"] == "0"
+            and completion["owned_processes_absent"]
+            and all(
+                value is True for value in completion["owned_processes_absent"].values()
+            )
+            and same_json_value(retained["native_report"], native)
+            and same_json_value(retained["flush_report"], capture["flush_report"])
+            and same_json_value(retained["snapshot"], snapshot),
+            "CLI completion differs from its actual worker/capture/result",
+        )
+        for name in ("capture", "snapshot", "index"):
+            ref = docs[name]["evidence"]
+            recorded = retained["retained_files"].get(ref["path"], {})
+            require(
+                recorded.get("sha256") == ref["sha256"]
+                and type(recorded.get("bytes")) is int
+                and recorded["bytes"]
+                == (
+                    snapshot["delta"]["manifest_bytes"]
+                    if name == "index"
+                    else Path(ref["path"]).stat().st_size
+                ),
+                "CLI completion omits or changes retained source evidence",
+            )
+    return {
+        **source,
+        "receipts": docs,
+        "original_producer_identity": identity,
+        "scope_note": "Completed exposed tuning capture; no physical example, final cache selection or performance qualification.",
+    }
+
+
 def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity=None):
     """Consume accepted snapshot evidence; a preserved prefix is not a finished run."""
     path = Path(path).resolve()
@@ -3217,7 +3463,8 @@ def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity
                 source.get("kind") == "strict-preparation"
                 and source["scope"] == "completed-preparation"
                 or source.get("kind") != "strict-preparation"
-                and source["scope"] in ("committed-prefix", "completed-example")
+                and source["scope"]
+                in ("committed-prefix", "completed-example", "completed-capture")
             ),
             "duplicate/invalid cumulative source",
         )
@@ -3326,9 +3573,20 @@ def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity
             "snapshot barrier differs from actual native capture/snapshot",
         )
         require(
-            barrier["producer_completed"] is (source["scope"] == "completed-example"),
+            barrier["producer_completed"]
+            is (source["scope"] in ("completed-example", "completed-capture")),
             "partial source cannot become completed example",
         )
+        if source["scope"] == "completed-capture":
+            sources.append(
+                completed_capture_source(
+                    source,
+                    docs,
+                    path.parent,
+                    semantic_binding=report["semantic_binding"],
+                )
+            )
+            continue
         if source["scope"] == "completed-example":
             require(
                 docs["producer"]["raw_receipt"].get("schema")
@@ -3396,7 +3654,8 @@ def cumulative_cache_record(path, cache, physical_scope=None, *, source_identity
         if preservation_only
         else "validated-committed-snapshot",
         "all_source_runs_completed": all(
-            row["scope"] in ("completed-example", "completed-preparation")
+            row["scope"]
+            in ("completed-example", "completed-preparation", "completed-capture")
             for row in report["sources"]
         ),
         **physical_completion(completed_physical, physical_scope),
