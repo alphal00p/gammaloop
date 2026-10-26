@@ -96,61 +96,63 @@ class GalleryBenchmarkTests(unittest.TestCase):
                 self.assertFalse(Gallery.benchmark_available())
 
     def test_launch_records_projection_bundle_and_background_worker(self):
-        for projection in ("quadratic", "zero-momentum"):
-            with self.subTest(projection=projection):
-                inherited = []
+        projection = "zero-momentum"
+        inherited = []
 
-                def spawn(*args, inherited=inherited, **kwargs):
-                    (descriptor,) = kwargs["pass_fds"]
-                    os.fstat(descriptor)
-                    inherited.append(descriptor)
+        def spawn(*args, inherited=inherited, **kwargs):
+            (descriptor,) = kwargs["pass_fds"]
+            os.fstat(descriptor)
+            inherited.append(descriptor)
 
-                with patch(
-                    "shared_gallery.subprocess.Popen", side_effect=spawn
-                ) as popen:
-                    work = Path(Gallery.start_benchmark(projection))
-                command = json.loads((work / "request.json").read_text())["command"]
-                self.assertEqual(
-                    command[0], self.environment["VAKINT_GALLERY_BENCHMARK"]
-                )
-                self.assertEqual(command[command.index("--projection") + 1], projection)
-                self.assertEqual(
-                    command[command.index("--prepared-input") + 1],
-                    str((self.prepared / projection).resolve()),
-                )
-                self.assertEqual(command[command.index("--work-dir") + 1], str(work))
-                self.assertEqual(
-                    command[command.index("--artifacts") + 1],
-                    self.environment["VAKINT_GALLERY_ARTIFACTS"],
-                )
-                self.assertNotIn("--cache", command)
-                self.assertIn("--running-cache-capture-only", command)
-                self.assertNotIn("--running-cache-no-read-delta", command)
-                self.assertEqual(
-                    command[command.index("--running-cache") + 1],
-                    str(work / "running-cache"),
-                )
-                self.assertTrue(work.is_dir())
-                self.assertFalse((work / "running-cache").exists())
-                self.assertEqual(
-                    json.loads((work / "status.json").read_text()),
-                    {"state": "starting"},
-                )
-                popen.assert_called_once()
-                arguments = popen.call_args.args[0]
-                self.assertEqual(arguments[0], sys.executable)
-                self.assertEqual(
-                    Path(arguments[1]), Gallery.directory / "benchmark_job.py"
-                )
-                self.assertEqual(arguments[2:], [str(work), str(inherited[0])])
-                self.assertEqual(popen.call_args.kwargs["stderr"], subprocess.STDOUT)
-                self.assertNotIn("timeout", popen.call_args.kwargs)
-                with self.assertRaises(OSError):
-                    os.fstat(inherited[0])
+        with patch("shared_gallery.subprocess.Popen", side_effect=spawn) as popen:
+            work = Path(Gallery.start_benchmark(projection))
+        command = json.loads((work / "request.json").read_text())["command"]
+        self.assertEqual(command[0], self.environment["VAKINT_GALLERY_BENCHMARK"])
+        self.assertEqual(command[command.index("--projection") + 1], projection)
+        self.assertEqual(
+            command[command.index("--prepared-input") + 1],
+            str((self.prepared / projection).resolve()),
+        )
+        self.assertEqual(command[command.index("--work-dir") + 1], str(work))
+        self.assertEqual(
+            command[command.index("--artifacts") + 1],
+            self.environment["VAKINT_GALLERY_ARTIFACTS"],
+        )
+        self.assertNotIn("--cache", command)
+        self.assertIn("--running-cache-capture-only", command)
+        self.assertNotIn("--running-cache-no-read-delta", command)
+        self.assertEqual(
+            command[command.index("--running-cache") + 1],
+            str(work / "running-cache"),
+        )
+        self.assertTrue(work.is_dir())
+        self.assertFalse((work / "running-cache").exists())
+        self.assertEqual(
+            json.loads((work / "status.json").read_text()),
+            {"state": "starting"},
+        )
+        popen.assert_called_once()
+        arguments = popen.call_args.args[0]
+        self.assertEqual(arguments[0], sys.executable)
+        self.assertEqual(Path(arguments[1]), Gallery.directory / "benchmark_job.py")
+        self.assertEqual(arguments[2:], [str(work), str(inherited[0])])
+        self.assertEqual(popen.call_args.kwargs["stderr"], subprocess.STDOUT)
+        self.assertNotIn("timeout", popen.call_args.kwargs)
+        with self.assertRaises(OSError):
+            os.fstat(inherited[0])
+
+    def test_quadratic_launch_is_deferred_without_starting_a_worker(self):
+        with (
+            patch("shared_gallery.subprocess.Popen") as popen,
+            self.assertRaisesRegex(ValueError, "quadratic reduction is deferred"),
+        ):
+            Gallery.start_benchmark("quadratic")
+        popen.assert_not_called()
+        self.assertFalse(self.work.exists())
 
     def test_cached_launch_uses_configured_cache(self):
         with patch("shared_gallery.subprocess.Popen"):
-            work = Path(Gallery.start_benchmark("quadratic", cached=True))
+            work = Path(Gallery.start_benchmark("zero-momentum", cached=True))
         command = json.loads((work / "request.json").read_text())["command"]
         self.assertEqual(
             command[command.index("--cache") + 1],
@@ -170,7 +172,7 @@ class GalleryBenchmarkTests(unittest.TestCase):
         index.write_bytes(b"synthetic opaque native index")
         before = index.read_bytes()
         with patch("shared_gallery.subprocess.Popen"):
-            work = Path(Gallery.start_benchmark("quadratic", cached=True))
+            work = Path(Gallery.start_benchmark("zero-momentum", cached=True))
         command = json.loads((work / "request.json").read_text())["command"]
         self.assertEqual(command[command.index("--cache") + 1], str(cache))
         self.assertEqual(index.read_bytes(), before)
@@ -182,18 +184,18 @@ class GalleryBenchmarkTests(unittest.TestCase):
             patch("shared_gallery.subprocess.Popen") as popen,
             self.assertRaisesRegex(ValueError, "cache"),
         ):
-            Gallery.start_benchmark("quadratic", cached=True)
+            Gallery.start_benchmark("zero-momentum", cached=True)
         popen.assert_not_called()
 
     def test_fresh_output_directories_share_only_prepared_input(self):
         with patch("shared_gallery.subprocess.Popen"):
-            first = Path(Gallery.start_benchmark("quadratic"))
-            second = Path(Gallery.start_benchmark("quadratic"))
+            first = Path(Gallery.start_benchmark("zero-momentum"))
+            second = Path(Gallery.start_benchmark("zero-momentum"))
         self.assertNotEqual(first, second)
         for work in (first, second):
             self.assertEqual(work.parent, self.work.resolve())
             self.assertTrue((work / "request.json").is_file())
-            self.assertNotEqual(work, self.prepared / "quadratic")
+            self.assertNotEqual(work, self.prepared / "zero-momentum")
             command = json.loads((work / "request.json").read_text())["command"]
             self.assertEqual(
                 command[command.index("--running-cache") + 1],
@@ -208,7 +210,7 @@ class GalleryBenchmarkTests(unittest.TestCase):
                 patch("shared_gallery.subprocess.Popen") as popen,
                 self.assertRaisesRegex(RuntimeError, "already running"),
             ):
-                Gallery.start_benchmark("quadratic")
+                Gallery.start_benchmark("zero-momentum")
             popen.assert_not_called()
         self.assertEqual(list(self.work.iterdir()), [self.work / "benchmark.lock"])
 
@@ -220,7 +222,7 @@ class GalleryBenchmarkTests(unittest.TestCase):
             ) as popen,
             self.assertRaisesRegex(OSError, "synthetic launch error"),
         ):
-            Gallery.start_benchmark("quadratic")
+            Gallery.start_benchmark("zero-momentum")
         popen.assert_called_once()
         (descriptor,) = popen.call_args.kwargs["pass_fds"]
         with self.assertRaises(OSError):
@@ -437,7 +439,9 @@ class GalleryClosurePresentationTests(unittest.TestCase):
         arguments = {arg.arg: object() for arg in self.cell.args.args}
         arguments.update(
             mo=mo,
-            Gallery=SimpleNamespace(metrics=lambda *_: "metrics"),
+            Gallery=SimpleNamespace(
+                metrics=lambda *_: "metrics", native_formula=Gallery.native_formula
+            ),
             closure_seconds=0.1,
         )
         formula_names = (
@@ -479,6 +483,104 @@ class GalleryClosurePresentationTests(unittest.TestCase):
             self.assertTrue(tabs.contents[tabs.value])
         self.assertEqual(render.call_count, 2)
         self.assertEqual(static_html.call_count, len(formula_names))
+
+
+class GalleryNativeFormulaTests(unittest.TestCase):
+    def test_missing_native_html_is_an_explicit_error(self):
+        for payload in (None, "", "  ", b"not a native HTML string"):
+            with self.subTest(payload=payload):
+                mo = SimpleNamespace(Html=Mock())
+                expression = SimpleNamespace(_repr_html_=Mock(return_value=payload))
+                with self.assertRaisesRegex(ValueError, "native HTML"):
+                    Gallery.native_formula(mo, expression)
+                mo.Html.assert_not_called()
+
+    def test_all_four_tensor_panes_use_the_native_static_protocol(self):
+        path = Gallery.directory / "01_graphs_and_numerators.py"
+        tree = ast.parse(path.read_text())
+        cell = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.FunctionDef)
+            and {arg.arg for arg in node.args.args}
+            == {
+                "Gallery",
+                "contraction_seconds",
+                "mo",
+                "numerator",
+                "projected",
+                "projector",
+                "reduced",
+            }
+        )
+        cell.decorator_list = []
+        namespace = {}
+        exec(  # noqa: S102 - Execute only this presentation cell with fake native values.
+            compile(ast.Module(body=[cell], type_ignores=[]), str(path), "exec"),
+            namespace,
+        )
+        tabs = Mock(side_effect=lambda contents: SimpleNamespace(contents=contents))
+        mo = SimpleNamespace(
+            Html=Mock(side_effect=lambda text: text),
+            vstack=lambda values: values,
+            ui=SimpleNamespace(tabs=tabs),
+        )
+        names = ("reduced", "projector", "numerator", "projected")
+        values = {
+            name: SimpleNamespace(
+                _repr_html_=Mock(return_value=f"<math><mi>{name}</mi></math>"),
+                _display_=Mock(side_effect=AssertionError("Interactive widget")),
+            )
+            for name in names
+        }
+        namespace["_"](
+            Gallery=SimpleNamespace(
+                native_formula=Gallery.native_formula,
+                metrics=lambda *_: "metrics",
+                note=lambda *_: "note",
+            ),
+            mo=mo,
+            contraction_seconds=0.1,
+            **values,
+        )
+        contents = tabs.call_args.args[0]
+        self.assertEqual(
+            list(contents),
+            [
+                "Scalar dot products",
+                "Projector",
+                "Tensor numerator",
+                "Projected tensor",
+            ],
+        )
+        for name, payload in zip(names, contents.values(), strict=True):
+            values[name]._repr_html_.assert_called_once_with()
+            values[name]._display_.assert_not_called()
+            self.assertEqual(
+                payload,
+                f'<div class="vg-native-formula"><math><mi>{name}</mi></math></div>',
+            )
+
+    def test_physical_run_cell_exposes_only_zero_momentum(self):
+        tree = ast.parse((Gallery.directory / "03_five_loop_uv.py").read_text())
+        calls = [
+            node
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and isinstance(node.func.value, ast.Name)
+            and node.func.value.id == "Gallery"
+            and node.func.attr == "start_benchmark"
+        ]
+        self.assertEqual(len(calls), 1)
+        self.assertIsInstance(calls[0].args[0], ast.Constant)
+        self.assertEqual(calls[0].args[0].value, "zero-momentum")
+        self.assertFalse(
+            any(
+                isinstance(node, ast.Name) and node.id == "benchmark_choice"
+                for node in ast.walk(tree)
+            )
+        )
 
 
 class GalleryFooterTests(unittest.TestCase):

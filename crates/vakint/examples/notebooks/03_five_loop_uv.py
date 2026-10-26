@@ -1,4 +1,4 @@
-"""The complete quadratic QCD fixture, its provenance, and measured reductions."""
+"""The zero-momentum QCD fixture, its provenance, and cache comparisons."""
 
 # Marimo cell outputs and generated return markers are intentional.
 # ruff: noqa: B018, PLR1711
@@ -24,10 +24,10 @@ def _(Gallery, mo):
     Gallery.header(
         mo,
         "five-loop",
-        "A five-loop UV coefficient",
-        "One closed massless quark trace, four gluon rungs, and the complete "
-        "quadratic transverse Taylor coefficient. Follow the scientific input "
-        "through the authenticated reduction campaign.",
+        "A five-loop zero-momentum reduction",
+        "One closed massless quark trace and four gluon rungs. Follow the "
+        "unaveraged metric/color contraction through the authenticated campaign "
+        "and compare its uncached, light-cache and heavy-cache reductions.",
     )
     return
 
@@ -40,13 +40,14 @@ def _(Gallery, mo):
                 mo,
                 [
                     ("5", "vacuum loops"),
-                    ("14 → 16", "total denominator powers after Taylor expansion"),
-                    ("10", "unlowered quadratic coefficient: A − r_mom"),
+                    ("14", "total denominator powers"),
+                    ("5", "original momentum rank"),
+                    ("9", "zero-momentum input: A − r_mom"),
                     ("640", "declared 5L campaign masters; uncomputed"),
                 ],
             ),
             Gallery.section(
-                mo, "01 / scientific input", "Keep the full quadratic fixture"
+                mo, "01 / scientific input", "Keep the complete zero-momentum input"
             ),
         ]
     )
@@ -71,37 +72,18 @@ def _(Gallery, mo):
     mo.vstack(
         [
             mo.md(r"""
-        $$\frac{\delta_{ab}}{8(d-1)q^2}
-        \left(g_{\mu\nu}-\frac{q_\mu q_\nu}{q^2}\right).$$
+        $$g_{\mu\nu}\,\delta_{ab}\,
+        \Pi^{ab,\mu\nu}(q)\big|_{q=0}.$$
 
-        Expand **numerator and propagator product together** through order
-        $q^2$, then remove the auxiliary external direction by exact tensor
-        reduction. Insert $M_{\mathrm{UV}}$ only in the vacuum denominators;
-        the quark slash numerators stay massless. Native graph factors are
-        included once.
+        Set the external momentum to zero and retain **both current vertices**
+        and all contributions. The metric/color contraction is unaveraged.
+        Insert $M_{\mathrm{UV}}$ only in the vacuum denominators; the quark
+        slash numerators stay massless. Native diagram factors are included once.
         """),
             mo.ui.table(
                 [
                     {
-                        "contribution": "Quadratic · numerator order 2",
-                        "A": 14,
-                        "r_mom": 4,
-                        "A − r_mom": 10,
-                    },
-                    {
-                        "contribution": "Quadratic · mixed expansion",
-                        "A": 15,
-                        "r_mom": 5,
-                        "A − r_mom": 10,
-                    },
-                    {
-                        "contribution": "Quadratic · propagator order 2",
-                        "A": 16,
-                        "r_mom": 6,
-                        "A − r_mom": 10,
-                    },
-                    {
-                        "contribution": "Separate zero-momentum diagnostic",
+                        "contribution": "Complete zero-momentum contraction",
                         "A": 14,
                         "r_mom": 5,
                         "A − r_mom": 9,
@@ -114,7 +96,7 @@ def _(Gallery, mo):
             Gallery.note(
                 mo,
                 "One graph, precisely defined",
-                "This is a single graph's transverse quadratic coefficient, not a gauge-complete sum, beta function, or fully R-subtracted observable. Twelve vacuum incidence edges coalesce to nine distinct quadratic denominator forms.",
+                "This is one graph's zero-momentum vacuum contribution, not a gauge-complete sum, beta function, or fully R-subtracted observable. The displayed graph supplies its geometry; the saved scalar input preserves the specialized numerator, routing and native factors. Twelve vacuum incidence edges coalesce to nine distinct quadratic denominator forms.",
             ),
             mo.accordion(
                 {
@@ -129,7 +111,15 @@ def _(Gallery, mo):
                 A coefficient $(M_{\mathrm{UV}}^2)^j$ balances engineering
                 mass dimension through $D_{\mathrm{key}}-j$; it does not
                 change that scalar term's loop-momentum UV degree.
-                """)
+                """),
+                    "Deferred quadratic fixture · no Run action": mo.md(r"""
+                The complete quadratic Taylor coefficient and its prepared input
+                are retained for a later decision. Its transverse contraction is
+                $\delta_{ab}(g_{\mu\nu}-q_\mu q_\nu/q^2)/[8(d-1)q^2]$;
+                the original groups have $(A,r_{\mathrm{mom}})=(14,4),(15,5),(16,6)$.
+                Quadratic reduction and retesting are **deferred**. No completed
+                quadratic reduction, cache comparison or Run action is offered here.
+                """),
                 }
             ),
         ]
@@ -175,14 +165,24 @@ def _(Gallery, mo):
                 "Uncached versus cumulative-cache reduction",
                 "Verified scalar-input loading, external data, native reduction and cache attachment are measured separately. Fresh scientific preparation is independent validation.",
             ),
-            Gallery.evidence_card(mo, "quadratic", "Complete quadratic fixture"),
             Gallery.evidence_card(
-                mo, "zero-momentum", "Zero-momentum metric/color diagnostic"
+                mo, "zero-momentum", "Complete zero-momentum physical reduction"
             ),
             Gallery.evidence_card(
                 mo,
                 "zero-momentum-running-cache",
                 "Optimized zero-momentum run · cumulative cache progress",
+            ),
+            Gallery.evidence_card(
+                mo, "zero-momentum-light-cache", "Official light cache · at most 95 MB"
+            ),
+            Gallery.evidence_card(
+                mo, "zero-momentum-heavy-cache", "Full heavy cache · hosted separately"
+            ),
+            Gallery.note(
+                mo,
+                "Two cache tiers, separately measured",
+                "The full accumulated heavy cache is preserved without an aggregate size cap and supplied as a compressed local artifact for separate hosting. Only the trimmed light cache, selected by measured rule frequency and usefulness and limited to 95 MB, is published in the official repository and releases. A cached run uses the server's explicitly configured immutable base; light and heavy results remain distinct.",
             ),
             mo.md(
                 "Final comparisons use three fresh processes per configuration with the same verified scalar input, medians and ranges, fixed workers/affinity, and exact result/guard checks. Original graph and numerator preparation are reported separately. Warm in-process reuse is reported separately."
@@ -205,17 +205,8 @@ def _(Gallery, mo):
 
 @app.cell
 def _(Gallery, mo, os):
-    benchmark_choice = mo.ui.dropdown(
-        {
-            "Complete quadratic coefficient": "quadratic",
-            "Zero-momentum diagnostic": "zero-momentum",
-        },
-        value="Complete quadratic coefficient",
-        label="Physical projection",
-        full_width=True,
-    )
     use_cache = mo.ui.checkbox(
-        label="Attach the configured prepared cache",
+        label="Attach the configured light or heavy cache",
         disabled=not bool(os.environ.get("VAKINT_GALLERY_CACHE")),
     )
     run_benchmark = mo.ui.run_button(
@@ -225,12 +216,16 @@ def _(Gallery, mo, os):
     )
     mo.vstack(
         [
-            benchmark_choice,
+            Gallery.note(
+                mo,
+                "Zero-momentum only",
+                "This action reduces the verified zero-momentum input. The quadratic fixture is deferred and has no gallery Run action.",
+            ),
             use_cache,
             Gallery.note(
                 mo,
                 "May take substantial time",
-                "This invokes the compiled Rust reduction with the complete verified scalar input, preserving all contributions and projector conditions. It reuses graph, trace and Taylor preparation and saves completed native work in a fresh per-run cache delta, including durable prefixes of failed reductions. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
+                "This invokes the compiled Rust reduction with the complete verified zero-momentum scalar input, preserving all contributions and contraction conditions. It reuses graph and trace preparation and saves completed native work in a fresh per-run cache delta, including durable prefixes of failed reductions. Reduction can still take minutes or hours; there is no default time cutoff. A single interactive run is not a controlled three-run benchmark.",
             ),
             run_benchmark,
             mo.md(
@@ -240,16 +235,14 @@ def _(Gallery, mo, os):
             ),
         ]
     )
-    return benchmark_choice, run_benchmark, use_cache
+    return run_benchmark, use_cache
 
 
 @app.cell
-def _(Gallery, benchmark_choice, mo, run_benchmark, use_cache):
+def _(Gallery, mo, run_benchmark, use_cache):
     mo.stop(not run_benchmark.value)
     try:
-        benchmark_job = Gallery.start_benchmark(
-            benchmark_choice.value, cached=use_cache.value
-        )
+        benchmark_job = Gallery.start_benchmark("zero-momentum", cached=use_cache.value)
     except (OSError, ValueError, RuntimeError) as _error:
         mo.stop(True, mo.callout(str(_error), kind="warn"))
     return (benchmark_job,)

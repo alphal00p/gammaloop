@@ -143,7 +143,7 @@ def _(Gallery, graph_choice, mo):
             Gallery.note(
                 mo,
                 "Explicit computation",
-                "The five-loop numerator can take several minutes. This unaveraged metric/color contraction is a tensor demonstration; the complete quadratic transverse UV coefficient is in the next app.",
+                "The five-loop numerator can take several minutes. This unaveraged metric/color contraction is a tensor demonstration; the next app follows the complete zero-momentum vacuum reduction. The quadratic Taylor fixture is deferred.",
                 pending=graph_choice.value == "ladder",
             ),
             contract_button,
@@ -196,16 +196,16 @@ def _(Gallery, contraction_seconds, mo, numerator, projected, projector, reduced
             ),
             mo.ui.tabs(
                 {
-                    "Scalar dot products": reduced,
-                    "Projector": projector,
-                    "Tensor numerator": numerator,
-                    "Projected tensor": projected,
+                    "Scalar dot products": Gallery.native_formula(mo, reduced),
+                    "Projector": Gallery.native_formula(mo, projector),
+                    "Tensor numerator": Gallery.native_formula(mo, numerator),
+                    "Projected tensor": Gallery.native_formula(mo, projected),
                 }
             ),
             Gallery.note(
                 mo,
                 "One native tensor workflow",
-                "The returned scalar is still a TensorExpression. Model parameters remain symbolic and SU(3) invariants are evaluated. The physical five-loop fixture separately specializes the massless quark and applies its complete quadratic projector.",
+                "The returned scalar is still a TensorExpression. Model parameters remain symbolic and SU(3) invariants are evaluated. The physical five-loop example specializes the massless quark at zero external momentum and keeps the unaveraged metric/color contraction. Its quadratic Taylor expansion is deferred.",
             ),
         ]
     )
@@ -226,10 +226,12 @@ def _(Gallery, mo):
         retained = engine.evaluate_integral(integral.to_expression())
         ```
 
-        The vacuum diagram and its family must have matching routing. The full
-        five-loop example also expands **both numerator and propagators**, applies
-        the transverse projector, and inserts the common mass only in the
-        denominators. Those steps are performed by the shared scientific fixture.
+        The vacuum diagram and its family must have matching routing. The complete
+        zero-momentum five-loop fixture keeps both current vertices and the
+        unaveraged metric/color contraction. Its massless quark numerators are
+        specialized at $q=0$; the common mass enters only the vacuum denominators.
+        The distinct quadratic Taylor/transverse fixture is deferred and has no
+        gallery Run action.
         """),
             Gallery.footer(mo),
         ]

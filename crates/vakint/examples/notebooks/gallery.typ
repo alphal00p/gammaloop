@@ -3,7 +3,10 @@
 These four Marimo applications share the native HEPKit, tensor, graph and
 Symbolica types from one coherent host. They demonstrate graph dressing and
 efficient gamma/color contractions, precision-aware constant/master inspection,
-the complete quadratic four-rung UV fixture, and exact numerator/pinch closure.
+the zero-momentum four-rung vacuum fixture, and exact numerator/pinch closure.
+The quadratic Taylor fixture is retained as deferred history. Its reduction,
+retesting and cache comparison require a later user decision and have no gallery
+Run action.
 The source follows the native workflow of the
 #link("https://www.hepkit.org/gallery/notebooks/four_loop_numerator.py")[HEPKit numerator tutorial].
 
@@ -45,7 +48,7 @@ Each optional producer receipt is listed in #raw("data/manifest.json") with its
 relative path and SHA-256. #raw("VAKINT_GALLERY_EVIDENCE") can select another
 directory containing the same manifest. The app checks the bytes before display
 and rejects traversal or corruption. Receipt names are #raw("campaign"),
-#raw("quadratic"), #raw("zero-momentum"), #raw("closure"), #raw("cache-build"),
+#raw("zero-momentum"), #raw("closure"), #raw("cache-build"),
 #raw("held-out") and #raw("warning-controls"). The last records a real tuning
 case which triggered a lowered-entry coverage advisory and still reduced to
 declared catalogue masters. Its provisional owner mapping does not establish
@@ -62,6 +65,10 @@ that same input is a seen-input check, distinct from the held-out suite.
 Keep final reduction times, speedups and estimates absent until their completed
 authenticated receipts are available. Refreshing this evidence does not require
 changing the deployed native host or starting a numerical calculation.
+The separate #raw("zero-momentum-light-cache") and
+#raw("zero-momentum-heavy-cache") receipts contain completed comparisons for
+their named tier. Keep them pending until exact results, cache identities and
+controlled measurements have been validated.
 
 Browser previews have bounded depth, item counts and string lengths. A receipt
 above 8 MiB is offered as a download instead of being parsed into the page.
@@ -73,9 +80,12 @@ embedding large arrays in the browser. Unlisted paths and checksum mismatches
 are rejected. A returned expression with unknown terminals is labeled a partial
 retained result, never a completed reduction to catalogue masters.
 
-The quadratic fixture retains the full numerator/propagator expansion and
-transverse normalization. The separate metric/color zero-momentum diagnostic
-is never substituted for it. Timings distinguish numerator preparation, loading,
+The primary physical fixture is the complete zero-momentum contraction with both
+current vertices, unaveraged #raw("g_mu_nu delta_a_b"), massless quark slash
+numerators, and the auxiliary mass only in vacuum denominators. It has
+#raw("R=5, A=14, D=9"). The distinct quadratic fixture and its transverse
+normalization remain deferred; no completed or cached quadratic result is claimed.
+Timings distinguish numerator preparation, loading,
 routing, IBP reduction, cache attachment and total runtime. Final comparisons
 use medians/ranges of three fresh processes and exact result/guard checks.
 
@@ -85,13 +95,14 @@ To enable the saved-input reduction button, configure the qualified compiled
 #raw("VAKINT_GALLERY_BENCHMARK") executable, #raw("VAKINT_GALLERY_ARTIFACTS")
 checkout, #raw("VAKINT_GALLERY_WORK") development directory, and
 #raw("VAKINT_GALLERY_PREPARED_INPUT_ROOT"). This last directory contains
-#raw("quadratic/") and #raw("zero-momentum/") bundles, each with
+#raw("zero-momentum/") bundle with
 #raw("prepared-input.json"), #raw("vakint-input.symbolica") and its complete
 #raw("projector-conditions.symbolica"). The selected bundle must exist; the native
 CLI validates its exact payload, projection, scientific identity and producer
 provenance. Missing or invalid configured input reports an error and never falls
-back to fresh preparation. The two projections keep their distinct scientific
-definitions. The executable must support #raw("--running-cache") and
+back to fresh preparation. Historical quadratic bundles can be retained,
+but the gallery launcher rejects that projection while it is deferred.
+The executable must support #raw("--running-cache") and
 #raw("--running-cache-capture-only"); bind its bytes and capabilities to the
 reviewed build and consumer-validation receipts before enabling the button.
 An older executable is not a fallback for unsupported flags.
@@ -114,8 +125,8 @@ durable prefix, including when the reduction or reporting fails; do not reuse a
 failed job's directory for another attempt.
 
 Each fresh process uses the same complete scalar input without
-repeating native graph generation, trace contraction, Taylor expansion or angular
-projection. The report separates current verification/loading from original
+repeating native graph generation or trace contraction. The report separates
+current verification/loading from original
 producer preparation; historical preparation is excluded from current end-to-end
 time. Validate fresh scientific generation independently with
 #raw("--fresh-prepare --prepare-only") in a new directory before installing a
@@ -127,12 +138,23 @@ time cutoff.
 Requests, logs and resulting receipts remain below the configured workspace.
 The app never starts #raw("prepare_cache") or a #raw("build_cache") production
 job. Completed native work captured during reductions can later join the
-authenticated cumulative cache. Keep large useful prefixes; there is no
-aggregate cache-size cap. Multipart release transport keeps each asset below
-GitHub's limit and installs one native directory, preserving its codec and
-campaign bindings. The graph tutorial's explicit tensor-contraction
+authenticated cumulative cache. Preserve the full *heavy* running cache without
+an aggregate size cap, and provide its compressed local artifact for separate
+hosting. Only the trimmed *light* cache, selected using measured rule frequency
+and usefulness and limited to *95 MB*, is published in the official repository
+and releases. Keep light and heavy provenance, sizes and timing comparisons
+distinct; neither live counts nor compressed size proves a speedup. Both preserve
+native codec and campaign bindings. The graph tutorial's explicit tensor-contraction
 button is a separate, interactive algebra demonstration, not a controlled timing
-sample of the complete quadratic fixture.
+sample of the physical zero-momentum fixture.
+
+The ten small teaching formulae use their objects' existing native HTML protocol
+through the shared gallery presentation method. This retains native MathML and
+any bounded-preview omission notes without a view-owned widget model. The
+underlying tensor/Expression objects, native gamma/color/dot contraction, and
+interactive FeynKit graphs are unchanged. Verify every default teaching formula
+is complete, and both directions of every formula-tab switch work, in the actual
+browser. Never strip native omission markers to make a preview appear complete.
 
 == Validation
 
