@@ -54,6 +54,14 @@ class Gallery:
         )
 
     @staticmethod
+    def native_formula(mo, expression):
+        """Keep native HTML and omission notes without a view-owned widget model."""
+        payload = expression._repr_html_()
+        if not isinstance(payload, str) or not payload.strip():
+            raise ValueError("This expression has no native HTML presentation")
+        return mo.Html('<div class="vg-native-formula">' + payload + "</div>")
+
+    @staticmethod
     def styles():
         return (
             Gallery.math_font_css()
@@ -88,6 +96,7 @@ class Gallery:
         .vg-section small { color:var(--vg-teal); font-size:10px;
           letter-spacing:.15em; text-transform:uppercase; }
         .vg-section h2 { font-size:24px; letter-spacing:-.025em; margin:.35rem 0; }
+        .vg-native-formula { max-width:100%; overflow-x:auto; }
         .vg-section p { color:var(--vg-muted); font-size:14px; line-height:1.6; }
         .vg-note { border:1px solid #cfe5e2; border-left:4px solid #45a69a;
           background:#f0f9f7; border-radius:10px; padding:17px 20px;
@@ -395,7 +404,7 @@ class Gallery:
             for key, label in (
                 ("graph_generation_seconds", "Graph and Feynman rules"),
                 ("scalar_contraction_seconds", "Native trace contraction"),
-                ("taylor_seconds", "Quadratic expansion"),
+                ("taylor_seconds", "Taylor stage (when applicable)"),
                 ("angular_seconds", "Tensor reduction"),
                 ("ingress_seconds", "Vacuum integral construction"),
             ):
@@ -500,8 +509,10 @@ class Gallery:
         """Start one serialized background job, leaving the app kernel responsive."""
         import fcntl
 
-        if projection not in ("quadratic", "zero-momentum"):
-            raise ValueError("Unknown physical projection")
+        if projection != "zero-momentum":
+            raise ValueError(
+                "Only the zero-momentum fixture is enabled; quadratic reduction is deferred"
+            )
         if not Gallery.benchmark_available():
             raise ValueError(
                 "This gallery server needs a benchmark runner, workspace, external data and prepared scalar inputs"

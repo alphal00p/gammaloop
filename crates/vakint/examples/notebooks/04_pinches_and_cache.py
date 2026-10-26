@@ -203,25 +203,24 @@ def _(
     target_integral,
     target_result,
 ):
-    # Keep native widgets and their virtual ESM files owned by this result cell.
-    # Tab changes select existing HTML without invalidating its creator.
+    # Native static MathML survives tab remounts without widget comm models.
     closure_view = mo.ui.tabs(
         {
             "The identity": mo.vstack(
                 [
                     mo.md("**Cancelling numerator**"),
-                    mo.as_html(cancelling_numerator),
+                    Gallery.native_formula(mo, cancelling_numerator),
                     mo.md("**Source and target integrands**"),
-                    mo.as_html(source_integral),
-                    mo.as_html(target_integral),
+                    Gallery.native_formula(mo, source_integral),
+                    Gallery.native_formula(mo, target_integral),
                 ]
             ),
             "Retained-master results": mo.vstack(
                 [
-                    mo.as_html(source_result),
-                    mo.as_html(target_result),
+                    Gallery.native_formula(mo, source_result),
+                    Gallery.native_formula(mo, target_result),
                     mo.md("**Difference**"),
-                    mo.as_html(difference),
+                    Gallery.native_formula(mo, difference),
                 ]
             ),
             "Independent native graphs": mo.hstack(
@@ -299,10 +298,16 @@ def _(Gallery, mo):
         own fresh delta while saving new work. Each run keeps a separate delta;
         a failure never discards its durable prefix.
 
-        Completed useful captures can be combined into an authenticated native
-        cache. Large caches are transported as checksummed release parts, each
-        below GitHub's asset limit, then installed as one native directory.
-        There is no aggregate size cap. Codec and campaign bindings still apply.
+        **Heavy cache:** preserve the full accumulated native cache, without an
+        aggregate size cap. Its compressed local artifact is hosted separately;
+        it is not a GitHub repository or release asset.
+
+        **Light cache:** distribute a trimmed file of at most **95 MB** through
+        the official external-data repository and releases. Selection uses
+        measured rule frequency and usefulness. Report light and heavy timings
+        separately; neither size nor a live counter establishes a speedup.
+
+        Both tiers retain exact completed reductions, codec and campaign bindings.
         Vakint's `prepare_cache()` and `build_cache` workload driver remain
         available for reproducible seed workloads. This app never starts a
         cache-production job.
