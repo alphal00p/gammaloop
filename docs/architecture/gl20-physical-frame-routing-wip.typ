@@ -1,12 +1,12 @@
 = WIP: physical graph frame and paired routing root
 
 This branch checkpoints the combined, source-reviewed GL20 compatibility
-candidate. The first focused Graph run failed with two passes and two failures.
-Generator contracts and the complete original GL20 regression did not run. A
-separate test-only correction now installs the required cuts; its new gated run
-is pending at this checkpoint. This is a WIP source checkpoint; no GL20 fix, final review,
-Clippy, or full CI success is claimed. NixCI remains disabled and no production
-dependency pin changes.
+candidate. The corrected cohort passed four Graph contracts and seven Generator
+contracts, but the complete original GL20 regression failed its unchanged golden
+snapshot. All 16 events now match the golden event indices, cut metadata, and
+incoming and outgoing momenta exactly. Numeric weight differences remain, so this
+candidate is not a sufficient GL20 fix. NixCI remains disabled; no production
+dependency pin, final-review status, Clippy, or full CI success is claimed.
 
 == Generation and routing boundaries
 
@@ -46,7 +46,7 @@ checkpoint. A withdrawn singleton shortcut is excluded from this candidate.
 Runtime counterterm helper signs, model inputs, original fixture, golden
 snapshot, tolerances, and scientific assertions are unchanged.
 
-== Validation result and remaining plan
+== Validation results
 
 The sealed private plan first runs four Graph contracts and seven Generator
 contracts. Graph contracts include a genuinely paired sewn box: the automatic
@@ -77,6 +77,21 @@ historical cut 0, including both attachment crowns; its mirrored counterpart
 reverses the sides. The disconnected fixture uses an explicitly synthetic cut.
 All 18 prior assertions remain, with eight completeness and crossing assertions
 added. Production Graph and Generator sources are byte-identical to the first
-cohort. Independent source review passed; the corrected focused suites and the
-complete original GL20 result remain pending. No five-loop physical
+cohort. Independent source review passed. The corrected cohort compiled all 12 planned
+artifacts, passed all four Graph and seven Generator contracts, and then ran the
+complete original GL20 test once with `INSTA_UPDATE=no`. Setup took 1104.7 seconds;
+the original test ran for 7.55 seconds and returned 101 after a snapshot failure.
+Source, fixture, and golden hashes passed the post-failure guard. No retry ran.
+
+All 16 reconstructed events now equal both current and historical golden data
+for event order, complete cut metadata, and incoming and outgoing momenta.
+The complete retained diff changes 78 numeric rows. The current aggregate is
+`(-1.4716101189747047e-29, -4.5025928118207965e-30)` in `(re, im)` order;
+the current golden is
+`(-1.4716101189741638e-29, -4.502592811820771e-30)`.
+The large imaginary-sign discrepancy is resolved, but these strict numerical
+mismatches remain. The historical golden is a separate numeric reference and is
+not substituted for the current one. Stored numerator, evaluator IR, and
+operation ordering remain the next comparison boundary; no tolerance or golden
+change is proposed. No five-loop physical
 execution is involved.
