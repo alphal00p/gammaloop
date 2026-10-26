@@ -841,6 +841,19 @@ title = "Engineering investigations"
 summary = "Dated measurements and diagnostic records. Treat their results as experiment context, not timeless API guarantees."
 
 [[section.note]]
+id = "gl20-physical-frame-routing-wip"
+title = "GL20 physical frame and strict regression"
+summary = "Paired external roles, physical representative selection and native routing root restored; the original exact GL20 snapshot passes after a diagnosed numeric fixture migration."
+source = "docs/architecture/gl20-physical-frame-routing-wip.typ"
+kind = "Correctness investigation"
+status = "Focused contracts and original strict GL20 pass; full CI pending"
+lifecycle = "investigation"
+owner = "unassigned"
+captured_at = "2026-10-26"
+topics = ["gl20", "graph-generation", "routing", "numeric-precision"]
+review_triggers = ["crates/feynkit-generator/src/**", "crates/feynkit-graph/src/**", "tests/tests/test_evaluation_api.rs"]
+
+[[section.note]]
 id = "gammaloop-drawing-evaluated-fields-history"
 title = "GammaLoop Evaluated-Field Proposal"
 summary = "The superseded proposal for executable Typst fields in DOT drawing data, preserved separately from the maintained callback-based drawing architecture."

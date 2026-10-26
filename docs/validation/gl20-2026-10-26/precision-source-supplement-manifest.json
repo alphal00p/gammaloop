@@ -1,0 +1,332 @@
+{
+  "schema": "gl20.completed-precision-diagnostic-source-supplement.v1",
+  "captured_at": "2026-10-26",
+  "scope": "Exact completed diagnostic helper/controller/comparison sources since the d8dd6d16 source checkpoint. Includes actual failed build/prebuild precursors with their scope labels. No source here is a standalone activation bundle or a proof of numerical causality.",
+  "exclusions": [
+    "scientific state/model/case/input/output JSON payloads",
+    "cohort/control/runtime manifests",
+    "ELFs, libraries and build products",
+    "environment files, licence or secret values",
+    "bound activation/PID/UUID records",
+    "unexecuted pre-review variants and lint-only composite controllers",
+    "production source trees and snapshots",
+    "unfinished conclusions"
+  ],
+  "members": [
+    {
+      "path": "common-input/caseprep.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/caseprep.py",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "b8729ad77fce168f611f609773254ca927dd3d425397b230f7c8b2740ebbd319",
+      "bytes": 10840
+    },
+    {
+      "path": "common-input/check_retained_radicand_signs.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/check_retained_radicand_signs.py",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "e1a23a2474c90382c27eed7e55c4810b2241763e3b91b66df6a4bcc451a635ea",
+      "bytes": 4825
+    },
+    {
+      "path": "common-input/compare_roots_constants.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/compare_roots_constants.py",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "b98fb6e021f88965ef13198333e0026540faf73d5d860356b78e568f01ac7b68",
+      "bytes": 10739
+    },
+    {
+      "path": "common-input/helpers/cut_constraint_counterfactual.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/cut_constraint_counterfactual.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "dddd902138cb461cc077842d6b5118339f3be99fddaeb241a803ecabeedd3219",
+      "bytes": 10442
+    },
+    {
+      "path": "common-input/helpers/group2_intermediate.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/group2_intermediate.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "432df3514cd897273e684744eac42cd36e6cabb380400beeeb12ccf7376b74f2",
+      "bytes": 11786
+    },
+    {
+      "path": "common-input/helpers/group2_intermediate_api_corrected.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/group2_intermediate_api_corrected.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "8539c60f4b1872c24727dc6eaed09512791ee31ba4902ef081653420dc58ba71",
+      "bytes": 11800
+    },
+    {
+      "path": "common-input/helpers/portable_trace.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/portable_trace.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "8960dd25c9ade83bc04dd169d938ce1513c588b8ee9f9e2a2575eee0cf3c788d",
+      "bytes": 15804
+    },
+    {
+      "path": "common-input/helpers/portable_trace_arb.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/portable_trace_arb.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "b06573335ba7c1e6c1801df5f74328fd7e2a8b86670ffba777354bffd435c028",
+      "bytes": 19578
+    },
+    {
+      "path": "common-input/helpers/portable_trace_arb_api_corrected.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/portable_trace_arb_api_corrected.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "bfb9015bb4fda056d5bc2bb8acf41c48053856df09151b9aedcc08f874d9c3ae",
+      "bytes": 19608
+    },
+    {
+      "path": "common-input/helpers/portable_trace_arb_cut_constraint.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/portable_trace_arb_cut_constraint.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "94a735481f1d829fae1ebd3a0ad061a19ec9d1a9440f53531115fb275eb0bbcf",
+      "bytes": 30317
+    },
+    {
+      "path": "common-input/helpers/portable_trace_selected.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/portable_trace_selected.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "07e221981bd49aae0e24b8bc6899f5b6186035949e1108f4ab05b70ec94fdf68",
+      "bytes": 16157
+    },
+    {
+      "path": "common-input/helpers/roots_only.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/helpers/roots_only.rs",
+      "stage": "completed helper/control sources, including executed failed group2 API precursor",
+      "sha256": "51add0cbcfe099a57abfd0a047575016e492b4abef4302602d0bb5b5ddac0029",
+      "bytes": 6888
+    },
+    {
+      "path": "common-input/launch_roots.sh",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/launch_roots.sh",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "bc0446a0ed29770c886ff8e13c0d92021b32c8cd396b338a4ae1217dab4b98ac",
+      "bytes": 761
+    },
+    {
+      "path": "common-input/prepare_owner_identities.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/prepare_owner_identities.py",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "baa2eb265a5fbbf2316a8b21a2382ea6ebfbc8de5d9396a8ddf7a8fc6771bf89",
+      "bytes": 7523
+    },
+    {
+      "path": "common-input/prepare_roots_packet.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/prepare_roots_packet.py",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "af73c1690fc0871073af4ae3ccc8a50a632bad20584c778a05aa836403439833",
+      "bytes": 5699
+    },
+    {
+      "path": "common-input/run_roots.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/run_roots.py",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "8b555137f0f92e9321103e75125a523291de65fa725392e6112341d228855cf6",
+      "bytes": 8755
+    },
+    {
+      "path": "common-input/start_roots.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/start_roots.py",
+      "stage": "completed roots and read-only comparisons",
+      "sha256": "348fc8b30fc17e4c1c4e88165b64ce2ff4897d379216f5017ef5beaec4f52be0",
+      "bytes": 3617
+    },
+    {
+      "path": "formal-cut-counterfactual/compare_produced_formal_counterfactual.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-cut-constraint-counterfactual/compare_produced_formal_counterfactual.py",
+      "stage": "completed formal cut-constraint counterfactual; not a new physical point",
+      "sha256": "f1f7736181f0b73ad9fd318ed91921c4079e9b7a8cb00570adc3681d7e08b377",
+      "bytes": 6252
+    },
+    {
+      "path": "formal-cut-counterfactual/launch_group2.sh",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-cut-constraint-counterfactual/launch_group2.sh",
+      "stage": "completed formal cut-constraint counterfactual; not a new physical point",
+      "sha256": "5a33caf646508e41f73490bca668ee30b597a06ed8a82fd1f1231035c49732a6",
+      "bytes": 799
+    },
+    {
+      "path": "formal-cut-counterfactual/prepare_packet.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-cut-constraint-counterfactual/prepare_packet.py",
+      "stage": "completed formal cut-constraint counterfactual; not a new physical point",
+      "sha256": "ecb71b48e1660ed1ac002f0c69b684433b64d8bb194caf84fbfd11e6a7106e6e",
+      "bytes": 4732
+    },
+    {
+      "path": "formal-cut-counterfactual/run_group2.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-cut-constraint-counterfactual/run_group2.py",
+      "stage": "completed formal cut-constraint counterfactual; not a new physical point",
+      "sha256": "1ef49c5e799447e95aba8ab05271aad66015e976d8ba411de5989910085c9d19",
+      "bytes": 8809
+    },
+    {
+      "path": "formal-cut-counterfactual/start_group2.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-cut-constraint-counterfactual/start_group2.py",
+      "stage": "completed formal cut-constraint counterfactual; not a new physical point",
+      "sha256": "11a00d83e55197e70bd3cc6e91c85599db99a9c2ad3dbbab75f5b0a44740adc5",
+      "bytes": 3624
+    },
+    {
+      "path": "fullpoint-reference/compare_produced_complex_norms.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/fullpoint-precise-proposal/compare_produced_complex_norms.py",
+      "stage": "completed single fullpoint precision reference and stored-result comparisons",
+      "sha256": "5a7e97e5e21c9e69f7ab9d4ed8f8c2f0427d49e2d75b3b66f1c707332e5e3c6c",
+      "bytes": 7551
+    },
+    {
+      "path": "fullpoint-reference/compare_produced_fullpoint.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/fullpoint-precise-proposal/compare_produced_fullpoint.py",
+      "stage": "completed single fullpoint precision reference and stored-result comparisons",
+      "sha256": "25a3a796afbef880e0b2a81534145cfa50af8645507360eaa36013f880af77bc",
+      "bytes": 10442
+    },
+    {
+      "path": "fullpoint-reference/helpers/fullpoint_precise.rs",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/fullpoint-precise-proposal/helpers/fullpoint_precise.rs",
+      "stage": "completed single fullpoint precision reference and stored-result comparisons",
+      "sha256": "e96ae82d2ecc1b33b72febb869edca2a8c0c712921e50364b3502d837bc33a02",
+      "bytes": 5491
+    },
+    {
+      "path": "fullpoint-reference/launch_roots.sh",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/fullpoint-precise-proposal/launch_roots.sh",
+      "stage": "completed single fullpoint precision reference and stored-result comparisons",
+      "sha256": "3e22bfb8849efd0a1834c3fbad9ed50f6fa3f947d90530c7a8b7a4e08a20276f",
+      "bytes": 577
+    },
+    {
+      "path": "fullpoint-reference/prepare_fullpoint_packet.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/fullpoint-precise-proposal/prepare_fullpoint_packet.py",
+      "stage": "completed single fullpoint precision reference and stored-result comparisons",
+      "sha256": "f0d52510b1f4700c84306a80b7a15d4c60c1dd8338ae30b0cc59387bc9619cac",
+      "bytes": 4282
+    },
+    {
+      "path": "fullpoint-reference/run_roots.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/fullpoint-precise-proposal/run_roots.py",
+      "stage": "completed single fullpoint precision reference and stored-result comparisons",
+      "sha256": "4463064d40cc38fff3befbb891a62f2a17a89ef8f1f50e9474786781e24e6a40",
+      "bytes": 8776
+    },
+    {
+      "path": "fullpoint-reference/start_roots.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/fullpoint-precise-proposal/start_roots.py",
+      "stage": "completed single fullpoint precision reference and stored-result comparisons",
+      "sha256": "8dca3732f3f23f85a3df2a22545afaf058d94265d12211c8f86185a600e06484",
+      "bytes": 3421
+    },
+    {
+      "path": "group2-accepted-v2/compare_produced_intermediates.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe-api-corrected-v2/compare_produced_intermediates.py",
+      "stage": "completed native-gated intermediate comparison",
+      "sha256": "810189af22a04e723eed8f193321f483583186e7d98473807d719c625df8d63c",
+      "bytes": 9899
+    },
+    {
+      "path": "group2-accepted-v2/launch_group2.sh",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe-api-corrected-v2/launch_group2.sh",
+      "stage": "completed native-gated intermediate comparison",
+      "sha256": "1d0d50e0fe0b79a56c1e8718328620257fdd8d5e447f4a6aefab2cea8e66675e",
+      "bytes": 805
+    },
+    {
+      "path": "group2-accepted-v2/prepare_group2_packet.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe-api-corrected-v2/prepare_group2_packet.py",
+      "stage": "completed native-gated intermediate comparison",
+      "sha256": "b286ae372fec1d038b165792ac84ce2e687b1c03d671968d3869c49b33fe833f",
+      "bytes": 7225
+    },
+    {
+      "path": "group2-accepted-v2/run_group2.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe-api-corrected-v2/run_group2.py",
+      "stage": "completed native-gated intermediate comparison",
+      "sha256": "bce9452903a2798baa298a5f10b847baaaf96d889dda09f7546871509f3751b1",
+      "bytes": 8754
+    },
+    {
+      "path": "group2-accepted-v2/start_group2.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe-api-corrected-v2/start_group2.py",
+      "stage": "completed native-gated intermediate comparison",
+      "sha256": "0fc220cfa0e7a329c5c3b21a4ed287448c135312d474b6c04a68a35a43181b5b",
+      "bytes": 3623
+    },
+    {
+      "path": "group2-failed-build/independent_group2_review.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe/independent_group2_review.py",
+      "stage": "actual failed build; no successful numerical run in this cohort",
+      "sha256": "19b6f8c8a8a4b7500ebb6963b97465100a75a6715367d05819cdf3cd2792fdf3",
+      "bytes": 7642
+    },
+    {
+      "path": "group2-failed-build/launch_group2.sh",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe/launch_group2.sh",
+      "stage": "actual failed build; no successful numerical run in this cohort",
+      "sha256": "80df2a21716d4ab59dfeef31256b14e1847ac1360fd9572c0b3f52a726942f28",
+      "bytes": 788
+    },
+    {
+      "path": "group2-failed-build/prepare_group2_packet.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe/prepare_group2_packet.py",
+      "stage": "actual failed build; no successful numerical run in this cohort",
+      "sha256": "c9d49c32ece5e50e003ae142b5176fcc4dec710b332d52cbe299fff8f6be5a36",
+      "bytes": 7169
+    },
+    {
+      "path": "group2-failed-build/run_group2.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe/run_group2.py",
+      "stage": "actual failed build; no successful numerical run in this cohort",
+      "sha256": "bce9452903a2798baa298a5f10b847baaaf96d889dda09f7546871509f3751b1",
+      "bytes": 8754
+    },
+    {
+      "path": "group2-failed-build/start_group2.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/common-input-eager-proposal/group2-intermediate-probe/start_group2.py",
+      "stage": "actual failed build; no successful numerical run in this cohort",
+      "sha256": "0fc220cfa0e7a329c5c3b21a4ed287448c135312d474b6c04a68a35a43181b5b",
+      "bytes": 3623
+    },
+    {
+      "path": "packaging/prepare_precision_source_supplement.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/precision-source-supplement-preparation/prepare_precision_source_supplement.py",
+      "stage": "this source-only packager; executes no archived helper",
+      "sha256": "2876256b6aa3d345c1241d406d3222a204169581c3b965c8c13f82869d90ae20",
+      "bytes": 11597
+    },
+    {
+      "path": "strict-original-v2/launch_strict.sh",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/strict-original-regression-controller-v2/launch_strict.sh",
+      "stage": "completed once-only original strict test controller",
+      "sha256": "bbb8c04b7df5408251398f98817f674a1a6169779f0b9c60f6bed802161ed7e4",
+      "bytes": 579
+    },
+    {
+      "path": "strict-original-v2/run_strict.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/strict-original-regression-controller-v2/run_strict.py",
+      "stage": "completed once-only original strict test controller",
+      "sha256": "198ea4961a86f12592834616648ff4a6711a384bb346691678d24088b18ccd1e",
+      "bytes": 6761
+    },
+    {
+      "path": "strict-original/prepare_test_plan.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/strict-original-regression/prepare_test_plan.py",
+      "stage": "completed matching original-test plan preparer",
+      "sha256": "653684f1bdc354f71bdc14c704ce1cfe8bde7d2cb64b4e010cbc00f9e91c1ac8",
+      "bytes": 11212
+    },
+    {
+      "path": "strict-prebuild-precursor/launch_strict.sh",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/strict-original-regression/launch_strict.sh",
+      "stage": "actual missing-datetime controller precursor; no harness or mathematical run",
+      "sha256": "8ab12a302c66c5199e61d3a08a2918f6e2af3e01d5444fd31df74245e8efda7e",
+      "bytes": 565
+    },
+    {
+      "path": "strict-prebuild-precursor/run_strict.py",
+      "source_origin": "ct-real-point-diagnostic/generation-frame-witness/candidate-physical-master-and-hedge-root-restoration/strict-original-regression/run_strict.py",
+      "stage": "actual missing-datetime controller precursor; no harness or mathematical run",
+      "sha256": "026f2121b859c9a9ed54b4b353cd683262c4ec9d3ec7ece4cfec5e0e68801f2e",
+      "bytes": 6745
+    }
+  ]
+}
