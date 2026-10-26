@@ -373,13 +373,12 @@ mod tests {
     }
 
     #[test]
-    fn tensor_archive_admits_raw_parts_before_encoding() {
+    fn tensor_intake_rejects_invalid_parts_before_encoding() {
         let structure = PartialStructure::from_logical_slots([Minkowski {}
             .new_rep(4)
             .to_lib()
             .slot(PartialIndex::Open(OpenPortId(0)))]);
-        let raw = SymbolicTensor::from_normalized_parts(Atom::one(), structure);
-        assert!(bincode::encode_to_vec(raw, config::standard()).is_err());
+        assert!(SymbolicTensor::from_declared_parts(Atom::one(), structure).is_err());
     }
 
     #[test]

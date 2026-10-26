@@ -355,7 +355,7 @@ impl tensor::SymbolicTensor<PartialStructure> {
     /// As for axis permutation, unresolved axes acquire independent graph labels
     /// before the operation; their public logical order remains unchanged.
     pub fn dirac_adjoint(&self, preserve_indices: bool) -> Result<Self, AdjointError> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let materialized;
         let source = if self.structure().open_positions().is_empty() {
             self

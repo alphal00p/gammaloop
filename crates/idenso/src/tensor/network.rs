@@ -71,7 +71,7 @@ impl SymbolicTensor<PartialStructure> {
                 "component lowering only decodes reversibly encoded index payloads".into(),
             ));
         }
-        self.ensure_validated()
+        self.explicit_index_occurrences()
             .map_err(|error| invalid(error.to_string()))?;
         let source = if self.structure.open_positions().is_empty() {
             self

@@ -32,6 +32,26 @@ pub(in crate::tensor) struct ObservationScope {
 type Cache = AHashMap<ObservationScope, AHashMap<Vec<u8>, ExplicitIndexOccurrences>>;
 
 impl InterfaceInference {
+    /// Whether a function argument exports explicit tensor-index occurrences.
+    ///
+    /// This is the syntax-only boundary shared by construction observation and
+    /// targeted index relabelling. Metadata stays opaque as a whole,
+    /// including arithmetic whose tensor syntax is confined to a scalar exponent.
+    pub(in crate::tensor) fn explicit_index_argument(
+        parent: Symbol,
+        argument: AtomView<'_>,
+        slots: &mut SlotMatcher,
+    ) -> bool {
+        (parent.has_tag(&SPENSO_TAG.tensor) || composition::is_composite_head(parent, &SPENSO_TAG))
+            && (slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
+                || Representation::<LibraryRep>::try_from(argument).is_ok()
+                || argument.is_tensorial(StrictTensorFilter::Tagged)
+                || matches!(argument, AtomView::Fun(nested)
+                    if nested.get_symbol() == *SYM
+                        || nested.get_symbol() == *ANTISYM
+                        || nested.get_symbol() == *CYCLIC))
+    }
+
     /// Detect explicit index pairs in any additive branch without distributing it.
     ///
     /// The predicate suppresses ports of matching tensor leaves, without changing
@@ -288,7 +308,6 @@ impl InterfaceInference {
                 }
                 let tensor_leaf = symbol.has_tag(&SPENSO_TAG.tensor);
                 let count_arguments = scope.count_indices
-                    && (tensor_leaf || composition::is_composite_head(symbol, &SPENSO_TAG))
                     && !(composition::is_tensor_leaf_head(symbol) && exclude_tensor_leaf(value));
                 let mut inputs = 0;
                 let mut outputs = 0;
@@ -314,14 +333,8 @@ impl InterfaceInference {
                         }
                         continue;
                     }
-                    child.count_indices = count_arguments
-                        && (slots.parse::<LibraryRep, AbstractIndex>(argument).is_ok()
-                            || Representation::<LibraryRep>::try_from(argument).is_ok()
-                            || argument.is_tensorial(StrictTensorFilter::Tagged)
-                            || matches!(argument, AtomView::Fun(nested)
-                                if nested.get_symbol() == *SYM
-                                || nested.get_symbol() == *ANTISYM
-                                || nested.get_symbol() == *CYCLIC));
+                    child.count_indices =
+                        count_arguments && Self::explicit_index_argument(symbol, argument, slots);
                     if child.validate || child.count_indices {
                         result.append(&Self::observe_indices(
                             argument,

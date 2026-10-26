@@ -37,6 +37,8 @@ use spenso::structure::{
     Canonicalized, IndexedStructure, OrderedStructure, StructureError, TensorStructure,
 };
 use std::collections::{HashMap, HashSet};
+use std::mem;
+#[cfg(debug_assertions)]
 use std::slice;
 use std::sync::{Arc, OnceLock};
 use symbolica::atom::{Atom, AtomCore, AtomOrView, AtomView, FunctionBuilder, Symbol};
@@ -268,59 +270,23 @@ impl<'a> BorrowedTensorParts<'a> {
         self.structure.canonical().is_scalar()
     }
 
-    pub(super) fn ensure_validated(&self) -> InferenceResult<()> {
-        if self.proofs.validated.get() == Some(&true) {
-            if self.proofs.occurrences.get().is_none() {
-                // A producer may certify parts without observing them. Complete
-                // their metadata once at this boundary, before cloning it into
-                // derived values. Subsequent operations trust this metadata.
-                let mut occurrences = ExplicitIndexOccurrences::from_atom(
-                    self.expression.as_view(),
-                    &mut SlotMatcher::default(),
-                );
-                if self.expression.is_zero() {
-                    occurrences = ExplicitIndexOccurrences::from_interface(self.structure);
-                } else {
-                    occurrences
-                        .branch_max(&ExplicitIndexOccurrences::from_interface(self.structure));
-                }
-                occurrences.validate()?;
-                let _ = self.proofs.occurrences.set(Arc::new(occurrences));
-            }
-            return Ok(());
-        }
-        #[cfg(feature = "reference-cases")]
-        let _phase = timing::scope(Phase::Validation);
-        let (_, occurrences) = SymbolicTensor::<PartialStructure>::validate_observed_interface(
-            self.expression,
-            self.structure,
-            LeafInference::Observe,
-        )?;
-        let occurrences = match occurrences {
-            _ if self.expression.is_zero() => {
-                ExplicitIndexOccurrences::from_interface(self.structure)
-            }
-            Some(occurrences) => occurrences,
-            None => InterfaceInference::scoped_occurrences(
-                self.expression.as_view(),
-                &mut SlotMatcher::default(),
-            )?,
-        };
-        occurrences.validate()?;
-        let _ = self.proofs.occurrences.set(Arc::new(occurrences));
-        let _ = self.proofs.validated.set(true);
-        Ok(())
-    }
-
+    /// Borrow published construction history. Raw mutation requires an explicit
+    /// publication through `finish_parts`; algebra never re-admits its inputs.
     pub(super) fn explicit_index_occurrences(
         &self,
     ) -> InferenceResult<&'a ExplicitIndexOccurrences> {
-        self.ensure_validated()?;
-        Ok(self
-            .proofs
+        if self.proofs.validated.get() != Some(&true) {
+            return Err(TensorInferenceError::invalid(
+                "tensor parts must be published before algebra; finish mutated parts explicitly",
+            ));
+        }
+        self.proofs
             .occurrences
             .get()
-            .expect("admitted index metadata"))
+            .map(Arc::as_ref)
+            .ok_or_else(|| {
+                TensorInferenceError::invalid("published tensor is missing construction history")
+            })
     }
 
     /// Attach a result of established algebra without making the normalized
@@ -329,10 +295,16 @@ impl<'a> BorrowedTensorParts<'a> {
         &self,
         expression: Atom,
     ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
-        self.ensure_validated()?;
-        let mut result = SymbolicTensor::<PartialStructure>::from_normalized_parts(
+        self.explicit_index_occurrences()?;
+        let mut result = SymbolicTensor::<PartialStructure>::from_validated_parts(
             expression,
             self.structure.clone(),
+            Arc::clone(
+                self.proofs
+                    .occurrences
+                    .get()
+                    .expect("published index history"),
+            ),
         );
         result.proofs = self.proofs.algebra_result();
         Ok(result)
@@ -363,73 +335,7 @@ impl<'a> BorrowedTensorParts<'a> {
     }
 
     pub(super) fn established_interface_is_valid(&self) -> bool {
-        if self.expression.is_zero() {
-            let _ =
-                self.proofs
-                    .occurrences
-                    .set(Arc::new(ExplicitIndexOccurrences::from_interface(
-                        self.structure,
-                    )));
-            let _ = self.proofs.validated.set(true);
-            return true;
-        }
-        *self.proofs.validated.get_or_init(|| {
-            let mut inference = InterfaceInference::default();
-            if let AtomView::Fun(function) = self.expression.as_view()
-                && function.get_symbol().has_tag(&SPENSO_TAG.tensor)
-                && function.iter().all(|argument| {
-                    inference
-                        .slots
-                        .parse::<LibraryRep, AbstractIndex>(argument)
-                        .is_ok_and(|slot| !matches!(slot.aind(), AbstractIndex::Open { .. }))
-                })
-            {
-                // An unchecked explicit leaf still needs validation, but its
-                // physical ports are already readable without tree inference.
-                let mut checked = || -> InferenceResult<bool> {
-                    let occurrences = InterfaceInference::scoped_occurrences(
-                        self.expression.as_view(),
-                        &mut inference.slots,
-                    )?;
-                    inference.validate_tensor_syntax_after_scopes(self.expression.as_view())?;
-                    let Some(interface) =
-                        inference.direct_leaf_interface(function, LeafInference::Observe)
-                    else {
-                        return Ok(false);
-                    };
-                    let interface =
-                        InterfaceInference::merge_explicit_interface_sequence(&[interface])?;
-                    occurrences.validate()?;
-                    let valid =
-                        InterfaceInference::additive_interfaces_match(self.structure, &interface);
-                    if valid {
-                        let _ = self.proofs.occurrences.set(Arc::new(occurrences));
-                    }
-                    Ok(valid)
-                };
-                return checked().unwrap_or(false);
-            }
-            let occurrences = match SymbolicTensor::<PartialStructure>::validate_observed_interface(
-                self.expression,
-                self.structure,
-                LeafInference::Observe,
-            ) {
-                Ok((_, Some(occurrences))) => occurrences,
-                Ok((_, None)) => match InterfaceInference::scoped_occurrences(
-                    self.expression.as_view(),
-                    &mut SlotMatcher::default(),
-                ) {
-                    Ok(occurrences) => occurrences,
-                    Err(_) => return false,
-                },
-                Err(_) => return false,
-            };
-            if occurrences.validate().is_err() {
-                return false;
-            }
-            let _ = self.proofs.occurrences.set(Arc::new(occurrences));
-            true
-        })
+        self.explicit_index_occurrences().is_ok()
     }
 
     pub(super) fn algebra_preserves_interface(&self) -> bool {
@@ -456,8 +362,10 @@ impl<'a> BorrowedTensorParts<'a> {
         &self,
         expression: Atom,
     ) -> InferenceResult<SymbolicTensor<PartialStructure>> {
+        if expression.is_zero() && expression.as_view() != self.expression.as_view() {
+            return self.with_established_expression(expression);
+        }
         if expression.as_view() != self.expression.as_view()
-            && !expression.as_view().is_zero()
             && !self.structure.open_positions().is_empty()
         {
             return self.finish_checked_open_expression(expression);
@@ -513,7 +421,7 @@ impl<'a> BorrowedTensorParts<'a> {
         // anonymous factor has one possible port correspondence if every other
         // factor stays exactly in place; multiple changed factors do not have
         // that certificate, even when their ranks and representations agree.
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let tensor_factors =
             |expression: AtomView<'_>| -> InferenceResult<Vec<(Atom, PartialStructure)>> {
                 let factors = match expression {
@@ -604,7 +512,7 @@ impl<'a> BorrowedTensorParts<'a> {
                 ));
             }
         }
-        let occurrences = match occurrences {
+        let mut occurrences = match occurrences {
             _ if expression.is_zero() => ExplicitIndexOccurrences::from_interface(self.structure),
             Some(occurrences) => occurrences,
             None => InterfaceInference::scoped_occurrences(
@@ -612,13 +520,13 @@ impl<'a> BorrowedTensorParts<'a> {
                 &mut SlotMatcher::default(),
             )?,
         };
+        occurrences.branch_max(self.explicit_index_occurrences()?);
         occurrences.validate()?;
-        let value = SymbolicTensor::<PartialStructure>::from_normalized_parts(
+        let value = SymbolicTensor::<PartialStructure>::from_validated_parts(
             expression,
             self.structure.clone(),
+            Arc::new(occurrences),
         );
-        let _ = value.proofs.occurrences.set(Arc::new(occurrences));
-        let _ = value.proofs.validated.set(true);
         value.finish_parts()
     }
 
@@ -693,23 +601,15 @@ impl<'a> BorrowedTensorParts<'a> {
                 false,
             ));
         }
-        let (structure, inferred_contraction) = if expression.as_view().is_zero() {
-            (self.structure.clone(), false)
-        } else if self.is_scalar()
-            || InterfaceInference::has_structured_syntax(expression.as_view())
-        {
-            let (value, contracted) =
-                SymbolicTensor::<PartialStructure>::infer_with_contractions(expression.clone())?;
-            (value.structure, contracted)
-        } else {
-            return Err(TensorInferenceError::invalid(
-                "Tensor transformation removed the tensor syntax of a non-scalar expression",
-            ));
-        };
-        let raw_rank = structure.canonical().order();
-        let value = SymbolicTensor::<PartialStructure>::from_produced_parts(expression, structure)?;
-        let contracted = inferred_contraction || value.rank() != raw_rank;
-        Ok((value, contracted))
+        if expression.is_zero() {
+            return Ok((self.with_established_expression(expression)?, false));
+        }
+        if self.is_scalar() || InterfaceInference::has_structured_syntax(expression.as_view()) {
+            return SymbolicTensor::<PartialStructure>::infer_with_contractions(expression);
+        }
+        Err(TensorInferenceError::invalid(
+            "Tensor transformation removed the tensor syntax of a non-scalar expression",
+        ))
     }
 }
 
@@ -724,13 +624,7 @@ impl SymbolicTensor<PartialStructure> {
         }
     }
 
-    /// Admit an unchecked carrier once at an algebra boundary. Derived tensors
-    /// retain this fact; it is invalidated with mutable payload/interface access.
-    pub(crate) fn ensure_validated(&self) -> InferenceResult<()> {
-        self.borrowed_parts().ensure_validated()
-    }
-
-    pub(super) fn explicit_index_occurrences(&self) -> InferenceResult<&ExplicitIndexOccurrences> {
+    pub(crate) fn explicit_index_occurrences(&self) -> InferenceResult<&ExplicitIndexOccurrences> {
         self.borrowed_parts().explicit_index_occurrences()
     }
 
@@ -753,13 +647,32 @@ impl SymbolicTensor<PartialStructure> {
     /// placeholder scopes and index multiplicities, and account for callback
     /// effects. Preserve the chosen logical order, including the rank of zero.
     /// Raw external expressions belong at `from_declared_parts` instead.
-    /// Derived occurrence and product-normalization facts remain unknown.
-    /// This is a fresh producer boundary, not a way to transfer an existing
-    /// tensor's collision history after its payload has simplified.
-    pub(crate) fn from_validated_parts(expression: Atom, structure: PartialStructure) -> Self {
-        let value = Self::from_normalized_parts(expression, structure);
-        let _ = value.proofs.validated.set(true);
-        value
+    /// The producer supplies conservative construction history, including dummy
+    /// uses hidden by normalization. Publication never inspects the payload.
+    pub(crate) fn from_validated_parts(
+        expression: Atom,
+        structure: PartialStructure,
+        occurrences: Arc<ExplicitIndexOccurrences>,
+    ) -> Self {
+        let is_metric =
+            matches!(expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
+        let is_composite = !matches!(expression.as_view(), AtomView::Fun(_));
+        let structure = if structure.has_unresolved_ports() {
+            structure.canonicalize_open_ports()
+        } else {
+            structure
+        };
+        Self {
+            expression,
+            structure,
+            is_metric,
+            is_composite,
+            proofs: TensorProofs {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(occurrences),
+                ..TensorProofs::default()
+            },
+        }
     }
 
     pub(crate) fn normalization_is_intrinsic(&self) -> bool {
@@ -773,7 +686,7 @@ impl SymbolicTensor<PartialStructure> {
         expression: Atom,
         observations: Option<DomainObservations>,
     ) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         if expression == self.expression {
             return Ok(self.clone());
         }
@@ -807,7 +720,7 @@ impl SymbolicTensor<PartialStructure> {
         operation: &str,
         expression: Atom,
     ) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         if expression == self.expression {
             return Ok(self.clone());
         }
@@ -815,9 +728,9 @@ impl SymbolicTensor<PartialStructure> {
             ExplicitIndexOccurrences::from_atom(expression.as_view(), &mut SlotMatcher::default());
         occurrences.validate()?;
         occurrences.branch_max(self.explicit_index_occurrences()?);
-        let mut result = Self::from_normalized_parts(expression, self.structure.clone());
-        result.proofs = self.proofs.algebra_result();
-        result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        let mut result =
+            Self::from_validated_parts(expression, self.structure.clone(), Arc::new(occurrences));
+        result.proofs.normalized_product = self.proofs.normalized_product.clone();
         TensorProofs::assert_normalization_preserves_interface(
             operation,
             &[&self.expression],
@@ -893,7 +806,10 @@ impl SymbolicTensor<PartialStructure> {
     fn infer_with_contractions(atom: Atom) -> InferenceResult<(Self, bool)> {
         let atom = DotNormalizer::nested_vectors(atom.as_view());
         let atom = InterfaceInference::lower_tensor_powers(atom.as_view())?.unwrap_or(atom);
-        let mut inference = InterfaceInference::default();
+        let mut inference = InterfaceInference {
+            leaf_inference: LeafInference::Observe,
+            ..InterfaceInference::default()
+        };
         let (structure, occurrences) = inference.infer_observed(atom.as_view())?;
         let raw_rank = structure.canonical().order();
         let structure = InterfaceInference::merge_explicit_interface_sequence(&[structure])?
@@ -903,18 +819,14 @@ impl SymbolicTensor<PartialStructure> {
             AtomOrView::View(_) => (atom, true),
             normalized => (normalized.into_owned(), false),
         };
-        let value = Self::from_normalized_parts(atom, structure);
-        // Admission already checked signatures, placeholder scopes and index
-        // multiplicities. With intrinsic normalization its inferred interface
-        // belongs to this unchanged payload, including chains and traces.
-        // Callback-sensitive materialization can observe a different interface
-        // and therefore cannot supply this certificate.
+        let value = Self::from_validated_parts(atom, structure, Arc::new(occurrences));
+        // Admission publishes its observed interface and conservative history
+        // before normalization. Payload-specific optimization facts additionally
+        // require unchanged, intrinsic syntax.
         if unchanged
             && !value.expression.as_view().needs_normalization()
             && inference.normalization_is_intrinsic_cached(value.expression.as_view())
         {
-            let _ = value.proofs.occurrences.set(Arc::new(occurrences));
-            let _ = value.proofs.validated.set(true);
             let _ = value.proofs.intrinsic.set(true);
             let _ = value
                 .proofs
@@ -958,12 +870,11 @@ impl SymbolicTensor<PartialStructure> {
             return Ok(self.clone());
         }
         if exponent_atom.is_zero() {
-            let result =
-                Self::from_validated_parts(Atom::one(), PartialStructure::from_logical_slots([]));
-            let _ = result
-                .proofs
-                .occurrences
-                .set(Arc::new(ExplicitIndexOccurrences::default()));
+            let result = Self::from_validated_parts(
+                Atom::one(),
+                PartialStructure::from_logical_slots([]),
+                Arc::new(ExplicitIndexOccurrences::default()),
+            );
             let _ = result.proofs.normalized_product.set(true);
             return Ok(result);
         }
@@ -979,13 +890,13 @@ impl SymbolicTensor<PartialStructure> {
             .pow(&exponent_atom);
             // A scalar base and its exponent own independent closed scopes.
             // Their internal dummies cannot meet factors outside this power.
-            self.ensure_validated()?;
-            exponent.ensure_validated()?;
-            let result = Self::from_validated_parts(expression, interface);
-            let _ = result
-                .proofs
-                .occurrences
-                .set(Arc::new(ExplicitIndexOccurrences::default()));
+            self.explicit_index_occurrences()?;
+            exponent.explicit_index_occurrences()?;
+            let result = Self::from_validated_parts(
+                expression,
+                interface,
+                Arc::new(ExplicitIndexOccurrences::default()),
+            );
             return Ok(result);
         }
         let rational = Rational::try_from(exponent_atom.as_view()).map_err(|_| {
@@ -1015,16 +926,12 @@ impl SymbolicTensor<PartialStructure> {
             }
             occurrences.validate()?;
             let expression = self.expression.pow(&exponent_atom);
-            let result = Self::from_validated_parts(expression, interface);
-            let _ = result.proofs.occurrences.set(Arc::new(occurrences));
+            let result = Self::from_validated_parts(expression, interface, Arc::new(occurrences));
             let _ = result
                 .proofs
                 .normalized_product
                 .set(self.borrowed_parts().product_is_normalized());
             return Ok(result);
-        }
-        if self.is_zero() {
-            return Self::from_produced_parts(Atom::Zero, interface);
         }
         let mut result = self.clone();
         for _ in 1..repetitions {
@@ -1040,10 +947,7 @@ impl SymbolicTensor<PartialStructure> {
                 "cannot divide by a non-scalar tensor; tensor division requires a scalar denominator",
             ));
         }
-        let inverse = denominator.pow(&Self::from_normalized_parts(
-            Atom::num(-1),
-            PartialStructure::from_logical_slots([]),
-        ))?;
+        let inverse = denominator.pow(&Self::infer(Atom::num(-1))?)?;
         Ok(self.multiply(&inverse)?)
     }
 
@@ -1079,16 +983,16 @@ impl SymbolicTensor<PartialStructure> {
         expression: Atom,
         structure: PartialStructure,
     ) -> InferenceResult<Self> {
-        let value = Self::from_normalized_parts(expression, structure).finish_parts()?;
-        // This owner finishes an interface already established by its producer;
-        // external declarations use `from_declared_parts` to check correspondence.
-        let _ = value.proofs.validated.set(true);
-        value.ensure_validated()?;
-        let mut occurrences = value.explicit_index_occurrences()?.clone();
-        occurrences.branch_max(&ExplicitIndexOccurrences::from_interface(&value.structure));
+        // A fresh producer owns its declared ports. Observe scopes before product
+        // normalization can erase indices; derived producers supply retained history.
+        let mut occurrences = InterfaceInference::scoped_occurrences(
+            expression.as_view(),
+            &mut SlotMatcher::default(),
+        )?;
+        occurrences.branch_max(&ExplicitIndexOccurrences::from_interface(&structure));
         occurrences.validate()?;
-        let mut value = value;
-        value.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        let value = Self::from_validated_parts(expression, structure, Arc::new(occurrences))
+            .finish_parts()?;
         TensorProofs::assert_normalization_preserves_interface(
             "from_produced_parts",
             &[&value.expression],
@@ -1115,12 +1019,18 @@ impl SymbolicTensor<PartialStructure> {
         expression: Atom,
         structure: PartialStructure,
     ) -> InferenceResult<Self> {
-        let value = Self::from_normalized_parts(expression, structure);
-        if !value.established_interface_is_valid() {
-            return Err(TensorInferenceError::invalid(
-                "expression does not match its declared tensor interface",
-            ));
-        }
+        let (_, occurrences) =
+            Self::validate_observed_interface(&expression, &structure, LeafInference::Observe)?;
+        let mut occurrences = match occurrences {
+            Some(occurrences) => occurrences,
+            None => InterfaceInference::scoped_occurrences(
+                expression.as_view(),
+                &mut SlotMatcher::default(),
+            )?,
+        };
+        occurrences.branch_max(&ExplicitIndexOccurrences::from_interface(&structure));
+        occurrences.validate()?;
+        let value = Self::from_validated_parts(expression, structure, Arc::new(occurrences));
         value.borrowed_parts().product_is_normalized();
         Ok(value)
     }
@@ -1136,17 +1046,9 @@ impl SymbolicTensor<PartialStructure> {
     /// that violates explicit-index multiplicity.
     pub fn finish_parts(mut self) -> InferenceResult<Self> {
         if self.proofs.validated.get() != Some(&true) {
-            let occurrences = if self.expression.is_zero() {
-                ExplicitIndexOccurrences::from_interface(&self.structure)
-            } else {
-                InterfaceInference::scoped_occurrences(
-                    self.expression.as_view(),
-                    &mut SlotMatcher::default(),
-                )?
-            };
-            occurrences.validate()?;
-            let _ = self.proofs.occurrences.set(Arc::new(occurrences));
+            return Self::from_declared_parts(self.expression, self.structure)?.finish_parts();
         }
+        self.explicit_index_occurrences()?;
         let normalized = if self.proofs.normalized_product.get() == Some(&true) {
             None
         } else {
@@ -1158,20 +1060,15 @@ impl SymbolicTensor<PartialStructure> {
         if let Some(expression) = normalized {
             let mut proofs = self.proofs.algebra_result();
             proofs.normalized_product = Default::default();
-            self = Self::from_normalized_parts(expression, self.structure);
+            self.expression = expression;
+            self.is_metric = matches!(self.expression.as_view(), AtomView::Fun(fun) if fun.get_symbol() == ETS.metric);
+            self.is_composite = !matches!(self.expression.as_view(), AtomView::Fun(_));
             self.proofs = proofs;
         }
-        // Publishing proven tensor parts must retain their chosen notation.
-        // Chain closure belongs to explicit composition and permitted contraction;
-        // doing it here would reverse undo_trace and ignore collect_traces=false.
-        let structure = InterfaceInference::merge_explicit_interface_sequence(slice::from_ref(
-            &self.structure,
-        ))?
-        .canonicalize_open_ports();
-        if structure != self.structure {
-            self.proofs = self.proofs.algebra_result();
-            self.structure = structure;
-        }
+        // The construction owner already established this interface. Finishing
+        // payload spelling cannot contract two declared ports inside one factor,
+        // including the nominal ports of zero. Parser inference and explicit
+        // composition own their respective contractions and chain closure.
         Ok(self)
     }
 
@@ -1213,7 +1110,7 @@ impl SymbolicTensor<PartialStructure> {
     /// # Ok::<(), TensorInferenceError>(())
     /// ```
     pub fn expanded(&self, var: Option<AtomView<'_>>, via_poly: bool) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         #[cfg(feature = "reference-cases")]
         let _phase = timing::scope(Phase::Materialization);
         let expression = if let Some(var) = var {
@@ -1323,7 +1220,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         mut map: impl FnMut(LibraryRep, AtomView<'_>) -> Atom,
     ) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let cooking = CookSettings::indices()
             .with_mode(CookMode::ReversibleEncoding)
             .with_representation_payloads(false, true);
@@ -1416,9 +1313,7 @@ impl SymbolicTensor<PartialStructure> {
                 let structure =
                     InterfaceInference::merge_explicit_interface_sequence(&[structure])?
                         .canonicalize_open_ports();
-                let result = Self::from_validated_parts(expression, structure);
-                let _ = result.proofs.occurrences.set(Arc::new(occurrences));
-                result
+                Self::from_validated_parts(expression, structure, Arc::new(occurrences))
             };
         if value.expression == self.expression {
             value.is_metric = self.is_metric;
@@ -1442,7 +1337,7 @@ impl SymbolicTensor<PartialStructure> {
     ///
     /// Rejects invalid source metadata or invalid resulting explicit-index multiplicities.
     pub fn wrap_indices(&self, scope: Symbol, dummies_only: bool) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let mut structure = self.structure.logical_slots();
         let external = structure
             .iter()
@@ -1471,9 +1366,8 @@ impl SymbolicTensor<PartialStructure> {
             })
         })?;
         occurrences.validate()?;
-        let mut result = Self::from_normalized_parts(expression, structure);
-        result.proofs = self.proofs.algebra_result();
-        result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        let mut result = Self::from_validated_parts(expression, structure, Arc::new(occurrences));
+        result.proofs.normalized_product = self.proofs.normalized_product.clone();
         TensorProofs::assert_normalization_preserves_interface(
             "wrap_indices",
             &[&self.expression],
@@ -1492,7 +1386,7 @@ impl SymbolicTensor<PartialStructure> {
     /// Rejects invalid source metadata, unsupported cooking payloads, malformed cooked
     /// slots, or resulting explicit-index multiplicities greater than two.
     pub fn with_cooked_indices(&self, settings: &CookSettings) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let cook = |atom: &Atom| {
             settings
                 .try_cook_indices(atom.as_view())
@@ -1530,8 +1424,7 @@ impl SymbolicTensor<PartialStructure> {
             PartialStructure::from_logical_slots(slots),
         ])?
         .canonicalize_open_ports();
-        let value = Self::from_validated_parts(expression, structure);
-        let _ = value.proofs.occurrences.set(Arc::new(occurrences));
+        let value = Self::from_validated_parts(expression, structure, Arc::new(occurrences));
         TensorProofs::assert_normalization_preserves_interface(
             "with_cooked_indices",
             &[&self.expression],
@@ -1549,7 +1442,7 @@ impl SymbolicTensor<PartialStructure> {
         &self,
         renaming: &HashMap<Symbol, Symbol>,
     ) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let rename = |atom: AtomView<'_>| {
             atom.replace_map(|node, _context, out| {
                 if let AtomView::Var(variable) = node
@@ -1591,12 +1484,12 @@ impl SymbolicTensor<PartialStructure> {
             })
         })?;
         occurrences.validate()?;
-        let mut result = Self::from_normalized_parts(
+        let mut result = Self::from_validated_parts(
             rename(self.expression.as_view()),
             PartialStructure::from_logical_slots(slots),
+            Arc::new(occurrences),
         );
-        result.proofs = self.proofs.algebra_result();
-        result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        result.proofs.normalized_product = self.proofs.normalized_product.clone();
         TensorProofs::assert_normalization_preserves_interface(
             "with_renamed_symbols",
             &[&self.expression],
@@ -1706,9 +1599,7 @@ impl SymbolicTensor<PartialStructure> {
                 slot
             }),
         );
-        let mut result = Self::from_normalized_parts(expression, structure);
-        result.proofs = self.proofs.algebra_result();
-        result.proofs.occurrences = OnceLock::from(Arc::new(occurrences));
+        let mut result = Self::from_validated_parts(expression, structure, Arc::new(occurrences));
         result.proofs.normalized_product = self.proofs.normalized_product.clone();
         TensorProofs::assert_normalization_preserves_interface(
             "with_renamed_indices",
@@ -1732,7 +1623,7 @@ impl SymbolicTensor<PartialStructure> {
     /// Rejects noninjective renaming, collisions with existing symbols (including hidden
     /// index history), invalid source metadata, or malformed mapped slots.
     pub fn rename_symbols(&self, renaming: &HashMap<Symbol, Symbol>) -> InferenceResult<Self> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let mut present = self.expression.get_all_symbols(true);
         for slot in self.structure.logical_slots() {
             present.extend(composition::port_atom(slot).get_all_symbols(true));
@@ -1809,22 +1700,23 @@ impl SymbolicTensor<PartialStructure> {
     ///
     /// Rejects invalid operand metadata or incompatible logical interfaces.
     pub fn try_add(&self, right: &Self) -> InferenceResult<Self> {
-        self.ensure_validated()?;
-        right.ensure_validated()?;
+        self.explicit_index_occurrences()?;
+        right.explicit_index_occurrences()?;
         if !InterfaceInference::additive_interfaces_match(&self.structure, &right.structure) {
             return Err(TensorInferenceError::invalid(
                 "addition requires compatible tensor interfaces",
             ));
         }
-        let result = Self::from_validated_parts(
-            &self.expression + &right.expression,
-            self.structure.clone().into_algebra_result(),
-        );
+
         // Each summand binds its internal pairs. Only the shared public ports
         // remain visible to subsequent products, including a ranked zero.
         let mut occurrences = self.explicit_index_occurrences()?.scoped(&self.structure);
         occurrences.branch_max(&right.explicit_index_occurrences()?.scoped(&right.structure));
-        let _ = result.proofs.occurrences.set(Arc::new(occurrences));
+        let result = Self::from_validated_parts(
+            &self.expression + &right.expression,
+            self.structure.clone().into_algebra_result(),
+            Arc::new(occurrences),
+        );
         let _ = result.proofs.normalized_product.set(
             self.borrowed_parts().product_is_normalized()
                 && right.borrowed_parts().product_is_normalized(),
@@ -1839,20 +1731,21 @@ impl SymbolicTensor<PartialStructure> {
     ///
     /// Rejects invalid operand metadata or incompatible logical interfaces.
     pub fn try_sub(&self, right: &Self) -> InferenceResult<Self> {
-        self.ensure_validated()?;
-        right.ensure_validated()?;
+        self.explicit_index_occurrences()?;
+        right.explicit_index_occurrences()?;
         if !InterfaceInference::additive_interfaces_match(&self.structure, &right.structure) {
             return Err(TensorInferenceError::invalid(
                 "subtraction requires compatible tensor interfaces",
             ));
         }
+
+        let mut occurrences = self.explicit_index_occurrences()?.scoped(&self.structure);
+        occurrences.branch_max(&right.explicit_index_occurrences()?.scoped(&right.structure));
         let result = Self::from_validated_parts(
             &self.expression - &right.expression,
             self.structure.clone().into_algebra_result(),
+            Arc::new(occurrences),
         );
-        let mut occurrences = self.explicit_index_occurrences()?.scoped(&self.structure);
-        occurrences.branch_max(&right.explicit_index_occurrences()?.scoped(&right.structure));
-        let _ = result.proofs.occurrences.set(Arc::new(occurrences));
         let _ = result.proofs.normalized_product.set(
             self.borrowed_parts().product_is_normalized()
                 && right.borrowed_parts().product_is_normalized(),
@@ -2346,7 +2239,18 @@ impl InterfaceInference {
                                     .map(Some)
                                     .map_err(|_| ());
                             }
-                            let interface = self.infer_validated(*argument).map_err(|_| ())?;
+                            // Consumed operands have a logical compact axis even
+                            // when the enclosing query observes graph storage.
+                            // Keep their logical interface cache separate; only
+                            // the mode-independent slot matcher is shared.
+                            let mut operand = Self {
+                                slots: mem::take(&mut self.slots),
+                                leaf_inference: LeafInference::Observe,
+                                ..Self::default()
+                            };
+                            let interface = operand.infer_validated(*argument);
+                            self.slots = operand.slots;
+                            let interface = interface.map_err(|_| ())?;
                             let slots = interface.logical_slots();
                             match slots.as_slice() {
                                 [slot] if matches!(slot.aind, PartialIndex::Open(_)) => {
@@ -3813,8 +3717,10 @@ impl InterfaceInference {
                             // ports need the pair selection of tensor multiplication.
                             base.pow(Atom::num(repetitions))
                         } else {
-                            let factor =
-                                SymbolicTensor::<PartialStructure>::new(base.to_owned(), interface);
+                            let factor = SymbolicTensor::<PartialStructure>::from_produced_parts(
+                                base.to_owned(),
+                                interface,
+                            )?;
                             let mut result = factor.clone();
                             for _ in 1..repetitions {
                                 result = result.multiply(&factor)?;
@@ -4632,7 +4538,7 @@ pub(crate) mod tests {
             } else {
                 PartialStructure::from_logical_slots(slots)
             };
-            let source = SymbolicTensor::<PartialStructure>::new(leaf.clone(), logical);
+            let source = SymbolicTensor::<PartialStructure>::new(leaf.clone(), logical).unwrap();
             let expression = &leaf * Atom::num(2);
             SCOPE_VALIDATIONS.with(|count| count.set(0));
             SymbolicTensor::validate_interface(&expression, &source.structure).unwrap();
@@ -4666,11 +4572,13 @@ pub(crate) mod tests {
         let tensor = SymbolicTensor::<PartialStructure>::new(
             leaf(&[a.to_atom()]),
             explicit_interface(representation, a.aind()),
-        );
+        )
+        .unwrap();
         let scalar = SymbolicTensor::<PartialStructure>::new(
             Atom::one(),
             PartialStructure::from_logical_slots([]),
-        );
+        )
+        .unwrap();
         let placeholder = Atom::var(SPENSO_TAG.chain_in);
         for (source, expression, expected) in [
             (&tensor, placeholder.clone(), "compatible tensor interface"),
@@ -5426,16 +5334,8 @@ pub(crate) mod tests {
         let expected = SymbolicTensor::from_produced_parts(malformed.clone(), scalar.clone())
             .unwrap_err()
             .to_string();
-        let unchecked = SymbolicTensor::from_normalized_parts(malformed, scalar.clone());
-        let mut calls = 0;
-        let actual = unchecked
-            .map_representation_dimensions(|_, dimension| {
-                calls += 1;
-                dimension.to_owned()
-            })
-            .unwrap_err();
+        let actual = SymbolicTensor::from_declared_parts(malformed, scalar).unwrap_err();
         assert_eq!(actual.to_string(), expected);
-        assert_eq!(calls, 0);
 
         // Interface admission can precede product finishing. Preserve that boundary.
         let x = Atom::var(symbol!("dimension_noop_unfinished_x"));
@@ -5444,7 +5344,11 @@ pub(crate) mod tests {
             .add_arg(&x)
             .add_arg(&y)
             .finish();
-        let admitted = SymbolicTensor::from_declared_parts(expression, scalar).unwrap();
+        let admitted = SymbolicTensor::from_declared_parts(
+            expression,
+            PartialStructure::from_logical_slots([]),
+        )
+        .unwrap();
         assert_eq!(admitted.proofs.validated.get(), Some(&true));
         let finished = admitted
             .map_representation_dimensions(|_, dimension| dimension.to_owned())
@@ -5666,6 +5570,8 @@ pub(crate) mod tests {
             expression,
             PartialStructure::from_logical_slots(ports),
         )
+        .unwrap()
+        .indexed(&HashMap::new())
         .unwrap();
         assert_eq!(value.rank(), 1);
         assert!(
@@ -5715,7 +5621,8 @@ pub(crate) mod tests {
                 let value = SymbolicTensor::<PartialStructure>::new(
                     expression,
                     PartialStructure::from_logical_slots([port]),
-                );
+                )
+                .unwrap();
                 calls.lock().unwrap().clear();
                 let unchanged = value
                     .expression
@@ -5785,7 +5692,8 @@ pub(crate) mod tests {
         let value = SymbolicTensor::<PartialStructure>::new(
             expression,
             PartialStructure::from_logical_slots([]),
-        );
+        )
+        .unwrap();
         calls.lock().unwrap().clear();
         let expected = value
             .expression
@@ -5846,9 +5754,12 @@ pub(crate) mod tests {
         let target = settings.try_cook_indices(raw_slot.as_view()).unwrap();
         assert_ne!(target, raw_slot);
         let slot = Slot::<LibraryRep, AbstractIndex>::try_from(target.as_view()).unwrap();
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = Arc::clone(&calls);
         let callback = tensor_symbol!(
             "cooking_callback_strips_ports",
             norm = move |node, output| {
+                observed.fetch_add(1, Ordering::Relaxed);
                 if let AtomView::Fun(function) = node
                     && function.iter().any(|argument| argument == target.as_view())
                 {
@@ -5857,13 +5768,23 @@ pub(crate) mod tests {
             }
         );
         let expression = FunctionBuilder::new(callback).add_arg(raw_slot).finish();
-        let value = SymbolicTensor::<PartialStructure>::new(
-            expression,
-            PartialStructure::from_logical_slots([slot
-                .rep()
-                .slot(PartialIndex::Explicit(slot.aind()))]),
+        let structure = PartialStructure::from_logical_slots([slot
+            .rep()
+            .slot(PartialIndex::Explicit(slot.aind()))]);
+        calls.store(0, Ordering::Relaxed);
+        let raw_error = SymbolicTensor::new(expression.clone(), structure.clone()).unwrap_err();
+        assert!(matches!(raw_error, TensorInferenceError::Invalid(message)
+            if message.contains("cook nested indices")));
+        assert_eq!(calls.load(Ordering::Relaxed), 0);
+        let cooked = settings.try_cook_indices(expression.as_view()).unwrap();
+        assert!(cooked.is_one());
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
+        let cooked_error = SymbolicTensor::from_declared_parts(cooked, structure).unwrap_err();
+        assert!(
+            matches!(cooked_error, TensorInferenceError::Invalid(message)
+            if message.contains("compatible tensor interface"))
         );
-        assert!(value.with_cooked_indices(&settings).is_err());
+        assert_eq!(calls.load(Ordering::Relaxed), 1);
     }
 
     #[test]
@@ -5891,7 +5812,8 @@ pub(crate) mod tests {
                 .add_arg(composition::port_atom(slot))
                 .finish(),
             PartialStructure::from_logical_slots([slot]),
-        );
+        )
+        .unwrap();
         let scoped = value.wrap_indices(scope, false).unwrap();
         assert_eq!(
             SymbolicTensor::infer(scoped.expression.clone())
@@ -5910,7 +5832,8 @@ pub(crate) mod tests {
         let zero = SymbolicTensor::<PartialStructure>::new(
             Atom::Zero,
             PartialStructure::from_logical_slots([slot, rep.slot(PartialIndex::open(1))]),
-        );
+        )
+        .unwrap();
         let scoped = zero.wrap_indices(scope, false).unwrap();
         assert!(scoped.expression().is_zero());
         assert_eq!(
@@ -5958,7 +5881,8 @@ pub(crate) mod tests {
         let scalar = SymbolicTensor::<PartialStructure>::new(
             Atom::one(),
             PartialStructure::from_logical_slots([]),
-        );
+        )
+        .unwrap();
         assert!(left.try_add(&scalar).is_err());
         assert!(left.try_sub(&scalar).is_err());
     }
@@ -6193,18 +6117,16 @@ pub(crate) mod tests {
             .add_arg(spin.to_symbolic([]))
             .add_arg(mink.slot::<AbstractIndex, _>(mu).to_atom())
             .finish();
-        let anonymous = SymbolicTensor::new(
+        let invalid = SymbolicTensor::new(
             anonymous,
             PartialStructure::from_logical_slots([
                 mink.slot(PartialIndex::Explicit(mu)),
                 spin.slot(PartialIndex::open(0)),
             ]),
-        );
-        assert!(
-            anonymous
-                .with_rewritten_expression(Atom::num(2) * &anonymous.expression)
-                .is_err()
-        );
+        )
+        .unwrap_err();
+        assert!(matches!(invalid, TensorInferenceError::Invalid(message)
+            if message.contains("compatible tensor interface")));
     }
 
     #[test]
@@ -6542,7 +6464,8 @@ pub(crate) mod tests {
             [&explicit, &compact].map(|index| crate::gamma!(index)),
         );
         let value =
-            SymbolicTensor::<PartialStructure>::new(source, explicit_interface(minkowski, index));
+            SymbolicTensor::<PartialStructure>::new(source, explicit_interface(minkowski, index))
+                .unwrap();
         calls.lock().unwrap().clear();
         let settings = crate::dirac::GammaSimplifySettings::default();
         let rewritten = crate::dirac::DiracSimplifier::new(&settings)
@@ -6665,13 +6588,13 @@ pub(crate) mod tests {
             for (is_metric, is_composite) in
                 [(false, false), (false, true), (true, false), (true, true)]
             {
-                let value = SymbolicTensor {
-                    proofs: Default::default(),
-                    expression: expression.clone(),
-                    structure: PartialStructure::from_logical_slots(ports),
-                    is_metric,
-                    is_composite,
-                };
+                let mut value = SymbolicTensor::from_declared_parts(
+                    expression.clone(),
+                    PartialStructure::from_logical_slots(ports),
+                )
+                .unwrap();
+                value.is_metric = is_metric;
+                value.is_composite = is_composite;
                 for finish in [
                     SymbolicTensor::<PartialStructure>::with_checked_expression,
                     SymbolicTensor::<PartialStructure>::with_algebra_result,
@@ -6919,12 +6842,11 @@ pub(crate) mod tests {
         );
         assert!(inference.reusable_interfaces.is_empty());
         let value = SymbolicTensor::<PartialStructure>::infer(leaf).unwrap();
-        assert!(value.is_scalar());
-        assert!(value.proofs.validated.get().is_none());
-        assert!(value.proofs.rewrite.get().is_none());
-        // Materialization erased a port which still exists in the stored leaf.
-        // Constructor success must not turn that into an observation certificate.
-        assert!(!value.established_interface_is_valid());
+        // Intake observes the already constructed leaf. A later callback may
+        // return zero, whose nominal port remains owned by this carrier.
+        assert_eq!(value.rank(), 1);
+        assert_eq!(value.proofs.validated.get(), Some(&true));
+        assert!(value.established_interface_is_valid());
     }
 
     #[test]
@@ -7081,7 +7003,8 @@ pub(crate) mod tests {
             let x = Atom::var(symbolica::symbol!("observed_result_x"));
             let y = Atom::var(symbolica::symbol!("observed_result_y"));
             let value =
-                SymbolicTensor::<PartialStructure>::new((&x + &y) * &atom, structure.clone());
+                SymbolicTensor::<PartialStructure>::new((&x + &y) * &atom, structure.clone())
+                    .unwrap();
             let expanded = value.expression.expand();
             calls.store(0, Ordering::Relaxed);
             for finish in [
@@ -7409,7 +7332,8 @@ pub(crate) mod tests {
         let atom = FunctionBuilder::new(spenso::tensor_symbol!("tensor_value_boundary"))
             .add_args(slots.map(composition::port_atom))
             .finish();
-        let value = SymbolicTensor::new(atom.clone(), PartialStructure::from_logical_slots(slots));
+        let value =
+            SymbolicTensor::new(atom.clone(), PartialStructure::from_logical_slots(slots)).unwrap();
         let mut same = value.clone();
         same.is_metric = !value.is_metric;
         same.is_composite = !value.is_composite;
@@ -7424,10 +7348,12 @@ pub(crate) mod tests {
         let reversed = SymbolicTensor::new(
             atom,
             PartialStructure::from_logical_slots(slots.into_iter().rev()),
-        );
+        )
+        .unwrap();
         assert!(!value.same_value(&reversed));
-        let scalar_zero = SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots([]));
-        let tensor_zero = SymbolicTensor::new(Atom::Zero, value.structure.clone());
+        let scalar_zero =
+            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots([])).unwrap();
+        let tensor_zero = SymbolicTensor::new(Atom::Zero, value.structure.clone()).unwrap();
         assert!(scalar_zero.is_zero() && tensor_zero.is_zero());
         assert!(!scalar_zero.same_value(&tensor_zero));
     }
@@ -7452,14 +7378,13 @@ pub(crate) mod tests {
         assert!(result.rewrites_preserve_interface());
         assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
         assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
-        let detached = SymbolicTensor::from_normalized_parts(
-            result.expression,
-            PartialStructure::from_logical_slots([]),
-        )
-        .finish_parts()
-        .unwrap();
-        assert!(detached.proofs.validated.get().is_none());
-        assert!(!detached.rewrites_preserve_interface());
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                result.expression,
+                PartialStructure::from_logical_slots([]),
+            )
+            .is_err()
+        );
     }
     #[test]
     fn canonical_rank_one_components_have_scalar_interfaces() {
@@ -7879,7 +7804,8 @@ pub(crate) mod tests {
                 let value = SymbolicTensor::<PartialStructure>::new(
                     expression,
                     PartialStructure::from_logical_slots([port]),
-                );
+                )
+                .unwrap();
                 calls.lock().unwrap().clear();
                 let unchanged = value
                     .expression
@@ -7947,7 +7873,8 @@ pub(crate) mod tests {
         let value = SymbolicTensor::<PartialStructure>::new(
             expression,
             PartialStructure::from_logical_slots([]),
-        );
+        )
+        .unwrap();
         calls.lock().unwrap().clear();
         let expected = value
             .expression
@@ -7986,7 +7913,8 @@ pub(crate) mod tests {
                 .add_arg(composition::port_atom(slot))
                 .finish(),
             PartialStructure::from_logical_slots([slot]),
-        );
+        )
+        .unwrap();
         value.wrap_indices(scope, false).unwrap();
     }
 

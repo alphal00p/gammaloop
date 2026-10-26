@@ -40,7 +40,7 @@ use std::collections::HashMap;
 use std::hash::Hasher;
 #[cfg(feature = "bincode")]
 use std::result::Result as StdResult;
-use symbolica::atom::{Atom, AtomCore, AtomView, Symbol};
+use symbolica::atom::{Atom, AtomView, Symbol};
 use symbolica::id::ConditionResult;
 #[cfg(feature = "bincode")]
 use symbolica::state::HasStateMap;
@@ -60,10 +60,10 @@ impl From<IndexedTensor> for PartialTensor {
 impl PartialTensor {
     /// Require explicit public indices without changing payload or assigning labels.
     ///
-    /// Unchecked sources undergo the existing interface/scope validation once.
-    /// Already established facts survive the representation-only conversion.
+    /// Sources must already be published. Their established facts survive this
+    /// representation-only conversion without observing the payload again.
     pub fn try_into_indexed(self) -> Result<IndexedTensor> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let Self {
             structure,
             expression,
@@ -101,22 +101,9 @@ impl IndexedTensor {
     /// Check a declared indexed boundary, including the logical shape of zero.
     /// Encoded unresolved ports are rejected even though `AbstractIndex` can store them.
     pub fn from_indexed_parts(expression: Atom, structure: IndexedStructure) -> Result<Self> {
-        let is_metric = expression
-            .as_fun_view()
-            .is_some_and(|fun| fun.get_symbol() == spenso::network::library::symbolic::ETS.metric);
-        let is_composite = !matches!(expression.as_view(), AtomView::Fun(_));
-        // Observe these declared parts directly. Rebuilding through logical-slot
-        // sorting could change canonical tie order for symbolic dimensions and
-        // discard the supplied layout. The checked conversion below validates
-        // callbacks, scopes and multiplicities before publishing this carrier.
-        PartialTensor {
-            structure: structure.into_partial(),
-            expression,
-            is_metric,
-            is_composite,
-            proofs: Default::default(),
-        }
-        .try_into_indexed()
+        // Admit once while retaining the supplied canonical storage and logical
+        // layout. The indexed projection only checks representability.
+        PartialTensor::from_declared_parts(expression, structure.into_partial())?.try_into_indexed()
     }
 
     pub(crate) fn into_partial_engine(self) -> PartialTensor {
@@ -475,6 +462,7 @@ mod tests {
     use spenso::{index_symbol, tensor_symbol};
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
+    use symbolica::atom::AtomCore;
     #[cfg(feature = "bincode")]
     use symbolica::state::StateMap;
     use symbolica::{function, symbol};
@@ -494,6 +482,9 @@ mod tests {
         assert_eq!(zero.rank(), 2);
         assert!(!zero.is_scalar());
         assert!(zero.is_zero());
+        let history = zero.proofs.occurrences.get().unwrap();
+        assert_eq!(history.count(slots[0]), 1);
+        assert_eq!(history.count(slots[1]), 1);
         let restored = zero
             .clone()
             .into_partial_engine()
@@ -511,14 +502,14 @@ mod tests {
             let partial = PartialTensor::new(
                 Atom::Zero,
                 PartialStructure::from_logical_slots([rep.slot(PartialIndex::Explicit(index))]),
-            );
+            )
+            .unwrap();
             assert!(partial.try_into_indexed().is_err());
         }
-        let malformed = PartialTensor::new(Atom::one(), structure.into_partial());
-        assert!(malformed.try_into_indexed().is_err());
+        assert!(PartialTensor::new(Atom::one(), structure.into_partial()).is_err());
 
-        // A symbolic dimension can compare equal to a concrete dimension during
-        // canonical sorting. A metadata projection must not sort those ties anew.
+        // Representation-only projection retains the supplied canonical storage
+        // and logical layout for symbolic and concrete dimensions alike.
         let symbolic = Minkowski {}.new_rep(symbol!("indexed_layout_D")).to_lib();
         let tied: IndexedStructure = [
             symbolic.slot(AbstractIndex::Normal(23)),
@@ -526,13 +517,8 @@ mod tests {
         ]
         .into_iter()
         .collect();
-        let partial = PartialTensor {
-            expression: Atom::Zero,
-            structure: tied.clone().into_partial(),
-            is_metric: false,
-            is_composite: true,
-            proofs: Default::default(),
-        };
+        let partial =
+            PartialTensor::from_declared_parts(Atom::Zero, tied.clone().into_partial()).unwrap();
         let indexed = partial.try_into_indexed().unwrap();
         assert_eq!(indexed.structure, tied);
         assert_eq!(indexed.structure.layout(), tied.layout());
@@ -610,7 +596,6 @@ mod tests {
             slot.to_atom()
         );
         let mut source = IndexedTensor::infer_indexed(expression).unwrap();
-        source.proofs.validated = Default::default();
         source.proofs.algebra = Default::default();
         let result = source
             .with_algebra_result(Atom::num(2) * source.expression())

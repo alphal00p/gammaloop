@@ -3899,7 +3899,7 @@ mod tests {
         let interface = PartialStructure::from_logical_slots([]);
         let tensor = Spensor::scalar_with_descriptor(
             ConcreteOrParam::Concrete(RealOrComplex::Real(2.)),
-            SymbolicTensor::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
@@ -3915,7 +3915,7 @@ mod tests {
     fn concrete_formatted_text_survives_html_export_failure() {
         let tensor = Spensor::scalar_with_descriptor(
             ConcreteOrParam::Concrete(RealOrComplex::Real(2.)),
-            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots([])),
+            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots([])).unwrap(),
             None,
             Vec::new(),
         );
@@ -3972,7 +3972,7 @@ mod tests {
                 structure,
             }
             .into(),
-            SymbolicTensor::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
@@ -4022,7 +4022,7 @@ mod tests {
         .into_canonical();
         let tensor = Spensor::from_storage_with_descriptor(
             tensor,
-            SymbolicTensor::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
@@ -4084,7 +4084,7 @@ mod tests {
         .into_canonical();
         let tensor = Spensor::from_storage_with_descriptor(
             storage,
-            SymbolicTensor::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );
@@ -4190,7 +4190,7 @@ mod tests {
         .into_canonical();
         let tensor = Spensor::from_storage_with_descriptor(
             storage,
-            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots(slots)),
+            SymbolicTensor::new(Atom::Zero, PartialStructure::from_logical_slots(slots)).unwrap(),
             None,
             Vec::new(),
         );

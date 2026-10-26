@@ -318,7 +318,7 @@ impl SymbolicTensor<PartialStructure> {
             ReductionRequest::Contract(_) => "contract",
             ReductionRequest::Algebra(_) => "simplify_algebra",
         };
-        source.ensure_validated()?;
+        source.explicit_index_occurrences()?;
         let policy = request.policy();
         if let Some(record) = &source.proofs.reduction
             && record.completed.contains(&policy)
@@ -1251,7 +1251,7 @@ mod tests {
                 .unwrap_or_else(|error| panic!("{name}: {error}"));
             assert_eq!(result.structure, source.structure, "{name}");
             assert!(
-                result.ensure_validated().is_ok(),
+                result.explicit_index_occurrences().is_ok(),
                 "{name}: the result remains validated"
             );
         }

@@ -1,481 +1,373 @@
-//! Ordered products with one payload operation per exact named run.
+//! Sorted metadata products, with expression assembly independent of index history.
 
-use super::{
-    ExplicitIndexOccurrences, PortPair, PortRewriteState, ProductPlan, TensorCompositionError,
-};
+use super::{ExplicitIndexOccurrences, PortPair, ProductPlan, TensorCompositionError};
 use crate::tensor::SymbolicTensor;
 use crate::tensor::composition;
-use ahash::AHashMap;
 use spenso::network::tags::SPENSO_TAG;
 use spenso::structure::abstract_index::AbstractIndex;
-use spenso::structure::dimension::Dimension;
 use spenso::structure::partial::{PartialIndex, PartialSlot, PartialStructure};
-use spenso::structure::representation::LibraryRep;
+use spenso::structure::representation::{LibraryRep, RepName};
 use spenso::structure::slot::{IsAbstractSlot, Slot};
-use spenso::structure::{Canonicalized, OrderedStructure, TensorStructure};
-#[cfg(test)]
-use std::cell::Cell;
-use std::collections::hash_map::Entry;
-use std::mem;
-use std::ops::Range;
+use spenso::structure::{Canonicalized, OrderedStructure, SlotIndex};
+use std::cmp::Reverse;
+use std::collections::BinaryHeap;
+use std::iter;
 use std::sync::Arc;
 use symbolica::atom::{Atom, AtomView};
 
-#[cfg(test)]
-#[derive(Clone, Copy, Debug, Default)]
-pub(super) struct NamedProductWork {
-    pub(super) interface_builds: usize,
-    pub(super) inventory_checks: usize,
-    pub(super) cartesian_checks: usize,
+/// Splitting canonical ports by orientation makes every borrowed stream monotone
+/// in exact base representation, dimension and index, including the dual stream.
+#[derive(Clone, Copy, Debug)]
+enum NamedStream<'a> {
+    Ports {
+        slots: &'a [PartialSlot],
+        canonical_offset: usize,
+    },
+    History(&'a ExplicitIndexOccurrences),
 }
 
-#[cfg(test)]
-thread_local! {
-    pub(super) static NAMED_PRODUCT_WORK: Cell<NamedProductWork> = const {
-        Cell::new(NamedProductWork {
-            interface_builds: 0,
-            inventory_checks: 0,
-            cartesian_checks: 0,
-        })
-    };
-}
-
-/// Dimension comparison is consistent within an oriented representation when
-/// all dimensions are concrete, or all comparisons of dimensions tie.
-#[derive(Clone, Copy, Debug, Default)]
-struct DimensionOrder {
-    concrete: Option<usize>,
-    distinct_concrete: bool,
-    symbolic: bool,
-}
-
-impl DimensionOrder {
-    fn observe(&mut self, dimension: Dimension) {
-        match dimension {
-            Dimension::Concrete(value) => {
-                self.distinct_concrete |= self.concrete.is_some_and(|previous| previous != value);
-                self.concrete = self.concrete.or(Some(value));
-            }
-            Dimension::Symbolic(_) => self.symbolic = true,
+impl NamedStream<'_> {
+    fn key(self, position: usize) -> Option<Slot<LibraryRep, AbstractIndex>> {
+        match self {
+            Self::Ports { slots, .. } => slots.get(position).copied().map(ProductPlan::named_key),
+            Self::History(history) => history
+                .indices
+                .get(position)
+                .map(|slot| slot.rep().base().slot(slot.aind())),
         }
     }
-
-    fn combined(self, other: Self) -> Self {
-        Self {
-            concrete: self.concrete.or(other.concrete),
-            distinct_concrete: self.distinct_concrete
-                || other.distinct_concrete
-                || matches!((self.concrete, other.concrete), (Some(left), Some(right)) if left != right),
-            symbolic: self.symbolic || other.symbolic,
-        }
-    }
-
-    fn is_consistent(self) -> bool {
-        !self.symbolic || !self.distinct_concrete
-    }
 }
 
-#[derive(Debug)]
-struct IncomingPort {
-    slot: PartialSlot,
-    logical_position: usize,
-    contracted: bool,
+/// One cursor per nonempty stream; no per-port inventory survives a key.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+struct NamedCursor {
+    key: Slot<LibraryRep, AbstractIndex>,
+    factor: usize,
+    stream: usize,
+    position: usize,
 }
 
-#[derive(Debug, Default)]
-struct NamedFactor {
-    ports: Vec<IncomingPort>,
-    dimensions: Vec<(LibraryRep, DimensionOrder)>,
-}
-
-impl NamedFactor {
-    /// Classification, source correspondence and the ordering certificate share
-    /// one borrowed canonical traversal. No cross-factor pairing happens here.
-    fn load(&mut self, interface: &PartialStructure) -> bool {
-        self.ports.clear();
-        self.dimensions.clear();
-        self.ports.reserve(interface.canonical().order());
-        for (position, slot) in interface.canonical().external_structure_iter().enumerate() {
-            if !SymbolicTensor::index_is_named(slot.aind) {
-                self.ports.clear();
-                self.dimensions.clear();
-                return false;
-            }
-            let representation = slot.rep();
-            if let Some((_, order)) = self
-                .dimensions
-                .iter_mut()
-                .find(|(rep, _)| *rep == representation.rep)
-            {
-                order.observe(representation.dim);
-            } else {
-                let mut order = DimensionOrder::default();
-                order.observe(representation.dim);
-                self.dimensions.push((representation.rep, order));
-            }
-            self.ports.push(IncomingPort {
-                slot,
-                logical_position: interface.layout().canonical_to_logical_position(position),
-                contracted: false,
-            });
-        }
-        true
-    }
-}
-
-#[derive(Debug)]
-struct NamedSlot {
+#[derive(Clone, Copy, Debug)]
+struct SourcePort {
     slot: PartialSlot,
     factor: usize,
-    canonical_position: usize,
-    live: bool,
+    /// Logical source ports flattened in factor order, used only in diagnostics.
+    position: usize,
 }
 
-#[derive(Debug)]
-struct CanonicalPrefix {
-    interface: PartialStructure,
-    slots: Vec<usize>,
+#[derive(Clone, Copy, Debug, Default)]
+struct NamedStep {
+    contractions: usize,
+    /// An actual rank-one contraction needs this port, not a prefix interface.
+    left_slot: Option<PartialSlot>,
 }
 
-/// Most live keys retain at most two source occurrences. Larger transient sets
-/// still have ordinary owned storage; this container is not a multiplicity proof.
 #[derive(Debug, Default)]
-struct LiveOccurrences {
-    inline: [usize; 2],
-    len: usize,
-    spill: Vec<usize>,
-}
-
-impl LiveOccurrences {
-    fn push(&mut self, id: usize) {
-        if self.len < self.inline.len() {
-            self.inline[self.len] = id;
-        } else {
-            self.spill.push(id);
-        }
-        self.len += 1;
-    }
-
-    fn iter(&self) -> impl Iterator<Item = &usize> {
-        self.inline[..self.len.min(self.inline.len())]
-            .iter()
-            .chain(self.spill.iter())
-    }
-
-    fn remove(&mut self, id: usize) {
-        let mut retained = 0;
-        for position in 0..self.len.min(self.inline.len()) {
-            let candidate = self.inline[position];
-            if candidate != id {
-                self.inline[retained] = candidate;
-                retained += 1;
-            }
-        }
-        self.spill.retain(|&candidate| candidate != id);
-        while retained < self.inline.len() && !self.spill.is_empty() {
-            self.inline[retained] = self.spill.remove(0);
-            retained += 1;
-        }
-        self.len = retained + self.spill.len();
-    }
-
-    fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-}
-
-/// The inventory owns cross-factor pairing, never occurrence history. Stable
-/// record IDs retain source occurrences even when their indices coincide.
-#[derive(Debug)]
-struct PreparedNamedProduct {
-    inventory: AHashMap<Slot<LibraryRep, AbstractIndex>, LiveOccurrences>,
-    slots: Vec<NamedSlot>,
-    dimensions: AHashMap<LibraryRep, DimensionOrder>,
-    legacy: Option<CanonicalPrefix>,
-    rank: usize,
-    factors: usize,
-}
-
-impl ProductPlan {
-    fn named_key(slot: PartialSlot) -> Slot<LibraryRep, AbstractIndex> {
-        let PartialIndex::Explicit(index) = slot.aind else {
-            unreachable!("named preparation admits only explicit named ports");
-        };
-        slot.rep().base().slot(index)
-    }
-
-    fn prepare_named(interface: &PartialStructure) -> Option<PreparedNamedProduct> {
-        let mut factor = NamedFactor::default();
-        if !factor.load(interface) {
-            return None;
-        }
-        let mut result = PreparedNamedProduct {
-            inventory: AHashMap::new(),
-            slots: Vec::with_capacity(factor.ports.len()),
-            dimensions: AHashMap::new(),
-            legacy: None,
-            rank: 0,
-            factors: 0,
-        };
-        let _ = result.add_ports(&mut factor, &[]);
-        let certified = result.include_dimensions(&factor);
-        if !certified {
-            // The seed is an established prefix. Do not sort it an extra time.
-            result.legacy = Some(CanonicalPrefix {
-                interface: Canonicalized::identity(interface.canonical().clone()),
-                slots: (0..result.slots.len()).collect(),
-            });
-        }
-        Some(result)
-    }
-}
-
-impl PreparedNamedProduct {
-    fn pairings(
-        &mut self,
-        factor: &NamedFactor,
-        pairs: &mut Vec<PortPair>,
-    ) -> Result<(), TensorCompositionError> {
-        pairs.clear();
-        // All incoming occurrences see the same old inventory. In particular,
-        // duplicate partners cannot be greedily consumed before ambiguity checks.
-        for (right, port) in factor.ports.iter().enumerate() {
-            if let Some(candidates) = self.inventory.get(&ProductPlan::named_key(port.slot)) {
-                for &left in candidates.iter() {
-                    #[cfg(test)]
-                    NAMED_PRODUCT_WORK.with(|work| {
-                        let mut observed = work.get();
-                        observed.inventory_checks += 1;
-                        work.set(observed);
-                    });
-                    if composition::automatically_contractible(&self.slots[left].slot, &port.slot) {
-                        pairs.push(PortPair { left, right });
-                    }
-                }
-            }
-        }
-        if ProductPlan::named_pairs_are_ambiguous(pairs) {
-            let prefix = self.legacy.take().unwrap_or_else(|| {
-                let order = self.source_order();
-                self.canonicalize(order)
-            });
-            let mut positions = vec![0; self.slots.len()];
-            for (position, &id) in prefix.slots.iter().enumerate() {
-                positions[id] = position;
-            }
-            for pair in pairs.iter_mut() {
-                pair.left = positions[pair.left];
-                pair.right = factor.ports[pair.right].logical_position;
-            }
-            pairs.sort_unstable_by_key(|pair| (pair.left, pair.right));
-            return Err(TensorCompositionError::Ambiguous(mem::take(pairs)));
-        }
-        Ok(())
-    }
-
-    fn include_dimensions(&mut self, factor: &NamedFactor) -> bool {
-        let mut certified = true;
-        for &(rep, incoming) in &factor.dimensions {
-            let order = self.dimensions.entry(rep).or_default();
-            *order = order.combined(incoming);
-            certified &= order.is_consistent();
-        }
-        certified
-    }
-
-    fn add_ports(&mut self, factor: &mut NamedFactor, pairs: &[PortPair]) -> Range<usize> {
-        let start = self.slots.len();
-        for pair in pairs {
-            factor.ports[pair.right].contracted = true;
-            let previous = &mut self.slots[pair.left];
-            previous.live = false;
-            let key = ProductPlan::named_key(previous.slot);
-            match self.inventory.entry(key) {
-                Entry::Occupied(mut entry) => {
-                    entry.get_mut().remove(pair.left);
-                    if entry.get().is_empty() {
-                        let _ = entry.remove();
-                    }
-                }
-                Entry::Vacant(_) => unreachable!("a selected port is live"),
-            }
-        }
-        for (position, port) in factor.ports.iter().enumerate() {
-            if port.contracted {
-                continue;
-            }
-            let id = self.slots.len();
-            self.slots.push(NamedSlot {
-                slot: port.slot,
-                factor: self.factors,
-                canonical_position: position,
-                live: true,
-            });
-            self.inventory
-                .entry(ProductPlan::named_key(port.slot))
-                .or_default()
-                .push(id);
-        }
-        self.rank = self.rank + factor.ports.len() - 2 * pairs.len();
-        self.factors += 1;
-        start..self.slots.len()
-    }
-
-    fn source_order(&self) -> Vec<usize> {
-        let mut order = self
-            .inventory
-            .values()
-            .flat_map(|occurrences| occurrences.iter())
-            .copied()
-            .collect::<Vec<_>>();
-        order.sort_unstable_by_key(|&id| {
-            let slot = &self.slots[id];
-            (slot.factor, slot.canonical_position)
-        });
-        order
-    }
-
-    fn canonicalize(&self, order: Vec<usize>) -> CanonicalPrefix {
-        #[cfg(test)]
-        NAMED_PRODUCT_WORK.with(|work| {
-            let mut observed = work.get();
-            observed.interface_builds += 1;
-            work.set(observed);
-        });
-        // The existing two-stage usize sorter also supplies correspondence for
-        // diagnostics and subsequent legacy prefixes, without matching again.
-        let interface =
-            OrderedStructure::new(order.iter().map(|&id| self.slots[id].slot).collect());
-        let slots = (0..order.len())
-            .map(|position| order[interface.layout().canonical_to_logical_position(position)])
-            .collect();
-        CanonicalPrefix {
-            interface: Canonicalized::identity(interface.into_canonical()),
-            slots,
-        }
-    }
-
-    /// Commit only after source admission, pairing, eligibility and history have
-    /// succeeded. Certificate failure changes ordering work, not dispatch mode.
-    fn commit(&mut self, factor: &mut NamedFactor, pairs: &[PortPair]) {
-        if !self.include_dimensions(factor) && self.legacy.is_none() {
-            let order = self.source_order();
-            self.legacy = Some(self.canonicalize(order));
-        }
-        let added = self.add_ports(factor, pairs);
-        if let Some(prefix) = self.legacy.take() {
-            let order = prefix
-                .slots
-                .into_iter()
-                .filter(|&id| self.slots[id].live)
-                .chain(added)
-                .collect();
-            self.legacy = Some(self.canonicalize(order));
-        }
-    }
-
-    fn finish(mut self) -> PartialStructure {
-        if let Some(prefix) = self.legacy.take() {
-            return prefix.interface;
-        }
-        #[cfg(test)]
-        NAMED_PRODUCT_WORK.with(|work| {
-            let mut observed = work.get();
-            observed.interface_builds += 1;
-            work.set(observed);
-        });
-        let order = self.source_order();
-        Canonicalized::identity(OrderedStructure::merge_slots(
-            order.into_iter().map(|id| self.slots[id].slot),
-        ))
-    }
-}
-
-#[derive(Debug)]
 struct ProductOccurrence {
-    slot: Slot<LibraryRep, AbstractIndex>,
+    representative: Option<Slot<LibraryRep, AbstractIndex>>,
     total: usize,
     base: usize,
     dual: usize,
 }
 
-impl ExplicitIndexOccurrences {
-    /// Scratch lookup for a run, using exact dimension equality rather than
-    /// structural ordering. Keep the first representative's orientation.
-    fn accumulate_product(
-        &self,
-        entries: &mut AHashMap<Slot<LibraryRep, AbstractIndex>, ProductOccurrence>,
-    ) -> Result<(), TensorCompositionError> {
-        self.validate()?;
-        let mut overflow = None;
-        for (slot, total, base, dual) in self.oriented_entries() {
-            let key = slot.rep().base().slot(slot.aind());
-            let entry = entries.entry(key).or_insert(ProductOccurrence {
-                slot,
-                total: 0,
-                base: 0,
-                dual: 0,
-            });
-            entry.total = entry.total.saturating_add(total);
-            entry.base = entry.base.saturating_add(base);
-            entry.dual = entry.dual.saturating_add(dual);
-            if entry.total > 2
-                && overflow.is_none_or(|previous| Self::compare(&slot, &previous).is_lt())
-            {
-                // Binary history merging reports the first collision in its
-                // total key order, within the earliest failing prefix.
-                overflow = Some(slot);
-            }
-        }
-        if let Some(slot) = overflow {
-            return Err(TensorCompositionError::InvalidExplicitMultiplicity {
-                index: slot.aind(),
-                occurrences: 3,
-            });
-        }
-        Ok(())
+impl ProductOccurrence {
+    fn include(&mut self, history: &ExplicitIndexOccurrences, position: usize) {
+        self.representative.get_or_insert(history.indices[position]);
+        self.total = self
+            .total
+            .saturating_add(1 + usize::from(history.dummies[SlotIndex(position)]));
+        let orientations = history.orientations[position];
+        // Alternative branches can carry both bounds without carrying their sum.
+        self.base = self.base.saturating_add(usize::from(orientations & 3));
+        self.dual = self
+            .dual
+            .saturating_add(usize::from((orientations >> 2) & 3));
+    }
+}
+
+#[derive(Debug)]
+struct NamedProduct {
+    interface: PartialStructure,
+    occurrences: ExplicitIndexOccurrences,
+    steps: Vec<NamedStep>,
+}
+
+impl ProductPlan {
+    fn named_key(slot: PartialSlot) -> Slot<LibraryRep, AbstractIndex> {
+        let PartialIndex::Explicit(index) = slot.aind else {
+            unreachable!("a named stream contains only explicit indices");
+        };
+        slot.rep().base().slot(index)
     }
 
-    fn finish_product(
-        entries: AHashMap<Slot<LibraryRep, AbstractIndex>, ProductOccurrence>,
-        selected_pair: bool,
-    ) -> Self {
-        let mut entries = entries.into_values().collect::<Vec<_>>();
-        entries.sort_unstable_by(|left, right| Self::compare(&left.slot, &right.slot));
-        let mut result = Self {
-            selected_pair,
-            ..Self::default()
-        };
-        for entry in entries {
-            result.indices.push(entry.slot);
-            result.dummies.push(entry.total == 2);
-            result
-                .orientations
-                .push((entry.base as u8) | ((entry.dual as u8) << 2));
+    /// Find a cross-factor ambiguity witness in linear work, even for a large
+    /// invalid key. Matching policy remains the same as binary named planning.
+    fn named_group_ambiguity(ports: &[SourcePort]) -> Option<Vec<PortPair>> {
+        if ports.len() <= 2 {
+            return None;
         }
-        result
+        let mut totals = [0usize; 2];
+        let mut representatives = [None; 2];
+        for port in ports {
+            let orientation = usize::from(!port.slot.rep().rep.is_base());
+            totals[orientation] += 1;
+            representatives[orientation].get_or_insert(port.slot);
+        }
+        let mut start = 0;
+        while start < ports.len() {
+            let factor = ports[start].factor;
+            let end = start
+                + ports[start..]
+                    .iter()
+                    .take_while(|port| port.factor == factor)
+                    .count();
+            let mut local = [0usize; 2];
+            for port in &ports[start..end] {
+                local[usize::from(!port.slot.rep().rep.is_base())] += 1;
+            }
+            for port in &ports[start..end] {
+                let partners = representatives
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, representative)| {
+                        representative.is_some_and(|slot| {
+                            composition::automatically_contractible(&port.slot, &slot)
+                        })
+                    })
+                    .map(|(orientation, _)| totals[orientation] - local[orientation])
+                    .sum::<usize>();
+                if partners > 1 {
+                    return Some(
+                        ports
+                            .iter()
+                            .filter(|other| {
+                                other.factor != factor
+                                    && composition::automatically_contractible(
+                                        &port.slot,
+                                        &other.slot,
+                                    )
+                            })
+                            .take(2)
+                            .map(|other| PortPair {
+                                left: port.position,
+                                right: other.position,
+                            })
+                            .collect(),
+                    );
+                }
+            }
+            start = end;
+        }
+        None
+    }
+
+    /// A valid admitted exact key has at most two public occurrences. Repeated
+    /// ports of one factor remain distinct; only different factors can contract.
+    fn named_group_survivors(
+        ports: &[SourcePort],
+        steps: &mut [NamedStep],
+        survivors: &mut Vec<PartialSlot>,
+        dual_survivors: &mut Vec<PartialSlot>,
+    ) {
+        if let [left, right] = ports
+            && left.factor != right.factor
+            && composition::automatically_contractible(&left.slot, &right.slot)
+        {
+            let step = &mut steps[right.factor];
+            step.contractions += 1;
+            step.left_slot = Some(left.slot);
+            return;
+        }
+        for port in ports {
+            if port.slot.rep().rep.is_base() {
+                survivors.push(port.slot);
+            } else {
+                dual_survivors.push(port.slot);
+            }
+        }
+    }
+
+    fn merge_named(
+        sources: &[&SymbolicTensor<PartialStructure>],
+    ) -> Result<NamedProduct, TensorCompositionError> {
+        let mut streams = Vec::with_capacity(4 * sources.len());
+        let mut cursors = Vec::with_capacity(4 * sources.len());
+        let mut offsets = Vec::with_capacity(sources.len());
+        let mut source_ports = 0;
+        let mut occurrences = ExplicitIndexOccurrences::default();
+        for (factor, source) in sources.iter().enumerate() {
+            offsets.push(source_ports);
+            source_ports += source.rank();
+            let canonical = source.structure.canonical();
+            let mut canonical_offset = 0;
+            for slots in [
+                canonical.self_dual_slice(),
+                canonical.base_slice(),
+                canonical.dual_slice(),
+            ] {
+                let stream = NamedStream::Ports {
+                    slots,
+                    canonical_offset,
+                };
+                if let Some(key) = stream.key(0) {
+                    cursors.push(Reverse(NamedCursor {
+                        key,
+                        factor,
+                        stream: streams.len(),
+                        position: 0,
+                    }));
+                    streams.push(stream);
+                }
+                canonical_offset += slots.len();
+            }
+            let history = source.explicit_index_occurrences()?;
+            occurrences.selected_pair |= history.selected_pair;
+            let stream = NamedStream::History(history);
+            if let Some(key) = stream.key(0) {
+                cursors.push(Reverse(NamedCursor {
+                    key,
+                    factor,
+                    stream: streams.len(),
+                    position: 0,
+                }));
+                streams.push(stream);
+            }
+        }
+
+        let mut heap = BinaryHeap::from(cursors);
+        let mut ports = Vec::with_capacity(2);
+        let mut survivors = Vec::with_capacity(source_ports);
+        let mut dual_survivors = Vec::new();
+        let mut steps = vec![NamedStep::default(); sources.len()];
+        while let Some(Reverse(first)) = heap.peek().copied() {
+            ports.clear();
+            let mut occurrence = ProductOccurrence::default();
+            while heap.peek().is_some_and(|cursor| cursor.0.key == first.key) {
+                let Reverse(mut cursor) = heap.pop().expect("the current key has a cursor");
+                match streams[cursor.stream] {
+                    NamedStream::Ports {
+                        slots,
+                        canonical_offset,
+                    } => {
+                        let source = sources[cursor.factor];
+                        ports.push(SourcePort {
+                            slot: slots[cursor.position],
+                            factor: cursor.factor,
+                            position: offsets[cursor.factor]
+                                + source.structure.layout().canonical_to_logical_position(
+                                    canonical_offset + cursor.position,
+                                ),
+                        });
+                    }
+                    NamedStream::History(history) => occurrence.include(history, cursor.position),
+                }
+                cursor.position += 1;
+                if let Some(key) = streams[cursor.stream].key(cursor.position) {
+                    cursor.key = key;
+                    heap.push(Reverse(cursor));
+                }
+            }
+            if let Some(pairs) = Self::named_group_ambiguity(&ports) {
+                return Err(TensorCompositionError::Ambiguous(pairs));
+            }
+            if occurrence.total > 2 {
+                return Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                    index: first.key.aind(),
+                    occurrences: 3,
+                });
+            }
+            Self::named_group_survivors(&ports, &mut steps, &mut survivors, &mut dual_survivors);
+            occurrences.push_product_occurrence(occurrence);
+        }
+        let interface = Canonicalized::identity(OrderedStructure::from_sorted_slots(
+            survivors.into_iter().chain(dual_survivors),
+        ));
+        Ok(NamedProduct {
+            interface,
+            occurrences,
+            steps,
+        })
+    }
+}
+
+impl ExplicitIndexOccurrences {
+    /// Groups arrive in total key order, with the first factor's representative.
+    /// Hidden pairs and cancelled indices need no public port to reach this output.
+    fn push_product_occurrence(&mut self, occurrence: ProductOccurrence) {
+        self.indices.push(
+            occurrence
+                .representative
+                .expect("admitted public indices have retained occurrence metadata"),
+        );
+        self.dummies.push(occurrence.total == 2);
+        self.orientations
+            .push((occurrence.base as u8) | ((occurrence.dual as u8) << 2));
     }
 }
 
 impl SymbolicTensor<PartialStructure> {
-    /// Multiply borrowed factors in input order, starting from scalar one.
+    /// Flush arithmetic only where an actual rank-one contraction can choose
+    /// the operation owner's compact dot spelling.
+    fn named_product_expression(
+        sources: &[&Self],
+        steps: &[NamedStep],
+    ) -> Result<Atom, TensorCompositionError> {
+        let mut expression = Atom::one();
+        let mut pending = 0;
+        let mut rank = 0;
+        for (factor, (source, step)) in sources.iter().zip(steps).enumerate() {
+            if rank == 1
+                && source.rank() == 1
+                && step.contractions == 1
+                && matches!(source.expression.as_view(), AtomView::Fun(vector)
+                    if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
+            {
+                expression = Atom::mul_many(
+                    iter::once(&expression).chain(
+                        sources[pending..factor]
+                            .iter()
+                            .map(|source| &source.expression),
+                    ),
+                );
+                pending = factor;
+                if matches!(expression.as_view(), AtomView::Fun(vector)
+                    if vector.get_symbol().has_tag(&SPENSO_TAG.rank1))
+                {
+                    expression = Self::compact_dot_parts(
+                        &expression,
+                        step.left_slot
+                            .expect("a selected contraction has a left port"),
+                        source,
+                    )?;
+                    pending += 1;
+                }
+            }
+            rank = rank + source.rank() - 2 * step.contractions;
+        }
+        Ok(Atom::mul_many(iter::once(&expression).chain(
+            sources[pending..].iter().map(|source| &source.expression),
+        )))
+    }
+
+    /// Multiply borrowed tensors, using one sorted metadata merge per named run.
     ///
-    /// Iteration stops at its first `None`, including for non-fused sources.
-    /// Empty input returns one. A singleton still passes through scalar
-    /// multiplication, including canonical free-axis ordering and nominal zero
-    /// ports. Pairing decisions and collision checks occur at each prefix, just
-    /// as in a left fold of [`Self::multiply`]. Exact named runs share one
-    /// factor-preserving payload multiplication; positional ports, compact dots,
-    /// rounded arithmetic and callbacks retain sequential operation dispatch.
-    /// Named pairing advances over live source occurrences. Canonical ordering
-    /// is deferred only when dimension comparisons are consistent across the run.
+    /// Inputs own complete public interfaces and scoped explicit-index histories.
+    /// Named runs merge those borrowed streams without inspecting payloads for
+    /// admission, reconstructing prefixes or sorting output. Duplicates in one
+    /// factor remain separate ports; contractions join different factors. Open
+    /// ports and channels use the existing multiplication operation. Expression
+    /// assembly uses Symbolica arithmetic and the existing compact-dot owner.
+    ///
+    /// Empty input returns scalar one. A singleton receives canonical named-axis
+    /// order, including the nominal ports of zero. Iteration stops at its first
+    /// `None`, including for non-fused sources.
     ///
     /// # Errors
     ///
-    /// Returns the first prefix's error from [`Self::multiply`], including invalid
-    /// source metadata, ambiguous pairings, unsupported channel composition or
-    /// excessive explicit-index multiplicity. Later factors are not admitted
-    /// after an earlier prefix fails.
+    /// Returns multiplication errors for newly ambiguous pairings, excessive
+    /// explicit multiplicity or unsupported channel composition. Named errors are
+    /// selected in global exact-key order. Ambiguity witnesses identify logical
+    /// source ports flattened in factor order; no earliest-prefix error is promised.
     ///
     /// ```
     /// use idenso::tensor::SymbolicTensor;
@@ -490,59 +382,37 @@ impl SymbolicTensor<PartialStructure> {
     pub fn multiply_many<'a>(
         factors: impl IntoIterator<Item = &'a Self>,
     ) -> Result<Self, TensorCompositionError> {
-        let mut factors = factors.into_iter().fuse().peekable();
-        let mut product = Self::infer(Atom::one())?;
-        let mut incoming = NamedFactor::default();
-        let mut pairs = Vec::new();
-        while factors.peek().is_some() {
-            if let Some(mut prepared) = ProductPlan::prepare_named(&product.structure)
-                && product.borrowed_parts().product_is_normalized()
-                && PortRewriteState::exact_arithmetic(product.expression.as_view())
+        let factors = factors.into_iter().fuse().collect::<Vec<_>>();
+        let mut product = Self::from_validated_parts(
+            Atom::one(),
+            Canonicalized::identity(OrderedStructure::default()),
+            Arc::new(ExplicitIndexOccurrences::default()),
+        );
+        let mut position = 0;
+        while position < factors.len() {
+            if Self::interface_is_named(&product.structure)
+                && Self::interface_is_named(&factors[position].structure)
             {
-                let mut sources = vec![&product];
-                let mut entries = AHashMap::new();
-                let history = product.explicit_index_occurrences()?;
-                history.accumulate_product(&mut entries)?;
-                let mut selected_pair = history.selected_pair;
-                while let Some(&factor) = factors.peek() {
-                    if !incoming.load(&factor.structure) {
-                        break;
-                    }
-                    // Admission precedes planning, which precedes combined
-                    // history validation, exactly as for binary multiplication.
-                    let history = factor.explicit_index_occurrences()?;
-                    prepared.pairings(&incoming, &mut pairs)?;
-                    let potential_dot = !pairs.is_empty()
-                        && prepared.rank == 1
-                        && incoming.ports.len() == 1
-                        && matches!(factor.expression.as_view(), AtomView::Fun(vector)
-                            if vector.get_symbol().has_tag(&SPENSO_TAG.rank1));
-                    if potential_dot
-                        || !factor.borrowed_parts().product_is_normalized()
-                        || !PortRewriteState::exact_arithmetic(factor.expression.as_view())
-                    {
-                        break;
-                    }
-                    history.accumulate_product(&mut entries)?;
-                    selected_pair |= history.selected_pair;
-                    prepared.commit(&mut incoming, &pairs);
-                    sources.push(factor);
-                    factors.next();
+                let start = position;
+                position += 1;
+                while position < factors.len()
+                    && Self::interface_is_named(&factors[position].structure)
+                {
+                    position += 1;
                 }
-                if sources.len() > 1 {
-                    let expression =
-                        Atom::mul_many(sources.iter().map(|source| &source.expression));
-                    let value = Self::from_validated_parts(expression, prepared.finish());
-                    let history = ExplicitIndexOccurrences::finish_product(entries, selected_pair);
-                    let _ = value.proofs.occurrences.set(Arc::new(history));
-                    let _ = value.proofs.normalized_product.set(true);
-                    product = value.validate_rewrite("multiply_many", &sources)?;
-                }
-            }
-            // Flush before dispatching an operation whose spelling, rounding or
-            // callbacks depend on the actual accumulated payload.
-            if let Some(factor) = factors.next() {
-                product = product.multiply(factor)?;
+                let sources = iter::once(&product)
+                    .chain(factors[start..position].iter().copied())
+                    .collect::<Vec<_>>();
+                let NamedProduct {
+                    interface,
+                    occurrences,
+                    steps,
+                } = ProductPlan::merge_named(&sources)?;
+                let expression = Self::named_product_expression(&sources, &steps)?;
+                product = Self::from_validated_parts(expression, interface, Arc::new(occurrences));
+            } else {
+                product = product.multiply(factors[position])?;
+                position += 1;
             }
         }
         Ok(product)
@@ -554,211 +424,212 @@ mod tests {
     use super::*;
     use crate::representations::ColorFundamental;
     use crate::test_support;
+    use spenso::structure::dimension::Dimension;
     use spenso::structure::partial::PartialStructureExt;
-    use spenso::structure::representation::{ExtendibleReps, RepName, Representation};
+    use spenso::structure::representation::{ExtendibleReps, Representation};
     use symbolica::symbol;
 
     fn rep() -> Representation<LibraryRep> {
         ExtendibleReps::EUCLIDEAN.new_rep(4).cast()
     }
 
-    #[test]
-    fn live_occurrences_preserve_order_across_inline_spill_removal_and_refill() {
-        let mut occurrences = LiveOccurrences::default();
-        assert!(occurrences.is_empty());
-        occurrences.push(10);
-        assert_eq!(occurrences.iter().copied().collect::<Vec<_>>(), [10]);
-        occurrences.push(20);
-        assert_eq!(occurrences.iter().copied().collect::<Vec<_>>(), [10, 20]);
-        assert_eq!(occurrences.spill.capacity(), 0);
-        occurrences.push(30);
-        occurrences.push(40);
-        assert_eq!(
-            occurrences.iter().copied().collect::<Vec<_>>(),
-            [10, 20, 30, 40]
-        );
-        occurrences.remove(20);
-        assert_eq!(
-            occurrences.iter().copied().collect::<Vec<_>>(),
-            [10, 30, 40]
-        );
-        occurrences.push(50);
-        occurrences.remove(40);
-        assert_eq!(
-            occurrences.iter().copied().collect::<Vec<_>>(),
-            [10, 30, 50]
-        );
-        occurrences.remove(10);
-        assert_eq!(occurrences.iter().copied().collect::<Vec<_>>(), [30, 50]);
-        assert!(occurrences.spill.is_empty());
-        for absent in [99, 10, 20, 40] {
-            occurrences.remove(absent);
-            assert_eq!(occurrences.iter().copied().collect::<Vec<_>>(), [30, 50]);
-        }
-        occurrences.remove(30);
-        assert_eq!(occurrences.iter().copied().collect::<Vec<_>>(), [50]);
-        occurrences.remove(50);
-        assert!(occurrences.is_empty());
-        assert_eq!(occurrences.iter().count(), 0);
-        occurrences.push(60);
-        occurrences.push(70);
-        assert_eq!(occurrences.iter().copied().collect::<Vec<_>>(), [60, 70]);
-        assert!(occurrences.spill.is_empty());
+    fn admitted_zero(
+        slots: impl IntoIterator<Item = PartialSlot>,
+    ) -> SymbolicTensor<PartialStructure> {
+        let interface = PartialStructure::from_logical_slots(slots);
+        let occurrences = ExplicitIndexOccurrences::from_interface(&interface);
+        occurrences.validate().unwrap();
+        SymbolicTensor::from_validated_parts(Atom::Zero, interface, Arc::new(occurrences))
     }
 
     #[test]
-    fn prepared_inventory_deletes_and_reinserts_an_empty_key_without_stale_pairings() {
-        test_support::test_initialize();
-        let slot = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(99901)));
-        let interface = PartialStructure::from_logical_slots([slot]);
-        let key = ProductPlan::named_key(slot);
-        let mut prepared = ProductPlan::prepare_named(&interface).unwrap();
-        let mut incoming = NamedFactor::default();
-        let mut pairs = Vec::new();
-        assert!(incoming.load(&interface));
-        prepared.pairings(&incoming, &mut pairs).unwrap();
-        assert_eq!(pairs, [PortPair { left: 0, right: 0 }]);
-        prepared.commit(&mut incoming, &pairs);
-        assert_eq!(prepared.rank, 0);
-        assert!(!prepared.inventory.contains_key(&key));
-        assert!(incoming.ports[0].contracted);
-
-        // Inventory storage can refill independently of the public operation's
-        // separate history check. This does not authorize a third index use.
-        assert!(incoming.load(&interface));
-        assert!(!incoming.ports[0].contracted);
-        prepared.pairings(&incoming, &mut pairs).unwrap();
-        assert!(pairs.is_empty());
-        prepared.commit(&mut incoming, &pairs);
-        assert_eq!(prepared.rank, 1);
-        let live = prepared.inventory[&key].iter().copied().collect::<Vec<_>>();
-        assert_eq!(live, [1]);
-        assert!(prepared.slots[live[0]].live);
-        assert_eq!(prepared.finish().logical_slots(), [slot]);
-    }
-
-    #[test]
-    fn named_factor_scratch_resets_size_dimensions_marks_and_logical_correspondence() {
+    fn merge_keeps_same_factor_duplicates_and_only_contracts_different_factors() {
         test_support::test_initialize();
         let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
-        let named = |representation: Representation<LibraryRep>, index| {
-            representation.slot(PartialIndex::Explicit(AbstractIndex::Normal(index)))
+        let [i, j, k] = [99901, 99903, 99905].map(AbstractIndex::Normal);
+        let slot = |representation: Representation<LibraryRep>, index| {
+            representation.slot(PartialIndex::Explicit(index))
         };
-        let symbolic = Representation {
-            rep: rep().rep,
-            dim: Dimension::Symbolic(symbol!("storage_scratch_dimension").into()),
-        };
-        let large = PartialStructure::from_logical_slots([
-            named(base, 9),
-            named(rep().rep.new_rep(2), 7),
-            named(symbolic, 5),
-            named(rep(), 3),
+        let left = admitted_zero([
+            slot(rep(), i),
+            slot(rep(), i),
+            slot(base, j),
+            slot(base.dual(), j),
+            slot(base.dual(), k),
         ]);
-        let small = PartialStructure::from_logical_slots([named(rep(), 1)]);
-        let scalar = PartialStructure::from_logical_slots([]);
-        let rejected = PartialStructure::from_logical_slots([
-            named(rep(), 11),
-            base.slot(PartialIndex::open(0)),
-        ]);
-        let mut scratch = NamedFactor::default();
-        assert!(scratch.load(&small));
-        assert!(scratch.load(&large));
-        assert_eq!(scratch.ports.len(), 4);
-        assert_eq!(scratch.dimensions.len(), 2);
-        let dimension = scratch
-            .dimensions
-            .iter()
-            .find(|(key, _)| *key == rep().rep)
-            .unwrap()
-            .1;
-        assert!(dimension.symbolic && dimension.distinct_concrete);
-        let logical = large.logical_slots();
-        for port in &mut scratch.ports {
-            assert_eq!(logical[port.logical_position], port.slot);
-            port.contracted = true;
+        let right = admitted_zero([slot(base, k)]);
+        let merged = ProductPlan::merge_named(&[&left, &right]).unwrap();
+        assert_eq!(merged.steps[0].contractions, 0);
+        assert_eq!(merged.steps[1].contractions, 1);
+        assert_eq!(merged.steps[1].left_slot, Some(slot(base.dual(), k)));
+        assert_eq!(
+            merged.interface.logical_slots(),
+            [
+                slot(rep(), i),
+                slot(rep(), i),
+                slot(base, j),
+                slot(base.dual(), j)
+            ]
+        );
+        for (representation, index) in [(rep(), i), (base, j), (base, k)] {
+            assert_eq!(merged.occurrences.count(representation.slot(index)), 2);
         }
-        let port_capacity = scratch.ports.capacity();
-        let dimension_capacity = scratch.dimensions.capacity();
-        assert!(scratch.load(&small));
-        assert_eq!(scratch.ports.len(), 1);
-        assert!(!scratch.ports[0].contracted);
-        assert_eq!(scratch.ports[0].logical_position, 0);
-        assert_eq!(scratch.dimensions.len(), 1);
-        let dimension = scratch.dimensions[0].1;
-        assert_eq!(dimension.concrete, Some(4));
-        assert!(!dimension.symbolic && !dimension.distinct_concrete);
-        assert_eq!(scratch.ports.capacity(), port_capacity);
-        assert_eq!(scratch.dimensions.capacity(), dimension_capacity);
-        assert!(scratch.load(&scalar));
-        assert!(scratch.ports.is_empty() && scratch.dimensions.is_empty());
-        assert!(!scratch.load(&rejected));
-        assert!(scratch.ports.is_empty() && scratch.dimensions.is_empty());
-
-        let dual = PartialStructure::from_logical_slots([named(base.dual().rep.new_rep(5), 13)]);
-        assert!(scratch.load(&dual));
-        assert_eq!(scratch.ports.len(), 1);
-        assert!(!scratch.ports[0].contracted);
-        assert_eq!(scratch.dimensions.len(), 1);
-        assert_eq!(scratch.dimensions[0].0, base.dual().rep);
-        let dimension = scratch.dimensions[0].1;
-        assert_eq!(dimension.concrete, Some(5));
-        assert!(!dimension.symbolic && !dimension.distinct_concrete);
     }
 
     #[test]
-    fn accumulated_history_keeps_first_orientation_bounds_scopes_and_selected_pair() {
+    fn merge_keeps_equal_orientation_ports_from_different_factors() {
+        test_support::test_initialize();
+        let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
+        let index = AbstractIndex::Normal(99907);
+        for representation in [base, base.dual()] {
+            let slot = representation.slot(PartialIndex::Explicit(index));
+            let left = admitted_zero([slot]);
+            let right = admitted_zero([slot]);
+            let merged = ProductPlan::merge_named(&[&left, &right]).unwrap();
+            assert_eq!(merged.interface.logical_slots(), [slot, slot]);
+            assert_eq!(merged.steps[1].contractions, 0);
+            assert_eq!(merged.occurrences.count(base.slot(index)), 2);
+        }
+    }
+
+    #[test]
+    fn duplicate_partners_report_a_cross_factor_ambiguity_witness() {
+        test_support::test_initialize();
+        let slot = rep().slot(PartialIndex::Explicit(AbstractIndex::Normal(99909)));
+        let repeated = admitted_zero([slot, slot]);
+        let single = admitted_zero([slot]);
+        for sources in [[&repeated, &single], [&single, &repeated]] {
+            let Err(TensorCompositionError::Ambiguous(pairs)) = ProductPlan::merge_named(&sources)
+            else {
+                panic!("two cross-factor partners must be ambiguous");
+            };
+            assert_eq!(pairs.len(), 2);
+            assert_eq!(pairs[0].left, pairs[1].left);
+            assert_ne!(pairs[0].right, pairs[1].right);
+            let boundary = sources[0].rank();
+            assert!(pairs.iter().all(|pair| {
+                (pair.left < boundary && pair.right >= boundary)
+                    || (pair.right < boundary && pair.left >= boundary)
+            }));
+        }
+    }
+
+    #[test]
+    fn history_preserves_first_orientation_independent_bounds_scopes_and_selected_pair() {
         test_support::test_initialize();
         let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
         let index = AbstractIndex::Normal(99911);
-        let scoped = index.scoped(symbol!("storage_history_scope"));
+        let scoped = index.scoped(symbol!("sorted_product_history_scope"));
         let symbolic = Representation {
             rep: base.rep,
-            dim: Dimension::Symbolic(symbol!("storage_history_dimension").into()),
+            dim: Dimension::Symbolic(symbol!("sorted_product_history_dimension").into()),
         };
-        let mut dual = ExplicitIndexOccurrences::default();
-        dual.add(base.dual().slot(index), 1);
-        dual.add(symbolic.slot(index), 1);
-        dual.selected_pair = true;
+        let mut alternatives = ExplicitIndexOccurrences::default();
+        alternatives.add_oriented(base.dual().slot(index), 1, 1, 1);
+        alternatives.add(symbolic.slot(index), 1);
+        alternatives.selected_pair = true;
         let mut fundamental = ExplicitIndexOccurrences::default();
         fundamental.add(base.slot(index), 1);
         fundamental.add(base.slot(scoped), 1);
-        for (first, second, representative) in [
-            (&dual, &fundamental, base.dual().slot(index)),
-            (&fundamental, &dual, base.slot(index)),
+        let left = SymbolicTensor::from_validated_parts(
+            Atom::Zero,
+            Canonicalized::identity(OrderedStructure::default()),
+            Arc::new(alternatives),
+        );
+        let right = SymbolicTensor::from_validated_parts(
+            Atom::Zero,
+            Canonicalized::identity(OrderedStructure::default()),
+            Arc::new(fundamental),
+        );
+        for (sources, representative) in [
+            ([&left, &right], base.dual().slot(index)),
+            ([&right, &left], base.slot(index)),
         ] {
-            let mut expected = first.clone();
-            expected.append(second);
-            expected.validate().unwrap();
-            let mut entries = AHashMap::new();
-            first.accumulate_product(&mut entries).unwrap();
-            second.accumulate_product(&mut entries).unwrap();
-            let actual = ExplicitIndexOccurrences::finish_product(
-                entries,
-                first.selected_pair || second.selected_pair,
+            let merged = ProductPlan::merge_named(&sources).unwrap();
+            assert!(merged.interface.logical_slots().is_empty());
+            assert!(merged.occurrences.selected_pair);
+            assert_eq!(merged.occurrences.entries().count(), 3);
+            assert_eq!(merged.occurrences.count(symbolic.slot(index)), 1);
+            assert_eq!(merged.occurrences.count(base.slot(scoped)), 1);
+            assert!(
+                merged
+                    .occurrences
+                    .oriented_entries()
+                    .any(|entry| { entry == (representative, 2, 2, 1) })
             );
-            assert_eq!(
-                actual.oriented_entries().collect::<Vec<_>>(),
-                expected.oriented_entries().collect::<Vec<_>>()
-            );
-            assert_eq!(actual.entries().count(), 3);
-            let shared = actual
-                .oriented_entries()
-                .find(|(slot, _, _, _)| {
-                    slot.aind() == index && slot.rep().dim == Dimension::Concrete(3)
-                })
-                .unwrap();
-            assert_eq!(shared, (representative, 2, 1, 1));
-            assert!(actual.selected_pair);
-            assert_eq!(actual.count(symbolic.slot(index)), 1);
-            assert_eq!(actual.count(base.slot(scoped)), 1);
-            let mut entries = AHashMap::new();
-            actual.accumulate_product(&mut entries).unwrap();
-            let mut extra = ExplicitIndexOccurrences::default();
-            extra.add(base.slot(index), 1);
-            assert!(matches!(extra.accumulate_product(&mut entries),
-                Err(TensorCompositionError::InvalidExplicitMultiplicity { index: failed, occurrences: 3 })
-                    if failed == index
-            ));
         }
+    }
+
+    #[test]
+    fn hidden_history_collisions_follow_global_key_order() {
+        test_support::test_initialize();
+        let [low, high] = [99913, 99915].map(AbstractIndex::Normal);
+        let hidden = |index, count| {
+            let mut history = ExplicitIndexOccurrences::default();
+            history.add(rep().slot(index), count);
+            SymbolicTensor::from_validated_parts(
+                Atom::Zero,
+                Canonicalized::identity(OrderedStructure::default()),
+                Arc::new(history),
+            )
+        };
+        let first = hidden(high, 2);
+        let second = hidden(high, 1);
+        let third = hidden(low, 2);
+        let fourth = hidden(low, 1);
+        assert!(matches!(
+            ProductPlan::merge_named(&[&first, &second, &third, &fourth]),
+            Err(TensorCompositionError::InvalidExplicitMultiplicity { index, occurrences: 3 })
+                if index == low
+        ));
+    }
+
+    #[test]
+    fn sorted_output_distinguishes_dimensions_and_appends_dual_survivors() {
+        test_support::test_initialize();
+        let base: Representation<LibraryRep> = ColorFundamental {}.new_rep(3).cast();
+        let index = AbstractIndex::Normal(99917);
+        let dimensions = [
+            Dimension::Concrete(2),
+            Dimension::Concrete(5),
+            Dimension::Symbolic(symbol!("sorted_product_dim_a").into()),
+            Dimension::Symbolic(symbol!("sorted_product_dim_b").into()),
+        ];
+        let slot = |representation, dim| {
+            Representation {
+                rep: representation,
+                dim,
+            }
+            .slot(PartialIndex::Explicit(index))
+        };
+        let paired =
+            dimensions.map(|dim| admitted_zero([slot(base.rep, dim), slot(base.dual().rep, dim)]));
+        let independent = dimensions
+            .into_iter()
+            .rev()
+            .flat_map(|dim| {
+                [rep().rep, LibraryRep::Dummy]
+                    .map(|representation| admitted_zero([slot(representation, dim)]))
+            })
+            .collect::<Vec<_>>();
+        let borrowed = independent.iter().chain(paired.iter()).collect::<Vec<_>>();
+        let merged = ProductPlan::merge_named(&borrowed).unwrap();
+        let mut expected = dimensions
+            .into_iter()
+            .flat_map(|dim| {
+                [rep().rep, base.rep, base.dual().rep, LibraryRep::Dummy]
+                    .map(|representation| slot(representation, dim))
+            })
+            .collect::<Vec<_>>();
+        expected.sort_unstable();
+        assert_eq!(merged.interface.logical_slots(), expected);
+        assert_eq!(merged.occurrences.entries().count(), 12);
+        let history_keys = merged
+            .occurrences
+            .indices
+            .iter()
+            .map(|slot| slot.rep().base().slot::<AbstractIndex, _>(slot.aind()))
+            .collect::<Vec<_>>();
+        assert!(history_keys.windows(2).all(|pair| pair[0] < pair[1]));
     }
 }

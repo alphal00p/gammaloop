@@ -364,7 +364,7 @@ impl SymbolicTensor<PartialStructure> {
     /// Concrete `cind` arguments are observed as components; callback results
     /// must preserve the original logical ports, including the rank of zero.
     pub fn expand_dots(&self) -> Result<Self, TensorInferenceError> {
-        self.ensure_validated()?;
+        self.explicit_index_occurrences()?;
         let settings =
             ParseSettings::default().with_strict_tensor_filter(StrictTensorFilter::ContainsReps);
         let compact = DotNormalizer::metric_shorthand_to_dot(self.expression().as_view());
@@ -818,7 +818,8 @@ mod test {
             * spenso::bracket!(function!(a, &rep), function!(b, &rep));
         assert!(value.with_checked_expression(reversed).is_err());
         assert_eq!(value.expression(), &(&scalar * &ordered));
-        let zero = SymbolicTensor::from_normalized_parts(Atom::Zero, value.structure().clone());
+        let zero =
+            SymbolicTensor::from_declared_parts(Atom::Zero, value.structure().clone()).unwrap();
         let result = zero.expand_dots().unwrap();
         assert_eq!(result.expression(), &Atom::Zero);
         assert_eq!(result.structure(), value.structure());

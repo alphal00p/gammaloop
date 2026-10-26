@@ -109,6 +109,10 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom
         matcher: &mut SlotMatcher,
     ) -> Result<Canonicalized<Self>, StructureError> {
         let structure = OrderedStructure::<LibraryRep, Aind>::structure_from_atom(value, matcher)?;
+        let occurrences = ExplicitIndexOccurrences::from_atom(value, matcher);
+        occurrences
+            .validate()
+            .map_err(|error| StructureError::ParsingError(error.to_string()))?;
         Ok(structure.map_canonical(|structure| {
             let (is_composite, is_metric) = if let AtomView::Fun(f) = value {
                 (false, f.get_symbol() == ETS.metric)
@@ -116,7 +120,11 @@ impl<Aind: ParseableAind + AbsInd + DummyAind> StructureFromAtom
                 (true, false)
             };
             SymbolicTensor {
-                proofs: Default::default(),
+                proofs: TensorProofs {
+                    validated: OnceLock::from(true),
+                    occurrences: OnceLock::from(Arc::new(occurrences)),
+                    ..TensorProofs::default()
+                },
                 structure,
                 is_composite,
                 is_metric,
@@ -159,6 +167,11 @@ where
         expression: AtomOrView<'src>,
         structure: Canonicalized<OrderedStructure<LibraryRep, Aind>>,
     ) -> Result<Canonicalized<Self>, TensorNetworkError<K, Symbol>> {
+        let occurrences =
+            ExplicitIndexOccurrences::from_atom(expression.as_view(), &mut SlotMatcher::default());
+        occurrences
+            .validate()
+            .map_err(|error| TensorNetworkError::Other(eyre::eyre!(error)))?;
         let (is_composite, is_metric) = if let AtomView::Fun(fun) = expression.as_view() {
             (false, fun.get_symbol() == ETS.metric)
         } else {
@@ -169,7 +182,11 @@ where
             owned => owned.into_owned().into(),
         };
         Ok(structure.map_canonical(|structure| Self {
-            proofs: Default::default(),
+            proofs: TensorProofs {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(Arc::new(occurrences)),
+                ..TensorProofs::default()
+            },
             structure,
             expression,
             is_metric,
@@ -260,7 +277,7 @@ pub(crate) struct TensorProofs {
     /// Tensor product finishing is inert and there are no unresolved factor
     /// occurrences which ordinary multiplication could reorder or coalesce.
     pub(super) normalized_product: OnceLock<bool>,
-    pub(in crate::tensor) occurrences: OnceLock<Arc<ExplicitIndexOccurrences>>,
+    pub(crate) occurrences: OnceLock<Arc<ExplicitIndexOccurrences>>,
     pub(super) algebra: OnceLock<bool>,
     pub(super) rewrite: OnceLock<bool>,
     pub(super) contracted: bool,
@@ -478,9 +495,23 @@ impl<Aind: AbsInd> spenso::network::TensorCommonFactor<Atom>
 }
 
 impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
+    /// # Panics
+    /// Panics if the supplied scalar has invalid explicit-index multiplicities.
     fn new_scalar(scalar: Self::Scalar) -> Self {
+        // This is fresh scalar intake, not a transfer of an existing carrier.
+        // Structured scalar payloads can retain internal pairs even when their
+        // free interface is empty; do not replace that history by an empty mask.
+        let occurrences =
+            ExplicitIndexOccurrences::from_atom(scalar.as_view(), &mut SlotMatcher::default());
+        occurrences
+            .validate()
+            .expect("scalar tensor producer requires valid index multiplicities");
         SymbolicTensor {
-            proofs: Default::default(),
+            proofs: TensorProofs {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(Arc::new(occurrences)),
+                ..TensorProofs::default()
+            },
             structure: OrderedStructure::scalar_structure(),
             is_metric: false,
             is_composite: false,
@@ -492,7 +523,11 @@ impl<Aind: AbsInd> ScalarTensor for SymbolicTensor<OrderedStructure<LibraryRep, 
 impl<Aind: AbsInd> ScalarStructure for SymbolicTensor<OrderedStructure<LibraryRep, Aind>> {
     fn scalar_structure() -> Self {
         SymbolicTensor {
-            proofs: Default::default(),
+            proofs: TensorProofs {
+                validated: OnceLock::from(true),
+                occurrences: OnceLock::from(Arc::default()),
+                ..TensorProofs::default()
+            },
             structure: OrderedStructure::scalar_structure(),
             is_metric: false,
             is_composite: false,

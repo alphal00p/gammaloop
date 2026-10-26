@@ -2281,7 +2281,7 @@ mod tests {
             ParamOrConcrete::new_scalar(ConcreteOrParam::Concrete(RealOrComplex::Complex(
                 Complex::new(1., 2.),
             ))),
-            SymbolicTensor::new(Atom::Zero, interface),
+            SymbolicTensor::new(Atom::Zero, interface).unwrap(),
             None,
             Vec::new(),
         );

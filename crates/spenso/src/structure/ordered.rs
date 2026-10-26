@@ -119,8 +119,8 @@ impl TryFrom<super::partial::PartialStructure> for super::IndexedStructure {
             slots.push(slot.rep().slot(index));
         }
         // Removing the Explicit enum wrapper does not change the established
-        // canonical order. Keep both ordering stages verbatim, including ties
-        // involving symbolic dimensions; do not sort an admitted layout again.
+        // canonical order. Keep both ordering stages verbatim; do not sort an
+        // admitted layout again.
         Ok(value.map_canonical(|structure| OrderedStructure {
             structure: slots,
             dual_start: structure.dual_start,
@@ -257,6 +257,50 @@ impl<R: RepName, Aind> Default for OrderedStructure<R, Aind> {
     }
 }
 
+impl<R: RepName, Aind> OrderedStructure<R, Aind> {
+    /// Collects canonically ordered slots without sorting or recording axis history.
+    ///
+    /// The producer must supply slots in nondecreasing canonical [`Slot`] order:
+    /// representation kind and orientation, then dimension, then abstract index.
+    /// Self-dual representations must precede base representations, which must
+    /// precede dual representations, as in [`LibraryRep`]'s order. This constructor
+    /// relies on the producer's structural algorithm to establish that order;
+    /// it does not validate it. Every supplied occurrence is retained, including
+    /// duplicates. Partition boundaries are established while appending slots.
+    ///
+    /// ```
+    /// use spenso::structure::OrderedStructure;
+    /// use spenso::structure::representation::{Euclidean, RepName};
+    ///
+    /// let i = Euclidean {}.new_slot(3, 1);
+    /// let j = Euclidean {}.new_slot(3, 2);
+    /// let structure = OrderedStructure::<Euclidean>::from_sorted_slots([i, i, j]);
+    /// assert_eq!(structure.self_dual_slice(), [i, i, j]);
+    /// assert!(structure.base_slice().is_empty());
+    /// assert!(structure.dual_slice().is_empty());
+    /// ```
+    #[must_use]
+    pub fn from_sorted_slots(slots: impl IntoIterator<Item = Slot<R, Aind>>) -> Self {
+        let slots = slots.into_iter();
+        let mut result = Self {
+            structure: Vec::with_capacity(slots.size_hint().0),
+            ..Self::default()
+        };
+        for slot in slots {
+            if !slot.rep.rep.is_self_dual() {
+                if result.base_start == usize::MAX {
+                    result.base_start = result.structure.len();
+                }
+                if result.dual_start == usize::MAX && slot.rep.rep.is_dual() {
+                    result.dual_start = result.structure.len();
+                }
+            }
+            result.structure.push(slot);
+        }
+        result
+    }
+}
+
 // impl From<Vec<PhysicalSlots>> for VecStructure {
 //     fn from(value: Vec<PhysicalSlots>) -> Self {
 //         VecStructure { structure: value }
@@ -264,10 +308,8 @@ impl<R: RepName, Aind> Default for OrderedStructure<R, Aind> {
 // }
 
 impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
-    // Sort usize positions in both paths, as legacy admission did. Sorting Slots
-    // directly can use a different comparison schedule for symbolic dimension
-    // ties, whose comparison is not a total order. These scratch orders become
-    // admission history only when the caller explicitly constructs a layout.
+    // Keep representation and index ordering separate so admission records both
+    // axis mappings. Scratch orders become history only when constructing a layout.
     fn canonicalize(&mut self) -> (Vec<usize>, Vec<usize>) {
         let mut representation_order: Vec<_> = (0..self.structure.len()).collect();
         representation_order.sort_by_key(|&position| self.structure[position].rep);
@@ -453,8 +495,8 @@ impl<R: RepName, Aind: AbsInd> OrderedStructure<R, Aind> {
     /// This retains every supplied occurrence, including matching slots and
     /// same-oriented duplicates; it never infers a contraction. Stable sorting
     /// first groups representations and then orders full slots, exactly as at
-    /// admission, including ties involving symbolic dimensions. The result owns
-    /// its canonical axes and records no history of the supplied slot order.
+    /// admission. The result owns its canonical axes and records no history of
+    /// the supplied slot order.
     /// This operation does not reorder any associated tensor component data.
     ///
     /// ```
@@ -1065,24 +1107,109 @@ impl<R: RepName<Dual = R>, Aind: AbsInd> StructureContract for OrderedStructure<
 pub mod test {
     use linnet::half_edge::subgraph::SubSetLike;
     #[cfg(feature = "shadowing")]
-    use linnet::permutation::Permutation;
-
-    #[cfg(feature = "shadowing")]
     use symbolica::symbol;
+    #[cfg(feature = "shadowing")]
+    use symbolica_utils::SerializableSymbol;
 
     #[cfg(feature = "shadowing")]
     use crate::structure::abstract_index::AbstractIndex;
-    #[cfg(feature = "shadowing")]
     use crate::structure::dimension::Dimension;
     use crate::structure::representation::{Euclidean, LibraryRep, Lorentz, Minkowski, RepName};
-    #[cfg(feature = "shadowing")]
-    use crate::structure::slot::Slot;
-    use crate::structure::slot::{DualSlotTo, IsAbstractSlot};
+    use crate::structure::slot::{DualSlotTo, IsAbstractSlot, Slot};
     use crate::structure::{
         Canonicalized, MergeInfo, SlotIndex, StructureContract, TensorStructure,
     };
 
     use super::OrderedStructure;
+
+    #[test]
+    fn sorted_slots_establish_partitions_with_empty_kinds_and_duplicates() {
+        let self_dual: Slot<LibraryRep> = Euclidean {}.new_slot(4, 0).to_lib();
+        let upper = Lorentz {}.new_slot(4, 1).to_lib();
+        let lower = upper.dual();
+        for self_dual_count in 0..=2 {
+            for base_count in 0..=2 {
+                for dual_count in 0..=2 {
+                    let slots: Vec<_> = [self_dual; 2]
+                        .into_iter()
+                        .take(self_dual_count)
+                        .chain([upper; 2].into_iter().take(base_count))
+                        .chain([lower; 2].into_iter().take(dual_count))
+                        .collect();
+                    let direct = OrderedStructure::from_sorted_slots(slots.iter().copied());
+                    assert_eq!(direct.structure, slots);
+                    assert_eq!(direct.self_dual_slice(), &slots[..self_dual_count]);
+                    assert_eq!(
+                        direct.base_slice(),
+                        &slots[self_dual_count..self_dual_count + base_count]
+                    );
+                    assert_eq!(direct.dual_slice(), &slots[self_dual_count + base_count..]);
+                    assert_eq!(direct.n_self_dual(), self_dual_count);
+                    assert_eq!(direct.n_base(), base_count);
+                    assert_eq!(direct.n_dual(), dual_count);
+                    assert_eq!(
+                        direct.base_start,
+                        if base_count + dual_count == 0 {
+                            usize::MAX
+                        } else {
+                            self_dual_count
+                        }
+                    );
+                    assert_eq!(
+                        direct.dual_start,
+                        if dual_count == 0 {
+                            usize::MAX
+                        } else {
+                            self_dual_count + base_count
+                        }
+                    );
+                    assert_eq!(direct, OrderedStructure::new(slots).into_canonical());
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn sorted_slots_preserve_dummy_dimensions_and_canonical_index_order() {
+        let dimensions = [
+            Dimension::Concrete(1),
+            Dimension::Concrete(4),
+            #[cfg(feature = "shadowing")]
+            Dimension::from(symbol!("sorted_slots_dimension")),
+        ];
+        let slots: Vec<Slot<LibraryRep>> =
+            [LibraryRep::Dummy, Euclidean {}.into(), Minkowski {}.into()]
+                .into_iter()
+                .flat_map(|rep| {
+                    dimensions.into_iter().flat_map(move |dimension| {
+                        [0, 0, 2].map(|index| rep.new_slot(dimension, index))
+                    })
+                })
+                .chain([Lorentz {}.new_slot(4, 1).to_lib()])
+                .chain([Lorentz {}.dual().new_slot(4, 1).to_lib()])
+                .collect();
+        assert!(slots.is_sorted());
+        let direct = OrderedStructure::from_sorted_slots(slots.iter().copied());
+        let self_dual_count = 3 * dimensions.len() * 3;
+        assert_eq!(direct.structure, slots);
+        assert_eq!(direct.self_dual_slice(), &slots[..self_dual_count]);
+        assert_eq!(
+            direct.base_slice(),
+            &slots[self_dual_count..self_dual_count + 1]
+        );
+        assert_eq!(direct.dual_slice(), &slots[self_dual_count + 1..]);
+        assert_eq!(direct, OrderedStructure::new(slots).into_canonical());
+    }
+
+    #[test]
+    fn sorted_slots_accept_owned_indices() {
+        let slot: Slot<Euclidean, String> =
+            Euclidean {}.new_rep(4).slot(String::from("logical_axis"));
+        let direct = OrderedStructure::from_sorted_slots([slot]);
+        let mut slots = direct.into_iter();
+        assert_eq!(slots.next().unwrap().aind, "logical_axis");
+        assert!(slots.next().is_none());
+    }
 
     #[test]
     fn selected_survivor_merge_retains_matches_and_same_oriented_duplicates() {
@@ -1147,45 +1274,69 @@ pub mod test {
 
     #[cfg(feature = "shadowing")]
     #[test]
-    fn selected_survivors_preserve_stable_two_stage_symbolic_dimension_ties() {
-        let symbolic_a = Dimension::from(symbol!("selected_survivor_dimension_a"));
-        let symbolic_b = Dimension::from(symbol!("selected_survivor_dimension_b"));
+    fn selected_survivors_follow_total_symbolic_dimension_order() {
+        let mut symbols: [SerializableSymbol; 2] = [
+            symbol!("selected_survivor_dimension_a").into(),
+            symbol!("selected_survivor_dimension_b").into(),
+        ];
+        symbols.sort();
+        let [symbolic_a, symbolic_b] = symbols.map(Dimension::Symbolic);
         let slot = |dimension, index| -> Slot<LibraryRep> {
             Euclidean {}
                 .new_rep(dimension)
                 .slot(AbstractIndex::Normal(index))
                 .to_lib()
         };
-        let tied = [slot(symbolic_b, 2), slot(symbolic_a, 2)];
+        let symbolic_slots = [slot(symbolic_b, 2), slot(symbolic_a, 2)];
+        let upper = Lorentz {}.new_slot(3, 4).to_lib();
         let input = vec![
-            Lorentz {}.new_slot(3, 4).to_lib().dual(),
-            tied[0],
+            upper.dual(),
+            symbolic_slots[0],
             slot(4.into(), 3),
             slot(2.into(), 0),
-            tied[1],
+            symbolic_slots[1],
             slot(symbolic_a, 1),
-            Lorentz {}.new_slot(3, 4).to_lib(),
+            upper,
+        ];
+        let expected_self_dual = [
+            slot(2.into(), 0),
+            slot(4.into(), 3),
+            slot(symbolic_a, 1),
+            slot(symbolic_a, 2),
+            slot(symbolic_b, 2),
         ];
         for rotation in 0..input.len() {
             let mut slots = input.clone();
             slots.rotate_left(rotation);
-            let expected = Canonicalized::from(slots.clone()).into_canonical();
+            let admitted = OrderedStructure::new(slots.clone());
+            assert_eq!(
+                admitted
+                    .layout()
+                    .canonical_to_logical(&admitted.canonical().structure),
+                slots
+            );
             let merged = OrderedStructure::merge_slots(slots);
-            assert_eq!(merged, expected);
-            assert_eq!(merged.base_slice(), expected.base_slice());
-            assert_eq!(merged.dual_slice(), expected.dual_slice());
+            assert_eq!(&merged, admitted.canonical());
+            assert_eq!(merged.self_dual_slice(), expected_self_dual);
+            assert_eq!(merged.base_slice(), [upper]);
+            assert_eq!(merged.dual_slice(), [upper.dual()]);
+            assert_eq!(
+                OrderedStructure::from_sorted_slots(merged.structure.iter().copied()),
+                merged
+            );
         }
-        let tied_result = OrderedStructure::merge_slots(tied);
-        assert_eq!(tied_result.self_dual_slice(), tied);
-        let reversed = tied_result.select([SlotIndex(1), SlotIndex(0)]);
-        assert_eq!(reversed.self_dual_slice(), [tied[1], tied[0]]);
-        let merged = tied_result.merge_selected(&reversed, [SlotIndex(0)], [SlotIndex(0)]);
-        assert_eq!(merged.self_dual_slice(), tied);
+        let ordered = OrderedStructure::merge_slots(symbolic_slots);
+        let expected = [symbolic_slots[1], symbolic_slots[0]];
+        assert_eq!(ordered.self_dual_slice(), expected);
+        let reversed_selection = ordered.select([SlotIndex(1), SlotIndex(0)]);
+        assert_eq!(reversed_selection.self_dual_slice(), expected);
+        let merged = ordered.merge_selected(&reversed_selection, [SlotIndex(0)], [SlotIndex(1)]);
+        assert_eq!(merged.self_dual_slice(), expected);
     }
 
     #[cfg(feature = "shadowing")]
     #[test]
-    fn twenty_one_symbolic_slots_keep_the_legacy_position_sort_order() {
+    fn twenty_one_symbolic_slots_sort_totally_and_preserve_logical_axes() {
         let symbolic = Dimension::from(symbol!("legacy_position_sort_dimension"));
         let dimensions = [
             2.into(),
@@ -1207,19 +1358,11 @@ pub mod test {
                     .to_lib()
             })
             .collect();
-        let expected: Vec<_> = [
-            1.into(),
-            2.into(),
-            symbolic,
-            symbolic,
-            symbolic,
-            symbolic,
-            1.into(),
-            2.into(),
-        ]
-        .into_iter()
-        .chain([symbolic; 13])
-        .collect();
+        let expected: Vec<_> = [1.into(), 1.into(), 2.into(), 2.into()]
+            .into_iter()
+            .chain([symbolic; 17])
+            .collect();
+        assert_eq!(slots.len(), 21);
         let admitted = OrderedStructure::new(slots.clone());
         let merged = OrderedStructure::merge_slots(slots.clone());
         assert_eq!(
@@ -1230,6 +1373,11 @@ pub mod test {
             expected
         );
         assert_eq!(merged.external_dims_iter().collect::<Vec<_>>(), expected);
+        assert!(admitted.canonical().structure.is_sorted());
+        assert_eq!(
+            OrderedStructure::from_sorted_slots(merged.structure.iter().copied()),
+            merged
+        );
         assert_eq!(
             admitted
                 .layout()
@@ -1240,7 +1388,7 @@ pub mod test {
 
     #[cfg(feature = "shadowing")]
     #[test]
-    fn larger_symbolic_survivor_orders_match_legacy_sorting_and_admission_history() {
+    fn larger_symbolic_survivor_orders_sort_totally_and_preserve_admission_history() {
         let symbolic_a = Dimension::from(symbol!("large_legacy_position_dimension_a"));
         let symbolic_b = Dimension::from(symbol!("large_legacy_position_dimension_b"));
         let prefix = [
@@ -1269,19 +1417,24 @@ pub mod test {
                 if reverse {
                     slots.reverse();
                 }
-                // Keep the original admission pipeline as an independent oracle:
-                // both stable sorts operate on usize positions inside Permutation.
                 let mut expected = slots.clone();
-                let representation = Permutation::sort_by_key(&expected, |slot| slot.rep);
-                representation.apply_slice_in_place(&mut expected);
-                let index = Permutation::sort(&expected);
-                index.apply_slice_in_place(&mut expected);
+                expected.sort();
+                assert_eq!(expected[0].dim(), Dimension::Concrete(1));
+                assert_eq!(expected[1].dim(), Dimension::Concrete(1));
+                assert_eq!(expected[2].dim(), Dimension::Concrete(2));
+                assert_eq!(expected[3].dim(), Dimension::Concrete(2));
+                assert!(
+                    expected[4..]
+                        .iter()
+                        .all(|slot| { matches!(slot.dim(), Dimension::Symbolic(_)) })
+                );
 
                 let admitted = OrderedStructure::new(slots.clone());
                 assert_eq!(admitted.canonical().structure, expected);
                 assert_eq!(admitted.layout().canonical_to_logical(&expected), slots,);
                 let merged = OrderedStructure::merge_slots(slots);
                 assert_eq!(merged.structure, expected);
+                assert_eq!(OrderedStructure::from_sorted_slots(expected), merged);
             }
         }
     }

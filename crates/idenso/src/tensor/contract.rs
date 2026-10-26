@@ -6,6 +6,7 @@ use spenso::{
     network::library::symbolic::ETS,
     structure::slot::{DualSlotTo, IsAbstractSlot},
 };
+use std::sync::Arc;
 use symbolica::atom::{Atom, AtomCore, AtomView};
 
 use super::{
@@ -284,11 +285,19 @@ impl SymbolicTensor<PartialStructure> {
                 Some(interface) => interface,
                 None => InterfaceInference::replacement_interface(value)?,
             };
-            let domain = if self.normalization_is_intrinsic() {
-                Self::from_validated_parts(value.to_owned(), interface)
-            } else {
-                Self::from_produced_parts(value.to_owned(), interface)?
-            };
+            // This regional result returns only its payload to the enclosing
+            // carrier, so retain the enclosing conservative history intact.
+            self.explicit_index_occurrences()?;
+            let domain = Self::from_validated_parts(
+                value.to_owned(),
+                interface,
+                Arc::clone(
+                    self.proofs
+                        .occurrences
+                        .get()
+                        .expect("published index history"),
+                ),
+            );
             domain.observe_replacement(self);
             let nested = domain.contract_prerequisite_scopes(settings, selected, allowed_vector)?;
             result.status = result.status.max(nested.status);
@@ -378,11 +387,17 @@ impl SymbolicTensor<PartialStructure> {
         ) else {
             return Ok(result);
         };
-        let domain = if self.normalization_is_intrinsic() {
-            Self::from_validated_parts(expression, interface)
-        } else {
-            Self::from_produced_parts(expression, interface)?
-        };
+        self.explicit_index_occurrences()?;
+        let domain = Self::from_validated_parts(
+            expression,
+            interface,
+            Arc::clone(
+                self.proofs
+                    .occurrences
+                    .get()
+                    .expect("published index history"),
+            ),
+        );
         domain.observe_replacement(self);
         let contracted = domain.contract_parts(ContractSettings {
             collect_chains: false,

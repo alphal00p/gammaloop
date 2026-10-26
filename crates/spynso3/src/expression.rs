@@ -215,8 +215,8 @@ impl TensorExpression {
         Self::from_shared(py, Arc::new(value), name, name_args)
     }
 
-    /// Admit symbolic parts and normalize their contractions. Existing typed
-    /// results use `from_shared` to retain their established index metadata.
+    /// Publish known symbolic parts and contract compatible repeated ports.
+    /// Existing typed results use `from_shared` to retain their established metadata.
     pub(crate) fn from_known_parts(
         py: Python<'_>,
         atom: Atom,
@@ -227,6 +227,9 @@ impl TensorExpression {
         let original_rank = interface.canonical().order();
         let value =
             SymbolicTensor::from_produced_parts(atom, interface).map_err(Self::inference_error)?;
+        let value = value
+            .indexed(&HashMap::new())
+            .map_err(|error| Self::inference_error(error.into()))?;
         // A contraction is a derived expression, not a declaration of the original stored data.
         let (name, name_args) = if value.rank() == original_rank {
             (name, name_args)
@@ -234,24 +237,6 @@ impl TensorExpression {
             (None, Vec::new())
         };
         Self::from_shared(py, Arc::new(value), name, name_args)
-    }
-
-    /// Construct without inferring, validating, or normalizing the supplied parts.
-    /// The caller is responsible for matching the atom, ordered slots, and identity;
-    /// subsequent tensor operations trust this invariant.
-    pub fn from_parts_unchecked(
-        py: Python<'_>,
-        atom: Atom,
-        interface: PartialStructure,
-        name: Option<Symbol>,
-        name_args: Vec<Atom>,
-    ) -> PyResult<Py<Self>> {
-        Self::from_shared(
-            py,
-            Arc::new(SymbolicTensor::from_normalized_parts(atom, interface)),
-            name,
-            name_args,
-        )
     }
 
     pub(crate) fn from_shared(
@@ -5722,9 +5707,11 @@ mod tests {
                     let numerator = SymbolicTensor::new(
                         numerator.clone(),
                         infer_interface(&numerator).unwrap(),
-                    );
+                    )
+                    .unwrap();
                     let metric =
-                        SymbolicTensor::new(metric.clone(), infer_interface(&metric).unwrap());
+                        SymbolicTensor::new(metric.clone(), infer_interface(&metric).unwrap())
+                            .unwrap();
                     for (left, right) in [(&numerator, &metric), (&metric, &numerator)] {
                         let product = left.multiply(right).unwrap();
                         assert!(product.is_scalar());
@@ -5765,14 +5752,15 @@ mod tests {
         let vector = |name, slot: &Atom| FunctionBuilder::new(name).add_arg(slot).finish();
         let numerator = vector(p, &mu) * vector(q, &nu);
         let numerator =
-            SymbolicTensor::new(numerator.clone(), infer_interface(&numerator).unwrap());
+            SymbolicTensor::new(numerator.clone(), infer_interface(&numerator).unwrap()).unwrap();
         let expected = vector(p, &mu) * vector(q, &rho);
         for (input, output) in [(&nu, &rho), (&rho, &nu)] {
             let metric = FunctionBuilder::new(ETS.metric)
                 .add_arg(input)
                 .add_arg(output)
                 .finish();
-            let metric = SymbolicTensor::new(metric.clone(), infer_interface(&metric).unwrap());
+            let metric =
+                SymbolicTensor::new(metric.clone(), infer_interface(&metric).unwrap()).unwrap();
             for (left, right) in [(&numerator, &metric), (&metric, &numerator)] {
                 let product = left.multiply(right).unwrap();
                 assert_eq!(product.rank(), 2);
@@ -5809,9 +5797,9 @@ mod tests {
         let projector = FunctionBuilder::new(momentum).add_arg(&mu).finish()
             * FunctionBuilder::new(momentum).add_arg(&nu).finish();
         let numerator =
-            SymbolicTensor::new(numerator.clone(), infer_interface(&numerator).unwrap());
+            SymbolicTensor::new(numerator.clone(), infer_interface(&numerator).unwrap()).unwrap();
         let projector =
-            SymbolicTensor::new(projector.clone(), infer_interface(&projector).unwrap());
+            SymbolicTensor::new(projector.clone(), infer_interface(&projector).unwrap()).unwrap();
         let contracted = numerator
             .contract_ports(&projector, &[composition::PortPair { left: 0, right: 0 }])
             .unwrap();
@@ -7705,7 +7693,7 @@ mod tests {
                         .map(composition::port_atom),
                 )
                 .finish();
-            SymbolicTensor::new(atom, interface)
+            SymbolicTensor::new(atom, interface).unwrap()
         };
         let left = tensor("canonical_addition_left", [i, j]);
         let right = tensor("canonical_addition_right", [j, i]);
@@ -7760,7 +7748,8 @@ mod tests {
             &inferred
         ));
 
-        let standalone = SymbolicTensor::new(left.expression().clone(), right.structure().clone());
+        let standalone =
+            SymbolicTensor::new(left.expression().clone(), right.structure().clone()).unwrap();
         assert_eq!(
             standalone.presentation_atom(),
             tensor("canonical_addition_left", [j, i]).into_expression()
@@ -8234,14 +8223,9 @@ mod tests {
                 [inner],
             );
             for interface in [None, Some(PartialStructure::from_logical_slots([]))] {
-                let message = if interface.is_some() {
-                    "expression does not match its declared tensor interface"
-                } else {
-                    "cannot be nested"
-                };
                 let error = TensorExpression::from_atom_interface(py, outer.clone(), interface)
                     .expect_err("nested chain/trace syntax must be rejected");
-                assert!(error.to_string().contains(message), "{error}");
+                assert!(error.to_string().contains("cannot be nested"), "{error}");
             }
         });
     }
@@ -8267,7 +8251,8 @@ mod tests {
                         representation.slot(PartialIndex::open(0)),
                         representation.slot(PartialIndex::open(1)),
                     ]),
-                ),
+                )
+                .unwrap(),
             )?;
             let indexed = expression.bind(py).call1(("i", "i"))?;
             let indexed = indexed.extract::<PyRef<'_, TensorExpression>>()?;
@@ -8631,7 +8616,7 @@ mod tests {
                     .add_arg(representation.to_symbolic([]))
                     .add_arg(representation.to_symbolic([]))
                     .finish();
-                SymbolicTensor::new(atom, PartialStructure::from_logical_slots(ports))
+                SymbolicTensor::new(atom, PartialStructure::from_logical_slots(ports)).unwrap()
             };
             let composed = matrix("index_tooling_left")
                 .multiply(&matrix("index_tooling_right"))
@@ -8677,43 +8662,23 @@ mod tests {
     }
 
     #[test]
-    fn network_tooling_failures_are_python_value_errors() {
+    fn malformed_dot_is_rejected_before_tensor_publication() {
         Python::initialize();
-        Python::attach(|py| -> PyResult<()> {
+        Python::attach(|py| {
             let malformed = FunctionBuilder::new(SPENSO_TAG.dot)
-                .add_arg(Atom::var(symbolica::symbol!("malformed_dot_operand")))
+                .add_arg(Atom::var(symbol!("malformed_dot_operand")))
                 .finish();
-            // Deliberately inject malformed internals to test tooling error translation.
-            let expression = TensorExpression::from_parts_unchecked(
-                py,
-                malformed,
-                PartialStructure::from_logical_slots(std::iter::empty()),
-                None,
-                Vec::new(),
-            )?;
-
-            for name in ["undo_dots", "dirac_adjoint"] {
-                let error = expression
-                    .bind(py)
-                    .call_method0(name)
-                    .expect_err("malformed dot notation should return an error");
+            for interface in [None, Some(PartialStructure::from_logical_slots([]))] {
+                let error = TensorExpression::from_atom_interface(py, malformed.clone(), interface)
+                    .expect_err("malformed dot notation must fail at intake");
                 assert!(error.is_instance_of::<PyValueError>(py));
-                if name == "dirac_adjoint" {
-                    // The typed adjoint rejects malformed source syntax before
-                    // materializing its component network.
-                    assert!(
-                        error
-                            .to_string()
-                            .contains("dot requires exactly two operands")
-                    );
-                } else {
-                    assert!(error.to_string().contains("cannot parse tensor network"));
-                    assert!(error.to_string().contains("Invalid dot function"));
-                }
+                assert!(
+                    error
+                        .to_string()
+                        .contains("dot requires exactly two operands")
+                );
             }
-            Ok(())
-        })
-        .unwrap();
+        });
     }
 
     #[test]
@@ -8861,17 +8826,33 @@ mod tests {
                 2,
                 "the fixture must expose an intermediate port pair"
             );
-            let result = TensorExpression::from_known_parts(
-                py,
-                diagonal,
-                raw,
-                original.borrow(py).name,
-                original.borrow(py).name_args.clone(),
-            )?;
-            let result = result.borrow(py);
-            assert_eq!(result.interface().canonical().order(), 0);
-            assert!(result.name.is_none());
-            assert!(result.name_args.is_empty());
+            let third = SymbolicTensor::infer(
+                FunctionBuilder::new(spenso::tensor_symbol!("diagonal_descriptor_third"))
+                    .add_arg(&slot)
+                    .finish(),
+            )
+            .unwrap();
+            for atom in [diagonal, Atom::Zero] {
+                let result = TensorExpression::from_known_parts(
+                    py,
+                    atom.clone(),
+                    raw.clone(),
+                    original.borrow(py).name,
+                    original.borrow(py).name_args.clone(),
+                )?;
+                let result = result.borrow(py);
+                assert_eq!(*result.atom(), atom);
+                assert_eq!(result.interface().canonical().order(), 0);
+                assert!(result.name.is_none());
+                assert!(result.name_args.is_empty());
+                assert!(matches!(
+                    result.value.multiply(&third),
+                    Err(TensorCompositionError::InvalidExplicitMultiplicity {
+                        index: AbstractIndex::Normal(73201),
+                        occurrences: 3,
+                    })
+                ));
+            }
 
             // A scalar rewrite with no port contraction retains explicitly assigned identity.
             let scalar =

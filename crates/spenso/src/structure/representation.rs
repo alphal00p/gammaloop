@@ -483,11 +483,7 @@ pub struct Representation<T: RepName> {
 
 impl<T: RepName> Ord for Representation<T> {
     fn cmp(&self, other: &Self) -> Ordering {
-        if self.rep.is_dummy() && other.rep.is_dummy() {
-            Ordering::Equal
-        } else {
-            self.rep.cmp(&other.rep).then(self.dim.cmp(&other.dim))
-        }
+        self.rep.cmp(&other.rep).then(self.dim.cmp(&other.dim))
     }
 }
 
@@ -2045,10 +2041,80 @@ impl<'a, T: RepName> FromIterator<&'a Representation<T>> for Vec<Dimension> {
 #[cfg(test)]
 mod test {
     use linnet::permutation::Permutation;
+    use std::cmp::Ordering;
 
+    #[cfg(feature = "shadowing")]
+    use symbolica::symbol;
+
+    use crate::structure::dimension::Dimension;
     use crate::structure::representation::{RepName, Representation};
 
-    use super::{Euclidean, LibraryRep, Lorentz, Minkowski};
+    use super::{Dummy, Euclidean, LibraryRep, Lorentz, Minkowski};
+
+    #[test]
+    fn representation_order_is_total_and_consistent_with_equality() {
+        let dimensions = [
+            Dimension::Concrete(0),
+            Dimension::Concrete(1),
+            Dimension::Concrete(4),
+            #[cfg(feature = "shadowing")]
+            Dimension::from(symbol!("representation_order_a")),
+            #[cfg(feature = "shadowing")]
+            Dimension::from(symbol!("representation_order_b")),
+        ];
+        let kinds = [
+            LibraryRep::Dummy,
+            Euclidean {}.into(),
+            Minkowski {}.into(),
+            Lorentz {}.into(),
+            Lorentz {}.dual().into(),
+        ];
+        let representations: Vec<_> = kinds
+            .into_iter()
+            .flat_map(|rep| dimensions.map(|dim| Representation { rep, dim }))
+            .collect();
+
+        for left in &representations {
+            for right in &representations {
+                assert_eq!(left.cmp(right) == Ordering::Equal, left == right);
+                assert_eq!(left.partial_cmp(right), Some(left.cmp(right)));
+                assert_eq!(left.cmp(right), right.cmp(left).reverse());
+                for third in &representations {
+                    if left <= right && right <= third {
+                        assert!(left <= third, "{left:?} <= {right:?} <= {third:?}");
+                    }
+                }
+            }
+        }
+
+        let small = Dummy {}.new_rep(1);
+        let large = Dummy {}.new_rep(4);
+        assert!(small < large);
+        assert!(small.cast::<LibraryRep>() < large.cast::<LibraryRep>());
+    }
+
+    #[test]
+    fn sorting_respects_kind_orientation_and_dimension_including_dummy() {
+        let expected = [
+            LibraryRep::Dummy.new_rep(0),
+            LibraryRep::Dummy.new_rep(4),
+            Euclidean {}.new_rep(0).cast(),
+            Euclidean {}.new_rep(4).cast(),
+            Minkowski {}.new_rep(2).cast(),
+            Lorentz {}.new_rep(1).cast(),
+            Lorentz {}.new_rep(4).cast(),
+            Lorentz {}.dual().new_rep(1).cast(),
+            Lorentz {}.dual().new_rep(4).cast(),
+        ];
+        assert!(Permutation::sort(expected).is_identity());
+        for rotation in 0..expected.len() {
+            let mut input = expected;
+            input.reverse();
+            input.rotate_left(rotation);
+            input.sort();
+            assert_eq!(input, expected);
+        }
+    }
 
     #[test]
     fn ordering() {

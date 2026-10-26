@@ -76,8 +76,8 @@ fn zero_algebra_maps_hidden_pair_before_later_explicit_collisions() {
         source.explicit_index_occurrences().unwrap().count(physical),
         2
     );
-    physical_leaf.ensure_validated().unwrap();
-    extended_leaf.ensure_validated().unwrap();
+    physical_leaf.explicit_index_occurrences().unwrap();
+    extended_leaf.explicit_index_occurrences().unwrap();
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
@@ -148,7 +148,7 @@ fn dual_free_dimension_mapping_preserves_orientation_and_later_collision_history
             .count(source_slot),
         1
     );
-    partner.ensure_validated().unwrap();
+    partner.explicit_index_occurrences().unwrap();
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
@@ -234,7 +234,7 @@ fn admitted_arithmetic_owns_canonical_named_ports_and_composes_without_observati
     ))
     .unwrap();
     for source in [&a, &b, &scalar, &scalar_zero, &probe] {
-        source.ensure_validated().unwrap();
+        source.explicit_index_occurrences().unwrap();
     }
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
@@ -299,7 +299,7 @@ fn additive_branches_keep_maximum_public_multiplicity_in_both_operand_orders() {
     assert!(scalar.is_scalar());
     assert_eq!(scalar.explicit_index_occurrences().unwrap().count(slot), 1);
     assert_eq!(vector.explicit_index_occurrences().unwrap().count(slot), 1);
-    extra.ensure_validated().unwrap();
+    extra.explicit_index_occurrences().unwrap();
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
@@ -360,8 +360,8 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
             .count(base_slot),
         1
     );
-    free_dual.ensure_validated().unwrap();
-    compatible.ensure_validated().unwrap();
+    free_dual.explicit_index_occurrences().unwrap();
+    compatible.explicit_index_occurrences().unwrap();
     OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
     SCOPE_VALIDATIONS.with(|count| count.set(0));
     INFERENCE_CALLS.with(|count| count.set(0));
@@ -444,4 +444,90 @@ fn mapping_hidden_base_use_separates_it_from_the_free_dual_port() {
         Err(TensorCompositionError::InvalidExplicitMultiplicity { index: found, occurrences: 3 })
             if found == index.scoped(scope)
     ));
+}
+
+#[test]
+fn intake_installs_hidden_history_before_zero_product_finishing() {
+    test_support::test_initialize();
+    let slot = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(99591));
+    let left = function!(tensor_symbol!("publication::left"), slot.to_atom());
+    let right = function!(tensor_symbol!("publication::right"), slot.to_atom());
+    let expression = FunctionBuilder::new(SPENSO_TAG.bracket)
+        .add_arg(Atom::Zero)
+        .add_arg(left)
+        .add_arg(right)
+        .finish();
+    let value = SymbolicTensor::new(expression, PartialStructure::from_logical_slots([])).unwrap();
+    assert!(value.is_zero());
+    assert_eq!(value.explicit_index_occurrences().unwrap().count(slot), 2);
+    let probe = SymbolicTensor::infer(function!(
+        tensor_symbol!("publication::probe"),
+        slot.to_atom()
+    ))
+    .unwrap();
+    assert!(matches!(
+        value.multiply(&probe),
+        Err(TensorCompositionError::InvalidExplicitMultiplicity { occurrences: 3, .. })
+    ));
+}
+
+#[test]
+fn publication_borrows_supplied_history_without_observing_the_payload() {
+    test_support::test_initialize();
+    let slot = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot::<AbstractIndex, _>(AbstractIndex::Normal(99593));
+    let mut history = ExplicitIndexOccurrences::default();
+    history.add(slot, 2);
+    let history = Arc::new(history);
+    let value = SymbolicTensor::from_validated_parts(
+        Atom::Zero,
+        PartialStructure::from_logical_slots([]),
+        Arc::clone(&history),
+    );
+    let scalar = SymbolicTensor::infer(Atom::num(3)).unwrap();
+    OCCURRENCE_FUNCTION_VISITS.with(|count| count.set(0));
+    SCOPE_VALIDATIONS.with(|count| count.set(0));
+    INFERENCE_CALLS.with(|count| count.set(0));
+    assert_eq!(value.explicit_index_occurrences().unwrap().count(slot), 2);
+    assert!(Arc::ptr_eq(
+        value.proofs.occurrences.get().unwrap(),
+        &history
+    ));
+    let result = SymbolicTensor::multiply_many([&value, &scalar]).unwrap();
+    assert_eq!(result.explicit_index_occurrences().unwrap().count(slot), 2);
+    let mut unpublished = value;
+    unpublished.proofs = TensorProofs::default();
+    assert!(unpublished.explicit_index_occurrences().is_err());
+    assert_eq!(OCCURRENCE_FUNCTION_VISITS.with(|count| count.get()), 0);
+    assert_eq!(SCOPE_VALIDATIONS.with(|count| count.get()), 0);
+    assert_eq!(INFERENCE_CALLS.with(|count| count.get()), 0);
+}
+
+#[test]
+fn checked_constructors_preserve_two_declared_zero_ports_with_the_same_index() {
+    test_support::test_initialize();
+    let slot = LibraryRep::from(Minkowski {})
+        .new_rep(4)
+        .slot(PartialIndex::Explicit(AbstractIndex::Normal(99597)));
+    let structure = PartialStructure::from_logical_slots([slot, slot]);
+    for value in [
+        SymbolicTensor::new(Atom::Zero, structure.clone()).unwrap(),
+        SymbolicTensor::from_produced_parts(Atom::Zero, structure.clone()).unwrap(),
+    ] {
+        assert_eq!(value.rank(), 2);
+        assert_eq!(value.structure.logical_slots(), [slot, slot]);
+        assert_eq!(
+            value
+                .explicit_index_occurrences()
+                .unwrap()
+                .count(slot.rep().slot(AbstractIndex::Normal(99597))),
+            2
+        );
+        let product = SymbolicTensor::multiply_many([&value]).unwrap();
+        assert_eq!(product.rank(), 2);
+        assert_eq!(product.structure.logical_slots(), [slot, slot]);
+    }
 }

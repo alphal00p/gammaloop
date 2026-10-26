@@ -1,5 +1,6 @@
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 
 #[cfg(feature = "shadowing")]
 use symbolica::{atom::AtomView, coefficient::CoefficientView};
@@ -51,17 +52,21 @@ impl Dimension {
 }
 
 impl Ord for Dimension {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         match (self, other) {
-            (Dimension::Concrete(s), Dimension::Concrete(o)) => s.cmp(o),
+            (Self::Concrete(s), Self::Concrete(o)) => s.cmp(o),
             #[cfg(feature = "shadowing")]
-            _ => std::cmp::Ordering::Equal,
+            (Self::Concrete(_), Self::Symbolic(_)) => Ordering::Less,
+            #[cfg(feature = "shadowing")]
+            (Self::Symbolic(_), Self::Concrete(_)) => Ordering::Greater,
+            #[cfg(feature = "shadowing")]
+            (Self::Symbolic(s), Self::Symbolic(o)) => s.cmp(o),
         }
     }
 }
 
 impl PartialOrd for Dimension {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -152,6 +157,92 @@ impl PartialEq<Dimension> for usize {
             Dimension::Concrete(c) => c == self,
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::cmp::Ordering;
+
+    #[cfg(feature = "shadowing")]
+    use symbolica::symbol;
+    #[cfg(feature = "shadowing")]
+    use symbolica_utils::SerializableSymbol;
+
+    use super::Dimension;
+
+    #[test]
+    fn dimension_order_is_total_and_consistent_with_equality() {
+        let dimensions = [
+            Dimension::Concrete(0),
+            Dimension::Concrete(1),
+            Dimension::Concrete(4),
+            Dimension::Concrete(usize::MAX),
+            #[cfg(feature = "shadowing")]
+            Dimension::from(symbol!("dimension_order_a")),
+            #[cfg(feature = "shadowing")]
+            Dimension::from(symbol!("dimension_order_b")),
+        ];
+
+        for left in dimensions {
+            for right in dimensions {
+                assert_eq!(left.cmp(&right) == Ordering::Equal, left == right);
+                assert_eq!(left.partial_cmp(&right), Some(left.cmp(&right)));
+                assert_eq!(left.cmp(&right), right.cmp(&left).reverse());
+                for third in dimensions {
+                    if left <= right && right <= third {
+                        assert!(left <= third, "{left:?} <= {right:?} <= {third:?}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn concrete_dimensions_sort_numerically() {
+        let mut dimensions = [
+            Dimension::Concrete(usize::MAX),
+            Dimension::Concrete(4),
+            Dimension::Concrete(0),
+            Dimension::Concrete(1),
+            Dimension::Concrete(4),
+        ];
+        dimensions.sort();
+        assert_eq!(
+            dimensions.map(|dim| usize::try_from(dim).unwrap()),
+            [0, 1, 4, 4, usize::MAX]
+        );
+    }
+
+    #[cfg(feature = "shadowing")]
+    #[test]
+    fn symbolic_dimensions_follow_serializable_symbol_order_after_concrete() {
+        let mut symbols: [SerializableSymbol; 2] = [
+            symbol!("dimension_sort_a").into(),
+            symbol!("dimension_sort_b").into(),
+        ];
+        symbols.sort();
+        let [first, second] = symbols.map(Dimension::Symbolic);
+        let mut dimensions = [
+            second,
+            Dimension::Concrete(4),
+            first,
+            Dimension::Concrete(0),
+            first,
+        ];
+        dimensions.sort();
+        assert_eq!(
+            dimensions,
+            [
+                Dimension::Concrete(0),
+                Dimension::Concrete(4),
+                first,
+                first,
+                second
+            ]
+        );
+        assert_eq!(first.cmp(&second), symbols[0].cmp(&symbols[1]));
+        assert!(Dimension::Concrete(usize::MAX) < first);
     }
 }
 

@@ -1526,6 +1526,7 @@ mod tests {
         let cached = SymbolicTensor::from_validated_parts(
             combined.expression.clone(),
             combined.structure.clone(),
+            Arc::clone(combined.proofs.occurrences.get().unwrap()),
         );
         cached.proofs.observations.set(Arc::new(facts)).unwrap();
         let settings = AlgebraSettings {
@@ -1819,12 +1820,13 @@ mod tests {
         let b = spenso::mink!(4, 98934);
         let c = spenso::mink!(4, 98935);
         let tensor = SymbolicTensor::infer(spenso::g!(&b, &c)).unwrap();
-        let unchecked = SymbolicTensor::from_normalized_parts(
+        let admitted = SymbolicTensor::from_declared_parts(
             tensor.expression.clone(),
             tensor.structure.clone(),
-        );
+        )
+        .unwrap();
         assert!(
-            !unchecked
+            admitted
                 .reduction_observations()
                 .excludes_internal_connections()
         );

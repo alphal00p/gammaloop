@@ -295,7 +295,7 @@ fn network_from_arithmetic(
             let atom = expression.to_expression()?.expr;
             let network =
                 ParsingNet::try_from_view(atom.as_view(), library, &ParseSettings::default())?;
-            let value = SymbolicTensor::new(
+            let value = SymbolicTensor::from_produced_parts(
                 atom.clone(),
                 PartialStructure::from_logical_slots(
                     network
@@ -304,7 +304,7 @@ fn network_from_arithmetic(
                         .into_iter()
                         .map(|slot| slot.rep().slot(PartialIndex::Explicit(slot.aind()))),
                 ),
-            )
+            )?
             .normalize_closed_root_chain()?;
             Ok(SpensoNet {
                 network,
@@ -448,7 +448,11 @@ impl SpensoNet {
                 .map_err(composition_error)?;
             let scalar = TensorExpression::from_structured(
                 py,
-                SymbolicTensor::new(coefficient, PartialStructure::from_logical_slots([])),
+                SymbolicTensor::from_produced_parts(
+                    coefficient,
+                    PartialStructure::from_logical_slots([]),
+                )
+                .map_err(TensorExpression::inference_error)?,
             )?;
             term = term.multiply_network(Self::from_arithmetic(
                 ArithmeticStructure::Tensor(scalar),
@@ -938,10 +942,11 @@ impl SpensoNet {
     /// True
     #[staticmethod]
     pub fn one() -> SpensoNet {
-        let value = SymbolicTensor::new(
+        let value = SymbolicTensor::from_produced_parts(
             Atom::num(1),
             PartialStructure::from_logical_slots(std::iter::empty()),
-        );
+        )
+        .expect("scalar one has an empty tensor interface");
         SpensoNet {
             network: Network::one(),
             structure: value.clone(),
@@ -1023,10 +1028,11 @@ impl SpensoNet {
     /// True
     #[staticmethod]
     pub fn zero() -> SpensoNet {
-        let value = SymbolicTensor::new(
+        let value = SymbolicTensor::from_produced_parts(
             Atom::Zero,
             PartialStructure::from_logical_slots(std::iter::empty()),
-        );
+        )
+        .expect("scalar zero has an empty tensor interface");
         SpensoNet {
             network: Network::zero(),
             structure: value.clone(),
@@ -2926,7 +2932,8 @@ mod tests {
                         representation.slot(PartialIndex::open(0)),
                         representation.slot(PartialIndex::open(1)),
                     ]),
-                ),
+                )
+                .unwrap(),
             )?;
             let network = SpensoNet::from_arithmetic(
                 ArithmeticStructure::Tensor(expression),
@@ -3244,10 +3251,11 @@ mod tests {
         );
 
         // Use the native Rust API directly to avoid Python linking issues
-        let value = SymbolicTensor::new(
+        let value = SymbolicTensor::from_produced_parts(
             expr.clone(),
             PartialStructure::from_logical_slots(std::iter::empty()),
-        );
+        )
+        .unwrap();
         let net = SpensoNet {
             network: ParsingNet::try_from_view(
                 expr.as_view(),
@@ -3274,7 +3282,8 @@ mod tests {
                 representation.slot(PartialIndex::open(0)),
                 representation.slot(PartialIndex::Explicit(explicit)),
             ]),
-        );
+        )
+        .unwrap();
 
         let network = non_scalar_zero_network(&value).unwrap();
         assert!(network.state.is_tensor());

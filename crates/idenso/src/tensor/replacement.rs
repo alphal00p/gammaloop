@@ -213,8 +213,16 @@ impl SymbolicTensor<PartialStructure> {
         match replacement.apply(self.expression.as_view())? {
             AtomOrView::View(_) => Ok(self.clone()),
             expression => {
-                let mut result =
-                    Self::from_normalized_parts(expression.into_owned(), self.structure.clone());
+                let mut result = Self::from_validated_parts(
+                    expression.into_owned(),
+                    self.structure.clone(),
+                    Arc::clone(
+                        self.proofs
+                            .occurrences
+                            .get()
+                            .expect("published index history"),
+                    ),
+                );
                 // Every binding preserves ports and bounds its explicit indices
                 // by the source. Retain that conservative metadata even when
                 // normalization cancels leaves or coalesces them into powers.
@@ -762,9 +770,11 @@ mod tests {
         let diagonal = leaf(f, &[a.clone(), a.clone()]);
         let x = Atom::var(symbol!("rule_cancellation_x"));
         let admitted = typed(&diagonal * &x);
-        // Producers may certify admission before populating the index summary.
-        let source = SymbolicTensor::from_validated_parts(admitted.expression, admitted.structure);
-        assert!(source.proofs.occurrences.get().is_none());
+        // Publication must carry history before replacement can erase its payload.
+        let history = Arc::clone(admitted.proofs.occurrences.get().unwrap());
+        let source =
+            SymbolicTensor::from_validated_parts(admitted.expression, admitted.structure, history);
+        assert!(source.proofs.occurrences.get().is_some());
         let collision = typed(leaf(g, &[a]));
         let rule = TensorRule::new(diagonal.to_pattern(), x.pow(-1).into(), None, 0).unwrap();
         assert!(rule.literal_rhs.is_some());
@@ -823,19 +833,9 @@ mod tests {
         assert!(result.proofs.rewrite.get().is_none());
         assert!(result.proofs.algebra.get().is_none());
         assert!(!result.rewrites_preserve_interface());
-        let invalid = SymbolicTensor::<PartialStructure>::new(&fa * ga.pow(2), source.structure);
-        let calls = Arc::new(AtomicUsize::new(0));
-        let seen = calls.clone();
-        let rhs = ReplaceWith::Map(Box::new(move |_| {
-            seen.fetch_add(1, Ordering::Relaxed);
-            Atom::Zero
-        }));
         assert!(
-            invalid
-                .replace(&TensorRule::new(fa.to_pattern(), rhs.clone(), None, 0).unwrap())
-                .is_err()
+            SymbolicTensor::<PartialStructure>::new(&fa * ga.pow(2), source.structure).is_err()
         );
-        assert_eq!(calls.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -1274,7 +1274,7 @@ mod tests {
                 PartialStructure::from_logical_slots([]),
             )
             .unwrap(),
-            SymbolicTensor::new(Atom::Zero, source.structure.clone()),
+            SymbolicTensor::new(Atom::Zero, source.structure.clone()).unwrap(),
         ] {
             let result = source
                 .replace(&TensorRule::new(pattern.clone(), rhs.clone(), None, 0).unwrap())
@@ -1411,7 +1411,8 @@ mod tests {
         let unresolved = SymbolicTensor::new(
             leaf(f, &[m.to_symbolic([])]),
             PartialStructure::from_logical_slots([m.slot(PartialIndex::open(0))]),
-        );
+        )
+        .unwrap();
         assert!(
             unresolved
                 .replace(
@@ -1463,7 +1464,7 @@ mod tests {
         let (expression, structure) = inferred.into_parts();
         // Detached storage must establish its own facts even when its parts
         // came from a previously checked value.
-        let source = SymbolicTensor::from_normalized_parts(expression, structure);
+        let source = SymbolicTensor::from_declared_parts(expression, structure).unwrap();
         let rule = TensorRule::new(
             source.expression.to_pattern(),
             leaf(g, &[a]).into(),
@@ -1474,7 +1475,7 @@ mod tests {
         SCOPE_VALIDATIONS.with(|count| count.set(0));
         assert!(source.rewrites_preserve_interface());
         let established = SCOPE_VALIDATIONS.with(Cell::get);
-        assert!(established > 0);
+        assert_eq!(established, 0);
         assert!(source.rewrites_preserve_interface());
         let same = source
             .with_checked_expression(source.expression.clone())
@@ -1487,7 +1488,10 @@ mod tests {
         assert!(changed.proofs.rewrite.get().is_none());
         assert!(changed.proofs.algebra.get().is_none());
         assert!(changed.proofs.intrinsic.get().is_none());
-        assert!(changed.proofs.normalized_product.get().is_none());
+        assert_eq!(
+            changed.proofs.normalized_product.get(),
+            source.proofs.normalized_product.get()
+        );
         let after_binding_checks = SCOPE_VALIDATIONS.with(Cell::get);
         assert!(changed.rewrites_preserve_interface());
         assert_eq!(SCOPE_VALIDATIONS.with(Cell::get), after_binding_checks);
@@ -1509,18 +1513,21 @@ mod tests {
         assert!(ordered.proofs.algebra.get().is_none());
         *ordered.mut_structure() = OrderedStructure::new(Vec::new()).into_canonical();
         let (expression, structure) = ordered.into_parts();
-        let changed = SymbolicTensor::from_normalized_parts(
-            expression,
-            PartialStructure::from_logical_slots(structure.external_structure()),
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                expression,
+                PartialStructure::from_logical_slots(structure.external_structure()),
+            )
+            .is_err()
         );
-        assert!(!changed.rewrites_preserve_interface());
-        assert!(changed.replace(&rule).is_err());
 
         let (expression, _) = source.into_parts();
-        let detached = SymbolicTensor::from_normalized_parts(
-            expression,
-            PartialStructure::from_logical_slots([]),
+        assert!(
+            SymbolicTensor::from_declared_parts(
+                expression,
+                PartialStructure::from_logical_slots([]),
+            )
+            .is_err()
         );
-        assert!(!detached.rewrites_preserve_interface());
     }
 }

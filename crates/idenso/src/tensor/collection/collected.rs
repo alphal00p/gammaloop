@@ -435,6 +435,7 @@ impl<'a> CollectedOutput<'a> {
             let coefficient = SymbolicTensor::from_validated_parts(
                 Atom::one(),
                 PartialStructure::from_logical_slots([]),
+                Arc::default(),
             );
             retained.push((selected, coefficient));
         }
@@ -519,6 +520,7 @@ mod tests {
         let selected = SymbolicTensor::from_validated_parts(
             source.expression.pow(i64::from(i32::MAX)),
             PartialStructure::from_logical_slots([]),
+            Arc::clone(source.proofs.occurrences.get().unwrap()),
         );
         selected
             .proofs
