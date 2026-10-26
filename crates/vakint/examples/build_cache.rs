@@ -975,45 +975,47 @@ fn run(options: Options, worker_started: Instant) -> Result<()> {
             "build_identity": identity,
         }),
     )?;
-    let mut viewer = if options.monitor.display == RustRedMonitorDisplay::Tui {
-        options
-            .monitor
-            .progress_snapshot
-            .as_deref()
-            .map(|path| RustRedSnapshotViewer::new(path, options.monitor.no_color))
-    } else {
-        None
-    };
-    let mut child = Command::new(std::env::current_exe()?)
-        .args(std::env::args_os().skip(1))
-        .arg("--worker")
-        .arg("--worker-budget")
-        .arg(serde_json::to_string(&attempt)?)
-        .stdin(Stdio::null())
-        .stdout(log.try_clone()?)
-        .stderr(log)
-        .spawn()
-        .context("start cache worker")?;
-    if let Some(viewer) = viewer.as_mut() {
-        viewer.bind_worker_pid(child.id());
-    }
-    let (success, hard_deadline) = loop {
-        let expired = started.elapsed() >= Duration::from_secs_f64(attempt.hard_seconds)
-            || unix_seconds()? >= attempt.hard_deadline_unix_seconds;
-        if let Some(status) = child.try_wait()? {
-            break (status.success() && !expired, expired);
-        }
-        if expired {
-            child.kill()?;
-            child.wait()?;
-            break (false, true);
-        }
+    // Restore the terminal before writing the supervisor's receipts.
+    let (success, hard_deadline) = {
+        let mut viewer = if options.monitor.display == RustRedMonitorDisplay::Tui {
+            options
+                .monitor
+                .progress_snapshot
+                .as_deref()
+                .map(|path| RustRedSnapshotViewer::new(path, options.monitor.no_color))
+        } else {
+            None
+        };
+        let mut child = Command::new(std::env::current_exe()?)
+            .args(std::env::args_os().skip(1))
+            .arg("--worker")
+            .arg("--worker-budget")
+            .arg(serde_json::to_string(&attempt)?)
+            .stdin(Stdio::null())
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .spawn()
+            .context("start cache worker")?;
         if let Some(viewer) = viewer.as_mut() {
-            viewer.refresh();
+            viewer.bind_worker_pid(child.id());
         }
-        std::thread::sleep(Duration::from_millis(200));
+        loop {
+            let expired = started.elapsed() >= Duration::from_secs_f64(attempt.hard_seconds)
+                || unix_seconds()? >= attempt.hard_deadline_unix_seconds;
+            if let Some(status) = child.try_wait()? {
+                break (status.success() && !expired, expired);
+            }
+            if expired {
+                child.kill()?;
+                child.wait()?;
+                break (false, true);
+            }
+            if let Some(viewer) = viewer.as_mut() {
+                viewer.refresh();
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
     };
-    drop(viewer);
     let elapsed_seconds = started.elapsed().as_secs_f64();
     let supervision = json!({
         "state": "finished", "success": success, "hard_deadline_exhausted": hard_deadline,
