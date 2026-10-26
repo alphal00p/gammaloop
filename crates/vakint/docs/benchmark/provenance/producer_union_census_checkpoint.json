@@ -1,0 +1,33 @@
+{
+  "schema": "vakint.native-union-census-producer-source-checkpoint-index.v1",
+  "archive": "vakint-5l-native-union-producer-v4-census-20261026.tar.gz",
+  "archive_bytes": 77169,
+  "archive_sha256": "7181cab1e015d1441b995864a95645267c05f2c6011745b5ce2686bdebad95ca",
+  "archive_manifest_sha256": "80ad86d3ca6db4834b18258c8fd9acfc23d841637b9b9a1d8748377979b6283d",
+  "members": 23,
+  "frozen_helper_source_files": 10,
+  "note": "producer_union_census_checkpoint.typ",
+  "compiled_helper_source_sha256": "87a1a0a48c80deaabbe82a31ab9ad59a372f50a7c07d997571f48472fc6225bc",
+  "qualified_local_executable_sha256": "ba4a7b9c6b26cbed29ff9a00ef17c1d44424ccf06829467c6897494e142f967d",
+  "native_revision": "b209adb1e774242bcbe0417fed223317566561bd",
+  "symbolica_revision": "9cd57678d8817ec33c05cacba4925162f1c86b0b",
+  "preserved_predecessor": {
+    "compiled_helper_source_sha256": "f48dfaf3ced936bf85ecb8e8cd15a0b2971efec6a181ebc3d171929f8ec7d2a7",
+    "qualified_local_executable_sha256": "ad6f13eedf595359a11ed209c3eadfe92e3aedb90321ee6013de4d6e66cbdb79",
+    "mutated": false
+  },
+  "state": "SOURCE_CHECKPOINT_BUILD_GATES_PASS_NO_NATIVE_RUNTIME",
+  "checks": {
+    "actual_source_members_and_checksums": true,
+    "two_archive_builds_byte_identical": true,
+    "normalized_regular_files_only": true,
+    "gzip_mtime_zero": true,
+    "parser_tests_passed": 38,
+    "parser_tests_failed": 0,
+    "real_admission_test_ignored": 1,
+    "clippy_exit": 0,
+    "release_build_exit": 0,
+    "build_info_exit": 0
+  },
+  "scope": "Source and reproduction controls only. Every known expectation is exact; actual Native metadata exclusively drives output arithmetic. No ELF/proofs/cache/runtime data or real N-source union acceptance. Relocation changes cohort; no fresh-host rebuild, finalHEAVY/LIGHT or release claim."
+}
