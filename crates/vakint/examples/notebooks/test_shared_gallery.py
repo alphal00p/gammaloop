@@ -421,8 +421,10 @@ class GalleryClosurePresentationTests(unittest.TestCase):
             namespace,
         )
         render = Mock(side_effect=lambda value: ("html", value))
+        static_html = Mock(side_effect=lambda value: ("static-html", value))
         mo = SimpleNamespace(
             as_html=render,
+            Html=static_html,
             md=lambda value: value,
             vstack=lambda values: values,
             hstack=lambda values: values,
@@ -438,20 +440,36 @@ class GalleryClosurePresentationTests(unittest.TestCase):
             Gallery=SimpleNamespace(metrics=lambda *_: "metrics"),
             closure_seconds=0.1,
         )
-        (tabs,) = namespace["_"](**arguments)
-        native_names = (
+        formula_names = (
             "cancelling_numerator",
             "source_integral",
             "target_integral",
             "source_result",
             "target_result",
             "difference",
-            "source_graph",
-            "target_graph",
         )
-        self.assertEqual(render.call_count, len(native_names))
-        for name in native_names:
-            render.assert_any_call(arguments[name])
+        formula_html = {name: f"<math><mi>{name}</mi></math>" for name in formula_names}
+        # The native printer's omission metadata must never be stripped.
+        formula_html["source_result"] = (
+            '<math><mtext data-symbolica-marker="0">⋯</mtext></math>'
+            "<p>Expression preview · items 1–25 of 30</p>"
+        )
+        for name in formula_names:
+            arguments[name] = SimpleNamespace(
+                _repr_html_=Mock(return_value=formula_html[name]),
+                _display_=Mock(side_effect=AssertionError("Interactive formula")),
+            )
+        (tabs,) = namespace["_"](**arguments)
+        self.assertEqual(static_html.call_count, len(formula_names))
+        for name in formula_names:
+            arguments[name]._repr_html_.assert_called_once_with()
+            arguments[name]._display_.assert_not_called()
+            static_html.assert_any_call(
+                '<div class="vg-native-formula">' + formula_html[name] + "</div>"
+            )
+        self.assertEqual(render.call_count, 2)
+        render.assert_any_call(arguments["source_graph"])
+        render.assert_any_call(arguments["target_graph"])
         self.assertEqual(
             list(tabs.contents),
             ["The identity", "Retained-master results", "Independent native graphs"],
@@ -459,7 +477,8 @@ class GalleryClosurePresentationTests(unittest.TestCase):
         for label in tabs.contents:
             tabs.value = label
             self.assertTrue(tabs.contents[tabs.value])
-        self.assertEqual(render.call_count, len(native_names))
+        self.assertEqual(render.call_count, 2)
+        self.assertEqual(static_html.call_count, len(formula_names))
 
 
 class GalleryFooterTests(unittest.TestCase):

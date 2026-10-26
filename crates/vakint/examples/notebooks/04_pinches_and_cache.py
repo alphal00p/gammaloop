@@ -203,25 +203,29 @@ def _(
     target_integral,
     target_result,
 ):
-    # Keep native widgets and their virtual ESM files owned by this result cell.
-    # Tab changes select existing HTML without invalidating its creator.
+    # Native static MathML survives tab remounts without widget comm models.
+    def _formula(expression):
+        return mo.Html(
+            '<div class="vg-native-formula">' + expression._repr_html_() + "</div>"
+        )
+
     closure_view = mo.ui.tabs(
         {
             "The identity": mo.vstack(
                 [
                     mo.md("**Cancelling numerator**"),
-                    mo.as_html(cancelling_numerator),
+                    _formula(cancelling_numerator),
                     mo.md("**Source and target integrands**"),
-                    mo.as_html(source_integral),
-                    mo.as_html(target_integral),
+                    _formula(source_integral),
+                    _formula(target_integral),
                 ]
             ),
             "Retained-master results": mo.vstack(
                 [
-                    mo.as_html(source_result),
-                    mo.as_html(target_result),
+                    _formula(source_result),
+                    _formula(target_result),
                     mo.md("**Difference**"),
-                    mo.as_html(difference),
+                    _formula(difference),
                 ]
             ),
             "Independent native graphs": mo.hstack(
