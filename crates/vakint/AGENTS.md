@@ -59,10 +59,13 @@ The cumulative physical-example cache and its fresh seen-input reuse use the
 separate `merge_physical_capture_results.py` adapter described in the same
 maintenance contract. Keep incomplete runs pending until accepted completion,
 flush/close and exact output/guard receipts exist. Preserve every durable cache
-prefix; there is no 50 MiB publication target or 95 MiB aggregate native-pack cap.
-The final cumulative cache must include useful completed work from physical
-examples, not only a finite `build_cache` selection. Never promote a single seen
-reuse, a live counter or diagnostic timing into a held-out or repeated-performance
+prefix in the full heavy cache, including useful completed work from physical
+examples rather than only a finite `build_cache` selection. Deliver its compressed
+local path for independent hosting. Publish a separate trimmed five-loop cache
+of at most 95,000,000 compressed bytes in external data. Select its records using
+measured usage and usefulness from training, tuning and physical examples; do not
+use final held-out measurements for selection. Report both tiers separately. Never promote a
+single seen reuse, a live counter or diagnostic timing into a held-out or repeated-performance
 claim. Preserve all 48 original four-loop measurements and their provenance.
 
 The five-loop physical collector saves its complete scalar input as

@@ -135,8 +135,10 @@ observation for the same descriptor, native indexes, data and kernel; import
 validation remains separate from attachment and reduction measurements.
 The existing exact result/guard, binding/cohort, twelve held-out sets, three fresh
 matched samples and serialized-window requirements remain in force. Useful
-incidental descendant and root hits stay visible. There is no aggregate
-50/95 MiB rejection, and none of the original four-loop history is rewritten.
+incidental descendant and root hits stay visible. The full heavy collection has
+no aggregate size cap. A separate five-loop light cache must fit within
+95,000,000 compressed bytes and is the only tier published in external data.
+Neither tier rewrites the original four-loop history.
 
 Publishing the selected cache changes release-manifest hashes. A consumer may
 therefore supply #raw("data_metadata_requalification: {path, sha256}") pointing to
@@ -370,9 +372,14 @@ The final cumulative cache includes strict completed roots and intermediate
 descendants produced while running the physical examples. The finite
 #raw("build_cache") workload remains separately identified evidence; it is not
 the sole production source. Preserve every durable prefix and immutable base.
-There is no 50 MiB publication target or 95 MiB aggregate limit for native packs.
-Record actual sizes and operational allowances; an older single-file format's
-bound must not become a campaign-wide truncation policy. See
+Keep that full heavy collection without an aggregate size limit and deliver its
+compressed local path for independent hosting. Build a separate light cache of
+at most 95,000,000 compressed bytes for the external-data repository and release.
+Use measured completed-record hits, input diversity and demonstrated benefit to
+select records; aggregate monitor snapshots do not establish per-record frequency.
+Keep final held-out results out of selection and report loading, reduction and
+end-to-end measurements for both immutable tiers. Record actual sizes and
+operational allowances; trimming never deletes the heavy cache or its prefixes. See
 #link("../../cache_preparation.typ")[cache preparation and cumulative capture].
 
 The physical capture producer and its fresh seen-input reuse have a separate

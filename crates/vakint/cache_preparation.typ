@@ -163,10 +163,10 @@ The final gzip target does not constrain checkpoint scratch disk usage.
 
 The driver records native progress, strict preparation policy, intermediate
 capture diagnostics, input and output hashes, compressed and decoded identities,
-and elapsed time. There is no 50 MiB publication target or 95 MiB aggregate cache
-ceiling. Preserve useful completed records and publish their measured size. An
-older single-file decoder's limit is a compatibility constraint on that format,
-not a reason to truncate or discard a cumulative native pack. Warm RAM
+and elapsed time. Preserve every useful completed record in the heavy collection;
+its size is unbounded. A separate light five-loop cache is selected for publication
+within 95,000,000 compressed bytes. A format limit or the light-cache budget must
+never truncate or discard the heavy collection. Warm RAM
 repeats, requested-root hits and intermediate-only benefits must be reported
 separately in performance comparisons.
 
@@ -199,10 +199,31 @@ with raw elapsed observations only; it is not a three-sample performance median.
 Choose explicit operational memory, disk and elapsed allowances for the host and
 record them with the actual run. Startup capacity reservations are not runtime
 kill limits or guarantees of peak use. Bounded queues and individual record/codec
-checks remain necessary, but no arbitrary aggregate publication-size cap is
-imposed. The final distribution inventory records cumulative roots and
+checks remain necessary. The heavy inventory records cumulative roots and
 descendants, exact native bindings, physical producer provenance and measured
-compressed/decoded size. Numerical master availability is unchanged.
+compressed/decoded size, without an aggregate cap. Numerical master availability
+is unchanged.
+
+=== Heavy and light five-loop delivery
+
+Keep the heavy cache as the full union of accumulated strict completed records.
+Provide its compressed local path and checked installation instructions for
+independent hosting. Do not upload that large archive to the external-data
+repository or release. Preserve every source prefix used to construct it.
+
+Publish a separate light cache of at most 95,000,000 compressed bytes. Select
+completed cached reductions, rather than deleting IBP campaign rules. Use
+per-record hit frequency, reuse across physical and tuning inputs, storage cost
+and measured reduction benefit. Collect hit events before monitor coalescing;
+latest snapshots and aggregate counters cannot reconstruct complete frequencies.
+Do not describe hit counts as avoided CPU time without a corresponding measurement.
+
+Freeze selection before final held-out comparisons. Keep their data out of the
+selection statistics, distinguish seen physical inputs from held-out inputs, and
+record the exact heavy and light snapshots used for every comparison. Validate
+full values and nonzero conditions after trimming. Report each tier's record
+counts, compressed/decoded sizes, load cost, IBP timing and end-to-end timing
+separately; useful records remain in the heavy cache even when excluded from light.
 
 === Running-cache API
 
