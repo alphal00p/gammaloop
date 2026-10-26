@@ -153,6 +153,32 @@ class PhysicalCaptureContracts(unittest.TestCase):
             "bytes": path.stat().st_size,
         }
 
+    @staticmethod
+    def scope_document():
+        return {
+            "schema": "vakint.benchmark-physical-scope.v1",
+            "reason": "Accept the completed q0 example; defer the quadratic campaign.",
+            "physical_scope": {
+                "required": ["zero-momentum-diagnostic"],
+                "deferred": ["quadratic-four-rung-uv"],
+            },
+        }
+
+    def capture_command(self, base, output, scope=None):
+        command = [
+            sys.executable,
+            str(Path(adapter.__file__)),
+            "--base",
+            str(base),
+            "--campaign",
+            str(self.root),
+            "--output",
+            str(output),
+        ]
+        if scope is not None:
+            command.extend(["--physical-scope", str(scope)])
+        return command
+
     def run_fixture(self, config, config_ref, pid, duration, producer):
         root = Path(config["output_root"])
         prepared = config["prepared_input"]
@@ -431,6 +457,212 @@ class PhysicalCaptureContracts(unittest.TestCase):
             any("median" in key or "ratio" in key or "speedup" in key for key in run)
         )
         self.assertIsNone(run["pure_ibp_seconds"])
+
+    def test_omitted_scope_still_requires_both_physical_examples(self):
+        scope, authorization = adapter.load_physical_scope(None)
+        self.assertIsNone(scope)
+        self.assertIsNone(authorization)
+        q0_only = adapter.physical_completion(["zero-momentum-diagnostic"], scope)
+        self.assertFalse(q0_only["physical_examples_complete"])
+        self.assertEqual(
+            q0_only["completed_physical_examples"], ["zero-momentum-diagnostic"]
+        )
+        self.assertNotIn("physical_scope", q0_only)
+        both = ["zero-momentum-diagnostic", "quadratic-four-rung-uv"]
+        self.assertTrue(adapter.physical_completion(both)["physical_examples_complete"])
+        legacy = adapter.physical_capture(self.root)
+        self.assertNotIn("physical_scope", legacy)
+        self.assertFalse(legacy.get("physical_examples_complete", False))
+
+    def test_explicit_q0_scope_completes_only_the_accepted_projection(self):
+        document = self.scope_document()
+        reference = self.file("physical-scope.json", document)
+        scope, authorization = adapter.load_physical_scope(reference["path"])
+        self.assertEqual(scope, document["physical_scope"])
+        self.assertEqual(authorization["raw_receipt"], document)
+        self.assertEqual(authorization["evidence"]["sha256"], reference["sha256"])
+        run = adapter.physical_capture(self.root, scope)
+        self.assertTrue(run["physical_examples_complete"])
+        self.assertEqual(
+            run["completed_physical_examples"], ["zero-momentum-diagnostic"]
+        )
+        self.assertEqual(run["physical_scope"]["deferred"], ["quadratic-four-rung-uv"])
+        self.assertFalse(run["performance_eligible"])
+        self.assertEqual(
+            run["raw_producer"]["report"]["projection"], "zero-momentum-metric"
+        )
+        both_required = {
+            "required": ["zero-momentum-diagnostic", "quadratic-four-rung-uv"],
+            "deferred": [],
+        }
+        incomplete = adapter.physical_capture(self.root, both_required)
+        self.assertFalse(incomplete["physical_examples_complete"])
+        self.assertEqual(
+            incomplete["completed_physical_examples"], ["zero-momentum-diagnostic"]
+        )
+        reversed_scope = {"required": scope["deferred"], "deferred": scope["required"]}
+        with self.assertRaisesRegex(ValueError, "outside the required scope"):
+            adapter.physical_capture(self.root, reversed_scope)
+
+    def test_explicit_scope_does_not_override_completed_run_descriptor_checks(self):
+        self.file("q0.final.json", {**self.producer, "projection": "quadratic"})
+        self.refresh_bindings()
+        with self.assertRaisesRegex(ValueError, "job/projection identity"):
+            adapter.completed_run(self.producer_config["path"])
+        with self.assertRaisesRegex(ValueError, "job/projection identity"):
+            adapter.physical_capture(self.root, self.scope_document()["physical_scope"])
+
+    def test_scope_cli_binds_receipt_preserves_48_samples_and_separates_run_ids(self):
+        historical = {
+            "selected_reduction_run": "old-0",
+            "reduction_runs": {
+                f"old-{i}": {"raw_samples": [i, i + 0.5, True, None]} for i in range(48)
+            },
+            "selected_five_loop_run": "five-old",
+            "five_loop_runs": {"five-old": {"primary": "untouched"}},
+            "physical_capture_runs": {"previous": {"raw": [True, "retained"]}},
+            "selected_physical_capture_run": "previous",
+        }
+        base = self.file("scoped-history.json", historical)
+        base_bytes = Path(base["path"]).read_bytes()
+        document = self.scope_document()
+        scope_ref = self.file("physical-scope.json", document)
+        first_path = self.root / "scoped-first.json"
+        first_result = subprocess.run(
+            self.capture_command(base["path"], first_path, scope_ref["path"])
+            + ["--select-current"],
+            check=True,
+            capture_output=True,
+        )
+        first_id = json.loads(first_result.stdout)["run_id"]
+        first = adapter.read(first_path)
+        self.assertEqual(first["selected_physical_capture_run"], first_id)
+        self.assertEqual(len(first["reduction_runs"]), 48)
+        self.assertEqual(
+            json.dumps(first["reduction_runs"], sort_keys=True),
+            json.dumps(historical["reduction_runs"], sort_keys=True),
+        )
+        for key in historical.keys() - {
+            "physical_capture_runs",
+            "selected_physical_capture_run",
+        }:
+            self.assertEqual(first[key], historical[key])
+        self.assertEqual(
+            first["physical_capture_runs"]["previous"],
+            historical["physical_capture_runs"]["previous"],
+        )
+        run = first["physical_capture_runs"][first_id]
+        self.assertTrue(run["physical_examples_complete"])
+        self.assertEqual(
+            run["completed_physical_examples"], ["zero-momentum-diagnostic"]
+        )
+        self.assertEqual(run["physical_scope"], document["physical_scope"])
+        self.assertEqual(
+            run["physical_scope_authorization"],
+            {
+                "evidence": {"path": scope_ref["path"], "sha256": scope_ref["sha256"]},
+                "raw_receipt": document,
+            },
+        )
+        notes = "\n".join(run["notes"])
+        for retained in (document["reason"], scope_ref["path"], scope_ref["sha256"]):
+            self.assertIn(retained, notes)
+        self.assertIn("Deferred examples remain unmeasured", notes)
+        self.assertEqual(Path(base["path"]).read_bytes(), base_bytes)
+
+        # Keep the path and campaign fixed: only changed scope bytes distinguish this run.
+        changed = {**document, "reason": document["reason"] + " Updated authorization."}
+        changed_ref = self.file("physical-scope.json", changed)
+        self.assertEqual(changed_ref["path"], scope_ref["path"])
+        self.assertNotEqual(changed_ref["sha256"], scope_ref["sha256"])
+        second_path = self.root / "scoped-second.json"
+        second_result = subprocess.run(
+            self.capture_command(first_path, second_path, changed_ref["path"]),
+            check=True,
+            capture_output=True,
+        )
+        second_id = json.loads(second_result.stdout)["run_id"]
+        second = adapter.read(second_path)
+        self.assertNotEqual(second_id, first_id)
+        self.assertEqual(second["selected_physical_capture_run"], first_id)
+        self.assertEqual(second["reduction_runs"], historical["reduction_runs"])
+        self.assertEqual(len(second["physical_capture_runs"]), 3)
+        for run_id, prior in first["physical_capture_runs"].items():
+            self.assertEqual(second["physical_capture_runs"][run_id], prior)
+        self.assertEqual(
+            second["physical_capture_runs"][second_id]["physical_scope_authorization"][
+                "raw_receipt"
+            ],
+            changed,
+        )
+
+    def test_invalid_scope_cli_fails_before_creating_any_output(self):
+        document = self.scope_document()
+        q0, quad = "zero-momentum-diagnostic", "quadratic-four-rung-uv"
+        malformed = [None, False, 1, "scope", []]
+        malformed += [
+            {**document, "schema": value} for value in (None, False, "unknown")
+        ]
+        malformed += [
+            {**document, "reason": value} for value in (None, False, 1, "", " \n\t")
+        ]
+        malformed += [
+            {k: v for k, v in document.items() if k != missing}
+            for missing in ("schema", "reason", "physical_scope")
+        ]
+        malformed += [
+            {**document, "physical_scope": scope}
+            for scope in (
+                None,
+                [],
+                {"deferred": [quad]},
+                {"required": [q0]},
+                {"required": [q0], "deferred": [quad], "extra": []},
+                {"required": [], "deferred": [q0, quad]},
+                {"required": [q0], "deferred": []},
+                {"required": [q0, q0], "deferred": [quad]},
+                {"required": [q0], "deferred": [quad, quad]},
+                {"required": [q0, quad], "deferred": [quad]},
+                {"required": ["unknown"], "deferred": [quad]},
+                {"required": [q0], "deferred": ["unknown"]},
+                {"required": q0, "deferred": [quad]},
+                {"required": [q0], "deferred": quad},
+                {"required": [False], "deferred": [quad]},
+                {"required": [q0], "deferred": [{}]},
+                # Valid partition, but this campaign supplies no required quadratic evidence.
+                {"required": [quad], "deferred": [q0]},
+            )
+        ]
+        base = self.file(
+            "invalid-base.json", {"physical_capture_runs": {"old": {"raw": True}}}
+        )
+        for index, invalid in enumerate(malformed):
+            with self.subTest(index=index, document=invalid):
+                scope_ref = self.file("invalid-scope.json", invalid)
+                output = self.root / "not-created" / str(index) / "report.json"
+                result = subprocess.run(
+                    self.capture_command(base["path"], output, scope_ref["path"]),
+                    check=False,
+                    capture_output=True,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(b"ValueError", result.stderr)
+                self.assertFalse(output.parent.exists())
+                self.assertEqual(adapter.digest(base["path"]), base["sha256"])
+
+    def test_scope_cli_cannot_replace_missing_required_completion(self):
+        base = self.file("missing-base.json", {})
+        scope_ref = self.file("physical-scope.json", self.scope_document())
+        Path(self.producer_done["path"]).unlink()
+        output = self.root / "missing-required" / "report.json"
+        result = subprocess.run(
+            self.capture_command(base["path"], output, scope_ref["path"]),
+            check=False,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(b"FileNotFoundError", result.stderr)
+        self.assertFalse(output.parent.exists())
 
     def test_completed_run_accepts_quadratic_only_with_explicit_job(self):
         config = self.quadratic_fixture()

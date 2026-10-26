@@ -244,6 +244,63 @@ class ReportContractTests(unittest.TestCase):
     def evaluate(self, **kwargs):
         return merge.primary_records(merge.ReportEvidence(self.index(**kwargs)))
 
+    def test_deferred_primary_preserves_functional_records_without_measurements(self):
+        self.paired()
+        self.paired(case="zero-momentum-diagnostic")
+        provenance = merge.ReportEvidence(self.index())
+        result = merge.primary_records(
+            provenance,
+            {
+                "required": ["zero-momentum-diagnostic"],
+                "deferred": ["quadratic-four-rung-uv"],
+            },
+        )
+        deferred = result["quadratic-four-rung-uv"]
+        self.assertEqual(deferred["status"], "deferred")
+        self.assertEqual(len(deferred["functional_records"]), 6)
+        self.assertTrue(
+            all(
+                not record["performance_eligible"]
+                for record in deferred["functional_records"]
+            )
+        )
+        for field in (
+            "uncached",
+            "cached",
+            "catalogue_closure",
+            "exact_output_and_guard_parity",
+        ):
+            self.assertIsNone(deferred[field])
+        self.assertEqual(result["zero-momentum-diagnostic"]["status"], "measured")
+        self.assertEqual(provenance.used, set(provenance.records))
+        # The same historical evidence retains its original meaning without a scope.
+        self.assertEqual(
+            self.evaluate()["quadratic-four-rung-uv"]["status"], "measured"
+        )
+
+    def test_deferral_does_not_bypass_exact_retained_payload_checks(self):
+        report = self.sample("uncached", 0)
+        (report.parent / "result.symbolica").write_text("changed retained result")
+        with self.assertRaisesRegex(ValueError, "exact result changed"):
+            merge.primary_records(
+                merge.ReportEvidence(self.index(False)),
+                {
+                    "required": ["zero-momentum-diagnostic"],
+                    "deferred": ["quadratic-four-rung-uv"],
+                },
+            )
+
+    def test_explicit_scope_does_not_invent_primary_completion(self):
+        result = merge.primary_records(
+            merge.ReportEvidence(self.index(False)),
+            {
+                "required": ["zero-momentum-diagnostic"],
+                "deferred": ["quadratic-four-rung-uv"],
+            },
+        )
+        self.assertEqual(result["quadratic-four-rung-uv"]["status"], "deferred")
+        self.assertEqual(result["zero-momentum-diagnostic"]["status"], "pending")
+
     def change_report(self, index, edit):
         path = Path(self.records[index]["record"]["path"])
         report = merge.read(path)
@@ -2524,6 +2581,80 @@ class CumulativeCacheContractTests(unittest.TestCase):
             new["five_loop_runs"]["EXISTING"], historical["five_loop_runs"]["EXISTING"]
         )
 
+    def test_scoped_cumulative_append_binds_override_and_preserves_48_measurements(
+        self,
+    ):
+        path, cache = self.cumulative_fixture()
+        scope = {
+            "required": ["zero-momentum-diagnostic"],
+            "deferred": ["quadratic-four-rung-uv"],
+        }
+        authorization = self.write(
+            "physical-scope.json",
+            {
+                "schema": "vakint.benchmark-physical-scope.v1",
+                "physical_scope": scope,
+                "reason": "Synthetic user scope: quadratic deferred until after delivery.",
+            },
+        )
+        historical = {
+            "reduction_runs": {str(i): {"raw": [i, i + 0.25]} for i in range(48)},
+            "selected_reduction_run": "OLD",
+            "five_loop_runs": {"old": {"raw": "unchanged"}},
+            "selected_five_loop_run": "old",
+        }
+        base = self.write("historical-scoped.json", historical)
+        original = base.read_bytes()
+        index = self.index(False)
+        identifiers = []
+        for scoped in (False, True):
+            output = self.root / f"scoped-{scoped}.json"
+            command = [
+                "adapter",
+                "--base",
+                str(base),
+                "--build",
+                str(path),
+                "--cache",
+                str(cache),
+                "--evidence",
+                str(index),
+                "--output",
+                str(output),
+            ]
+            if scoped:
+                command += ["--physical-scope", str(authorization)]
+            with patch("sys.argv", command):
+                merge.main()
+            new = merge.read(output)
+            self.assertEqual(new["reduction_runs"], historical["reduction_runs"])
+            self.assertEqual(new["selected_reduction_run"], "OLD")
+            self.assertEqual(new["selected_five_loop_run"], "old")
+            self.assertEqual(
+                new["five_loop_runs"]["old"], historical["five_loop_runs"]["old"]
+            )
+            identifier = next(key for key in new["five_loop_runs"] if key != "old")
+            identifiers.append(identifier)
+            run = new["five_loop_runs"][identifier]
+            # A preserved prefix never becomes a completed q0 run through scope alone.
+            self.assertFalse(run["cache"]["physical_examples_complete"])
+            if scoped:
+                self.assertEqual(run["physical_scope"], scope)
+                self.assertEqual(run["cache"]["physical_scope"], scope)
+                self.assertEqual(
+                    run["physical_scope_authorization"]["evidence"],
+                    merge.evidence(authorization),
+                )
+                self.assertIn(merge.digest(authorization), run["notes"][0])
+                self.assertEqual(
+                    run["primary"]["quadratic-four-rung-uv"]["status"], "deferred"
+                )
+            else:
+                self.assertNotIn("physical_scope", run)
+                self.assertNotIn("physical_scope", run["cache"])
+        self.assertNotEqual(*identifiers)
+        self.assertEqual(base.read_bytes(), original)
+
     def public_import_fixture(self, producer, cohort):
         """Actual receipt schemas with opaque tiny test files; no import is run."""
         prefix = "synthetic-public-import"
@@ -3304,6 +3435,38 @@ class CumulativeCacheContractTests(unittest.TestCase):
                 finally:
                     self.root = original_root
 
+    def test_required_completion_comes_only_from_actual_matching_physical_receipts(
+        self,
+    ):
+        scope = {
+            "required": ["zero-momentum-diagnostic"],
+            "deferred": ["quadratic-four-rung-uv"],
+        }
+        for job, complete in (("q0", True), ("quadratic", False)):
+            with (
+                self.subTest(job=job),
+                tempfile.TemporaryDirectory(dir=self.root) as temporary,
+            ):
+                original_root, self.root = self.root, Path(temporary)
+                try:
+                    path, cache, *_ = self.completed_source_fixture(job)
+                    scoped = merge.build_record(path, cache, physical_scope=scope)
+                    self.assertIs(scoped["physical_examples_complete"], complete)
+                    self.assertEqual(scoped["physical_scope"], scope)
+                    self.assertEqual(
+                        scoped["completed_physical_examples"],
+                        [
+                            "zero-momentum-diagnostic"
+                            if job == "q0"
+                            else "quadratic-four-rung-uv"
+                        ],
+                    )
+                    self.assertFalse(
+                        merge.build_record(path, cache)["physical_examples_complete"]
+                    )
+                finally:
+                    self.root = original_root
+
     def test_native_omitted_source_keys_and_owner_aliases_are_rejected(self):
         path, _, producer, index, acceptance = self.native_suite_fixture()
         accepted = merge.read(acceptance)
@@ -3684,6 +3847,9 @@ class CumulativeCacheContractTests(unittest.TestCase):
 class MetadataRequalificationTests(unittest.TestCase):
     """Synthetic manifest/opaque-payload parity; no native import or evaluation."""
 
+    def cache_fixture(self, count, directory, files):
+        return {"path": "cache/prepared.gz"}
+
     def setUp(self):
         self.base = CumulativeCacheContractTests()
         self.base.setUp()
@@ -3720,7 +3886,7 @@ class MetadataRequalificationTests(unittest.TestCase):
                     "loop_count": count,
                     "normalization": "FMFTandMATAD",
                     "coverage": {"predicate": "SYNTHETIC"},
-                    "cache": {"path": "cache/prepared.gz"},
+                    "cache": self.cache_fixture(count, directory, files),
                     "masters": [{"id": "TEST"}],
                     "ibps": {"path": "ibps/program.bin"},
                     "files": files,
@@ -4341,6 +4507,761 @@ class MetadataRequalificationTests(unittest.TestCase):
         self.refresh()
         with self.assertRaisesRegex(ValueError, "worker receipt belongs"):
             self.qualify()
+
+
+class LightMetadataRequalificationTests(unittest.TestCase):
+    """Opaque synthetic LIGHT receipts; no native cache export or evaluation."""
+
+    def setUp(self):
+        self.binding = {
+            "family_fingerprint": "TEST_FAMILY",
+            "physical_arity": 15,
+            "artifact_digest": [1] * 32,
+            "layer": "saved-application-route-apply-v1",
+        }
+        # Compose the Native fixture, without inheriting its snapshot-only tests.
+        self.fixture = MetadataRequalificationTests()
+        self.fixture.cache_fixture = self.cache_fixture
+        self.fixture.setUp()
+        self.addCleanup(self.fixture.doCleanups)
+        self.root = self.fixture.root
+        self.target = self.fixture.target
+        self.cache = self.target / "5L/cache/prepared.rrcache.gz"
+        self.metadata = self.target / "5L/cache.json"
+        self.loop_path = self.target / "5L/manifest.json"
+        old_root = merge.read(self.fixture.new_manifest)
+        selected = old_root.pop("runtime_cache_snapshots")[0]
+        (self.target / selected["manifest"]).unlink()
+        loop = merge.read(self.loop_path)
+        del loop["files"][selected["manifest"].removeprefix("5L/")]
+        self.put(self.fixture.new_manifest, old_root)
+        self.put(self.loop_path, loop)
+        self.cache.write_bytes(b"OPAQUE SYNTHETIC LIGHT CACHE; NOT A NATIVE FILE")
+        producer = self.fixture.producer["raw_report"]
+        self.assertEqual(producer["semantic_binding"], self.binding)
+        self.source_record = {
+            "producer": self.provenance(
+                "producer.json",
+                Path(self.fixture.producer["evidence"]["path"]).read_bytes(),
+            ),
+            "data_manifest_sha256": merge.digest(self.fixture.old_manifest),
+            "cache_native_index_identity": producer["cache_native_index_identity"],
+            "inventory": self.provenance(
+                "source-inventory.json",
+                {"synthetic": True, "inventory": producer["inventory"]},
+            ),
+        }
+        self.selection = {
+            "keys": self.provenance(
+                "selected-keys.json", {"synthetic": True, "keys": ["ROUTE", "APPLY"]}
+            ),
+            "unique_keys": 2,
+            "usage_profile": self.provenance(
+                "usage-profile.json",
+                {"synthetic": True, "tuning": 1, "physical-example": 3},
+            ),
+            "allowed_input_classes": ["tuning", "physical-example"],
+            "final_held_out_used": False,
+        }
+        self.identity = {
+            "compressed_bytes": self.cache.stat().st_size,
+            "compressed_blake3": [4] * 32,
+            "decoded_bytes": 512,
+            "decoded_blake3": [5] * 32,
+        }
+        self.decoded_sha256 = "f" * 64
+        exporter, exporter_artifact, exporter_sha = self.tool("exporter", "8")
+        reader, reader_artifact, reader_sha = self.tool("reader", "9")
+        self.validation_fields = {
+            "selected_records": 2,
+            "reimported_records": 2,
+            "complete_records": 2,
+            "missing_keys": 0,
+            "partial_records": 0,
+            "exact_record_and_ordered_guard_equality": True,
+            "declared_terminal_validation": True,
+            "source_unchanged": True,
+            "codec_state_format": 6,
+        }
+        self.raw_path = self.target / "provenance/native-validation.json"
+        self.put(
+            self.raw_path,
+            {
+                "schema": "vakint.strict-light-cache-native-validation.v1",
+                "success": True,
+                "semantic_binding": self.binding,
+                "cache_sha256": merge.digest(self.cache),
+                "cache_identity": self.identity,
+                "decoded_sha256": self.decoded_sha256,
+                "selected_keys_sha256": self.selection["keys"]["sha256"],
+                "source_inventory_sha256": self.source_record["inventory"]["sha256"],
+                "source_cache_native_index_identity": self.source_record[
+                    "cache_native_index_identity"
+                ],
+                "usage_profile_sha256": self.selection["usage_profile"]["sha256"],
+                "compiled_cohort": reader,
+                "collector_artifacts": reader_artifact,
+                "executable_sha256": reader_sha,
+                **self.validation_fields,
+            },
+        )
+        self.put(
+            self.metadata,
+            {
+                "schema": "vakint.external-data.saved-cache.v1",
+                "strict": True,
+                "coverage_claim": False,
+                "selection": {
+                    "kind": "usage-selected-strict-snapshot",
+                    "source": self.source_record,
+                    **self.selection,
+                    "validation": self.ref(self.raw_path),
+                },
+            },
+        )
+        # A synthetic file-contract witness, not an executed source admission.
+        self.admission_path = self.target / "provenance/selection-admission.json"
+        self.put(
+            self.admission_path,
+            {
+                "schema": "vakint.light-cache-selection-admission.v1",
+                "accepted": True,
+                "cache_metadata_sha256": merge.digest(self.metadata),
+                "selected_keys_sha256": self.selection["keys"]["sha256"],
+                "usage_profile_sha256": self.selection["usage_profile"]["sha256"],
+                "source_inventory_sha256": self.source_record["inventory"]["sha256"],
+                "native_validation_sha256": merge.digest(self.raw_path),
+                "semantic_binding": self.binding,
+                "source_cache_native_index_identity": self.source_record[
+                    "cache_native_index_identity"
+                ],
+                "checks": {
+                    key: True
+                    for key in (
+                        "authenticated_eligible_sources",
+                        "dispatch_counts_reconciled",
+                        "positive_frequency_selected_subset",
+                        "final_held_out_excluded",
+                    )
+                },
+                "selected_unique_keys": 2,
+                "eligible_profile_unique_keys": 3,
+            },
+        )
+        self.export_path = self.target / "provenance/light-export.json"
+        self.put(
+            self.export_path,
+            {
+                "schema": "vakint.strict-light-cache-export-validation.v1",
+                "accepted": True,
+                "source": self.source_record,
+                "semantic_binding": self.binding,
+                "selection": self.selection,
+                "output": {
+                    "cache": self.ref(self.cache, size=True),
+                    "metadata": self.ref(self.metadata, size=True),
+                    "identity": self.identity,
+                    "decoded_sha256": self.decoded_sha256,
+                },
+                "compiled_cohort": exporter,
+                "collector_artifacts": exporter_artifact,
+                "executable_sha256": exporter_sha,
+                "validation": {
+                    "receipt": self.ref(self.raw_path),
+                    **self.validation_fields,
+                },
+                "selection_admission": self.ref(self.admission_path),
+            },
+        )
+        loop = merge.read(self.loop_path)
+        loop["cache"].update(identity=self.identity, decoded_sha256=self.decoded_sha256)
+        self.put(self.loop_path, loop)
+        relation = merge.read(self.fixture.relation_path)
+        relation.pop("runtime_cache_snapshot")
+        relation["prepared_cache_replacement"] = {
+            "loop_count": 5,
+            "export_validation": merge.evidence(self.export_path),
+        }
+        self.put(self.fixture.relation_path, relation)
+        self.refresh()
+
+    @staticmethod
+    def put(path, value):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, indent=2))
+
+    def ref(self, path, *, size=False):
+        result = {
+            "path": path.relative_to(self.target).as_posix(),
+            "sha256": merge.digest(path),
+        }
+        if size:
+            result["bytes"] = path.stat().st_size
+        return result
+
+    def provenance(self, name, document):
+        path = self.target / "provenance" / name
+        if isinstance(document, bytes):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(document)
+        else:
+            self.put(path, document)
+        return self.ref(path)
+
+    def cache_fixture(self, count, directory, files):
+        if count != 5:
+            return {"path": "cache/prepared.gz"}
+        prepared = directory / "cache/prepared.rrcache.gz"
+        (directory / "cache/prepared.gz").rename(prepared)
+        files["cache/prepared.rrcache.gz"] = files.pop("cache/prepared.gz")
+        metadata = directory / "cache.json"
+        self.put(metadata, {"synthetic": "ORIGINAL PREPARED CACHE METADATA"})
+        files["cache.json"] = {
+            "sha256": merge.digest(metadata),
+            "bytes": metadata.stat().st_size,
+        }
+        return {
+            "available": True,
+            "path": "cache/prepared.rrcache.gz",
+            "metadata": "cache.json",
+            "format": "rustred.saved-application-cache-file.v1",
+            "binding": self.binding,
+            "identity": {
+                "compressed_bytes": prepared.stat().st_size,
+                "compressed_blake3": [1] * 32,
+                "decoded_bytes": 256,
+                "decoded_blake3": [2] * 32,
+            },
+            "decoded_sha256": "c" * 64,
+        }
+
+    def tool(self, role, digit):
+        cohort = copy.deepcopy(merge.read(self.fixture.frozen_proof)["compiled_cohort"])
+        cohort["main_revision"] = digit * 40
+        binary = self.target / "provenance" / f"{role}.bin"
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        binary.write_text(f"SYNTHETIC {role}; NOT AN EXECUTABLE")
+        artifact = copy.deepcopy(merge.read(self.fixture.base.artifact))
+        artifact["stamps"]["VAKINT_CACHE_BUILD_GIT_REVISION"] = cohort["main_revision"]
+        artifact["binary"] = {
+            "sha256": merge.digest(binary),
+            "immutable_path": str(binary),
+        }
+        return (
+            cohort,
+            self.provenance(f"{role}-artifacts.json", artifact),
+            merge.digest(binary),
+        )
+
+    def refresh(self, *, admission_links=True):
+        """Rebind changed opaque files without repairing their semantic contents."""
+        loop = merge.read(self.loop_path)
+        for path in (self.cache, self.metadata):
+            loop["files"][path.relative_to(self.target / "5L").as_posix()] = {
+                "sha256": merge.digest(path),
+                "bytes": path.stat().st_size,
+            }
+        self.put(self.loop_path, loop)
+        exported = merge.read(self.export_path)
+        exported["output"]["metadata"] = self.ref(self.metadata, size=True)
+        if admission_links:
+            admission = merge.read(self.admission_path)
+            admission.update(
+                cache_metadata_sha256=merge.digest(self.metadata),
+                selected_keys_sha256=exported["selection"]["keys"]["sha256"],
+                usage_profile_sha256=exported["selection"]["usage_profile"]["sha256"],
+                source_inventory_sha256=exported["source"]["inventory"]["sha256"],
+                native_validation_sha256=exported["validation"]["receipt"]["sha256"],
+                semantic_binding=exported["semantic_binding"],
+                source_cache_native_index_identity=exported["source"][
+                    "cache_native_index_identity"
+                ],
+            )
+            self.put(self.admission_path, admission)
+        exported["selection_admission"] = self.ref(self.admission_path)
+        self.put(self.export_path, exported)
+        relation = merge.read(self.fixture.relation_path)
+        if "prepared_cache_replacement" in relation:
+            relation["prepared_cache_replacement"]["export_validation"] = (
+                merge.evidence(self.export_path)
+            )
+        self.put(self.fixture.relation_path, relation)
+        self.fixture.refresh()
+
+    def alter_export(self, change):
+        document = merge.read(self.export_path)
+        change(document)
+        self.put(self.export_path, document)
+        self.refresh()
+
+    def alter_raw(self, change):
+        document = merge.read(self.raw_path)
+        change(document)
+        self.put(self.raw_path, document)
+        reference = self.ref(self.raw_path)
+        metadata = merge.read(self.metadata)
+        metadata["selection"]["validation"] = reference
+        self.put(self.metadata, metadata)
+        exported = merge.read(self.export_path)
+        exported["validation"]["receipt"] = reference
+        self.put(self.export_path, exported)
+        self.refresh()
+
+    def fresh(self):
+        case = LightMetadataRequalificationTests()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        return case
+
+    def qualify(self):
+        return self.fixture.qualify()["data_metadata_requalification"]
+
+    def test_light_replacement_preserves_science_and_distinct_tool_provenance(self):
+        producer = copy.deepcopy(self.fixture.producer["raw_report"])
+        qualified = self.qualify()
+        self.assertEqual(self.fixture.producer["raw_report"], producer)
+        self.assertEqual(
+            qualified["source_manifest"], merge.evidence(self.fixture.old_manifest)
+        )
+        self.assertEqual(
+            qualified["consumer_manifest"], merge.evidence(self.fixture.new_manifest)
+        )
+        self.assertNotEqual(
+            merge.read(self.export_path)["compiled_cohort"],
+            merge.read(self.raw_path)["compiled_cohort"],
+        )
+        self.assertEqual(
+            merge.read(self.fixture.new_manifest).get("runtime_cache_snapshots", []),
+            [],
+        )
+
+    def test_light_requires_exactly_one_relation_mode(self):
+        for change in ("missing", "both", "wrong-loop", "extra-field"):
+            with self.subTest(change=change):
+                case = self.fresh()
+                relation = merge.read(case.fixture.relation_path)
+                if change == "missing":
+                    relation.pop("prepared_cache_replacement")
+                elif change == "both":
+                    relation["runtime_cache_snapshot"] = {"loop_count": 5}
+                elif change == "wrong-loop":
+                    relation["prepared_cache_replacement"]["loop_count"] = 4
+                else:
+                    relation["prepared_cache_replacement"]["extra"] = True
+                case.put(case.fixture.relation_path, relation)
+                case.fixture.refresh()
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_cannot_be_shadowed_by_a_runtime_snapshot(self):
+        for key in ("source_manifest", "consumer_manifest"):
+            with self.subTest(root=key):
+                case = self.fresh()
+                if key == "source_manifest":
+                    path = case.fixture.old_manifest
+                else:
+                    path = case.fixture.new_manifest
+                root = merge.read(path)
+                root["runtime_cache_snapshots"] = [{"loop_count": 5}]
+                case.put(path, root)
+                case.fixture.refresh()
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_declared_size_cap_and_native_identity_are_checked(self):
+        for field, value in (
+            ("bytes", 0),
+            ("bytes", True),
+            ("bytes", 95_000_001),
+            ("bytes", 1),
+            ("sha256", "0" * 64),
+        ):
+            with self.subTest(field=field, value=value):
+                case = self.fresh()
+                case.alter_export(
+                    lambda doc, field=field, value=value: doc["output"]["cache"].update(
+                        {field: value}
+                    )
+                )
+                with self.assertRaises(ValueError):
+                    case.qualify()
+        for field, value in (
+            ("compressed_bytes", 1),
+            ("compressed_blake3", "not-a-digest"),
+            ("decoded_bytes", 0),
+            ("decoded_blake3", "0" * 64),
+        ):
+            with self.subTest(identity=field):
+                case = self.fresh()
+                case.alter_export(
+                    lambda doc, field=field, value=value: doc["output"][
+                        "identity"
+                    ].update({field: value})
+                )
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_rejects_oversized_actual_file_before_hashing_it(self):
+        with self.cache.open("r+b") as stream:
+            stream.truncate(95_000_001)
+        exported = merge.read(self.export_path)
+        exported["output"]["cache"]["bytes"] = 95_000_001
+        exported["output"]["identity"]["compressed_bytes"] = 95_000_001
+        self.put(self.export_path, exported)
+        relation = merge.read(self.fixture.relation_path)
+        relation["prepared_cache_replacement"]["export_validation"] = merge.evidence(
+            self.export_path
+        )
+        self.put(self.fixture.relation_path, relation)
+        self.fixture.refresh()
+        original_digest = merge.digest
+
+        def bounded_digest(path):
+            self.assertNotEqual(Path(path).resolve(), self.cache.resolve())
+            return original_digest(path)
+
+        with (
+            patch.object(merge, "digest", bounded_digest),
+            self.assertRaisesRegex(ValueError, "95,000,000"),
+        ):
+            self.qualify()
+
+    def test_light_accepts_the_inclusive_compressed_byte_cap(self):
+        # A sparse opaque fixture exercises the real filesystem size boundary.
+        # It is never imported or presented as an actual Native cache.
+        with self.cache.open("r+b") as stream:
+            stream.truncate(95_000_000)
+        identity = {**self.identity, "compressed_bytes": 95_000_000}
+        cache_reference = self.ref(self.cache, size=True)
+        loop = merge.read(self.loop_path)
+        loop["cache"]["identity"] = identity
+        self.put(self.loop_path, loop)
+        self.alter_raw(
+            lambda doc: doc.update(
+                cache_sha256=cache_reference["sha256"], cache_identity=identity
+            )
+        )
+        self.alter_export(
+            lambda doc: doc["output"].update(cache=cache_reference, identity=identity)
+        )
+        self.qualify()
+
+    def test_light_requires_complete_matching_native_validation(self):
+        for field, value in (
+            ("selected_records", 0),
+            ("selected_records", True),
+            ("reimported_records", 1),
+            ("complete_records", 1),
+            ("missing_keys", 1),
+            ("partial_records", 1),
+            ("exact_record_and_ordered_guard_equality", False),
+            ("declared_terminal_validation", False),
+            ("source_unchanged", False),
+            ("codec_state_format", 5),
+        ):
+            with self.subTest(field=field):
+                case = self.fresh()
+                case.alter_export(
+                    lambda doc, field=field, value=value: doc["validation"].update(
+                        {field: value}
+                    )
+                )
+                case.alter_raw(
+                    lambda doc, field=field, value=value: doc.update({field: value})
+                )
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_raw_receipt_cannot_be_forged_by_wrapper_success(self):
+        for field, value in (
+            ("schema", "OTHER"),
+            ("success", False),
+            ("cache_sha256", "0" * 64),
+            ("decoded_sha256", "0" * 64),
+            ("selected_keys_sha256", "0" * 64),
+            ("source_inventory_sha256", "0" * 64),
+            ("usage_profile_sha256", "0" * 64),
+            ("executable_sha256", "0" * 64),
+        ):
+            with self.subTest(field=field):
+                case = self.fresh()
+                case.alter_raw(
+                    lambda doc, field=field, value=value: doc.update({field: value})
+                )
+                with self.assertRaises(ValueError):
+                    case.qualify()
+        case = self.fresh()
+        other_source = case.root / "OTHER-SYNTHETIC-SOURCE"
+        other_source.mkdir()
+        (other_source / "cache.rrindex").write_text("SYNTHETIC DIFFERENT SOURCE INDEX")
+        other_identity = merge.native_cache_identity(other_source)
+        case.alter_raw(
+            lambda doc: doc.update(source_cache_native_index_identity=other_identity)
+        )
+        with self.assertRaises(ValueError):
+            case.qualify()
+        self.raw_path.write_text("TRUNCATED JSON")
+        with self.assertRaises(ValueError):
+            self.qualify()
+
+    def test_light_native_binding_keeps_json_integer_types(self):
+        for location in (
+            "raw-binding",
+            "raw-identity",
+            "loop-binding",
+            "loop-identity",
+        ):
+            with self.subTest(location=location):
+                case = self.fresh()
+
+                def change(document, location=location):
+                    if location == "raw-binding":
+                        document["semantic_binding"]["artifact_digest"][0] = True
+                    elif location == "raw-identity":
+                        document["cache_identity"]["compressed_blake3"][0] = 4.0
+                    elif location == "loop-binding":
+                        document["cache"]["binding"]["artifact_digest"][0] = True
+                    else:
+                        identity = document["cache"]["identity"]
+                        identity["compressed_bytes"] = float(
+                            identity["compressed_bytes"]
+                        )
+
+                if location.startswith("raw-"):
+                    case.alter_raw(change)
+                else:
+                    case.fixture.change_loop(change)
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_selection_admission_is_required_and_binds_actual_sources(self):
+        mutations = [
+            lambda d: d.update(schema="OTHER"),
+            lambda d: d.update(accepted=False),
+            lambda d: d["semantic_binding"].update(physical_arity=14),
+            lambda d: d["source_cache_native_index_identity"].update(sha256="0" * 64),
+        ]
+        for field in (
+            "cache_metadata_sha256",
+            "selected_keys_sha256",
+            "usage_profile_sha256",
+            "source_inventory_sha256",
+            "native_validation_sha256",
+        ):
+            mutations.append(lambda d, field=field: d.update({field: "0" * 64}))
+        for field, value in (
+            ("selected_unique_keys", 0),
+            ("selected_unique_keys", True),
+            ("selected_unique_keys", 3),
+            ("eligible_profile_unique_keys", 0),
+            ("eligible_profile_unique_keys", True),
+            ("eligible_profile_unique_keys", 1),
+        ):
+            mutations.append(
+                lambda d, field=field, value=value: d.update({field: value})
+            )
+        for field in (
+            "authenticated_eligible_sources",
+            "dispatch_counts_reconciled",
+            "positive_frequency_selected_subset",
+            "final_held_out_excluded",
+        ):
+            mutations.append(lambda d, field=field: d["checks"].update({field: False}))
+        for index, change in enumerate(mutations):
+            with self.subTest(mutation=index):
+                case = self.fresh()
+                admission = merge.read(case.admission_path)
+                change(admission)
+                case.put(case.admission_path, admission)
+                case.refresh(admission_links=False)
+                with self.assertRaises(ValueError):
+                    case.qualify()
+        exported = merge.read(self.export_path)
+        exported.pop("selection_admission")
+        self.put(self.export_path, exported)
+        relation = merge.read(self.fixture.relation_path)
+        relation["prepared_cache_replacement"]["export_validation"] = merge.evidence(
+            self.export_path
+        )
+        self.put(self.fixture.relation_path, relation)
+        self.fixture.refresh()
+        with self.assertRaises(ValueError):
+            self.qualify()
+
+    def test_light_source_binding_selection_and_exporter_are_authenticated(self):
+        mutations = (
+            lambda d: d.update(accepted=False),
+            lambda d: d["semantic_binding"].update(physical_arity=14),
+            lambda d: d["source"].update(data_manifest_sha256="0" * 64),
+            lambda d: d["source"]["cache_native_index_identity"].update(
+                sha256="0" * 64
+            ),
+            lambda d: d["source"]["producer"].update(sha256="0" * 64),
+            lambda d: d["selection"].update(unique_keys=1),
+            lambda d: d["selection"].update(final_held_out_used=True),
+            lambda d: d["selection"].update(allowed_input_classes=["held_out"]),
+            lambda d: d["selection"].update(
+                allowed_input_classes=["training", "physical-example"]
+            ),
+            lambda d: d["selection"].update(
+                allowed_input_classes=["tuning", "physical-example", "physical-example"]
+            ),
+            lambda d: d.update(executable_sha256="0" * 64),
+            lambda d: d["compiled_cohort"].update(main_revision="0" * 40),
+        )
+        for index, change in enumerate(mutations):
+            with self.subTest(mutation=index):
+                case = self.fresh()
+                case.alter_export(change)
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_only_allows_the_two_existing_five_loop_payloads(self):
+        for count, name in (
+            (1, "cache/prepared.gz"),
+            (4, "cache/prepared.gz"),
+            (5, "ibps/program.bin"),
+            (5, "masters.json"),
+            (5, "graphs/master.dot"),
+            (5, "cache/extra.gz"),
+        ):
+            with self.subTest(loop=count, payload=name):
+                case = self.fresh()
+                path = case.target / f"{count}L" / name
+                path.write_text("ILLICIT BUT REHASHED SYNTHETIC PAYLOAD")
+                case.fixture.change_loop(
+                    lambda doc, name=name, path=path: doc["files"].update(
+                        {
+                            name: {
+                                "sha256": merge.digest(path),
+                                "bytes": path.stat().st_size,
+                            }
+                        }
+                    ),
+                    count=count,
+                )
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_preserves_scientific_and_immutable_cache_fields(self):
+        for field in ("normalization", "coverage", "masters", "ibps"):
+            with self.subTest(scientific=field):
+                case = self.fresh()
+                case.fixture.change_loop(
+                    lambda doc, field=field: doc.update({field: "ILLICIT"})
+                )
+                with self.assertRaises(ValueError):
+                    case.qualify()
+        for field, value in (
+            ("available", False),
+            ("available", 1),
+            ("format", "other-format"),
+            ("binding", {"other": True}),
+            ("path", "cache/other.gz"),
+            ("metadata", "other.json"),
+            ("extra", True),
+        ):
+            with self.subTest(cache=field, value=value):
+                case = self.fresh()
+                case.fixture.change_loop(
+                    lambda doc, field=field, value=value: doc["cache"].update(
+                        {field: value}
+                    )
+                )
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_metadata_must_match_export_and_keep_narrow_schema(self):
+        mutations = (
+            lambda d: d.update(strict=False),
+            lambda d: d.update(strict=1),
+            lambda d: d.update(coverage_claim=True),
+            lambda d: d.update(coverage_claim=0),
+            lambda d: d.update(extra=True),
+            lambda d: d["selection"].update(kind="OTHER"),
+            lambda d: d["selection"].update(unique_keys=3),
+            lambda d: d["selection"].update(final_held_out_used=True),
+            lambda d: d["selection"]["keys"].update(sha256="0" * 64),
+            lambda d: d["selection"]["validation"].update(sha256="0" * 64),
+            lambda d: d["selection"]["source"].update(data_manifest_sha256="0" * 64),
+        )
+        for index, change in enumerate(mutations):
+            with self.subTest(mutation=index):
+                case = self.fresh()
+                document = merge.read(case.metadata)
+                change(document)
+                case.put(case.metadata, document)
+                case.refresh()
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_metadata_references_are_portable_root_provenance_paths(self):
+        for kind in ("absolute", "parent", "dot", "parent-segment", "outside"):
+            with self.subTest(kind=kind):
+                case = self.fresh()
+                keys = case.target / "provenance/selected-keys.json"
+                if kind == "absolute":
+                    path = str(keys)
+                elif kind == "parent":
+                    path = "../published-data/provenance/selected-keys.json"
+                elif kind == "dot":
+                    path = "./provenance/selected-keys.json"
+                elif kind == "parent-segment":
+                    path = "provenance/../provenance/selected-keys.json"
+                else:
+                    path = "selected-keys.json"
+                    (case.target / path).write_bytes(keys.read_bytes())
+                candidate = Path(path)
+                candidate = (
+                    candidate if candidate.is_absolute() else case.target / candidate
+                )
+                self.assertEqual(merge.digest(candidate), merge.digest(keys))
+                document = merge.read(case.metadata)
+                document["selection"]["keys"]["path"] = path
+                case.put(case.metadata, document)
+                case.refresh()
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_duplicate_keys_symlinks_and_hidden_payloads_stay_rejected(self):
+        for kind in ("duplicate", "symlink", "hidden"):
+            with self.subTest(kind=kind):
+                case = self.fresh()
+                if kind == "duplicate":
+                    case.metadata.write_text(
+                        '{"strict":false,' + case.metadata.read_text()[1:]
+                    )
+                    case.refresh()
+                elif kind == "symlink":
+                    case.cache.unlink()
+                    case.cache.symlink_to(
+                        case.fixture.source / "5L/cache/prepared.rrcache.gz"
+                    )
+                else:
+                    (case.target / "5L/hidden.bin").write_text("HIDDEN")
+                with self.assertRaises(ValueError):
+                    case.qualify()
+
+    def test_light_release_provenance_and_frozen_workload_remain_exact(self):
+        for change in ("provenance", "version", "archive", "workload"):
+            with self.subTest(change=change):
+                case = self.fresh()
+                if change == "workload":
+                    workload = merge.read(case.fixture.consumer_workload)
+                    workload["held_out"][0]["powers"][0] += 1
+                    case.put(case.fixture.consumer_workload, workload)
+                else:
+                    root = merge.read(case.fixture.new_manifest)
+                    if change == "provenance":
+                        root["provenance_assets"] = [{"archive": "ILLICIT"}]
+                    elif change == "version":
+                        root["version"] = "not-a-release"
+                    else:
+                        root["loop_packs"][4]["archive"] = "wrong.tar.gz"
+                    case.put(case.fixture.new_manifest, root)
+                case.fixture.refresh()
+                with self.assertRaises(ValueError):
+                    case.qualify()
 
 
 class QualificationProjectionTests(unittest.TestCase):

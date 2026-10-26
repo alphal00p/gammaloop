@@ -39,6 +39,8 @@ STAGES = (
     "saved_rule_application",
     "terminal_geometry_and_lower_factors",
 )
+LIGHT_CACHE_LIMIT_BYTES = 95_000_000
+SOURCE_PROOF_LIMIT_BYTES = 100 * 1024 * 1024
 
 
 def require(ok, message):
@@ -58,6 +60,13 @@ def read(path):
     return json.loads(Path(path).read_text())
 
 
+def same_json_value(before, after):
+    """Preserve JSON types: Python equality otherwise accepts true == 1 == 1.0."""
+    return json.dumps(before, sort_keys=True, allow_nan=False) == json.dumps(
+        after, sort_keys=True, allow_nan=False
+    )
+
+
 def evidence(path):
     path = Path(path).resolve()
     return {"path": str(path), "sha256": digest(path)}
@@ -74,6 +83,71 @@ def hashed_file(reference, base):
 def hashed_record(reference, base):
     path = hashed_file(reference, base)
     return path, read(path)
+
+
+def validate_physical_scope(scope):
+    """A scope partitions known examples; it never substitutes for their receipts."""
+    require(
+        isinstance(scope, dict) and set(scope) == {"required", "deferred"},
+        "physical scope needs exactly required and deferred examples",
+    )
+    for kind in ("required", "deferred"):
+        values = scope[kind]
+        require(
+            isinstance(values, list)
+            and all(isinstance(value, str) and value in PRIMARY for value in values)
+            and len(values) == len(set(values)),
+            "unknown or duplicate physical scope example",
+        )
+    require(
+        scope["required"]
+        and not set(scope["required"]) & set(scope["deferred"])
+        and set(scope["required"]) | set(scope["deferred"]) == set(PRIMARY),
+        "physical scope must partition every example with a nonempty required set",
+    )
+    return copy.deepcopy(scope)
+
+
+def load_physical_scope(path):
+    if path is None:
+        return None, None
+    document = read(path)
+    require(
+        isinstance(document, dict)
+        and document.get("schema") == "vakint.benchmark-physical-scope.v1"
+        and isinstance(document.get("reason"), str)
+        and document["reason"].strip(),
+        "physical scope needs an explicit reason and known schema",
+    )
+    scope = validate_physical_scope(document.get("physical_scope"))
+    return scope, {"evidence": evidence(path), "raw_receipt": document}
+
+
+def physical_completion(completed, scope=None):
+    """Keep historical scope-less reports bound to both physical examples."""
+    require(set(completed) <= set(PRIMARY), "unknown completed physical example")
+    effective = (
+        validate_physical_scope(scope)
+        if scope is not None
+        else {"required": list(PRIMARY), "deferred": []}
+    )
+    result = {
+        "completed_physical_examples": sorted(set(completed)),
+        "physical_examples_complete": set(effective["required"]).issubset(completed),
+    }
+    if scope is not None:
+        result["physical_scope"] = effective
+    return result
+
+
+def physical_scope_note(authorization):
+    reference = authorization["evidence"]
+    return (
+        "Explicit physical scope: "
+        + authorization["raw_receipt"]["reason"]
+        + f" Scope artifact {reference['path']} (SHA-256 {reference['sha256']}). "
+        + "Deferred examples remain unmeasured for this run."
+    )
 
 
 def native_cache_identity(directory):
@@ -566,40 +640,70 @@ class ReportEvidence:
             ),
             "invalid release schema/version in metadata relation",
         )
-        selected = relation["runtime_cache_snapshot"]
         require(
-            set(selected)
-            == {"loop_count", "manifest", "manifest_sha256", "manifest_bytes"}
-            and type(selected["loop_count"]) is int
-            and selected["loop_count"] == 5
-            and re.fullmatch(
-                r"5L/cache/[A-Za-z0-9][A-Za-z0-9._-]*\.json", selected["manifest"]
+            len(
+                {"runtime_cache_snapshot", "prepared_cache_replacement"}.intersection(
+                    relation
+                )
             )
-            and old.get("runtime_cache_snapshots", []) == []
-            and new.get("runtime_cache_snapshots") == [selected],
-            "metadata relation must add exactly the selected 5L cache reference",
+            == 1,
+            "metadata relation needs exactly one cache representation",
         )
-        descriptor_path, descriptor = strict_record(
-            {"path": selected["manifest"], "sha256": selected["manifest_sha256"]},
-            new_path.parent,
-        )
-        _, packet = hashed_record(imported["packet"], path.parent)
-        imported_descriptor = hashed_file(
-            packet["descriptor"], Path(imported["packet"]["path"]).parent
-        )
-        require(
-            type(selected["manifest_bytes"]) is int
-            and selected["manifest_bytes"] == descriptor_path.stat().st_size
-            and descriptor_path.read_bytes() == imported_descriptor.read_bytes()
-            and descriptor["binding"] == producer["raw_report"]["semantic_binding"]
-            and {
-                name.removeprefix("cache/"): item
-                for name, item in descriptor["files"].items()
-                if name.endswith(".rrindex")
-            }
-            == producer["raw_report"]["cache_native_index_identity"]["indexes"],
-            "metadata cache descriptor differs from authenticated import/binding/index identity",
-        )
+        selected = relation.get("runtime_cache_snapshot")
+        light = None
+        light_evidence = None
+        if "prepared_cache_replacement" in relation:
+            replacement = relation["prepared_cache_replacement"]
+            require(
+                isinstance(replacement, dict)
+                and set(replacement) == {"loop_count", "export_validation"}
+                and type(replacement["loop_count"]) is int
+                and replacement["loop_count"] == 5
+                and old.get("runtime_cache_snapshots", []) == []
+                and new.get("runtime_cache_snapshots", []) == [],
+                "light replacement needs only 5L and no selected native snapshot",
+            )
+            light_path, light = strict_record(
+                replacement["export_validation"], path.parent
+            )
+            light_evidence = self.light_cache_export(
+                light_path, light, old_path, new_path.parent, producer, strict_record
+            )
+        else:
+            require(
+                isinstance(selected, dict)
+                and set(selected)
+                == {"loop_count", "manifest", "manifest_sha256", "manifest_bytes"}
+                and type(selected["loop_count"]) is int
+                and selected["loop_count"] == 5
+                and re.fullmatch(
+                    r"5L/cache/[A-Za-z0-9][A-Za-z0-9._-]*\.json", selected["manifest"]
+                )
+                and old.get("runtime_cache_snapshots", []) == []
+                and new.get("runtime_cache_snapshots") == [selected],
+                "metadata relation must add exactly the selected 5L cache reference",
+            )
+            descriptor_path, descriptor = strict_record(
+                {"path": selected["manifest"], "sha256": selected["manifest_sha256"]},
+                new_path.parent,
+            )
+            _, packet = hashed_record(imported["packet"], path.parent)
+            imported_descriptor = hashed_file(
+                packet["descriptor"], Path(imported["packet"]["path"]).parent
+            )
+            require(
+                type(selected["manifest_bytes"]) is int
+                and selected["manifest_bytes"] == descriptor_path.stat().st_size
+                and descriptor_path.read_bytes() == imported_descriptor.read_bytes()
+                and descriptor["binding"] == producer["raw_report"]["semantic_binding"]
+                and {
+                    name.removeprefix("cache/"): item
+                    for name, item in descriptor["files"].items()
+                    if name.endswith(".rrindex")
+                }
+                == producer["raw_report"]["cache_native_index_identity"]["indexes"],
+                "metadata cache descriptor differs from authenticated import/binding/index identity",
+            )
         old_packs, new_packs = old["loop_packs"], new["loop_packs"]
         require(
             [item["loop_count"] for item in old_packs]
@@ -667,27 +771,106 @@ class ReportEvidence:
                         "bytes": selected["manifest_bytes"],
                     }
                 }
-                if count == 5
+                if count == 5 and selected is not None
                 else {}
             )
-            require(
-                not set(source_files).intersection(addition)
-                and target_files == {**source_files, **addition},
-                "metadata relation added/changed a scientific file inventory",
-            )
+            replacements = {}
+            if count == 5 and light is not None:
+                before_cache, after_cache = source["cache"], target["cache"]
+                cache_keys = {
+                    "available",
+                    "binding",
+                    "decoded_sha256",
+                    "format",
+                    "identity",
+                    "metadata",
+                    "path",
+                }
+                require(
+                    set(before_cache) == set(after_cache) == cache_keys
+                    and before_cache["available"] is True
+                    and after_cache["available"] is True
+                    and before_cache["format"]
+                    == "rustred.saved-application-cache-file.v1"
+                    and same_json_value(
+                        before_cache["binding"], light["semantic_binding"]
+                    )
+                    and before_cache["metadata"] == "cache.json"
+                    and re.fullmatch(
+                        r"cache/[A-Za-z0-9][A-Za-z0-9._-]*\.gz", before_cache["path"]
+                    )
+                    and same_json_value(
+                        {
+                            key: value
+                            for key, value in before_cache.items()
+                            if key not in ("identity", "decoded_sha256")
+                        },
+                        {
+                            key: value
+                            for key, value in after_cache.items()
+                            if key not in ("identity", "decoded_sha256")
+                        },
+                    )
+                    and same_json_value(
+                        after_cache["identity"], light["output"]["identity"]
+                    )
+                    and after_cache["decoded_sha256"]
+                    == light["output"]["decoded_sha256"],
+                    "light replacement changed prepared-cache binding/format/paths/identity",
+                )
+                for kind, name in (
+                    ("cache", before_cache["path"]),
+                    ("metadata", before_cache["metadata"]),
+                ):
+                    output = light["output"][kind]
+                    replacements[name] = {
+                        key: output[key] for key in ("sha256", "bytes")
+                    }
+                    require(
+                        name in source_files, "light replacement added a cache payload"
+                    )
+                    record(f"/5L/files/{name}", source_files[name], replacements[name])
+                require(
+                    same_json_value(target_files, {**source_files, **replacements}),
+                    "light replacement changed a scientific file inventory",
+                )
+                metadata_path, metadata = strict_record(
+                    {
+                        "path": after_cache["metadata"],
+                        **replacements[after_cache["metadata"]],
+                    },
+                    target_path.parent,
+                )
+                self.light_cache_metadata(metadata, light, new_path.parent)
+                require(
+                    metadata_path.stat().st_size
+                    == light["output"]["metadata"]["bytes"],
+                    "light cache metadata size differs",
+                )
+                for key in ("identity", "decoded_sha256"):
+                    record(f"/5L/cache/{key}", before_cache[key], after_cache[key])
+            else:
+                require(
+                    not set(source_files).intersection(addition)
+                    and same_json_value(target_files, {**source_files, **addition}),
+                    "metadata relation added/changed a scientific file inventory",
+                )
             before_tree, after_tree = (
                 payloads(source_path.parent),
                 payloads(target_path.parent),
             )
             require(
-                before_tree == source_files and after_tree == target_files,
+                same_json_value(before_tree, source_files)
+                and same_json_value(after_tree, target_files),
                 "metadata relation changed original payload bytes or added hidden payload",
             )
-            verified_files += len(before_tree)
+            verified_files += len(before_tree) - len(replacements)
             target_compare = copy.deepcopy(target)
             target_compare.update(version=source["version"], files=source_files)
+            if replacements:
+                target_compare["cache"] = source["cache"]
             require(
-                target_compare == source,
+                same_json_value(target_compare, source),
                 "metadata relation changed loop scientific semantics",
             )
             for document, version in (
@@ -725,7 +908,7 @@ class ReportEvidence:
                 )
                 pack_compare[key] = before_pack[key]
             require(
-                pack_compare == before_pack,
+                same_json_value(pack_compare, before_pack),
                 "metadata relation changed loop-pack semantics",
             )
             record(f"/{count}L/version", source["version"], target["version"])
@@ -737,20 +920,22 @@ class ReportEvidence:
                 )
         root_compare = copy.deepcopy(new)
         root_compare.update(version=old["version"], loop_packs=old_packs)
-        if "runtime_cache_snapshots" in old:
-            root_compare["runtime_cache_snapshots"] = old["runtime_cache_snapshots"]
-        else:
-            root_compare.pop("runtime_cache_snapshots")
+        if selected is not None:
+            if "runtime_cache_snapshots" in old:
+                root_compare["runtime_cache_snapshots"] = old["runtime_cache_snapshots"]
+            else:
+                root_compare.pop("runtime_cache_snapshots")
         require(
-            root_compare == old,
+            same_json_value(root_compare, old),
             "metadata relation changed other release semantics/provenance",
         )
         record("/version", old["version"], new["version"])
-        record(
-            "/runtime_cache_snapshots",
-            old.get("runtime_cache_snapshots"),
-            new["runtime_cache_snapshots"],
-        )
+        if selected is not None:
+            record(
+                "/runtime_cache_snapshots",
+                old.get("runtime_cache_snapshots"),
+                new["runtime_cache_snapshots"],
+            )
         _, frozen_workload = strict_record(relation["frozen_workload"], path.parent)
         frozen_proof_path, frozen_proof = strict_record(
             relation["frozen_owner_proof"], path.parent
@@ -766,8 +951,10 @@ class ReportEvidence:
             owner_proof=frozen_workload["owner_proof"],
         )
         require(
-            workload_compare == frozen_workload
-            and selected_inputs(frozen_workload) == accepted["immutable_selection"],
+            same_json_value(workload_compare, frozen_workload)
+            and same_json_value(
+                selected_inputs(frozen_workload), accepted["immutable_selection"]
+            ),
             "metadata relation transformed frozen workload/owner keys",
         )
         require(
@@ -900,10 +1087,13 @@ class ReportEvidence:
                 for proof in (frozen_proof, docs["owner_proof"])
                 for row in proof["rows"]
             )
-            and [{key: row[key] for key in fields} for row in frozen_proof["rows"]]
-            == [
-                {key: row[key] for key in fields} for row in docs["owner_proof"]["rows"]
-            ],
+            and same_json_value(
+                [{key: row[key] for key in fields} for row in frozen_proof["rows"]],
+                [
+                    {key: row[key] for key in fields}
+                    for row in docs["owner_proof"]["rows"]
+                ],
+            ),
             "metadata relation transformed frozen native owner transports/guards",
         )
         return {
@@ -915,8 +1105,289 @@ class ReportEvidence:
             "frozen_workload": relation["frozen_workload"],
             "frozen_owner_proof": relation["frozen_owner_proof"],
             "frozen_collector_artifacts": evidence(frozen_artifact_path),
+            "prepared_cache_replacement": light_evidence,
             "scope": "Dataset metadata parity only; original source/import/physics provenance and all other consumer qualifications remain distinct.",
         }
+
+    def light_cache_export(self, path, report, source_manifest, root, producer, record):
+        """Bind an existing Native export/reimport acceptance, without decoding it."""
+        require(
+            report.get("schema") == "vakint.strict-light-cache-export-validation.v1"
+            and report.get("accepted") is True,
+            "light replacement lacks accepted native export validation",
+        )
+        source, selection, output, validation = (
+            report[key] for key in ("source", "selection", "output", "validation")
+        )
+        source_producer, _ = record(source["producer"], root)
+        require(
+            digest(source_producer) == producer["evidence"]["sha256"]
+            and source["data_manifest_sha256"] == digest(source_manifest)
+            and same_json_value(
+                source["cache_native_index_identity"],
+                producer["raw_report"]["cache_native_index_identity"],
+            )
+            and same_json_value(
+                report["semantic_binding"], producer["raw_report"]["semantic_binding"]
+            ),
+            "light export names another source producer/index/data/binding",
+        )
+        for ref in (source["inventory"], selection["keys"], selection["usage_profile"]):
+            self.light_source_file(ref, root)
+        count = selection["unique_keys"]
+        require(
+            type(count) is int
+            and count > 0
+            and selection["final_held_out_used"] is False
+            and isinstance(selection["allowed_input_classes"], list)
+            and len(selection["allowed_input_classes"]) == 2
+            and set(selection["allowed_input_classes"])
+            == {"tuning", "physical-example"},
+            "light selection must use deduplicated eligible keys, not final held-out data",
+        )
+        identity = output["identity"]
+        require(
+            set(identity)
+            == {
+                "compressed_bytes",
+                "compressed_blake3",
+                "decoded_bytes",
+                "decoded_blake3",
+            }
+            and all(
+                type(identity[key]) is int and identity[key] > 0
+                for key in ("compressed_bytes", "decoded_bytes")
+            )
+            and all(
+                isinstance(identity[key], list)
+                and len(identity[key]) == 32
+                and all(
+                    type(value) is int and 0 <= value <= 255 for value in identity[key]
+                )
+                for key in ("compressed_blake3", "decoded_blake3")
+            )
+            and re.fullmatch(r"[0-9a-f]{64}", output["decoded_sha256"]),
+            "light export has an invalid native cache identity",
+        )
+        for kind in ("cache", "metadata"):
+            item = output[kind]
+            candidate = Path(item["path"])
+            candidate = candidate if candidate.is_absolute() else root / candidate
+            require(
+                candidate.is_file()
+                and not candidate.is_symlink()
+                and type(item["bytes"]) is int
+                and item["bytes"] > 0
+                and candidate.stat().st_size == item["bytes"],
+                "light export output needs matching regular file bytes",
+            )
+            if kind == "cache":
+                require(
+                    item["bytes"] <= LIGHT_CACHE_LIMIT_BYTES
+                    and item["bytes"] == identity["compressed_bytes"],
+                    "light cache exceeds 95,000,000 compressed bytes or differs from identity",
+                )
+            hashed_file(item, root)
+        native_path, native = record(validation["receipt"], root)
+        counts = ("selected_records", "reimported_records", "complete_records")
+        zeroes = ("missing_keys", "partial_records")
+        checks = (
+            "exact_record_and_ordered_guard_equality",
+            "declared_terminal_validation",
+            "source_unchanged",
+        )
+        require(
+            native.get("schema") == "vakint.strict-light-cache-native-validation.v1"
+            and native.get("success") is True
+            and all(
+                type(validation[key]) is int and validation[key] == count
+                for key in counts
+            )
+            and all(
+                type(validation[key]) is int and validation[key] == 0 for key in zeroes
+            )
+            and all(validation[key] is True for key in checks)
+            and all(
+                type(native.get(key)) is int and native[key] == count for key in counts
+            )
+            and all(type(native.get(key)) is int and native[key] == 0 for key in zeroes)
+            and all(native.get(key) is True for key in checks)
+            and type(validation["codec_state_format"]) is int
+            and validation["codec_state_format"] == 6
+            and type(native.get("codec_state_format")) is int
+            and all(
+                native[key] == validation[key]
+                for key in (*counts, *zeroes, *checks, "codec_state_format")
+            )
+            and same_json_value(native["semantic_binding"], report["semantic_binding"])
+            and native["cache_sha256"] == output["cache"]["sha256"]
+            and same_json_value(native["cache_identity"], identity)
+            and native["decoded_sha256"] == output["decoded_sha256"]
+            and native["selected_keys_sha256"] == selection["keys"]["sha256"]
+            and native["source_inventory_sha256"] == source["inventory"]["sha256"]
+            and same_json_value(
+                native["source_cache_native_index_identity"],
+                source["cache_native_index_identity"],
+            )
+            and native["usage_profile_sha256"] == selection["usage_profile"]["sha256"],
+            "light native strict reimport/counts/guards/source proof differs",
+        )
+        require(
+            isinstance(report.get("selection_admission"), dict),
+            "light selection lacks external eligibility/frequency admission",
+        )
+        admission_path, admission = record(report["selection_admission"], root)
+        require(
+            admission.get("schema") == "vakint.light-cache-selection-admission.v1"
+            and admission.get("accepted") is True
+            and all(
+                admission.get("checks", {}).get(key) is True
+                for key in (
+                    "authenticated_eligible_sources",
+                    "dispatch_counts_reconciled",
+                    "positive_frequency_selected_subset",
+                    "final_held_out_excluded",
+                )
+            )
+            and type(admission["selected_unique_keys"]) is int
+            and admission["selected_unique_keys"] == count
+            and type(admission["eligible_profile_unique_keys"]) is int
+            and admission["eligible_profile_unique_keys"] >= count
+            and admission["cache_metadata_sha256"] == output["metadata"]["sha256"]
+            and admission["selected_keys_sha256"] == selection["keys"]["sha256"]
+            and admission["usage_profile_sha256"]
+            == selection["usage_profile"]["sha256"]
+            and admission["source_inventory_sha256"] == source["inventory"]["sha256"]
+            and admission["native_validation_sha256"] == validation["receipt"]["sha256"]
+            and same_json_value(
+                admission["semantic_binding"], report["semantic_binding"]
+            )
+            and same_json_value(
+                admission["source_cache_native_index_identity"],
+                source["cache_native_index_identity"],
+            ),
+            "light selection lacks matching external eligibility/frequency admission",
+        )
+        for observed in (report, native):
+            _, artifact = record(observed["collector_artifacts"], root)
+            cohort = observed["compiled_cohort"]
+            require(
+                all(
+                    artifact["stamps"].get(stamp) == cohort[field]
+                    and isinstance(cohort[field], str)
+                    and re.fullmatch(
+                        r"[0-9a-f]{64}"
+                        if field.endswith("_sha256")
+                        else r"[0-9a-f]{40}",
+                        cohort[field],
+                    )
+                    for field, stamp in COHORT_STAMPS
+                )
+                and observed["executable_sha256"]
+                in {item["sha256"] for item in artifact_binaries(artifact)},
+                "light exporter/reader artifact or own compiled cohort differs",
+            )
+            for item in artifact_binaries(artifact):
+                if item.get("immutable_path") and Path(item["immutable_path"]).exists():
+                    require(
+                        digest(item["immutable_path"]) == item["sha256"],
+                        "light exporter/reader executable changed",
+                    )
+        return {
+            "export_validation": evidence(path),
+            "native_validation": evidence(native_path),
+            "selection_admission": evidence(admission_path),
+            "cache_sha256": output["cache"]["sha256"],
+            "compressed_bytes": output["cache"]["bytes"],
+            "unique_selected_records": count,
+            "scope": "Strict selected-cache dataset replacement only; no family coverage or light performance qualification.",
+        }
+
+    def light_source_file(self, reference, root, *, portable=False):
+        """Hash source-only evidence; Native owns key/profile decoding, including compression."""
+        name = reference["path"]
+        if portable:
+            require(
+                isinstance(name, str)
+                and name.startswith("provenance/")
+                and "\\" not in name
+                and ":" not in name
+                and "\0" not in name
+                and not Path(name).is_absolute()
+                and all(part not in ("", ".", "..") for part in name.split("/")),
+                "light cache metadata proof reference is not root-relative provenance",
+            )
+            parts = name.split("/")
+            require(
+                all(
+                    not root.joinpath(*parts[:i]).is_symlink()
+                    for i in range(1, len(parts) + 1)
+                ),
+                "light cache metadata proof reference contains a symlink",
+            )
+        candidate = Path(name)
+        candidate = candidate if candidate.is_absolute() else root / candidate
+        require(
+            candidate.is_file()
+            and not candidate.is_symlink()
+            and candidate.stat().st_size < SOURCE_PROOF_LIMIT_BYTES,
+            "light source proof needs a regular file smaller than 100 MiB",
+        )
+        return hashed_file(reference, root)
+
+    def light_cache_metadata(self, metadata, report, root):
+        """Source-only proof references use the repository root, outside loop packs."""
+        selection = metadata.get("selection", {})
+        require(
+            set(metadata) == {"schema", "strict", "coverage_claim", "selection"}
+            and metadata["schema"] == "vakint.external-data.saved-cache.v1"
+            and metadata["strict"] is True
+            and metadata["coverage_claim"] is False
+            and set(selection)
+            == {
+                "kind",
+                "source",
+                "keys",
+                "unique_keys",
+                "usage_profile",
+                "allowed_input_classes",
+                "final_held_out_used",
+                "validation",
+            }
+            and selection["kind"] == "usage-selected-strict-snapshot",
+            "light cache metadata is not the strict usage-selected source projection",
+        )
+
+        def portable(actual, expected):
+            self.light_source_file(actual, root, portable=True)
+            expected_path = self.light_source_file(expected, root)
+            require(
+                actual["sha256"] == digest(expected_path),
+                "light cache metadata proof identity differs",
+            )
+
+        source, expected_source = selection["source"], report["source"]
+        require(
+            set(source) == set(expected_source),
+            "light cache metadata source fields differ",
+        )
+        for key in source:
+            if key in ("producer", "inventory"):
+                portable(source[key], expected_source[key])
+            else:
+                require(
+                    same_json_value(source[key], expected_source[key]),
+                    "light cache metadata source differs",
+                )
+        for key, value in report["selection"].items():
+            if key in ("keys", "usage_profile"):
+                portable(selection[key], value)
+            else:
+                require(
+                    same_json_value(selection[key], value),
+                    "light cache metadata selection differs",
+                )
+        portable(selection["validation"], report["validation"]["receipt"])
 
     def cumulative_cache_import(self, reference, producer, cohort, base):
         """Bind the actual public-import job, not a declared import check flag."""
@@ -2114,7 +2585,7 @@ def preserved_native_source(source, base):
     }
 
 
-def cumulative_cache_record(path, cache):
+def cumulative_cache_record(path, cache, physical_scope=None):
     """Consume accepted snapshot evidence; a preserved prefix is not a finished run."""
     path = Path(path).resolve()
     report = read(path)
@@ -2349,17 +2820,16 @@ def cumulative_cache_record(path, cache):
         "all_source_runs_completed": all(
             row["scope"] == "completed-example" for row in report["sources"]
         ),
-        "completed_physical_examples": sorted(completed_physical),
-        "physical_examples_complete": set(PRIMARY).issubset(completed_physical),
+        **physical_completion(completed_physical, physical_scope),
         "performance_eligible": False,
         "scope": "Stored references may overlap; snapshot preservation does not establish producer completion, unique keys, or performance.",
     }
 
 
-def build_record(path, cache, provenance=None):
+def build_record(path, cache, provenance=None, physical_scope=None):
     build = read(path)
     if build.get("schema") == "vakint.cumulative-native-cache-report.v1":
-        return cumulative_cache_record(path, cache)
+        return cumulative_cache_record(path, cache, physical_scope)
     require(
         build.get("schema") == "vakint.five-loop-cache-build.v2", "unknown build schema"
     )
@@ -3017,7 +3487,12 @@ def primary_record(bundle):
     return result
 
 
-def primary_records(provenance):
+def primary_records(provenance, physical_scope=None):
+    deferred = (
+        validate_physical_scope(physical_scope)["deferred"]
+        if physical_scope is not None
+        else []
+    )
     output = {}
     for case_id in PRIMARY:
         bundles = [
@@ -3039,6 +3514,10 @@ def primary_records(provenance):
         }
         if records:
             item["status"] = "functional-only"
+        if case_id in deferred:
+            item["status"] = "deferred"
+            output[case_id] = item
+            continue
         candidates = [
             (bundle, record)
             for bundle, record in zip(bundles, records)
@@ -3585,6 +4064,11 @@ def main():
     parser.add_argument("--held-out", type=Path)
     parser.add_argument("--tuning", type=Path)
     parser.add_argument(
+        "--physical-scope",
+        type=Path,
+        help="Explicit scope authorization JSON; omitted historical scope requires both examples",
+    )
+    parser.add_argument(
         "--evidence",
         type=Path,
         required=True,
@@ -3609,8 +4093,13 @@ def main():
         "suite measurements require their authenticated cache receipt",
     )
     provenance = ReportEvidence(args.evidence)
+    physical_scope, scope_authorization = load_physical_scope(args.physical_scope)
     require(args.build or provenance.records, "no report evidence supplied")
-    build = build_record(args.build, args.cache, provenance) if args.build else None
+    build = (
+        build_record(args.build, args.cache, provenance, physical_scope)
+        if args.build
+        else None
+    )
     run = {
         "schema": "vakint.five-loop-report-run.v1",
         "cache": build,
@@ -3620,11 +4109,17 @@ def main():
         "tuning": suite_record(args.tuning, "tuning", build, provenance)
         if args.tuning
         else None,
-        "primary": primary_records(provenance),
+        "primary": primary_records(provenance, physical_scope),
         "warm_reuse": warm_reuse_records(provenance),
         "evidence_index": evidence(args.evidence),
         "scope": "Functional evidence is retained separately from eligible matched performance samples.",
     }
+    if scope_authorization is not None:
+        run.update(
+            physical_scope=physical_scope,
+            physical_scope_authorization=scope_authorization,
+            notes=[physical_scope_note(scope_authorization)],
+        )
     require(
         provenance.used == set(provenance.records), "unused or unknown report evidence"
     )
@@ -3697,15 +4192,15 @@ def main():
                 ),
                 "primary performance cache/data differs from completed build",
             )
-    identity = json.dumps(
-        [
-            run["evidence_index"],
-            build["evidence"] if build else None,
-            run["held_out"]["evidence"] if run["held_out"] else None,
-            run["tuning"]["evidence"] if run["tuning"] else None,
-        ],
-        sort_keys=True,
-    )
+    identity_parts = [
+        run["evidence_index"],
+        build["evidence"] if build else None,
+        run["held_out"]["evidence"] if run["held_out"] else None,
+        run["tuning"]["evidence"] if run["tuning"] else None,
+    ]
+    if scope_authorization is not None:
+        identity_parts.append(scope_authorization["evidence"])
+    identity = json.dumps(identity_parts, sort_keys=True)
     run_id = "five-loop-" + hashlib.sha256(identity.encode()).hexdigest()[:24]
     runs = merged.setdefault("five_loop_runs", {})
     require(run_id not in runs, "this evidence is already appended")

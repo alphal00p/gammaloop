@@ -96,8 +96,35 @@ and full nonzero conditions remain checked in both modes.
 python3 crates/vakint/docs/benchmark/merge_five_loop_results.py \
   --base crates/vakint/docs/benchmark/data/results.json \
   --evidence /path/to/workspace/evidence-index.json \
+  --physical-scope /path/to/workspace/physical-scope.json \
   --output /path/to/workspace/new-results.json --select-current
 ```
+
+Both existing report adapters accept the optional #raw("--physical-scope PATH")
+artifact. Its schema is #raw("vakint.benchmark-physical-scope.v1"); the latest user
+override requires only the zero-momentum diagnostic and defers the quadratic
+fixture:
+
+```json
+{
+  "schema": "vakint.benchmark-physical-scope.v1",
+  "physical_scope": {
+    "required": ["zero-momentum-diagnostic"],
+    "deferred": ["quadratic-four-rung-uv"]
+  },
+  "reason": "User requested zero-momentum-only physical completion; quadratic remains deferred."
+}
+```
+
+The shared validator checks the partition and nonempty reason. Each appended run
+records #raw("physical_scope") plus #raw("physical_scope_authorization"), retaining
+the artifact's path, SHA-256 and raw receipt. Reuse the same artifact for both
+adapters. Without it, the original requirement for both physical examples remains.
+Deferred primary rows remain visible as *Deferred*, with null timings, closure and
+parity; their original #raw("functional_records") stay intact. The override changes
+which physical completions are required, not the evidence needed to measure a
+required input. Preserve all 48 historical four-loop measurements and the frozen
+twelve-input held-out suite.
 
 The output must not already exist. Omit #raw("--select-current") to append while
 retaining the old selection. Completed strict cache preparation can be included
@@ -120,9 +147,11 @@ preservation or union into a new snapshot.
 
 Cumulative report rows distinguish #raw("preserved-committed-prefix") from
 #raw("validated-committed-snapshot"). They list individually validated completed
-physical examples; #raw("physical_examples_complete") requires both the
-zero-momentum diagnostic and the complete quadratic fixture. The separate
-#raw("all_source_runs_completed") also accounts for retained incomplete prefixes.
+physical examples; #raw("physical_examples_complete") requires every input in the
+recorded #raw("physical_scope.required"). An absent scope retains the original
+requirement for both the zero-momentum diagnostic and complete quadratic fixture.
+Deferred examples are labelled *Deferred*, never measured or silently omitted.
+The separate #raw("all_source_runs_completed") also accounts for retained incomplete prefixes.
 Snapshot preservation alone has #raw("performance_eligible: false") and never
 supplies missing timings or pretends to be a completed finite cache workload.
 
@@ -143,13 +172,34 @@ Neither tier rewrites the original four-loop history.
 Publishing the selected cache changes release-manifest hashes. A consumer may
 therefore supply #raw("data_metadata_requalification: {path, sha256}") pointing to
 a #raw("vakint.external-data-metadata-requalification.v1") relation. It binds the
-old and new manifests, the selected descriptor, and the frozen workload, owner
-proof and collector artifacts. The adapter verifies every original loop-pack
-payload and scientific field; only release/archive metadata and the selected
-descriptor may be added or changed. Source captures and import evidence retain
-their original identities. Fresh consumer proofs must belong to the new dataset
-and their own authenticated artifacts. This relation never retargets old receipts
-or permits mixing datasets within a fresh measurement comparison.
+old and new manifests and the frozen workload, owner proof and collector artifacts.
+The relation selects exactly one representation: the existing
+#raw("runtime_cache_snapshot") descriptor addition, or
+#raw("prepared_cache_replacement: {loop_count: 5, export_validation: {path, sha256}}")
+for the strict light file. A light replacement requires no selected runtime
+snapshot that could override that prepared file.
+
+Only the existing 5L prepared-cache file and #raw("cache.json") may be replaced;
+the inline native identity and decoded checksum must match the independently
+validated export. Binding, format and paths remain exact. The compressed cache
+must contain 1–95,000,000 bytes. All other loop-pack payloads, scientific fields,
+1L–4L caches and version-bound root provenance remain unchanged, apart from the
+existing release-version/archive metadata changes.
+
+The light acceptance binds the frozen heavy source, selected keys, eligible usage
+profile, actual exporter/reader artifacts, strict reimport counts and complete
+record/ordered-guard equality. Native validation owns record interpretation;
+the external source validator owns selection eligibility. Source proofs live
+under repository-root #raw("provenance/") and are not added to 5L runtime packs.
+Their portable references in #raw("cache.json") resolve from that root; individual
+source files remain below 100 MiB, with compressed key/profile summaries permitted.
+The raw native validation does not reference #raw("cache.json"), avoiding a hash
+cycle. The top acceptance separately binds both metadata and native/source proofs.
+
+Source captures and import evidence retain their original identities. Fresh
+consumer proofs must belong to the new dataset and their own authenticated
+artifacts. This relation never retargets old receipts, qualifies light timings from
+heavy evidence, or permits mixing datasets within a fresh measurement comparison.
 
 == File bindings and functional records
 
@@ -389,8 +439,13 @@ append-only report path:
 python3 crates/vakint/docs/benchmark/merge_physical_capture_results.py \
   --base crates/vakint/docs/benchmark/data/results.json \
   --campaign /path/to/workspace/physical-capture-campaign \
+  --physical-scope /path/to/workspace/physical-scope.json \
   --output /path/to/workspace/physical-capture-results.json --select-current
 ```
+
+The scope artifact uses the same validation and hashed provenance described above.
+The zero-momentum-only override leaves the quadratic example deferred and retains
+its historical evidence; it does not qualify a missing physical completion.
 
 The campaign must already contain the accepted producer and reuse completions,
 their immutable configurations, full output/guard/unknown-master files, terminal

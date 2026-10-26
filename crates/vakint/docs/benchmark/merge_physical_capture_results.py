@@ -14,7 +14,18 @@ import math
 import re
 from pathlib import Path
 
-from merge_five_loop_results import digest, evidence, hashed_file, read, require
+from merge_five_loop_results import (
+    PRIMARY,
+    digest,
+    evidence,
+    hashed_file,
+    load_physical_scope,
+    physical_completion,
+    physical_scope_note,
+    read,
+    require,
+    validate_physical_scope,
+)
 
 
 def seconds(value):
@@ -334,7 +345,9 @@ def completed_run(config_path, *, expected_job_id="q0"):
     }
 
 
-def physical_capture(campaign):
+def physical_capture(campaign, physical_scope=None):
+    if physical_scope is not None:
+        physical_scope = validate_physical_scope(physical_scope)
     campaign = Path(campaign).resolve()
     comparison_path = campaign / "seen-reuse-comparison.json"
     comparison = read(comparison_path)
@@ -356,6 +369,17 @@ def physical_capture(campaign):
     producer = completed_run(campaign / "q0.final.json")
     reuse = completed_run(campaign / "q0.seen-reuse.final.json")
     a, b = producer["report"], reuse["report"]
+    completed_examples = [
+        case for case, projection in PRIMARY.items() if a["projection"] == projection
+    ]
+    require(
+        len(completed_examples) == 1
+        and (
+            physical_scope is None
+            or completed_examples[0] in physical_scope["required"]
+        ),
+        "completed physical projection is outside the required scope",
+    )
     pc, rc = producer["config"], reuse["config"]
     allowed = {
         "capture_only_producer",
@@ -474,7 +498,7 @@ def physical_capture(campaign):
         comparison["cache_preserved"] == pc["running_cache_directory"],
         "comparison cache identity differs",
     )
-    return {
+    result = {
         "schema": "vakint.physical-capture-report-run.v1",
         "status": "functional-seen-physical-reuse",
         "performance_eligible": False,
@@ -494,23 +518,34 @@ def physical_capture(campaign):
         },
         "scope": "One fresh seen-input functional reuse; capture writes are included in the producer. No held-out or serialized performance aggregate.",
     }
+    if physical_scope is not None:
+        result.update(physical_completion(completed_examples, physical_scope))
+    return result
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base", type=Path, required=True)
     parser.add_argument("--campaign", type=Path, required=True)
+    parser.add_argument("--physical-scope", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--select-current", action="store_true")
     args = parser.parse_args()
     require(not args.output.exists(), "output must be a new path")
-    run = physical_capture(args.campaign)
+    physical_scope, scope_authorization = load_physical_scope(args.physical_scope)
+    run = physical_capture(args.campaign, physical_scope)
+    if scope_authorization is not None:
+        run.update(
+            physical_scope_authorization=scope_authorization,
+            notes=[physical_scope_note(scope_authorization)],
+        )
     merged = copy.deepcopy(read(args.base))
+    identity = run["evidence"]
+    if scope_authorization is not None:
+        identity = [identity, scope_authorization["evidence"]]
     run_id = (
         "physical-capture-"
-        + hashlib.sha256(
-            json.dumps(run["evidence"], sort_keys=True).encode()
-        ).hexdigest()[:24]
+        + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:24]
     )
     runs = merged.setdefault("physical_capture_runs", {})
     require(run_id not in runs, "this evidence is already appended")

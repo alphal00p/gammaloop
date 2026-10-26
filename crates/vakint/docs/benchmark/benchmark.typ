@@ -148,13 +148,28 @@ Refresh instructions: #raw("../../AGENTS.md").
 #let physical-id = report.at("selected_physical_capture_run", default: none)
 #let physical = if physical-id == none { none } else { report.physical_capture_runs.at(physical-id) }
 #let primary(id) = if five == none { none } else { five.primary.at(id) }
+#let physical-scope-note(run) = {
+  let authorization = run.at("physical_scope_authorization", default: none)
+  if authorization != none {
+    let scope = run.physical_scope
+    let labels(ids) = ids.map(id => pending.cases.find(case => case.id == id).label).join(", ")
+    block(fill: pale, inset: 8pt, radius: 4pt, width: 100%)[
+      #set text(8.5pt)
+      *Required physical scope:* #labels(scope.required).
+      #if scope.deferred.len() > 0 [*Deferred, unmeasured:* #labels(scope.deferred).]
+      #authorization.raw_receipt.reason
+      Scope authorization: #raw(authorization.evidence.sha256.slice(0, 12)).
+      Historical records remain unchanged.
+    ]
+  }
+}
 #let summary-time(value) = if value == none { [—] } else {
   [#timing(value.median_seconds) #text(7.5pt)[(#timing(value.min_seconds)–#timing(value.max_seconds))]]
 }
 #let primary-cell(id, variant) = {
   let row = primary(id)
   if row == none or row.status != "measured" {
-    [Pending]
+    if row != none and row.status == "deferred" { [Deferred] } else { [Pending] }
     if row != none and row.functional_records.len() > 0 {
       linebreak()
       text(8pt)[Functional evidence only]
@@ -253,6 +268,11 @@ claim. Earlier interrupted checks are not a timing baseline.
   )
 }
 
+#if five != none {
+  v(0.3em)
+  physical-scope-note(five)
+}
+
 #v(0.35em)
 #block(fill: pale, inset: 9pt, radius: 4pt, width: 100%)[
   #set text(9pt)
@@ -299,7 +319,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   for case in pending.cases.filter(case => case.id != "held-out-suite") {
     let row = primary(case.id)
     v(0.3em)
-    [*#case.label:* #row.status.]
+    [*#case.label:* #if row.status == "deferred" [Deferred; unmeasured in this scope.] else [#row.status.]]
     if row.functional_records.len() > 0 {
       let functional = row.functional_records.filter(record => not record.performance_eligible)
       if functional.len() > 0 {
@@ -361,6 +381,7 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
   } else if cumulative-cache {
     let cache = five.cache
     let inventory = cache.raw_report.inventory
+    let deferred = cache.at("physical_scope", default: (deferred: ())).deferred
     assert(cache.status in ("preserved-committed-prefix", "validated-committed-snapshot"))
     assert(not cache.performance_eligible)
     parbreak()
@@ -388,14 +409,15 @@ acceptance was pending in that historical record. Full revisions: #raw("data/res
       fill: (x, y) => if x == 0 { pale } else { none },
       ..pending.cases.filter(case => case.id != "held-out-suite").map(case => (
         case.label,
-        if case.id in cache.completed_physical_examples { [Completion validated] } else { [Pending] },
+        if case.id in deferred { [Deferred] }
+          else if case.id in cache.completed_physical_examples { [Completion validated] } else { [Pending] },
       )).flatten(),
       [All retained source runs complete],
       if cache.all_source_runs_completed { [Yes] } else { [Not established] },
     )
     v(0.2em)
     text(8pt)[#cache.sources.len() original source receipt(s).
-    Both physical examples complete: #if cache.physical_examples_complete [yes.] else [not established.]
+    Required physical scope complete: #if cache.physical_examples_complete [yes.] else [not established.]
     Snapshot identity #raw(cache.raw_report.cache_native_index_identity.sha256.slice(0, 12));
     cache report #raw(cache.evidence.sha256.slice(0, 12));
     validation #raw(cache.validation.evidence.sha256.slice(0, 12)).
@@ -610,6 +632,8 @@ v(0.6em)
   assert(physical.status == "functional-seen-physical-reuse")
   assert(not physical.performance_eligible)
   assert(physical.seen_not_heldout)
+  physical-scope-note(physical)
+  v(0.3em)
   [*One completed fresh seen-input pair; functional evidence only.*
   Complete retained output, ordered nonzero conditions, unknown-master inventory
   and family map agree. The fresh reuse wrote no new records and preserved the
