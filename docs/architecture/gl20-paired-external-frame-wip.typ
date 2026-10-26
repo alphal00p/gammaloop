@@ -1,9 +1,10 @@
 = WIP: paired external momentum frame
 
 This branch checkpoints a reviewed generation candidate. Three focused tests
-pass; the complete original GL20 regression is still pending at this source
-checkpoint. NixCI remains disabled. This is not a final-review or delivered-fix
-claim.
+pass, but the complete original GL20 regression failed its unchanged golden
+snapshot. The candidate is not a sufficient GL20 fix. NixCI remains disabled;
+no production dependency pin is changed. This is a WIP source checkpoint, not
+a final-review or delivered-fix claim.
 
 == Source boundary
 
@@ -46,8 +47,18 @@ particle conjugation, mirrored and idempotent counterparts, amplitude/vacuum
 scope guards, atomic rejection of invalid metadata, and the existing UFO slot
 matcher with half-edge IDs, flow, spin, and color.
 
-The complete original `gl20_multichannel_local_inspect_event_snapshot` test is
-being rebuilt and will run once with `INSTA_UPDATE=no`, its original semantic
-selector, fixture, model settings, point, golden snapshot, and assertions.
-Full regression success, Clippy, and broader CI are not claimed here. No
-production dependency pin is changed.
+The complete original `gl20_multichannel_local_inspect_event_snapshot` test
+ran once with `INSTA_UPDATE=no`, its original semantic selector, fixture, model
+settings, point, golden snapshot, and assertions. Its external runtime was
+7.1593 seconds and its Rust return code was 101: snapshot failure. All source,
+fixture, and golden hashes passed the post-failure guard.
+
+The resulting imaginary part remains positive,
+`+4.502592811820771e-30`, while the golden value is
+`-4.502592811820771e-30`. Its magnitude now matches exactly, but the real
+component also still differs. Therefore the literal single-pass role replay
+does not establish full two-pass and master-selection equivalence. The saved
+postprocess state is retained for the next matched read-only frame comparison.
+No retry or second numerical run was performed in this cohort.
+
+Full regression success, Clippy, and broader CI are not claimed here.
