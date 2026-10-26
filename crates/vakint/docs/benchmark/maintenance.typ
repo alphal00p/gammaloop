@@ -223,6 +223,20 @@ Final cumulative-cache suites additionally require an independently accepted
 #raw("vakint.cumulative-cache-consumer-requalification.v1") receipt. It binds the
 original source starting-key inventories and route/alias exclusion against the
 unchanged frozen owner sets, explicitly classifying exposed starting inputs.
+The #raw("captured-tuning-workload") inventory kind binds an original provisional
+measurement to its hashed workload, exact tuning case and input, complete raw
+lowered-key list and current Native owner proof. Its original cohort and
+#raw("native_keys_authenticated: false") flag remain recorded; postcombine seeds cannot replace raw
+source roots or remove an overlap with protected held-out inputs.
+Compatible multi-source unions preserve each source's original data-manifest
+identity rather than rebasing it to the union report's data manifest.
+The existing #raw("physical-census") kind requires an actual
+#raw("vakint.qcd-ladder.campaign-census.v1") source. Pathless input metadata resolves
+through the configuration's hashed prepared manifest and its established
+#raw("vakint-input.symbolica") payload, with matching projection, hash and byte
+length. An older selected-witness census with the same input/family does not
+establish the active public matcher's dispatch. Its historical schema remains
+unsupported here; actual producer/witness equivalence is still required.
 Its #raw("cache_import") reference must bind the successful public-import
 observation for the same descriptor, native indexes, data and kernel; import
 validation remains separate from attachment and reduction measurements.

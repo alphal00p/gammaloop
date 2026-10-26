@@ -1875,6 +1875,110 @@ class ReportEvidence:
                     "starting workload differs from actual producer",
                 )
                 starting.update(tuple(item["powers"]) for item in inputs["training"])
+            elif row["kind"] == "captured-tuning-workload":
+                require(
+                    inputs.get("schema") == "vakint.five-loop-cache-workload.v1"
+                    and isinstance(inputs.get("tuning"), list)
+                    and all(isinstance(item, dict) for item in inputs["tuning"]),
+                    "invalid captured tuning workload",
+                )
+                cases = [
+                    item for item in inputs["tuning"] if item["id"] == row["case_id"]
+                ]
+                require(len(cases) == 1, "captured tuning case is absent or ambiguous")
+                case = cases[0]
+                require(
+                    isinstance(origin.get("identity"), dict),
+                    "captured tuning measurement lacks its original identity",
+                )
+                identity = origin["identity"]
+                require(
+                    origin.get("schema") == "vakint.five-loop-cache-measurement.v1"
+                    and origin.get("success") is True
+                    and (
+                        "worker_success" not in origin
+                        or origin["worker_success"] is True
+                    )
+                    and (
+                        "supervision" not in origin
+                        or isinstance(origin["supervision"], dict)
+                        and origin["supervision"].get("success") is True
+                        and origin["supervision"].get("deadline_exhausted") is False
+                        and type(origin["supervision"].get("exit_code")) is int
+                        and origin["supervision"]["exit_code"] == 0
+                    )
+                    and all(
+                        origin.get(key) is None
+                        for key in ("error", "failure", "resource_failure")
+                    )
+                    and origin.get("provisional") is True
+                    and origin.get("native_keys_authenticated") is False
+                    and identity.get("provisional") is True
+                    and identity["suite"] == "tuning"
+                    and identity["only_case"] == origin["case_id"] == row["case_id"]
+                    and identity["workload_sha256"] == digest(input_path)
+                    and identity["source_census_sha256"]
+                    == inputs["source_census_sha256"]
+                    and isinstance(identity.get("data_manifest_sha256"), str)
+                    and re.fullmatch(r"[0-9a-f]{64}", identity["data_manifest_sha256"])
+                    and identity["data_manifest_sha256"]
+                    == inputs["data_manifest_sha256"]
+                    and same_json_value(
+                        origin["cache_statistics"]["binding"],
+                        producer["raw_report"]["semantic_binding"],
+                    ),
+                    "captured tuning measurement differs from its legacy workload/case/binding",
+                )
+                proof = docs["owner_proof"]
+                require(
+                    proof.get("schema") == "vakint.public-lowering-owner-map-proof.v1"
+                    and same_json_value(
+                        proof["compiled_cohort"], docs["compiled_cohort"]
+                    )
+                    and same_json_value(
+                        proof["semantic_binding"],
+                        producer["raw_report"]["semantic_binding"],
+                    ),
+                    "captured tuning owner proof/cohort differs",
+                )
+                matches = [
+                    item for item in proof["rows"] if item["id"] == row["case_id"]
+                ]
+                require(len(matches) == 1, "captured tuning owner proof omits its case")
+                matched = matches[0]
+                require(
+                    isinstance(case.get("public_input"), str)
+                    and matched["logical_cohort"] == "tuning"
+                    and matched["public_input_source_sha256"]
+                    == hashlib.sha256(case["public_input"].encode()).hexdigest()
+                    and matched["input_sha256"] == origin["input_sha256"]
+                    and matched.get("complete_owner_transport") is True
+                    and matched.get("reduction_succeeded") is True
+                    and matched.get("mapping_error") is None
+                    and same_json_value(
+                        matched["application_binding"],
+                        producer["raw_report"]["semantic_binding"],
+                    ),
+                    "captured tuning input or complete owner transport differs",
+                )
+                roots = case["lowered_roots"]
+                require(
+                    isinstance(roots, list)
+                    and roots
+                    and all(
+                        isinstance(key, list)
+                        and len(key) == 15
+                        and all(type(power) is int for power in key)
+                        for key in roots
+                    )
+                    and len({tuple(key) for key in roots}) == len(roots)
+                    and same_json_value(roots, origin["actual_lowered_roots"])
+                    and same_json_value(roots, matched["actual_lowered_roots"]),
+                    "captured tuning raw starting keys differ",
+                )
+                # Historical authentication flags remain false. This current
+                # proof binds the raw input; postcombine seeds cannot replace it.
+                starting.update(tuple(key) for key in roots)
             else:
                 require(
                     row["kind"] == "physical-census"
@@ -1884,19 +1988,43 @@ class ReportEvidence:
                 config, config_path = origin, origin_path
                 if source["scope"] == "completed-example":
                     config_path, config = hashed_record(source["config"], base)
+                prepared = config["prepared_input"]
                 require(
                     config.get("schema")
                     == "vakint.inactive-capture-physical-user-unit.v1"
-                    and inputs["source_sha256"]
-                    == config["prepared_input"]["input"]["sha256"],
+                    and inputs["source_sha256"] == prepared["input"]["sha256"]
+                    and inputs["projection"] == prepared["manifest_projection"]
+                    and type(inputs["source_bytes"]) is int
+                    and inputs["source_bytes"] == prepared["input"]["bytes"]
+                    and inputs["family_fingerprint"]
+                    == producer["raw_report"]["semantic_binding"]["family_fingerprint"],
                     "physical census differs from producer input",
                 )
-                scalar = hashed_file(
-                    config["prepared_input"]["input"],
-                    config_path.parent,
-                )
+                if "path" in prepared["input"]:
+                    scalar = hashed_file(prepared["input"], config_path.parent)
+                else:
+                    manifest_path, manifest = hashed_record(
+                        prepared["manifest"], config_path.parent
+                    )
+                    require(
+                        manifest.get("schema") == "vakint.qcd-ladder.prepared-input.v1"
+                        and manifest["definition"]
+                        == "massless-qcd-four-rung-native-uv-v1"
+                        and manifest["projection"] == prepared["manifest_projection"]
+                        and same_json_value(manifest["input"], prepared["input"])
+                        and Path(prepared["directory"]).is_absolute()
+                        and Path(prepared["directory"]).resolve()
+                        == manifest_path.parent,
+                        "physical prepared manifest identity differs",
+                    )
+                    # Reuse the prepared format's established payload name,
+                    # without adding a path to the immutable configuration.
+                    scalar = manifest_path.parent / "vakint-input.symbolica"
                 require(
-                    digest(scalar) == inputs["source_sha256"],
+                    type(prepared["input"]["bytes"]) is int
+                    and prepared["input"]["bytes"] > 0
+                    and scalar.stat().st_size == prepared["input"]["bytes"]
+                    and digest(scalar) == inputs["source_sha256"],
                     "physical starting input changed",
                 )
                 starting.update(
