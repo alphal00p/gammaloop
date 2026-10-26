@@ -1602,12 +1602,12 @@ impl FeynmanDiagram {
 
     /// Select the first depth-first basis for an explicit internal-edge order.
     ///
-    /// Paired cross-section connections root the traversal at the attachment
-    /// retained as hedge zero by legacy sewing (the outgoing side), in
-    /// connection order. One-sided amplitude connections use their only
-    /// attachment. No other spanning forests are enumerated. Generators can
-    /// therefore reproduce a pre-existing half-edge insertion convention
-    /// without moving topology or routing ownership into a downstream runtime.
+    /// Paired cross-section connections start at the owner of the first
+    /// non-dummy native half-edge, preserving the sewing order. One-sided
+    /// amplitude connections use their only attachment. No other spanning
+    /// forests are enumerated, so generators can reproduce a pre-existing
+    /// half-edge insertion convention without moving topology or routing
+    /// ownership into a downstream runtime.
     pub fn with_first_loop_momentum_basis_in_edge_order(
         self,
         ordered: &[EdgeId],
@@ -1658,10 +1658,24 @@ impl FeynmanDiagram {
         }
         let ordered_graph: HedgeGraph<EdgeId, ()> = builder.into();
         let full = ordered_graph.full_filter();
-        let roots = external_attachments
+        let mut roots = Vec::new();
+        if external_attachments
             .values()
-            .filter_map(|(source, target)| (*source).or(*target))
-            .collect::<Vec<_>>();
+            .any(|(source, target)| source.is_some() && target.is_some())
+            && let Some(first) = self
+                .half_edges()
+                .find(|half| !self.underlying()[EdgeIndex(half.edge.0)].is_dummy)
+        {
+            let hedge = self
+                .half_edge_id(first)
+                .expect("native half-edge iteration yields an existing endpoint");
+            roots.push(VertexId(self.underlying().node_id(hedge).0));
+        }
+        roots.extend(
+            external_attachments
+                .values()
+                .filter_map(|(source, target)| (*source).or(*target)),
+        );
         let mut remaining = full.clone();
         let mut forest: SuBitGraph = ordered_graph.empty_subgraph();
         let mut root_nodes = roots
@@ -3326,7 +3340,7 @@ mod tests {
     }
 
     #[test]
-    fn sewn_box_default_routing_roots_at_the_outgoing_attachment() {
+    fn gl20_frame_sewn_box_default_routing_follows_native_half_edge_owner() {
         let model = scalar_model();
         let particle = model.particle_id("phi").unwrap();
         let rule = model.vertex_rule_id("V_1").unwrap();
@@ -3359,6 +3373,23 @@ mod tests {
                 .unwrap();
         }
         let original = builder.build().unwrap();
+        let mut paired_connections = BTreeSet::new();
+        for (edge, endpoints, data) in original.edges() {
+            if let Some(external) = &data.external {
+                assert!(endpoints.source.is_some() && endpoints.target.is_some());
+                assert_eq!(external.state, ExternalState::Incoming);
+                assert!(matches!(
+                    original.underlying()[&EdgeIndex(edge.0)].1,
+                    HedgePair::Paired { .. }
+                ));
+                assert!(paired_connections.insert(external.connection));
+            }
+        }
+        assert_eq!(paired_connections, BTreeSet::from([0, 1]));
+        let first = original.half_edges().next().unwrap();
+        let first_hedge = original.half_edge_id(first).unwrap();
+        assert_eq!(first_hedge.0, 0);
+        assert_eq!(VertexId(original.underlying().node_id(first_hedge).0), a);
         let (left, right) = original.half_edges().partition(|half_edge| {
             let hedge = original.half_edge_id(*half_edge).unwrap();
             matches!(
@@ -3376,13 +3407,103 @@ mod tests {
                 EdgeId(5),
             ])
             .unwrap();
-        // With the outgoing root, the independent loop is a physical cut
-        // momentum. Both cut momenta vanish spatially at K=0 in the centre-of-
-        // mass frame P0=-P1. An incoming root instead selects the t-channel
-        // edge, putting K=0 outside the massive two-particle LU cut surface.
-        assert_eq!(routed.loop_momentum_basis().loop_edges, [EdgeId(4)]);
+        // Sewing retains an incoming half-edge first, so its attachment owns
+        // the traversal root even when the paired edge stores the other end
+        // as its source.
+        assert_eq!(routed.loop_momentum_basis().loop_edges, [EdgeId(2)]);
+        let cut_basis = original
+            .clone()
+            .with_loop_momentum_edges(&[EdgeId(4)])
+            .unwrap();
+        for diagram in [&routed, &cut_basis] {
+            let basis = diagram.loop_momentum_basis();
+            basis.validate(diagram).unwrap();
+            assert_eq!(basis.loop_edges.len(), 1);
+            assert_eq!(basis.external_edges, [EdgeId(0), EdgeId(1)]);
+            for (vertex, _) in diagram.vertices() {
+                let mut total = vec![0_isize; 3];
+                for (edge, endpoints, _) in diagram.edges() {
+                    for (attachment, sign) in [(endpoints.source, 1), (endpoints.target, -1)] {
+                        if attachment != Some(vertex) {
+                            continue;
+                        }
+                        let signature = &basis.edge_signatures[&edge];
+                        for (sum, coefficient) in total.iter_mut().zip(
+                            signature
+                                .loops
+                                .integer_coefficients()
+                                .into_iter()
+                                .chain(signature.external.integer_coefficients()),
+                        ) {
+                            *sum += sign * coefficient;
+                        }
+                    }
+                }
+                assert_eq!(total, [0, 0, 0], "signed momentum at vertex {vertex:?}");
+            }
+            assert_eq!(diagram.cuts().len(), 1);
+            let cut = &diagram.cuts()[0];
+            assert_eq!(
+                cut.cut
+                    .iter()
+                    .map(|half| half.edge)
+                    .collect::<BTreeSet<_>>(),
+                BTreeSet::from([EdgeId(3), EdgeId(4)])
+            );
+            let mut cut_momentum = vec![0_isize; 3];
+            for half in &cut.cut {
+                let sign = match half.endpoint {
+                    DiagramEndpoint::Source => 1,
+                    DiagramEndpoint::Target => -1,
+                };
+                let signature = &basis.edge_signatures[&half.edge];
+                for (sum, coefficient) in cut_momentum.iter_mut().zip(
+                    signature
+                        .loops
+                        .integer_coefficients()
+                        .into_iter()
+                        .chain(signature.external.integer_coefficients()),
+                ) {
+                    *sum += sign * coefficient;
+                }
+            }
+            assert_eq!(
+                cut_momentum,
+                [0, 1, 1],
+                "cut momentum equals incoming P0+P1"
+            );
+            assert_eq!(
+                diagram.canonical_key().unwrap(),
+                original.canonical_key().unwrap()
+            );
+            assert_eq!(diagram.numerator(), original.numerator());
+        }
+
+        // Express the explicit physical-cut coordinate in the native default
+        // coordinate, then require every edge momentum to transform exactly.
+        let native = routed.loop_momentum_basis();
+        let alternate = cut_basis.loop_momentum_basis();
+        let (transition_loops, transition_external) =
+            native.edge_signatures[&alternate.loop_edges[0]].integer_coefficients();
+        for (edge, signature) in &alternate.edge_signatures {
+            let (loops, external) = signature.integer_coefficients();
+            let (native_loops, native_external) =
+                native.edge_signatures[edge].integer_coefficients();
+            assert_eq!(native_loops, [loops[0] * transition_loops[0]]);
+            assert_eq!(
+                native_external,
+                external
+                    .iter()
+                    .zip(&transition_external)
+                    .map(|(coefficient, shift)| coefficient + loops[0] * shift)
+                    .collect::<Vec<_>>()
+            );
+        }
+
+        // The equal-shift property belongs to this explicit physical-cut
+        // basis, independently of which owner seeds the default traversal.
         for cut_edge in [EdgeId(3), EdgeId(4)] {
-            let shift = &routed.loop_momentum_basis().edge_signatures[&cut_edge].external;
+            let shift = &cut_basis.loop_momentum_basis().edge_signatures[&cut_edge].external;
             assert_eq!(shift.len(), 2);
             assert_eq!(shift.get(0), shift.get(1));
         }
@@ -5125,4 +5246,6 @@ mod tests {
             Err(DiagramError::DuplicateExternalIndex(0))
         ));
     }
+
+    include!("gl20_frame_routing_tests.rs");
 }
